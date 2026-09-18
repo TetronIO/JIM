@@ -558,25 +558,21 @@ public class StageToExecuteContractTests : WorkflowTestBase
     #region ExportedUnconfirmed + AttributeUpdate: Update sent only once the Create is confirmed
 
     /// <summary>
-    /// FINDING (all three export paths; see <see cref="AttributeUpdateBeforeConfirmationCases"/> for the
-    /// evidence-carrying <c>[Ignore]</c> reason on each case): staging does not gate an attribute change on
-    /// the Create having been confirmed at all. <c>SyncEngine.ExportStaging.cs</c>'s
-    /// <c>DecideOutboundStaging</c> computes <c>needsProvisioning</c> purely from
-    /// <c>existingCso.Status == ConnectedSystemObjectStatus.PendingProvisioning</c> (line ~61), and CSO
-    /// Status never transitions away from PendingProvisioning until a REAL confirming import runs -
-    /// established elsewhere in this fixture (Defect2's own arrange assertion: "export never transitions
-    /// status by itself"), auto-confirm included. Any still-unconfirmed CSO therefore always takes the
-    /// <c>ReusePendingProvisioningCso</c> branch (line ~98-103), which unconditionally sets
-    /// <c>ChangeType = PendingExportChangeType.Create</c> - there is no code path that stages an Update for
-    /// an object whose provisioning is not yet confirmed. Confirmed empirically: on all three export paths,
-    /// the export immediately following the attribute change sends a SECOND Create (not an Update, and not
-    /// deferred), before any confirming import has run. This directly contradicts all three product-owner
-    /// requirements: a second Create IS sent, it IS sent before confirmation (real or auto), and no Update
-    /// is ever staged at all - the new value only ever travels via the re-sent Create.
+    /// An attribute change arriving for a PendingProvisioning CSO whose Create has already been sent (or
+    /// auto-confirmed away) and is awaiting confirmation by import must never re-issue a second Create.
+    /// <c>SyncEngine.ExportStaging.cs</c>'s <c>DecideOutboundStaging</c> tells a never-sent Create apart
+    /// from one already sent via <c>SyncEngine.IsProvisioningNeverExported</c>: only a still-unsent Create
+    /// (unattempted, zero errors) reuses the <c>ReusePendingProvisioningCso</c>/Create branch; a Create that
+    /// has been sent (or auto-confirmed away, or attempted) stages an Update instead
+    /// (<c>UpdateExportedProvisioningCso</c>). <c>ExportExecutionServer</c>'s exportability guard refuses to
+    /// re-execute a Create with Status Exported, so that Update is never sent before the Create is
+    /// confirmed (auto-confirm counts as confirmation); once confirmed,
+    /// <c>SyncEngine.Reconciliation.ReconcileCsoAgainstPendingExport</c> flips the Pending Export's
+    /// ChangeType from Create to Update so the queued change goes out on the next export.
     ///
-    /// This test asserts the SPECIFIED behaviour, not the actual one; it deliberately runs its own two-cycle
-    /// sync/export/confirm/sync/export/confirm lifecycle (the shared matrix driver only models one export
-    /// cycle after the tested change) so it is a dedicated test rather than a <see cref="ContractCase"/>.
+    /// This test drives its own two-cycle sync/export/confirm/sync/export/confirm lifecycle (the shared
+    /// matrix driver only models one export cycle after the tested change) so it is a dedicated test rather
+    /// than a <see cref="ContractCase"/>.
     ///
     /// The connector is deliberately reused across every export call in this test (rather than a fresh
     /// instance per call, as elsewhere in this fixture) so its own <c>ExportedItems</c> log accumulates the
@@ -598,13 +594,26 @@ public class StageToExecuteContractTests : WorkflowTestBase
 
         var connector = CreateExportConnector(exportPath);
 
+        // The connector's own log holds live PendingExport references (both MockCallConnector and
+        // StubFileExportConnector), and this test's whole point is that reconciliation genuinely mutates
+        // the Create's ChangeType to Update in place, later, once it is confirmed (by design - see
+        // SyncEngine.Reconciliation.cs). Reading the log live at the end would therefore see EVERY entry
+        // sharing that one mutated object's CURRENT ChangeType, however many times it was logged, which
+        // cannot tell "exactly one Create, never a second one" apart from "the one Create got renamed
+        // in place". Snapshotting each newly logged call (ChangeType and a copy of its attribute changes
+        // at that moment) into a list nothing mutates afterward is what makes that check - and the
+        // shared AssertContract call below, which does the same counting - honest.
+        var callHistory = new List<PendingExport>();
+        void RecordNewCalls() => callHistory.AddRange(GetExportedItems(connector).Skip(callHistory.Count)
+            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = pe.AttributeValueChanges.ToList() }));
+
         // Export the Create.
         var createActivity = await RunExportAsync(topology.Target, connector);
         AssertExportExecutedCleanly($"{caseName} (create)", createActivity);
-        var exportedSoFar = GetExportedItems(connector);
-        Assert.That(exportedSoFar.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
+        RecordNewCalls();
+        Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
             $"[{caseName}] arrange: exactly one Create must have been sent");
-        var callsAfterCreate = exportedSoFar.Count;
+        var callsAfterCreate = callHistory.Count;
 
         // The attribute update arrives at the source.
         ReplaceStringAttributeValue(sourceCso, topology.SourceDisplayNameAttr, $"{caseName} Updated Name");
@@ -613,7 +622,8 @@ public class StageToExecuteContractTests : WorkflowTestBase
         // First post-change export attempt.
         var firstExportActivity = await RunExportAsync(topology.Target, connector);
         AssertExportExecutedCleanly($"{caseName} (export 1)", firstExportActivity);
-        var callsAfterFirstExport = GetExportedItems(connector).Count;
+        RecordNewCalls();
+        var callsAfterFirstExport = callHistory.Count;
 
         if (exportPath != ExportPath.FileAutoConfirm)
         {
@@ -640,25 +650,25 @@ public class StageToExecuteContractTests : WorkflowTestBase
         // Second export attempt.
         var secondExportActivity = await RunExportAsync(topology.Target, connector);
         AssertExportExecutedCleanly($"{caseName} (export 2)", secondExportActivity);
+        RecordNewCalls();
 
         var allExported = GetExportedItems(connector);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(allExported.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
+            Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
                 $"[{caseName}] exactly one Create, never a second one");
-            Assert.That(allExported.Count(pe => pe.ChangeType == PendingExportChangeType.Update), Is.EqualTo(1),
+            Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Update), Is.EqualTo(1),
                 $"[{caseName}] exactly one Update");
         }
 
-        var allExportedList = allExported.ToList();
-        var createIndex = allExportedList.FindIndex(pe => pe.ChangeType == PendingExportChangeType.Create);
-        var updateIndex = allExportedList.FindIndex(pe => pe.ChangeType == PendingExportChangeType.Update);
+        var createIndex = callHistory.FindIndex(pe => pe.ChangeType == PendingExportChangeType.Create);
+        var updateIndex = callHistory.FindIndex(pe => pe.ChangeType == PendingExportChangeType.Update);
         Assert.That(createIndex, Is.LessThan(updateIndex),
             $"[{caseName}] the connector must receive the Create before the Update, never the reverse");
 
-        // The Update must carry the new value.
+        // The Update must carry the new value, read from the frozen snapshot taken the moment it was sent.
         var targetDisplayNameAttr = topology.TargetType.Attributes.Single(a => a.Name == "DisplayName");
-        var updatePe = allExportedList.Single(pe => pe.ChangeType == PendingExportChangeType.Update);
+        var updatePe = callHistory[updateIndex];
         var updateChange = updatePe.AttributeValueChanges.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
         Assert.That(updateChange?.StringValue, Is.EqualTo($"{caseName} Updated Name"),
             $"[{caseName}] the Update must carry the new DisplayName value");
@@ -683,37 +693,21 @@ public class StageToExecuteContractTests : WorkflowTestBase
             stagedBeforeExecution: [],
             executedActivities: [createActivity, firstExportActivity, secondExportActivity],
             expectedCreates: 1, expectedUpdates: 1, expectedDeletes: 0,
-            connectorCallLogs: [allExported]);
+            connectorCallLogs: [callHistory]);
     }
 
     /// <summary>
-    /// One case per export path, each carrying the same FINDING (see the test method's own doc comment for
-    /// the full evidence and suspected root cause): staging always re-issues a Create - never an Update,
-    /// and with no gating on confirmation at all - for any attribute change arriving while the target CSO
-    /// is still Pending Provisioning, regardless of whether its Create has already been sent (or even
-    /// auto-confirmed). Confirmed by running each case unignored and inspecting the connector's own call
-    /// log: after the very first post-change export, all three paths show <c>Create, Create</c> - never
-    /// <c>Create, Update</c> - before any confirming import has run.
+    /// One case per export path: proves staging appends the change and stages an Update - never a second
+    /// Create - for an attribute change arriving while the target CSO is still Pending Provisioning with
+    /// its Create already sent (or auto-confirmed), and that the Update is not sent before the Create is
+    /// confirmed.
     /// </summary>
     private static IEnumerable<TestCaseData> AttributeUpdateBeforeConfirmationCases()
     {
-        const string reason =
-            "FINDING: staging re-issues a Create (never an Update) for any attribute change arriving " +
-            "while the target CSO is still Pending Provisioning, with no gating on confirmation - a second " +
-            "Create is sent immediately, before any confirming import (real or auto-confirmed). Root cause: " +
-            "SyncEngine.ExportStaging.cs DecideOutboundStaging computes needsProvisioning purely from " +
-            "CSO.Status == PendingProvisioning (~line 61), which never transitions away until a real " +
-            "confirming import runs; the ReusePendingProvisioningCso branch it falls into (~line 98-103) " +
-            "unconditionally sets ChangeType = Create. There is no staging path that produces an Update for " +
-            "an unconfirmed-but-already-exported provisioning CSO. Contradicts all three specified " +
-            "requirements: a second Create is sent, it is sent before confirmation, and no Update is ever " +
-            "staged.";
-
         foreach (var exportPath in new[] { ExportPath.Call, ExportPath.FileAutoConfirm, ExportPath.FileNoAutoConfirm })
         {
             yield return new TestCaseData(exportPath)
-                .SetName($"ExportedUnconfirmed_AttributeUpdate_UpdateFollowsOnceCreateConfirmed_{exportPath}")
-                .Ignore(reason);
+                .SetName($"ExportedUnconfirmed_AttributeUpdate_UpdateFollowsOnceCreateConfirmed_{exportPath}");
         }
     }
 

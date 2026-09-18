@@ -1877,6 +1877,29 @@ public class ExportEvaluationServer
         changeType == PendingExportChangeType.Create ? exportRule.Id : null;
 
     /// <summary>
+    /// Resolves the Pending Export already attached to a PendingProvisioning CSO, ahead of an outbound
+    /// staging decision: <see cref="SyncEngine.DecideOutboundStaging"/> needs it to tell a Create that has
+    /// never been sent apart from one already sent (or auto-confirmed away) and awaiting confirmation.
+    /// Checked only for a PendingProvisioning CSO - a Normal CSO's decision does not depend on it, and the
+    /// lookup would be wasted work on the hot path otherwise. Consults the run's in-memory batch of Pending
+    /// Exports staged so far this page first, where supplied (a CSO provisioned earlier in this same run
+    /// has its Create only there, not yet in the database), then falls back to a lightweight database read.
+    /// </summary>
+    private async Task<PendingExport?> ResolveExistingPendingExportForStagingDecisionAsync(
+        ConnectedSystemObject? existingCso,
+        List<PendingExport>? existingPendingExports)
+    {
+        if (existingCso is not { Status: ConnectedSystemObjectStatus.PendingProvisioning })
+            return null;
+
+        var inMemory = existingPendingExports?.FirstOrDefault(pe => pe.ConnectedSystemObjectId == existingCso.Id);
+        if (inMemory != null)
+            return inMemory;
+
+        return await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(existingCso.Id);
+    }
+
+    /// <summary>
     /// Creates or updates a PendingExport for an MVO change to a target system.
     /// For provisioning (Create) scenarios, also creates a CSO with Status=PendingProvisioning
     /// to establish the CSO↔MVO relationship before the object exists in the target system.
@@ -1893,10 +1916,11 @@ public class ExportEvaluationServer
     {
         // Find existing CSO for this MVO in the target system
         var existingCso = await SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
+        var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
 
         // The verdict comes from the pure engine (#288 extraction); this method is orchestration: resolve
         // the CSO, act on the verdict, compute the delta and persist.
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false, existingPendingExport);
 
         ConnectedSystemObject? csoForExport = existingCso;
         var createdNewCso = false;
@@ -1995,10 +2019,11 @@ public class ExportEvaluationServer
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
         cache.CsoLookup.TryGetValue(lookupKey, out var existingCso);
+        var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
 
         // The verdict comes from the pure engine (#288 extraction); this method is orchestration: resolve
         // the CSO from the cache, act on the verdict, compute the delta and persist.
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false, existingPendingExport);
 
         ConnectedSystemObject? csoForExport = existingCso;
         var createdNewCso = false;
@@ -2164,12 +2189,18 @@ public class ExportEvaluationServer
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
         cache.CsoLookup.TryGetValue(lookupKey, out var existingCso);
 
+        // Resolved once, ahead of the decision, and reused below in the merge-fallback block instead of a
+        // second database round trip for the same row (only ever relevant for a PendingProvisioning CSO).
+        // Named distinctly from the in-memory-batch "existingPendingExport" local further down (a
+        // different, narrower lookup scoped to Update merges only) to avoid shadowing it.
+        var existingPendingExportForDecision = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports);
+
         // The verdict comes from the pure engine (#288 extraction); this method is orchestration: resolve
         // the CSO, attempt export matching where the verdict provisions, compute the delta and persist. The
         // lookup is keyed by (Metaverse Object, Connected System) with no Object Type in it, so a Rule
         // targeting a different Object Type resolves to whichever Object holds that slot; the engine reports
         // that conflict (#1331) and the Metaverse Object's other export Rules are unaffected.
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics, existingPendingExportForDecision);
 
         if (decision.Outcome == OutboundStagingOutcome.ObjectTypeConflict)
         {
@@ -2381,13 +2412,25 @@ public class ExportEvaluationServer
         // Fallback: check if a Pending Export exists in the database from a previous activity
         // (e.g., drift detection ran in a previous sync step and its PE hasn't been exported yet,
         // or a previous sync created a pending Create export that hasn't been exported yet).
-        // If found, delete the old PE and return a new merged PE for batch creation.
+        // If found, delete the old PE and return a new merged PE for batch creation - UNLESS it is a
+        // Create that has already been sent and is awaiting confirmation (see the append branch below),
+        // which must never be deleted and replaced.
         if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
-            using (var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge")
-                .SetTag("leanFetch", true))
+
+            // Reuse the Pending Export already resolved ahead of the staging decision above when it is the
+            // same row (only ever true for a PendingProvisioning CSO): avoids a second database round trip
+            // for the same lookup.
+            if (existingPendingExportForDecision != null && existingCso != null && csoId.Value == existingCso.Id)
             {
+                dbPendingExport = existingPendingExportForDecision;
+            }
+            else
+            {
+                using var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge")
+                    .SetTag("leanFetch", true);
+
                 // Lean fetch (issue #986): the merge logic below only ever reads Id and
                 // AttributeValueChanges off dbPendingExport, never ConnectedSystemObject,
                 // SourceMetaverseObject or ConnectedSystem. The heavy GetPendingExportByConnectedSystemObjectIdAsync
@@ -2410,6 +2453,45 @@ public class ExportEvaluationServer
                     Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: CSO {CsoId} has a pending Delete export; " +
                         "recall skipping {ChangeCount} change(s) (deprovisioning supersedes membership updates)",
                         csoId, attributeChanges.Count);
+                    return (null, provisioningCso, csoAlreadyCurrentCount);
+                }
+
+                // A Create that has already been sent (or auto-confirmed away) and is awaiting confirmation
+                // by import must never be deleted and replaced: that would mean sending a second Create,
+                // which most connectors reject for an object that already exists. Append the newly
+                // evaluated changes onto the SAME row instead, keeping its ChangeType (Create) and Status
+                // untouched; only once SyncEngine.Reconciliation confirms the Create does the row flip to
+                // Update and the appended changes go out (SyncEngine.Reconciliation.cs). Guarded on the
+                // actual fetched row's shape (Create, not provably never-exported) rather than solely on
+                // the staging outcome, so a Create that was attempted-but-failed-and-is-retrying (still
+                // Status Pending, but not provably unsent either) is appended too rather than risking a
+                // replacement that silently drops its Create semantics.
+                if (csoForExport is { Status: ConnectedSystemObjectStatus.PendingProvisioning } &&
+                    dbPendingExport.ChangeType == PendingExportChangeType.Create &&
+                    !_syncEngine.IsProvisioningNeverExported(csoForExport, dbPendingExport))
+                {
+                    // Compute the merge against a throwaway shell sharing the same AttributeValueChanges
+                    // list contents, never the tracked entity's own list: SyncEngine.MergeAttributeChangesIntoPendingExport
+                    // mutates in place, and this method must not touch a database-loaded PendingExport's
+                    // real navigation before the repository call below has had a chance to persist the
+                    // change (and, on the EF-backed repository, fix up its own tracked graph safely).
+                    var mergeShell = new PendingExport
+                    {
+                        Id = dbPendingExport.Id,
+                        AttributeValueChanges = new List<PendingExportAttributeValueChange>(dbPendingExport.AttributeValueChanges)
+                    };
+                    var beforeIds = mergeShell.AttributeValueChanges.Select(avc => avc.Id).ToHashSet();
+                    var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(mergeShell, attributeChanges);
+                    var changesToAdd = mergeShell.AttributeValueChanges.Where(avc => !beforeIds.Contains(avc.Id)).ToList();
+                    var changeIdsToRemove = beforeIds.Except(mergeShell.AttributeValueChanges.Select(avc => avc.Id)).ToList();
+
+                    await SyncRepo.AppendAttributeChangesToPendingExportAsync(dbPendingExport.Id, changesToAdd, changeIdsToRemove);
+
+                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Appended {AddedCount} attribute change(s) onto " +
+                        "exported-but-unconfirmed Create PendingExport {ExistingPeId} for CSO {CsoId} ({ReplacedCount} superseded a prior " +
+                        "staged change); the Create is never re-sent, and the change travels as an Update once the Create is confirmed. Source: MVO {MvoId}",
+                        changesToAdd.Count, dbPendingExport.Id, csoId.Value, mergeResult.ReplacedCount, mvo.Id);
+
                     return (null, provisioningCso, csoAlreadyCurrentCount);
                 }
 
@@ -2886,7 +2968,10 @@ public class ExportEvaluationServer
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes)
     {
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false);
+        // Read-only lookup (the preview never writes): needed for the same reason as the real staging
+        // path - telling a never-sent Create apart from one already sent and awaiting confirmation.
+        var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false, existingPendingExport);
 
         Guid? wouldJoinCsoId = null;
         var effectiveChangeType = decision.ChangeType;

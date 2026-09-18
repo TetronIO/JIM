@@ -541,6 +541,12 @@ public partial class SyncRepository : ISyncRepository
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => _repo.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
 
+    public Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove)
+        => _repo.ConnectedSystems.AppendAttributeChangesToPendingExportAsync(pendingExportId, changesToAdd, changeIdsToRemove);
+
     #endregion
 
     #region Export Evaluation Support

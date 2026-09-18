@@ -2320,6 +2320,30 @@ public class SyncRepository : ISyncRepository
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => UpdatePendingExportsAsync(new[] { pendingExport });
 
+    /// <summary>
+    /// This fake store has no change tracker to fix up (see the lightweight-fetch comment above): appending
+    /// is a direct mutation of the seeded <see cref="PendingExport"/>'s own <see cref="PendingExport.AttributeValueChanges"/> list.
+    /// </summary>
+    public Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove)
+    {
+        if (!_pendingExports.TryGetValue(pendingExportId, out var pe))
+            return Task.CompletedTask;
+
+        if (changeIdsToRemove.Count > 0)
+            pe.AttributeValueChanges.RemoveAll(avc => changeIdsToRemove.Contains(avc.Id));
+
+        foreach (var change in changesToAdd)
+        {
+            change.PendingExportId = pendingExportId;
+            pe.AttributeValueChanges.Add(change);
+        }
+
+        return Task.CompletedTask;
+    }
+
     #endregion
 
     #region Export Evaluation Support

@@ -40,12 +40,18 @@ public partial class SyncEngine
     /// provisioning relevance check.</param>
     /// <param name="recallSemantics">True when evaluating a reference recall (#1003), which must never
     /// provision: an object with no presence in the target has nothing there to remove a member from.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to <paramref name="existingCso"/>,
+    /// if any; the caller resolves this only for a PendingProvisioning CSO (it is irrelevant otherwise), from
+    /// the run's in-memory batch first and the database second. Distinguishes a Create that has never been
+    /// sent (<see cref="IsProvisioningNeverExported"/>) from one that has already been sent (or auto-confirmed
+    /// away): a change arriving after the Create is sent must stage an Update, never a second Create.</param>
     public OutboundStagingDecision DecideOutboundStaging(
         MetaverseObject mvo,
         SyncRule exportRule,
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        bool recallSemantics)
+        bool recallSemantics,
+        PendingExport? existingPendingExport)
     {
         // #1331: the Metaverse Object's one CSO in this system may be of a different Object Type than the
         // rule targets; exporting onto it would write this rule's attribute values to the wrong object.
@@ -93,14 +99,33 @@ public partial class SyncEngine
 
         // Reuse the existing PendingProvisioning CSO only when the changes are relevant to this rule:
         // restaging an identical Create export would misattribute it to this synchronisation in the
-        // causality tree.
+        // causality tree. Applies whether the Create is still unsent or has already gone out, below.
         if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
             return new OutboundStagingDecision { Outcome = OutboundStagingOutcome.PendingProvisioningChangesIrrelevant };
 
+        // The Create is still unsent (never attempted): absorb the change into it in place, still a
+        // Create, exactly as before.
+        if (IsProvisioningNeverExported(existingCso, existingPendingExport))
+        {
+            return new OutboundStagingDecision
+            {
+                Outcome = OutboundStagingOutcome.ReusePendingProvisioningCso,
+                ChangeType = PendingExportChangeType.Create
+            };
+        }
+
+        // The Create has already been sent: it is gone (existingPendingExport is null, an auto-confirming
+        // file export deleted it the moment it succeeded), it is a Create sitting Exported/ExportNotConfirmed
+        // awaiting a confirming import, or it was attempted and is retrying. Either way the object may
+        // already exist in the target, so the change must travel as an Update, never a second Create - most
+        // connectors reject a Create for an object that already exists. The orchestrator never sends this
+        // Update before the Create is confirmed by import (ExportExecutionServer's exportability guard), and
+        // once confirmed, SyncEngine.Reconciliation.cs flips this very Pending Export's ChangeType from
+        // Create to Update so the queued change goes out on the next export.
         return new OutboundStagingDecision
         {
-            Outcome = OutboundStagingOutcome.ReusePendingProvisioningCso,
-            ChangeType = PendingExportChangeType.Create
+            Outcome = OutboundStagingOutcome.UpdateExportedProvisioningCso,
+            ChangeType = PendingExportChangeType.Update
         };
     }
 

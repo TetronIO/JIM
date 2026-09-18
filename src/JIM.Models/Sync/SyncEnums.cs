@@ -74,7 +74,12 @@ public enum OutboundStagingOutcome
     /// restaging would misattribute the existing Create export in the causality tree, so nothing is staged.</summary>
     PendingProvisioningChangesIrrelevant,
     /// <summary>The object exists in the target: an Update export carrying only the changed attributes.</summary>
-    UpdateExistingCso
+    UpdateExistingCso,
+    /// <summary>A pending provisioning CSO's Create has already been sent (exported, auto-confirmed away,
+    /// or attempted) and is awaiting confirmation by import: an Update, carrying only the changed
+    /// attributes, that the orchestrator must never send before the Create is confirmed. Never a second
+    /// Create - most connectors reject a Create for an object that already exists.</summary>
+    UpdateExportedProvisioningCso
 }
 
 /// <summary>

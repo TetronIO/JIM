@@ -451,11 +451,16 @@ public class SyncEngineReconciliationTests
     [Test]
     public void TransitionCreateToUpdate_NoSecondaryIdInConfirmed_StaysCreate()
     {
+        // The remaining change is itself still awaiting confirmation (ExportedNotConfirmed, a retry): the
+        // Create is not yet fully confirmed, so neither trigger fires and it must stay a Create.
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
-            AttributeValueChanges = [new PendingExportAttributeValueChange { AttributeId = 1 }]
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange { AttributeId = 1, Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed }
+            ]
         };
 
         var result = new PendingExportReconciliationResult();
@@ -464,6 +469,62 @@ public class SyncEngineReconciliationTests
             AttributeId = 2,
             Attribute = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "mail", IsSecondaryExternalId = false, Type = AttributeDataType.Text }
         });
+
+        SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
+
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+    }
+
+    [Test]
+    public void TransitionCreateToUpdate_AllExportedChangesConfirmedWithPendingChangesQueued_TransitionsToUpdate()
+    {
+        // Generalisation beyond the Secondary External ID trigger: the Create's own exported changes have
+        // all been confirmed (removed from AttributeValueChanges by the caller before this runs), and a
+        // change appended while it awaited confirmation is queued Pending - it must travel as an Update,
+        // never as a second Create.
+        var queuedChange = new PendingExportAttributeValueChange
+        {
+            AttributeId = 3,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "displayName", Type = AttributeDataType.Text },
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Create,
+            AttributeValueChanges = [queuedChange]
+        };
+
+        var result = new PendingExportReconciliationResult();
+        result.ConfirmedChanges.Add(new PendingExportAttributeValueChange
+        {
+            AttributeId = 2,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "mail", IsSecondaryExternalId = false, Type = AttributeDataType.Text }
+        });
+
+        SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
+
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+    }
+
+    [Test]
+    public void TransitionCreateToUpdate_ExportedChangesStillAwaitingConfirmationWithPendingChangesQueued_StaysCreate()
+    {
+        // Not every originally exported change has confirmed yet (one is still ExportedNotConfirmed,
+        // retrying) even though a further change is queued Pending: the Create is not done, so it must not
+        // transition yet - re-sending it later must still be shaped as a Create.
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Create,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange { AttributeId = 1, Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed },
+                new PendingExportAttributeValueChange { AttributeId = 3, Status = PendingExportAttributeChangeStatus.Pending }
+            ]
+        };
+
+        var result = new PendingExportReconciliationResult();
 
         SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
 

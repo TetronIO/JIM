@@ -349,6 +349,21 @@ public interface IConnectedSystemRepository
     public Task CreatePendingExportAsync(PendingExport pendingExport);
 
     /// <summary>
+    /// Appends newly evaluated attribute changes onto an existing Pending Export without touching its
+    /// ChangeType or Status. Used for a PendingProvisioning Connected System Object whose Create has
+    /// already been sent (or auto-confirmed away) and is awaiting confirmation by import: never delete
+    /// and replace such a row (that would send a second Create), so the caller's already-computed merge
+    /// (additions and supersessions) is persisted onto the same row instead.
+    /// </summary>
+    /// <param name="pendingExportId">The Pending Export to append to.</param>
+    /// <param name="changesToAdd">The newly evaluated attribute changes to add.</param>
+    /// <param name="changeIdsToRemove">The ids of existing attribute changes the new ones supersede, removed first.</param>
+    public Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove);
+
+    /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
