@@ -111,6 +111,37 @@ During confirming import:
 - Retry uses exponential backoff (`NextRetryAt`), max retries tracked via `ErrorCount`
 - After max retries → PE status → `Failed` (requires manual intervention)
 
+### Attribute change against an unconfirmed-provisioning CSO
+
+A CSO is created `PendingProvisioning` alongside a Create PE. If a further Metaverse Object attribute
+change arrives while that Create is still unconfirmed (sent, or auto-confirmed away by a file-style
+export, or attempted), staging (`SyncEngine.DecideOutboundStaging`) must never restage a second Create:
+most Connectors reject a Create for an object they already hold. `SyncEngine.IsProvisioningNeverExported`
+is the exact test - Status `Pending`, unattempted, zero errors - and only that case still absorbs the
+change into the unsent Create in place. Everything else stages an `UpdateExportedProvisioningCso` verdict
+(`ChangeType = Update`) instead.
+
+Persistence follows the same rule, not "merge and replace": `ExportEvaluationServer` never deletes a
+Create PE that has already been sent. Instead it appends the newly evaluated change onto the SAME row via
+`ISyncRepository.AppendAttributeChangesToPendingExportAsync`, using the same merge-key semantics as
+`MergeAttributeChangesIntoPendingExport` (a change for the same attribute supersedes the existing staged
+one). The row's `Id`, `ChangeType` (still `Create`) and `Status` (still `Exported`/`ExportNotConfirmed`,
+or `Pending` for a retrying attempt) are left untouched; the appended change is queued `Pending`.
+`ExportExecutionServer`'s exportability check refuses to re-execute a Create with Status `Exported` (the
+same guard that already refused a re-exported Delete), so the queued change is never sent while the
+Create itself is still awaiting confirmation.
+
+Once a confirming import confirms the Create's own exported changes, `SyncEngine.Reconciliation`'s
+`TransitionCreateToUpdateIfSecondaryExternalIdConfirmed` flips the PE's `ChangeType` from `Create` to
+`Update` (generalised beyond its original Secondary External ID trigger to also fire once every exported
+change is confirmed and a queued `Pending` change remains), and the ordinary `UpdatePendingExportStatus`
+sets `Status` back to `Pending`. The next export then sends exactly one Update carrying the queued
+change - never a second Create, and never before the Create is confirmed.
+
+`IsProvisioningNeverExported` still returns `false` for an exported Create carrying an appended `Pending`
+change (its `Status` is `Exported`, not `Pending`), so a withdrawal in this window still stages a Delete
+against the CSO, never a cancellation.
+
 ### Delete against an unconfirmed-provisioning CSO
 
 A CSO is created `PendingProvisioning` alongside a Create PE. If the Create is exported but the MVO is

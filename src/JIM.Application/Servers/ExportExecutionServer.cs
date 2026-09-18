@@ -319,6 +319,20 @@ public class ExportExecutionServer
             return false;
         }
 
+        // A Create that has already been exported is awaiting confirmation by import: re-sending it
+        // would ask the connector to create an object that already exists there, which most connectors
+        // reject. Any attribute changes appended while it waits (see ExportEvaluationServer's
+        // append-not-replace staging for a PendingProvisioning CSO whose Create has already been sent)
+        // travel later as an Update, once SyncEngine.Reconciliation confirms the Create and flips the
+        // row's ChangeType (SyncEngine.Reconciliation.cs). ExportNotConfirmed (a retry after a failed or
+        // ambiguous send) stays exportable: unlike Exported, it means the Create genuinely needs to go
+        // out again.
+        if (pendingExport.ChangeType == PendingExportChangeType.Create &&
+            pendingExport.Status == PendingExportStatus.Exported)
+        {
+            return false;
+        }
+
         return true;
     }
 

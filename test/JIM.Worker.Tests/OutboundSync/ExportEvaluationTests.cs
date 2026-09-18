@@ -412,6 +412,147 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// A PendingProvisioning CSO whose Create has already been exported (Status Exported, awaiting
+    /// confirmation) must never have that row deleted and replaced when a further attribute change
+    /// arrives: that would mean sending a second Create, which most connectors reject for an object that
+    /// already exists. The change must instead be appended onto the SAME row, keeping its id, ChangeType
+    /// (Create) and Status (Exported) untouched, with the new change queued Pending and any prior
+    /// still-awaiting-confirmation change for the same attribute superseded.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_ExistingExportedCreate_AppendsRatherThanReplacesAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+        var displayNameMvAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.DisplayName);
+
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameMvAttr,
+            AttributeId = displayNameMvAttr.Id,
+            StringValue = "New Name"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameCsAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
+        exportRule.AttributeFlowRules.Clear();
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 9101,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = displayNameCsAttr,
+            TargetConnectedSystemAttributeId = displayNameCsAttr.Id,
+            Sources = { new SyncRuleMappingSource { Id = 9101, Order = 0, MetaverseAttribute = displayNameMvAttr, MetaverseAttributeId = displayNameMvAttr.Id } }
+        });
+
+        // The target CSO: PendingProvisioning, its Create already sent and awaiting confirmation.
+        var pendingProvisioningCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
+
+        // The Create's own exported changes, still awaiting confirmation; the DisplayName one is what the
+        // new evaluation must supersede, the unrelated one must survive the append untouched.
+        var supersededChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = displayNameCsAttr.Id,
+            Attribute = displayNameCsAttr,
+            StringValue = "Old Name",
+            ChangeType = PendingExportAttributeChangeType.Update,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        };
+        var unrelatedAttr = new ConnectedSystemObjectTypeAttribute { Id = 88001, Name = "Unrelated", Type = AttributeDataType.Text };
+        var unrelatedChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = unrelatedAttr.Id,
+            Attribute = unrelatedAttr,
+            StringValue = "Untouched",
+            ChangeType = PendingExportAttributeChangeType.Update,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        };
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = pendingProvisioningCso.Id,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Exported,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            AttributeValueChanges = [supersededChange, unrelatedChange]
+        };
+        SyncRepo.SeedPendingExport(existingCreatePe);
+
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> { { (mvo.Id, targetSystem.Id), pendingProvisioningCso } },
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo, changedAttributes, cache);
+
+        // Assert - nothing new staged; the existing Create row absorbs the change in place
+        Assert.That(result.PendingExports, Is.Empty,
+            "the change must be appended onto the existing exported Create, not returned as a new Pending Export");
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "no second Pending Export row for this CSO");
+
+        var persisted = SyncRepo.PendingExports[existingCreatePe.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.Id, Is.EqualTo(existingCreatePe.Id), "row id preserved");
+            Assert.That(persisted.ChangeType, Is.EqualTo(PendingExportChangeType.Create), "ChangeType untouched: never a second Create");
+            Assert.That(persisted.Status, Is.EqualTo(PendingExportStatus.Exported), "Status untouched: the Create is still awaiting confirmation");
+        }
+
+        var newChange = persisted.AttributeValueChanges.SingleOrDefault(avc => avc.AttributeId == displayNameCsAttr.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(newChange, Is.Not.Null, "the new DisplayName change must be present");
+            Assert.That(newChange!.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending), "queued, not yet sent");
+            Assert.That(newChange.StringValue, Is.EqualTo("New Name"));
+            Assert.That(newChange.Id, Is.Not.EqualTo(supersededChange.Id), "a genuinely new change, not the old one mutated in place");
+            Assert.That(persisted.AttributeValueChanges.Any(avc => avc.Id == supersededChange.Id), Is.False,
+                "the superseded same-attribute change must be removed");
+            Assert.That(persisted.AttributeValueChanges.Any(avc => avc.Id == unrelatedChange.Id), Is.True,
+                "an unrelated attribute's still-awaiting-confirmation change must survive the append untouched");
+        }
+    }
+
+    /// <summary>
     /// The deprovisioning face of #1284: a Metaverse Object that falls out of an outbound rule's scope
     /// must be deprovisioned from the rule's target system even when that system is the one being
     /// synchronised. The whole-system Q3 skip silently suppressed scope-out deprovisioning too.

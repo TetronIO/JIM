@@ -509,6 +509,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportAsync));
 
+    public Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove)
+        => throw new PreviewWriteAttemptedException(nameof(AppendAttributeChangesToPendingExportAsync));
+
     public Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DisconnectConnectedSystemObjectsAsync));
 

@@ -4452,6 +4452,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc/>
+    public async Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove)
+    {
+        // A plain EF query for the rows to remove finds them via the identity map when a tracked instance
+        // already exists on this context - typically the very Pending Export this call is appending to,
+        // loaded moments earlier by GetPendingExportLightweightByConnectedSystemObjectIdAsync - so RemoveRange
+        // marks them through the ordinary change tracker rather than raw SQL, avoiding the "fix up or detach
+        // tracked instances" hazard documented in src/CLAUDE.md entirely (there is nothing to fix up: the same
+        // SaveChangesAsync below both deletes and inserts).
+        if (changeIdsToRemove.Count > 0)
+        {
+            var toRemove = await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => changeIdsToRemove.Contains(avc.Id))
+                .ToListAsync();
+            Repository.Database.PendingExportAttributeValueChanges.RemoveRange(toRemove);
+        }
+
+        if (changesToAdd.Count > 0)
+        {
+            foreach (var change in changesToAdd)
+                change.PendingExportId = pendingExportId;
+
+            await Repository.Database.PendingExportAttributeValueChanges.AddRangeAsync(changesToAdd);
+        }
+
+        if (changeIdsToRemove.Count > 0 || changesToAdd.Count > 0)
+            await Repository.Database.SaveChangesAsync();
+    }
+
 
     /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.

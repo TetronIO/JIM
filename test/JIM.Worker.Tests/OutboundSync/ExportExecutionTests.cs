@@ -1487,6 +1487,118 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// A Create that has already been exported is awaiting confirmation by import: re-sending it would ask
+    /// the connector to create an object that already exists there. Any attribute changes appended while it
+    /// waits travel later as an Update, once the Create is confirmed (SyncEngine.Reconciliation.cs).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateWithExportedStatus_SkipsExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // A Create already sent, with a further change appended while it awaits confirmation.
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Exported,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Test",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(0),
+            "Create export with Exported status should not be re-executed, even with Pending changes queued");
+    }
+
+    /// <summary>
+    /// ExportNotConfirmed (a retry after a failed or ambiguous send) is the exception: unlike Exported, it
+    /// means the Create genuinely needs to go out again.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateWithExportNotConfirmedStatus_IncludesExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.ExportNotConfirmed,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(1),
+            "Create export with ExportNotConfirmed status is a retry and must still be executable");
+    }
+
+    /// <summary>
     /// Tests that Update exports with Pending attribute changes are eligible.
     /// </summary>
     [Test]

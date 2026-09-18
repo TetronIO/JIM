@@ -240,6 +240,33 @@ public class SyncEngineExportEvaluationTests
     }
 
     [Test]
+    public void IsProvisioningNeverExported_ExportedCreateWithAppendedPendingChanges_IsNotNeverExported()
+    {
+        // The append-not-replace staging path (ExportEvaluationServer.CreateOrUpdatePendingExportWithNoNetChangeAsync)
+        // leaves a sent Create's Status at Exported and adds the new change as Pending on the SAME row -
+        // never touching Status. A withdrawal in this window must still stage a Delete, never a cancellation
+        // (cancelling would strand a live object in the target with nothing left in JIM to delete it).
+        var cso = Cso();
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var exportedCreateWithAppendedChange = new PendingExport
+        {
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Exported,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    AttributeId = 1,
+                    Status = PendingExportAttributeChangeStatus.Pending,
+                    StringValue = "Appended Value"
+                }
+            ]
+        };
+
+        Assert.That(_engine.IsProvisioningNeverExported(cso, exportedCreateWithAppendedChange), Is.False);
+    }
+
+    [Test]
     public void IsProvisioningNeverExported_ACsoThatIsNotPendingProvisioning_IsNotNeverExported()
     {
         // A Normal CSO represents a live object in the target system, whatever Pending Export it carries.

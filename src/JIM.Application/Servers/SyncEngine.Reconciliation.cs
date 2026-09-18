@@ -548,34 +548,55 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// If the Pending Export was a Create and the Secondary External ID attribute has been confirmed,
-    /// transition it to an Update. Once an object is created, remaining unconfirmed attribute changes
-    /// should be applied as updates. Connectors require the Secondary External ID (e.g., distinguishedName
-    /// for LDAP) in the attribute changes for Create operations, but once confirmed, it is removed.
-    /// Without this transition, retry attempts would fail because the connector cannot determine
-    /// where to create the object.
+    /// Transitions a Create Pending Export to an Update once its provisioning is confirmed enough that
+    /// Create-shaped handling is no longer needed. Two independent triggers, either sufficient on its own:
+    /// <list type="bullet">
+    /// <item>The Secondary External ID attribute was confirmed this round (e.g. distinguishedName for
+    /// LDAP). Connectors require it among a Create's own attribute changes to know where to create the
+    /// object, but not for a subsequent Update, so remaining unconfirmed changes must switch to Update
+    /// shape to retry correctly - even while other attributes are still unconfirmed.</item>
+    /// <item>Every attribute change this Create originally exported has now been confirmed (none remain
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/> or
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedNotConfirmed"/>), AND further changes are
+    /// queued <see cref="PendingExportAttributeChangeStatus.Pending"/>: these were appended while the
+    /// Create awaited confirmation (see <c>ExportEvaluationServer</c>'s append-not-replace staging, which
+    /// never deletes and replaces a Create that has already been sent) and must now travel as a single
+    /// Update, never as a second Create.</item>
+    /// </list>
+    /// Without this transition, retry attempts (or the newly queued changes) would be sent shaped as a
+    /// Create the connector has already fulfilled.
     /// </summary>
     public static void TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(PendingExport pendingExport, PendingExportReconciliationResult result)
     {
         if (pendingExport.ChangeType != PendingExportChangeType.Create)
             return;
 
-        var secondaryExternalIdWasConfirmed = result.ConfirmedChanges.Any(ac =>
-            ac.Attribute?.IsSecondaryExternalId == true);
-
-        if (!secondaryExternalIdWasConfirmed)
+        if (pendingExport.AttributeValueChanges.Count == 0)
             return;
 
-        if (pendingExport.AttributeValueChanges.Count > 0)
-        {
-            var confirmedAttrName = result.ConfirmedChanges
-                .FirstOrDefault(ac => ac.Attribute?.IsSecondaryExternalId == true)?.Attribute?.Name ?? "unknown";
+        var confirmedSecondaryExternalId = result.ConfirmedChanges
+            .FirstOrDefault(ac => ac.Attribute?.IsSecondaryExternalId == true);
 
-            pendingExport.ChangeType = PendingExportChangeType.Update;
-            Log.Debug("ReconcileCsoAgainstPendingExport: Transitioned Pending Export {ExportId} from Create to Update. " +
-                "Secondary External ID attribute '{AttributeName}' was confirmed but {RemainingCount} attribute changes remain.",
-                pendingExport.Id, confirmedAttrName, pendingExport.AttributeValueChanges.Count);
-        }
+        // The whole Create is done: nothing remains awaiting confirmation, and there are queued Pending
+        // changes for it to carry once it does travel as an Update.
+        var noExportedChangesRemainAwaitingConfirmation = !pendingExport.AttributeValueChanges.Any(ac =>
+            ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+            ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+        var hasQueuedPendingChanges = pendingExport.AttributeValueChanges.Any(ac =>
+            ac.Status == PendingExportAttributeChangeStatus.Pending);
+        var wholeCreateNowConfirmedWithMoreQueued = noExportedChangesRemainAwaitingConfirmation && hasQueuedPendingChanges;
+
+        if (confirmedSecondaryExternalId == null && !wholeCreateNowConfirmedWithMoreQueued)
+            return;
+
+        pendingExport.ChangeType = PendingExportChangeType.Update;
+        Log.Debug("ReconcileCsoAgainstPendingExport: Transitioned Pending Export {ExportId} from Create to Update ({Reason}). " +
+            "{RemainingCount} attribute change(s) remain.",
+            pendingExport.Id,
+            confirmedSecondaryExternalId != null
+                ? $"Secondary External ID attribute '{confirmedSecondaryExternalId.Attribute!.Name}' was confirmed"
+                : "the Create's exported changes are all now confirmed and further changes are queued",
+            pendingExport.AttributeValueChanges.Count);
     }
 
     /// <summary>
