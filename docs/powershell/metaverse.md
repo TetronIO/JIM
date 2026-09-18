@@ -1019,10 +1019,10 @@ Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId $systems -Generate -Fo
 
 ### Notes
 
-- **This resets the passwords on whichever accounts you point it at.** Anyone who can call it can reset any account in these connector spaces, subject only to what each Connected System's service account is permitted to do.
+- **This resets the passwords on whichever Connected System Objects you point it at.** Anyone who can call it can reset the password of any Connected System Object in these Connector Spaces, subject only to what each Connected System's service account is permitted to do.
 - Each Connected System is delivered to on its own. One refusing does not stop the others, and the person is left with a different password there until you deal with it, so check every target rather than the first.
-- A refused password will be refused again if you resend it. Generate a different one, and set it on every account rather than only the one that failed, or the person ends up with two.
-- A named system whose Password Synchronisation is switched off is still delivered to; the switch governs propagated changes, and you named the account. A propagated change to that system is held until it is switched on.
+- A refused password will be refused again if you resend it. Generate a different one, and set it on every Connected System Object rather than only the one that failed, or the person ends up with two.
+- A named system whose Password Synchronisation is switched off is still delivered to; the switch governs propagated changes, and you named the Connected System Object. A propagated change to that system is held until it is switched on.
 
 ---
 

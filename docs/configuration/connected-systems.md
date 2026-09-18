@@ -470,9 +470,9 @@ The same action is available to automation through `Set-JIMConnectedSystemObject
 
 ### One password across several Connected Systems
 
-A person often has accounts in more than one place, and conveying a different password for each is both more work and worse for them: four different passwords on a first morning end up on a sticky note. Open a person's **Password** tab and **Set Password** lists every account they have whose Connector can set a password.
+A Metaverse Object often has Connected System Objects in more than one place, and conveying a different password for each is both more work and worse for the person: four different passwords on a first morning end up on a sticky note. Open the Metaverse Object's **Password** tab and **Set Password** lists every Connected System Object it has whose Connector can set a password.
 
-Choose some or all of them and JIM sets one password across them, one queued change per Connected System, each delivered on its own. **Nothing is selected by default**, so resetting a forgotten password in one system never silently resets the others. An account in a system whose Password Synchronisation is switched off is still delivered to, and the dialog says the system is paused for propagated changes; you named the account, which is the decision that switch exists to make.
+Choose some or all of them and JIM sets one password across them, one queued change per Connected System, each delivered on its own. **Nothing is selected by default**, so resetting a forgotten password in one system never silently resets the others. A Connected System Object in a system whose Password Synchronisation is switched off is still delivered to, and the dialog says the system is paused for propagated changes; you named the Connected System Object, which is the decision that switch exists to make.
 
 The password is generated to satisfy the strictest of the selected systems' rules: the longest minimum length any of them demands, and the character categories all of them count. A category only one system recognises cannot help satisfy another system's complexity rule, so JIM counts only what they have in common. Where a selected system has never published a policy, JIM says so rather than assuming it will accept anything.
 
