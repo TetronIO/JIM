@@ -1106,7 +1106,7 @@ public class SynchronisationController(
     /// <response code="202">A wait applied and ran out with the account still Queued or Delivering. The body carries what is known; delivery continues.</response>
     /// <response code="400">The password was empty, `wait` is outside 0 to 30, or the Connector cannot set passwords.</response>
     /// <response code="403">The transport is not one JIM will carry a password over.</response>
-    /// <response code="404">No such Connected System, no such object within it, or the object is not joined to a Metaverse Object, so there is no person whose password this would be.</response>
+    /// <response code="404">No such Connected System, no such object within it, or the object is not joined to a Metaverse Object, so there is no Metaverse Object whose password this would be.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/password", Name = "SetConnectedSystemObjectPassword")]
     [RequireSecureTransport]
@@ -1154,7 +1154,7 @@ public class SynchronisationController(
         if (connectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
         {
             return NotFound(ApiErrorResponse.NotFound(
-                $"Connected System Object {csoId} is not joined to a Metaverse Object, so there is no person whose password this would be. Join it to one first."));
+                $"Connected System Object {csoId} is not joined to a Metaverse Object, so there is no Metaverse Object whose password this would be. Join it to one first."));
         }
 
         var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);

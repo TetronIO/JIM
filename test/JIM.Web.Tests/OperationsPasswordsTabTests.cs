@@ -188,7 +188,7 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
                     It.Is<PendingPasswordChangeFilter>(f => f.MetaverseObjectId == id),
                     It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()),
                     Times.AtLeastOnce);
-                Assert.That(cut.Markup, Does.Contain("Showing one identity's queued password changes"),
+                Assert.That(cut.Markup, Does.Contain("Showing one Metaverse Object's queued password changes"),
                     "the cards count the whole queue while the list is one person's; the notice is what reconciles them");
             }
         });
