@@ -1763,6 +1763,29 @@ try {
         Write-Host "  PASSED: MvoDeletionScheduled recorded as the sole explaining outcome (ValuesPreserved correctly absent)" -ForegroundColor Green
 
         $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $true }
+
+        # Teardown: the pending deletion must not outlive this test. Later tests zero the grace period on the same
+        # Metaverse Object Type, which makes this Metaverse Object eligible at once, and housekeeping (a 60-second
+        # idle tick) then deletes it at an arbitrary point in their windows; it once landed inside Test 9's, where
+        # the delete Pending Export it staged failed that test's "nothing staged" assertion. Zero the grace period
+        # here and wait for housekeeping to delete the object, then drain the delete export it stages (the export
+        # Synchronisation Rule's deprovisioning action is Delete at this point), so the directory is clean too.
+        Write-Host "  Teardown: zeroing the grace period so housekeeping deletes the pending MVO now..." -ForegroundColor Gray
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+            -GracePeriod ([TimeSpan]::Zero) `
+            -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
+            -RemoveContributedAttributesOnObsoletion $true `
+            -RecallConnectedSystemId $config.CSVSystemId
+        $teardownDeadline = (Get-Date).AddSeconds(150)   # one 60-second housekeeping tick, with margin
+        while (Test-MvoExistsById -MvoId $test4bMvoId) {
+            if ((Get-Date) -gt $teardownDeadline) {
+                throw "Test 4b teardown failed: housekeeping did not delete MVO $test4bMvoId within 150 seconds of the grace period being zeroed"
+            }
+            Start-Sleep -Seconds 5
+        }
+        Write-Host "  Teardown: pending MVO deleted by housekeeping; draining its delete export" -ForegroundColor Gray
+        Invoke-DrainPendingExports -Config $config
     }
 
     # =============================================================================================================
