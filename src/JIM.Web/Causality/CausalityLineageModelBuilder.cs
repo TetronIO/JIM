@@ -82,7 +82,8 @@ public static class CausalityLineageModelBuilder
         // item's subject, so it anchors the graph even when no loaded event happens to land on it (a
         // synchronisation's events all land on the Identity and the staging targets).
         ColumnState? pageRecordColumn = null;
-        if (context.CsoConnectedSystemId.HasValue || context.RecordName != null)
+        if (context.CsoConnectedSystemId.HasValue
+            || ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) != null)
         {
             pageRecordColumn = GetRecordColumn(context.CsoConnectedSystemId, context.CsoConnectedSystemName,
                 isSourceSide: !pageRecordIsTarget);
@@ -422,7 +423,9 @@ public static class CausalityLineageModelBuilder
             string? href = context.CsoId is { } csoId && context.CsoConnectedSystemId is { } systemId
                 ? JimUtilities.GetConnectedSystemObjectHref(systemId, csoId)
                 : null;
-            return new ColumnHead(context.RecordName ?? "Connected System Object", IsRoleHead: false, href, context.CsoObjectTypeName);
+            return new ColumnHead(
+                ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? "Connected System Object",
+                IsRoleHead: false, href, context.CsoObjectTypeName);
         }
 
         var soleNames = state.Hops.OrderBy(h => h.Sequence)
@@ -449,8 +452,9 @@ public static class CausalityLineageModelBuilder
         // record's does above, so a target reads "user: EMP001746" rather than the name alone.
         var recordLink = state.ThisRunEvents.SelectMany(e => e.Links)
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Record && l.Href != null);
-        return new ColumnHead(context.RecordName ?? state.SystemName ?? "Connected System Object", IsRoleHead: false,
-            recordLink?.Href, ObjectTypeName: recordLink?.ObjectTypeName);
+        return new ColumnHead(
+            ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? state.SystemName ?? "Connected System Object",
+            IsRoleHead: false, recordLink?.Href, ObjectTypeName: recordLink?.ObjectTypeName);
     }
 
     /// <summary>

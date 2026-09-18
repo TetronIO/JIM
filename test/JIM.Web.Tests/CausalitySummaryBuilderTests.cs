@@ -325,4 +325,31 @@ public class CausalitySummaryBuilderTests
                 Assert.That(pill.Label, Does.Not.Contain('—'));
         }
     }
+
+    /// <summary>
+    /// Moved from the retired CausalityRecordLabelTests: the record's name in the summary
+    /// sentence now comes from <see cref="ObjectDescription.ChipName"/>, the one naming rule every object
+    /// chip and mention shares, but the "never show the same value twice" behaviour it pins is unchanged.
+    /// A record carrying none of the naming attributes resolves its name to its external id
+    /// (<c>ConnectedSystemObject.NameOrId</c> falls through to it), so the sentence must not go on to
+    /// mention the external id again as though it were a second fact.
+    /// </summary>
+    [Test]
+    public void Build_RecordNameEqualsExternalId_SentenceMentionsTheValueOnce()
+    {
+        const string entryUuid = "1f16ccb0-1f01-1041-8be1-eb9f4cb3f25e";
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            CsoDisplayName = entryUuid,
+            CsoExternalId = entryUuid
+        };
+
+        var summary = BuildSummary(CausalityTestData.NewJoinerItem(), context);
+        var sentence = RenderSentence(summary.Segments);
+
+        // NewJoinerContext's own object type ("person"), the two overridden fields (name, external id)
+        // aside.
+        Assert.That(sentence, Does.Contain($"processed person {entryUuid}:"));
+        Assert.That(sentence, Does.Not.Contain($"{entryUuid} ({entryUuid})"));
+    }
 }

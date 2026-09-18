@@ -11,7 +11,9 @@ using JIM.Models.Activities;
 using JIM.Models.Staging;
 using JIM.Web;
 using JIM.Web.Causality;
+using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -58,34 +60,37 @@ public class CausalityTimelineViewTests
 
         var cut = RenderTimeline(context, model);
 
-        // The Timeline is the one view with room to be precise: it reads RecordLabel while the summary
-        // sentence and the Flow and Graph views read RecordName. Pinned so the two never quietly converge.
-        Assert.That(cut.Markup, Does.Contain("Liam Allen (S8-287551)"));
+        // The Timeline shows the record's name; the external id (where distinct) is one hover away in the
+        // chip's tooltip rather than appended to the visible text.
+        Assert.That(cut.Markup, Does.Contain("Liam Allen"));
+        Assert.That(cut.Markup, Does.Not.Contain("Liam Allen (S8-287551)"));
     }
 
     /// <summary>
-    /// The record chip is a label, not a sentence, so it keeps the "type: name" form (#1669 follow-up):
-    /// "person: Liam Allen (S8-287551)", sourced from <see cref="ObjectDescription.ForConnectedSystemObjectLabel"/>
-    /// so the chip and the Lineage column head can never quietly disagree on how that form reads. The
-    /// type prefix is a separate, dimmed span for display only ("person:"); the visible text of the
-    /// two spans together must still read identically to the single-string label.
+    /// The record chip names the type and the record alone: "person: Liam Allen", with the
+    /// external id moved into the tooltip rather than appended to the visible name. The type prefix is a
+    /// separate, dimmed span for display only ("person:"); the visible text of the two spans together
+    /// must still read identically to the name alone.
     /// </summary>
     [Test]
-    public async Task Render_SourceRowRecordChip_NamesTheTypeAndNameAsALabelAsync()
+    public async Task Render_SourceRowRecordChip_NamesTheTypeAndNameWithTheExternalIdInTheTooltipAsync()
     {
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var cut = RenderTimeline(context, model);
 
-        var chip = cut.Find(".evt-entities .chip");
+        var recordChip = cut.FindComponents<ObjectChip>().First(c => c.Instance.Kind == ObjectChipKind.ConnectedSystemObject);
+        var chip = recordChip.Find(".jim-object-chip");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(chip.GetAttribute("title"), Is.EqualTo("person: Liam Allen (S8-287551)"));
-            Assert.That(chip.QuerySelector(".glyph")!.TextContent.Trim(), Is.EqualTo("CSO"));
-            Assert.That(string.Concat(chip.QuerySelector(".sub")!.TextContent, chip.QuerySelector(".name-ellip")!.TextContent).Trim(),
-                Is.EqualTo("person: Liam Allen (S8-287551)"));
-            Assert.That(chip.QuerySelector(".sub")!.TextContent.Trim(), Is.EqualTo("person:"),
+            Assert.That(recordChip.FindComponent<MudTooltip>().Instance.Text,
+                Is.EqualTo("person: Liam Allen · S8-287551 · in Yellowstone APAC"));
+            Assert.That(chip.QuerySelector(".jim-object-chip-glyph")!.TextContent.Trim(), Is.EqualTo("CSO"));
+            Assert.That(
+                string.Concat(chip.QuerySelector(".jim-object-chip-type")!.TextContent, chip.QuerySelector(".jim-object-chip-name")!.TextContent).Trim(),
+                Is.EqualTo("person: Liam Allen"));
+            Assert.That(chip.QuerySelector(".jim-object-chip-type")!.TextContent.Trim(), Is.EqualTo("person:"),
                 "the dimmed type prefix is its own span, split from the name purely for display");
         }
     }
@@ -116,12 +121,12 @@ public class CausalityTimelineViewTests
 
         var cut = RenderTimeline(context, model);
 
-        var chip = cut.FindAll(".evt-entities .chip")
-            .Single(c => c.QuerySelector(".name-ellip")!.TextContent.Trim() == "EMP001746");
+        var targetChip = cut.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "EMP001746");
+        var chip = targetChip.Find(".jim-object-chip");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(chip.QuerySelector(".sub")!.TextContent.Trim(), Is.EqualTo("user:"));
-            Assert.That(chip.GetAttribute("title"), Is.EqualTo("user: EMP001746"));
+            Assert.That(chip.QuerySelector(".jim-object-chip-type")!.TextContent.Trim(), Is.EqualTo("user:"));
+            Assert.That(targetChip.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo("user: EMP001746"));
         }
     }
 
@@ -190,7 +195,7 @@ public class CausalityTimelineViewTests
             Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("Projected to the Metaverse"));
             // The abbreviations live only in the entity chips' glyphs, where the full name sits in
             // the glyph's title; the timeline's own words never use them.
-            var prose = string.Join(" ", cut.FindAll(".verb, .tl-detail-line, .evt-badge, .name-ellip, .sub")
+            var prose = string.Join(" ", cut.FindAll(".verb, .tl-detail-line, .evt-badge, .jim-object-chip-name, .jim-object-chip-type")
                 .Select(e => e.TextContent));
             Assert.That(prose, Does.Not.Contain("MVO"));
             Assert.That(prose, Does.Not.Contain("CSO"));
