@@ -3,27 +3,27 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* A causality entity chip: a glyph circle identifying the entity kind (CS, SR, PE, DR, RP), an
-   optional demoted sub-label and the entity name with ellipsis overflow. A Connected System Object
-   or Metaverse Object mention carries no glyph at all: its name (and, where SubLabel names its
-   object type) is enough, and the two-letter abbreviation gained nothing beside it. Where a
-   SubLabel is set, the visible text reads as ObjectDescription's "type: name" label form (#1669
-   follow-up), not the running-text mention with "in {system}": a chip is a tag, not a sentence, and
-   the Connected System already follows on its own linked sub-line beneath the row that carries this
-   chip. It is split into two spans purely for the type prefix's dimmed colour; the chip's title and
-   accessible text (AccessibleText, below) are the same "type: name" string as one piece, so the two
-   can never disagree on what the label actually says. The remaining glyph kinds keep theirs, with
-   the glyph's own title attribute spelling out the abbreviation ("Connected System",
+@* A causality entity chip: a glyph circle identifying the entity kind (CSO, MVO, CS, SR, PE, DR, RP),
+   an optional demoted sub-label and the entity name with ellipsis overflow. A Connected System Object
+   and a Metaverse Object wear three-letter glyphs, so that on the Lineage view the two sides of a
+   column pair are told apart at a glance and neither is mistaken for the two-letter CS glyph the
+   Timeline's Connected System chips carry. Where a SubLabel is set, the visible text reads as
+   ObjectDescription's "type: name" label form (#1669 follow-up), not the running-text mention with
+   "in {system}": a chip is a tag, not a sentence, and the Connected System already follows on its own
+   linked sub-line beneath the row that carries this chip. It is split into two spans purely for the
+   type prefix's dimmed colour; the chip's title and accessible text (AccessibleText, below) are the
+   same "type: name" string as one piece, so the two can never disagree on what the label actually
+   says. The glyph's own title attribute spells out the abbreviation ("Connected System Object",
    "Synchronisation Rule", ...), since nothing else on the chip explains it. Renders as a link when
    Href is provided, otherwise as a plain chip. *@
 
 @if (!string.IsNullOrEmpty(Href))
 {
-    <a class="chip" href="@Href" title="@AccessibleText">@ChipContent</a>
+    <a class="chip @(ShowGlyph ? null : "plain")" href="@Href" title="@AccessibleText">@ChipContent</a>
 }
 else
 {
-    <span class="chip" title="@AccessibleText">@ChipContent</span>
+    <span class="chip @(ShowGlyph ? null : "plain")" title="@AccessibleText">@ChipContent</span>
 }
 
 @code {
@@ -46,6 +46,15 @@ else
     public CausalityEntityKind Kind { get; set; }
 
     /// <summary>
+    /// Whether the glyph renders at all. False where something beside the chip already says what kind
+    /// of object it names: a card in a Lineage column, whose head carries the CSO or MVO glyph for
+    /// every chip beneath it. The chip then renders name-only, with the "plain" class so its padding
+    /// suits a chip with no leading circle.
+    /// </summary>
+    [Parameter]
+    public bool ShowGlyph { get; set; } = true;
+
+    /// <summary>
     /// Optional demoted sub-label rendered before the name (e.g. the Connected System Object's own
     /// type). Visible text is dimmed, display-only; <see cref="AccessibleText"/> is the single source
     /// of what the combined "type: name" label actually says.
@@ -55,9 +64,9 @@ else
 
     private RenderFragment ChipContent => __builder =>
     {
-        @if (GetGlyphText() is { } glyphText)
+        @if (ShowGlyph)
         {
-            <span class="glyph @GetGlyphClass()" aria-hidden="true" title="@GetGlyphFullName()">@glyphText</span>
+            <span class="glyph @GetGlyphClass()" aria-hidden="true" title="@GetGlyphFullName()">@GetGlyphText()</span>
         }
         @if (!string.IsNullOrEmpty(SubLabel))
         {
@@ -83,16 +92,15 @@ else
         : ObjectDescription.ForConnectedSystemObjectLabel(SubLabel, Label);
 
     /// <summary>
-    /// The glyph circle's text, or null for a Connected System Object or Metaverse Object mention,
-    /// which renders label-only.
+    /// The glyph circle's text.
     /// </summary>
-    private string? GetGlyphText()
+    private string GetGlyphText()
     {
         return Kind switch
         {
             CausalityEntityKind.ConnectedSystem => "CS",
-            CausalityEntityKind.Record => null,
-            CausalityEntityKind.Identity => null,
+            CausalityEntityKind.Record => "CSO",
+            CausalityEntityKind.Identity => "MVO",
             CausalityEntityKind.SynchronisationRule => "SR",
             CausalityEntityKind.PendingExport => "PE",
             CausalityEntityKind.DeletionRecord => "DR",
@@ -101,14 +109,15 @@ else
     }
 
     /// <summary>
-    /// The glyph's full name, for the abbreviation's own title attribute. Only called where
-    /// <see cref="GetGlyphText"/> is non-null.
+    /// The glyph's full name, for the abbreviation's own title attribute.
     /// </summary>
     private string GetGlyphFullName()
     {
         return Kind switch
         {
             CausalityEntityKind.ConnectedSystem => "Connected System",
+            CausalityEntityKind.Record => "Connected System Object",
+            CausalityEntityKind.Identity => "Metaverse Object",
             CausalityEntityKind.SynchronisationRule => "Synchronisation Rule",
             CausalityEntityKind.PendingExport => "Pending Export",
             CausalityEntityKind.DeletionRecord => "Deletion record",
@@ -121,6 +130,8 @@ else
         return Kind switch
         {
             CausalityEntityKind.ConnectedSystem => "sys",
+            CausalityEntityKind.Record => "cso",
+            CausalityEntityKind.Identity => "mvo",
             CausalityEntityKind.SynchronisationRule => "rule",
             _ => "other"
         };
