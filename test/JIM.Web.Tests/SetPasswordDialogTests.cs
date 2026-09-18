@@ -595,7 +595,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         Click(provider, SelectAllMarker);
 
-        Assert.That(Button(provider, SubmitMarker).TextContent, Does.Contain("Set on 2 accounts"));
+        Assert.That(Button(provider, SubmitMarker).TextContent, Does.Contain("Set on 2 Connected System Objects"));
     }
 
     [Test]
@@ -788,7 +788,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Success));
-            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Password set on all 2 accounts."));
+            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Password set on all 2 Connected System Objects."));
             Assert.That(rows, Has.Count.EqualTo(2), "one row per account, including the ones that worked");
             Assert.That(rows.Select(r => r.GetAttribute("data-state")), Is.All.EqualTo("Set"));
             Assert.That(rows[0].TextContent, Does.Contain("must be changed at next sign-in"));
@@ -853,7 +853,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Warning));
-            Assert.That(summary, Does.Contain("Set on 1 of 2 accounts."));
+            Assert.That(summary, Does.Contain("Set on 1 of 2 Connected System Objects."));
             Assert.That(summary, Does.Contain("Fabrikam HR could not be reached, so JIM has kept the password and will try again in 5 minutes"));
             Assert.That(summary, Does.Contain("then with a longer wait each time"));
             Assert.That(retryingRow.GetAttribute("data-state"), Is.EqualTo("Retrying"));
@@ -896,7 +896,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Error));
-            Assert.That(summary, Does.Contain("Set on 1 of 2 accounts."));
+            Assert.That(summary, Does.Contain("Set on 1 of 2 Connected System Objects."));
             Assert.That(summary, Does.Contain("The password in Fabrikam HR is unchanged"));
             Assert.That(rows[1].GetAttribute("data-state"), Is.EqualTo("Parked"));
             Assert.That(rows[1].ClassName, Does.Contain("jim-password-result--failed"), "the row carries the failure, not the sentence");
@@ -1049,7 +1049,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[0].GetAttribute("data-state"), Is.EqualTo("Set"));
-            Assert.That(Button(provider, PausedMarker).TextContent, Does.Contain("Contoso AD is not taking propagated passwords; this one is delivered there because you named the account."));
+            Assert.That(Button(provider, PausedMarker).TextContent, Does.Contain("Contoso AD is not taking propagated passwords; this one is delivered there because you named the Connected System Object."));
         }
     }
 
