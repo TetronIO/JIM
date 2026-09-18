@@ -1274,6 +1274,28 @@ public interface ISyncRepository
     /// </summary>
     Task UpdatePendingExportAsync(PendingExport pendingExport);
 
+    /// <summary>
+    /// Appends newly evaluated attribute changes onto an existing Pending Export without touching its
+    /// <see cref="PendingExport.ChangeType"/> or <see cref="PendingExport.Status"/>. Used when a Metaverse
+    /// Object change arrives for a PendingProvisioning Connected System Object whose Create has already
+    /// been sent (or auto-confirmed away) and is awaiting confirmation by import: the Create must never be
+    /// deleted and replaced (that would mean sending a second Create, which most connectors reject for an
+    /// object that already exists), so the change queues Pending on the same row instead, and travels as an
+    /// Update once <c>SyncEngine.ReconcileCsoAgainstPendingExport</c> confirms the Create and flips the
+    /// row's ChangeType (SyncEngine.Reconciliation.cs).
+    /// </summary>
+    /// <param name="pendingExportId">The Pending Export to append to.</param>
+    /// <param name="changesToAdd">The newly evaluated attribute changes to add, already carrying their own
+    /// <see cref="PendingExportAttributeValueChange.Id"/>; implementations set
+    /// <see cref="PendingExportAttributeValueChange.PendingExportId"/>.</param>
+    /// <param name="changeIdsToRemove">The ids of existing attribute changes the new ones supersede (same
+    /// value-level merge semantics as <c>SyncEngine.MergeAttributeChangesIntoPendingExport</c>; computed by
+    /// the caller, which owns the merge policy), removed before the additions above.</param>
+    Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove);
+
     #endregion
 
     #region Export Evaluation Support

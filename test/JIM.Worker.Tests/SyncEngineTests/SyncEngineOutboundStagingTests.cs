@@ -37,7 +37,7 @@ public class SyncEngineOutboundStagingTests
         var rule = ExportRule(provisionToConnectedSystem: true, csoTypeId: 5);
         var cso = Cso(ConnectedSystemObjectStatus.Normal, typeId: 6, joinedToMvo: true);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: false);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: false, existingPendingExport: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -53,7 +53,7 @@ public class SyncEngineOutboundStagingTests
     {
         var rule = ExportRule(provisionToConnectedSystem: false);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, existingCso: null, changedAttributes: [], recallSemantics: false);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, existingCso: null, changedAttributes: [], recallSemantics: false, existingPendingExport: null);
 
         Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.ProvisioningDeclined));
     }
@@ -63,10 +63,11 @@ public class SyncEngineOutboundStagingTests
     {
         // The braided code treated a PendingProvisioning CSO exactly like no CSO for the provisioning gate:
         // the object does not exist in the target yet, and a rule that no longer provisions must not stage.
+        // Declines regardless of whether the Create was ever sent - the gate runs before that distinction.
         var rule = ExportRule(provisionToConnectedSystem: false);
         var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: false);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: false, existingPendingExport: null);
 
         Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.ProvisioningDeclined));
     }
@@ -78,7 +79,7 @@ public class SyncEngineOutboundStagingTests
         // Update instead); the verdict itself is "this rule wants a presence created".
         var rule = ExportRule(provisionToConnectedSystem: true);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, existingCso: null, changedAttributes: [], recallSemantics: false);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, existingCso: null, changedAttributes: [], recallSemantics: false, existingPendingExport: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -88,14 +89,15 @@ public class SyncEngineOutboundStagingTests
     }
 
     [Test]
-    public void DecideOutboundStaging_PendingProvisioningCsoWithRelevantChanges_ReusesItForACreate()
+    public void DecideOutboundStaging_PendingProvisioningCsoNeverExportedWithRelevantChanges_ReusesItForACreate()
     {
         var relevantAttributeId = 77;
         var rule = ExportRule(provisionToConnectedSystem: true, directSourceAttributeId: relevantAttributeId);
         var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
 
         var decision = _engine.DecideOutboundStaging(
-            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(relevantAttributeId)], recallSemantics: false);
+            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(relevantAttributeId)], recallSemantics: false,
+            existingPendingExport: UnsentCreate());
 
         using (Assert.EnterMultipleScope())
         {
@@ -108,12 +110,15 @@ public class SyncEngineOutboundStagingTests
     public void DecideOutboundStaging_PendingProvisioningCsoWithIrrelevantChanges_StagesNothing()
     {
         // Replacing the existing Create Pending Export with an identical one would misattribute it to this
-        // synchronisation in the causality tree; the braided code skipped, and so must this.
+        // synchronisation in the causality tree; the braided code skipped, and so must this. Applies whether
+        // the Create is still unsent or has already gone out (existingPendingExport is irrelevant here: the
+        // relevance guard runs before the never-exported check).
         var rule = ExportRule(provisionToConnectedSystem: true, directSourceAttributeId: 77);
         var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
 
         var decision = _engine.DecideOutboundStaging(
-            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(attributeId: 999)], recallSemantics: false);
+            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(attributeId: 999)], recallSemantics: false,
+            existingPendingExport: UnsentCreate());
 
         Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.PendingProvisioningChangesIrrelevant));
     }
@@ -126,9 +131,66 @@ public class SyncEngineOutboundStagingTests
         var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
 
         var decision = _engine.DecideOutboundStaging(
-            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(attributeId: 999)], recallSemantics: false);
+            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(attributeId: 999)], recallSemantics: false,
+            existingPendingExport: UnsentCreate());
 
         Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.ReusePendingProvisioningCso));
+    }
+
+    [Test]
+    public void DecideOutboundStaging_PendingProvisioningCsoWithSentCreate_StagesAnUpdate()
+    {
+        // The Create has already been exported and is awaiting confirmation: staging must never re-issue a
+        // second Create for it (most connectors reject a Create for an object that already exists).
+        var relevantAttributeId = 77;
+        var rule = ExportRule(provisionToConnectedSystem: true, directSourceAttributeId: relevantAttributeId);
+        var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
+
+        var decision = _engine.DecideOutboundStaging(
+            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(relevantAttributeId)], recallSemantics: false,
+            existingPendingExport: SentCreate(PendingExportStatus.Exported));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.UpdateExportedProvisioningCso));
+            Assert.That(decision.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+        }
+    }
+
+    [Test]
+    public void DecideOutboundStaging_PendingProvisioningCsoWithNoPendingExport_TreatsItAsSentAndStagesAnUpdate()
+    {
+        // No Pending Export at all means an auto-confirming file export deleted the Create the moment it
+        // succeeded (see IsProvisioningNeverExported's own remarks) - the object really did reach the
+        // target, so this must not be read as "never exported".
+        var relevantAttributeId = 77;
+        var rule = ExportRule(provisionToConnectedSystem: true, directSourceAttributeId: relevantAttributeId);
+        var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
+
+        var decision = _engine.DecideOutboundStaging(
+            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(relevantAttributeId)], recallSemantics: false,
+            existingPendingExport: null);
+
+        Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.UpdateExportedProvisioningCso));
+    }
+
+    [Test]
+    public void DecideOutboundStaging_PendingProvisioningCsoWithAttemptedCreate_TreatsItAsSentAndStagesAnUpdate()
+    {
+        // A Create that was attempted (LastAttemptedAt set) and is retrying, even while still Status Pending,
+        // is not "never exported" either - IsProvisioningNeverExported requires no attempt at all.
+        var relevantAttributeId = 77;
+        var rule = ExportRule(provisionToConnectedSystem: true, directSourceAttributeId: relevantAttributeId);
+        var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
+        var attemptedCreate = UnsentCreate();
+        attemptedCreate.LastAttemptedAt = DateTime.UtcNow;
+        attemptedCreate.ErrorCount = 1;
+
+        var decision = _engine.DecideOutboundStaging(
+            Mvo(), rule, cso, changedAttributes: [ChangedAttribute(relevantAttributeId)], recallSemantics: false,
+            existingPendingExport: attemptedCreate);
+
+        Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.UpdateExportedProvisioningCso));
     }
 
     [Test]
@@ -137,7 +199,7 @@ public class SyncEngineOutboundStagingTests
         var rule = ExportRule(provisionToConnectedSystem: true);
         var cso = Cso(ConnectedSystemObjectStatus.Normal, typeId: 5, joinedToMvo: true);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: false);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: false, existingPendingExport: null);
 
         using (Assert.EnterMultipleScope())
         {
@@ -153,7 +215,7 @@ public class SyncEngineOutboundStagingTests
         // and provisioning one on a recall would be inventing an account to delete a membership from.
         var rule = ExportRule(provisionToConnectedSystem: true);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, existingCso: null, changedAttributes: [], recallSemantics: true);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, existingCso: null, changedAttributes: [], recallSemantics: true, existingPendingExport: null);
 
         Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.RecallSkippedNoTargetPresence));
     }
@@ -166,7 +228,7 @@ public class SyncEngineOutboundStagingTests
         var rule = ExportRule(provisionToConnectedSystem: true);
         var cso = Cso(ConnectedSystemObjectStatus.PendingProvisioning, typeId: 5);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: true);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: true, existingPendingExport: UnsentCreate());
 
         Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.RecallSkippedNoTargetPresence));
     }
@@ -177,7 +239,7 @@ public class SyncEngineOutboundStagingTests
         var rule = ExportRule(provisionToConnectedSystem: true);
         var cso = Cso(ConnectedSystemObjectStatus.Normal, typeId: 5, joinedToMvo: true);
 
-        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: true);
+        var decision = _engine.DecideOutboundStaging(Mvo(), rule, cso, changedAttributes: [], recallSemantics: true, existingPendingExport: null);
 
         Assert.That(decision.Outcome, Is.EqualTo(OutboundStagingOutcome.UpdateExistingCso));
     }
@@ -241,5 +303,24 @@ public class SyncEngineOutboundStagingTests
     {
         Id = Guid.NewGuid(),
         AttributeId = attributeId
+    };
+
+    /// <summary>A Create Pending Export that has never been sent: unsent, zero attempts - the only shape
+    /// <see cref="SyncEngine.IsProvisioningNeverExported"/> accepts.</summary>
+    private static PendingExport UnsentCreate() => new()
+    {
+        Id = Guid.NewGuid(),
+        ChangeType = PendingExportChangeType.Create,
+        Status = PendingExportStatus.Pending,
+        LastAttemptedAt = null,
+        ErrorCount = 0
+    };
+
+    /// <summary>A Create Pending Export that has already been sent and is awaiting confirmation.</summary>
+    private static PendingExport SentCreate(PendingExportStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        ChangeType = PendingExportChangeType.Create,
+        Status = status
     };
 }

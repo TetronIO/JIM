@@ -228,20 +228,26 @@ public interface ISyncEngine
     /// Decides what kind of export, if any, a Metaverse Object change stages against one export
     /// Synchronisation Rule's target: nothing (a reported Object Type conflict, provisioning declined, a
     /// reference recall against no exportable presence, or changes irrelevant to a pending provisioning), a
-    /// Create (provision new, or restage the pending provisioning CSO's Create), or an Update. The
-    /// orchestrator interposes export matching before acting on a ProvisionNewCso verdict.
+    /// Create (provision new, or restage a still-unsent pending provisioning CSO's Create), or an Update (the
+    /// object already exists in the target, or its Create has already been sent and is awaiting confirmation -
+    /// never a second Create). The orchestrator interposes export matching before acting on a ProvisionNewCso
+    /// verdict.
     /// </summary>
     /// <param name="mvo">The Metaverse Object whose change is being evaluated.</param>
     /// <param name="exportRule">The export Synchronisation Rule under evaluation.</param>
     /// <param name="existingCso">The Metaverse Object's CSO in the rule's Connected System, if any.</param>
     /// <param name="changedAttributes">The changed attributes, for the pending provisioning relevance check.</param>
     /// <param name="recallSemantics">True when evaluating a reference recall (#1003), which must never provision.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to <paramref name="existingCso"/>,
+    /// if any, resolved by the caller only for a PendingProvisioning CSO (from the run's in-memory batch first,
+    /// the database second). Tells a never-sent Create apart from one already sent and awaiting confirmation.</param>
     OutboundStagingDecision DecideOutboundStaging(
         MetaverseObject mvo,
         SyncRule exportRule,
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        bool recallSemantics);
+        bool recallSemantics,
+        PendingExport? existingPendingExport);
 
     /// <summary>
     /// Merges newly evaluated attribute changes into a Pending Export this run has already staged for the
