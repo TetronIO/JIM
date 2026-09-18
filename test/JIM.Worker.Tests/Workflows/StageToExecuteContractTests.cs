@@ -153,6 +153,12 @@ public class StageToExecuteContractTests : WorkflowTestBase
     //                                                                                              exactly one unsent Create.
     // Confirmed + AttributeUpdate x {Call, FileAutoConfirm,          | 1 Create (provisioning)   | A single Update carries the
     //   FileNoAutoConfirm}                                          | + 1 Update (follow-up)    | latest value; CSO stays Normal.
+    // ExportedUnconfirmed + AttributeUpdate x {Call,                 | 1 Create + 1 Update,      | The Update is not sent before
+    //   FileAutoConfirm, FileNoAutoConfirm}                          | Create always first       | the Create is confirmed (auto-
+    //   (dedicated test, two sync/export/confirm cycles)                                          | confirm counts as confirmation,
+    //                                                                                              | so it may go on the very next
+    //                                                                                              | export there); CSO ends Normal
+    //                                                                                              | + Provisioned with the new value.
     // ExportedUnconfirmed + (LeavesScope|MvoDeleted) + Delete        | 1 Create + 1 Delete       | Delete export succeeds and
     //   x {Call, FileAutoConfirm, FileNoAutoConfirm}                                              | removes the CSO even though it
     //                                                                                              was never confirmed by import
@@ -480,9 +486,12 @@ public class StageToExecuteContractTests : WorkflowTestBase
 
         // Group 2: attribute updates. NeverExported: the unsent Create's staged value simply updates in
         // place (nothing executes). Confirmed: a real Update export, proven clean across all three export
-        // paths. ExportedUnconfirmed x AttributeUpdate is deliberately excluded: how staging should treat
-        // an attribute change arriving mid-flight, before any confirmation, on an already-exported Create
-        // is not specified by the docs and would need a product decision, not an assumed expectation here.
+        // paths. ExportedUnconfirmed x AttributeUpdate (Create sent, not yet confirmed, attribute change
+        // arrives before confirmation) is no longer excluded: the product owner has specified the
+        // behaviour (an Update follows once the Create has been confirmed - auto-confirm counts as
+        // confirmation), and it is covered by its own dedicated test below
+        // (ExportedUnconfirmed_AttributeUpdate_UpdateFollowsOnceCreateConfirmedAsync), which needs a
+        // two-cycle sync/export/confirm lifecycle the shared matrix driver does not model.
         yield return Case(new ContractCase(
             "NeverExported_AttributeUpdate_UpdatesUnsentCreateInPlace",
             CsoLifecycleState.NeverExported, ChangeKind.AttributeUpdate, OutboundDeprovisionAction.Disconnect, ExportPath.Call,
@@ -542,6 +551,208 @@ public class StageToExecuteContractTests : WorkflowTestBase
     {
         var testCase = new TestCaseData(c).SetName(c.Name);
         return ignoreReason == null ? testCase : testCase.Ignore(ignoreReason);
+    }
+
+    #endregion
+
+    #region ExportedUnconfirmed + AttributeUpdate: Update sent only once the Create is confirmed
+
+    /// <summary>
+    /// FINDING (all three export paths; see <see cref="AttributeUpdateBeforeConfirmationCases"/> for the
+    /// evidence-carrying <c>[Ignore]</c> reason on each case): staging does not gate an attribute change on
+    /// the Create having been confirmed at all. <c>SyncEngine.ExportStaging.cs</c>'s
+    /// <c>DecideOutboundStaging</c> computes <c>needsProvisioning</c> purely from
+    /// <c>existingCso.Status == ConnectedSystemObjectStatus.PendingProvisioning</c> (line ~61), and CSO
+    /// Status never transitions away from PendingProvisioning until a REAL confirming import runs -
+    /// established elsewhere in this fixture (Defect2's own arrange assertion: "export never transitions
+    /// status by itself"), auto-confirm included. Any still-unconfirmed CSO therefore always takes the
+    /// <c>ReusePendingProvisioningCso</c> branch (line ~98-103), which unconditionally sets
+    /// <c>ChangeType = PendingExportChangeType.Create</c> - there is no code path that stages an Update for
+    /// an object whose provisioning is not yet confirmed. Confirmed empirically: on all three export paths,
+    /// the export immediately following the attribute change sends a SECOND Create (not an Update, and not
+    /// deferred), before any confirming import has run. This directly contradicts all three product-owner
+    /// requirements: a second Create IS sent, it IS sent before confirmation (real or auto), and no Update
+    /// is ever staged at all - the new value only ever travels via the re-sent Create.
+    ///
+    /// This test asserts the SPECIFIED behaviour, not the actual one; it deliberately runs its own two-cycle
+    /// sync/export/confirm/sync/export/confirm lifecycle (the shared matrix driver only models one export
+    /// cycle after the tested change) so it is a dedicated test rather than a <see cref="ContractCase"/>.
+    ///
+    /// The connector is deliberately reused across every export call in this test (rather than a fresh
+    /// instance per call, as elsewhere in this fixture) so its own <c>ExportedItems</c> log accumulates the
+    /// full, ordered call history in one place, letting the assertions below check both the count AND the
+    /// order of Create vs Update directly against it.
+    /// </summary>
+    [Test]
+    [TestCaseSource(nameof(AttributeUpdateBeforeConfirmationCases))]
+    public async Task ExportedUnconfirmed_AttributeUpdate_UpdateFollowsOnceCreateConfirmedAsync(ExportPath exportPath)
+    {
+        var caseName = $"ExportedUnconfirmed_AttributeUpdate_{exportPath}";
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disconnect);
+        var (sourceCso, _) = await CreateSourceCsoAsync(topology, $"{caseName} User", "EMP2000");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+        Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            $"[{caseName}] arrange: provisioning must stage a Pending Provisioning target CSO");
+
+        var connector = CreateExportConnector(exportPath);
+
+        // Export the Create.
+        var createActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly($"{caseName} (create)", createActivity);
+        var exportedSoFar = GetExportedItems(connector);
+        Assert.That(exportedSoFar.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
+            $"[{caseName}] arrange: exactly one Create must have been sent");
+        var callsAfterCreate = exportedSoFar.Count;
+
+        // The attribute update arrives at the source.
+        ReplaceStringAttributeValue(sourceCso, topology.SourceDisplayNameAttr, $"{caseName} Updated Name");
+        await RunFullSyncAsync(topology.Source, "Attribute Update Full Sync");
+
+        // First post-change export attempt.
+        var firstExportActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly($"{caseName} (export 1)", firstExportActivity);
+        var callsAfterFirstExport = GetExportedItems(connector).Count;
+
+        if (exportPath != ExportPath.FileAutoConfirm)
+        {
+            // Auto-confirm is the only path where confirmation happens the moment the Create succeeds;
+            // for the other two, nothing may be sent yet - the Create is still awaiting a real confirming
+            // import, and clause 3 forbids sending the Update before that.
+            Assert.That(callsAfterFirstExport, Is.EqualTo(callsAfterCreate),
+                $"[{caseName}] the Update must not be sent before the Create has been confirmed by import");
+        }
+        // FileAutoConfirm: deliberately no assertion here - the specification says the Update "may" go on
+        // this very next export (auto-confirm already counts as confirmation by this point), not that it
+        // must; whichever export call actually carries it is checked by the ordering assertion below.
+
+        // Confirming import: report back what the target actually, currently holds, derived from the
+        // connector's own recorded call history rather than assumed - see BuildConfirmingImportObjectFromActualExport.
+        var importConnector1 = new MockCallConnector();
+        importConnector1.QueueImportObjects(BuildConfirmingImportObjectFromActualExport(topology, targetCso, GetExportedItems(connector)));
+        await RunConfirmingImportAsync(topology.Target, importConnector1);
+
+        // Sync again: with the Create now confirmed, staging should notice the source's updated
+        // DisplayName no longer matches the target and stage the Update (if it has not already gone out).
+        await RunFullSyncAsync(topology.Source, "Attribute Update Full Sync (post-confirm)");
+
+        // Second export attempt.
+        var secondExportActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly($"{caseName} (export 2)", secondExportActivity);
+
+        var allExported = GetExportedItems(connector);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allExported.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
+                $"[{caseName}] exactly one Create, never a second one");
+            Assert.That(allExported.Count(pe => pe.ChangeType == PendingExportChangeType.Update), Is.EqualTo(1),
+                $"[{caseName}] exactly one Update");
+        }
+
+        var allExportedList = allExported.ToList();
+        var createIndex = allExportedList.FindIndex(pe => pe.ChangeType == PendingExportChangeType.Create);
+        var updateIndex = allExportedList.FindIndex(pe => pe.ChangeType == PendingExportChangeType.Update);
+        Assert.That(createIndex, Is.LessThan(updateIndex),
+            $"[{caseName}] the connector must receive the Create before the Update, never the reverse");
+
+        // The Update must carry the new value.
+        var targetDisplayNameAttr = topology.TargetType.Attributes.Single(a => a.Name == "DisplayName");
+        var updatePe = allExportedList.Single(pe => pe.ChangeType == PendingExportChangeType.Update);
+        var updateChange = updatePe.AttributeValueChanges.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+        Assert.That(updateChange?.StringValue, Is.EqualTo($"{caseName} Updated Name"),
+            $"[{caseName}] the Update must carry the new DisplayName value");
+
+        // Final confirming import (confirms the Update) and sync.
+        var importConnector2 = new MockCallConnector();
+        importConnector2.QueueImportObjects(BuildConfirmingImportObjectFromActualExport(topology, targetCso, allExported));
+        await RunConfirmingImportAsync(topology.Target, importConnector2);
+        await RunFullSyncAsync(topology.Source, "Final Full Sync");
+
+        var finalTargetCso = SyncRepo.ConnectedSystemObjects.GetValueOrDefault(targetCso.Id);
+        Assert.That(finalTargetCso, Is.Not.Null, $"[{caseName}] the target CSO must still exist");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finalTargetCso!.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), $"[{caseName}] final CSO status");
+            Assert.That(finalTargetCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned), $"[{caseName}] final CSO join type");
+            var finalValue = finalTargetCso.AttributeValues.SingleOrDefault(av => av.AttributeId == targetDisplayNameAttr.Id)?.StringValue;
+            Assert.That(finalValue, Is.EqualTo($"{caseName} Updated Name"), $"[{caseName}] final CSO DisplayName");
+        }
+
+        AssertContract(caseName,
+            stagedBeforeExecution: [],
+            executedActivities: [createActivity, firstExportActivity, secondExportActivity],
+            expectedCreates: 1, expectedUpdates: 1, expectedDeletes: 0,
+            connectorCallLogs: [allExported]);
+    }
+
+    /// <summary>
+    /// One case per export path, each carrying the same FINDING (see the test method's own doc comment for
+    /// the full evidence and suspected root cause): staging always re-issues a Create - never an Update,
+    /// and with no gating on confirmation at all - for any attribute change arriving while the target CSO
+    /// is still Pending Provisioning, regardless of whether its Create has already been sent (or even
+    /// auto-confirmed). Confirmed by running each case unignored and inspecting the connector's own call
+    /// log: after the very first post-change export, all three paths show <c>Create, Create</c> - never
+    /// <c>Create, Update</c> - before any confirming import has run.
+    /// </summary>
+    private static IEnumerable<TestCaseData> AttributeUpdateBeforeConfirmationCases()
+    {
+        const string reason =
+            "FINDING: staging re-issues a Create (never an Update) for any attribute change arriving " +
+            "while the target CSO is still Pending Provisioning, with no gating on confirmation - a second " +
+            "Create is sent immediately, before any confirming import (real or auto-confirmed). Root cause: " +
+            "SyncEngine.ExportStaging.cs DecideOutboundStaging computes needsProvisioning purely from " +
+            "CSO.Status == PendingProvisioning (~line 61), which never transitions away until a real " +
+            "confirming import runs; the ReusePendingProvisioningCso branch it falls into (~line 98-103) " +
+            "unconditionally sets ChangeType = Create. There is no staging path that produces an Update for " +
+            "an unconfirmed-but-already-exported provisioning CSO. Contradicts all three specified " +
+            "requirements: a second Create is sent, it is sent before confirmation, and no Update is ever " +
+            "staged.";
+
+        foreach (var exportPath in new[] { ExportPath.Call, ExportPath.FileAutoConfirm, ExportPath.FileNoAutoConfirm })
+        {
+            yield return new TestCaseData(exportPath)
+                .SetName($"ExportedUnconfirmed_AttributeUpdate_UpdateFollowsOnceCreateConfirmed_{exportPath}")
+                .Ignore(reason);
+        }
+    }
+
+    /// <summary>
+    /// Builds a confirming import object from what the target connector has ACTUALLY been sent so far
+    /// (per its own recorded call history), rather than from source data or assumption: the latest
+    /// AttributeValueChange for each attribute across every Pending Export the connector has received, in
+    /// call order, is what the target genuinely, currently holds. This is what makes it possible to check
+    /// "the Update is not sent before the Create is confirmed" honestly - a confirming import built from
+    /// source data would silently report the new value as already present even on a run where it had not,
+    /// in fact, been sent yet.
+    /// </summary>
+    private static ConnectedSystemImportObject BuildConfirmingImportObjectFromActualExport(
+        Topology topology, ConnectedSystemObject targetCso, IReadOnlyList<PendingExport> exportedItemsSoFar)
+    {
+        var targetDisplayNameAttr = topology.TargetType.Attributes.Single(a => a.Name == "DisplayName");
+        string? displayName = null;
+        foreach (var pe in exportedItemsSoFar)
+        {
+            var change = pe.AttributeValueChanges.FirstOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+            if (change != null)
+                displayName = change.StringValue;
+        }
+
+        var targetExternalIdAttr = topology.TargetType.Attributes.Single(a => a.IsExternalId);
+        var externalId = targetCso.AttributeValues.SingleOrDefault(av => av.AttributeId == targetExternalIdAttr.Id)?.StringValue;
+
+        var importObject = new ConnectedSystemImportObject
+        {
+            ObjectType = topology.TargetType.Name,
+            ChangeType = ObjectChangeType.Updated
+        };
+
+        if (displayName != null)
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "DisplayName", StringValues = { displayName } });
+        if (externalId != null)
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ExternalId", StringValues = { externalId } });
+
+        return importObject;
     }
 
     #endregion
