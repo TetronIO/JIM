@@ -188,17 +188,17 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 
 #### Initial password attention (ById only)
 
-How many accounts in the Connected System are waiting on a person over their initial password.
+How many Connected System Objects in the Connected System are waiting on a person over their initial password.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `ParkedInitialPasswordCount` | `int?` | Accounts whose target refused the password and which JIM has stopped retrying |
-| `ExpiredInitialPasswordCount` | `int?` | Accounts never given an initial password within its time to live |
+| `ParkedInitialPasswordCount` | `int?` | Connected System Objects whose target refused the password and which JIM has stopped retrying |
+| `ExpiredInitialPasswordCount` | `int?` | Connected System Objects never given an initial password within its time to live |
 
-The two are never summed, because they ask for different things. Parked accounts are released by correcting the
-initial password settings on the [Synchronisation Rule](synchronisation-rules.md) that provisioned them and saving;
-`Get-JIMSyncRuleInitialPassword` reports what the target actually said. Expired accounts cannot be helped that way at
-all and need a password set by other means.
+The two are never summed, because they ask for different things. Parked Connected System Objects are released by
+correcting the initial password settings on the [Synchronisation Rule](synchronisation-rules.md) that provisioned them and saving;
+`Get-JIMSyncRuleInitialPassword` reports what the target actually said. Expired Connected System Objects cannot be
+helped that way at all and need a password set by other means.
 
 ```powershell title="Find the systems with initial password work waiting"
 Get-JIMConnectedSystem -All |
@@ -1593,9 +1593,9 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 Sets the password on one Connected System Object.
 
-The account-scoped form of Set Password: the same operation as [`Set-JIMMetaverseObjectPassword`](metaverse.md#set-jimmetaverseobjectpassword) with this one account named, for scripts that hold the account rather than the person. The change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing; by default the command waits up to ten seconds and tells you what the account did with the password. JIM holds the password only until the account has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. Every attempt is recorded as an Activity, carrying the outcome and, where the system refused, its verbatim reason.
+The Connected System Object-scoped form of Set Password: the same operation as [`Set-JIMMetaverseObjectPassword`](metaverse.md#set-jimmetaverseobjectpassword) with this one Connected System Object named, for scripts that hold the Connected System Object rather than the Metaverse Object. The change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing; by default the command waits up to ten seconds and tells you what the Connected System Object did with the password. JIM holds the password only until the object has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. Every attempt is recorded as an Activity, carrying the outcome and, where the system refused, its verbatim reason.
 
-This is the automation counterpart of the **Set Password** action on a Connected System Object in the administration portal. The object must be joined to a Metaverse Object: a password belongs to a person, and that is where its history is kept. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`.
+This is the automation counterpart of the **Set Password** action on a Connected System Object in the administration portal. The object must be joined to a Metaverse Object: a password belongs to a Metaverse Object, and that is where its history is kept. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`.
 
 ### Syntax
 

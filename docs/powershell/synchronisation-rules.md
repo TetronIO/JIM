@@ -1350,11 +1350,11 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 
 ### Get-JIMSyncRuleInitialPassword
 
-Gets whether JIM sets an initial password on the accounts a Synchronisation Rule provisions, how it generates one,
-and which accounts are waiting on a person.
+Gets whether JIM sets an initial password on the Connected System Objects a Synchronisation Rule provisions, how it
+generates one, and which Connected System Objects are waiting on a person.
 
 No password value is ever returned. A generated password is produced at the moment it is set and stored nowhere;
-where the rule uses one password for every account, that password is stored encrypted and is write-only, so all
+where the rule uses one password for every Connected System Object, that password is stored encrypted and is write-only, so all
 that comes back is that one is set and when it last changed.
 
 #### Syntax
@@ -1368,22 +1368,22 @@ Get-JIMSyncRule -Id <int> | Get-JIMSyncRuleInitialPassword
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `enabled` | `bool` | Whether JIM sets an initial password on accounts this rule provisions |
-| `source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every account) |
+| `enabled` | `bool` | Whether JIM sets an initial password on the Connected System Objects this rule provisions |
+| `source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every Connected System Object) |
 | `customPolicy` | `object` | The generator settings used when `source` is `Custom` |
 | `expiryBehaviour` | `string` | What happens to the password once it is set |
-| `enableAccount` | `bool` | Whether the account is enabled once the password is set |
-| `staticPasswordSet` | `bool` | Whether one password is stored for every account this rule provisions |
+| `enableAccount` | `bool` | Whether the Connected System Object is enabled once the password is set |
+| `staticPasswordSet` | `bool` | Whether one password is stored for every Connected System Object this rule provisions |
 | `staticPasswordSetAt` | `datetime` | When that password last changed, or null where none is set |
-| `parkedAccountCount` | `int` | Accounts waiting on a change to these settings |
-| `expiredAccountCount` | `int` | Accounts never given an initial password within its time to live |
+| `parkedAccountCount` | `int` | Connected System Objects waiting on a change to these settings |
+| `expiredAccountCount` | `int` | Connected System Objects never given an initial password within its time to live |
 | `parkedReasons` | `array` | One entry per distinct refusal, biggest group first |
 
 Each entry in `parkedReasons` carries `targetMessage` (what the target said, unaltered), `failureReason`,
 `accountCount` and `firstSeenAt`.
 
-The two counts are never summed. Correcting these settings and saving releases the parked accounts, and does
-nothing at all for the expired ones; those need a password set by other means.
+The two counts are never summed. Correcting these settings and saving releases the parked Connected System Objects,
+and does nothing at all for the expired ones; those need a password set by other means.
 
 #### Examples
 
@@ -1412,26 +1412,26 @@ Get-JIMSyncRule -All | ForEach-Object {
 
 ### Set-JIMSyncRuleInitialPassword
 
-Replaces the configuration above. Saving a change that alters what would be delivered releases every account
-parked against the rule, and they are attempted again on the Connected System's next export run; saving a change
+Replaces the configuration above. Saving a change that alters what would be delivered releases every Connected
+System Object parked against the rule, and they are attempted again on the Connected System's next export run; saving a change
 that would deliver the same password in the same way releases nothing.
 
 Only what you supply changes, with one exception: the generator settings travel as a set, so supplying any one of
 them sends the whole policy.
 
-#### One password for every account
+#### One password for every Connected System Object
 
-`-Source Static` with `-StaticPassword` sets one password you choose on every account the rule provisions, so you
-can tell a new starter what it is. **This option is not recommended**: every account the rule provisions shares
-that password until each person changes it. See
+`-Source Static` with `-StaticPassword` sets one password you choose on every Connected System Object the rule
+provisions, so you can tell a new starter what it is. **This option is not recommended**: every Connected System
+Object the rule provisions shares that password until each person changes it. See
 [Passwords](../concepts/passwords.md#one-password-for-every-connected-system-object) before using it.
 
 `-StaticPassword` takes a `SecureString`, so the password does not sit in your session's command history in clear
 text. It is write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which
 is what makes changing another setting safe.
 
-```powershell title="Set one password for every account this rule provisions"
-$password = Read-Host -AsSecureString "Initial password for every new account"
+```powershell title="Set one password for every Connected System Object this rule provisions"
+$password = Read-Host -AsSecureString "Initial password for every new Connected System Object"
 Set-JIMSyncRuleInitialPassword -Id 5 -Enable -Source Static -StaticPassword $password
 ```
 

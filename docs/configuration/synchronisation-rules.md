@@ -313,7 +313,7 @@ Each Connected System Object ends up in one of these states, all of them reporte
 
 The target's own words are kept verbatim on a parked Connected System Object, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
 
-### Clearing parked accounts
+### Clearing parked Connected System Objects
 
 Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every Connected System Object parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
 

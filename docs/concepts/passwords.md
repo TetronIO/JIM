@@ -9,7 +9,7 @@ It can also set a password on demand: on the Connected System Objects you name, 
 
 This page covers what JIM does with passwords and why. To actually configure it, follow the links in [Where to go next](#where-to-go-next).
 
-## 🔑 Giving new accounts their first password
+## 🔑 Giving new Connected System Objects their first password
 
 Most directories will not let a newly created object be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every Connected System Object that rule creates, so the object is complete and enabled from the moment it exists instead of waiting on somebody to do it by hand.
 
