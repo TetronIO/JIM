@@ -134,4 +134,73 @@ public static class ObjectDescription
     {
         return "in the Metaverse";
     }
+
+    /// <summary>
+    /// The one naming rule for an object chip: the display name if present, else the external id, else
+    /// null when neither is known (a provisioned object before export names nothing; the call site shows the
+    /// type alone and links the object beside it). Never both at once: the external id, where distinct, belongs
+    /// in the chip's tooltip (<see cref="ForConnectedSystemObjectChipTooltip"/>), not beside the name in the
+    /// chip's own text.
+    /// </summary>
+    /// <param name="displayName">The object's display name, or null/empty when it has none.</param>
+    /// <param name="externalId">The object's external id, or null/empty when it has none.</param>
+    public static string? ChipName(string? displayName, string? externalId)
+    {
+        return Present(displayName) ?? Present(externalId);
+    }
+
+    /// <summary>
+    /// A Connected System Object chip's tooltip: "person: Sienna Quinn · EMP000051 · in HR CSV Source".
+    /// Carries what the chip's own text leaves out: the external id, when it differs from the name the chip
+    /// shows, and the Connected System the object lives in.
+    /// </summary>
+    /// <param name="typeName">The Connected System Object Type's name, as the schema gives it, or null/empty when unknown.</param>
+    /// <param name="displayName">The object's display name, or null/empty when it has none.</param>
+    /// <param name="externalId">The object's external id, or null/empty when it has none.</param>
+    /// <param name="connectedSystemName">The Connected System the object lives in, or null/empty when unknown.</param>
+    public static string ForConnectedSystemObjectChipTooltip(
+        string? typeName, string? displayName, string? externalId, string? connectedSystemName)
+    {
+        var name = ChipName(displayName, externalId);
+        var parts = new List<string>
+        {
+            name != null
+                ? ForConnectedSystemObjectLabel(typeName, name)
+                : Present(typeName) ?? "Connected System Object"
+        };
+
+        var presentExternalId = Present(externalId);
+        if (presentExternalId != null && !string.Equals(presentExternalId, name, StringComparison.Ordinal))
+            parts.Add(presentExternalId);
+
+        var presentSystem = Present(connectedSystemName);
+        if (presentSystem != null)
+            parts.Add($"in {presentSystem}");
+
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// A Metaverse Object chip's tooltip: "User: Sienna Quinn". A Metaverse Object carries no external
+    /// id of its own, so there is nothing this adds over <see cref="ForConnectedSystemObjectLabel"/> beyond the
+    /// unknown-value fallback that makes it safe to call with either value missing.
+    /// </summary>
+    /// <param name="typeName">The Metaverse Object Type's name, or null/empty when unknown.</param>
+    /// <param name="displayName">The object's display name, or null/empty when it has none.</param>
+    public static string ForMetaverseObjectChipTooltip(string? typeName, string? displayName)
+    {
+        var name = Present(displayName);
+        return name != null
+            ? ForConnectedSystemObjectLabel(typeName, name)
+            : Present(typeName) ?? "Metaverse Object";
+    }
+
+    /// <summary>
+    /// Treats a whitespace-only value as absent: a connected system that supplies "   " has supplied nothing,
+    /// and rendering it produces a label that looks empty but is not.
+    /// </summary>
+    private static string? Present(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
 }

@@ -16,7 +16,7 @@
 @* py-2 that keeps it one line tall, level with the tab bar; only the shrink-to-fit layout is its own.           *@
 @* jim-identity-strip is a hook, not a style.                                                                     *@
 <MudPaper Outlined="true" Class="jim-identity-strip d-inline-flex align-center gap-3 px-4 py-2">
-    <ObjectChip Kind="ObjectChipKind.Metaverse" TypeName="@MetaverseObjectTypeName" Tooltip="Metaverse Object Type" Class="ma-0" />
+    <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@MetaverseObjectTypeName" Tooltip="Metaverse Object Type" Class="ma-0" />
     <MudTooltip Text="@FlowTooltip" Arrow="true" Placement="Placement.Top">
         <span class="@($"jim-identity-flow {FlowClass}")">
             @if (!IsOutbound)
@@ -32,7 +32,7 @@
             }
         </span>
     </MudTooltip>
-    <ObjectChip Kind="ObjectChipKind.ConnectedSystem" TypeName="@ConnectedSystemObjectTypeName" Tooltip="Connected System Object Type" Class="ma-0" />
+    <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@ConnectedSystemObjectTypeName" Tooltip="Connected System Object Type" Class="ma-0" />
     <MudDivider Vertical="true" FlexItem="true" />
     <span class="mud-text-secondary">in</span>
     <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}")" Class="jim-identity-strip-system">

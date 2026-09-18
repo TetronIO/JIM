@@ -848,9 +848,9 @@
     private static ObjectChipKind? ObjectSide(ConfigurationChangePreviewDelta row)
     {
         if (row is { ConnectedSystemObjectId: not null, ConnectedSystemId: not null })
-            return ObjectChipKind.ConnectedSystem;
+            return ObjectChipKind.ConnectedSystemObject;
 
-        return row.MetaverseObjectId.HasValue ? ObjectChipKind.Metaverse : null;
+        return row.MetaverseObjectId.HasValue ? ObjectChipKind.MetaverseObject : null;
     }
 
     /// <summary>
@@ -859,9 +859,9 @@
     /// </summary>
     private string? ObjectHref(ConfigurationChangePreviewDelta row) => ObjectSide(row) switch
     {
-        ObjectChipKind.ConnectedSystem =>
+        ObjectChipKind.ConnectedSystemObject =>
             Utilities.GetConnectedSystemObjectHref(row.ConnectedSystemId!.Value, row.ConnectedSystemObjectId!.Value),
-        ObjectChipKind.Metaverse when _selectedGroupTypePluralName is { Length: > 0 } pluralName =>
+        ObjectChipKind.MetaverseObject when _selectedGroupTypePluralName is { Length: > 0 } pluralName =>
             Utilities.GetMetaverseObjectHref(row.MetaverseObjectId!.Value, pluralName),
         _ => null
     };
@@ -872,9 +872,9 @@
     /// </summary>
     private string ObjectTooltip(ObjectChipKind side) => side switch
     {
-        ObjectChipKind.ConnectedSystem when !string.IsNullOrEmpty(_selectedGroup?.ConnectedSystemName) =>
+        ObjectChipKind.ConnectedSystemObject when !string.IsNullOrEmpty(_selectedGroup?.ConnectedSystemName) =>
             $"Connected System Object in {_selectedGroup.ConnectedSystemName}",
-        ObjectChipKind.ConnectedSystem => "Connected System Object",
+        ObjectChipKind.ConnectedSystemObject => "Connected System Object",
         _ => "Metaverse Object"
     };
 

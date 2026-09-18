@@ -198,4 +198,125 @@ public class ObjectDescriptionTests
 
         Assert.That(text, Is.EqualTo("in the Metaverse"));
     }
+
+    // ─── ChipName: the one naming rule - display name wins, then external id, never both ───
+
+    [Test]
+    public void ChipName_NameAndExternalIdPresent_ReturnsTheNameAlone()
+    {
+        Assert.That(ObjectDescription.ChipName("Erin Byrne", "S8-100"), Is.EqualTo("Erin Byrne"));
+    }
+
+    [Test]
+    public void ChipName_NameOnly_ReturnsTheName()
+    {
+        Assert.That(ObjectDescription.ChipName("Erin Byrne", null), Is.EqualTo("Erin Byrne"));
+    }
+
+    [Test]
+    public void ChipName_ExternalIdOnly_FallsBackToIt()
+    {
+        Assert.That(ObjectDescription.ChipName(null, "S8-100"), Is.EqualTo("S8-100"));
+    }
+
+    [Test]
+    public void ChipName_WhitespaceOnlyValues_TreatedAsAbsent()
+    {
+        Assert.That(ObjectDescription.ChipName("   ", "  "), Is.Null);
+    }
+
+    [Test]
+    public void ChipName_NeitherPresent_ReturnsNull()
+    {
+        Assert.That(ObjectDescription.ChipName(null, null), Is.Null);
+    }
+
+    // ─── ForConnectedSystemObjectChipTooltip ───
+
+    [Test]
+    public void ForConnectedSystemObjectChipTooltip_EveryValueKnown_CombinesTypeNameExternalIdAndSystem()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectChipTooltip(
+            "person", "Sienna Quinn", "EMP000051", "HR CSV Source");
+
+        Assert.That(text, Is.EqualTo("person: Sienna Quinn · EMP000051 · in HR CSV Source"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectChipTooltip_ExternalIdEqualsName_NeverDuplicatesIt()
+    {
+        // The chip already shows the value once (ChipName falls through to the external id here); the
+        // tooltip must not repeat it as though it were a second, distinct fact.
+        const string entryUuid = "1f16ccb0-1f01-1041-8be1-eb9f4cb3f25e";
+
+        var text = ObjectDescription.ForConnectedSystemObjectChipTooltip("jimGroup", null, entryUuid, "Yellowstone APAC");
+
+        Assert.That(text, Is.EqualTo($"jimGroup: {entryUuid} · in Yellowstone APAC"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectChipTooltip_NoExternalId_OmitsThatSegment()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectChipTooltip("person", "Sienna Quinn", null, "HR CSV Source");
+
+        Assert.That(text, Is.EqualTo("person: Sienna Quinn · in HR CSV Source"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectChipTooltip_NoConnectedSystem_OmitsThatSegment()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectChipTooltip("person", "Sienna Quinn", "EMP000051", null);
+
+        Assert.That(text, Is.EqualTo("person: Sienna Quinn · EMP000051"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectChipTooltip_NoNameOrExternalId_NamesTheTypeAlone()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectChipTooltip("person", null, null, "HR CSV Source");
+
+        Assert.That(text, Is.EqualTo("person · in HR CSV Source"));
+    }
+
+    [Test]
+    public void ForConnectedSystemObjectChipTooltip_NothingKnown_FallsBackToTheFullProductNoun()
+    {
+        var text = ObjectDescription.ForConnectedSystemObjectChipTooltip(null, null, null, null);
+
+        Assert.That(text, Is.EqualTo("Connected System Object"));
+    }
+
+    // ─── ForMetaverseObjectChipTooltip ───
+
+    [Test]
+    public void ForMetaverseObjectChipTooltip_TypeAndNameKnown_CombinesThem()
+    {
+        var text = ObjectDescription.ForMetaverseObjectChipTooltip("User", "Sienna Quinn");
+
+        Assert.That(text, Is.EqualTo("User: Sienna Quinn"));
+    }
+
+    [Test]
+    public void ForMetaverseObjectChipTooltip_TypeUnknown_NamesTheNameAlone()
+    {
+        var text = ObjectDescription.ForMetaverseObjectChipTooltip(null, "Sienna Quinn");
+
+        Assert.That(text, Is.EqualTo("Sienna Quinn"));
+    }
+
+    [Test]
+    public void ForMetaverseObjectChipTooltip_NameUnknown_NamesTheTypeAlone()
+    {
+        var text = ObjectDescription.ForMetaverseObjectChipTooltip("User", null);
+
+        Assert.That(text, Is.EqualTo("User"));
+    }
+
+    [Test]
+    public void ForMetaverseObjectChipTooltip_NothingKnown_FallsBackToTheFullProductNoun()
+    {
+        var text = ObjectDescription.ForMetaverseObjectChipTooltip(null, null);
+
+        Assert.That(text, Is.EqualTo("Metaverse Object"));
+    }
 }

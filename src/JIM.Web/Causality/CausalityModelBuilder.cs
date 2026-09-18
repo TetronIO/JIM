@@ -231,11 +231,12 @@ public static class CausalityModelBuilder
             if (node.TargetEntityId is { } mvoId && mvoId != Guid.Empty)
             {
                 links.Add(new CausalityEntityLink(
-                    node.TargetEntityDescription ?? "Identity", GetMetaverseObjectHref(mvoId, context), CausalityEntityKind.Identity));
+                    node.TargetEntityDescription ?? "Identity", GetMetaverseObjectHref(mvoId, context), CausalityEntityKind.Identity,
+                    context.MvoTypeName));
             }
             else if (!string.IsNullOrEmpty(node.TargetEntityDescription))
             {
-                links.Add(new CausalityEntityLink(node.TargetEntityDescription, null, CausalityEntityKind.Identity));
+                links.Add(new CausalityEntityLink(node.TargetEntityDescription, null, CausalityEntityKind.Identity, context.MvoTypeName));
             }
         }
         else if (lane == CausalityLane.Downstream)
@@ -765,7 +766,7 @@ public static class CausalityModelBuilder
                 // The Metaverse Object no longer exists: name it, but link the durable deletion
                 // record browser instead of the (deleted) Identity's detail page
                 if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
-                    links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Identity));
+                    links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Identity, context.MvoTypeName));
                 links.Add(new CausalityEntityLink(
                     "View deletion record",
                     GetDeletedMvoHref(outcome.TargetEntityId),
@@ -793,11 +794,12 @@ public static class CausalityModelBuilder
                     links.Add(new CausalityEntityLink(
                         outcome.TargetEntityDescription ?? "Metaverse Object",
                         GetMetaverseObjectHref(mvoId, context),
-                        CausalityEntityKind.Identity));
+                        CausalityEntityKind.Identity,
+                        context.MvoTypeName));
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
                 {
-                    links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Identity));
+                    links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Identity, context.MvoTypeName));
                 }
                 break;
         }

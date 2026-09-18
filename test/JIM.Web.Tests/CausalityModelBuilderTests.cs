@@ -153,6 +153,9 @@ public class CausalityModelBuilderTests
         Assert.That(identityLink, Is.Not.Null);
         Assert.That(identityLink!.Label, Is.EqualTo("Liam Allen"));
         Assert.That(identityLink.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
+        // The one naming rule: a Metaverse Object chip reads "type: name" like a record's, and the page
+        // context knows the Metaverse Object Type, so every Identity link carries it.
+        Assert.That(identityLink.ObjectTypeName, Is.EqualTo("Person"));
 
         var ruleLink = projected.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
         Assert.That(ruleLink, Is.Not.Null);
