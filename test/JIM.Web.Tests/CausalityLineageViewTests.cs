@@ -492,7 +492,7 @@ public class CausalityLineageViewTests
     }
 
     [Test]
-    public void Render_ExportCreateStory_HeadsNameRecordsAndTheMetaverseObjectWithNoGlyph()
+    public void Render_ExportCreateStory_HeadsNameRecordsAndTheMetaverseObjectWithTheirGlyphs()
     {
         var cut = RenderLineage(ExportCreateLineage());
 
@@ -503,9 +503,12 @@ public class CausalityLineageViewTests
             Assert.That(heads[0].TextContent, Does.Contain("Liam Allen"));
             Assert.That(heads[0].TextContent, Does.Contain("in Yellowstone APAC"));
             Assert.That(heads[2].TextContent, Does.Contain("in Glitterband EMEA"));
-            // Column heads carry no glyph of their own: the Metaverse Object and the Connected System
-            // Objects either side of it are told apart by their own text, not by an abbreviation.
-            Assert.That(heads.SelectMany(h => h.QuerySelectorAll(".glyph")), Is.Empty);
+            // Each column head carries its object's glyph: CSO either side, MVO in the middle. Three
+            // letters, so neither reads as the CS glyph the Timeline's Connected System chips wear.
+            Assert.That(heads.Select(h => h.QuerySelector(".glyph")!.TextContent.Trim()),
+                Is.EqualTo(new[] { "CSO", "MVO", "CSO" }));
+            Assert.That(heads[1].QuerySelector(".glyph")!.GetAttribute("title"), Is.EqualTo("Metaverse Object"));
+            Assert.That(heads[0].QuerySelector(".glyph")!.GetAttribute("title"), Is.EqualTo("Connected System Object"));
         }
     }
 

@@ -48,6 +48,15 @@
                 {
                     <div class="ln-object" @key="lineageObject">
                         <div class="ln-obj">
+                            @* The head's CSO/MVO glyph: which side of the story this column is, at a
+                               glance, in the same three letters the cards' chips wear. The trailing
+                               column of unassigned chains stands for no one object and carries none. *@
+                            @if (column.Kind != CausalityLineageColumnKind.Unassigned)
+                            {
+                                <span class="glyph @(column.Kind == CausalityLineageColumnKind.Identity ? "mvo" : "cso")"
+                                      aria-hidden="true"
+                                      title="@(column.Kind == CausalityLineageColumnKind.Identity ? "Metaverse Object" : "Connected System Object")">@(column.Kind == CausalityLineageColumnKind.Identity ? "MVO" : "CSO")</span>
+                            }
                             @if (lineageObject.Href != null)
                             {
                                 <a class="ln-obj-title" href="@lineageObject.Href">@GetObjectTitle(column, lineageObject)</a>

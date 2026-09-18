@@ -316,6 +316,30 @@
     color: var(--mud-palette-warning-text, #fff);
 }
 
+/* The two object glyphs carry three letters, so they widen into a pill of the same height rather
+   than squeezing the text into the circle; the letters drop a step to keep the pill compact. The
+   Connected System Object keeps the secondary colour and the Metaverse Object the primary, JIM's
+   own, as the R and ID glyphs they replace did. */
+.causality-panel .chip .glyph.cso,
+.causality-panel .chip .glyph.mvo {
+    width: auto;
+    min-width: 24px;
+    padding: 0 6px;
+    border-radius: 12px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+}
+
+.causality-panel .chip .glyph.cso {
+    background: var(--cz-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+}
+
+.causality-panel .chip .glyph.mvo {
+    background: var(--cz-primary);
+    color: var(--mud-palette-primary-text, #fff);
+}
+
 .causality-panel .chip .sub {
     color: var(--cz-text-faint);
     font-weight: 450;
@@ -509,12 +533,18 @@
     top: 14px;
 }
 
-.causality-panel .tl-row:last-child > .tl-rail::before {
+/* The last row of a block ends its rail at its own dot, unless it has children: then the rail runs
+   on to the bottom of the row's own content, where the nested block's connector takes over. */
+.causality-panel .tl-row:last-child:not(.has-children) > .tl-rail::before {
     bottom: calc(100% - 14px);
 }
 
-.causality-panel .tl-row.only-child > .tl-rail::before {
+.causality-panel .tl-row.only-child:not(.has-children) > .tl-rail::before {
     display: none;
+}
+
+.causality-panel .tl-row.only-child.has-children > .tl-rail::before {
+    top: 14px;
 }
 
 .causality-panel .tl-dot {
@@ -544,11 +574,11 @@
     min-width: 0;
 }
 
-/* A row's children render at the end of its own body, and each child body already carries the
-   trailing gap, so a parent keeping its bottom padding as well counts the gap twice: the space after
-   a nested branch came out at double the space between plain siblings, and compounded once more per
-   level of nesting. */
-.causality-panel .tl-body.has-children {
+/* A row's children render beneath its own body (see .tl-children), and each child body already
+   carries the trailing gap, so a parent keeping its bottom padding as well counts the gap twice: the
+   space after a nested branch came out at double the space between plain siblings, and compounded
+   once more per level of nesting. */
+.causality-panel .tl-row.has-children > .tl-body {
     padding-bottom: 0;
 }
 
@@ -643,8 +673,47 @@
 
 /* The parent's own bottom padding is suppressed (see .tl-body.has-children), so descending into a
    branch has to supply the same gap here that a sibling would have got from that padding. */
+/* A nested block sits in the parent row's second column, beneath the parent's body, so its rows are
+   indented by the rail column and its gap (42px). Every nested row draws two connectors back to its
+   parent's rail, which lies 30px left of the row's own rail line: a vertical run down that rail's
+   line (::before) and an elbow across to the row's own dot (::after). The first row's run reaches up
+   through the block's top margin to meet the parent's rail where it ended; the last row's run stops
+   at its own elbow when the parent is the last of its block, and carries on to the row's bottom edge
+   (the parent's next sibling) when it is not. A nested row's run spans the row's full height, its own
+   children included, so a deeper block's continuation past an ancestor is drawn by that ancestor's
+   row without any extra rule per level. */
 .causality-panel .tl-children {
+    grid-column: 2;
     margin-top: var(--cz-tl-gap);
+}
+
+.causality-panel .tl-children > .tl-row::before,
+.causality-panel .tl-children > .tl-row::after {
+    content: "";
+    position: absolute;
+    background: var(--cz-line-soft);
+}
+
+.causality-panel .tl-children > .tl-row::before {
+    left: -30px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+}
+
+.causality-panel .tl-children > .tl-row:first-child::before {
+    top: calc(-1 * var(--cz-tl-gap));
+}
+
+.causality-panel .tl-row:last-child > .tl-children > .tl-row:last-child::before {
+    bottom: calc(100% - 17px);
+}
+
+.causality-panel .tl-children > .tl-row::after {
+    left: -30px;
+    top: 16px;
+    width: 34px;
+    height: 2px;
 }
 
 .causality-panel .tl-inline-detail {
@@ -818,6 +887,31 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+/* The head's CSO/MVO glyph: square-cornered so heads read as objects rather than as the round
+   entity chips on cards, but coloured identically so the vocabulary stays one vocabulary. */
+.causality-panel .ln-obj .glyph {
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 6px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.causality-panel .ln-obj .glyph.cso {
+    background: var(--cz-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+}
+
+.causality-panel .ln-obj .glyph.mvo {
+    background: var(--cz-primary);
+    color: var(--mud-palette-primary-text, #fff);
 }
 
 .causality-panel .ln-obj-title {
