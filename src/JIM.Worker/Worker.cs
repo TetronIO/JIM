@@ -216,7 +216,7 @@ public class Worker : BackgroundService
                     Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
 
                     // During idle time, perform housekeeping tasks like orphan MVO cleanup
-                    await PerformHousekeepingAsync(mainLoopJim);
+                    await PerformHousekeepingAsync();
 
                     await Task.Delay(2000, stoppingToken);
                 }
@@ -953,13 +953,22 @@ public class Worker : BackgroundService
     /// Currently includes: orphaned MVO cleanup based on deletion rules.
     /// Internal for testability (JIM.Worker.Tests exercises the housekeeping path directly).
     /// </summary>
-    internal async Task PerformHousekeepingAsync(JimApplication jim)
+    internal async Task PerformHousekeepingAsync()
     {
         // Only run housekeeping every 60 seconds to avoid unnecessary database queries
         if ((DateTime.UtcNow - _lastHousekeepingRun).TotalSeconds < 60)
             return;
 
         _lastHousekeepingRun = DateTime.UtcNow;
+
+        // Each tick runs on a JimApplication (and so a DbContext) of its own, never the main loop's. That instance
+        // lives for the worker's lifetime on a change-tracking context, and EF Core serves a tracked entity back
+        // from its identity map rather than refreshing it from a later query, so a Synchronisation Rule or
+        // Metaverse Object Type loaded for one batch was being reused, as it then stood, by every batch after it:
+        // an export rule switched to Disconnect after the first batch still had its directory objects deleted
+        // (found by Scenario 4, Test 9). A fresh instance reads the configuration as it stands now, and releases
+        // everything the batch tracked when it is done.
+        using var jim = _jimFactory.Create();
 
         try
         {
