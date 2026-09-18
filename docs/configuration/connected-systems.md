@@ -443,11 +443,11 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 !!! note "The reset rights check needs somewhere to look"
     Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Partitions and Containers tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
 
-### Setting the password on one account
+### Setting the password on one Connected System Object
 
-Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. It is the same operation as Set Password on the person, aimed at this one account: the change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. It is never staged as a Pending Export, and JIM holds the password only until the account has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. The account must be joined to a Metaverse Object, because a password belongs to a person and that is where its history is kept.
+Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. It is the same operation as Set Password on the Metaverse Object, aimed at this one Connected System Object: the change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. It is never staged as a Pending Export, and JIM holds the password only until the object has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. The Connected System Object must be joined to a Metaverse Object, because a password belongs to a Metaverse Object and that is where its history is kept.
 
-Use it for the new starter about to sign in for the first time, the account whose provisioning password was refused, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
+Use it for the new starter about to sign in for the first time, the Connected System Object whose provisioning password was refused, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the object, where they happen without anybody watching.
 
 The dialog is built around one rule: **the password is masked from the moment it is generated, and copying it does not require showing it.**
 
@@ -456,17 +456,17 @@ The dialog is built around one rule: **the password is masked from the moment it
 - **Reveal** is the secondary action, for reading a password aloud or checking a transcription. It hides itself again after thirty seconds.
 - You can type your own password instead of generating one.
 
-Choose what happens to the password once it is set (requiring a change at the next sign-in is the default, and the right one for a password somebody else chose), and whether to enable the account at the same time. Leaving the enable switch off leaves the account's enabled state exactly as it was, which is what a reset on a working account should do.
+Choose what happens to the password once it is set (requiring a change at the next sign-in is the default, and the right one for a password somebody else chose), and whether to enable the Connected System Object at the same time. Leaving the enable switch off leaves the object's enabled state exactly as it was, which is what a reset on a working object should do.
 
 The dialog waits for the outcome and shows it: **Set**, **Retrying** with the next attempt where the system could not be reached (JIM keeps trying on its own clock, and you can stop it), or **Parked** where the system refused the password, carrying its own words so you can try another one. Every attempt is recorded as an Activity, whether it succeeded or not; the Activity records that a password was set, never the password.
 
-!!! warning "This resets the password on whichever account you point it at"
-    Anyone who can reach this action can reset the password of any account in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
+!!! warning "This resets the password on whichever Connected System Object you point it at"
+    Anyone who can reach this action can reset the password of any Connected System Object in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
 
 !!! note "Copying and your operating system's clipboard"
     Copying needs an HTTPS connection: browsers deny clipboard access over plain HTTP, and the button says so rather than silently doing nothing. JIM clears the clipboard when the dialog closes where the browser allows it, but your operating system may keep the value in its own clipboard history, which no web page can reach.
 
-The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, which can either take a password you supply or generate one against the discovered policy. A generated password is returned to the caller, once, because they asked for it; JIM's own copy is the queued one, and it goes when the account has it.
+The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, which can either take a password you supply or generate one against the discovered policy. A generated password is returned to the caller, once, because they asked for it; JIM's own copy is the queued one, and it goes when the Connected System Object has it.
 
 ### One password across several Connected Systems
 
@@ -481,7 +481,7 @@ The dialog waits for the outcomes and shows one per Connected System: **Set**, *
 !!! warning "There is no transaction across Connected Systems"
     Each system is delivered to independently. A reset can end with the new password in some systems and not yet in others, and the person has a different password where a system refused it. JIM says which, in as many words. A system that could not be reached is retried by JIM on its own clock; nothing is lost while it is down.
 
-    Where a system refused the **password itself**, retrying it unchanged will fail identically. **Try another password** generates a fresh one for every account instead, including the ones that already took the first, because replacing it only where it failed would leave the person with two.
+    Where a system refused the **password itself**, retrying it unchanged will fail identically. **Try another password** generates a fresh one for every Connected System Object instead, including the ones that already took the first, because replacing it only where it failed would leave the person with two.
 
 Every Connected System gets its own Activity, grouped under one parent for the change, so the whole action is findable afterwards and appears in the person's password history beside any propagated change.
 
@@ -489,25 +489,25 @@ For automation, `Set-JIMMetaverseObjectPassword -ConnectedSystemId` does the sam
 
 ## Password Synchronisation
 
-Setting a password on named accounts, above, is a choice made per reset. Password Synchronisation is the standing arrangement: which systems receive a person's password when it is set without naming any, so that one change reaches every system they have an account in.
+Setting a password on named Connected System Objects, above, is a choice made per reset. Password Synchronisation is the standing arrangement: which systems receive a Metaverse Object's password when it is set without naming any, so that one change reaches every system it has a Connected System Object in.
 
 It is configured on the Connected System's **Passwords** tab, which appears only where the connector can set passwords at all. Systems whose connector has no password channel do not show the tab, because there is nothing to configure rather than something to switch on later.
 
 | Setting | What it does |
 |---|---|
 | **Deliver password changes to this Connected System** | Whether queued password changes are delivered. Separate from the configuration existing, so a system can be set up ahead of a change window and switched on during one. |
-| **Object Type holding user accounts** | Which Connected System Object Type receives passwords. Only Object Types you have selected for synchronisation are offered: an unselected one holds no objects, so choosing it would queue passwords for accounts that never appear. |
+| **Object Type that receives passwords** | Which Connected System Object Type receives passwords. Only Object Types you have selected for synchronisation are offered: an unselected one holds no objects, so choosing it would queue passwords for objects that never appear. |
 | **Maximum attempts** | How many delivery attempts JIM makes before it stops and asks you to look. Leave it at 0 to use JIM's default of five. |
 | **First retry after** | How long to wait before the first retry. Each further attempt waits twice as long as the one before. |
 
 Two things follow from the enable toggle being separate from the configuration:
 
-- **Switching a system off does not discard anything.** Password changes for identities with an account there accumulate, and switching it back on delivers what accumulated. That is what makes it safe to switch off for a maintenance window.
+- **Switching a system off does not discard anything.** Password changes for Metaverse Objects with a Connected System Object there accumulate, and switching it back on delivers what accumulated. That is what makes it safe to switch off for a maintenance window.
 - **There is no way to remove a configuration, only to disable it.** Removing one would throw away everything queued against it, so JIM does not offer that. This is true of the REST API and PowerShell too.
 
 Two settings that govern delivery here live on the **Settings** tab instead, under Passwords, because they govern every password JIM sends to this system rather than only synchronised ones:
 
-- **Only send passwords over an encrypted connection.** JIM cannot always tell an encrypted connection from an unencrypted one; a signed and sealed bind is encrypted but does not look it from the system's settings, which is why JIM warns rather than refusing by default. Turn this on, once you know the connection is encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued password changes wait, and accounts stay owed their first password. It applies equally to the initial password on an account JIM provisions and to a password you set by hand.
+- **Only send passwords over an encrypted connection.** JIM cannot always tell an encrypted connection from an unencrypted one; a signed and sealed bind is encrypted but does not look it from the system's settings, which is why JIM warns rather than refusing by default. Turn this on, once you know the connection is encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued password changes wait, and Connected System Objects stay owed their first password. It applies equally to the initial password on a Connected System Object JIM provisions and to a password you set by hand.
 - **Give up after.** How long a queued change waits before JIM expires it rather than delivering a password that has since been superseded. Shared with initial password provisioning deliberately: the question both are asking is how long this system may be unavailable before JIM stops trying, and the answer is a property of the system rather than of the deployment.
 
 Every change to these settings reaches the Connected System's configuration change history, so switching Password Synchronisation on or off is attributable afterwards.

@@ -1424,7 +1424,7 @@ them sends the whole policy.
 `-Source Static` with `-StaticPassword` sets one password you choose on every account the rule provisions, so you
 can tell a new starter what it is. **This option is not recommended**: every account the rule provisions shares
 that password until each person changes it. See
-[Passwords](../concepts/passwords.md#one-password-for-every-account) before using it.
+[Passwords](../concepts/passwords.md#one-password-for-every-connected-system-object) before using it.
 
 `-StaticPassword` takes a `SecureString`, so the password does not sit in your session's command history in clear
 text. It is write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which

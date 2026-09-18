@@ -1,73 +1,73 @@
 # Passwords
 
-A newly provisioned account is not much use until somebody gives it a password. JIM can do that for you, on the accounts it manages, without anyone touching the target system by hand.
+A newly provisioned Connected System Object is not much use until somebody gives it a password. JIM can do that for you, on the Connected System Objects it manages, without anyone touching the target system by hand.
 
-It can also set a password on demand: on the accounts you name, or on every system configured to receive a person's password changes.
+It can also set a password on demand: on the Connected System Objects you name, or on every system configured to receive a Metaverse Object's password changes.
 
 !!! info "Nothing happens until you ask for it"
-    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named account. Today the [LDAP Connector](../connectors/jim-ldap-connector.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP and generic LDAP directories.
+    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named Connected System Object. Today the [LDAP Connector](../connectors/jim-ldap-connector.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP and generic LDAP directories.
 
 This page covers what JIM does with passwords and why. To actually configure it, follow the links in [Where to go next](#where-to-go-next).
 
 ## 🔑 Giving new accounts their first password
 
-Most directories will not let an account be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every account that rule creates, so the account is complete and enabled from the moment it exists instead of waiting on somebody to do it by hand.
+Most directories will not let a newly created object be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every Connected System Object that rule creates, so the object is complete and enabled from the moment it exists instead of waiting on somebody to do it by hand.
 
-By default that password is different for every account and JIM keeps no copy, so it is not one anybody receives; see [how the person gets their password](#so-how-does-the-person-get-their-password) below. One password for every account is offered as well, and is [not recommended](#one-password-for-every-account).
+By default that password is different for every Connected System Object and JIM keeps no copy, so it is not one anybody receives; see [how the person gets their password](#so-how-does-the-person-get-their-password) below. One password for every Connected System Object is offered as well, and is [not recommended](#one-password-for-every-connected-system-object).
 
 --8<-- "assets/diagrams/initial-password.svg"
 
-<p class="jim-diagram-caption">The password is set in its own pass at the end of the export run, not as part of creating the account.<span class="jimdg-caption-motion"> Moving dots trace an account through to a delivered password.</span></p>
+<p class="jim-diagram-caption">The password is set in its own pass at the end of the export run, not as part of creating the Connected System Object.<span class="jimdg-caption-motion"> Moving dots trace a Connected System Object through to a delivered password.</span></p>
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM separates populations: contractors and permanent staff provisioned into the same directory can want different password rules.
 
 ### Why it is a separate step
 
-Setting the password happens after the account is created, and cannot fail the export that created it. If it could, JIM would treat the account as never created and try to create it again.
+Setting the password happens after the Connected System Object is created, and cannot fail the export that created it. If it could, JIM would treat the object as never created and try to create it again.
 
-Instead the password is delivered in its own pass at the end of every export run, covering every account on that Connected System still owing one, not just the accounts this run created. **An ordinary export run is therefore the retry.** A directory that was offline, or a permission your service account was missing, is picked up by the next run that was going to happen anyway. There is nothing extra to schedule.
+Instead the password is delivered in its own pass at the end of every export run, covering every Connected System Object on that system still owing one, not just the ones this run created. **An ordinary export run is therefore the retry.** A directory that was offline, or a permission your service account was missing, is picked up by the next run that was going to happen anyway. There is nothing extra to schedule.
 
 ### What you will see afterwards
 
-Every account ends up in one of four states, reported on the export's Activity.
+Every Connected System Object ends up in one of four states, reported on the export's Activity.
 
 | State | What it means | What you do |
 |---|---|---|
-| Delivered | The password was set and the account is ready to use. | Nothing. |
-| Retrying | JIM could not reach the system, or the account was not visible yet. | Nothing; JIM tries again on the next export run. |
-| Parked | The system refused the password itself, for not meeting the rules that apply to that account. Another password generated the same way would be refused for the same reason, so JIM stops rather than spending attempts on the same answer. | Correct the rule's password settings. See below. |
-| Expired | The Connected System's initial password window passed without success, a week by default. JIM stops trying, and records that it did rather than quietly forgetting the account. | Set a password on those accounts another way. |
+| Delivered | The password was set and the Connected System Object is ready to use. | Nothing. |
+| Retrying | JIM could not reach the system, or the Connected System Object was not visible yet. | Nothing; JIM tries again on the next export run. |
+| Parked | The system refused the password itself, for not meeting the rules that apply to that Connected System Object. Another password generated the same way would be refused for the same reason, so JIM stops rather than spending attempts on the same answer. | Correct the rule's password settings. See below. |
+| Expired | The Connected System's initial password window passed without success, a week by default. JIM stops trying, and records that it did rather than quietly forgetting the Connected System Object. | Set a password on those objects another way. |
 
-A parked account keeps **the system's own words, unaltered**, because why a directory refused a password is a fact about that directory, and it is the most useful thing you can be shown.
+A parked Connected System Object keeps **the system's own words, unaltered**, because why a directory refused a password is a fact about that directory, and it is the most useful thing you can be shown.
 
-### Getting parked accounts moving again
+### Getting parked Connected System Objects moving again
 
-Parking is not a dead end. **Saving a change to the rule's initial password settings releases every account parked against it**, and they are tried again on that Connected System's next export run. There is nothing to regenerate or invalidate first: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work, so the retry uses your corrected settings either way. Before you save, the portal tells you how many accounts saving will release, and says nothing at all for an edit that would not change what gets delivered.
+Parking is not a dead end. **Saving a change to the rule's initial password settings releases every Connected System Object parked against it**, and they are tried again on that Connected System's next export run. There is nothing to regenerate or invalidate first: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work, so the retry uses your corrected settings either way. Before you save, the portal tells you how many Connected System Objects saving will release, and says nothing at all for an edit that would not change what gets delivered.
 
 You are told where the work is waiting without going looking for it: parked and expired counts appear on the Synchronisation Rules and Connected Systems list pages, on the rule's own Passwords tab, and through `Get-JIMSyncRuleInitialPassword` and `Get-JIMConnectedSystem`. The two counts are shown separately and never added together, because parked work is fixable where it is reported and expired work is not.
 
 ### How long JIM keeps trying
 
-An account stays owed its first password for **seven days** by default, after which JIM records the expiry above and stops. That window belongs to the Connected System rather than to the Synchronisation Rule, because what it has to outlast is that system being unavailable, and how long that lasts is a property of the system.
+A Connected System Object stays owed its first password for **seven days** by default, after which JIM records the expiry above and stops. That window belongs to the Connected System rather than to the Synchronisation Rule, because what it has to outlast is that system being unavailable, and how long that lasts is a property of the system.
 
-**Raise it before taking a system out of service for longer than the current window.** Every account provisioned while the target is unreachable otherwise expires without a password, and each one then needs a password set by hand. Set it on the Connected System's Settings tab, under **Initial Passwords**, or with `Set-JIMConnectedSystem -Id 1 -InitialPasswordTimeToLive (New-TimeSpan -Days 30)`.
+**Raise it before taking a system out of service for longer than the current window.** Every Connected System Object provisioned while the target is unreachable otherwise expires without a password, and each one then needs a password set by hand. Set it on the Connected System's Settings tab, under **Initial Passwords**, or with `Set-JIMConnectedSystem -Id 1 -InitialPasswordTimeToLive (New-TimeSpan -Days 30)`.
 
-Parked and expired records are kept so you can see what became of an account. They are removed once they have been in that state for the **initial password record retention period** (90 days by default, under Admin > Service Settings), which stops a rule provisioning into a system that refuses its passwords accumulating a record per account for ever. A record still being worked is never removed, however old, and the Activity recording what happened to the account outlives the record either way.
+Parked and expired records are kept so you can see what became of a Connected System Object. They are removed once they have been in that state for the **initial password record retention period** (90 days by default, under Admin > Service Settings), which stops a rule provisioning into a system that refuses its passwords accumulating a record per object for ever. A record still being worked is never removed, however old, and the Activity recording what happened to the object outlives the record either way.
 
-### One password for every account
+### One password for every Connected System Object
 
-A generated password nobody can be told is the right answer for getting an account working and the wrong one for the day a new starter arrives. **One password for every account** is the third option under Password Settings: you choose it, JIM sets that same password on every account the rule provisions, and you can put it on an onboarding sheet or read it out.
+A generated password nobody can be told is the right answer for getting a Connected System Object working and the wrong one for the day a new starter arrives. **One password for every Connected System Object** is the third option under Password Settings: you choose it, JIM sets that same password on every Connected System Object the rule provisions, and you can put it on an onboarding sheet or read it out.
 
 !!! warning "This option is not recommended"
-    Every account the rule provisions shares this password until each person changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again, and it is the only password JIM stores anywhere.
+    Every Connected System Object the rule provisions shares this password until each person changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again, and it is the only password JIM stores anywhere.
 
-    Leave **Require a change at the next sign-in** switched on: it is what ends each account's share of the password. Any other setting leaves every account the rule provisions on it until somebody changes it by hand.
+    Leave **Require a change at the next sign-in** switched on: it is what ends each object's share of the password. Any other setting leaves every Connected System Object the rule provisions on it until somebody changes it by hand.
 
 If you use it, three things are worth knowing:
 
 - **You cannot read it back.** JIM encrypts it and no surface will show it to you again, so keep your own record of it. What JIM will tell you is that one is set and when it last changed, on the rule's Passwords tab and through `Get-JIMSyncRuleInitialPassword`.
 - **Change it whenever somebody who knew it leaves.** The date JIM reports is what makes that checkable across every rule at once; there is nothing else that can date a shared password.
-- **A password the target would refuse is refused here.** JIM checks it against the policy it discovered when you set it, rather than letting it park every account the rule provisions.
+- **A password the target would refuse is refused here.** JIM checks it against the policy it discovered when you set it, rather than letting it park every Connected System Object the rule provisions.
 
 Delivering a generated password to somebody who should have it, by email, is the answer that replaces this one; it is not built yet.
 
@@ -80,7 +80,7 @@ Whenever a Connected System's schema is retrieved or refreshed, JIM also reads i
 **What JIM cannot always find out is worth knowing up front:**
 
 - **Most systems publish nothing.**<br /> Only Active Directory and Samba AD expose a password policy a client can read. Other directories keep their rules in configuration an ordinary connection cannot see, and no cross-vendor standard exists for exposing them. JIM tells you it found nothing rather than implying the system has no rules.
-- **A policy can apply to only some accounts.**<br /> Active Directory calls these Fine-Grained Password Policies. Reading them needs privileges your JIM service account should not have, so JIM checks whether any exist rather than reading them, and gives you one of three answers: none, some exist, or it could not tell. "Could not tell" is kept separate from "none" on purpose, because a directory hides what you may not see by returning nothing, which looks identical to there being nothing.
+- **A policy can apply to only some objects.**<br /> Active Directory's Fine-Grained Password Policies apply a different policy to the objects they govern, and JIM checks for them. Reading them needs privileges your JIM service account should not have, so JIM checks whether any exist rather than reading them, and gives you one of three answers: none, some exist, or it could not tell. "Could not tell" is kept separate from "none" on purpose, because a directory hides what you may not see by returning nothing, which looks identical to there being nothing.
 - **A system can enforce rules nothing can discover.**<br /> A custom password filter is exposed over no protocol at all. A password meeting everything JIM read can still be refused.
 
 So treat what JIM discovered as a **floor, not a guarantee**, and read a blank value as "JIM could not find this out", never as "there is no such rule". That is also why the parked state above exists: handling a refusal is part of how this works, not a sign something went wrong.
@@ -88,14 +88,14 @@ So treat what JIM discovered as a **floor, not a guarantee**, and read a blank v
 !!! tip "Check the channel before you rely on it"
     **Check password channel**, on the Connected System's Schema tab, tests the things that usually stop a password being set: whether the connection is encrypted, whether the mechanism JIM needs is available, whether your service account may actually reset passwords in each container, and whether the policy could be read. It sets no password on anything, so it is safe to run against production whenever you like.
 
-    It cannot prove the whole chain, and JIM deliberately offers nothing that does, because the only way to prove it end to end is to reset a real account's password.
+    It cannot prove the whole chain, and JIM deliberately offers nothing that does, because the only way to prove it end to end is to reset a real Connected System Object's password.
 
 ## 🔐 Setting a password on demand
 
-Alongside provisioning, you can set a password whenever you need to: the new starter about to sign in for the first time, the account whose provisioning password was refused, the reset that has to happen now.
+Alongside provisioning, you can set a password whenever you need to: the new starter about to sign in for the first time, the Connected System Object whose provisioning password was refused, the reset that has to happen now.
 
-- **One account.**<br /> Open a Connected System Object and use **Set Password**. The password is masked from the moment it is generated, and **Copy works while it is still masked**, so handing someone their password never means putting it on a screen others can read. Reveal is there for reading one aloud, and hides itself again after thirty seconds.
-- **One person, several systems.**<br /> Open a person's **Password** tab and **Set Password** lists every account they have that JIM can set a password on. Nothing is selected by default, so a reset in one system never quietly resets the others.
+- **One Connected System Object.**<br /> Open the Connected System Object and use **Set Password**. The password is masked from the moment it is generated, and **Copy works while it is still masked**, so handing someone their password never means putting it on a screen others can read. Reveal is there for reading one aloud, and hides itself again after thirty seconds.
+- **One Metaverse Object, several systems.**<br /> Open the Metaverse Object's **Password** tab and **Set Password** lists every Connected System Object it has that JIM can set a password on. Nothing is selected by default, so a reset in one system never quietly resets the others.
 
 JIM generates passwords in three styles (random characters, words, or a pronounceable password), always from a cryptographic random source, and tells you the length and character categories the result is guaranteed to carry. You can type your own instead. Automation has the same choice, through `-Generate` or `-Password` on the set-password cmdlets and their REST equivalents.
 
@@ -110,15 +110,15 @@ This is the case where letting JIM generate the password matters most. You canno
 !!! warning "Each system is delivered to independently"
     There is no transaction across Connected Systems. Each one gets its own queued change, so one system being down or refusing the password does not stop the others, and the person can end up with the new password in some systems and not yet in others. JIM tells you exactly where each one stands: **Set**, **Retrying** where a system could not be reached (JIM keeps trying on its own clock), or **Parked** where the system refused it.
 
-    Where a system refused the **password itself**, sending it again would fail identically, so JIM offers **Try another password**: a fresh one for every account, including the ones that already took the first. Replacing it only where it failed would leave the person with two passwords.
+    Where a system refused the **password itself**, sending it again would fail identically, so JIM offers **Try another password**: a fresh one for every Connected System Object, including the ones that already took the first. Replacing it only where it failed would leave the person with two passwords.
 
-    Where JIM could read no policy from a selected system, it says so rather than assuming that system will accept anything. Where no single password could satisfy them all, it refuses before queueing anything, rather than handing you one that the first account accepts and the second rejects after the first has already changed.
+    Where JIM could read no policy from a selected system, it says so rather than assuming that system will accept anything. Where no single password could satisfy them all, it refuses before queueing anything, rather than handing you one that the first Connected System Object accepts and the second rejects after the first has already changed.
 
 ## 🛡️ How JIM handles passwords safely
 
 **A password is held, encrypted, only until it is delivered.** A password you set or propagate is encrypted the moment JIM receives it and sits on the queue only as long as it takes the Password Delivery Service to hand it to each Connected System; the moment a system has it, JIM's copy for that system is gone. A copy a system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with, until the change [expires or retention removes it](#-how-long-any-of-it-is-kept). Nothing else holds one: not JIM's logs, its Activities, its configuration history, its previews or its search, and no page, REST response or cmdlet will show you a queued password. An initial password JIM generates during provisioning is produced at the moment it is delivered and never queued at all.
 
-The one password that is stored for longer is a [shared initial password](#one-password-for-every-account) you choose to set on a Synchronisation Rule. That one has to survive until the next account is provisioned, so it is stored, encrypted at rest exactly as a Connected System's credentials are. It is write-only on every surface: no portal page, REST response or cmdlet will return it, and your configuration history records a keyed hash of it, which is enough to show that it changed and when without carrying the password.
+The one password that is stored for longer is a [shared initial password](#one-password-for-every-connected-system-object) you choose to set on a Synchronisation Rule. That one has to survive until the next Connected System Object is provisioned, so it is stored, encrypted at rest exactly as a Connected System's credentials are. It is write-only on every surface: no portal page, REST response or cmdlet will return it, and your configuration history records a keyed hash of it, which is enough to show that it changed and when without carrying the password.
 
 A password you explicitly asked JIM to generate for you is handed back once, to you, at the moment it is made; after that JIM's copy is the queued one, and it goes when the systems have it. That is why the portal generates one for you on screen but the provisioning path does not; there is nothing kept to look up later.
 
@@ -126,17 +126,17 @@ Every attempt is recorded as an Activity, whether it worked or not, carrying the
 
 ### So how does the person get their password?
 
-**Not the generated one set during provisioning.** It is different for every account and JIM keeps no copy, so there is nothing for anyone to look up or pass on. Nobody can tell a new starter what it is, including you.
+**Not the generated one set during provisioning.** It is different for every Connected System Object and JIM keeps no copy, so there is nothing for anyone to look up or pass on. Nobody can tell a new starter what it is, including you.
 
-That is deliberate, and it means the initial password is doing a different job from the one it might look like it is doing. Its job is to get the account into a working state: many directories will not enable an account, or let it be used at all, until it holds a password that meets their rules, and an account left sitting with no password while it waits for somebody to get round to it is worth closing off. It is not a password anybody is meant to receive.
+That is deliberate, and it means the initial password is doing a different job from the one it might look like it is doing. Its job is to get the Connected System Object into a working state: many directories will not enable an object, or let it be used at all, until it holds a password that meets their rules, and an object left sitting with no password while it waits for somebody to get round to it is worth closing off. It is not a password anybody is meant to receive.
 
 There are two ways to give somebody something they can actually sign in with:
 
-- **Set their password when they need it,** using **Set Password** on that account, and hand them the value. Requiring a change at next sign-in (the default) then does what you would expect: they use what you gave them once, and choose their own. This is the right answer for one person at a time.
-- **Use [one password for every account](#one-password-for-every-account)** where handing out a password per person is not practical, accepting that every new starter shares it until they change it. Read that section before you do.
+- **Set their password when they need it,** using **Set Password** on that Connected System Object, and hand them the value. Requiring a change at next sign-in (the default) then does what you would expect: they use what you gave them once, and choose their own. This is the right answer for one person at a time.
+- **Use [one password for every Connected System Object](#one-password-for-every-connected-system-object)** where handing out a password per person is not practical, accepting that every new starter shares it until they change it. Read that section before you do.
 
-!!! warning "Anyone who can set a password can reset any account"
-    These actions reset the password on whichever account they are pointed at, including privileged ones, limited only by what the Connected System's service account is allowed to do. Grant the Administrator role accordingly, and restrict the service account's rights to the parts of the directory JIM manages.
+!!! warning "Anyone who can set a password can reset any Connected System Object"
+    These actions reset the password on whichever Connected System Object they are pointed at, including privileged ones, limited only by what the Connected System's service account is allowed to do. Grant the Administrator role accordingly, and restrict the service account's rights to the parts of the directory JIM manages.
 
     That service account needs the **Reset Password** right on those containers and nothing more; in Active Directory this is separate from write access to attributes. **It does not need to be a Domain Admin, and should not be.** See [Service Account Permissions](../connectors/jim-ldap-connector.md#service-account-permissions).
 
@@ -160,7 +160,7 @@ It also means JIM writes passwords the way each directory expects rather than wr
 
 ## 🔁 Password Synchronisation
 
-Everything above concerns setting a password on one account, at the moment you ask. Password Synchronisation is the other half: one password change reaching **every** system that person has an account in, durably, without you standing over it.
+Everything above concerns setting a password on one Connected System Object, at the moment you ask. Password Synchronisation is the other half: one password change reaching **every** system the Metaverse Object has a Connected System Object in, durably, without you standing over it.
 
 --8<-- "assets/diagrams/password-synchronisation.svg"
 
@@ -168,7 +168,7 @@ Everything above concerns setting a password on one account, at the moment you a
 
 You configure it per Connected System, on the **Passwords** tab of the Connected System, and it appears only on systems whose connector can set passwords at all. Two settings, and one deliberate separation between them:
 
-- **The configuration** says which Object Type holds the accounts, how many delivery attempts to make before JIM stops and asks you to look, how long to wait before the first retry, and whether to refuse to transmit over a connection JIM cannot confirm is encrypted.
+- **The configuration** says which Object Type receives passwords, how many delivery attempts to make before JIM stops and asks you to look, how long to wait before the first retry, and whether to refuse to transmit over a connection JIM cannot confirm is encrypted.
 - **The enable toggle** is separate from the configuration existing, so you can set a system up ahead of a change window and switch it on during one. A configured system that is switched **off** does not discard password changes: they accumulate, and switching it on delivers what accumulated.
 
 That is also why there is no way to remove a configuration, only to disable it. Removing one would throw away everything queued against it.
@@ -179,20 +179,20 @@ How long a change waits before JIM gives up on it is the Connected System's **in
 
 JIM has one operation for giving somebody a password, **Set Password**, and you aim it one of two ways. Both go through the same queue, the same delivery service, the same retries and the same history; what differs is where the password goes, and so what the sensible defaults are.
 
-| | **Named accounts** | **Every configured system** |
+| | **Named Connected System Objects** | **Every configured system** |
 |---|---|---|
 | Answers | "Change this person's password in the systems I choose" | "This person's password changed; every system should hold it" |
-| Reaches | The accounts you name, whether or not their system's Password Synchronisation is switched on | Every Connected System configured for Password Synchronisation, including those switched off (held) and those where the account does not exist yet (delivered when it does) |
+| Reaches | The Connected System Objects you name, whether or not their system's Password Synchronisation is switched on | Every Connected System configured for Password Synchronisation, including those switched off (held) and those where the Connected System Object does not exist yet (delivered when it does) |
 | Expiry, unless you say otherwise | Change required at next sign-in: somebody else chose this password | Left to each system's own policy: the person chose it, and should not be made to choose another |
-| Told to you | The call waits up to ten seconds and reports what each account did with the password | The call returns as soon as the change is recorded; ask it to wait if you want the outcomes |
-| Enable the account | Available | Never: a propagated password reaches accounts an administrator may have disabled on purpose |
+| Told to you | The call waits up to ten seconds and reports what each Connected System Object did with the password | The call returns as soon as the change is recorded; ask it to wait if you want the outcomes |
+| Enable the Connected System Object | Available | Never: a propagated password reaches Connected System Objects an administrator may have disabled on purpose |
 
-Name the accounts when you are choosing the password for somebody: onboarding them, or putting right an account whose password was refused or forgotten. Name none when they have already changed their own password somewhere and the rest should catch up; this is also the shape a future capture agent, replaying a change made in another directory, would use.
+Name the Connected System Objects when you are choosing the password for somebody: onboarding them, or putting right one whose password was refused or forgotten. Name none when they have already changed their own password somewhere and the rest should catch up; this is also the shape a future capture agent, replaying a change made in another directory, would use.
 
-In the portal, both live on the person's **Password** tab: the **Set Password** card lists their accounts, and what is still to be delivered and what recent changes did sit beneath it. Both are available to automation:
+In the portal, both live on the Metaverse Object's **Password** tab: the **Set Password** card lists its Connected System Objects, and what is still to be delivered and what recent changes did sit beneath it. Both are available to automation:
 
 ```powershell
-# Change the password on the accounts in the systems you name, and wait to hear what each did with it
+# Change the password on the Connected System Objects in the systems you name, and wait to hear what each did with it
 Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId 3 -Password $password
 
 # Propagate a password change to every configured system, returning as soon as it is recorded
@@ -202,17 +202,17 @@ Set-JIMMetaverseObjectPassword -Id $id -Password $password
 Set-JIMMetaverseObjectPassword -Id $id -Password $password -Wait 10
 ```
 
-Over REST it is one endpoint, `POST /api/v1/metaverse/objects/{id}/password`, with `connectedSystemObjectIds` naming the accounts or omitted to propagate. `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password` is the same operation with that one account named, for callers that hold the account rather than the person. Every endpoint that accepts a password refuses the request unless JIM can confirm the connection is encrypted; if TLS terminates at a reverse proxy, set `JIM_TRUSTED_PROXIES` so JIM reads the forwarded scheme rather than the hop it can see.
+Over REST it is one endpoint, `POST /api/v1/metaverse/objects/{id}/password`, with `connectedSystemObjectIds` naming the Connected System Objects or omitted to propagate. `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/connector-space/{csoId}/password` is the same operation with that one Connected System Object named, for callers that hold the object rather than the Metaverse Object. Every endpoint that accepts a password refuses the request unless JIM can confirm the connection is encrypted; if TLS terminates at a reverse proxy, set `JIM_TRUSTED_PROXIES` so JIM reads the forwarded scheme rather than the hop it can see.
 
 Either way the change is recorded and delivered separately (the next section says why): the call answers once the change is durable, and the first delivery attempt follows within about a second. The endpoint takes an optional `wait`, in seconds from 0 to 30 (`-Wait` in PowerShell), which overrides either default and holds the request until every target has settled or the time runs out. It answers `200` when everything settled and `202` when something was still on its way, with the same body either way: `origin` (`Explicit` or `Propagated`), `settled`, and one entry per Connected System carrying its `state` (`Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`), the target's own `message`, its `attemptCount`, and `nextAttemptAt` for a target that is retrying. A target that is retrying counts as settled: its next attempt is minutes away, and nobody at a screen should be held for it. A target that was parked is settled too, and is the one that needs you: the system refused the password, in the words the `message` carries, and sending the same one again would be refused the same way.
 
 ### 📬 How a password change reaches a system
 
-A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have an account in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; the **Password Delivery Service** takes it from there.
+A password change is recorded first and delivered afterwards, never in the same breath. The person changing their password must not be held waiting on a directory, and their new password must not fail to take because one of the systems they have a Connected System Object in happens to be down. So JIM writes one queued change per target system, encrypted, and returns; the **Password Delivery Service** takes it from there.
 
 What happens to a queued change:
 
-- **It is delivered, and disappears.** While it is being written to the target it shows as **Delivering**; the moment the target has the password the change is gone, because there is no value worth retaining and every reason not to. The outcome is recorded as an Activity, which is where the person's password history comes from.
+- **It is delivered, and disappears.** While it is being written to the target it shows as **Delivering**; the moment the target has the password the change is gone, because there is no value worth retaining and every reason not to. The outcome is recorded as an Activity, which is where the Metaverse Object's password history comes from.
 - **It is retried.** A target that was unreachable, or that failed in a way another attempt may resolve, gets one. Each wait is twice as long as the one before it, starting from the backoff you configured, and never longer than the time the change has left.
 - **It is parked, and waits for you.** A target that *refused* the password, or that cannot do what was asked at all, will refuse it identically next time; JIM stops rather than burning the attempts. So does a change that has used all of them. Parked work is released, and tried again, the moment you change what would be delivered to that system: switching Password Synchronisation on, or correcting a setting.
 - **It is held, because the system is switched off.** Password Synchronisation being switched off on a Connected System does not stop changes being recorded for it; it stops them being sent. They accumulate, shown as **Held**, and switching the system back on delivers all of them without anything else being done. Nothing about a held change is attempted while it waits, so it does not consume attempts and does not appear in the due count. It still expires on time, which is what bounds how long a change window can last before the passwords made during it are lost.
@@ -234,7 +234,7 @@ The service reports its own health. Its **Worker · Passwords** card on the [Ser
 
 ### 🔎 Watching the queue
 
-Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Passwords** tab of **Administration > Operations** lists every change on its way to a Connected System, one row per person per system, with what the target said about it. It sits beside the Queue, History and Schedules tabs because it answers the same question they do: what JIM is doing, and what it has stopped doing. The tab is badged with how many changes are waiting on a person (parked plus expired), so a backlog is visible from anywhere on the Operations page.
+Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Passwords** tab of **Administration > Operations** lists every change on its way to a Connected System, one row per Metaverse Object per system, with what the target said about it. It sits beside the Queue, History and Schedules tabs because it answers the same question they do: what JIM is doing, and what it has stopped doing. The tab is badged with how many changes are waiting on a person (parked plus expired), so a backlog is visible from anywhere on the Operations page.
 
 It never shows a password, and cannot: the queued value is encrypted in the database and has no representation on any page, in any API response, or in any log line.
 
@@ -245,7 +245,7 @@ Four counts sit above the list:
 - **Expired**<br /> They outlived their time to live. The password each carried is gone, so nothing can deliver them now.
 - **Cancelled**<br /> You stopped them. Counted rather than hidden, because that person's password is still divergent on that system and the count is the only thing that says so.
 
-Filter by Connected System, by state, or by how the last attempt failed, and search by person or system. Two actions apply to whatever the filters are currently showing, as well as to a single row:
+Filter by Connected System, by state, or by how the last attempt failed, and search by Metaverse Object or system. Two actions apply to whatever the filters are currently showing, as well as to a single row:
 
 - **Retry**<br /> Makes matching changes due immediately; the Password Delivery Service attempts them within about a second. This is what you run once the reason a directory was refusing passwords has been dealt with. It applies to waiting, parked and cancelled changes; an expired one is left alone, because there is no password left to send.
 - **Cancel**<br /> Stops JIM delivering them. The changes stay, marked **Cancelled**, recording who cancelled them and when.
@@ -255,11 +255,11 @@ Filter by Connected System, by state, or by how the last attempt failed, and sea
 
 Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry over a directory that has just come back is a single decision, and a hundred Activities saying so would bury the decision in its own consequences. The Activity is recorded even when nothing matched, so a retry that changed nothing can be told from a retry that never ran.
 
-You are also told where the work is without going looking for it. The **Connected Systems** list carries a Password Synchronisation column showing each system's state, with parked and expired counts beside it, sortable and filterable, including a **Needs attention** filter that cuts across the states. And each person's own page has an administrator-only **Password** tab: Set Password, what is still owed to which of their systems, and what their recent password changes actually did on each one, whether an administrator set them or they were propagated.
+You are also told where the work is without going looking for it. The **Connected Systems** list carries a Password Synchronisation column showing each system's state, with parked and expired counts beside it, sortable and filterable, including a **Needs attention** filter that cuts across the states. And each Metaverse Object's own page has an administrator-only **Password** tab: Set Password, what is still owed to which of its systems, and what their recent password changes actually did on each one, whether an administrator set them or they were propagated.
 
 That last view is a timeline, grouped by day: one entry per change, marked **Set** or **Propagated**, saying who made it, with a pill per Connected System that names the system and, where it is anything other than delivered, its state (**retrying**, **parked**, **held**, **expired**, **cancelled**). A system that refused the change or is still owed it gets a line beneath in the target's own words, with **Retry** or **Stop trying** on that line; a delivered one needs no words, unless it landed more than a minute after it was asked for, in which case the line says when. The entry's dot takes the colour of its worst outcome.
 
-It reads from the Activities rather than from the queue, deliberately. A delivered change leaves the queue, so a view built on the queue alone would show a person's failures and none of their successes.
+It reads from the Activities rather than from the queue, deliberately. A delivered change leaves the queue, so a view built on the queue alone would show a Metaverse Object's failures and none of its successes.
 
 Everything on the tab is scriptable, because a recovery across a directory that has just come back is not a job for a browser:
 
@@ -281,18 +281,18 @@ See [PowerShell: Password Synchronisation](../powershell/password-synchronisatio
 A finished password change is not kept for ever. The built-in **History Retention Cleanup** [Schedule](../configuration/schedules.md#built-in-schedules) runs daily and removes two things once they have had the `History.PasswordEventRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings), which defaults to a year:
 
 - **Queued changes that finished**, whether parked, expired or cancelled. A change still owed to a Connected System is never removed, however old it is.
-- **The Activities recording what happened to each change**, including the per-system outcomes behind a person's Password tab.
+- **The Activities recording what happened to each change**, including the per-system outcomes behind a Metaverse Object's Password tab.
 
-The two move together on purpose: a person's password history is the outcomes, and a queued change without them says something happened without saying what.
+The two move together on purpose: a Metaverse Object's password history is the outcomes, and a queued change without them says something happened without saying what.
 
-This period is also what bounds how long JIM holds a password. A parked or cancelled change still carries its encrypted password, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these out, so a target that refuses passwords would otherwise keep one for every person, for ever.
+This period is also what bounds how long JIM holds a password. A parked or cancelled change still carries its encrypted password, because both can be retried; shorten the retention period if you would rather JIM stopped holding one sooner. Nothing else ages these out, so a target that refuses passwords would otherwise keep one for every Metaverse Object, for ever.
 
 Each pass says what it removed, on its own Activity, so retention is something you can check rather than assume.
 
 !!! warning "Requiring an encrypted connection means refusing to send"
-    A Connected System with **Only send passwords over an encrypted connection** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. It is on the Connected System's Settings tab, under Passwords, and it governs **every** password JIM sends to that system: the first password on an account JIM provisions, one you set by hand, and a synchronised password change alike.
+    A Connected System with **Only send passwords over an encrypted connection** on will not have passwords sent to it over a connection JIM cannot confirm is encrypted. It is on the Connected System's Settings tab, under Passwords, and it governs **every** password JIM sends to that system: the first password on a Connected System Object JIM provisions, one you set by hand, and a synchronised password change alike.
 
-    Nothing is discarded when JIM refuses. Queued password changes, an administrator's reset among them, wait and are delivered once the connection is encrypted or the setting is turned off; accounts stay owed their first password and get one on the next export. An administrator watching a reset is told at the time that the system is refusing to send, rather than having it go out in the clear.
+    Nothing is discarded when JIM refuses. Queued password changes, an administrator's reset among them, wait and are delivered once the connection is encrypted or the setting is turned off; Connected System Objects stay owed their first password and get one on the next export. An administrator watching a reset is told at the time that the system is refusing to send, rather than having it go out in the clear.
 
     Leave it off only where the target genuinely cannot offer an encrypted connection, and understand what that costs: a password sent over an unencrypted one is readable by anyone on the network path.
 
@@ -305,7 +305,7 @@ Each pass says what it removed, on its own Activity, so retention is something y
 |---|---|
 | Switch on initial passwords for a rule | [Synchronisation Rules: Initial password](../configuration/synchronisation-rules.md#initial-password) |
 | See a discovered policy, or run the channel check | [Connected Systems: Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel) |
-| Set a password on one account, or on a person | [Connected Systems: Setting the password on one account](../configuration/connected-systems.md#setting-the-password-on-one-account) |
+| Set a password on one Connected System Object, or on a Metaverse Object | [Connected Systems: Setting the password on one Connected System Object](../configuration/connected-systems.md#setting-the-password-on-one-connected-system-object) |
 | Configure Password Synchronisation on a system | [Connected Systems: Password Synchronisation](../configuration/connected-systems.md#password-synchronisation) |
 | Directory specifics: encryption, mechanisms, permissions | [LDAP Connector: Setting Passwords](../connectors/jim-ldap-connector.md#setting-passwords) |
 | See what is queued, and retry or cancel it | [PowerShell: Password Synchronisation](../powershell/password-synchronisation.md) |
