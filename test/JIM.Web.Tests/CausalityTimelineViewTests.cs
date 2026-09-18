@@ -1,11 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AngleSharp.Dom;
 using Bunit;
+using JIM.Models.Activities;
+using JIM.Models.Staging;
 using JIM.Web;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
@@ -84,6 +87,41 @@ public class CausalityTimelineViewTests
                 Is.EqualTo("person: Liam Allen (S8-287551)"));
             Assert.That(chip.QuerySelector(".sub")!.TextContent.Trim(), Is.EqualTo("person:"),
                 "the dimmed type prefix is its own span, split from the name purely for display");
+        }
+    }
+
+    /// <summary>
+    /// A target object reached through an outcome (here a queued export against an existing
+    /// Connected System Object) is named "type: name" exactly as the source row's own chip is, once the
+    /// "csId|csoTypeName" channel carries a type.
+    /// </summary>
+    [Test]
+    public async Task Render_TargetObjectChip_NamesTheTypeAndNameAsALabelAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var projected = CausalityTestData.AddOutcome(item,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected, parent: null, ordinal: 0,
+            targetEntityId: Guid.NewGuid(), targetEntityDescription: "Liam Allen");
+        var export = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: projected, ordinal: 0, targetEntityId: Guid.NewGuid(),
+            targetEntityDescription: "Contoso AD", detailCount: 1, detailMessage: "3|user");
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange = new ConnectedSystemObjectChange { ConnectedSystemObjectId = targetCsoId };
+        var pageContext = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+        var model = CausalityModelBuilder.Build(item, pageContext);
+
+        var cut = RenderTimeline(context, model);
+
+        var chip = cut.FindAll(".evt-entities .chip")
+            .Single(c => c.QuerySelector(".name-ellip")!.TextContent.Trim() == "EMP001746");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.QuerySelector(".sub")!.TextContent.Trim(), Is.EqualTo("user:"));
+            Assert.That(chip.GetAttribute("title"), Is.EqualTo("user: EMP001746"));
         }
     }
 

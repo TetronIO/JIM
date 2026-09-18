@@ -127,7 +127,7 @@
                     <div class="evt-entities">
                         @foreach (var link in chipLinks)
                         {
-                            <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" />
+                            <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" SubLabel="@link.ObjectTypeName" />
                         }
                     </div>
                 }

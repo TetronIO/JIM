@@ -11,4 +11,11 @@ namespace JIM.Web.Causality;
 /// <param name="Label">Display label for the entity.</param>
 /// <param name="Href">Destination href, or null for an unlinked mention.</param>
 /// <param name="Kind">The kind of entity, for glyph selection.</param>
-public sealed record CausalityEntityLink(string Label, string? Href, CausalityEntityKind Kind);
+/// <param name="ObjectTypeName">
+/// The entity's own object type (e.g. "user", "person"), where the channel that produced this link
+/// carried one. Null when the type is unknown, in which case every consumer renders the name alone
+/// rather than guessing a type. Only ever set for <see cref="CausalityEntityKind.Record"/> links: a
+/// Connected System, a Synchronisation Rule and the rest are not typed the way a Connected System
+/// Object or a Metaverse Object is.
+/// </param>
+public sealed record CausalityEntityLink(string Label, string? Href, CausalityEntityKind Kind, string? ObjectTypeName = null);
