@@ -215,8 +215,7 @@ public class Worker : BackgroundService
                 {
                     Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
 
-                    // During idle time, perform housekeeping tasks like orphan MVO cleanup
-                    await PerformHousekeepingAsync();
+                    await PerformIdleTickAsync(mainLoopJim);
 
                     await Task.Delay(2000, stoppingToken);
                 }
@@ -947,6 +946,21 @@ public class Worker : BackgroundService
     /// Tracks when the last housekeeping run occurred to avoid running too frequently.
     /// </summary>
     private DateTime _lastHousekeepingRun = DateTime.MinValue;
+
+    /// <summary>
+    /// One idle tick of the main loop: housekeeping, then the release of everything the main loop's context has
+    /// tracked. That context lives for the Worker's lifetime, and every Worker Task and Activity it dequeues or
+    /// checks for cancellation stays tracked in it; nothing in the loop needs those copies past the iteration that
+    /// loaded them (dispatch re-reads the task on its own context, heartbeats are direct updates, cancellation
+    /// re-loads by id), so without this a busy Worker's memory grows with every task it has ever run. Decisions are
+    /// never made from those tracked copies either: a long-lived context serves an entity back as it first stood,
+    /// which is what moved housekeeping onto a context of its own. Internal for testability.
+    /// </summary>
+    internal async Task PerformIdleTickAsync(JimApplication mainLoopJim)
+    {
+        await PerformHousekeepingAsync();
+        mainLoopJim.SyncRepo.ClearChangeTracker();
+    }
 
     /// <summary>
     /// Performs housekeeping tasks during worker idle time.
