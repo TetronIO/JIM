@@ -20,17 +20,18 @@ namespace JIM.Application.Utilities;
 /// (<c>ExportEvaluationServer.CreatePendingProvisioningCsoAsync</c>). The transition back to
 /// <see cref="ConnectedSystemObjectStatus.Normal"/> happens in exactly one place,
 /// <c>SyncImportTaskProcessor.ProcessImportObjectsAsync</c>, at the moment a confirming import matches
-/// the object by its (now exported) secondary external id. That same confirming import pass is what
-/// reconciles the Pending Export
+/// the object at all (by its primary or, where configured, secondary external id). That same
+/// confirming import pass is what reconciles the Pending Export
 /// (<c>SyncEngine.Reconciliation.ReconcileCsoAgainstPendingExport</c> ->
-/// <c>TransitionCreateToUpdateIfSecondaryExternalIdConfirmed</c>), flipping its
+/// <c>TransitionCreateToUpdateOnceObjectConfirmed</c>), flipping its
 /// <see cref="PendingExport.ChangeType"/> from <see cref="PendingExportChangeType.Create"/> to
-/// <see cref="PendingExportChangeType.Update"/> in the same pass. The two flips are not
-/// transactionally linked by a shared write, but they are driven by the same confirming import
-/// finding the same object, so a Create Pending Export paired with a Normal status, or an Update
-/// paired with PendingProvisioning, are not combinations the running system produces. This resolver
-/// still answers something reasonable if one is ever observed (see the PendingProvisioning-with-no-
-/// Pending-Export fallback below), rather than assuming the impossible case cannot reach it.
+/// <see cref="PendingExportChangeType.Update"/> whenever changes remain on it once confirmation has
+/// been processed, in the same pass. The two flips are not transactionally linked by a shared write,
+/// but they are driven by the same confirming import finding the same object, so a Create Pending
+/// Export paired with a Normal status, or an Update paired with PendingProvisioning, are not
+/// combinations the running system produces. This resolver still answers something reasonable if one
+/// is ever observed (see the PendingProvisioning-with-no-Pending-Export fallback below), rather than
+/// assuming the impossible case cannot reach it.
 /// </para>
 /// <para>
 /// <b>Priority when several facts could apply:</b> a Failed Pending Export is the single most

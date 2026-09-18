@@ -691,11 +691,18 @@ public class PendingExportReconciliationTests
     }
 
     /// <summary>
-    /// Tests that a Create Pending Export does NOT transition to Update when the Secondary External ID
-    /// is NOT confirmed.
+    /// Tests that a Create Pending Export still transitions to Update even when nothing at all is
+    /// confirmed this round (not even the Secondary External ID) - the generalised behaviour, and a
+    /// deliberate change from this test's own former pinning of the narrower two-trigger rule ("remains
+    /// Create" until the Secondary External ID specifically confirms). Reconciliation only ever runs for
+    /// a CSO an import actually returned and matched, so reaching this method with a Create already
+    /// proves the object exists; leaving it Create-shaped while unconfirmed changes remain would
+    /// re-send a Create for an object that has already been matched (the production bug this
+    /// generalisation fixes: a real confirming import that matches an object by its primary External Id
+    /// but leaves one attribute unconfirmed used to retry as a second Create instead of an Update).
     /// </summary>
     [Test]
-    public async Task ReconcileAsync_CreateWithSecondaryExternalIdNotConfirmed_RemainsCreateAsync()
+    public async Task ReconcileAsync_CreateWithNothingConfirmed_TransitionsToUpdateAsync()
     {
         // Arrange
         var cso = CreateTestCso();
@@ -719,7 +726,7 @@ public class PendingExportReconciliationTests
         // Other attribute change - also won't be confirmed
         var displayNameChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
 
-        // Nothing is on the CSO (object creation failed)
+        // Nothing is on the CSO (neither attribute confirmed this round)
         // Don't add any attribute values
 
         var service = new PendingExportReconciliationService(SyncRepo, new JIM.Application.Servers.SyncEngine());
@@ -730,8 +737,9 @@ public class PendingExportReconciliationTests
         // Assert
         Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "Nothing should be confirmed");
         Assert.That(result.RetryChanges.Count, Is.EqualTo(2), "Both changes should need retry");
-        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create),
-            "PendingExport should remain as Create when Secondary External ID is not confirmed");
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "PendingExport must transition from Create to Update: reconciliation running at all proves the object " +
+            "was matched, so the remaining changes must retry as an Update, never a second Create");
     }
 
     /// <summary>

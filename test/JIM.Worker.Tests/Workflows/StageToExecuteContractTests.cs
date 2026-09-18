@@ -766,13 +766,16 @@ public class StageToExecuteContractTests : WorkflowTestBase
     /// value back, the Pending Export is gone and the CSO is Normal.
     ///
     /// This topology has no Secondary External Id configured (see <see cref="BuildTopologyAsync"/> - the
-    /// primary External Id is itself the flowed attribute), so
-    /// <c>SyncEngine.Reconciliation.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed</c>'s first
-    /// trigger (a confirmed Secondary External Id) can never fire here; its second trigger requires EVERY
-    /// originally-exported change to be confirmed before any transitions to Update, which one
-    /// still-unconfirmed DisplayName change prevents. Whether that means the retry genuinely goes out as a
-    /// second Create (in which case this is the FINDING the brief anticipated - flagged, not bent) is what
-    /// this test determines empirically, not by further reading the source.
+    /// primary External Id is itself the flowed attribute), so the old, narrower
+    /// <c>TransitionCreateToUpdateIfSecondaryExternalIdConfirmed</c> never fired for this shape: its first
+    /// trigger (a confirmed Secondary External Id) could never fire here, and its second trigger required
+    /// EVERY originally-exported change to be confirmed before transitioning, which the one still-
+    /// unconfirmed DisplayName change prevented - so a second Create went out for an object reconciliation
+    /// had already matched. Fixed by generalising the transition
+    /// (<c>SyncEngine.Reconciliation.TransitionCreateToUpdateOnceObjectConfirmed</c>): reconciliation only
+    /// ever runs for a CSO an import actually matched, so a Create reaching it already proves the object
+    /// exists, and any changes still outstanding after confirmation now travel as an Update regardless of
+    /// which attribute(s) confirmed.
     ///
     /// Does not cover FileAutoConfirm: auto-confirm deletes the Create Pending Export the moment the
     /// export succeeds, so there is no confirming step for the Create to NOT confirm - the axis this test
@@ -877,41 +880,14 @@ public class StageToExecuteContractTests : WorkflowTestBase
 
     /// <summary>
     /// One case per export path that has a confirming step for the Create to not confirm (see the test
-    /// method's own doc comment for why FileAutoConfirm is excluded). Both carry the same FINDING.
-    ///
-    /// FINDING: confirmed empirically - a genuine SECOND Create reaches the connector for an object a
-    /// confirming import has already matched by External Id, instead of the specified Update. Root cause:
-    /// this topology has no Secondary External Id (the primary IS the flowed identifier), so
-    /// <c>SyncEngine.Reconciliation.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed</c> (~line
-    /// 569-600 of SyncEngine.Reconciliation.cs) never fires its first trigger; its second trigger requires
-    /// EVERY originally-exported attribute change to be confirmed in the same round, which the one
-    /// deliberately-unconfirmed DisplayName change prevents, so the Pending Export's ChangeType stays
-    /// Create. Reconciliation does set its Status to ExportNotConfirmed (not Exported), and
-    /// <c>ExportExecutionServer.IsReadyForExecution</c> (~line 293-330) only refuses re-execution of a
-    /// Create when Status is Exported specifically ("ExportNotConfirmed... stays exportable: unlike
-    /// Exported, it means the Create genuinely needs to go out again" - its own comment), so the still-
-    /// Create-shaped retry is sent. Verified this is real production behaviour, not an in-memory-provider
-    /// quirk: <c>JIM.InMemoryData.SyncRepository.GetExecutableExportsForSystem</c> applies the byte-for-
-    /// byte identical guard to the Postgres query in <c>ConnectedSystemRepository.GetExecutableExportsAsync</c>.
+    /// method's own doc comment for why FileAutoConfirm is excluded).
     /// </summary>
     private static IEnumerable<TestCaseData> ObjectPresentUnconfirmedAttributeCases()
     {
-        const string reason =
-            "FINDING: a second Create is sent for an object the confirming import already matched (by " +
-            "External Id), instead of an Update, because this topology has no Secondary External Id so " +
-            "TransitionCreateToUpdateIfSecondaryExternalIdConfirmed's first trigger never fires, and its " +
-            "second trigger requires every originally-exported change confirmed together - one still-" +
-            "unconfirmed attribute blocks it, leaving the Pending Export Create-shaped. " +
-            "ExportExecutionServer.IsReadyForExecution only blocks re-executing a Create when Status is " +
-            "Exported, not ExportNotConfirmed, so the Create-shaped retry goes out. See " +
-            "SyncEngine.Reconciliation.cs TransitionCreateToUpdateIfSecondaryExternalIdConfirmed (~line " +
-            "569) and ExportExecutionServer.cs IsReadyForExecution (~line 293).";
-
         foreach (var exportPath in new[] { ExportPath.Call, ExportPath.FileNoAutoConfirm })
         {
             yield return new TestCaseData(exportPath)
-                .SetName($"UnconfirmedCreate_ObjectPresentOneAttributeUnconfirmed_{exportPath}")
-                .Ignore(reason);
+                .SetName($"UnconfirmedCreate_ObjectPresentOneAttributeUnconfirmed_{exportPath}");
         }
     }
 
@@ -923,6 +899,14 @@ public class StageToExecuteContractTests : WorkflowTestBase
     /// the target; the CSO stays Pending Provisioning until an import confirms it; no stranded state
     /// (contract clause 3's invariants, including the one added specifically for an unconfirmable Exported
     /// Pending Export against a NotJoined CSO, are asserted at the end).
+    ///
+    /// Fixed via <c>SyncEngine.IsExportedCreateUnseenByFullImport</c> +
+    /// <c>SyncImportTaskProcessor</c>'s Full Import deletion-detection phase: when a Full Import completes
+    /// without seeing a Pending Provisioning CSO whose Create Pending Export is Status Exported, that
+    /// Create is marked for retry (Pending Export Status -&gt; ExportNotConfirmed, its
+    /// ExportedPendingConfirmation/ExportedNotConfirmed attribute changes -&gt; ExportedNotConfirmed with
+    /// the usual retry accounting), so the next export re-sends the Create. A Delta Import cannot prove
+    /// absence and leaves it alone.
     ///
     /// Does not cover FileAutoConfirm, for the same reason as sub-case A above.
     /// </summary>
@@ -951,8 +935,16 @@ public class StageToExecuteContractTests : WorkflowTestBase
         Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
             $"[{caseName}] arrange: exactly one Create must have been sent");
 
-        // Confirming import that does not return the object at all.
+        // Confirming import that does not return our object at all - but the run must still read
+        // something, unrelated noise, so it is not itself an empty Full Import (which the retry step
+        // deliberately treats as "no objects imported means do nothing", mirroring the same guard
+        // deletion detection applies: a Full Import that reads literally nothing may be the symptom of
+        // a connector/configuration problem, not proof that everything outstanding is now absent).
         var importConnector1 = new MockCallConnector();
+        var noiseImportObject = new ConnectedSystemImportObject { ObjectType = topology.TargetType.Name, ChangeType = ObjectChangeType.Updated };
+        noiseImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ExternalId", StringValues = { $"noise-{Guid.NewGuid()}" } });
+        noiseImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "DisplayName", StringValues = { "Unrelated Noise Object" } });
+        importConnector1.QueueImportObjects(noiseImportObject);
         await RunConfirmingImportAsync(topology.Target, importConnector1);
 
         Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
@@ -998,46 +990,23 @@ public class StageToExecuteContractTests : WorkflowTestBase
 
     /// <summary>
     /// One case per export path that has a confirming step for the Create to not confirm (see the sub-case
-    /// B test method's own doc comment for why FileAutoConfirm is excluded). Both carry the same FINDING,
-    /// distinct from and more severe than sub-case A's: the Create is never retried at all, not even as a
-    /// second Create - it is permanently stuck.
+    /// B test method's own doc comment for why FileAutoConfirm is excluded).
     ///
-    /// FINDING: confirmed empirically - a Create export that succeeds, followed by a confirming import
-    /// that never reports the object back at all, leaves the Pending Export stuck in Status Exported
-    /// forever. <c>ExportExecutionServer.IsReadyForExecution</c> (~line 293-330 of ExportExecutionServer.cs)
-    /// refuses to re-execute ANY Create whose Status is Exported ("re-sending it would ask the connector to
-    /// create an object that already exists there" - its own comment, which assumes the object DOES exist;
-    /// it does not distinguish that from "we simply never heard back"). Nothing in
-    /// SyncEngine.Reconciliation.cs transitions a Pending Export's Status away from Exported unless a
-    /// confirming import actually reports SOME data to reconcile against -
-    /// <c>ReconcileCsoAgainstPendingExport</c> is only ever invoked per imported object, so an object
-    /// genuinely absent from every subsequent import is never reconciled, and no timeout/staleness/reaper
-    /// mechanism was found in either file that would eventually force a retry. The CSO therefore stays
-    /// Pending Provisioning permanently, with no path to resolution - worse than sub-case A, which at
-    /// least re-sends something. Verified this is real production behaviour, not an in-memory-provider
-    /// quirk: <c>JIM.InMemoryData.SyncRepository.GetExecutableExportsForSystem</c> applies the byte-for-
-    /// byte identical guard (<c>!(pe.ChangeType == Create &amp;&amp; pe.Status == Exported)</c>) to the
-    /// Postgres query in <c>ConnectedSystemRepository.GetExecutableExportsAsync</c>, and both queries
-    /// otherwise include Exported-status rows as candidates (so this is not a status-filter oversight -
-    /// the exclusion is deliberate and specific to Create).
+    /// Fixed the same way as sub-case A's doc comment describes for the general mechanism, but via a
+    /// different code path: <c>ReconcileCsoAgainstPendingExport</c> is only ever invoked per imported
+    /// object, so an object genuinely absent from every subsequent import is never reconciled by it.
+    /// <c>SyncImportTaskProcessor</c>'s Full Import deletion-detection phase now runs a second, narrow
+    /// step (<c>SyncEngine.IsExportedCreateUnseenByFullImport</c>) that finds exactly this shape - a
+    /// Pending Provisioning CSO whose Create Pending Export is Status Exported but whose External Id
+    /// never appeared in the run's own imported set - and marks it for retry, so the next export re-sends
+    /// the Create.
     /// </summary>
     private static IEnumerable<TestCaseData> ObjectAbsentCases()
     {
-        const string reason =
-            "FINDING: a Create export that succeeds, followed by a confirming import that never reports " +
-            "the object at all, is never retried - the Pending Export is stuck in Status Exported " +
-            "permanently. ExportExecutionServer.IsReadyForExecution refuses to re-execute ANY Create with " +
-            "Status Exported, and nothing in SyncEngine.Reconciliation.cs transitions status away from " +
-            "Exported unless a confirming import reports data to reconcile against - an absent object " +
-            "never triggers that. The CSO stays Pending Provisioning forever. See ExportExecutionServer.cs " +
-            "IsReadyForExecution (~line 293) and JIM.InMemoryData.SyncRepository.GetExecutableExportsForSystem " +
-            "(confirms this mirrors ConnectedSystemRepository.GetExecutableExportsAsync, not an in-memory quirk).";
-
         foreach (var exportPath in new[] { ExportPath.Call, ExportPath.FileNoAutoConfirm })
         {
             yield return new TestCaseData(exportPath)
-                .SetName($"UnconfirmedCreate_ObjectAbsent_{exportPath}")
-                .Ignore(reason);
+                .SetName($"UnconfirmedCreate_ObjectAbsent_{exportPath}");
         }
     }
 
