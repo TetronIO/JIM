@@ -324,7 +324,7 @@ public static class CausalityTableModelBuilder
         string.IsNullOrWhiteSpace(causalityEvent.DetailMessage) ? "Attribute value" : causalityEvent.DetailMessage;
 
     private static string SourceDisplayName(CausalityModel model) =>
-        model.Context.RecordLabel ?? "Object being synchronised";
+        ObjectDescription.ChipName(model.Context.CsoDisplayName, model.Context.CsoExternalId) ?? "Object being synchronised";
 
     private static string? SourceSubtitle(CausalityModel model)
     {

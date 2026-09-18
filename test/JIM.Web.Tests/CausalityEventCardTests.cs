@@ -49,7 +49,7 @@ public class CausalityEventCardTests
     private static string ProseOf(IRenderedComponent<CausalityEventCard> cut)
     {
         var root = cut.Find(".evt-card");
-        foreach (var glyph in root.QuerySelectorAll(".glyph").ToList())
+        foreach (var glyph in root.QuerySelectorAll(".jim-object-chip-glyph").ToList())
             glyph.Remove();
         return root.TextContent;
     }
@@ -195,7 +195,7 @@ public class CausalityEventCardTests
         var cut = RenderCard(context, projected);
 
         // Projected carries the Identity link and the Synchronisation Rule attribution as chips
-        var chips = cut.FindAll(".evt-entities .chip").Select(c => c.TextContent).ToList();
+        var chips = cut.FindAll(".evt-entities .jim-object-chip").Select(c => c.TextContent).ToList();
         Assert.That(chips.Any(c => c.Contains("Liam Allen")), Is.True);
         Assert.That(chips.Any(c => c.Contains("Yellowstone People - Inbound")), Is.True);
     }

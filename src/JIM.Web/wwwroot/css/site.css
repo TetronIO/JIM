@@ -923,14 +923,109 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     color: var(--mud-palette-tertiary);
 }
 
-/* Chip-prefix accents for MV/CS object-type labels inside causality-tree chips.
-   Coloured to harmonise with each chip's avatar (primary for MV, secondary for CS). */
-.jim-mv-chip-prefix {
-    color: var(--mud-palette-primary-lighten);
+/* ─── Object chips (ObjectChip.razor) ─── */
+
+/* The site's one object chip: every reference to a Connected System Object, a Metaverse Object, a
+   Connected System, a Synchronisation Rule, a Pending Export, a Deletion Record or a Run Profile renders
+   through this markup, so it looks identical inside the causality panel and everywhere else. Ported from the
+   causality panel's own chip, which was scoped to .causality-panel and derived every token from the active
+   theme's MudBlazor palette; the derivation is unchanged here, just no longer re-declared per panel, so moving
+   it out of that scope changes nothing about how it looks, in any theme. */
+.jim-object-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
+    border-radius: 999px;
+    padding: 2px 10px 2px 3px;
+    /* Normal body size, per JIM's "default sizing unless asked otherwise" UI rule: the object's name in a
+       chip is the thing being linked to, so it reads at the same size as the text naming it. */
+    font-size: 1rem;
+    font-weight: 550;
+    color: var(--mud-palette-text-primary);
+    white-space: nowrap;
+    text-decoration: none;
+    transition: background 0.15s;
 }
 
-.jim-cs-chip-prefix {
-    color: var(--mud-palette-secondary-lighten);
+/* A chip with no leading glyph (a Lineage card's object chip, whose column head wears the glyph) pads both
+   ends alike, so the name sits centred in the pill rather than hugging the left edge. */
+.jim-object-chip.plain {
+    padding-left: 10px;
+}
+
+/* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip convention
+   (background/avatar colour change) rather than a border outline. jim-chip-link goes on the link wrapper
+   rather than the chip because the link is the hover target. */
+.jim-chip-link:hover .jim-object-chip {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 18%, transparent);
+}
+
+.jim-chip-link:hover .jim-object-chip-glyph {
+    filter: brightness(1.12);
+}
+
+/* Sized to the chip's own line box (1rem text at MudBlazor's line height), so the circle reads as part of the
+   chip rather than a smaller badge sunk into it. */
+.jim-object-chip-glyph {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: var(--mud-palette-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+    transition: filter 0.15s;
+}
+
+.jim-object-chip-glyph.sys {
+    background: var(--mud-palette-info);
+    color: var(--mud-palette-info-text, #fff);
+}
+
+.jim-object-chip-glyph.rule {
+    background: var(--mud-palette-warning);
+    color: var(--mud-palette-warning-text, #fff);
+}
+
+/* The two object glyphs (Connected System Object, Metaverse Object) carry three letters, so they widen into a
+   pill of the same height rather than squeezing the text into the circle; the letters drop a step to keep the
+   pill compact. The Connected System Object keeps the secondary colour and the Metaverse Object the primary,
+   JIM's own. */
+.jim-object-chip-glyph.cso,
+.jim-object-chip-glyph.mvo {
+    width: auto;
+    min-width: 24px;
+    padding: 0 6px;
+    border-radius: 12px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+}
+
+.jim-object-chip-glyph.cso {
+    background: var(--mud-palette-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+}
+
+.jim-object-chip-glyph.mvo {
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text, #fff);
+}
+
+.jim-object-chip-type {
+    color: color-mix(in srgb, var(--mud-palette-text-primary) 55%, transparent);
+    font-weight: 450;
+}
+
+.jim-object-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .jim-header-title {
@@ -2319,56 +2414,6 @@ html[lang] .jim-schema-change-table td {
 
 .jim-audit-chip-label {
     flex-shrink: 0;
-}
-
-/* Clickable chip link - hover effect for chips wrapped in links */
-.jim-chip-link .mud-chip {
-    cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.jim-chip-link .mud-chip .jim-title-accent,
-.jim-chip-link .mud-chip .jim-mv-chip-prefix,
-.jim-chip-link .mud-chip .jim-cs-chip-prefix {
-    transition: color 0.2s ease;
-}
-
-.jim-chip-link:hover .mud-chip {
-    background-color: var(--mud-palette-primary);
-    color: var(--mud-palette-primary-text);
-}
-
-/* Ensure the accent-coloured prefix (e.g. object type) inside a hovered chip
-   switches to the chip's hover text colour so it remains legible against the
-   primary background. Uses the theme's primary-text variable so this works
-   uniformly across every theme. */
-.jim-chip-link:hover .mud-chip .jim-title-accent,
-.jim-chip-link:hover .mud-chip .jim-mv-chip-prefix,
-.jim-chip-link:hover .mud-chip .jim-cs-chip-prefix {
-    color: var(--mud-palette-primary-text);
-}
-
-/* On hover the chip fills with the primary colour, so both avatar badges have to respond or they
-   read as a leftover from the resting state: the MV badge is Color.Primary and the CS badge is
-   Color.Secondary, and only the first was ever handled.
-
-   Inverting the chip's own hover pairing is what makes one rule work across all twelve themes: the
-   badge takes the hover text colour as its fill and the hover fill as its letters, so its legibility
-   is exactly the pairing the theme already guarantees for the chip's own label, whether that text
-   colour is light or dark. The two obvious alternatives were measured against every theme's palette
-   and both fail. Darkening the badge (what the MV badge did) leaves it between 1.2:1 and 1.7:1
-   against the fill, so the circle all but disappears. Using --mud-palette-secondary-darken for the CS
-   badge is no better (1.0:1 to 3.7:1) and drops its letters below 4.5:1 in four themes. Anything
-   built on "darker" also breaks outright in the themes whose primary text is dark rather than white
-   (navy-o5-dark), where a darker badge and dark letters converge. */
-.jim-chip-link .mud-chip .mud-avatar {
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-primary,
-.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-secondary {
-    background-color: var(--mud-palette-primary-text);
-    color: var(--mud-palette-primary);
 }
 
 /* Schedule Step Drag and Drop Styles */

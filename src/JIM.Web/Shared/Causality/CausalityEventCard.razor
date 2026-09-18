@@ -65,9 +65,9 @@
         <div class="evt-entities">
             @foreach (var link in chipLinks)
             {
-                <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind"
-                                     ShowGlyph="@(!(HideObjectGlyphs && link.Kind is CausalityEntityKind.Record or CausalityEntityKind.Identity))"
-                                     SubLabel="@link.ObjectTypeName" />
+                <ObjectChip Name="@link.Label" Href="@link.Href" Kind="@link.Kind.ToObjectChipKind()"
+                            ShowGlyph="@(!(HideObjectGlyphs && link.Kind is CausalityEntityKind.Record or CausalityEntityKind.Identity))"
+                            TypeName="@link.ObjectTypeName" />
             }
         </div>
     }

@@ -57,7 +57,7 @@ public static class CausalitySummaryBuilder
                 CausalityEntityKind.ConnectedSystem));
         }
 
-        var recordLabel = context.RecordName;
+        var recordLabel = ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId);
         // Conditional mood throughout for a preview (#1519, D-S9): nothing here has happened yet.
         var verb = isSpeculative ? "would process" : "processed";
 
