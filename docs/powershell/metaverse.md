@@ -898,16 +898,16 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ## Set-JIMMetaverseObjectPassword
 
-Sets a person's password, on the accounts you name or on every Connected System configured for Password Synchronisation.
+Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation.
 
-One command, aimed one of two ways. With `-ConnectedSystemId`, the password goes to the person's accounts in those systems: the reset case, where you chose the password for them. Without it, the password goes to every Connected System configured for [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) in which they have an account: the event case, where their password changed somewhere and the rest should hold it. Both go through the same queue and the same [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service), which makes the first attempt within about a second, whatever the synchronisation engine is doing; what differs is the defaults, set out under Parameters.
+One command, aimed one of two ways. With `-ConnectedSystemId`, the password goes to the Metaverse Object's Connected System Objects in those systems: the reset case, where you chose the password for the person. Without it, the password goes to every Connected System configured for [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) in which the Metaverse Object has a Connected System Object: the event case, where their password changed somewhere and the rest should hold it. Both go through the same queue and the same [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service), which makes the first attempt within about a second, whatever the synchronisation engine is doing; what differs is the defaults, set out under Parameters.
 
-Supply the password with `-Password`, or have JIM generate one that satisfies the discovered policy of every Connected System the person has an account in with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`; JIM holds its own copy, encrypted, only until the systems have it.
+Supply the password with `-Password`, or have JIM generate one that satisfies the discovered policy of every Connected System the Metaverse Object has a Connected System Object in with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`; JIM holds its own copy, encrypted, only until the systems have it.
 
 ### Syntax
 
 ```powershell
-# Named accounts: expires at next sign-in, waits up to 10 seconds
+# Named Connected System Objects: expires at next sign-in, waits up to 10 seconds
 Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Password <securestring>
     [-ExpiryBehaviour <string>] [-EnableAccount] [-Wait <int>] [-Force]
 
@@ -929,7 +929,7 @@ Set-JIMMetaverseObjectPassword -Id <guid> -Generate
     and only the character categories all of them count) and produce a password that satisfies all of them.
 
     Where no single password can satisfy them all, JIM refuses outright rather than handing back one that would
-    be accepted on the first account and refused on the second, after the first has already changed. A system
+    be accepted on the first Connected System Object and refused on the second, after the first has already changed. A system
     JIM could read no policy from is reported as a warning, because the password is about to go there and JIM
     cannot promise it will be accepted.
 
@@ -946,15 +946,15 @@ ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `ConnectedSystemId` | `int[]` | No | | The Connected Systems to set the password in. The person must have an account in every one named; the command refuses, and sets nothing, where they do not. Omit it to propagate to every Connected System configured for Password Synchronisation. |
+| `ConnectedSystemId` | `int[]` | No | | The Connected Systems to set the password in. The Metaverse Object must have a Connected System Object in every one named; the command refuses, and sets nothing, where it does not. Omit it to propagate to every Connected System configured for Password Synchronisation. |
 | `Password` | `securestring` | Yes (unless `-Generate`) | | The password. Encrypted before JIM stores it and held only until delivered. |
-| `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate the password. With `-ConnectedSystemId`, against the named systems' policies; without, against every system the person has an account in. |
-| `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` with `-ConnectedSystemId`; `ExpiresAccordingToTargetPolicy` without | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. The defaults follow who chose the password: you did when naming accounts; the person did otherwise. |
-| `EnableAccount` | `switch` | No | `$false` | Enables the named accounts as part of setting the password. Only available with `-ConnectedSystemId`: a propagated password never enables an account, because it reaches accounts an administrator may have disabled on purpose. |
+| `Generate` | `switch` | Yes (unless `-Password`) | | Have JIM generate the password. With `-ConnectedSystemId`, against the named systems' policies; without, against every system the Metaverse Object has a Connected System Object in. |
+| `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` with `-ConnectedSystemId`; `ExpiresAccordingToTargetPolicy` without | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. The defaults follow who chose the password: you did when naming Connected System Objects; the person did otherwise. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the named Connected System Objects as part of setting the password. Only available with `-ConnectedSystemId`: a propagated password never enables a Connected System Object, because it reaches objects an administrator may have disabled on purpose. |
 | `Wait` | `int` | No | `10` with `-ConnectedSystemId`; `0` without | Seconds, 0 to 30, to wait for the systems to answer. The wait ends early once every target has settled. A script that needs to watch for longer should poll `Get-JIMPendingPasswordChange -MetaverseObjectId` instead. |
 | `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
 
-To set a password on every account the person has regardless of which systems are configured for Password Synchronisation, name their systems: `-ConnectedSystemId (Get-JIMMetaverseObject -Id $id).ConnectedSystemObjects.ConnectedSystemId`.
+To set a password on every Connected System Object the Metaverse Object has regardless of which systems are configured for Password Synchronisation, name its systems: `-ConnectedSystemId (Get-JIMMetaverseObject -Id $id).ConnectedSystemObjects.ConnectedSystemId`.
 
 ### Output
 
@@ -963,9 +963,9 @@ One `PSCustomObject` describing the change. No property carries the password you
 | Property | Description |
 |----------|-------------|
 | `ActivityId` | The Activity recording the change. Its child Activities hold each system's outcome once delivery has been attempted. |
-| `Origin` | `Explicit` when accounts were named, `Propagated` when the password went to every configured system. |
+| `Origin` | `Explicit` when Connected System Objects were named, `Propagated` when the password went to every configured system. |
 | `Settled` | Whether every target had reached an outcome you need not wait on by the time the command returned. A target that is retrying counts as settled: its next attempt is minutes away. |
-| `QueuedForNoSystems` | `$true` when a propagated change found no Connected System configured for Password Synchronisation in which the person has an account, so nothing was queued. Worth checking: silence here would let a script believe a password propagated when nothing was recorded. |
+| `QueuedForNoSystems` | `$true` when a propagated change found no Connected System configured for Password Synchronisation in which the Metaverse Object has a Connected System Object, so nothing was queued. Worth checking: silence here would let a script believe a password propagated when nothing was recorded. |
 | `Targets` | One entry per Connected System the change was queued for, in name order. |
 | `GeneratedPassword` | The password JIM produced, as a SecureString. Present only with `-Generate`. |
 
@@ -974,8 +974,8 @@ Each entry under `Targets`:
 | Property | Description |
 |----------|-------------|
 | `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
-| `ConnectedSystemObjectId` | The account the password is aimed at, or `$null` where the person has no account in this system yet; a propagated change is queued regardless, bounded by its time to live, so it lands when provisioning catches up. |
-| `Enabled` | Whether the system is currently taking propagated passwords. `$false` on a propagated change means it is held until somebody switches the system on; a named account is delivered to either way. |
+| `ConnectedSystemObjectId` | The Connected System Object the password is aimed at, or `$null` where the Metaverse Object has none in this system yet; a propagated change is queued regardless, bounded by its time to live, so it lands when provisioning catches up. |
+| `Enabled` | Whether the system is currently taking propagated passwords. `$false` on a propagated change means it is held until somebody switches the system on; a named Connected System Object is delivered to either way. |
 | `State` | `Queued`, `Delivering`, `Set`, `Retrying`, `Parked`, `Held`, `Expired` or `Cancelled`. |
 | `NextAttemptAt` | When the next attempt falls due, for a target that is `Retrying`; `$null` otherwise. |
 | `Message` | The system's own words on its most recent outcome (why it refused, or that the password was set), or `$null` before anything has been said. |
@@ -1001,7 +1001,7 @@ Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -Passwor
 $result = Set-JIMMetaverseObjectPassword -Id $id -Password $password -Wait 10 -Force
 $result.Targets | Select-Object ConnectedSystemName, State, Message
 if (-not $result.Settled) {
-    Write-Warning "Not every system had answered after 10 seconds; check the person's Password tab."
+    Write-Warning "Not every system had answered after 10 seconds; check the Metaverse Object's Password tab."
 }
 ```
 
@@ -1009,20 +1009,20 @@ A service desk script uses this to tell the caller their reset has landed before
 
 ```powershell title="Catch the case where nothing was queued"
 $result = Set-JIMMetaverseObjectPassword -Id $id -Password $password -Force
-if ($result.QueuedForNoSystems) { Write-Warning "No system is configured to receive this person's password changes." }
+if ($result.QueuedForNoSystems) { Write-Warning "No system is configured to receive this Metaverse Object's password changes." }
 ```
 
-```powershell title="Set one generated password on every account the person has, whatever is configured"
+```powershell title="Set one generated password on every Connected System Object the Metaverse Object has, whatever is configured"
 $systems = (Get-JIMMetaverseObject -Id $id).ConnectedSystemObjects.ConnectedSystemId
 Set-JIMMetaverseObjectPassword -Id $id -ConnectedSystemId $systems -Generate -Force
 ```
 
 ### Notes
 
-- **This resets the passwords on whichever accounts you point it at.** Anyone who can call it can reset any account in these connector spaces, subject only to what each Connected System's service account is permitted to do.
+- **This resets the passwords on whichever Connected System Objects you point it at.** Anyone who can call it can reset the password of any Connected System Object in these Connector Spaces, subject only to what each Connected System's service account is permitted to do.
 - Each Connected System is delivered to on its own. One refusing does not stop the others, and the person is left with a different password there until you deal with it, so check every target rather than the first.
-- A refused password will be refused again if you resend it. Generate a different one, and set it on every account rather than only the one that failed, or the person ends up with two.
-- A named system whose Password Synchronisation is switched off is still delivered to; the switch governs propagated changes, and you named the account. A propagated change to that system is held until it is switched on.
+- A refused password will be refused again if you resend it. Generate a different one, and set it on every Connected System Object rather than only the one that failed, or the person ends up with two.
+- A named system whose Password Synchronisation is switched off is still delivered to; the switch governs propagated changes, and you named the Connected System Object. A propagated change to that system is held until it is switched on.
 
 ---
 
