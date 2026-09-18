@@ -656,18 +656,25 @@ public static class CausalityModelBuilder
                     if (outcome.TargetEntityId is { } provisionedCsoId && provisionedCsoId != Guid.Empty)
                     {
                         // A recorded run captured only what it knew at the time: a newly-created object had no
-                        // external id yet, so the fallback is "type: id". The context's name map, when supplied,
-                        // resolves the object's CURRENT display label instead, so the Timeline and Table view
-                        // stop showing the internal id once the object has since been exported and named.
-                        var recordLabel = context.ConnectedSystemObjectNames?.TryGetValue(provisionedCsoId, out var currentName) == true
-                            ? currentName
-                            : parsedDetail.CsoTypeName != null
+                        // external id yet, so the fallback is "type: id", with the type already embedded in the
+                        // label text (ObjectTypeName is left unset here so the chip does not prefix it a second
+                        // time). The context's name map, when supplied, resolves the object's CURRENT display
+                        // label instead: a bare name with nothing else naming its type, so ObjectTypeName carries
+                        // it separately once a current name is known, letting every consumer (chips, the Lineage
+                        // head) render "type: name" in one form rather than the bare name the Timeline and Table
+                        // view used to show once the object had since been exported and named.
+                        var currentName = context.ConnectedSystemObjectNames?.TryGetValue(provisionedCsoId, out var resolvedName) == true
+                            ? resolvedName
+                            : null;
+                        var recordLabel = currentName
+                            ?? (parsedDetail.CsoTypeName != null
                                 ? $"{parsedDetail.CsoTypeName}: {provisionedCsoId}"
-                                : provisionedCsoId.ToString();
+                                : provisionedCsoId.ToString());
                         links.Add(new CausalityEntityLink(
                             recordLabel,
                             JimUtilities.GetConnectedSystemObjectHref(provisioningSystemId, provisionedCsoId),
-                            CausalityEntityKind.Record));
+                            CausalityEntityKind.Record,
+                            ObjectTypeName: currentName != null ? parsedDetail.CsoTypeName : null));
                     }
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
@@ -706,7 +713,9 @@ public static class CausalityModelBuilder
                     // the outcome names it (an update to an existing object, or a cascade's deprovision). A
                     // provisioning export's Provisioned parent names the new object itself, so a change with
                     // no object id adds nothing here. Labelled by the object's current name when the page
-                    // resolved one (see CausalityPageContext.ConnectedSystemObjectNames), else by its id.
+                    // resolved one (see CausalityPageContext.ConnectedSystemObjectNames), else by its id; the
+                    // label is always bare (never "type: id"), so ObjectTypeName from the same "csId|csoTypeName"
+                    // channel can be set unconditionally, letting the chip and the Lineage head add the type.
                     if (outcome.ConnectedSystemObjectChange?.ConnectedSystemObjectId is { } targetCsoId && targetCsoId != Guid.Empty)
                     {
                         var targetLabel = context.ConnectedSystemObjectNames?.TryGetValue(targetCsoId, out var currentTargetName) == true
@@ -715,7 +724,8 @@ public static class CausalityModelBuilder
                         links.Add(new CausalityEntityLink(
                             targetLabel,
                             JimUtilities.GetConnectedSystemObjectHref(targetSystemId, targetCsoId),
-                            CausalityEntityKind.Record));
+                            CausalityEntityKind.Record,
+                            ObjectTypeName: parsedDetail.CsoTypeName));
                     }
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))

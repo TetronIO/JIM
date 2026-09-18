@@ -104,4 +104,17 @@ public static class SyncOutcomeBuilder
         if (outcomeCounts.Count > 0)
             rpei.OutcomeSummary = string.Join(",", outcomeCounts);
     }
+
+    /// <summary>
+    /// Formats a sync outcome's DetailMessage for the "csId|csoTypeName" link channel the causality
+    /// panel parses (<c>OutcomeDetailMessageParser</c>): every outcome whose target is a Connected
+    /// System Object should record its type here, not just Provisioned, so the panel can name the
+    /// target "type: name" instead of the bare name or id. The type segment is omitted (not written
+    /// as an empty trailing pipe) when unknown, which the parser already treats as "no type" for
+    /// either shape.
+    /// </summary>
+    /// <param name="connectedSystemId">The target Connected System's id.</param>
+    /// <param name="csoTypeName">The target Connected System Object's type name, where known.</param>
+    public static string FormatCsoLinkDetailMessage(int connectedSystemId, string? csoTypeName) =>
+        string.IsNullOrEmpty(csoTypeName) ? connectedSystemId.ToString() : $"{connectedSystemId}|{csoTypeName}";
 }

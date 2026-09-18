@@ -97,15 +97,18 @@
             .Where(l => !ChipKinds.Contains(l.Kind) && !string.IsNullOrEmpty(l.Href))
             .ToList();
 
-        <div class="tl-row @(siblingCount == 1 ? "only-child" : null)">
+        @* only-child: a lone row in its block draws no rail of its own; has-children: the row's
+           children render as its third grid child, beside the body rather than inside it, so the
+           rail's cell covers only this row's own content and its line runs straight into the
+           connector the nested block draws from it (see .tl-children in causality.css). The body
+           also drops its bottom padding, since the last child already carries the trailing gap. *@
+        <div class="tl-row @(siblingCount == 1 ? "only-child" : null) @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
             <div class="tl-rail">
                 <span class="tl-dot" style="--tone: @toneVar">
                     <MudIcon Icon="@causalityEvent.Icon" aria-hidden="true" />
                 </span>
             </div>
-            @* has-children suppresses this row's own bottom padding: its children render inside this
-               body and the last of them already provides the trailing gap. *@
-            <div class="tl-body @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
+            <div class="tl-body">
                 <div class="tl-line">
                     @* One vocabulary, and only one: no CSO or MVO wording appears anywhere on the panel.
                        See CausalityEventCard.Title. *@
@@ -124,7 +127,7 @@
                     <div class="evt-entities">
                         @foreach (var link in chipLinks)
                         {
-                            <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" />
+                            <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" SubLabel="@link.ObjectTypeName" />
                         }
                     </div>
                 }
@@ -158,16 +161,16 @@
                         </div>
                     }
                 }
-                @if (causalityEvent.Children.Count > 0)
-                {
-                    <div class="tl-children">
-                        @foreach (var child in causalityEvent.Children)
-                        {
-                            @RenderEvent(child, causalityEvent.Children.Count)
-                        }
-                    </div>
-                }
             </div>
+            @if (causalityEvent.Children.Count > 0)
+            {
+                <div class="tl-children">
+                    @foreach (var child in causalityEvent.Children)
+                    {
+                        @RenderEvent(child, causalityEvent.Children.Count)
+                    }
+                </div>
+            }
         </div>
     };
 

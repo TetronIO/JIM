@@ -100,7 +100,19 @@ public static class CausalityTableModelBuilder
 
         var recordLink = causalityEvent.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Record);
         if (recordLink != null)
-            objectMeta[key] = objectMeta[key] with { DisplayName = recordLink.Label, Href = recordLink.Href };
+        {
+            // The type travels onto the subtitle the same way SourceSubtitle() builds the source object's:
+            // "system · type" rather than the system name alone, so a downstream object reads with its type
+            // exactly as the source row does.
+            var subtitle = string.Join(" · ", new[] { causalityEvent.SystemName, recordLink.ObjectTypeName }
+                .Where(p => !string.IsNullOrWhiteSpace(p)));
+            objectMeta[key] = objectMeta[key] with
+            {
+                DisplayName = recordLink.Label,
+                Href = recordLink.Href,
+                Subtitle = subtitle.Length > 0 ? subtitle : objectMeta[key].Subtitle
+            };
+        }
 
         return key;
     }

@@ -3,6 +3,7 @@
 
 using System.Linq;
 using System.Threading.Tasks;
+using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Web.Causality;
@@ -41,6 +42,18 @@ public class CausalityEventCardTests
             .Add(c => c.HideTitle, hideTitle));
     }
 
+    /// <summary>
+    /// The card's text with the entity chips' glyph abbreviations left out: the glyph is an icon
+    /// (aria-hidden, full name in its title), not part of the vocabulary the card speaks.
+    /// </summary>
+    private static string ProseOf(IRenderedComponent<CausalityEventCard> cut)
+    {
+        var root = cut.Find(".evt-card");
+        foreach (var glyph in root.QuerySelectorAll(".glyph").ToList())
+            glyph.Remove();
+        return root.TextContent;
+    }
+
     [Test]
     public async Task Render_Title_ShowsTheEventsOneLabelAndNoCsoOrMvoVocabularyAsync()
     {
@@ -56,8 +69,10 @@ public class CausalityEventCardTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(title.TextContent.Trim(), Is.EqualTo("Projected to the Metaverse"));
-            Assert.That(cut.Markup, Does.Not.Contain("MVO"));
-            Assert.That(cut.Markup, Does.Not.Contain("CSO"));
+            // The abbreviations live only in the entity chips' glyphs, where the full name sits in
+            // the glyph's title; the card's own words never use them.
+            Assert.That(ProseOf(cut), Does.Not.Contain("MVO"));
+            Assert.That(ProseOf(cut), Does.Not.Contain("CSO"));
         }
     }
 

@@ -1,11 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AngleSharp.Dom;
 using Bunit;
+using JIM.Models.Activities;
+using JIM.Models.Staging;
 using JIM.Web;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
@@ -78,9 +81,47 @@ public class CausalityTimelineViewTests
         var chip = cut.Find(".evt-entities .chip");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(chip.TextContent.Trim(), Is.EqualTo("person: Liam Allen (S8-287551)"));
+            Assert.That(chip.GetAttribute("title"), Is.EqualTo("person: Liam Allen (S8-287551)"));
+            Assert.That(chip.QuerySelector(".glyph")!.TextContent.Trim(), Is.EqualTo("CSO"));
+            Assert.That(string.Concat(chip.QuerySelector(".sub")!.TextContent, chip.QuerySelector(".name-ellip")!.TextContent).Trim(),
+                Is.EqualTo("person: Liam Allen (S8-287551)"));
             Assert.That(chip.QuerySelector(".sub")!.TextContent.Trim(), Is.EqualTo("person:"),
                 "the dimmed type prefix is its own span, split from the name purely for display");
+        }
+    }
+
+    /// <summary>
+    /// A target object reached through an outcome (here a queued export against an existing
+    /// Connected System Object) is named "type: name" exactly as the source row's own chip is, once the
+    /// "csId|csoTypeName" channel carries a type.
+    /// </summary>
+    [Test]
+    public async Task Render_TargetObjectChip_NamesTheTypeAndNameAsALabelAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var projected = CausalityTestData.AddOutcome(item,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected, parent: null, ordinal: 0,
+            targetEntityId: Guid.NewGuid(), targetEntityDescription: "Liam Allen");
+        var export = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: projected, ordinal: 0, targetEntityId: Guid.NewGuid(),
+            targetEntityDescription: "Contoso AD", detailCount: 1, detailMessage: "3|user");
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange = new ConnectedSystemObjectChange { ConnectedSystemObjectId = targetCsoId };
+        var pageContext = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+        var model = CausalityModelBuilder.Build(item, pageContext);
+
+        var cut = RenderTimeline(context, model);
+
+        var chip = cut.FindAll(".evt-entities .chip")
+            .Single(c => c.QuerySelector(".name-ellip")!.TextContent.Trim() == "EMP001746");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.QuerySelector(".sub")!.TextContent.Trim(), Is.EqualTo("user:"));
+            Assert.That(chip.GetAttribute("title"), Is.EqualTo("user: EMP001746"));
         }
     }
 
@@ -100,21 +141,22 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
-    public async Task Render_RowWithChildren_MarksItsBodySoTheTrailingGapIsNotCountedTwiceAsync()
+    public async Task Render_RowWithChildren_RendersThemBesideItsBodyAndMarksTheRowAsync()
     {
         await using var context = CausalityBunitContext.Create();
         var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var cut = RenderTimeline(context, model);
 
-        // Children render inside their parent's body, so a parent that keeps its own bottom padding
-        // adds it on top of the last child's: the gap after a nested branch came out double the gap
-        // between siblings, and compounded once more per level.
+        // A row's children are its own grid child, beside the body rather than inside it, so the rail's
+        // cell spans only the parent's own content and its line meets the children's connector exactly
+        // where the nested block begins. has-children on the row drives both that layout and the
+        // body's dropped bottom padding (the last child already carries the trailing gap).
+        Assert.That(cut.FindAll(".tl-body .tl-children"), Is.Empty, "children must not render inside a body");
         foreach (var row in cut.FindAll(".tl-row"))
         {
-            var body = row.QuerySelector(".tl-body")!;
-            var hasChildren = body.QuerySelector(":scope > .tl-children") != null;
-            Assert.That(body.ClassList.Contains("has-children"), Is.EqualTo(hasChildren),
+            var hasChildren = row.QuerySelector(":scope > .tl-children") != null;
+            Assert.That(row.ClassList.Contains("has-children"), Is.EqualTo(hasChildren),
                 $"'{row.QuerySelector(".tl-line .verb")?.TextContent.Trim()}' marks has-children as " +
                 $"{!hasChildren} while it {(hasChildren ? "does" : "does not")} render a child container.");
         }
@@ -146,8 +188,12 @@ public class CausalityTimelineViewTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(projectedRow.QuerySelector(".verb")!.TextContent.Trim(), Is.EqualTo("Projected to the Metaverse"));
-            Assert.That(cut.Markup, Does.Not.Contain("MVO"));
-            Assert.That(cut.Markup, Does.Not.Contain("CSO"));
+            // The abbreviations live only in the entity chips' glyphs, where the full name sits in
+            // the glyph's title; the timeline's own words never use them.
+            var prose = string.Join(" ", cut.FindAll(".verb, .tl-detail-line, .evt-badge, .name-ellip, .sub")
+                .Select(e => e.TextContent));
+            Assert.That(prose, Does.Not.Contain("MVO"));
+            Assert.That(prose, Does.Not.Contain("CSO"));
         }
     }
 

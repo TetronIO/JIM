@@ -445,10 +445,12 @@ public static class CausalityLineageModelBuilder
 
         // A staging target holds this run's provisioning events and nothing chain-derived: the Connected
         // System Object is the story's subject arriving in the target system, linked where the run recorded it.
+        // Its type, where the link's own channel carried one, travels onto the head exactly as the page's own
+        // record's does above, so a target reads "user: EMP001746" rather than the name alone.
         var recordLink = state.ThisRunEvents.SelectMany(e => e.Links)
             .FirstOrDefault(l => l.Kind == CausalityEntityKind.Record && l.Href != null);
         return new ColumnHead(context.RecordName ?? state.SystemName ?? "Connected System Object", IsRoleHead: false,
-            recordLink?.Href, ObjectTypeName: null);
+            recordLink?.Href, ObjectTypeName: recordLink?.ObjectTypeName);
     }
 
     /// <summary>
