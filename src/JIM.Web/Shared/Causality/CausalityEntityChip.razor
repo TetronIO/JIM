@@ -19,11 +19,11 @@
 
 @if (!string.IsNullOrEmpty(Href))
 {
-    <a class="chip" href="@Href" title="@AccessibleText">@ChipContent</a>
+    <a class="chip @(ShowGlyph ? null : "plain")" href="@Href" title="@AccessibleText">@ChipContent</a>
 }
 else
 {
-    <span class="chip" title="@AccessibleText">@ChipContent</span>
+    <span class="chip @(ShowGlyph ? null : "plain")" title="@AccessibleText">@ChipContent</span>
 }
 
 @code {
@@ -46,6 +46,15 @@ else
     public CausalityEntityKind Kind { get; set; }
 
     /// <summary>
+    /// Whether the glyph renders at all. False where something beside the chip already says what kind
+    /// of object it names: a card in a Lineage column, whose head carries the CSO or MVO glyph for
+    /// every chip beneath it. The chip then renders name-only, with the "plain" class so its padding
+    /// suits a chip with no leading circle.
+    /// </summary>
+    [Parameter]
+    public bool ShowGlyph { get; set; } = true;
+
+    /// <summary>
     /// Optional demoted sub-label rendered before the name (e.g. the Connected System Object's own
     /// type). Visible text is dimmed, display-only; <see cref="AccessibleText"/> is the single source
     /// of what the combined "type: name" label actually says.
@@ -55,7 +64,10 @@ else
 
     private RenderFragment ChipContent => __builder =>
     {
-        <span class="glyph @GetGlyphClass()" aria-hidden="true" title="@GetGlyphFullName()">@GetGlyphText()</span>
+        @if (ShowGlyph)
+        {
+            <span class="glyph @GetGlyphClass()" aria-hidden="true" title="@GetGlyphFullName()">@GetGlyphText()</span>
+        }
         @if (!string.IsNullOrEmpty(SubLabel))
         {
             @* Dimmed display-only prefix (#1669 follow-up): the visible reading matches

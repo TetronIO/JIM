@@ -59,7 +59,7 @@
                             }
                             @if (lineageObject.Href != null)
                             {
-                                <a class="ln-obj-title" href="@lineageObject.Href">@GetObjectTitle(column, lineageObject)</a>
+                                <a class="ln-obj-title" href="@lineageObject.Href">@ObjectTitleContent(column, lineageObject)</a>
                             }
                             else
                             {
@@ -68,7 +68,7 @@
                                    resolved. What has since become of an object is a different fact, and it
                                    belongs below the events rather than beside the name. *@
                                 <span class="ln-obj-title"
-                                      title="@GetUnlinkedExplanation(column, lineageObject)">@GetObjectTitle(column, lineageObject)</span>
+                                      title="@GetUnlinkedExplanation(column, lineageObject)">@ObjectTitleContent(column, lineageObject)</span>
                             }
                             @* A Connected System Object's sub-line names its Connected System, and that name
                                links to the system like every other mention of it on the panel. Only the name
@@ -129,6 +129,7 @@
                                             </div>
                                             <CausalityEventCard Event="thisRunEvent"
                                                                 HideSystemChip="true"
+                                                                HideObjectGlyphs="true"
                                                                 Operation="thisRunEvent.Operation"
                                                                 HideTitle="@(thisRunEvent.OutcomeType is { } outcomeType && OutcomeDisplayMap.IsTitleSubsumedByOperation(outcomeType))"
                                                                 Selected="ReferenceEquals(SelectedEvent, thisRunEvent)"
@@ -233,18 +234,46 @@
         return column.Kind == CausalityLineageColumnKind.Identity ? "This Metaverse Object" : "This Connected System Object";
     }
 
+    /// <summary>
+    /// The type a head shows before its name, or null for a head that shows the name alone. The head is
+    /// a label, not a sentence, so it keeps the "type: name" form (ForConnectedSystemObjectLabel) that
+    /// the Timeline's chips use, for a Metaverse Object exactly as for a Connected System Object; the
+    /// Connected System or the Metaverse follows on its own sub-line beneath. A role head, or an object
+    /// whose type the snapshot did not carry, keeps its bare name: IsRoleHead's Title is already a
+    /// type noun ("Users"), and a name alone is still correct.
+    /// </summary>
+    private static string? GetObjectTypePrefix(CausalityLineageColumn column, CausalityLineageObject lineageObject)
+    {
+        return column.Kind != CausalityLineageColumnKind.Unassigned
+               && !lineageObject.IsRoleHead
+               && !string.IsNullOrWhiteSpace(lineageObject.ObjectTypeName)
+            ? lineageObject.ObjectTypeName
+            : null;
+    }
+
+    /// <summary>
+    /// The head's title as it reads in one piece, "type: name" or the bare name; what the rendered
+    /// spans below must always add up to.
+    /// </summary>
     private static string GetObjectTitle(CausalityLineageColumn column, CausalityLineageObject lineageObject)
     {
-        // The head is a label, not a sentence, so it keeps the "type: name" form
-        // (ForConnectedSystemObjectLabel) rather than the running-text mention with "in {system}";
-        // the Connected System already follows on its own linked sub-line beneath. A role head or a
-        // chain-derived record whose type the snapshot did not carry keeps its bare name: IsRoleHead's
-        // Title is already a type noun ("Users"), and the label method's own null-type branch already
-        // falls back to the bare name, so this reads correctly either way.
-        return column.Kind == CausalityLineageColumnKind.Record && lineageObject.ObjectTypeName != null
-            ? ObjectDescription.ForConnectedSystemObjectLabel(lineageObject.ObjectTypeName, lineageObject.Title)
-            : lineageObject.Title;
+        return ObjectDescription.ForConnectedSystemObjectLabel(GetObjectTypePrefix(column, lineageObject), lineageObject.Title);
     }
+
+    /// <summary>
+    /// The title split for display only: the type as a lowlighted prefix in its own span, the way the
+    /// Timeline's chips lowlight theirs, then the name. The colon and trailing space are baked into the
+    /// prefix span's own text (Razor trims a literal space before a closing tag), so the two spans read
+    /// exactly as <see cref="GetObjectTitle"/> does in one piece.
+    /// </summary>
+    private RenderFragment ObjectTitleContent(CausalityLineageColumn column, CausalityLineageObject lineageObject) => __builder =>
+    {
+        @if (GetObjectTypePrefix(column, lineageObject) is { } typePrefix)
+        {
+            <span class="type">@($"{typePrefix}: ")</span>
+        }
+        @lineageObject.Title
+    };
 
     /// <summary>
     /// The head's second line for everything that is not a Connected System Object: the Metaverse
@@ -257,9 +286,9 @@
         return column.Kind switch
         {
             CausalityLineageColumnKind.Record => null,
-            CausalityLineageColumnKind.Identity => lineageObject.ObjectTypeName != null
-                ? $"{lineageObject.ObjectTypeName} · Metaverse"
-                : "Metaverse",
+            // The type now leads the title itself, as a record's does, so the sub-line says only where
+            // the object lives, in the same "in ..." form as a record's Connected System sub-line.
+            CausalityLineageColumnKind.Identity => "in the Metaverse",
             _ => "causes this view could not place"
         };
     }

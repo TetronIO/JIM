@@ -273,7 +273,66 @@ public class CausalityLineageViewTests
 
         var cut = RenderLineage(model);
 
-        Assert.That(cut.Find(".ln-obj-title").TextContent.Trim(), Is.EqualTo("user: Baseline User"));
+        var title = cut.Find(".ln-obj-title");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(title.TextContent.Trim(), Is.EqualTo("user: Baseline User"));
+            // The type is a lowlighted prefix in its own span, exactly as the Timeline's chip shows it,
+            // so heads and chips read the one "type: name" form the same way.
+            Assert.That(title.QuerySelector(".type")!.TextContent, Is.EqualTo("user: "));
+        }
+    }
+
+    /// <summary>
+    /// The Metaverse Object head reads in the same "type: name" form as a Connected System Object head,
+    /// with the type lowlighted, and its sub-line says where it lives the way a record's does.
+    /// </summary>
+    [Test]
+    public void Render_IdentityHead_NamesTheTypeAndNameAsALabelWithInTheMetaverseBeneath()
+    {
+        var model = new CausalityLineageModel
+        {
+            Columns =
+            [
+                new CausalityLineageColumn
+                {
+                    Kind = CausalityLineageColumnKind.Identity,
+                    Objects = [new CausalityLineageObject { Title = "Benas Shepherd", ObjectTypeName = "User" }]
+                }
+            ],
+            Joins = []
+        };
+
+        var cut = RenderLineage(model);
+
+        var head = cut.Find(".ln-obj");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(head.QuerySelector(".ln-obj-title")!.TextContent.Trim(), Is.EqualTo("User: Benas Shepherd"));
+            Assert.That(head.QuerySelector(".ln-obj-title .type")!.TextContent, Is.EqualTo("User: "));
+            Assert.That(head.QuerySelector(".ln-obj-sub")!.TextContent.Trim(), Is.EqualTo("in the Metaverse"));
+        }
+    }
+
+    /// <summary>
+    /// A card sits in its object's column, whose head already says CSO or MVO, so the card's own object
+    /// chip carries no glyph. Connected System and Synchronisation Rule chips keep theirs where they
+    /// render, since the column says nothing about them.
+    /// </summary>
+    [Test]
+    public void Render_ThisRunCard_ObjectChipsCarryNoGlyph()
+    {
+        var cut = RenderLineage(NewJoinerLineage());
+
+        // The new joiner's cards name the Metaverse Object (Projected, Attributes flowed) and the
+        // provisioned Connected System Objects, beside their Synchronisation Rules.
+        var glyphs = cut.FindAll(".ln-now .chip .glyph").Select(g => g.TextContent.Trim()).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(glyphs, Does.Contain("SR"));
+            Assert.That(glyphs, Has.None.EqualTo("CSO").And.None.EqualTo("MVO"));
+            Assert.That(cut.FindAll(".ln-now .chip.plain"), Is.Not.Empty, "the object chips render without a glyph");
+        }
     }
 
     /// <summary>
@@ -771,7 +830,7 @@ public class CausalityLineageViewTests
     {
         var cut = RenderLineage(IdentityCreationLineage());
 
-        // The Identity column's sub-line always names "... · Metaverse"; no other column carries that.
+        // The Identity column's sub-line always reads "in the Metaverse"; no other column carries that.
         var identityObject = cut.FindAll(".ln-object")
             .Single(o => o.QuerySelector(".ln-obj-sub")?.TextContent.Contains("Metaverse") == true);
         using (Assert.EnterMultipleScope())

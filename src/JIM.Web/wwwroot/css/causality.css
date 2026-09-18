@@ -277,6 +277,12 @@
     transition: background 0.15s;
 }
 
+/* A chip with no leading glyph (a Lineage card's object chip, whose column head wears the glyph)
+   pads both ends alike, so the name sits centred in the pill rather than hugging the left edge. */
+.causality-panel .chip.plain {
+    padding-left: 10px;
+}
+
 /* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip
    convention (background/avatar colour change) rather than a border outline. */
 .causality-panel a.chip:hover {
@@ -917,6 +923,13 @@
 .causality-panel .ln-obj-title {
     color: var(--cz-text);
     overflow-wrap: anywhere;
+}
+
+/* The head's type prefix, lowlighted exactly as a chip's (.chip .sub), so "type: name" reads the same
+   way wherever an object is named. */
+.causality-panel .ln-obj-title .type {
+    color: var(--cz-text-faint);
+    font-weight: 450;
 }
 
 .causality-panel a.ln-obj-title {
