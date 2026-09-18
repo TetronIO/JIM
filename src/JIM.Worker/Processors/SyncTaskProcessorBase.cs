@@ -1870,7 +1870,7 @@ public abstract class SyncTaskProcessorBase
                     // Format: "csId|csoTypeName" (e.g. "4|person")
                     csoTypeNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csoTypeName);
                     var detailMessage = provisioningCso.ConnectedSystemId > 0
-                        ? $"{provisioningCso.ConnectedSystemId}|{csoTypeName}"
+                        ? SyncOutcomeBuilder.FormatCsoLinkDetailMessage(provisioningCso.ConnectedSystemId, csoTypeName)
                         : null;
 
                     csNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csName);
@@ -1908,6 +1908,11 @@ public abstract class SyncTaskProcessorBase
                 {
                     // Use ConnectedSystemId directly (nav property may not be set for deferred provisioning CSOs)
                     var peCsId = pendingExport.ConnectedSystemId;
+                    // The target CSO's own type, where known, so the causality panel can name it "type: name"
+                    // exactly as a Provisioned outcome's target already does.
+                    var peCsoTypeName = pendingExport.ConnectedSystemObject?.Type?.Name
+                        ?? (csoTypeNameLookup.TryGetValue(peCsId, out var lookedUpCsoTypeName) ? lookedUpCsoTypeName : null);
+                    var peDetailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(peCsId, peCsoTypeName);
 
                     ActivityRunProfileExecutionItemSyncOutcome peOutcome;
 
@@ -1919,7 +1924,7 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: provisionedParent.TargetEntityDescription,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString(),
+                            detailMessage: peDetailMessage,
                             stagedChangeType: pendingExport.ChangeType);
                     }
                     else if (exportParent != null)
@@ -1932,7 +1937,7 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString(),
+                            detailMessage: peDetailMessage,
                             stagedChangeType: pendingExport.ChangeType);
                     }
                     else
@@ -1944,7 +1949,7 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString(),
+                            detailMessage: peDetailMessage,
                             stagedChangeType: pendingExport.ChangeType);
                     }
 
@@ -1967,14 +1972,24 @@ public abstract class SyncTaskProcessorBase
                         syncRuleName: provisioningSyncRule?.Name);
                 }
 
+                // Standard mode builds no shared csoTypeNameLookup of its own (the Detailed-mode one above is
+                // scoped to that branch), so it is rebuilt here from the same export evaluation cache.
+                var standardCsoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystemObjectType != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+
                 foreach (var pe in result.PendingExports)
                 {
+                    var peCsoTypeName = pe.ConnectedSystemObject?.Type?.Name
+                        ?? standardCsoTypeNameLookup.GetValueOrDefault(pe.ConnectedSystemId);
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
                         SyncOutcomeTypes.ForPendingExport(pe),
                         targetEntityId: pe.Id,
                         targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
                         detailCount: pe.AttributeValueChanges.Count,
-                        detailMessage: pe.ConnectedSystemId.ToString(),
+                        detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pe.ConnectedSystemId, peCsoTypeName),
                         stagedChangeType: pe.ChangeType);
 
                     await SnapshotPendingExportChangesAsync(peOutcome, pe);
@@ -2016,14 +2031,20 @@ public abstract class SyncTaskProcessorBase
                     .Where(sr => sr.ConnectedSystem != null)
                     .GroupBy(sr => sr.ConnectedSystemId)
                     .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name);
+                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystemObjectType != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
 
                 foreach (var cancellation in outOfScopeWorkingSet.CancelledProvisionings)
                 {
                     csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
+                    csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
                     SyncOutcomeBuilder.AddRootOutcome(scopeOutRpei,
                         ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                         targetEntityDescription: targetSystemName,
-                        detailMessage: cancellation.ConnectedSystemId.ToString());
+                        detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, cancelledCsoTypeName));
                 }
             }
         }
@@ -3596,6 +3617,16 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
 
+        // Connected System id to CSO type name, the approximate ("first exporting rule's type per system")
+        // fallback used everywhere else in this file; the standalone branch below prefers the exact type off
+        // the CSO's own display snapshot where it has already paid for one.
+        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystemObjectType != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
+            ?? new Dictionary<int, string>();
+
         // Only needed for the standalone fallback items, which must stay self-describing once the target
         // Connected System Object is obsoleted and cleaned up. One Summary-tier lookup covers them all.
         Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>? csoSnapshots = null;
@@ -3621,6 +3652,7 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var targetCsName);
+            csoTypeNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var cascadeCsoTypeName);
 
             if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
             {
@@ -3629,7 +3661,7 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, cascadeCsoTypeName),
                     stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
                 // The deletion item's id is assigned here where missing, because the RPEI flush that would
@@ -3665,7 +3697,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
+                        pendingExport.ConnectedSystemId, snapshot?.TypeName ?? cascadeCsoTypeName),
                     stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
                 cascadeEffectOutcome = cascadeOutcome;
@@ -3726,6 +3759,12 @@ public abstract class SyncTaskProcessorBase
             .GroupBy(sr => sr.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
+        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystemObjectType != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
+            ?? new Dictionary<int, string>();
 
         var reportedCount = 0;
         foreach (var cancellation in workingSet.CancelledProvisionings)
@@ -3744,10 +3783,11 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
+            csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
             SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                 targetEntityDescription: targetSystemName,
-                detailMessage: cancellation.ConnectedSystemId.ToString());
+                detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, cancelledCsoTypeName));
             reportedCount++;
         }
 
@@ -3924,7 +3964,10 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: stagedPendingExport.Id,
                     targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
-                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString(),
+                    // snapshot.TypeName is the recalled object's own type, already loaded above for
+                    // ObjectTypeSnapshot: an exact value rather than the approximate per-system lookup used
+                    // where no snapshot of the specific CSO is already in hand.
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(stagedPendingExport.ConnectedSystemId, snapshot?.TypeName),
                     stagedChangeType: stagedPendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
                 effectOutcome = recallOutcome;
