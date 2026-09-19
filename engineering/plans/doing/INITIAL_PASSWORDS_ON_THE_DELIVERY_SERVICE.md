@@ -79,7 +79,7 @@ Settled before implementation began (2026-09-19); the plan below implements them
 
 ## Deviations
 
-- **A third layer for a discovered bug.** The park-then-release step added to Scenario 17 failed on every run: the API-key overload of `CreateOrUpdateSyncRuleAsync` never released parked accounts, and once the release was added it still compared the new configuration against itself, because the REST controller mutates the tracked rule in place and the save's own Activity write flushed it before the comparison. Fixed for both overloads in `feature/initial-passwords-on-delivery-service-stack-release-on-api-save` (#1706, #1707 and the third PR merge as stack #1708).
+- **A third layer for a discovered bug.** The park-then-release step added to Scenario 17 failed on every run: the API-key overload of `CreateOrUpdateSyncRuleAsync` never released parked accounts, and once the release was added it still compared the new configuration against itself, because the REST controller mutates the tracked rule in place and the save's own Activity write flushed it before the comparison. Fixed for both overloads in `feature/initial-passwords-on-delivery-service-stack-release-on-api-save` (#1706, #1707 and the third PR merge as stack #1713).
 
 Recorded during Layer 1 implementation (2026-09-19):
 
