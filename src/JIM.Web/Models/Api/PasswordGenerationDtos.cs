@@ -190,6 +190,14 @@ public class GeneratedPasswordResponse
     public List<string> SystemsWithNoDiscoveredPolicy { get; set; } = [];
 
     /// <summary>
+    /// Where several systems were asked for at once: those whose directory applies checks beyond the rules JIM
+    /// read (a password-quality module, a dictionary check). The password satisfies what those systems
+    /// published, and can still be refused by what they did not; a caller seeing a refusal there should expect
+    /// it rather than treat the generated password as wrong. Empty for a single-system generate.
+    /// </summary>
+    public List<string> SystemsApplyingFurtherChecks { get; set; } = [];
+
+    /// <summary>
     /// Where several systems were asked for at once: the rules the password had to satisfy, in the words the
     /// portal uses, so a script can report what it generated against.
     /// </summary>
@@ -205,6 +213,7 @@ public class GeneratedPasswordResponse
     {
         var response = FromGenerated(password, assessment, reconciliation.Constraints.Count > 0);
         response.SystemsWithNoDiscoveredPolicy = [.. reconciliation.SystemsWithNoDiscoveredPolicy];
+        response.SystemsApplyingFurtherChecks = [.. reconciliation.SystemsApplyingFurtherChecks];
         response.Constraints = [.. reconciliation.Constraints];
 
         // A system that disclosed nothing may be stricter than the reconciled policy knows, so JIM must not

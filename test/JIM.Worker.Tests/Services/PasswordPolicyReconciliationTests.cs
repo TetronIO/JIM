@@ -35,14 +35,16 @@ public class PasswordPolicyReconciliationTests
         bool? complexityRequired = null,
         int? requiredClasses = null,
         PasswordCharacterClasses recognised = PasswordCharacterClasses.None,
-        PolicyOverrideSignal overrideSignal = PolicyOverrideSignal.Absent) =>
+        PolicyOverrideSignal overrideSignal = PolicyOverrideSignal.Absent,
+        bool furtherChecksApply = false) =>
         new()
         {
             MinimumLength = minimumLength,
             ComplexityRequired = complexityRequired,
             RequiredCharacterClassCount = requiredClasses,
             RecognisedCharacterClasses = recognised,
-            PolicyOverrideSignal = overrideSignal
+            PolicyOverrideSignal = overrideSignal,
+            FurtherChecksApply = furtherChecksApply
         };
 
     #region length folds to the strictest
@@ -132,6 +134,81 @@ public class PasswordPolicyReconciliationTests
         ]);
 
         Assert.That(reconciliation.Constraints, Has.Some.Contains("3 of 4 character categories"));
+    }
+
+    /// <summary>
+    /// PRD requirement 8 (#1702). A directory that does not express complexity as a category count (OpenLDAP's
+    /// ppolicy overlay publishes none) contributes no constraint on that axis, exactly as an absent policy
+    /// would: the known count stands, and the silence narrows neither the count nor the categories that
+    /// count towards it.
+    /// </summary>
+    [Test]
+    public void Reconcile_WhenOneSystemDoesNotPublishACategoryCount_UsesTheKnownCount()
+    {
+        var reconciliation = _generator.Reconcile([
+            System("Contoso AD", Policy(minimumLength: 7, complexityRequired: true, requiredClasses: 3,
+                recognised: PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase |
+                            PasswordCharacterClasses.Digit | PasswordCharacterClasses.Symbol |
+                            PasswordCharacterClasses.OtherUnicodeLetter)),
+            System("Research LDAP", Policy(minimumLength: 12, requiredClasses: null, recognised: PasswordCharacterClasses.None))
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reconciliation.Constraints, Has.Some.Contains("3 of 5 character categories"));
+            Assert.That(reconciliation.Policy.Length, Is.GreaterThanOrEqualTo(12), "the other system's length still applies");
+            Assert.That(reconciliation.SystemsWithNoDiscoveredPolicy, Is.Empty, "a policy without a category count is still a policy");
+        }
+    }
+
+    #endregion
+
+    #region further checks JIM cannot see
+
+    /// <summary>
+    /// A directory running a password-quality module or a dictionary check can refuse a password that satisfies
+    /// every rule JIM read. Naming the system lets the dialog say so beside the constraints, so the refusal is
+    /// expected rather than read as JIM getting the rules wrong.
+    /// </summary>
+    [Test]
+    public void Reconcile_WhenASystemAppliesFurtherChecks_NamesIt()
+    {
+        var reconciliation = _generator.Reconcile([
+            System("Research LDAP", Policy(minimumLength: 12, furtherChecksApply: true)),
+            System("Contoso AD", Policy(minimumLength: 7))
+        ]);
+
+        Assert.That(reconciliation.SystemsApplyingFurtherChecks, Is.EqualTo(new[] { "Research LDAP" }));
+    }
+
+    [Test]
+    public void Reconcile_WhenNoSystemAppliesFurtherChecks_NamesNone()
+    {
+        var reconciliation = _generator.Reconcile([
+            System("Research LDAP", Policy(minimumLength: 12)),
+            System("Contoso AD", Policy(minimumLength: 7))
+        ]);
+
+        Assert.That(reconciliation.SystemsApplyingFurtherChecks, Is.Empty);
+    }
+
+    /// <summary>
+    /// A row that discovered nothing is already reported as unknown; naming it here as well would say the same
+    /// thing about the same system in two vocabularies (the rule <see cref="Reconcile_WithAPolicyRowThatDiscoveredNothing_TreatsItAsUnknownAndSaysSoOnlyOnce"/>
+    /// pins for the override signal).
+    /// </summary>
+    [Test]
+    public void Reconcile_WhenARowThatDiscoveredNothingClaimsFurtherChecks_ReportsItOnlyAsUnknown()
+    {
+        var reconciliation = _generator.Reconcile([
+            System("Research LDAP", Policy(furtherChecksApply: true))
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reconciliation.SystemsWithNoDiscoveredPolicy, Is.EqualTo(new[] { "Research LDAP" }));
+            Assert.That(reconciliation.SystemsApplyingFurtherChecks, Is.Empty);
+        }
     }
 
     #endregion

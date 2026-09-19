@@ -547,6 +547,12 @@ public class PasswordGeneratorService : IPasswordGeneratorService
                 .Where(p => p.Policy is not { HasAnyDiscoveredConstraint: true })
                 .Select(p => p.ConnectedSystemName)
                 .ToList(),
+            // Drawn from the systems whose rules were read, not from every row: a row that discovered nothing is
+            // reported once, above, as unknown.
+            SystemsApplyingFurtherChecks = known
+                .Where(p => p.Policy!.FurtherChecksApply)
+                .Select(p => p.ConnectedSystemName)
+                .ToList(),
             Conflicts = conflicts,
             // Any system that may hold a stricter policy for some accounts, or that JIM could not ask, makes the
             // whole combination a floor rather than a guarantee.
@@ -586,6 +592,9 @@ public class PasswordGeneratorService : IPasswordGeneratorService
             PasswordHistoryLength = policies.Select(p => p.PasswordHistoryLength).Max(),
             MaximumPasswordAge = policies.Select(p => p.MaximumPasswordAge).Min(),
             MinimumPasswordAge = policies.Select(p => p.MinimumPasswordAge).Max(),
+            // One system's unseen checks are unseen checks on the combination: a password has to pass every
+            // system, so the combined row is subject to them too.
+            FurtherChecksApply = policies.Any(p => p.FurtherChecksApply),
             PolicyOverrideSignal = policies.Any(p => p.PolicyOverrideSignal == PolicyOverrideSignal.Present)
                 ? PolicyOverrideSignal.Present
                 : policies.Any(p => p.PolicyOverrideSignal == PolicyOverrideSignal.CouldNotDetermine)
