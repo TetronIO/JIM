@@ -563,7 +563,7 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Name" Sortable="false">
+                <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Name" Name="name" />
                     </HeaderTemplate>
@@ -576,7 +576,7 @@
                    whose condition only becomes true after the grid has rendered (each of these three is derived
                    from the selected Object Type's attributes, and the selection changes under the reader) would
                    register last and render at the far right, whatever the markup says. *@
-                <TemplateColumn Title="Class" Sortable="false" Hidden="@(!_selectedObjectTypeHasClasses)">
+                <TemplateColumn Title="Class" Sortable="false" Hidden="@(!_selectedObjectTypeHasClasses)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Class" Name="class" />
                     </HeaderTemplate>
@@ -584,7 +584,7 @@
                         @context.Item.ClassName
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Type" Sortable="false">
+                <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Type" Name="type" />
                     </HeaderTemplate>
@@ -612,7 +612,7 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Plurality" Sortable="false">
+                <TemplateColumn Title="Plurality" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Plurality" Name="plurality" />
                     </HeaderTemplate>
@@ -622,7 +622,7 @@
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)">
+                <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Writability" Name="writability" />
                     </HeaderTemplate>
@@ -636,7 +636,7 @@
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Description" Sortable="false" Hidden="@(!_selectedObjectTypeHasDescriptions)">
+                <TemplateColumn Title="Description" Sortable="false" Hidden="@(!_selectedObjectTypeHasDescriptions)" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Description" Name="description" />
                     </HeaderTemplate>
@@ -659,7 +659,7 @@
                 </TemplateColumn>
                 @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                 {
-                    <TemplateColumn Title="Action" Sortable="false">
+                    <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                         <HeaderTemplate>
                             <MudText Typo="Typo.button">Action</MudText>
                         </HeaderTemplate>
