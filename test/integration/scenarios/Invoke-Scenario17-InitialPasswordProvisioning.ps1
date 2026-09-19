@@ -7,35 +7,40 @@
 
 .DESCRIPTION
     Proves that the Initial Password JIM sets on an account it provisions is one the account holder can
-    actually use, and that the options chosen alongside it are honoured by the directory.
-
-    Everything else in JIM's password coverage stops at the connector's outgoing bytes: the unit tests
-    in LdapConnectorPasswordTests assert against a mocked LDAP executor, so they prove JIM *emits* a
-    quoted UTF-16LE unicodePwd write and a pwdLastSet of zero, and prove nothing about whether a
-    directory accepts either. This scenario closes that gap by taking the credential JIM set and
-    signing in with it.
+    actually use, that the options chosen alongside it are honoured by the directory, and that a target's
+    refusal of it parks the account rather than losing it, recoverably, by correcting the rule.
 
     The chain, in order, and why each link is needed:
 
-      1. Provision an account through the ordinary path (HR CSV, Metaverse, Create export to Samba AD).
-         The export queues an Initial Password rather than setting it directly; the Password Delivery
-         Service delivers it within seconds, on the Connected System's own retry schedule if the first
-         attempt does not land. This step waits for the queue to drain before anything reads the account.
-      2. Read the account back: it must be enabled, and must carry pwdLastSet = 0.
-      3. Bind as the account holder with the Initial Password. Active Directory answers a correct
+      1. Provision accounts through the ordinary path (HR CSV, Metaverse, Create export to Samba AD),
+         with the Synchronisation Rule's Initial Password deliberately set to a value the domain refuses.
+         The export queues an Initial Password rather than setting it directly, and the Password Delivery
+         Service parks every one of them: the target's own refusal, in its own words, is recorded against
+         both the queue rows and the Synchronisation Rule.
+      2. Correct the rule to the password the rest of this scenario uses, and prove that saving it is
+         what releases the parked accounts: no re-export, no retry, no restart. The Password Delivery
+         Service delivers every one of them within seconds of the save.
+      3. Read an account back: it must be enabled, and must carry pwdLastSet = 0.
+      4. Bind as the account holder with the Initial Password. Active Directory answers a correct
          password on a must-change account with result 49 and sub-code 773, which is a *success*
          signal here: the credential is right and the directory is insisting on a change.
-      4. Bind with a deliberately wrong password. This must answer 49 sub-code 52e. Without this
-         contrast, step 3 proves nothing: both are result code 49, and a scenario that only checked
+      5. Bind with a deliberately wrong password. This must answer 49 sub-code 52e. Without this
+         contrast, step 4 proves nothing: both are result code 49, and a scenario that only checked
          "the bind failed" would pass just as happily against a password JIM never set.
-      5. Change the password as the account holder, authenticating with the Initial Password. This is
+      6. Change the password as the account holder, authenticating with the Initial Password. This is
          the flow a new starter is actually put through, and the only step that proves the credential
          is usable rather than merely recognised.
-      6. Bind with the newly chosen password. It must succeed outright.
-      7. Confirm JIM's own record agrees: nothing parked, nothing expired.
+      7. Bind with the newly chosen password. It must succeed outright.
+      8. Confirm JIM's own record agrees: nothing parked, nothing expired.
+
+    Everything else in JIM's password coverage stops at the connector's outgoing bytes: the unit tests
+    in LdapConnectorPasswordTests assert against a mocked LDAP executor, so they prove JIM *emits* the
+    right writes and prove nothing about whether a directory accepts them, still less about what happens
+    when it refuses. This scenario closes both gaps: it takes the credential JIM set and signs in with
+    it, and it drives a real target refusal through to a real recovery.
 
     Samba AD only. "Must change at next sign-in" is an Active Directory behaviour; JIM reports it as a
-    downgrade on every other directory, so step 3's central assertion has nothing to bite on there.
+    downgrade on every other directory, so step 4's central assertion has nothing to bite on there.
 
 .PARAMETER Step
     Which part to execute (Provision, Credential, All)
@@ -189,16 +194,139 @@ try {
         $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Delta Sync"
 
+        # Stage a password the target will refuse, before the accounts it applies to even exist.
+        #
+        # A too-short value alone will not reach the target: Set-JIMSyncRuleInitialPassword assesses a
+        # Static password against the password policy JIM already discovered on this Connected System
+        # (read during Setup-Scenario1's schema import) and refuses to save one that policy would reject
+        # outright, precisely so an unsatisfiable configuration cannot park every account it touches.
+        # Confirmed empirically: a six-character value is refused at save time with "This Connected
+        # System requires at least 7 characters", never reaching the directory at all.
+        #
+        # To get a *genuine* target refusal instead of a save-time one, this widens the gap between what
+        # JIM's cached policy still believes and what the domain actually enforces: raising the domain's
+        # real minimum length leaves JIM's stale, already-discovered figure looking more permissive than
+        # reality, exactly as it would the day after an administrator tightens a real directory's policy
+        # and before JIM's next schema refresh notices. A password between the two lengths clears JIM's
+        # save-time check on the old figure and is then refused for real when the export tries to set it.
+        # docker exec's output is captured as a string per line; joined to one string before matching, because
+        # -match against an array filters elements rather than setting $matches (PowerShell's array/scalar
+        # -match split), which would otherwise misjudge the array as a non-match and throw below regardless.
+        $domainMinPwdLengthOutput = (docker exec $DirectoryConfig.ContainerName samba-tool domain passwordsettings show 2>&1 | Out-String)
+        if ($domainMinPwdLengthOutput -notmatch 'Minimum password length:\s*(\d+)') {
+            throw "Could not read the domain's current minimum password length from samba-tool. Output: $domainMinPwdLengthOutput"
+        }
+        $originalMinPwdLength = [int]$matches[1]
+        $temporaryMinPwdLength = $originalMinPwdLength + 3
+
+        Write-Host "  Raising the domain's minimum password length from $originalMinPwdLength to $temporaryMinPwdLength, so JIM's already-discovered policy is stale..." -ForegroundColor DarkGray
+        docker exec $DirectoryConfig.ContainerName samba-tool domain passwordsettings set --min-pwd-length=$temporaryMinPwdLength 2>&1 | Out-Null
+
+        # One character short of the domain's new real minimum, but at or above the figure JIM cached
+        # when it last discovered the policy: this is what makes the save succeed and the export fail.
+        # Complexity is switched off on this domain, so content is irrelevant; only length distinguishes
+        # what JIM will accept from what the domain will. The source pattern mixes character classes
+        # anyway, so the same value would still be refused on its own merits if complexity were ever on.
+        $refusedPasswordSource = 'Vt-Zkq9!Rmx-Ln4-Bwc7-Pd3-Qs5-Tuv8'
+        $refusedPasswordLength = $temporaryMinPwdLength - 1
+        if ($refusedPasswordSource.Length -lt $refusedPasswordLength) {
+            throw "The refused-password source pattern is too short for a domain minimum length of $temporaryMinPwdLength. Lengthen `$refusedPasswordSource."
+        }
+        $refusedPassword = $refusedPasswordSource.Substring(0, $refusedPasswordLength)
+        Write-Host "  Staging an Initial Password the domain will refuse ('$refusedPassword', $($refusedPassword.Length) characters: passes JIM's cached policy, fails the domain's raised one)..." -ForegroundColor DarkGray
+        Set-JIMSyncRuleInitialPassword -Id $config.ExportSyncRuleId -Source Static `
+            -StaticPassword (ConvertTo-SecureString -String $refusedPassword -AsPlainText -Force) `
+            -ChangeReason "Scenario 17: stage a password the target refuses, to prove parking before release" | Out-Null
+
         # The Create exports land here, and each one stages a Pending Initial Password. The Activity
         # completing only means the export wrote the account; delivery is the Password Delivery
-        # Service's job, done asynchronously through the Connector's password channel, so it is not
-        # done yet just because this Activity is.
-        Write-Host "  [3/5] Directory Export (accounts created, Initial Passwords queued)..." -ForegroundColor DarkGray
+        # Service's job, done asynchronously through the Connector's password channel, so a completed
+        # Activity says nothing about whether the password landed, still less about the refusal below.
+        Write-Host "  [3/5] Directory Export (accounts created, Initial Passwords refused and parked)..." -ForegroundColor DarkGray
         $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Export"
 
-        # The export's Activity says the account was created; it says nothing about whether the Initial
-        # Password has reached it yet. Wait for the Password Delivery Service to drain the queue before
+        # -PassThru only carries ActivityId and TaskId, so the export's own count of objects it wrote
+        # (Creates, on this the Connected System's first export) is read back from the Activity itself.
+        $provisionedCount = [int](Get-JIMActivity -Id $r.activityId).executionStats.totalExported
+        Write-Host "  Export provisioned $provisionedCount account(s)" -ForegroundColor Gray
+
+        # ─────────────────────────────────────────────────────────────────────────────────────
+        # Test: the refused Initial Password parks every account, naming the target's refusal
+        # ─────────────────────────────────────────────────────────────────────────────────────
+        Write-TestSection "Test: the refused Initial Password parks every provisioned account"
+
+        $parkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $parkTimeoutSeconds = 30
+        $parkedRows = @()
+        while ($parkStopwatch.Elapsed.TotalSeconds -lt $parkTimeoutSeconds) {
+            $parkedRows = @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Parked)
+            if ($provisionedCount -gt 0 -and $parkedRows.Count -eq $provisionedCount) { break }
+            Start-Sleep -Milliseconds 250
+        }
+
+        Add-TestResult -Name "Every provisioned account is parked by the target's refusal of the Initial Password" `
+            -Passed ($provisionedCount -gt 0 -and $parkedRows.Count -eq $provisionedCount) `
+            -Detail "Expected $provisionedCount parked row(s), one per account this export provisioned; found $($parkedRows.Count) after $parkTimeoutSeconds seconds."
+
+        $wrongOrigin = @($parkedRows | Where-Object { $_.origin -ne 'Provisioned' -or $_.syncRuleId -ne $config.ExportSyncRuleId })
+        Add-TestResult -Name "The parked rows are Provisioned, staged against this Synchronisation Rule" `
+            -Passed ($wrongOrigin.Count -eq 0) `
+            -Detail "$($wrongOrigin.Count) row(s) carried an Origin other than Provisioned, or a SyncRuleId other than $($config.ExportSyncRuleId)."
+
+        $parkedInitialPasswordConfig = Get-JIMSyncRuleInitialPassword -Id $config.ExportSyncRuleId
+        Add-TestResult -Name "The Synchronisation Rule reports the same parked count and names the target's refusal" `
+            -Passed ($parkedInitialPasswordConfig.parkedAccountCount -eq $provisionedCount -and `
+                     @($parkedInitialPasswordConfig.parkedReasons).Count -gt 0 -and `
+                     -not [string]::IsNullOrWhiteSpace(($parkedInitialPasswordConfig.parkedReasons | Select-Object -First 1).targetMessage)) `
+            -Detail "parkedAccountCount was $($parkedInitialPasswordConfig.parkedAccountCount) (expected $provisionedCount); parkedReasons had $(@($parkedInitialPasswordConfig.parkedReasons).Count) entr(y/ies)."
+
+        $parkedReason = $parkedInitialPasswordConfig.parkedReasons | Select-Object -First 1
+        if ($parkedReason) {
+            Write-Host "  Target's refusal: $($parkedReason.targetMessage)" -ForegroundColor Yellow
+        }
+
+        # ─────────────────────────────────────────────────────────────────────────────────────
+        # Test: correcting the rule releases every parked account to the Password Delivery Service
+        # ─────────────────────────────────────────────────────────────────────────────────────
+        Write-TestSection "Test: correcting the Synchronisation Rule releases the parked accounts"
+
+        Write-Host "  Correcting the Initial Password to the value the rest of this scenario uses..." -ForegroundColor DarkGray
+        Set-JIMSyncRuleInitialPassword -Id $config.ExportSyncRuleId -Source Static `
+            -StaticPassword (ConvertTo-SecureString -String $initialPassword -AsPlainText -Force) `
+            -ChangeReason "Scenario 17: correct the rule so the parked accounts release" | Out-Null
+
+        $releaseStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $releaseTimeoutSeconds = 30
+        while ($releaseStopwatch.Elapsed.TotalSeconds -lt $releaseTimeoutSeconds) {
+            $outstanding = @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Pending) +
+                           @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Parked)
+            if ($outstanding.Count -eq 0) { break }
+            Start-Sleep -Milliseconds 250
+        }
+        $releasedAfter = $releaseStopwatch.Elapsed
+        Write-Host ("Parked initial passwords released and delivered {0:N1} s after the rule was saved" -f $releasedAfter.TotalSeconds) -ForegroundColor Cyan
+
+        $stillParked = @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Parked)
+        $stillExpired = @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Expired)
+
+        Add-TestResult -Name "Nothing remains Parked once the Synchronisation Rule is corrected" `
+            -Passed ($stillParked.Count -eq 0) `
+            -Detail "$($stillParked.Count) row(s) still parked after $releaseTimeoutSeconds seconds."
+
+        Add-TestResult -Name "Nothing expired while the accounts waited for the rule to be corrected" `
+            -Passed ($stillExpired.Count -eq 0) `
+            -Detail "$($stillExpired.Count) row(s) expired."
+
+        $releasedInitialPasswordConfig = Get-JIMSyncRuleInitialPassword -Id $config.ExportSyncRuleId
+        Add-TestResult -Name "The Synchronisation Rule's parked count returns to zero once corrected" `
+            -Passed ($releasedInitialPasswordConfig.parkedAccountCount -eq 0) `
+            -Detail "parkedAccountCount was $($releasedInitialPasswordConfig.parkedAccountCount)."
+
+        # The export's Activity said the account was created and its (deliberately refused) Initial
+        # Password was later corrected; it says nothing about whether the corrected password has reached
+        # the account yet. This wait is expected to pass instantly: the release loop above already drained
+        # the queue, so it is kept as the belt-and-braces check the rest of this scenario relies on before
         # doing anything that depends on the password being live, the LDAP bind steps below included.
         $exportFinishedAt = [System.Diagnostics.Stopwatch]::StartNew()
         $drainTimeoutSeconds = 30
@@ -389,7 +517,7 @@ try {
     # credential, which is the failure this whole feature exists to avoid.
     Add-TestResult -Name "No account was parked by the target refusing the Initial Password" `
         -Passed ($initialPasswordConfig.parkedAccountCount -eq 0) `
-        -Detail "parkedAccountCount was $($initialPasswordConfig.parkedAccountCount); reasons: $(($initialPasswordConfig.parkedReasons | ForEach-Object { $_.reason }) -join ', ')"
+        -Detail "parkedAccountCount was $($initialPasswordConfig.parkedAccountCount); reasons: $(($initialPasswordConfig.parkedReasons | ForEach-Object { $_.targetMessage }) -join ', ')"
 
     Add-TestResult -Name "No account expired waiting for an Initial Password" `
         -Passed ($initialPasswordConfig.expiredAccountCount -eq 0) `
@@ -400,6 +528,16 @@ try {
     Assert-NoWorkerErrors -Since $startTime
 }
 finally {
+    # Restore the domain to the minimum length this scenario found it at, if it got as far as raising
+    # it. Nothing later in this scenario depends on the restore (the chosen and corrected passwords both
+    # clear the original figure by a wide margin), but leaving a test domain's policy altered is a
+    # needless surprise for whoever inspects it next; run from `finally` so a failure anywhere between
+    # raising it and here still restores the domain rather than leaving it stuck at the temporary value.
+    if ($null -ne $originalMinPwdLength) {
+        Write-Host "  Restoring the domain's minimum password length to $originalMinPwdLength..." -ForegroundColor DarkGray
+        docker exec $DirectoryConfig.ContainerName samba-tool domain passwordsettings set --min-pwd-length=$originalMinPwdLength 2>&1 | Out-Null
+    }
+
     Disconnect-JIM -ErrorAction SilentlyContinue
     Remove-Module JIM -Force -ErrorAction SilentlyContinue
 }

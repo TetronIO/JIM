@@ -15,6 +15,7 @@ Delivered as a two-layer stacked pull request:
 |---|---|---|
 | 1 | `feature/initial-passwords-on-delivery-service` | The model change (a `Provisioned` origin, nullable `SyncRuleId` and `EncryptedPassword`), export-time staging onto the queue, delivery-lane handling of provisioned rows, Synchronisation Rule-side reads and release moved onto the queue, removal of the old store, the export-run pass and the retention setting, the migration, and RequiresPostgres coverage. |
 | 2 | `feature/initial-passwords-on-delivery-service-stack-surfaces` | The origin surfaced on the queue, the timeline and PowerShell; the Connected System's own initial-password indicator and REST counts removed; docs, changelog and the engineering plan; Scenario 17 updated to poll the queue instead of the export Activity. |
+| 3 | `feature/initial-passwords-on-delivery-service-stack-release-on-api-save` | A fix the new Scenario 17 assertion found: correcting a Synchronisation Rule's Initial Password through the REST API or PowerShell now releases the accounts parked against it (only a portal save did before), with the previous configuration read before anything in the save can flush the tracked rule; Scenario 17 gains the park-then-release loop against the Samba domain. |
 
 ## Business Value
 
@@ -77,6 +78,8 @@ Settled before implementation began (2026-09-19); the plan below implements them
 **Scenario 17 (outstanding).** Updated to poll `Get-JIMPendingPasswordChange` for the provisioned account rather than reading the export Activity's own outcome, matching where the work now actually completes.
 
 ## Deviations
+
+- **A third layer for a discovered bug.** The park-then-release step added to Scenario 17 failed on every run: the API-key overload of `CreateOrUpdateSyncRuleAsync` never released parked accounts, and once the release was added it still compared the new configuration against itself, because the REST controller mutates the tracked rule in place and the save's own Activity write flushed it before the comparison. Fixed for both overloads in `feature/initial-passwords-on-delivery-service-stack-release-on-api-save` (#1706, #1707 and the third PR merge as stack #1708).
 
 Recorded during Layer 1 implementation (2026-09-19):
 

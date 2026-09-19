@@ -8490,6 +8490,15 @@ public partial class ConnectedSystemServer
             // existing Synchronisation Rule - update
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedBy);
+
+            // Read before anything below flushes (#1697). A caller that loaded this rule tracked on this same
+            // unit of work (the REST controller pattern: load, mutate the tracked InitialPassword in place,
+            // then call this method) has already applied the new settings to the in-memory graph by this
+            // point; CreateActivityAsync's own SaveChangesAsync a few lines down would otherwise persist them
+            // before there is anything left to compare the new configuration against, so the comparison would
+            // always see "no change" and never release the parked accounts.
+            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
             // this must run while every named row is still readable; the keep choices are recorded on the
@@ -8500,11 +8509,7 @@ public partial class ConnectedSystemServer
             if (keepMessages.Count > 0)
                 activity.Message = string.Join(" ", keepMessages);
 
-            // Read before the write, or there is nothing left to compare the new configuration against.
-            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
-
-            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
-            await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
+            await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
@@ -8538,6 +8543,22 @@ public partial class ConnectedSystemServer
             return;
 
         await Application.InitialPasswords.ReleaseParkedForSyncRuleAsync(syncRule.Id);
+    }
+
+    /// <summary>
+    /// Updates an existing Synchronisation Rule and releases its parked initial passwords if the save changed
+    /// what would be delivered (#1697). Shared by both <c>CreateOrUpdateSyncRuleAsync</c> overloads so a
+    /// correction made via the REST API or PowerShell releases parked accounts exactly as a portal save does;
+    /// previously only the Metaverse-Object-initiated overload performed the read-before-write and release.
+    /// </summary>
+    /// <param name="previousInitialPassword">
+    /// The configuration as it stood before this save, read by the caller before anything in this save could
+    /// have flushed the tracked entity's new values to the database ahead of the comparison.
+    /// </param>
+    private async Task UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(SyncRule syncRule, SyncRuleInitialPassword? previousInitialPassword)
+    {
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+        await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
     }
 
     /// <summary>
@@ -8641,6 +8662,13 @@ public partial class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedByApiKey);
 
+            // Read before anything below flushes (#1697). The REST controller behind this overload loads the
+            // rule tracked on this same unit of work and mutates its InitialPassword in place before calling
+            // this method, so CreateActivityAsync's own SaveChangesAsync a few lines down would otherwise
+            // persist the new settings before there is anything left to compare them against, and the
+            // comparison would always see "no change" and never release the parked accounts.
+            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
             // this must run while every named row is still readable; the keep choices are recorded on the
@@ -8651,7 +8679,7 @@ public partial class ConnectedSystemServer
             if (keepMessages.Count > 0)
                 activity.Message = string.Join(" ", keepMessages);
 
-            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+            await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense

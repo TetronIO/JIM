@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Moq;
@@ -55,6 +56,7 @@ public class InitialPasswordReleaseOnSaveTests
         mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
         // Saving a Synchronisation Rule reconciles its target attributes' priority order (#1199), which reads the
         // mappings' persisted targets. A loose mock returns null for the dictionary and the reconcile throws;
         // production code is deliberately not null-guarded, because a null there would be a repository contract
@@ -296,6 +298,59 @@ public class InitialPasswordReleaseOnSaveTests
         await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(Rule(Configuration(), provisions: false), _initiatedBy);
 
         _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(SyncRuleId), Times.Once);
+    }
+
+    #endregion
+
+    #region the API-key initiated overload releases parked accounts identically (#1697)
+
+    /// <summary>
+    /// PUT /sync-rules/{id}/initial-password and every other API-key-initiated caller (PowerShell's
+    /// Set-JIMSyncRuleInitialPassword included) go through <c>CreateOrUpdateSyncRuleAsync(SyncRule, ApiKey, ...)</c>
+    /// rather than the Metaverse-Object-initiated overload above. Before #1697 that overload never read the
+    /// previous configuration or released parked accounts, so correcting an Initial Password through REST or
+    /// PowerShell never reached the accounts a policy rejection had parked; only a portal save did.
+    /// </summary>
+    private static readonly ApiKey InitiatedByApiKey = new() { Id = Guid.NewGuid(), Name = "automation-key" };
+
+    private async Task SaveByApiKeyAsync(SyncRuleInitialPassword? stored, SyncRuleInitialPassword? saving)
+    {
+        _mockCsRepo.Setup(r => r.GetSyncRuleInitialPasswordAsync(SyncRuleId)).ReturnsAsync(stored);
+
+        var saved = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(Rule(saving), InitiatedByApiKey);
+
+        Assert.That(saved, Is.True, "precondition: the Synchronisation Rule must have saved");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ApiKeyInitiated_WhenTheGeneratorSettingsChange_ReleasesTheParkedAccountsAsync()
+    {
+        await SaveByApiKeyAsync(stored: Configuration(), saving: Configuration(length: 24));
+
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(SyncRuleId), Times.Once);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ApiKeyInitiated_WhenTheConfigurationIsUnchanged_LeavesTheParkedAccountsParkedAsync()
+    {
+        await SaveByApiKeyAsync(stored: Configuration(), saving: Configuration());
+
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ApiKeyInitiated_OnCreate_DoesNotReleaseAnythingAsync()
+    {
+        // A create has no previous stored configuration to compare against, and no rule id yet for a parked
+        // row to reference; the release path must not be reached at all on this branch.
+        var rule = Rule(Configuration());
+        rule.Id = 0;
+
+        var saved = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, InitiatedByApiKey);
+
+        Assert.That(saved, Is.True, "precondition: the Synchronisation Rule must have saved");
+        _mockCsRepo.Verify(r => r.GetSyncRuleInitialPasswordAsync(It.IsAny<int>()), Times.Never);
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(It.IsAny<int>()), Times.Never);
     }
 
     #endregion
