@@ -331,6 +331,8 @@ Automation sees the same default. `Get-JIMConnectedSystemObjectType` omits inter
 | Skip Hidden Partitions | Skip Configuration, Schema, and DNS zone partitions when refreshing the hierarchy. Improves performance significantly. | `true` |
 | Create Containers as Needed | Automatically create OUs when provisioning objects to locations that do not yet exist. | `false` |
 
+A naming context or crossRef partition the service account cannot read (a least-privilege account bound against an OpenLDAP server hosting several suffixes, say) is skipped rather than failing the whole hierarchy import, and named in the Worker log alongside the LDAP result code so you can tell which partition to grant access to. Only every naming context being unreadable fails the import outright.
+
 ### Export Settings
 
 | Setting | Description | Default |
