@@ -149,10 +149,10 @@ public class PasswordDeliveryClaimDatabaseTests
         return await ctx.PendingPasswordChanges.AsNoTracking().SingleAsync(c => c.Id == id);
     }
 
-    private async Task<List<PendingPasswordChange>> ClaimAsync(int systemId, string claimant = Claimant, DateTime? asOf = null, int maximum = 100, bool explicitOnly = false)
+    private async Task<List<PendingPasswordChange>> ClaimAsync(int systemId, string claimant = Claimant, DateTime? asOf = null, int maximum = 100, bool excludePropagated = false)
     {
         await using var ctx = NewContext();
-        return await new PostgresDataRepository(ctx).Sync.ClaimDuePasswordChangesAsync(systemId, claimant, asOf ?? AsOf, Lease, maximum, explicitOnly);
+        return await new PostgresDataRepository(ctx).Sync.ClaimDuePasswordChangesAsync(systemId, claimant, asOf ?? AsOf, Lease, maximum, excludePropagated);
     }
 
     #endregion
@@ -249,7 +249,7 @@ public class PasswordDeliveryClaimDatabaseTests
 
         await using var first = NewContext();
         await using var transaction = await first.Database.BeginTransactionAsync();
-        var firstClaim = await new PostgresDataRepository(first).Sync.ClaimDuePasswordChangesAsync(systemId, Claimant, AsOf, Lease, 3, explicitOnly: false);
+        var firstClaim = await new PostgresDataRepository(first).Sync.ClaimDuePasswordChangesAsync(systemId, Claimant, AsOf, Lease, 3, excludePropagated: false);
 
         // Still inside the first claimer's transaction: its three rows are locked and marked, not yet committed.
         var secondClaim = await ClaimAsync(systemId, OtherClaimant, maximum: 10);
@@ -339,7 +339,7 @@ public class PasswordDeliveryClaimDatabaseTests
         var propagatedId = await SeedChangeAsync(systemId, createdAt: AsOf.AddMinutes(-10));
         var explicitId = await SeedChangeAsync(systemId, Explicit, createdAt: AsOf.AddMinutes(-5));
 
-        var claimed = await ClaimAsync(systemId, explicitOnly: true);
+        var claimed = await ClaimAsync(systemId, excludePropagated: true);
 
         using (Assert.EnterMultipleScope())
         {
@@ -357,7 +357,7 @@ public class PasswordDeliveryClaimDatabaseTests
         var propagatedId = await SeedChangeAsync(systemId, createdAt: AsOf.AddMinutes(-10));
         var explicitId = await SeedChangeAsync(systemId, Explicit, createdAt: AsOf.AddMinutes(-5));
 
-        var claimed = await ClaimAsync(systemId, explicitOnly: false);
+        var claimed = await ClaimAsync(systemId, excludePropagated: false);
 
         Assert.That(claimed.Select(c => c.Id), Is.EqualTo(new[] { propagatedId, explicitId }), "Oldest first, whatever the origin.");
     }
@@ -405,7 +405,7 @@ public class PasswordDeliveryClaimDatabaseTests
         });
 
         await using var ctx = NewContext();
-        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf, explicitOnly: true);
+        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf, excludePropagated: true);
 
         using (Assert.EnterMultipleScope())
         {
@@ -488,7 +488,7 @@ public class PasswordDeliveryClaimDatabaseTests
         var pendingId = claimedId == firstId ? secondId : firstId;
 
         await using var ctx = NewContext();
-        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf, explicitOnly: false);
+        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf, excludePropagated: false);
 
         using (Assert.EnterMultipleScope())
         {

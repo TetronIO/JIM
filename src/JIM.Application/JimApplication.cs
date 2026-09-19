@@ -180,7 +180,11 @@ public class JimApplication : IDisposable
             // Delivery outcomes are recorded by an unattended worker pass, so they are attributed to JIM itself.
             activity => Activities.CreateSystemActivityAsync(activity),
             activity => Activities.CompleteActivityAsync(activity),
-            (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage));
+            (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage),
+            // Resolves a Provisioned row's first password (#1697): the same generator instance and the
+            // same credential protection fallback InitialPasswordDeliveryServer above is built with.
+            PasswordGenerator,
+            () => CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()));
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);

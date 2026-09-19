@@ -7,10 +7,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Connectors.Mock;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Worker.Tests.Services;
@@ -32,6 +34,7 @@ public class PasswordDeliveryTests
 {
     private const int ConnectedSystemId = 3;
     private const int UserObjectTypeId = 200;
+    private const int SyncRuleId = 500;
     private const string ClaimedBy = "worker-test-1a2b3c4d";
 
     private JIM.InMemoryData.SyncRepository _syncRepository = null!;
@@ -111,7 +114,9 @@ public class PasswordDeliveryTests
                 activity.Status = ActivityStatus.FailedWithError;
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
-            });
+            },
+            new PasswordGeneratorService(),
+            () => _protection);
     }
 
     private async Task<PendingPasswordChange> QueueAsync(
@@ -169,6 +174,59 @@ public class PasswordDeliveryTests
 
         await _syncRepository.QueuePasswordChangesAsync([change]);
         return change;
+    }
+
+    /// <summary>
+    /// A Provisioned row for a newly provisioned account's first password (#1697): seeds the
+    /// Synchronisation Rule the row's <see cref="PendingPasswordChange.SyncRuleId"/> resolves against and the
+    /// Connected System its discovered password policy is read from, then queues a row carrying no password of
+    /// its own, matching what export staging produces.
+    /// </summary>
+    private async Task<(PendingPasswordChange Change, SyncRule Rule)> QueueProvisionedAsync(
+        int syncRuleId,
+        Action<SyncRuleInitialPassword>? configure = null,
+        DateTime? createdAt = null,
+        bool arrangeAccount = true)
+    {
+        var initialPassword = new SyncRuleInitialPassword
+        {
+            SyncRuleId = syncRuleId,
+            Enabled = true,
+            Source = InitialPasswordSource.Discovered,
+            ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+            EnableAccount = true
+        };
+        configure?.Invoke(initialPassword);
+
+        var rule = new SyncRule { Id = syncRuleId, Name = $"Provisioning rule {syncRuleId}", InitialPassword = initialPassword };
+        _syncRepository.SeedSyncRule(rule);
+        _syncRepository.SeedConnectedSystem(_connectedSystem);
+
+        var now = createdAt ?? DateTime.UtcNow;
+        var accountId = Guid.NewGuid();
+        var change = new PendingPasswordChange
+        {
+            MetaverseObjectId = Guid.NewGuid(),
+            ConnectedSystemId = ConnectedSystemId,
+            ConnectedSystemObjectId = accountId,
+            EncryptedPassword = null,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = syncRuleId,
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+
+        await _syncRepository.QueuePasswordChangesAsync([change]);
+
+        if (arrangeAccount)
+            _connectedSystemRepository
+                .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(change.MetaverseObjectId))
+                .ReturnsAsync([
+                    new ConnectedSystemObject { Id = accountId, ConnectedSystemId = ConnectedSystemId, TypeId = UserObjectTypeId }
+                ]);
+
+        return (change, rule);
     }
 
     /// <summary>
@@ -615,11 +673,12 @@ public class PasswordDeliveryTests
     }
 
     [Test]
-    public async Task Deliver_MixedOriginsOnADisabledSystem_DeliversOnlyTheExplicitRowAsync()
+    public async Task Deliver_MixedOriginsOnADisabledSystem_DeliversExplicitAndProvisionedRowsAsync()
     {
         _configuration.Enabled = false;
         var propagated = await QueueAsync();
         var explicitSet = await QueueExplicitAsync();
+        var (provisioned, _) = await QueueProvisionedAsync(SyncRuleId);
         ArrangeAccount(propagated);
         ArrangeAccount(explicitSet);
 
@@ -629,8 +688,9 @@ public class PasswordDeliveryTests
         var remaining = _syncRepository.PendingPasswordChanges.Values.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.DeliveredCount, Is.EqualTo(1));
-            Assert.That(_connector.PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(explicitSet.ConnectedSystemObjectId));
+            Assert.That(result.DeliveredCount, Is.EqualTo(2));
+            Assert.That(_connector.PasswordSetAttempts.Select(a => a.ConnectedSystemObjectId),
+                Is.EquivalentTo(new[] { explicitSet.ConnectedSystemObjectId, provisioned.ConnectedSystemObjectId }));
             Assert.That(remaining.Id, Is.EqualTo(propagated.Id), "The propagated change is held, untouched, until the system is switched on.");
             Assert.That(remaining.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
             Assert.That(remaining.AttemptCount, Is.Zero);
@@ -726,6 +786,31 @@ public class PasswordDeliveryTests
         }
     }
 
+    /// <summary>
+    /// Defensive: <see cref="PendingPasswordChange.EncryptedPassword"/> is nullable so a Provisioned row can carry
+    /// none, but an Explicit or Propagated row must always have one; nothing that queues either kind ever leaves
+    /// it null. If it ever does, there is nothing to send and no number of attempts changes that.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ExplicitRowWithNoPassword_ParksAsConfigurationFaultAsync()
+    {
+        var change = await QueueExplicitAsync();
+        ArrangeAccount(change);
+        _syncRepository.PendingPasswordChanges[change.Id].EncryptedPassword = null;
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ParkedCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty, "The Connector must never be asked to set nothing.");
+        }
+    }
+
     [Test]
     public async Task Deliver_ExplicitRow_CarriesTheEnableDecisionToTheConnectorAsync()
     {
@@ -760,7 +845,7 @@ public class PasswordDeliveryTests
     }
 
     [Test]
-    public async Task Deliver_OnADisabledSystem_ExpiresOnlyTheExplicitRowsAsync()
+    public async Task Deliver_OnADisabledSystem_ExpiresEverythingButPropagatedRowsAsync()
     {
         // The held propagated change is left exactly as it was, to be expired or delivered by the first lane
         // after the system is switched on, as it always has been.
@@ -768,15 +853,367 @@ public class PasswordDeliveryTests
         var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
         var propagated = await QueueAsync(createdAt: now.AddDays(-8));
         var explicitSet = await QueueExplicitAsync(createdAt: now.AddDays(-8));
+        var (provisioned, _) = await QueueProvisionedAsync(SyncRuleId, createdAt: now.AddDays(-8));
 
         var result = await _server.DeliverDuePasswordChangesAsync(
             _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.ExpiredCount, Is.EqualTo(1));
+            Assert.That(result.ExpiredCount, Is.EqualTo(2));
             Assert.That(_syncRepository.PendingPasswordChanges[explicitSet.Id].Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
+            Assert.That(_syncRepository.PendingPasswordChanges[provisioned.Id].Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
             Assert.That(_syncRepository.PendingPasswordChanges[propagated.Id].Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    #endregion
+
+    #region provisioned rows (#1697)
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_GeneratesAPasswordFromTheRuleAndSetsItAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_connector.PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(change.ConnectedSystemObjectId));
+            Assert.That(_connector.PasswordSetAttempts.Single().PasswordLength, Is.GreaterThan(0), "A password was generated and sent.");
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_StaticSource_SendsTheDecryptedStaticPasswordAsync()
+    {
+        const string staticPassword = "Static-Provision-42";
+        await QueueProvisionedAsync(SyncRuleId, ip =>
+        {
+            ip.Source = InitialPasswordSource.Static;
+            ip.StaticPasswordEncryptedValue = _protection.Protect(staticPassword);
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts.Single().PasswordLength, Is.EqualTo(staticPassword.Length));
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_CarriesTheRulesExpiryBehaviourAndEnableDecisionAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId, ip =>
+        {
+            ip.ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires;
+            ip.EnableAccount = false;
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var options = _connector.PasswordSetAttempts.Single().Options;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
+            Assert.That(options.EnableAccount, Is.False);
+            Assert.That(change.ExpiryBehaviour, Is.Not.EqualTo(PasswordExpiryBehaviour.NeverExpires),
+                "The row's own placeholder value must never be what reaches the Connector.");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_OnADisabledSystem_IsDeliveredAsync()
+    {
+        // Decision D1, widened by #1697: the account is already named, so there is no configuration
+        // decision left to defer to, exactly like an explicit set.
+        _configuration.Enabled = false;
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connector.PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(change.ConnectedSystemObjectId));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_OnAnUnconfiguredSystem_IsDeliveredUnderTheDefaultPolicyAsync()
+    {
+        _connectedSystem.PasswordSynchronisation = null;
+        await QueueProvisionedAsync(SyncRuleId);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connector.PasswordSetAttempts.Single().PasswordLength, Is.GreaterThan(0));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_WhoseAccountIsGone_IsWithdrawnNotParkedAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId, arrangeAccount: false);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.WithdrawnCount, Is.EqualTo(1));
+            Assert.That(result.ParkedCount, Is.Zero);
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete), "Nothing went wrong; the work simply stopped being needed.");
+            Assert.That(activity.Message, Does.Contain("no longer needed").And.Contain("Corporate AD"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_WhoseRuleNoLongerSetsAPassword_IsWithdrawnAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId, ip => ip.Enabled = false);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.WithdrawnCount, Is.EqualTo(1));
+            Assert.That(result.ParkedCount, Is.Zero);
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(activity.Message, Does.Contain("no longer sets one"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_WhoseRuleHasGone_IsWithdrawnAsync()
+    {
+        // No SyncRule is ever seeded for this id: the export that provisioned the account named a rule that has
+        // since been deleted.
+        var now = DateTime.UtcNow;
+        var accountId = Guid.NewGuid();
+        var change = new PendingPasswordChange
+        {
+            MetaverseObjectId = Guid.NewGuid(),
+            ConnectedSystemId = ConnectedSystemId,
+            ConnectedSystemObjectId = accountId,
+            EncryptedPassword = null,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = 999999,
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        await _syncRepository.QueuePasswordChangesAsync([change]);
+        _connectedSystemRepository
+            .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(change.MetaverseObjectId))
+            .ReturnsAsync([new ConnectedSystemObject { Id = accountId, ConnectedSystemId = ConnectedSystemId, TypeId = UserObjectTypeId }]);
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.WithdrawnCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(activity.Message, Does.Contain("no longer sets one").And.Contain("has been deleted"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_StaticPasswordMissing_ParksAsConfigurationFaultAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId, ip =>
+        {
+            ip.Source = InitialPasswordSource.Static;
+            ip.StaticPasswordEncryptedValue = null;
+        });
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ParkedCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty, "The Connector must never be asked to set nothing.");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_UnusablePolicy_ParksAsConfigurationFaultAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId, ip =>
+        {
+            ip.Source = InitialPasswordSource.Custom;
+            ip.CustomPolicy.Length = 8;
+            ip.CustomPolicy.MinimumUppercase = 100;
+        });
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ParkedCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
+            Assert.That(_connector.PasswordSetAttempts, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_PolicyRejection_ParksAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId);
+        _connector.WithPasswordSetResult(_ =>
+            PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Password does not meet complexity requirements"));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ParkedCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(stored.TargetMessage, Is.EqualTo("Password does not meet complexity requirements"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_TransientFailure_SchedulesARetryAsync()
+    {
+        await QueueProvisionedAsync(SyncRuleId);
+        _connector.WithPasswordSetResult(_ =>
+            PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Server unavailable"));
+
+        var now = new DateTime(2026, 8, 20, 12, 0, 0, DateTimeKind.Utc);
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, now, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RetryingCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(stored.AttemptCount, Is.EqualTo(1));
+            Assert.That(stored.NextRetryAt, Is.EqualTo(now.AddMinutes(5)));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_RetriesExhausted_ParksAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+        change.AttemptCount = 3;
+        await _syncRepository.RecordPasswordChangeAttemptsAsync([change]);
+        _connector.WithPasswordSetResult(_ =>
+            PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Still unavailable"));
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ParkedCount, Is.EqualTo(1));
+            Assert.That(_syncRepository.PendingPasswordChanges.Values.Single().Status,
+                Is.EqualTo(PendingPasswordChangeStatus.Parked));
+        }
+    }
+
+    /// <summary>
+    /// A Provisioned row carries no password of its own: every attempt resolves it fresh from the Synchronisation
+    /// Rule's current settings, so a configuration change between two failed attempts takes effect on the very
+    /// next one rather than waiting for the row to be re-queued.
+    /// </summary>
+    [Test]
+    public async Task Deliver_ProvisionedRow_ReadsTheRuleAgainOnEachAttemptAsync()
+    {
+        var (_, rule) = await QueueProvisionedAsync(SyncRuleId, ip => ip.ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn);
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Server unavailable"));
+
+        var firstAttempt = new DateTime(2026, 8, 20, 12, 0, 0, DateTimeKind.Utc);
+        await _server.DeliverDuePasswordChangesAsync(_connectedSystem, _connector, ClaimedBy, firstAttempt, CancellationToken.None);
+
+        Assert.That(_connector.PasswordSetAttempts, Has.Count.EqualTo(1));
+        Assert.That(_connector.PasswordSetAttempts[0].Options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        // The administrator changes the rule's settings between the two lanes.
+        rule.InitialPassword!.ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires;
+        _connector.WithPasswordSetResult(_ => PasswordSetResult.Succeeded(PasswordExpiryBehaviour.NeverExpires));
+
+        var secondAttempt = firstAttempt.AddHours(1);
+        var result = await _server.DeliverDuePasswordChangesAsync(_connectedSystem, _connector, ClaimedBy, secondAttempt, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connector.PasswordSetAttempts, Has.Count.EqualTo(2));
+            Assert.That(_connector.PasswordSetAttempts[1].Options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires),
+                "The second attempt must read the rule's settings again rather than reuse what the first attempt saw.");
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_RecordsAChildActivityUnderTheStagedParentAsync()
+    {
+        var (change, _) = await QueueProvisionedAsync(SyncRuleId);
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ParentActivityId, Is.EqualTo(change.ActivityId));
+            Assert.That(activity.TargetType, Is.EqualTo(ActivityTargetType.PasswordSynchronisation));
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(activity.Message, Does.Contain("Initial password set"));
+        }
+    }
+
+    [Test]
+    public async Task Deliver_ProvisionedRow_NeverRecordsThePasswordAsync()
+    {
+        const string staticPassword = "Correct-Horse-Provisioned-99";
+        await QueueProvisionedAsync(SyncRuleId, ip =>
+        {
+            ip.Source = InitialPasswordSource.Static;
+            ip.StaticPasswordEncryptedValue = _protection.Protect(staticPassword);
+        });
+
+        await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var activity = _createdActivities.Single();
+        var text = $"{activity.TargetName} {activity.Message} {activity.TargetContext}";
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(text, Does.Not.Contain("Correct-Horse").And.Not.Contain("Provisioned-99"));
+            Assert.That(text, Does.Not.Contain(_protection.Protect(staticPassword)!), "Not the ciphertext either.");
         }
     }
 
@@ -830,6 +1267,51 @@ public class PasswordDeliveryTests
             Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
             Assert.That(stored.ClaimedAt, Is.Null);
             Assert.That(stored.ClaimedBy, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Decision D9 (#1697): a delete guarded only by id would remove a row a newer password has since
+    /// superseded. The lane's own claimed copy is detached from the store (documented on
+    /// <see cref="JIM.InMemoryData.SyncRepository.ClaimDuePasswordChangesAsync"/>), so a supersession landing on
+    /// the stored row mid-attempt is invisible to the lane; only the delete guard on the stored row's status
+    /// stops the older delivery's success from removing the newer work.
+    /// </summary>
+    [Test]
+    public async Task Deliver_RowSupersededMidFlight_IsNotDeletedOnSuccessAsync()
+    {
+        var change = await QueueAsync();
+        ArrangeAccount(change);
+        var newerActivityId = Guid.NewGuid();
+        _connector.WithPasswordSetResult(_ =>
+        {
+            // A newer password arrived and coalesced onto this row while the attempt was in flight, exactly as
+            // QueuePasswordChangesAsync's coalescing would: the row is Pending again with newer work by the time
+            // the delivery succeeds.
+            var newer = new PendingPasswordChange
+            {
+                EncryptedPassword = _protection.ProtectPassword("a-newer-password")!,
+                ExpiryBehaviour = PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+                Origin = PendingPasswordChangeOrigin.Propagated,
+                ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+                ActivityId = newerActivityId,
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(7)
+            };
+            _syncRepository.PendingPasswordChanges[change.Id].Supersede(newer);
+            return PasswordSetResult.Succeeded(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy);
+        });
+
+        var result = await _server.DeliverDuePasswordChangesAsync(
+            _connectedSystem, _connector, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        var stored = _syncRepository.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.DeliveredCount, Is.EqualTo(1), "The lane still reports the delivery it made.");
+            Assert.That(stored.Id, Is.EqualTo(change.Id), "The superseding change replaced this row in place rather than the row being deleted under it.");
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending), "The newer change survives the older delivery's success.");
+            Assert.That(stored.ActivityId, Is.EqualTo(newerActivityId));
         }
     }
 

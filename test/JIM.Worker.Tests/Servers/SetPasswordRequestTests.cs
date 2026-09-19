@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Connectors.Mock;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -117,7 +118,9 @@ public class SetPasswordRequestTests
                 activity.Status = ActivityStatus.FailedWithError;
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
-            });
+            },
+            new PasswordGeneratorService(),
+            () => _protection);
     }
 
     #region arrangement

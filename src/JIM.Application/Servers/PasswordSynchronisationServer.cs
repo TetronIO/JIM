@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -45,6 +46,8 @@ public class PasswordSynchronisationServer
     private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<Activity, string, Task> _completeActivityWithError;
+    private readonly IPasswordGeneratorService _passwordGenerator;
+    private readonly Func<ICredentialProtectionService> _credentialProtection;
 
     /// <param name="passwordProtection">
     /// How to reach password protection, resolved when a change is queued rather than now. The hosts set
@@ -84,6 +87,16 @@ public class PasswordSynchronisationServer
     /// password is an operational outcome rather than a thrown exception: nothing here has an exception to pass,
     /// and the outcome still has to be recorded as a failure rather than described in prose on a completed one.
     /// </param>
+    /// <param name="passwordGenerator">
+    /// Generates a Provisioned row's first password from its Synchronisation Rule's settings at the moment of
+    /// delivery (#1697): mirrors <see cref="InitialPasswordDeliveryServer"/>, which resolves the same way
+    /// for the pass that preceded this one.
+    /// </param>
+    /// <param name="credentialProtection">
+    /// Decrypts a Provisioned row's static password, resolved when a delivery is attempted rather than now, for
+    /// the same reason <paramref name="passwordProtection"/> is: the hosts assign
+    /// <see cref="JimApplication.CredentialProtection"/> after constructing the facade.
+    /// </param>
     internal PasswordSynchronisationServer(
         ISyncRepository syncRepository,
         Func<IConnectedSystemRepository> connectedSystemRepository,
@@ -93,7 +106,9 @@ public class PasswordSynchronisationServer
         Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
         Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
-        Func<Activity, string, Task> completeActivityWithError)
+        Func<Activity, string, Task> completeActivityWithError,
+        IPasswordGeneratorService passwordGenerator,
+        Func<ICredentialProtectionService> credentialProtection)
     {
         _syncRepo = syncRepository;
         _connectedSystemRepo = connectedSystemRepository;
@@ -104,6 +119,8 @@ public class PasswordSynchronisationServer
         _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
         _completeActivityWithError = completeActivityWithError;
+        _passwordGenerator = passwordGenerator;
+        _credentialProtection = credentialProtection;
     }
 
     /// <summary>
@@ -428,27 +445,27 @@ public class PasswordSynchronisationServer
 
         var result = new PasswordDeliveryRunResult();
 
-        // Which rows this lane may take (#1635, decision D1). A system whose Password Synchronisation is
-        // unconfigured or switched off delivers no propagated change: requirement 2 has it accumulate rather than
-        // discard, so enabling it later has something to drain. An administrator's explicit set is delivered
-        // there anyway, because the administrator named the account and has already made the decision a
-        // configuration exists to make. So the lane claims only explicit rows over such a system, and everything
-        // due over a live one.
-        var explicitOnly = connectedSystem.PasswordSynchronisation is not { Enabled: true };
+        // Which rows this lane may take (#1635, decision D1; widened from explicit-only by #1697). A system
+        // whose Password Synchronisation is unconfigured or switched off delivers no propagated change:
+        // requirement 2 has it accumulate rather than discard, so enabling it later has something to drain. An
+        // administrator's explicit set and a provisioned account's first password are both delivered there
+        // anyway, because the account is already named and there is no configuration decision left to defer to.
+        // So the lane excludes only propagated rows over such a system, and claims everything due over a live one.
+        var excludePropagated = connectedSystem.PasswordSynchronisation is not { Enabled: true };
 
-        // The retry policy. A system with no configuration at all still delivers explicit sets, under JIM's
-        // defaults; the transient instance carries those and is never persisted, so nothing here creates a
-        // configuration the administrator did not.
+        // The retry policy. A system with no configuration at all still delivers explicit sets and provisioned
+        // first passwords, under JIM's defaults; the transient instance carries those and is never persisted, so
+        // nothing here creates a configuration the administrator did not.
         var configuration = connectedSystem.PasswordSynchronisation
                             ?? new ConnectedSystemPasswordSynchronisation { ConnectedSystemId = connectedSystem.Id };
 
         // Expiry first, so a change on its way out is not attempted, and its attempt count not inflated, on the
         // very lane that retires it. Expiry touches Pending rows only; a claimed row belongs to its claimant. Over
-        // a paused system only the explicit rows are retired: the held propagated ones are left exactly as they
-        // were, to be expired or delivered by the first lane after the system is switched back on.
-        result.ExpiredCount = await _syncRepo.ExpirePasswordChangesAsync(connectedSystem.Id, asOf, explicitOnly);
+        // a paused system only the explicit and provisioned rows are retired: the held propagated ones are left
+        // exactly as they were, to be expired or delivered by the first lane after the system is switched back on.
+        result.ExpiredCount = await _syncRepo.ExpirePasswordChangesAsync(connectedSystem.Id, asOf, excludePropagated);
 
-        var claimed = await _syncRepo.ClaimDuePasswordChangesAsync(connectedSystem.Id, claimedBy, asOf, ClaimLease, ClaimBatchSize, explicitOnly);
+        var claimed = await _syncRepo.ClaimDuePasswordChangesAsync(connectedSystem.Id, claimedBy, asOf, ClaimLease, ClaimBatchSize, excludePropagated);
         if (claimed.Count == 0)
             return result;
 
@@ -509,7 +526,7 @@ public class PasswordSynchronisationServer
                     break;
 
                 claimed = await _syncRepo.ClaimDuePasswordChangesAsync(connectedSystem.Id, claimedBy, asOf, ClaimLease,
-                    Math.Min(ClaimBatchSize, MaximumChangesPerPass - attemptedInTotal), explicitOnly);
+                    Math.Min(ClaimBatchSize, MaximumChangesPerPass - attemptedInTotal), excludePropagated);
                 if (claimed.Count == 0)
                     break;
             }
@@ -521,8 +538,8 @@ public class PasswordSynchronisationServer
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation.
         Log.Information(
-            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Released} released unattempted.",
-            connectedSystem.Id, result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.ReleasedCount);
+            "DeliverDuePasswordChangesAsync: Connected System {ConnectedSystemId}: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Released} released unattempted.",
+            connectedSystem.Id, result.DeliveredCount, result.RetryingCount, result.ParkedCount, result.ExpiredCount, result.WithdrawnCount, result.ReleasedCount);
 
         return result;
     }
@@ -545,6 +562,26 @@ public class PasswordSynchronisationServer
         var delivered = new List<Guid>();
         var unattempted = new List<PendingPasswordChange>();
 
+        // Read once per batch, and only when the batch actually holds a Provisioned row: every other origin's
+        // password already exists on the row, and a lane over a system nothing has provisioned into recently
+        // must not pay for a query it will never use. The rule's settings and the discovered policy are read
+        // fresh on every batch, never cached across a lane's own claims, so a configuration change takes effect
+        // on the very next attempt rather than waiting for the lane to restart (#1697).
+        Dictionary<int, SyncRuleInitialPassword>? initialPasswordConfigurations = null;
+        ConnectedSystemPasswordPolicy? discoveredPolicy = null;
+        InitialPasswordResolver? initialPasswordResolver = null;
+        if (claimed.Any(c => c.IsProvisioned))
+        {
+            var syncRuleIds = claimed
+                .Where(c => c.IsProvisioned && c.SyncRuleId.HasValue)
+                .Select(c => c.SyncRuleId!.Value)
+                .Distinct()
+                .ToList();
+            initialPasswordConfigurations = await _syncRepo.GetInitialPasswordConfigurationsAsync(syncRuleIds);
+            discoveredPolicy = await _syncRepo.GetDiscoveredPasswordPolicyAsync(connectedSystem.Id);
+            initialPasswordResolver = new InitialPasswordResolver(_passwordGenerator, _credentialProtection());
+        }
+
         try
         {
             foreach (var change in claimed)
@@ -566,20 +603,30 @@ public class PasswordSynchronisationServer
                     continue;
                 }
 
-                var outcome = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration, asOf, cancellationToken);
+                var disposition = await DeliverOneAsync(passwordConnector, connectedSystem, change, configuration,
+                    initialPasswordConfigurations, discoveredPolicy, initialPasswordResolver, asOf, cancellationToken);
 
-                if (outcome)
+                switch (disposition)
                 {
-                    delivered.Add(change.Id);
-                    result.DeliveredCount++;
-                }
-                else
-                {
-                    attempted.Add(change);
-                    if (change.Status == PendingPasswordChangeStatus.Parked)
-                        result.ParkedCount++;
-                    else
-                        result.RetryingCount++;
+                    case PasswordDeliveryDisposition.Delivered:
+                        delivered.Add(change.Id);
+                        result.DeliveredCount++;
+                        break;
+
+                    case PasswordDeliveryDisposition.Withdrawn:
+                        // Removed exactly as a delivered row is: nothing was sent, but there is nothing left to
+                        // send either, and the child Activity already recorded why.
+                        delivered.Add(change.Id);
+                        result.WithdrawnCount++;
+                        break;
+
+                    default:
+                        attempted.Add(change);
+                        if (change.Status == PendingPasswordChangeStatus.Parked)
+                            result.ParkedCount++;
+                        else
+                            result.RetryingCount++;
+                        break;
                 }
             }
         }
@@ -620,14 +667,18 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// Delivers one queued change, recording its outcome on the change. Returns true where the password was set
-    /// and the change should be removed from the queue.
+    /// Delivers one queued change, recording its outcome on the change. Returns what happened to the row: whether
+    /// it was delivered, kept for another attempt or for a person to look at, or withdrawn because there is
+    /// nothing left to deliver.
     /// </summary>
-    private async Task<bool> DeliverOneAsync(
+    private async Task<PasswordDeliveryDisposition> DeliverOneAsync(
         IConnectorPasswordManagement passwordConnector,
         ConnectedSystem connectedSystem,
         PendingPasswordChange change,
         ConnectedSystemPasswordSynchronisation configuration,
+        Dictionary<int, SyncRuleInitialPassword>? initialPasswordConfigurations,
+        ConnectedSystemPasswordPolicy? discoveredPolicy,
+        InitialPasswordResolver? initialPasswordResolver,
         DateTime asOf,
         CancellationToken cancellationToken)
     {
@@ -635,6 +686,14 @@ public class PasswordSynchronisationServer
         // what lets a propagated change queued before provisioning deliver once the account appears, and what
         // stops any change being sent to an account that has since been deleted and replaced.
         var accounts = await _connectedSystemRepo().GetConnectedSystemObjectsByMetaverseObjectIdAsync(change.MetaverseObjectId);
+
+        if (change.IsProvisioned)
+        {
+            // Never null here: DeliverBatchAsync builds both whenever the claimed batch holds a Provisioned row,
+            // and this change is one of them.
+            return await DeliverProvisionedAsync(passwordConnector, connectedSystem, change, accounts,
+                initialPasswordConfigurations!, discoveredPolicy, initialPasswordResolver!, configuration, asOf, cancellationToken);
+        }
 
         ConnectedSystemObject? account;
         if (change.IsExplicit)
@@ -657,7 +716,7 @@ public class PasswordSynchronisationServer
                 change.Status = PendingPasswordChangeStatus.Parked;
                 change.NextRetryAt = null;
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return false;
+                return PasswordDeliveryDisposition.Kept;
             }
         }
         else
@@ -672,18 +731,34 @@ public class PasswordSynchronisationServer
                 change.RecordAttempt(PasswordSetFailureReason.TargetObjectNotFound,
                     "The identity has no account in this Connected System yet.", configuration, asOf);
                 await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-                return false;
+                return PasswordDeliveryDisposition.Kept;
             }
 
             change.ConnectedSystemObjectId = account.Id;
+        }
+
+        if (change.EncryptedPassword == null)
+        {
+            // Defensive: an Explicit or Propagated row always carries a password through every path that queues
+            // one (SetPasswordAsync, and Supersede when a newer change replaces an older row); only a Provisioned
+            // row, handled above, is ever queued without one. If this is ever reached there is nothing to send,
+            // and no number of attempts changes that.
+            Log.Error(
+                "DeliverDuePasswordChangesAsync: A {Origin} password change for Connected System {ConnectedSystemId} carries no password. This should not be possible.",
+                change.Origin, connectedSystem.Id);
+            change.RecordAttempt(PasswordSetFailureReason.ConfigurationFault,
+                "This password change carries no password to send.", configuration, asOf);
+            change.Status = PendingPasswordChangeStatus.Parked;
+            change.NextRetryAt = null;
+            await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+            return PasswordDeliveryDisposition.Kept;
         }
 
         string password;
         try
         {
             // The one point at which a queued password exists in cleartext, and only for this attempt.
-            // change.EncryptedPassword! : null only for a Provisioned row, which a later package handles.
-            password = _passwordProtection().UnprotectPassword(change.EncryptedPassword!)!;
+            password = _passwordProtection().UnprotectPassword(change.EncryptedPassword)!;
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException)
         {
@@ -699,7 +774,7 @@ public class PasswordSynchronisationServer
             change.Status = PendingPasswordChangeStatus.Parked;
             change.NextRetryAt = null;
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return false;
+            return PasswordDeliveryDisposition.Kept;
         }
 
         // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
@@ -718,11 +793,92 @@ public class PasswordSynchronisationServer
         {
             change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
             await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
-            return false;
+            return PasswordDeliveryDisposition.Kept;
         }
 
         await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true);
-        return true;
+        return PasswordDeliveryDisposition.Delivered;
+    }
+
+    /// <summary>
+    /// Delivers a Provisioned row's first password (#1697): resolves the account and the provisioning
+    /// Synchronisation Rule's settings fresh on every attempt, generates or decrypts the password from those
+    /// settings, and sends it. Withdraws the row rather than delivering or retrying wherever there is nothing
+    /// left to deliver, so a stale row never sits parked or retrying against work nobody needs done any more.
+    /// </summary>
+    private async Task<PasswordDeliveryDisposition> DeliverProvisionedAsync(
+        IConnectorPasswordManagement passwordConnector,
+        ConnectedSystem connectedSystem,
+        PendingPasswordChange change,
+        List<ConnectedSystemObject> accounts,
+        Dictionary<int, SyncRuleInitialPassword> initialPasswordConfigurations,
+        ConnectedSystemPasswordPolicy? discoveredPolicy,
+        InitialPasswordResolver initialPasswordResolver,
+        ConnectedSystemPasswordSynchronisation configuration,
+        DateTime asOf,
+        CancellationToken cancellationToken)
+    {
+        // The export that staged this row always named the account it provisioned, so the row is re-read among
+        // the person's current accounts rather than trusted by id alone: an account deleted since (the foreign
+        // key nulls the row's reference) or disjoined from the person is not written to.
+        var account = change.ConnectedSystemObjectId is { } accountId
+            ? accounts.SingleOrDefault(a => a.Id == accountId && a.ConnectedSystemId == connectedSystem.Id)
+            : null;
+
+        if (account == null)
+        {
+            await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
+                $"Initial password no longer needed: the account it was for no longer exists in {connectedSystem.Name}, or is no longer joined to this person.");
+            return PasswordDeliveryDisposition.Withdrawn;
+        }
+
+        // Read fresh rather than trusted from when the row was staged, so a Synchronisation Rule switched off or
+        // reconfigured since takes effect on this very attempt.
+        var initialPasswordConfiguration = change.SyncRuleId is { } syncRuleId
+                                            && initialPasswordConfigurations.TryGetValue(syncRuleId, out var found)
+            ? found
+            : null;
+
+        if (initialPasswordConfiguration is not { Enabled: true })
+        {
+            await RecordWithdrawnOutcomeActivityAsync(connectedSystem, change,
+                "Initial password no longer needed: the Synchronisation Rule that provisioned this account no longer sets one, or has been deleted.");
+            return PasswordDeliveryDisposition.Withdrawn;
+        }
+
+        var resolution = initialPasswordResolver.Resolve(initialPasswordConfiguration, discoveredPolicy);
+        if (!resolution.IsUsable)
+        {
+            // A refusal here is always a configuration problem, never a target-side one, so it parks exactly as
+            // an undecryptable stored password does: no number of attempts fixes it without a person acting.
+            change.RecordAttempt(resolution.FailureReason ?? PasswordSetFailureReason.ConfigurationFault,
+                resolution.Message, configuration, asOf);
+            change.Status = PendingPasswordChangeStatus.Parked;
+            change.NextRetryAt = null;
+            await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+            return PasswordDeliveryDisposition.Kept;
+        }
+
+        // A Connector that throws rather than classifying comes back from the core as a transient failure, so the
+        // change is kept and one target's fault never stops the lane reaching the others.
+        var setResult = await PasswordDeliveryCore.SetPasswordAsync(passwordConnector, account, resolution.Password!, new PasswordSetOptions
+        {
+            // The rule's own settings, never the row's placeholder values: a Provisioned row carries no expiry
+            // behaviour or enable decision of its own, because both belong to the Synchronisation Rule that
+            // provisioned the account and can change independently of the queued row.
+            ExpiryBehaviour = initialPasswordConfiguration.ExpiryBehaviour,
+            EnableAccount = initialPasswordConfiguration.EnableAccount
+        }, cancellationToken);
+
+        if (!setResult.Success)
+        {
+            change.RecordAttempt(setResult.FailureReason, setResult.ErrorMessage, configuration, asOf);
+            await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: false);
+            return PasswordDeliveryDisposition.Kept;
+        }
+
+        await RecordDeliveryOutcomeActivityAsync(connectedSystem, change, success: true);
+        return PasswordDeliveryDisposition.Delivered;
     }
 
     /// <summary>
@@ -750,7 +906,7 @@ public class PasswordSynchronisationServer
             ConnectedSystemObjectId = change.ConnectedSystemObjectId,
             MetaverseObjectId = change.MetaverseObjectId,
             Message = success
-                ? $"Password set on {connectedSystem.Name}."
+                ? change.IsProvisioned ? $"Initial password set on {connectedSystem.Name}." : $"Password set on {connectedSystem.Name}."
                 : failure
         };
 
@@ -769,6 +925,31 @@ public class PasswordSynchronisationServer
             await _completeActivity(activity);
         else
             await _completeActivityWithError(activity, failure!);
+    }
+
+    /// <summary>
+    /// Records that a Provisioned row was removed from the queue without a password ever being sent (#1697's
+    /// WP3), as a completed child Activity carrying why. Completed rather than failed: nothing went wrong, the
+    /// work simply stopped being needed, either because the account it was for is gone or because the
+    /// Synchronisation Rule that provisioned it no longer sets one.
+    /// </summary>
+    private async Task RecordWithdrawnOutcomeActivityAsync(ConnectedSystem connectedSystem, PendingPasswordChange change, string message)
+    {
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.PasswordSynchronisation,
+            TargetOperationType = ActivityTargetOperationType.SetPassword,
+            TargetContext = connectedSystem.Name,
+            ParentActivityId = change.ActivityId,
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+            MetaverseObjectId = change.MetaverseObjectId,
+            Message = message
+        };
+
+        await _createSystemActivity(activity);
+        await _completeActivity(activity);
     }
 
     private static string DescribeFailure(ConnectedSystem connectedSystem, PendingPasswordChange change)
@@ -888,9 +1069,9 @@ public class PasswordSynchronisationServer
         }
 
         Log.Information(
-            "DeliverDueAsync: {Visited} Connected System(s) visited: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Problems} problem(s).",
+            "DeliverDueAsync: {Visited} Connected System(s) visited: {Delivered} delivered, {Retrying} retrying, {Parked} parked, {Expired} expired, {Withdrawn} withdrawn, {Problems} problem(s).",
             result.ConnectedSystemsVisited, result.DeliveredCount, result.RetryingCount, result.ParkedCount,
-            result.ExpiredCount, result.Problems.Count);
+            result.ExpiredCount, result.WithdrawnCount, result.Problems.Count);
 
         return result;
     }
@@ -1035,8 +1216,9 @@ public class PasswordSynchronisationServer
             PendingPasswordChangeStatus.Expired => PasswordChangeTargetState.Expired,
             PendingPasswordChangeStatus.Cancelled => PasswordChangeTargetState.Cancelled,
             // Pending: held by a paused system, waiting out a backoff after an attempt, or not yet attempted. Only
-            // a propagated change is ever held; an explicit set is delivered on a paused system (decision D1).
-            _ when !systemEnabled && !row.IsExplicit => PasswordChangeTargetState.Held,
+            // a propagated change is ever held; an explicit set and a provisioned first password are both
+            // delivered on a paused system (decision D1; widened by #1697).
+            _ when !systemEnabled && row.IsPropagated => PasswordChangeTargetState.Held,
             _ when row.LastAttemptedAt != null => PasswordChangeTargetState.Retrying,
             _ => PasswordChangeTargetState.Queued
         };

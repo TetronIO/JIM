@@ -149,3 +149,32 @@ public enum ProvisionedPasswordStagingDisposition
     /// </summary>
     Coalesced = 2
 }
+
+/// <summary>
+/// What one attempt at delivering a queued password change did with the row (#1697). Replaces a plain
+/// bool return from the delivery lane's per-change step, because a Provisioned row that no longer needs a
+/// password is neither a delivery nor a retry: it must be removed from the queue without being counted, or
+/// logged, as either.
+/// </summary>
+public enum PasswordDeliveryDisposition
+{
+    /// <summary>
+    /// The password was set at the target and the row is removed from the queue. The Activity recording the
+    /// change is what survives; nothing else needed to know the password ever existed.
+    /// </summary>
+    Delivered = 0,
+
+    /// <summary>
+    /// The row stays in the queue, either waiting out a backoff for the next attempt or parked for a person to
+    /// look at. Nothing was delivered, and there is still something to deliver.
+    /// </summary>
+    Kept = 1,
+
+    /// <summary>
+    /// There is nothing left to deliver, so the row is removed from the queue without a password ever being
+    /// sent: the account a Provisioned row named no longer exists, or the Synchronisation Rule that provisioned
+    /// it no longer sets one. The child Activity records why, completed rather than failed, since nothing went
+    /// wrong; the work simply stopped being needed.
+    /// </summary>
+    Withdrawn = 2
+}

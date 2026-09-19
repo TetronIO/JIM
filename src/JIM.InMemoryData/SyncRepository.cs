@@ -3033,7 +3033,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(systems);
     }
 
-    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool excludePropagated)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
 
@@ -3043,7 +3043,7 @@ public class SyncRepository : ISyncRepository
         // as it must against PostgreSQL.
         var claimed = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
-            .Where(c => !explicitOnly || c.IsExplicit)
+            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
             .OrderBy(c => c.CreatedAt)
             .ThenBy(c => c.Id)
             .Take(maximum)
@@ -3162,8 +3162,17 @@ public class SyncRepository : ISyncRepository
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
     {
+        // Guarded on status (#1697, decision D9), mirroring the Postgres repository: a row superseded or
+        // retried mid-flight is Pending again and carries newer work, so the older delivery's success must not
+        // delete it out from under the retry. A Cancelled row whose password nevertheless landed is still
+        // removed.
         foreach (var id in ids)
         {
+            if (_pendingPasswordChanges.TryGetValue(id, out var stored)
+                && stored.Status != PendingPasswordChangeStatus.Delivering
+                && stored.Status != PendingPasswordChangeStatus.Cancelled)
+                continue;
+
             _pendingPasswordChanges.Remove(id);
             _claimedPasswordChangeIds.Remove(id);
         }
@@ -3171,11 +3180,11 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool excludePropagated)
     {
         var expiring = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
-            .Where(c => !explicitOnly || c.IsExplicit)
+            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
             .ToList();
 
         foreach (var change in expiring)
