@@ -2,12 +2,13 @@
 
 - **Status:** Planned
 - **Created:** 2026-07-07
-- **Updated:** 2026-09-16 (design revised after review: JIM-owned generated value assignments replace the confirming-import model; Collision Remediation added; Import and Export Attribute Flow modes; causality integration against #1087/#1495; Set Value deferred)
+- **Updated:** 2026-09-19 (adversarial review applied: uniqueness tokens including sequence numbers with fixed width and random tokens; attribute-scoped forward-only counters; never-reuse register on by default; adopt-existing rule; case-insensitive uniqueness; no in-run remediation retry; derived values moved to the Metaverse-Derived Attribute Flows PRD; four-release delivery). 2026-09-16: JIM-owned generated value assignments replace the confirming-import model; Collision Remediation added; Import and Export Attribute Flow modes; causality integration against #1087/#1495; Set Value deferred
 - **Author:** JayVDZ (PRD drafted and revised via Claude Code)
 - **Issue:** [#242](https://github.com/TetronIO/JIM/issues/242)
 - **Plan:** [UNIQUE_VALUE_GENERATION.md](../plans/UNIQUE_VALUE_GENERATION.md)
+- **Depends on:** [PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md](PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md) for values derived from a generated value (release 2)
 - **Related:** [#549](https://github.com/TetronIO/JIM/issues/549) example-data expressions (closed; interim tracker), [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (parked-state and queue-and-follow precedents), [#1087](https://github.com/TetronIO/JIM/issues/1087) / [#1495](https://github.com/TetronIO/JIM/issues/1495) causality views, [#1079](https://github.com/TetronIO/JIM/issues/1079) optimistic export apply
-- **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) (design explainers, diagrams and six screens, built against `engineering/DESIGN.md` tokens)
+- **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) (design explainers, diagrams and six screens, built against `engineering/DESIGN.md` tokens); [Generated Value Options](https://claude.ai/artifact/AnigVtXRxx1t71qVS41yMr) (release 1 form: uniqueness tokens, sequence state, "Generate a new value"); [Linked Identifiers](https://claude.ai/artifact/KEbCieWusy8aoxnZqkMagD) (why derived values are expressions, not generated values)
 
 ## Problem Statement
 
@@ -23,7 +24,8 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 ## Goals
 
-- An administrator can configure an Attribute Flow so that **JIM generates** an attribute value from a base expression and guarantees it is not already in use, on an import Synchronisation Rule (the value becomes Metaverse data, reusable by every downstream export) or on an export Synchronisation Rule (the value belongs to one Connected System Object only).
+- An administrator can configure an Attribute Flow so that **JIM generates** an attribute value and guarantees it is not already in use, on an import Synchronisation Rule (the value becomes Metaverse data, reusable by every downstream export) or on an export Synchronisation Rule (the value belongs to one Connected System Object only). A generated value is a **base expression plus a uniqueness token**: a number or letter added only when the base value is taken (`joe.bloggs`, `joe.bloggs1`), a **sequence number** from a forward-only counter, optionally fixed width (`00000100456`, `G-100456`), or a **random token** (a GUID, or a short hex or digit string).
+- Generated values are **never re-issued** by default: a value once assigned is not given to another object even after the first is deleted. Sequence counters never move backwards.
 - Generated values are checked for availability against everything JIM can see before they are proposed: in-run reservations, the Metaverse, the relevant connector spaces, and, where the connector supports it, the target directory itself.
 - When a target nevertheless rejects a generated value as already in use, JIM **self-heals** by generating the next candidate and exporting again, without administrator involvement, unless doing so would rename an account another system has already provisioned; in that case JIM stops and gives the administrator a clear decision with remediation advice. This behaviour is called **Collision Remediation** and is controllable per Attribute Flow.
 - Generated values are **sticky**: assigned once, remembered, never renumbered on a re-run, and never recomputed from the expression once committed.
@@ -37,7 +39,9 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 - **No connector calls from the web tier.** `JIM.Web` does not instantiate connectors today and does not start here. Live checks in the authoring dialog use JIM's own data only.
 - **No automatic renaming of a value another target has already provisioned** (see the anchoring rule). JIM will not silently rename a live account.
 - **No workflow engine, approval step, or human override of a generated value** beyond the actions defined for the Needs Decision state.
-- **No general-purpose sequence or counter service.** Suffixing exists only to resolve collisions on a generated attribute.
+- **No named sequences shared between Attribute Flows** in this release. A sequence counter belongs to the target attribute; one counter feeding several attributes or object types is a later addition.
+- **No following of input changes.** A committed value does not change when its inputs change (a surname change does not rename the account). "Generate a new value" on the identity is the deliberate path.
+- **No values derived from a generated value inside this feature.** Email built from a generated Account Name is an ordinary expression, evaluated in dependency order by [Metaverse-Derived Attribute Flows](PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md); this PRD does not make derived values generated, sticky, or uniqueness-checked.
 - **No new expression dialect.** Base values are built with `DynamicExpressoEvaluator`; there is no `{n}` placeholder or similar token for administrators to learn.
 
 ## Key Concepts
@@ -51,6 +55,12 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 **Two connector capabilities.** *Probing* (can the connector check availability in the target before export?) and *rejection classification* (can the connector report that an export failed specifically because a value was already in use?). They are independent. Probing makes collisions rare; classification is what makes Collision Remediation possible at all.
 
 **Collision Remediation.** On a classified uniqueness rejection, JIM generates the next candidate, updates the Pending Export and exports again, bounded by the attempt limit. A per-Attribute-Flow switch, on by default where any participating connector classifies rejections, disabled with an explanation where none does. Off means an ordinary export error is recorded.
+
+**Uniqueness token.** What JIM adds to the base value, and when. *Only if taken*: nothing until the base value collides, then a number or letter. *Sequence*: always, the next number from a counter kept for the target attribute, with optional fixed width and an explicit behaviour when the number outgrows the width. *Random*: always, a GUID or a short hex or digit string; a clash draws again. Base and token may each be empty, which gives bare numbers, prefixed numbers and name-based values from one form.
+
+**Sequence counter.** Kept per target attribute, not per Attribute Flow, so removing and re-creating a flow continues the sequence. Forward-only: the next number is never below the highest ever assigned, deleted objects free nothing, and "Set next number" only moves it up, with confirmation and audit. Numbers are reserved in blocks per page with an atomic increment, so parallel runs never draw the same number; unused numbers at the end of a block are gaps, never reused. On first use with an existing population the counter seeds from the highest numeric value already held for the attribute, if above the configured start.
+
+**Retired values register.** With "Never reuse a value" on (the default), a value whose assignment is deleted for any reason (object deleted, "Generate a new value", supersession) is recorded as retired for its attribute, and the gates treat retired values as taken. It grows only with leavers and is never pruned. Turning the option off is the deliberate choice for organisations that want a rehire to receive the previous account name; the documentation recommends leaving it on for regulatory and security reasons.
 
 **Anchoring.** In import mode a value is exported to several systems. Once any target has accepted it, the value is *anchored*: revising it would rename a live account. Remediation acts only while a value is unanchored; an anchored collision enters Needs Decision instead. Export-mode values are always unanchored by definition.
 
@@ -73,7 +83,7 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 **Configuration**
 
 1. "JIM generates it" is a **source type** on the Add/Edit Attribute Flow dialog, alongside "An attribute" and "An expression", available on import and export Synchronisation Rules for single-valued text target attributes.
-2. The generation form captures: the base expression (the existing expression syntax and function library; no uniqueness token); the target attribute ("Assign the value to"); the collision strategy (add a number, or add a letter; start value; separator); the attempt limit; and the Collision Remediation switch.
+2. The generation form captures: the target attribute ("Assign the value to"); the base expression (the existing expression syntax and function library, optional when a sequence or random token is chosen); the uniqueness token and its settings (FR 23 to 27); the separator; the attempt limit; "Never reuse a value" (FR 28); and, from release 4, the Collision Remediation switch.
 3. Suffix position is determined by JIM: before the first `@` where the base value contains one, otherwise appended. The dialog shows a live preview of the first candidate and the collision sequence for sample inputs.
 4. For an import flow, the dialog shows the **derived** list of Connected Systems the value is exported to (every Connected System with an export Attribute Flow targeting that Metaverse attribute), with each system's probe and rejection-classification capability stated, and a per-system exclusion from availability checks. The list is not editable otherwise and updates automatically as export Synchronisation Rules change. For an export flow the list is the one Connected System.
 5. The Collision Remediation switch is enabled when at least one participating Connected System's connector classifies uniqueness rejections, and defaults to on. Where none does, it is rendered disabled with the reason. Where some do and some do not, it stays enabled and the system list states which systems will record an export error instead.
@@ -82,7 +92,7 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 6. Generation is a contribution to the target attribute like any other mapping and participates in attribute priority (#91). It contributes only when every higher-priority contribution is silent, which delivers "only when the authoritative source supplies no value" without a bespoke flag. A source at higher priority later supplying a value supersedes the generated one, visibly.
 7. Each candidate passes the four gates in order. A candidate is proposed only when all four report it free, or when the probe reports it cannot determine and the local three report it free.
-8. The live probe is three-state: Found, NotFound, CouldNotDetermine. A directory applies access control to searches as a silent filter, so an empty result from an under-privileged account is indistinguishable from absence; the probe must not report NotFound in that case. (The same trap #1121 documented for the Fine-Grained Password Policy signal.) Probes are batched per candidate set where the protocol allows, so latency does not scale with attempt count.
+8. The live probe is three-state: Found, NotFound, CouldNotDetermine. A directory applies access control to searches as a silent filter, so an empty result from an under-privileged account is indistinguishable from absence. Every probe batch therefore carries a control value JIM already holds in that connector space; a batch that does not return its control is CouldNotDetermine. This detects a blind bind, not a per-container denial, so NotFound is advisory: it makes collisions rare, and Collision Remediation remains the arbiter. For forest-wide attributes (a UPN) the probe uses the global catalogue where the connector has one. Probes are batched per candidate set where the protocol allows, so latency does not scale with attempt count.
 9. A proposed value is recorded as a generated value assignment in state Proposed, keyed on the object and attribute, with the Synchronisation Rule mapping that produced it recorded as its origin.
 10. A committed assignment is sticky: the value is never recomputed from the expression and never renumbered. Re-running any import or synchronisation produces the same value.
 11. If no free candidate is found within the attempt limit, the object fails hard through the standard RPEI/Activity error surface, naming the attribute, the last candidate tried and the scope that rejected it. No value is written.
@@ -90,11 +100,11 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Collision Remediation**
 
-13. When an export fails and the connector classifies the failure as a uniqueness rejection, and Collision Remediation is on for the flow, and the value is unanchored: JIM generates the next candidate, updates the assignment to Remediated, updates the Pending Export and retries within the same export run, bounded by the attempt limit. On acceptance the assignment becomes Committed with the accepted value.
+13. When an export fails and the connector classifies the failure as a uniqueness rejection attributable to one generated value, and Collision Remediation is on for the flow, and the value is unanchored: JIM generates the next candidate, updates the assignment to Remediated, revises the Metaverse value (import mode) or the Connected System Object value (export mode), and flags the object for review. The next synchronisation re-stages the whole export with every dependent value recomputed, and the next export run carries it. There is no retry within the export run: a retried export would carry stale dependent values (a DN or UPN built from the old value) and fail again for a different reason. On acceptance the assignment becomes Committed with the accepted value. Attribution: the connector names the attribute where the server does (Active Directory's message codes distinguish an account name, a UPN and a DN collision; Samba names the attribute); otherwise the export carries exactly one generated value; otherwise the probe attributes it; otherwise the rejection is an ordinary export error whose advice says why, and JIM revises nothing.
 14. When the value is anchored (any other target has already accepted it): JIM does not revise it. The assignment enters NeedsDecision, the export item records an error naming the rejecting system, the value, and the system that has provisioned it, and the identity, its Synchronisation Rule and the Connected System carry a needs-attention indicator.
 15. When Collision Remediation is off, or the connector cannot classify the rejection: an ordinary export error is recorded and the assignment is unchanged.
-16. NeedsDecision has three exits: **Allow the rename** (per identity; a confirmation names every system that will change and what it will receive; unanchors this identity so the next synchronisation and export runs carry the change, recorded as authorised by the administrator); **Retry** (releases NeedsDecision so the next export run tries the same value again, for when the conflict has been fixed at its source); **Leave it** (visible until resolved). Saving a change to the flow's configuration also releases NeedsDecision, as #1121 releases parked items. NeedsDecision never expires.
-17. In import mode, a remediated value flows to every other target through ordinary synchronisation and export. Derived values (an email built from the account name) recompute and re-export the same way. Nothing special-cases the dependency.
+16. NeedsDecision has three exits: **Allow the rename** (per identity; a confirmation names every system that will change and states that the new value is decided at the next export, since the worker generates it; records the authorisation on the assignment so the next rejection remediates instead of stopping); **Retry** (releases NeedsDecision so the next export run tries the same value again, for when the conflict has been fixed at its source); **Leave it** (visible until resolved). Saving a change to the flow's configuration also releases NeedsDecision, as #1121 releases parked items. NeedsDecision never expires.
+17. In import mode, a remediated value flows to every other target through ordinary synchronisation and export: the export run flags the object for review, and the next synchronisation of any joined system (full or delta) re-evaluates its exports through the existing review mechanism (#892). Values derived from the generated value (an email built from the account name) are ordinary derived Attribute Flows and are re-derived in the same review; see the Metaverse-Derived Attribute Flows PRD.
 
 **Transparency**
 
@@ -108,7 +118,29 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Surface parity**
 
-22. Every configuration element above (source type, generation settings, exclusions, Collision Remediation switch) is settable through the portal, the REST API (Synchronisation Rule and Attribute Flow DTOs) and PowerShell (`New-JIMSyncRuleMapping` / `Set-JIMSyncRuleMapping` for the flow; `Set-JIMSyncRule` where rule-level settings are involved) in the same PR, with tests and docs. The NeedsDecision list and its Allow-the-rename and Retry actions ship across all three surfaces likewise; REST answers `202 Accepted` for actions whose effect lands on a later run, following the #1121 pattern.
+22. Every configuration element above (source type, generation settings, exclusions, Collision Remediation switch) is settable through the portal, the REST API (Synchronisation Rule and Attribute Flow DTOs) and PowerShell (`New-JIMSyncRuleMapping` / `Set-JIMSyncRuleMapping` for the flow; `Set-JIMSyncRule` where rule-level settings are involved) in the same PR, with tests and docs. The NeedsDecision list and its Allow-the-rename and Retry actions ship across all three surfaces likewise; REST answers `202 Accepted` for actions whose effect lands on a later run, following the #1121 pattern. The identity's generated values (value, state, previous value) are readable, and "Generate a new value" and "Set next number" are actionable, through all three surfaces.
+
+**Uniqueness tokens**
+
+23. The token is one of: *only if taken* (style Number or Letter, start value, separator; the bare base value is always tried first), *sequence* (FR 24 to 26), *random* (FR 27). The base expression is required for *only if taken* and optional otherwise. The token is placed before the first `@` where the base value contains one, otherwise appended, with the separator between.
+24. A sequence draws the next number from the target attribute's counter: start value, increment, and the counter's floor, whichever is highest; then the four gates. The counter is forward-only, survives removal of the flow, seeds from the highest existing numeric value for the attribute on first use, is reserved in blocks per page with an atomic increment, and never re-issues a number. "Set next number" accepts only a higher number, confirms, and is audited.
+25. A sequence may be fixed width: zero-padded to the configured number of digits. The form shows how many numbers remain before the width is exhausted. When a number would outgrow the width, the flow either stops the object with an attributed error (default, for downstream fixed-length validation) or allows longer numbers, per flow.
+26. Sequence and digit tokens may target a Number attribute; fixed width is unavailable there because a Number cannot hold leading zeros, and the form says so.
+27. A random token is a GUID, or a lower-case hex or a digit string of a configured length, drawn from a cryptographic source. The form states the value space and when clashes become likely. A clash draws again, bounded by the attempt limit.
+
+**Never reuse a value**
+
+28. "Never reuse a value" is on by default. A value whose assignment is deleted is recorded in the retired values register for its attribute and is treated as taken by every gate thereafter. For sequence tokens the behaviour is inherent and cannot be turned off. The register is never pruned and is visible in the identity's history as a retirement event.
+
+**Generate once, and on purpose**
+
+29. Generation happens only when no higher-priority contribution supplies a value (FR 6), and a committed value never changes with its inputs. "Generate a new value" on the identity (portal, REST, PowerShell) deletes the assignment, retires the value (FR 28) and flags the object so the next synchronisation assigns the next free value; its confirmation names every system and derived value that will change and when.
+30. **Adopt before generate.** In either mode, when the object already holds a value for the attribute that a participating target has accepted (a joined pre-existing account; an account re-imported after a connector space clear; a value a withdrawn higher-priority source left behind), JIM adopts that value as the Committed assignment instead of generating. JIM never renames a live account by ordinary generation; only Collision Remediation with the anchoring rule, or an administrator, changes an accepted value.
+
+**Uniqueness semantics**
+
+31. Text uniqueness is case-insensitive: `Joe.Bloggs` and `joe.bloggs` are the same value to every gate and to the retired values register, because the directories JIM writes to treat them so. Lookups use case-normalised indexes.
+32. Uniqueness among generated values holds across concurrent runs: two synchronisations running in parallel cannot both assign the same value to different objects. The service enforces it in-process and the database enforces it with a unique constraint per attribute and normalised value, with the losing run generating the next candidate.
 
 ### Non-Functional Requirements
 
@@ -176,6 +208,29 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 **Given** the switch is off for the flow in Scenario 5
 **Then** the export records an ordinary export error for `joe.bloggs`, the assignment stays Proposed, and the administrator resolves it.
 
+### Scenario 11: Employee number sequence with fixed width
+
+**Given** an import flow for Employee Number with a sequence token starting at 100456, width 11, and an existing population whose highest number is 100999
+**When** the first synchronisation runs
+**Then** the counter seeds at 101000 and the first new starter receives `00000101000`; deleting that starter later frees nothing and the next starter receives `00000101001`.
+
+### Scenario 12: Prefixed sequence
+
+**Given** a base expression `"G-"` and a sequence token of width 6
+**Then** values are `G-100456`, `G-100457`, and a number outgrowing six digits stops the object with an attributed error unless "allow longer numbers" is on.
+
+### Scenario 13: Never reuse a value
+
+**Given** `joe.bloggs` was assigned to a leaver whose identity was deleted, and "Never reuse a value" is on
+**When** a new Joe Bloggs starts
+**Then** `joe.bloggs` is treated as taken and the starter receives `joe.bloggs1`; with the option off, `joe.bloggs` is free again.
+
+### Scenario 14: Adopt before generate
+
+**Given** a brownfield identity whose Corporate AD account `jsmith` is joined by employee id after HR projected the identity
+**When** the generated Account Name flow evaluates
+**Then** JIM adopts `jsmith` as the Committed assignment and does not propose `john.smith`; no rename is exported.
+
 ## UI Mocks
 
 Mockups for all six screens, plus the design explainers and diagrams (assignment lifecycle, the service and its callers, the three Set Value shapes), are linked in the document header. Screens extend existing surfaces; none is a new page. Dialog structure and row chips follow the shipped patterns from #843 (Value processing section) and #223 (`Initial Export Only` checkbox and chip); events follow the causality idiom from #1087 and #1495.
@@ -204,6 +259,9 @@ A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after th
 | Gates | Collision caught by the Metaverse; by a connector space holding an optimistically applied value the target does not yet have; intra-batch within one page; brownfield object in an OU outside the connector's import scope caught by the probe; probe reporting CouldNotDetermine (under-privileged bind) falling back to local gates without reporting NotFound |
 | Collision Remediation | Post-probe collision remediated within the export run and committed; the accepted value reaching the second directory on its next export; remediation off recording an ordinary export error; a CSV target with no classification recording an ordinary export error while the LDAP targets remediate (mixed capability) |
 | Anchoring | Value accepted by one directory then rejected by the other: Needs Decision entered, no rename performed, needs-attention indicators present; each exit exercised: Allow the rename (rename carried out on the next runs and recorded as authorised), Retry after removing the conflicting object, release on flow configuration change |
+| Tokens | Only-if-taken with number and letter styles; sequence with start, increment, fixed width, seeding from an existing population, block reservation under parallel runs, forward-only "Set next number", overflow stop versus allow; random GUID, hex and digits; prefixed combinations |
+| Never reuse | Retired value treated as taken after object deletion and after "Generate a new value"; option off releasing it; sequence numbers never reused regardless |
+| Adopt before generate | Brownfield join, clear and re-import, and withdrawn higher-priority source all adopt the accepted value; no rename exported |
 | Failure | Attempt limit exhausted: object failed via RPEI, nothing written |
 | Stability | Full and delta re-runs leave committed values unchanged; a higher-priority source later supplying a value supersedes the generated one visibly |
 | Transparency | Assertions against the Activity's outcomes and causal edges (`GeneratedValueRemediated`, `GeneratedValueCollisionUnresolved`, the revision edge and its reason codes) and against the identity's attribute history |
@@ -212,6 +270,17 @@ A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after th
 ### Converting existing scenarios
 
 Because JIM could not generate identifiers before this feature, the shared HR feed (`Generate-TestCSV.ps1`) carries IT-owned attributes as source data: `samAccountName`, `email` and `userPrincipalName`. Scenario 1 (HR to Identity Directory) imports `samAccountName` to Account Name from HR and exports it to the directory, which is the unrepresentative shape this feature exists to remove; Scenarios 2, 8, 10, 12, 13, 15, 17 and 18 reference the same columns. As part of this feature, every existing scenario is audited against one criterion: **an IT-owned attribute that flows from a source feed into the Metaverse is converted to generation; an attribute used as a join key or external identifier (the cross-domain scenarios) is kept.** Scenario 1 is the canonical conversion. The generator gains a switch so converted scenarios receive feeds without those columns while unconverted ones are unchanged. Converted scenarios must still pass with identical downstream expectations, which is itself a regression test of the feature under realistic load.
+
+## Delivery
+
+Four releases, each independently shippable:
+
+| Release | Delivers | Needs |
+|---|---|---|
+| 1 | Generation with all three tokens, counters, adopt before generate, case-insensitive and cross-run uniqueness, assignment lifecycle, "Generate a new value", configuration surfaces, Scenario 22's generation cases, docs. Target-side collisions are ordinary export errors naming the value and system. Scenario 1 converts Account Name only. | Nothing new |
+| 2 | Metaverse-Derived Attribute Flows (own PRD) and the retired values register; Scenario 1 conversion completed with Email and UPN derived. | Release 1 |
+| 3 | Probing: connector capability, LDAP first, SCIM and SQL after. | Release 1 |
+| 4 | Collision Remediation, anchoring, Needs Decision and its surfaces. | Releases 2 and 3 |
 
 ## Constraints
 
@@ -225,7 +294,7 @@ Because JIM could not generate identifiers before this feature, the shared HR fe
 
 | Area | Impact |
 |------|--------|
-| Models | `SyncRuleMapping`: source type "generated", generation settings (strategy, start, separator, attempt limit), per-system exclusions, `CollisionRemediation` flag. New `GeneratedValueAssignment` (object reference, attribute, value, state, origin, timestamps) and its enums. Appended members on `CausalEdgeType`, `CausalReasonCode`, sync outcome type, `ActivityRunProfileExecutionItemErrorType`, `ConnectedSystemExportErrorType`. |
+| Models | `SyncRuleMapping`: source type "generated", generation settings (token kind, style, start, increment, fixed width and overflow behaviour, random format and length, separator, attempt limit, never reuse), per-system exclusions, `CollisionRemediation` flag. New `GeneratedValueAssignment` (object reference, attribute, value, state, origin, timestamps), `GeneratedValueSequence` (per attribute counter), `RetiredGeneratedValue` (register) and their enums; a `Parked` Pending Export status for NeedsDecision. Appended members on `CausalEdgeType`, `CausalReasonCode`, sync outcome type, `ActivityRunProfileExecutionItemErrorType`, `ConnectedSystemExportErrorType`. |
 | Interfaces | New optional connector capability `IConnectorUniquenessProbe` (three-state, batched). Uniqueness-rejection classification added to the export error path; LDAP maps `EntryAlreadyExists` / attribute-uniqueness `ConstraintViolation`; SCIM maps `409`. |
 | Application | New unique value service (pattern, candidates, four-gate oracle, assignment persistence) in `JIM.Application/Servers/`. `SyncEngine.AttributeFlow.cs`: generated source type evaluated as a contribution under attribute priority; sticky assignment short-circuits recomputation. `ExportExecutionServer`: classified rejection, remediation retry loop, anchoring check, NeedsDecision entry. `ExportCausalEdgeBuilder`: the new edge. NeedsDecision release on configuration change in `ConnectedSystemServer`, mirroring `ReleaseParkedInitialPasswordsIfDeliveryChangedAsync`. |
 | Data | Repository methods: Metaverse-by-attribute-value lookup (index exists); assignment CRUD; NeedsDecision listing. Reuse of connector-space by-value lookups. |
@@ -245,6 +314,8 @@ Because JIM could not generate identifiers before this feature, the shared HR fe
 
 ## Dependencies
 
+- **[Metaverse-Derived Attribute Flows](PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md) (planned).** Values derived from a generated value, and generated base expressions that read `mv["..."]`, need its dependency ordering and derived pass. Release 1 of this feature does not need it; release 2 does.
+- **#892 Temporal Scope Reconciler (landed).** Its per-object review flag is how a value revised in an export run reaches the other targets under delta synchronisation.
 - **#1087 / #1495 causality views (landed).** All transparency requirements are expressed in that model; nothing bespoke.
 - **#1121 Initial Password Provisioning (Phases 1-3 landed).** Parked-state pattern (`Pending` / `Parked`, release on configuration change) and the queue-and-follow pattern for portal and API actions are reused. Its password delivery lane is explicitly *not* reused for Metaverse data.
 - **#1079 optimistic export apply (landed).** The reason the connector space is a distinct gate from the probe: it holds values the target does not yet have.
@@ -268,7 +339,18 @@ Taken during review of the linked artefact (July to September 2026). Recorded he
 8. **Needs Decision exits:** Allow the rename, Retry, Leave it; release on flow configuration change; never expires.
 9. **Set Value:** deferred out of #242 (2026-09-16). If it returns, it takes the schedule-consistent shape described in the artefact (assignment written now, propagated by the next synchronisation and export runs), never an immediate lane; and it brings the delta-synchronisation change needed to pick up Metaverse-side changes.
 10. **Both modes:** import and export Attribute Flows are first-class.
-11. **Causality:** retry within an item is an outcome; the import-mode cross-item consequence is an edge; wording derived from codes at render time.
+11. **Causality:** the remediation is an outcome on the export item; the import-mode cross-item consequence is an edge written by the synchronisation that re-stages the export; wording derived from codes at render time.
+
+Taken after the adversarial review (2026-09-19):
+
+12. **Tokens:** a generated value is base expression plus uniqueness token (only if taken, sequence, random). Reverses the earlier "no sequence" Non-Goal; numeric and prefixed identifiers are a core need.
+13. **Counters are attribute-scoped and forward-only;** blocks per page; gaps are acceptable; never re-issued.
+14. **"Never reuse a value" defaults to on.** JIM is opinionated toward the security posture; the rehire case is the documented exception.
+15. **Adopt before generate**, in both modes. Ordinary generation never renames a live account.
+16. **No retry inside the export run.** Remediation revises and flags; the schedule carries the corrected export with every dependent value recomputed.
+17. **Derived values are expressions,** ordered by the Metaverse-Derived Attribute Flows PRD; nothing derived is generated or sticky.
+18. **Uniqueness is case-insensitive** and enforced across concurrent runs at the database.
+19. **Delivery in four releases:** generation and tokens; derived flows and the retired register; probing; Collision Remediation and Needs Decision.
 
 ## Acceptance Criteria
 
@@ -279,7 +361,12 @@ Taken during review of the linked artefact (July to September 2026). Recorded he
 - [ ] Assignments are persisted, keyed on object and attribute, and committed values are sticky across full and delta runs (FR 9-10, Scenario 8).
 - [ ] Intra-run uniqueness holds across pages (FR 12, Scenario 3).
 - [ ] Exhaustion fails the object with an attributed RPEI error and writes nothing (FR 11, Scenario 7).
-- [ ] A classified, unanchored uniqueness rejection is remediated within the export run; the accepted value is committed and flows to other targets on their next export (FR 13, 17, Scenario 5).
+- [ ] A classified, attributable, unanchored uniqueness rejection is remediated in the export run without an in-run retry; the next synchronisation re-stages the export with dependent values recomputed and the accepted value is committed (FR 13, 17, Scenario 5).
+- [ ] Only-if-taken, sequence (start, increment, fixed width, overflow behaviour, forward-only counter, seeding, block reservation) and random tokens behave as specified across text and Number targets (FR 23 to 27, Scenarios 11 and 12).
+- [ ] "Never reuse a value" defaults to on and retires values on every assignment deletion; sequence numbers are never re-issued (FR 28, Scenario 13).
+- [ ] "Generate a new value" is available on all three surfaces with the confirmation as mocked (FR 29).
+- [ ] Adopt before generate holds for brownfield joins, clear and re-import, and withdrawn sources (FR 30, Scenario 14).
+- [ ] Uniqueness is case-insensitive and holds across parallel runs (FR 31, 32).
 - [ ] An anchored rejection enters Needs Decision with the three exits, needs-attention indicators, release on configuration change and no expiry (FR 14, 16, Scenario 6).
 - [ ] Collision Remediation off, or an unclassified rejection, records an ordinary export error (FR 15, Scenario 10).
 - [ ] Export-mode generation keys on the Connected System Object and never touches the Metaverse (Scenario 9).
@@ -293,10 +380,10 @@ Taken during review of the linked artefact (July to September 2026). Recorded he
 
 ## Open Questions
 
-1. **Derived values in the same flow.** Email built from the generated account name can either read the assigned value within the same object's flow (requires exposing values assigned earlier in the flow to later mappings, in dependency order) or lag by one synchronisation. The artefact assumes the former. Decide at implementation planning; either satisfies the requirements.
-2. **Attempt limit scope.** Per identity per run (recommended) or per identity for ever. Per run is simpler and matches "give up after N tries".
-3. **Probe batch size** for the LDAP filter, and whether SCIM filtering is worth a probe implementation in v1 or classification only.
-4. **Migration of example data** onto the generalised primitive: follow-up issue, not v1.
+Resolved in the plan: derived values (Metaverse-Derived Attribute Flows PRD), attempt-limit scope (per object per run for generation; per assignment lifetime for remediation), probe batching (LDAP 50 per filter with a lazy window; SCIM classification then probe; SQL `IN`), example-data migration (follow-up issue).
+
+1. **Named sequences shared between flows or object types.** Later addition; the counter entity is designed so a shared name can be added without moving data.
+2. **Following input changes** (rename on surname change) as a per-flow option. Not offered now; revisit on customer demand.
 
 ## Additional Context
 
