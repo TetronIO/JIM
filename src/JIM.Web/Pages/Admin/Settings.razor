@@ -41,7 +41,7 @@
         <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show overridden only" Color="Color.Primary" />
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Category" Sortable="false">
+        <TemplateColumn Title="Category" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Category" Name="category" />
             </HeaderTemplate>
@@ -49,14 +49,17 @@
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetCategoryDisplayName(context.Item.Category.ToString())</MudText>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Setting" Sortable="false">
+        <TemplateColumn Title="Setting" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Setting" Name="setting" />
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line, and a MudText renders a paragraph, so the description
                    under the name was a second line and a second row height. It reads inline after the name
-                   instead, low-lighted, with both available in full on hover. *@
+                   instead, low-lighted, with both available in full on hover. The clamp only clips inside a
+                   bounded box, so this is the table's fill column: it takes the width the other columns (each
+                   kept to one line with .jim-nowrap) do not need, rather than growing to its longest
+                   description and pushing the table past the page. *@
                 <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
@@ -98,7 +101,7 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Status" Sortable="false">
+        <TemplateColumn Title="Status" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Status" Name="status" />
             </HeaderTemplate>
@@ -133,7 +136,7 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Actions" Sortable="false">
+        <TemplateColumn Title="Actions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Actions</MudText>
             </HeaderTemplate>
