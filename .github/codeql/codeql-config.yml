@@ -78,6 +78,25 @@
 #   ships in a JIM deployment: the image is labelled not-for-production and is
 #   built only by the integration test runner.
 
+#
+# In-code suppressions (single false positives in shipped code):
+#
+#   A `// codeql[<rule-id>] <rationale>` comment (or `# codeql[...]` in YAML
+#   and PowerShell) alone on the line immediately above the flagged line
+#   removes that result before upload. This is CodeQL's own suppression
+#   syntax and placement, but the code-scanning suite the workflow runs does
+#   not include the alert-suppression query, and GitHub does not document
+#   honouring SARIF suppressions, so the comment is enforced by
+#   scripts/Filter-Sarif.ps1 rather than by CodeQL: PR #1637 added two such
+#   comments and both alerts stayed open (editing the lines re-minted them as
+#   alerts 541 and 542). The rule id must be named inside the brackets and a
+#   rationale must follow them; a comment without one is ignored and logged.
+#   Every suppression is logged on the Filter step so an upload never reads
+#   as "nothing found there". Use this for a heuristic misfire on one line
+#   (an enum member called UntrustedIssuer read as a secret, row counts from
+#   methods with "Password" in their names); use paths-ignore for whole test
+#   trees and query-filters only for a query that is wrong for JIM as a whole.
+
 paths-ignore:
   - test/JIM.*.Tests/**
   - test/JIM.TestScimServiceProvider/**

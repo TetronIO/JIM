@@ -116,6 +116,38 @@ if (-not $DirectoryConfig) {
 # 6. Cross-Domain Export - apply pending exports to cross-domain CSV
 # 7. Cross-Domain Full Import - confirm the exports succeeded (CSV uses Full Import, not Delta)
 # 8. Cross-Domain Delta Sync - process confirmed imports
+function Wait-ForPendingDeletionsToDrain {
+    <#
+    .SYNOPSIS
+        After the grace period is zeroed, lets housekeeping delete any Metaverse Object an earlier test left
+        pending deletion, then drains the Delete exports that staging raises for it.
+    .DESCRIPTION
+        Housekeeping reads the current Metaverse Object Type configuration, so zeroing the grace period makes
+        every Metaverse Object already pending deletion (Test 3's leaver, say) eligible at once, and its
+        60-second idle tick then deletes it at an arbitrary point in the calling test's window, staging Deletes
+        to both targets. A test that counts Pending Exports must not see those, so this waits for the deletions
+        to happen and runs a full cycle to export and confirm them before the test takes its baseline.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config
+    )
+
+    $pending = [int](Get-JIMPendingDeletion -Count)
+    if ($pending -eq 0) { return }
+
+    Write-Host "  $pending Metaverse Object(s) pending deletion from earlier tests; waiting for housekeeping to delete them..." -ForegroundColor Gray
+    $deadline = (Get-Date).AddSeconds(150)   # one 60-second housekeeping tick, with margin
+    while ([int](Get-JIMPendingDeletion -Count) -gt 0) {
+        if ((Get-Date) -gt $deadline) {
+            throw "Housekeeping did not delete the Metaverse Object(s) pending deletion within 150 seconds of the grace period being zeroed"
+        }
+        Start-Sleep -Seconds 5
+    }
+    Write-Host "  Pending deletions done; draining the Delete exports they staged..." -ForegroundColor Gray
+    Invoke-SyncSequence -Config $Config -ValidateActivityStatus | Out-Null
+}
+
 function Invoke-SyncSequence {
     param(
         [Parameter(Mandatory=$true)]
@@ -1430,6 +1462,7 @@ try {
             $withdrawnUserType = Get-JIMMetaverseObjectType -Name "User"
             if (-not $withdrawnUserType) { throw "Could not find the 'User' Metaverse Object Type" }
             Set-JIMMetaverseObjectType -Id $withdrawnUserType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
+            Wait-ForPendingDeletionsToDrain -Config $config
 
             $withdrawnUser = New-TestUser -Index 8877
             $withdrawnUser.EmployeeId = "EMP887700"
@@ -1568,6 +1601,7 @@ try {
             $withdrawnLateUserType = Get-JIMMetaverseObjectType -Name "User"
             if (-not $withdrawnLateUserType) { throw "Could not find the 'User' Metaverse Object Type" }
             Set-JIMMetaverseObjectType -Id $withdrawnLateUserType.id -DeletionGracePeriod ([TimeSpan]::Zero) | Out-Null
+            Wait-ForPendingDeletionsToDrain -Config $config
 
             $withdrawnLateUser = New-TestUser -Index 8878
             $withdrawnLateUser.EmployeeId = "EMP887800"
