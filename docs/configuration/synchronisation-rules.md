@@ -223,7 +223,9 @@ These determine what happens when no match is found.
 
 **Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new CSO in the target system's connector space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
 
-If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then.
+If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then; the Create counts as confirmed as soon as an import reports the object back at all, even if one of the values it reports still differs from what was exported, and the outstanding value then retries as part of that same Update.
+
+If a Full Import completes without reporting the object back at all, the Create itself is retried on the next export, up to the ordinary retry limit; a Delta Import never triggers this, since it only reports changes and an object missing from its payload is not evidence that it no longer exists.
 
 ## Deprovisioning Action
 
