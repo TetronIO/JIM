@@ -17,3 +17,25 @@ ou: People
 dn: ou=Groups,dc=yellowstone,dc=local
 objectClass: organizationalUnit
 ou: Groups
+
+# Delegated JIM service account (issue #1715). JIM's Connected Systems bind
+# as this identity instead of the directory administrator (cn=admin), so the
+# lab exercises the access-control set a customer would actually grant.
+# ou=Policies and its ppolicy default policy are added later by
+# scripts/01-add-second-suffix.sh: pwdPolicy needs the ppolicy schema, which
+# is only registered once the ppolicy module is loaded into a running slapd,
+# and this file is loaded by Bitnami's entrypoint before slapd is ever
+# started with our modules configured.
+dn: ou=Services,dc=yellowstone,dc=local
+objectClass: organizationalUnit
+ou: Services
+
+# Password is "Svc-Jim@123!", hashed with slappasswd -s. Deliberately
+# different from the admin password (Test@123!) so an accidental rootDN bind
+# by a Connected System does not pass unnoticed.
+dn: cn=svc-jim,ou=Services,dc=yellowstone,dc=local
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: svc-jim
+description: Delegated account JIM's Connected Systems bind as (#1715). Not for interactive or administrative use.
+userPassword: {SSHA}r7H2mmv2uzFq1oLpedFt7GS+XFIYGWDL

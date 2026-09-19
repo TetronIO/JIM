@@ -1,0 +1,30 @@
+# JIM password policy: point the ppolicy overlay's default policy (issue #1715)
+#
+# The lab image (docker/openldap/scripts/01-add-second-suffix.sh) already attaches the ppolicy
+# overlay (slapo-ppolicy) to this suffix's database with no default policy, so all this file needs
+# to do is point that existing overlay at the policy entry jim-password-policy.ldif creates on the
+# same suffix. Applied bound as the configuration rootDN (olcOverlay entries live under cn=config);
+# apply after jim-password-policy.ldif has created the policy entry on this suffix.
+#
+# Placeholders (substituted by the build script before this file is applied):
+#   __SUFFIX__ - the suffix DN, e.g. dc=example,dc=com
+#   __DB_DN__  - the olcDatabase={n}mdb,cn=config entry for this suffix, used here to address the
+#                existing olcOverlay=ppolicy,__DB_DN__ entry
+#
+# Requires the ppolicy overlay to already be attached to this database and jim-password-policy.ldif
+# already applied to the same suffix. Apply once per suffix database.
+dn: olcOverlay=ppolicy,__DB_DN__
+changetype: modify
+replace: olcPPolicyDefault
+olcPPolicyDefault: cn=default,ou=Policies,__SUFFIX__
+
+# --- Only if the ppolicy overlay is NOT already attached to this database ---
+# A customer directory that has not already loaded slapo-ppolicy and attached the overlay needs to
+# ADD it instead of modifying it; use this in place of the modify above:
+#
+# dn: olcOverlay=ppolicy,__DB_DN__
+# changetype: add
+# objectClass: olcOverlayConfig
+# objectClass: olcPPolicyConfig
+# olcOverlay: ppolicy
+# olcPPolicyDefault: cn=default,ou=Policies,__SUFFIX__

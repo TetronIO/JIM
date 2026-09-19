@@ -93,6 +93,13 @@ function Invoke-LDAPSearch {
     <#
     .SYNOPSIS
         Execute an LDAP search using ldapsearch command inside a container
+
+    .DESCRIPTION
+        Callers throughout this file bind as the directory administrator (Get-DirectoryConfig's
+        BindDN/BindPassword), deliberately, not as JimBindDN/JimBindPassword: these are
+        out-of-band assertions and population, and need the administrator's unrestricted view to
+        prove what JIM actually did to the directory, independent of what JIM itself was permitted
+        to see. Only the Connected Systems JIM configures bind as the delegated service account.
     #>
     param(
         [Parameter(Mandatory=$false)]

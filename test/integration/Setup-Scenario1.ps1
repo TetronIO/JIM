@@ -266,10 +266,12 @@ try {
         $ldapSettings[$portSetting.id] = @{ intValue = $DirectoryConfig.Port }
     }
     if ($usernameSetting) {
-        $ldapSettings[$usernameSetting.id] = @{ stringValue = $DirectoryConfig.BindDN }
+        # JIM's Connected System binds as the delegated service account, not the directory
+        # administrator; see Get-DirectoryConfig's comment help for the two-identity model.
+        $ldapSettings[$usernameSetting.id] = @{ stringValue = $DirectoryConfig.JimBindDN }
     }
     if ($passwordSetting) {
-        $ldapSettings[$passwordSetting.id] = @{ stringValue = $DirectoryConfig.BindPassword }
+        $ldapSettings[$passwordSetting.id] = @{ stringValue = $DirectoryConfig.JimBindPassword }
     }
     if ($useSSLSetting) {
         $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $DirectoryConfig.UseSSL }

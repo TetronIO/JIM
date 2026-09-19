@@ -85,10 +85,12 @@ $sourceHost        = $sourceConfig.Host
 $targetHost        = $targetConfig.Host
 $sourcePort        = $sourceConfig.Port
 $targetPort        = $targetConfig.Port
-$sourceBindDN      = $sourceConfig.BindDN
-$targetBindDN      = $targetConfig.BindDN
-$sourcePassword    = $sourceConfig.BindPassword
-$targetPassword    = $targetConfig.BindPassword
+# JIM's Connected Systems bind as the delegated service account, not the directory
+# administrator; see Get-DirectoryConfig's comment help for the two-identity model.
+$sourceJimBindDN   = $sourceConfig.JimBindDN
+$targetJimBindDN   = $targetConfig.JimBindDN
+$sourceJimPassword = $sourceConfig.JimBindPassword
+$targetJimPassword = $targetConfig.JimBindPassword
 $sourceUseSSL      = $sourceConfig.UseSSL
 $targetUseSSL      = $targetConfig.UseSSL
 $sourceBaseDN      = $sourceConfig.BaseDN
@@ -359,8 +361,8 @@ else {
 $sourceSettings = @{}
 if ($hostSetting) { $sourceSettings[$hostSetting.id] = @{ stringValue = $sourceHost } }
 if ($portSetting) { $sourceSettings[$portSetting.id] = @{ intValue = $sourcePort } }
-if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $sourceBindDN } }
-if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $sourcePassword } }
+if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $sourceJimBindDN } }
+if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $sourceJimPassword } }
 if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $sourceUseSSL } }
 if ($connectionTimeoutSetting) { $sourceSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
 if ($authTypeSetting) { $sourceSettings[$authTypeSetting.id] = @{ stringValue = "Simple" } }
@@ -393,8 +395,8 @@ else {
 $targetSettings = @{}
 if ($hostSetting) { $targetSettings[$hostSetting.id] = @{ stringValue = $targetHost } }
 if ($portSetting) { $targetSettings[$portSetting.id] = @{ intValue = $targetPort } }
-if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $targetBindDN } }
-if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $targetPassword } }
+if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $targetJimBindDN } }
+if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $targetJimPassword } }
 if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $targetUseSSL } }
 if ($connectionTimeoutSetting) { $targetSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
 if ($authTypeSetting) { $targetSettings[$authTypeSetting.id] = @{ stringValue = "Simple" } }
