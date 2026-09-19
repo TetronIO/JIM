@@ -6,6 +6,7 @@ using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Web.Causality;
 using NUnit.Framework;
 
@@ -302,6 +303,63 @@ public class CausalityLineageModelBuilderTests
 
             Assert.That(lineage.Joins.Select(j => j.Label), Is.EqualTo(new[] { "projected", "provisioned" }));
         }
+    }
+
+    /// <summary>
+    /// A queued export against an existing target object carries the object's own type on the
+    /// "csId|csoTypeName" DetailMessage channel exactly as a Provisioned outcome always has; the target
+    /// column's head must carry it through so it reads "user: EMP001746" rather than the name alone.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_TargetHeadCarriesTheTypeFromTheLink()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var projected = CausalityTestData.AddOutcome(item,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected, parent: null, ordinal: 0,
+            targetEntityId: Guid.NewGuid(), targetEntityDescription: "Liam Allen");
+        var export = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: projected, ordinal: 0, targetEntityId: Guid.NewGuid(),
+            targetEntityDescription: "Contoso AD", detailCount: 1, detailMessage: "3|user");
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange = new ConnectedSystemObjectChange { ConnectedSystemObjectId = targetCsoId };
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+
+        var targetObject = Sole(lineage.Columns[^1]);
+        Assert.That(targetObject.ObjectTypeName, Is.EqualTo("user"));
+    }
+
+    /// <summary>
+    /// The other half: where the channel carries no type (legacy rows, or a system this build has not yet
+    /// touched), the head stays name-only rather than guessing.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_WithNoTypeOnTheChannel_TargetHeadStaysNameOnly()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var projected = CausalityTestData.AddOutcome(item,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected, parent: null, ordinal: 0,
+            targetEntityId: Guid.NewGuid(), targetEntityDescription: "Liam Allen");
+        var export = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: projected, ordinal: 0, targetEntityId: Guid.NewGuid(),
+            targetEntityDescription: "Contoso AD", detailCount: 1, detailMessage: "3");
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange = new ConnectedSystemObjectChange { ConnectedSystemObjectId = targetCsoId };
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+        var lineage = CausalityLineageModelBuilder.Build(model, chain: null, ObjectChangeType.Projected);
+
+        var targetObject = Sole(lineage.Columns[^1]);
+        Assert.That(targetObject.ObjectTypeName, Is.Null);
     }
 
     // ─── Export items: chain hops land on the objects they happened to ───

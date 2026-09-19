@@ -43,15 +43,15 @@
             @if (Hop.ShowConnectedSystemChip && Hop.Cohort.ConnectedSystemId is { } connectedSystemId
                  && Hop.Cohort.HasConnectedSystem)
             {
-                <CausalityEntityChip Label="@Hop.Cohort.ConnectedSystemName"
-                                     Href="@($"/admin/connected-systems/{connectedSystemId}")"
-                                     Kind="CausalityEntityKind.ConnectedSystem" />
+                <ObjectChip Name="@Hop.Cohort.ConnectedSystemName"
+                            Href="@($"/admin/connected-systems/{connectedSystemId}")"
+                            Kind="ObjectChipKind.ConnectedSystem" />
             }
             @if (Hop.Cohort.SyncRuleId is { } syncRuleId && !string.IsNullOrWhiteSpace(Hop.Cohort.SyncRuleName))
             {
-                <CausalityEntityChip Label="@Hop.Cohort.SyncRuleName"
-                                     Href="@($"/admin/sync-rules/{syncRuleId}")"
-                                     Kind="CausalityEntityKind.SynchronisationRule" />
+                <ObjectChip Name="@Hop.Cohort.SyncRuleName"
+                            Href="@($"/admin/sync-rules/{syncRuleId}")"
+                            Kind="ObjectChipKind.SynchronisationRule" />
             }
             @if (Hop.Reason != null)
             {

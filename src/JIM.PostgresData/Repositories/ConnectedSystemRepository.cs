@@ -3532,6 +3532,42 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.GuidValue.HasValue)
                     .Select(av => av.GuidValue!.Value)).ToListAsync();
     }
+
+    /// <summary>
+    /// Returns every Pending Export for the given Connected System Object Type (and optionally
+    /// partition) that is a Create, Status Exported, targeting a Connected System Object still Status
+    /// PendingProvisioning. Deliberately the inverse scope of <see cref="BuildDeletionDetectionQuery"/>
+    /// (which excludes PendingProvisioning outright, since those CSOs have no External ID yet to
+    /// compare): a Full Import cannot prove absence for an object deletion detection never looks at, so
+    /// this is a second, narrow query used only to find exported Creates a Full Import never confirmed.
+    /// Loads what the caller needs to both compare the External Id (<c>ConnectedSystemObject.Type</c>
+    /// and <c>AttributeValues</c>) and mutate the retry statuses (<c>AttributeValueChanges</c>).
+    /// </summary>
+    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var query = Repository.Database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Where(pe =>
+                pe.ConnectedSystemId == connectedSystemId &&
+                pe.ChangeType == PendingExportChangeType.Create &&
+                pe.Status == PendingExportStatus.Exported &&
+                pe.ConnectedSystemObject != null &&
+                pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning &&
+                pe.ConnectedSystemObject.Type.Id == objectTypeId);
+
+        if (partitionId != null)
+            query = query.Where(pe => pe.ConnectedSystemObject!.PartitionId == partitionId);
+
+        return await query.ToListAsync();
+    }
     #endregion
 
     #region Connected System Object Types

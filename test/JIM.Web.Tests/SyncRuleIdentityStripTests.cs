@@ -63,9 +63,9 @@ public class SyncRuleIdentityStripTests : JimComponentTestContext
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(chips, Has.Count.EqualTo(2), $"{direction}: expected a chip per side");
-                Assert.That(chips[0].Instance.Kind, Is.EqualTo(ObjectChipKind.Metaverse), $"{direction}: left chip");
+                Assert.That(chips[0].Instance.Kind, Is.EqualTo(ObjectChipKind.MetaverseObject), $"{direction}: left chip");
                 Assert.That(chips[0].Instance.TypeName, Is.EqualTo("User"));
-                Assert.That(chips[1].Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystem), $"{direction}: right chip");
+                Assert.That(chips[1].Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystemObject), $"{direction}: right chip");
                 Assert.That(chips[1].Instance.TypeName, Is.EqualTo("inetOrgPerson"));
             }
         }

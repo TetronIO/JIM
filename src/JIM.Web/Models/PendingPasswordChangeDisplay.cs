@@ -89,7 +89,7 @@ public static class PendingPasswordChangeDisplay
         PasswordSetFailureReason.Transient => "Target unavailable",
         PasswordSetFailureReason.ConfigurationFault => "Configuration fault",
         PasswordSetFailureReason.PolicyRejection => "Policy rejection",
-        PasswordSetFailureReason.TargetObjectNotFound => "Account not found",
+        PasswordSetFailureReason.TargetObjectNotFound => "Connected System Object not found",
         PasswordSetFailureReason.UnsupportedOperation => "Unsupported operation",
         _ => reason.ToString()
     };

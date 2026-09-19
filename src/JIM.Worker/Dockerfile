@@ -27,6 +27,8 @@ WORKDIR /app
 # shipped image carry the fixes rather than wait for the rebuild. It runs before the pinned
 # installs so a pin is never silently moved: a pin older than what the upgrade installed fails
 # the build outright (and apt-pin-check will already have proposed the bump).
+# CI and release builds pass no-cache-filters=base so this layer is rebuilt from the live archive on
+# every build; replayed from the build cache it would carry the archive as it stood when it last ran.
 # See engineering/DEPENDENCY_PINNING.md.
 RUN apt-get update \
     && apt-get upgrade -y \

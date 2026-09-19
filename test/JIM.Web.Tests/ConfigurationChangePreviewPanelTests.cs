@@ -335,7 +335,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystem));
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystemObject));
             Assert.That(chip.Instance.Href, Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
             Assert.That(panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)
                 && a.GetAttribute("href") == $"/admin/connected-systems/5/connector-space/{csoId}"), Is.True);
@@ -365,7 +365,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.Metaverse));
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.MetaverseObject));
             Assert.That(chip.Instance.Href, Is.EqualTo($"/t/users/v/{mvoId}"));
         }
     }
@@ -389,7 +389,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystem));
+            Assert.That(chip.Instance.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystemObject));
             Assert.That(chip.Instance.Href, Is.EqualTo($"/admin/connected-systems/5/connector-space/{csoId}"));
         }
     }

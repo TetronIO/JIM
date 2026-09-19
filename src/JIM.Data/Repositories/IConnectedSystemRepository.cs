@@ -1322,6 +1322,13 @@ public interface IConnectedSystemRepository
     public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
     public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
+    /// <summary>
+    /// Returns every Pending Export for the given Connected System Object Type (and optionally
+    /// partition) that is a Create, Status Exported, targeting a Connected System Object still Status
+    /// PendingProvisioning. See <see cref="ISyncRepository.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>
+    /// for the full rationale.
+    /// </summary>
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     public Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     public Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);

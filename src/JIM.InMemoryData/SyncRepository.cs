@@ -559,7 +559,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        // Excludes PendingProvisioning CSOs, mirroring ConnectedSystemRepository.BuildDeletionDetectionQuery
+        // (Postgres): they have no External Id yet to compare and must never surface as a deletion candidate.
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId && c.Status != ConnectedSystemObjectStatus.PendingProvisioning);
         if (partitionId != null)
             csos = csos.Where(c => c.PartitionId == partitionId);
         var values = csos
@@ -572,7 +574,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        // Excludes PendingProvisioning CSOs, mirroring ConnectedSystemRepository.BuildDeletionDetectionQuery
+        // (Postgres): they have no External Id yet to compare and must never surface as a deletion candidate.
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId && c.Status != ConnectedSystemObjectStatus.PendingProvisioning);
         if (partitionId != null)
             csos = csos.Where(c => c.PartitionId == partitionId);
         var values = csos
@@ -585,7 +589,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        // Excludes PendingProvisioning CSOs, mirroring ConnectedSystemRepository.BuildDeletionDetectionQuery
+        // (Postgres): they have no External Id yet to compare and must never surface as a deletion candidate.
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId && c.Status != ConnectedSystemObjectStatus.PendingProvisioning);
         if (partitionId != null)
             csos = csos.Where(c => c.PartitionId == partitionId);
         var values = csos
@@ -598,7 +604,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        // Excludes PendingProvisioning CSOs, mirroring ConnectedSystemRepository.BuildDeletionDetectionQuery
+        // (Postgres): they have no External Id yet to compare and must never surface as a deletion candidate.
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId && c.Status != ConnectedSystemObjectStatus.PendingProvisioning);
         if (partitionId != null)
             csos = csos.Where(c => c.PartitionId == partitionId);
         var values = csos
@@ -611,7 +619,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
-        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        // Excludes PendingProvisioning CSOs, mirroring ConnectedSystemRepository.BuildDeletionDetectionQuery
+        // (Postgres): they have no External Id yet to compare and must never surface as a deletion candidate.
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId && c.Status != ConnectedSystemObjectStatus.PendingProvisioning);
         if (partitionId != null)
             csos = csos.Where(c => c.PartitionId == partitionId);
         var values = csos
@@ -620,6 +630,20 @@ public class SyncRepository : ISyncRepository
             .Select(av => av!.DecimalValue!.Value)
             .ToList();
         return Task.FromResult(values);
+    }
+
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var result = _pendingExports.Values
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ChangeType == PendingExportChangeType.Create
+                      && pe.Status == PendingExportStatus.Exported
+                      && pe.ConnectedSystemObject != null
+                      && pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning
+                      && pe.ConnectedSystemObject.TypeId == objectTypeId
+                      && (partitionId == null || pe.ConnectedSystemObject.PartitionId == partitionId))
+            .ToList();
+        return Task.FromResult(result);
     }
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)

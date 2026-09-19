@@ -107,8 +107,15 @@ public class SyncOutcomeTreeShapeTests : WorkflowTestBase
         var pendingExportOutcome = activity.RunProfileExecutionItems
             .SelectMany(r => r.SyncOutcomes)
             .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
-        Assert.That(pendingExportOutcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Update),
-            "An update to an already-provisioned object's attribute stages an Update Pending Export, and the outcome must record that staged kind");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pendingExportOutcome.StagedChangeType, Is.EqualTo(PendingExportChangeType.Update),
+                "An update to an already-provisioned object's attribute stages an Update Pending Export, and the outcome must record that staged kind");
+            // A queued export against an existing target object records the target's own CSO type
+            // in the same "csId|csoTypeName" DetailMessage channel a Provisioned outcome always has, so the
+            // causality panel can name the target "user: John Smith" rather than the bare name or id.
+            Assert.That(pendingExportOutcome.DetailMessage, Is.EqualTo($"{provisionedTargetCso.ConnectedSystemId}|user"));
+        }
     }
 
     /// <summary>

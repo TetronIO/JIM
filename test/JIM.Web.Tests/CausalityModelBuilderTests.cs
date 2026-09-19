@@ -153,6 +153,9 @@ public class CausalityModelBuilderTests
         Assert.That(identityLink, Is.Not.Null);
         Assert.That(identityLink!.Label, Is.EqualTo("Liam Allen"));
         Assert.That(identityLink.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
+        // The one naming rule: a Metaverse Object chip reads "type: name" like a record's, and the page
+        // context knows the Metaverse Object Type, so every Identity link carries it.
+        Assert.That(identityLink.ObjectTypeName, Is.EqualTo("Person"));
 
         var ruleLink = projected.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
         Assert.That(ruleLink, Is.Not.Null);
@@ -194,7 +197,13 @@ public class CausalityModelBuilderTests
         var provisioned = model.Roots[0].Children[0].Children[0];
 
         var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
-        Assert.That(recordLink.Label, Is.EqualTo("liam.allen"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink.Label, Is.EqualTo("liam.allen"));
+            // The label is bare once a current name is known, so the type now travels separately:
+            // every consumer (chips, the Lineage head) can render "person: liam.allen" in one form.
+            Assert.That(recordLink.ObjectTypeName, Is.EqualTo("person"));
+        }
     }
 
     [Test]
@@ -208,7 +217,13 @@ public class CausalityModelBuilderTests
         var provisioned = model.Roots[0].Children[0].Children[0];
 
         var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
-        Assert.That(recordLink.Label, Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink.Label, Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+            // ObjectTypeName stays unset here: the fallback label already embeds the type, and setting it
+            // too would double the prefix once a consumer renders "type: " in front of the label.
+            Assert.That(recordLink.ObjectTypeName, Is.Null);
+        }
     }
 
     [Test]
@@ -635,6 +650,59 @@ public class CausalityModelBuilderTests
         var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
         var recordLink = exportEvent.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
         Assert.That(recordLink?.Label, Is.EqualTo(targetCsoId.ToString()));
+    }
+
+    /// <summary>
+    /// A queued export against an existing object now carries the target's own type in the same
+    /// "csId|csoTypeName" DetailMessage channel a Provisioned outcome always has, so the Lineage head and
+    /// the Timeline/Table chips can name the target "type: name" rather than the bare name.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_WithTypeInDetailMessage_SetsObjectTypeNameOnTheRecordLink()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+        export.DetailMessage = "2|user";
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink.Label, Is.EqualTo("EMP001746"));
+            Assert.That(recordLink.ObjectTypeName, Is.EqualTo("user"));
+        }
+    }
+
+    /// <summary>
+    /// The parser tolerates the earlier shape (bare "csId", no type segment): existing rows must not
+    /// regress to a wrong or throwing read.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_WithoutTypeInDetailMessage_LeavesObjectTypeNameNull()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+        export.DetailMessage = "2";
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink.ObjectTypeName, Is.Null);
     }
 
     [Test]

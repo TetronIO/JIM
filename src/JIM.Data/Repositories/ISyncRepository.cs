@@ -213,6 +213,19 @@ public interface ISyncRepository
     Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
+    /// Returns every Pending Export for the given Connected System Object Type (and optionally
+    /// partition) that is a Create, Status Exported, targeting a Connected System Object still Status
+    /// PendingProvisioning: an exported Create whose confirming import has not yet reported the object
+    /// back. Ordinary deletion detection excludes PendingProvisioning Connected System Objects outright
+    /// (they have no External ID yet to compare), so this is a separate, deliberately narrow query used
+    /// only by a Full Import's "unseen exported Create" retry step
+    /// (<see cref="JIM.Application.Interfaces.ISyncEngine.IsExportedCreateUnseenByFullImport"/>): the
+    /// caller compares each returned Pending Export's Connected System Object External Id against the
+    /// run's own imported set to decide whether the Create was genuinely unseen.
+    /// </summary>
+    Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+
+    /// <summary>
     /// Loads CSOs by ID for cross-page reference resolution.
     /// Only loads CSOs and their attribute values — no navigation properties beyond that.
     /// </summary>

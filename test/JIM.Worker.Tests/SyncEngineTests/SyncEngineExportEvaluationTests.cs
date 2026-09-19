@@ -281,6 +281,55 @@ public class SyncEngineExportEvaluationTests
         }
     }
 
+    #region IsExportedCreateUnseenByFullImport
+
+    [Test]
+    public void IsExportedCreateUnseenByFullImport_FullImportSawObjectsButNotThisOne_ReturnsTrue()
+    {
+        Assert.That(_engine.IsExportedCreateUnseenByFullImport(ConnectedSystemRunType.FullImport, totalObjectsImported: 1, wasSeen: false),
+            Is.True);
+    }
+
+    [Test]
+    public void IsExportedCreateUnseenByFullImport_ObjectWasSeen_ReturnsFalse()
+    {
+        // Whatever this run read, if it included this object (by External Id, or the CSO was otherwise
+        // processed this run), it is confirmed present and must never be marked for retry.
+        Assert.That(_engine.IsExportedCreateUnseenByFullImport(ConnectedSystemRunType.FullImport, totalObjectsImported: 1, wasSeen: true),
+            Is.False);
+    }
+
+    [Test]
+    public void IsExportedCreateUnseenByFullImport_DeltaImport_ReturnsFalseEvenWhenUnseen()
+    {
+        // A Delta Import only reports changes, so an object missing from its payload proves nothing about
+        // whether it still exists - unlike a Full Import, which is a complete snapshot.
+        Assert.That(_engine.IsExportedCreateUnseenByFullImport(ConnectedSystemRunType.DeltaImport, totalObjectsImported: 1, wasSeen: false),
+            Is.False);
+    }
+
+    [Test]
+    public void IsExportedCreateUnseenByFullImport_NoObjectsImportedAtAll_ReturnsFalse()
+    {
+        // Mirrors deletion detection's own "no objects imported means do nothing" guard: a Full Import
+        // that read literally nothing may itself be the symptom of a connector/configuration problem, so
+        // it must not be read as proof that every outstanding Create is now absent.
+        Assert.That(_engine.IsExportedCreateUnseenByFullImport(ConnectedSystemRunType.FullImport, totalObjectsImported: 0, wasSeen: false),
+            Is.False);
+    }
+
+    [Test]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    [TestCase(ConnectedSystemRunType.Export)]
+    [TestCase(ConnectedSystemRunType.NotSet)]
+    public void IsExportedCreateUnseenByFullImport_NonImportRunTypes_ReturnFalse(ConnectedSystemRunType runType)
+    {
+        Assert.That(_engine.IsExportedCreateUnseenByFullImport(runType, totalObjectsImported: 1, wasSeen: false), Is.False);
+    }
+
+    #endregion
+
     [Test]
     public void WorkingSet_ADecisionRecordedForACso_IsReturnedOnTheSecondAsk()
     {

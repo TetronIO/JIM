@@ -1063,6 +1063,14 @@ public class Worker : BackgroundService
                 .GroupBy(sr => sr.ConnectedSystemId)
                 .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name);
 
+            // Connected System id to CSO type name, so the causality panel can name a staged export's target
+            // "type: name" instead of the bare name or id, matching the sync engine's own lookup.
+            var csoTypeNameLookup = exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                .SelectMany(rules => rules)
+                .Where(sr => sr.ConnectedSystemObjectType != null)
+                .GroupBy(sr => sr.ConnectedSystemId)
+                .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+
             foreach (var mvo in mvosToDelete)
             {
                 try
@@ -1122,7 +1130,8 @@ public class Worker : BackgroundService
                         {
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
-                                activity, csoChangeTrackingEnabled);
+                                activity, csoChangeTrackingEnabled,
+                                csoTypeNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId));
                             deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
                         }
@@ -1135,7 +1144,8 @@ public class Worker : BackgroundService
                             SyncOutcomeBuilder.AddChildOutcome(deletionItem, mvoDeletedOutcome,
                                 ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
                                 targetEntityDescription: csNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId),
-                                detailMessage: cancellation.ConnectedSystemId.ToString());
+                                detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
+                                    cancellation.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId)));
                         }
                     }
                     else
@@ -1150,7 +1160,8 @@ public class Worker : BackgroundService
                         {
                             var deprovisionItem = BuildPendingExportExecutionItem(pendingExport, mvo.NameOrId, mvo.Type?.Name,
                                 csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
-                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
+                                csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
                             deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
                                 CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
                                 deprovisionItem.SyncOutcomes.FirstOrDefault()));
@@ -1218,7 +1229,8 @@ public class Worker : BackgroundService
                         ResolveReferencingObjectDisplayName(pendingExport, recallResult),
                         objectTypeSnapshot: null,
                         csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
-                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
+                        csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
 
                     if (pendingExport.SourceMetaverseObjectId.HasValue
                         && causesByReferencingMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out var causes))
@@ -1323,6 +1335,8 @@ public class Worker : BackgroundService
     /// <param name="activity">The housekeeping Activity, for initiator attribution on the change snapshot.</param>
     /// <param name="outcomeTrackingLevel">The configured sync outcome tracking level.</param>
     /// <param name="csoChangeTrackingEnabled">Whether Connected System Object change tracking is enabled.</param>
+    /// <param name="csoTypeName">The target Connected System Object's own type, where known, so the outcome's
+    /// "csId|csoTypeName" link channel can name it.</param>
     private static ActivityRunProfileExecutionItem BuildPendingExportExecutionItem(
         PendingExport pendingExport,
         string? displayNameSnapshot,
@@ -1330,7 +1344,8 @@ public class Worker : BackgroundService
         string? targetConnectedSystemName,
         Activity activity,
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel outcomeTrackingLevel,
-        bool csoChangeTrackingEnabled)
+        bool csoChangeTrackingEnabled,
+        string? csoTypeName = null)
     {
         var executionItem = new ActivityRunProfileExecutionItem
         {
@@ -1343,7 +1358,7 @@ public class Worker : BackgroundService
         };
 
         if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-            AddPendingExportOutcome(executionItem, parent: null, pendingExport, targetConnectedSystemName, activity, csoChangeTrackingEnabled);
+            AddPendingExportOutcome(executionItem, parent: null, pendingExport, targetConnectedSystemName, activity, csoChangeTrackingEnabled, csoTypeName);
 
         return executionItem;
     }
@@ -1361,22 +1376,24 @@ public class Worker : BackgroundService
         PendingExport pendingExport,
         string? displayNameSnapshot,
         Activity activity,
-        bool csoChangeTrackingEnabled)
+        bool csoChangeTrackingEnabled,
+        string? csoTypeName = null)
     {
+        var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, csoTypeName);
         var outcome = parent == null
             ? SyncOutcomeBuilder.AddRootOutcome(executionItem,
                 SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
-                detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                detailMessage: detailMessage,
                 stagedChangeType: pendingExport.ChangeType)
             : SyncOutcomeBuilder.AddChildOutcome(executionItem, parent,
                 SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
-                detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                detailMessage: detailMessage,
                 stagedChangeType: pendingExport.ChangeType);
 
         if (csoChangeTrackingEnabled && pendingExport.AttributeValueChanges.Count > 0)

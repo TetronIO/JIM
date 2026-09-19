@@ -1,15 +1,17 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* The one way JIM renders a reference to an OBJECT that belongs to a side of the Metaverse: a chip carrying a  *@
-@* CS or MV avatar, the object's type, and its name or identifier. The sibling of AttributeChip, which does the *@
-@* same job for attributes; both exist because CS and MV are abbreviations, and which side something sits on is *@
-@* the fact a reader most needs and can least infer from a name or a GUID.                                     *@
-@*                                                                                                             *@
-@* This markup was duplicated by hand across two pages before it was extracted, and the duplication is what let *@
-@* a defect live: the hover rule that recolours the avatar against the filled chip was written for the MV badge *@
-@* only, so every CS badge kept its resting colour on hover. Pending Export Detail rendered both, side by side, *@
-@* with nothing tying them together. See JIM.Web/CLAUDE.md "Shared UI components".                              *@
+@* The one way JIM renders a reference to an OBJECT anywhere on the site: a glyph naming which of the *@
+@* seven kinds it is (Connected System Object, Metaverse Object, Connected System, Synchronisation Rule,       *@
+@* Pending Export, Deletion Record, Run Profile), the object's type as a dimmed prefix, then its name with      *@
+@* ellipsis overflow. This component previously covered only the CS/MV pair with a MudChip/MudAvatar; it now    *@
+@* also takes over the look and the kind set of the causality panel's own CausalityEntityChip (now retired),    *@
+@* so an object reads identically whether the reference sits inside the causality panel or anywhere else.       *@
+@*                                                                                                               *@
+@* The one naming rule: Name is the object's display name, or its external id where it has none, never  *@
+@* both; the external id, where distinct, belongs in the chip's Tooltip instead. See ObjectDescription.ChipName *@
+@* and its ForConnectedSystemObjectChipTooltip / ForMetaverseObjectChipTooltip siblings, which every call site   *@
+@* naming a Connected System Object or Metaverse Object should build its Name/Tooltip from. *@
 
 @* The tooltip wraps the LINK rather than the chip, and that nesting is load-bearing: MudTooltip renders an  *@
 @* inline-flex box of its own, and putting that between the link and the chip would sit a new box across the *@
@@ -29,21 +31,23 @@
 
 @code {
     /// <summary>
-    /// Which side of the Metaverse the object sits on, which decides the avatar and its colour.
+    /// Which of the seven kinds of object this chip names, which decides the glyph's text, colour and shape.
     /// </summary>
     [Parameter, EditorRequired]
     public ObjectChipKind Kind { get; set; }
 
     /// <summary>
     /// The object's type name (the Connected System Object Type, or the Metaverse Object Type), rendered as the
-    /// chip's accented prefix. A type is what makes a bare identifier readable, so it leads.
+    /// chip's dimmed prefix. A type is what makes a bare identifier readable, so it leads.
     /// </summary>
     [Parameter]
     public string? TypeName { get; set; }
 
     /// <summary>
-    /// How the object is identified: its name, external ID or display name. Optional, because a record that has
-    /// not been exported yet has no identifier to show and the type alone is still worth saying.
+    /// The object's name: the display name, or the external id where it has none, never
+    /// both. Build this from <see cref="ObjectDescription.ChipName"/> for a Connected System Object or Metaverse
+    /// Object. Optional, because a record that has not been exported yet has no identifier to show and the type
+    /// alone is still worth saying.
     /// </summary>
     [Parameter]
     public string? Name { get; set; }
@@ -63,48 +67,93 @@
     public string? Class { get; set; }
 
     /// <summary>
-    /// Optional tooltip. Defaults to naming the side the object sits on, which is the fact the avatar is
-    /// abbreviating and the one a reader cannot infer from a name or a GUID; pass a richer one where the call
-    /// site knows more (which Connected System the record lives in, say).
+    /// Optional tooltip. Defaults to the same "type: name" text the chip itself shows (or the kind's full name
+    /// where there is no name to show, a type-alone chip). Pass a richer one where the call site knows more:
+    /// the external id and Connected System for a Connected System Object
+    /// (<see cref="ObjectDescription.ForConnectedSystemObjectChipTooltip"/>), or the type for a Metaverse Object
+    /// (<see cref="ObjectDescription.ForMetaverseObjectChipTooltip"/>).
     /// </summary>
     [Parameter]
     public string? Tooltip { get; set; }
 
-    private string EffectiveTooltip => Tooltip ??
-        (Kind == ObjectChipKind.Metaverse ? "Metaverse Object" : "Connected System Object");
+    /// <summary>
+    /// Whether the glyph renders at all. False where something beside the chip already says what kind of object
+    /// it names: a Lineage card sitting in a column whose head already carries the CSO or MVO glyph for every
+    /// chip beneath it.
+    /// </summary>
+    [Parameter]
+    public bool ShowGlyph { get; set; } = true;
 
     /// <summary>
-    /// The avatar's colour by side. These are the two colours the hover rule in site.css recolours; changing one
-    /// here without the other leaves a badge that does not respond to its own chip's hover state.
+    /// The same "type: name" text the chip itself renders, when it has a name to show; the kind's full name
+    /// otherwise (a type-alone chip, or no name and no type). Overridden by <see cref="Tooltip"/>.
     /// </summary>
-    private Color AvatarColour => Kind == ObjectChipKind.Metaverse ? Color.Primary : Color.Secondary;
+    private string EffectiveTooltip => Tooltip ?? (HasName ? (HasType ? $"{TypeName}: {Name}" : Name!) : GlyphFullName);
 
-    private string AvatarText => Kind == ObjectChipKind.Metaverse ? "MV" : "CS";
+    private bool HasName => !string.IsNullOrEmpty(Name);
 
-    private string PrefixClass => Kind == ObjectChipKind.Metaverse ? "jim-mv-chip-prefix" : "jim-cs-chip-prefix";
+    private bool HasType => !string.IsNullOrEmpty(TypeName);
 
     /// <summary>
-    /// The colon joins the type to the identifier, so it belongs to the pair rather than to either half: a chip
-    /// showing a type and nothing else would otherwise trail a colon with nothing after it, and a chip showing a
-    /// name and no type (a preview drill-down row, whose Type column already carries the type) would lead with one.
+    /// The glyph circle (or, for a Connected System Object / Metaverse Object, pill)'s text: three letters for
+    /// the two object kinds, so neither is mistaken for the two-letter Connected System glyph, and two letters
+    /// for everything else.
     /// </summary>
-    private string Prefix => string.IsNullOrEmpty(Name) || string.IsNullOrEmpty(TypeName)
-        ? (TypeName ?? string.Empty)
-        : $"{TypeName}:";
+    private string GlyphText => Kind switch
+    {
+        ObjectChipKind.ConnectedSystemObject => "CSO",
+        ObjectChipKind.MetaverseObject => "MVO",
+        ObjectChipKind.ConnectedSystem => "CS",
+        ObjectChipKind.SynchronisationRule => "SR",
+        ObjectChipKind.PendingExport => "PE",
+        ObjectChipKind.DeletionRecord => "DR",
+        _ => "RP"
+    };
 
-    private RenderFragment Chip => @<MudChip T="string" Color="Color.Default" Class="@Class">
-        <AvatarContent>
-            <MudAvatar Color="@AvatarColour">@AvatarText</MudAvatar>
-        </AvatarContent>
-        <ChildContent>
-            <b class="@PrefixClass">@Prefix</b>@if (!string.IsNullOrEmpty(Name))
-            {
-                @if (!string.IsNullOrEmpty(Prefix))
-                {
-                    @((MarkupString)"&nbsp;")
-                }
-                @Name
-            }
-        </ChildContent>
-    </MudChip>;
+    /// <summary>
+    /// The glyph's full name, for the abbreviation's own title attribute and the chip's default tooltip.
+    /// </summary>
+    private string GlyphFullName => Kind switch
+    {
+        ObjectChipKind.ConnectedSystemObject => "Connected System Object",
+        ObjectChipKind.MetaverseObject => "Metaverse Object",
+        ObjectChipKind.ConnectedSystem => "Connected System",
+        ObjectChipKind.SynchronisationRule => "Synchronisation Rule",
+        ObjectChipKind.PendingExport => "Pending Export",
+        ObjectChipKind.DeletionRecord => "Deletion Record",
+        _ => "Run Profile"
+    };
+
+    private string GlyphClass => Kind switch
+    {
+        ObjectChipKind.ConnectedSystemObject => "cso",
+        ObjectChipKind.MetaverseObject => "mvo",
+        ObjectChipKind.ConnectedSystem => "sys",
+        ObjectChipKind.SynchronisationRule => "rule",
+        _ => "other"
+    };
+
+    /// <summary>
+    /// The dimmed type prefix's own text: "type: " (colon and trailing space baked in) when both a type and a
+    /// name are present, the bare type when there is no name to join it to (a chip showing the type alone must
+    /// not trail a colon with nothing after it), or nothing when there is no type.
+    /// </summary>
+    private string TypePrefixText => HasType
+        ? (HasName ? $"{TypeName}: " : TypeName!)
+        : string.Empty;
+
+    private RenderFragment Chip => @<span class="jim-object-chip @(ShowGlyph ? null : "plain") @Class">
+        @if (ShowGlyph)
+        {
+            <span class="jim-object-chip-glyph @GlyphClass" aria-hidden="true" title="@GlyphFullName">@GlyphText</span>
+        }
+        @if (HasType)
+        {
+            <span class="jim-object-chip-type">@TypePrefixText</span>
+        }
+        @if (HasName)
+        {
+            <span class="jim-object-chip-name">@Name</span>
+        }
+    </span>;
 }

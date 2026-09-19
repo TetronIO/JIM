@@ -130,44 +130,20 @@
                     @if (context.Item.Direction == SyncRuleDirection.Import)
                     {
                         @* Inbound: CS -> MV *@
-                        <MudChip T="string" Size="Size.Medium">
-                            <AvatarContent>
-                                <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
-                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@context.Item.ConnectedSystemObjectTypeName</ChildContent>
-                        </MudChip>
+                        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@context.Item.ConnectedSystemObjectTypeName"
+                                    Tooltip="Connected System Object Type" />
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
-                        <MudChip T="string" Size="Size.Medium">
-                            <AvatarContent>
-                                <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
-                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@context.Item.MetaverseObjectTypeName</ChildContent>
-                        </MudChip>
+                        <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
+                                    Tooltip="Metaverse Object Type" />
                     }
                     else
                     {
                         @* Outbound: MV -> CS *@
-                        <MudChip T="string" Size="Size.Medium">
-                            <AvatarContent>
-                                <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
-                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@context.Item.MetaverseObjectTypeName</ChildContent>
-                        </MudChip>
+                        <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
+                                    Tooltip="Metaverse Object Type" />
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
-                        <MudChip T="string" Size="Size.Medium">
-                            <AvatarContent>
-                                <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
-                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@context.Item.ConnectedSystemObjectTypeName</ChildContent>
-                        </MudChip>
+                        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@context.Item.ConnectedSystemObjectTypeName"
+                                    Tooltip="Connected System Object Type" />
                     }
                 </div>
             </CellTemplate>

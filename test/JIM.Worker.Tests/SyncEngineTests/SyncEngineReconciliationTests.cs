@@ -396,37 +396,29 @@ public class SyncEngineReconciliationTests
 
     #endregion
 
-    #region TransitionCreateToUpdateIfSecondaryExternalIdConfirmed
+    #region TransitionCreateToUpdateOnceObjectConfirmed
 
     [Test]
-    public void TransitionCreateToUpdate_SecondaryIdConfirmed_TransitionsToUpdate()
+    public void TransitionCreateToUpdate_HasRemainingChanges_TransitionsToUpdate()
     {
-        var secondaryAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "dn", IsSecondaryExternalId = true, Type = AttributeDataType.Text };
-        var remainingChange = new PendingExportAttributeValueChange
-        {
-            Id = Guid.NewGuid(),
-            AttributeId = 2,
-            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "mail", Type = AttributeDataType.Text },
-            StringValue = "test@test.com",
-            ChangeType = PendingExportAttributeChangeType.Add
-        };
-
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
-            AttributeValueChanges = [remainingChange]
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = 2,
+                    Attribute = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "mail", Type = AttributeDataType.Text },
+                    StringValue = "test@test.com",
+                    ChangeType = PendingExportAttributeChangeType.Add
+                }
+            ]
         };
 
-        var result = new PendingExportReconciliationResult();
-        result.ConfirmedChanges.Add(new PendingExportAttributeValueChange
-        {
-            AttributeId = 1,
-            Attribute = secondaryAttr,
-            StringValue = "CN=User1,DC=test"
-        });
-
-        SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
+        SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed(pendingExport, hasRemainingChanges: true);
 
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
     }
@@ -441,18 +433,40 @@ public class SyncEngineReconciliationTests
             AttributeValueChanges = [new PendingExportAttributeValueChange { AttributeId = 1 }]
         };
 
-        var result = new PendingExportReconciliationResult();
-
-        SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
+        SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed(pendingExport, hasRemainingChanges: true);
 
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
     }
 
     [Test]
-    public void TransitionCreateToUpdate_NoSecondaryIdInConfirmed_StaysCreate()
+    public void TransitionCreateToUpdate_NoRemainingChanges_StaysCreate()
     {
-        // The remaining change is itself still awaiting confirmation (ExportedNotConfirmed, a retry): the
-        // Create is not yet fully confirmed, so neither trigger fires and it must stay a Create.
+        // Nothing remains once confirmation has been processed: the caller is about to delete the
+        // Pending Export outright (ReconcileCsoAgainstPendingExport's own hasRemainingChanges == false
+        // branch), so there is nothing left to retry and no transition is needed.
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Create,
+            AttributeValueChanges = []
+        };
+
+        SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed(pendingExport, hasRemainingChanges: false);
+
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+    }
+
+    [Test]
+    public void TransitionCreateToUpdate_OneAttributeStillUnconfirmed_TransitionsToUpdate()
+    {
+        // Generalisation (previously "StaysCreate"): the remaining change is itself still awaiting
+        // confirmation (ExportedNotConfirmed, a retry) and no Secondary External ID was confirmed
+        // either - under the old two-trigger rule neither fired and the Pending Export stayed Create-
+        // shaped, which re-sent a second Create for an object ReconcileCsoAgainstPendingExport had
+        // already matched (the bug this transition now fixes: a Create the confirming import does not
+        // fully confirm must retry as an Update, never a second Create). Reconciliation only reaches
+        // this method for a CSO the import actually matched, so the object's existence is already
+        // proven regardless of which attribute confirmed.
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -463,25 +477,16 @@ public class SyncEngineReconciliationTests
             ]
         };
 
-        var result = new PendingExportReconciliationResult();
-        result.ConfirmedChanges.Add(new PendingExportAttributeValueChange
-        {
-            AttributeId = 2,
-            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "mail", IsSecondaryExternalId = false, Type = AttributeDataType.Text }
-        });
+        SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed(pendingExport, hasRemainingChanges: true);
 
-        SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
-
-        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
     }
 
     [Test]
     public void TransitionCreateToUpdate_AllExportedChangesConfirmedWithPendingChangesQueued_TransitionsToUpdate()
     {
-        // Generalisation beyond the Secondary External ID trigger: the Create's own exported changes have
-        // all been confirmed (removed from AttributeValueChanges by the caller before this runs), and a
-        // change appended while it awaited confirmation is queued Pending - it must travel as an Update,
-        // never as a second Create.
+        // A change appended while the Create awaited confirmation is queued Pending - it must travel as
+        // an Update, never as a second Create.
         var queuedChange = new PendingExportAttributeValueChange
         {
             AttributeId = 3,
@@ -495,24 +500,19 @@ public class SyncEngineReconciliationTests
             AttributeValueChanges = [queuedChange]
         };
 
-        var result = new PendingExportReconciliationResult();
-        result.ConfirmedChanges.Add(new PendingExportAttributeValueChange
-        {
-            AttributeId = 2,
-            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "mail", IsSecondaryExternalId = false, Type = AttributeDataType.Text }
-        });
-
-        SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
+        SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed(pendingExport, hasRemainingChanges: true);
 
         Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
     }
 
     [Test]
-    public void TransitionCreateToUpdate_ExportedChangesStillAwaitingConfirmationWithPendingChangesQueued_StaysCreate()
+    public void TransitionCreateToUpdate_ExportedChangesStillAwaitingConfirmationWithPendingChangesQueued_TransitionsToUpdate()
     {
-        // Not every originally exported change has confirmed yet (one is still ExportedNotConfirmed,
-        // retrying) even though a further change is queued Pending: the Create is not done, so it must not
-        // transition yet - re-sending it later must still be shaped as a Create.
+        // Generalisation (previously "StaysCreate"): not every originally exported change has confirmed
+        // yet (one is still ExportedNotConfirmed, retrying) even though a further change is queued
+        // Pending. Under the old rule the Create was left as-is until every originally-exported change
+        // confirmed together; under the generalised rule, reconciliation having run at all already
+        // proves the object exists, so this still transitions to Update.
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -524,11 +524,9 @@ public class SyncEngineReconciliationTests
             ]
         };
 
-        var result = new PendingExportReconciliationResult();
+        SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed(pendingExport, hasRemainingChanges: true);
 
-        SyncEngine.TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
-
-        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
     }
 
     #endregion

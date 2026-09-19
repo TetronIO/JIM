@@ -165,18 +165,19 @@
                     @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
-                            @if (_externalIdAttributeValue != null)
+                            @if (GetCsoChipName() != null)
                             {
-                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
                                             TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name"
-                                            Name="@_externalIdAttributeValue.ToStringNoName()"
+                                            Name="@GetCsoChipName()"
+                                            Tooltip="@GetCsoChipTooltip()"
                                             Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))" />
                             }
                             else
                             {
-                                @* No external ID to identify the record by yet, so the chip carries the type alone
-                                   and the link stands beside it rather than wrapping it. *@
-                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                @* No display name or external ID to identify the record by yet, so the chip carries
+                                   the type alone and the link stands beside it rather than wrapping it. *@
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
                                             TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name" />
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
@@ -895,6 +896,24 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     {
         return Helpers.GetErrorPhaseTitle(_activityRunProfileExecutionItem?.ErrorType);
     }
+
+    /// <summary>
+    /// The Execution Summary's Connected System Object chip name: the display name, or
+    /// the external id where it has none, never both. Null when the record carries neither yet (a provisioned
+    /// object before its first export), in which case the call site shows the type alone.
+    /// </summary>
+    private string? GetCsoChipName() => ObjectDescription.ChipName(
+        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Name, _externalIdAttributeValue?.ToStringNoName());
+
+    /// <summary>
+    /// The chip's tooltip: the external id, where distinct from the name the chip shows, and the record's own
+    /// Connected System, which the chip text leaves out.
+    /// </summary>
+    private string GetCsoChipTooltip() => ObjectDescription.ForConnectedSystemObjectChipTooltip(
+        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type.Name,
+        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Name,
+        _externalIdAttributeValue?.ToStringNoName(),
+        _connectedSystemHeader?.Name);
 
     /// <summary>
     /// Returns the appropriate label for the object field based on context.

@@ -223,7 +223,9 @@ These determine what happens when no match is found.
 
 **Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new CSO in the target system's connector space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
 
-If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then.
+If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then; the Create counts as confirmed as soon as an import reports the object back at all, even if one of the values it reports still differs from what was exported, and the outstanding value then retries as part of that same Update.
+
+If a Full Import completes without reporting the object back at all, the Create itself is retried on the next export, up to the ordinary retry limit; a Delta Import never triggers this, since it only reports changes and an object missing from its payload is not evidence that it no longer exists.
 
 ## Deprovisioning Action
 
@@ -259,31 +261,31 @@ Saving with a current preview on screen states its counts on the confirmation an
 
 ## Initial password
 
-An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
+A Connected System Object a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every Connected System Object that rule creates.
 
 For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
 
-It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
+It is off until you turn it on, on every rule: JIM setting passwords on Connected System Objects nobody asked it to is not a sensible default.
 
-It also depends on the rule provisioning. Only a newly created account has never had a password, so the tab appears only on an export rule with **Provision ... to the Connected System?** switched on, which is a setting on the Details tab. Switching that off removes the tab and switches the initial password off with it, rather than leaving a setting that reads as configured and can never run; any accounts parked waiting on those settings stop waiting. Switching provisioning back on brings the tab back with its settings intact, switched off.
+It also depends on the rule provisioning. Only a newly created Connected System Object has never had a password, so the tab appears only on an export rule with **Provision ... to the Connected System?** switched on, which is a setting on the Details tab. Switching that off removes the tab and switches the initial password off with it, rather than leaving a setting that reads as configured and can never run; any Connected System Objects parked waiting on those settings stop waiting. Switching provisioning back on brings the tab back with its settings intact, switched off.
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
 
 ### What you configure
 
-- **Password Settings**<br /> Where the password comes from. Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here, or [one password you choose for every account](#one-password-for-every-account). The first two generate a different password per account: choosing your own settings starts from the discovered policy rather than from nothing, switching between the two never discards what you configured, and the generator produces random characters, words, or a pronounceable password, telling you the minimum length and character classes the result is guaranteed to carry.
+- **Password Settings**<br /> Where the password comes from. Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here, or [one password you choose for every Connected System Object](#one-password-for-every-connected-system-object). The first two generate a different password per object: choosing your own settings starts from the discovered policy rather than from nothing, switching between the two never discards what you configured, and the generator produces random characters, words, or a pronounceable password, telling you the minimum length and character classes the result is guaranteed to carry.
 - **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
-- **Enable the account once the password is set**<br /> On by default. A provisioned account nobody can sign in to is rarely what was wanted, and directories that refuse to enable an account without a policy-compliant password need the enable to follow the password rather than accompany the create.
+- **Enable the Connected System Object once the password is set**<br /> On by default. A provisioned Connected System Object nobody can sign in to is rarely what was wanted, and directories that refuse to enable an object without a policy-compliant password need the enable to follow the password rather than accompany the create.
 
 **No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
 
-**Nobody receives a generated password, including you.** Its job is to get the account into a working state, since most directories will not enable an account or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) and hand them the value; requiring a change at their next sign-in then does what you would expect. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
+**Nobody receives a generated password, including you.** Its job is to get the Connected System Object into a working state, since most directories will not enable an object or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-connected-system-object) and hand them the value; requiring a change at their next sign-in then does what you would expect. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
 
-### One password for every account
+### One password for every Connected System Object
 
-The third Password Settings option sets one password you choose on every account the rule provisions, so you can tell a new starter what it is. **This option is not recommended**, and the portal says so beside it: every account the rule provisions shares that password until each person changes it, so anybody who learns of this can sign in as any new starter who has not.
+The third Password Settings option sets one password you choose on every Connected System Object the rule provisions, so you can tell a new starter what it is. **This option is not recommended**, and the portal says so beside it: every Connected System Object the rule provisions shares that password until each person changes it, so anybody who learns of this can sign in as any new starter who has not.
 
-Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each account's share of the password; any other choice leaves every account the rule provisions on it until somebody changes it by hand.
+Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each object's share of the password; any other choice leaves every Connected System Object the rule provisions on it until somebody changes it by hand.
 
 This is the only password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
 
@@ -294,39 +296,39 @@ $password = Read-Host -AsSecureString "New shared initial password"
 Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
 ```
 
-A password the Connected System would refuse is rejected when you set it, rather than parking every account the rule provisions. A rule set to this option with no password stored is refused too, for the same reason.
+A password the Connected System would refuse is rejected when you set it, rather than parking every Connected System Object the rule provisions. A rule set to this option with no password stored is refused too, for the same reason.
 
 ### What happens after provisioning
 
-Setting the password is a separate step from creating the account, and deliberately cannot fail the export that created it. The account exists; reporting its export as failed would have JIM retry the create.
+Setting the password is a separate step from creating the Connected System Object, and deliberately cannot fail the export that created it. The object exists; reporting its export as failed would have JIM retry the create.
 
 The password is therefore delivered in its own pass at the end of every export run, over everything the Connected System still owes rather than only what this run created. An ordinary export run is consequently the retry vehicle: a directory brought back online, or a right granted to JIM's service account, is picked up by the next run that was going to happen anyway, with no separate Run Profile to schedule.
 
-Each account ends up in one of these states, all of them reported on the export's Activity:
+Each Connected System Object ends up in one of these states, all of them reported on the export's Activity:
 
 | State | Meaning | What clears it |
 |-------|---------|----------------|
-| Delivered | The password was set. | Nothing; the account no longer owes one and JIM keeps no record beyond the Activity. |
-| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the account was not visible yet (after a create, usually replication catching up). | The next export run over that Connected System. |
-| Parked | The target refused the password itself, for not satisfying the rules in force for that account. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
-| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the account. | Nothing automatic; the account needs a password set by other means. |
+| Delivered | The password was set. | Nothing; the Connected System Object no longer owes one and JIM keeps no record beyond the Activity. |
+| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the Connected System Object was not visible yet (after a create, usually replication catching up). | The next export run over that Connected System. |
+| Parked | The target refused the password itself, for not satisfying the rules in force for that Connected System Object. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
+| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the Connected System Object. | Nothing automatic; the object needs a password set by other means. |
 
-The target's own words are kept verbatim on a parked account, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
+The target's own words are kept verbatim on a parked Connected System Object, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
 
-### Clearing parked accounts
+### Clearing parked Connected System Objects
 
-Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every account parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
+Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every Connected System Object parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
 
-Saving an unrelated part of the same rule releases nothing. Those accounts were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
+Saving an unrelated part of the same rule releases nothing. Those Connected System Objects were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
 
-The typical loop is therefore: read what the target said on the parked account, correct the generator settings (most often length or the character classes), save, and let the next export run deliver.
+The typical loop is therefore: read what the target said on the parked Connected System Object, correct the generator settings (most often length or the character classes), save, and let the next export run deliver.
 
 ### Where JIM tells you
 
-You do not have to go looking. Parked and expired accounts are reported in three places:
+You do not have to go looking. Parked and expired Connected System Objects are reported in three places:
 
-- **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the accounts parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
-- **The rule's Passwords tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the accounts grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many accounts saving will release; it stays quiet for an edit that would not change what is delivered.
+- **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the Connected System Objects parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
+- **The rule's Passwords tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the Connected System Objects grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many objects saving will release; it stays quiet for an edit that would not change what is delivered.
 - **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons. `Get-JIMConnectedSystem -Id <id>` carries the two counts for a whole Connected System.
 
 ## Attribute mappings

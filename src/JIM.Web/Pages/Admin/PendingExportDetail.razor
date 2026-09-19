@@ -108,7 +108,7 @@
                                     {
                                         <MudStack Spacing="0">
                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                                <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
                                                             TypeName="@_pendingExport.ConnectedSystemObject.Type.Name"
                                                             Name="@GetCsoDisplayName()"
                                                             Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{_pendingExport.ConnectedSystemObject.Id}")"
@@ -134,7 +134,7 @@
                                     {
                                         <MudStack Spacing="0">
                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                <ObjectChip Kind="ObjectChipKind.Metaverse"
+                                                <ObjectChip Kind="ObjectChipKind.MetaverseObject"
                                                             TypeName="@_pendingExport.SourceMetaverseObject.Type.Name"
                                                             Name="@GetMvoDisplayName()"
                                                             Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)"
