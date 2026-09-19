@@ -1,0 +1,22 @@
+# JIM service account access control: accesslog database (issue #1715)
+#
+# JIM's delta import reads cn=accesslog to find what changed since the last
+# run (reqStart, reqType, reqDN, reqOld, reqEntryUUID). Only the service
+# account(s) that run delta imports may read it; nothing else can, not even
+# a suffix's own directory administrator.
+#
+# A server hosting more than one suffix shares a single accesslog database
+# across all of them, so every suffix's service account needs its own "by
+# dn.exact=... read" clause here; a single-suffix deployment only has one
+# service account and should delete the second clause below.
+#
+# Placeholders (substituted by the build script before this file is applied):
+#   __DB_DN__        - the olcDatabase={n}mdb,cn=config entry for cn=accesslog
+#   __SERVICE_DN__   - a JIM service account DN allowed to read it
+#   __SERVICE_DN_2__ - a second JIM service account DN (delete this clause,
+#                      and the "by dn.exact=... read" it belongs to, for a
+#                      single-suffix deployment)
+dn: __DB_DN__
+changetype: modify
+replace: olcAccess
+olcAccess: {0}to * by dn.exact="__SERVICE_DN__" read by dn.exact="__SERVICE_DN_2__" read by * none

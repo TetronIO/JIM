@@ -297,6 +297,16 @@ function Get-DirectoryConfig {
         test scenarios to run against Samba AD or OpenLDAP by varying only the
         directory-specific details.
 
+        Every returned config carries two identities: BindDN/BindPassword is the directory
+        administrator (used to populate data and assert against the directory directly, e.g.
+        ldapmodify/ldapsearch, snapshot verification, the compose healthcheck), and
+        JimBindDN/JimBindPassword is the identity JIM's Connected System binds as. On OpenLDAP
+        these differ (JIM binds as a delegated service account, cn=svc-jim, under an explicit,
+        versioned access-control set; see test/integration/docker/openldap/acl/). On Samba AD
+        JimBindDN/JimBindPassword currently equal the Administrator BindDN/BindPassword: the lab
+        still binds JIM as the domain Administrator there, and delegating that bind is tracked as
+        follow-up work (#1716), not done here.
+
     .PARAMETER DirectoryType
         Which directory type to configure for (SambaAD or OpenLDAP)
 
@@ -323,6 +333,10 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=panoply,DC=local"
                     BindPassword     = "Test@123!"
+                    # JIM still binds as the domain Administrator here; delegating this to a
+                    # least-privilege account is tracked separately (#1716), not done here.
+                    JimBindDN        = "CN=Administrator,CN=Users,DC=panoply,DC=local"
+                    JimBindPassword  = "Test@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=panoply,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=panoply,DC=local"
@@ -351,6 +365,10 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
                     BindPassword     = "Test@123!"
+                    # JIM still binds as the domain Administrator here; delegating this to a
+                    # least-privilege account is tracked separately (#1716), not done here.
+                    JimBindDN        = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
+                    JimBindPassword  = "Test@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=resurgam,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=resurgam,DC=local"
@@ -379,6 +397,10 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=gentian,DC=local"
                     BindPassword     = "Test@123!"
+                    # JIM still binds as the domain Administrator here; delegating this to a
+                    # least-privilege account is tracked separately (#1716), not done here.
+                    JimBindDN        = "CN=Administrator,CN=Users,DC=gentian,DC=local"
+                    JimBindPassword  = "Test@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=gentian,DC=local"
                     UserContainer    = "OU=Users,OU=CorpManaged,DC=gentian,DC=local"
@@ -417,6 +439,12 @@ function Get-DirectoryConfig {
                     UseSSL           = $false
                     BindDN           = "cn=admin,dc=yellowstone,dc=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, not the rootDN: an explicit,
+                    # versioned access-control set (test/integration/docker/openldap/acl/) grants
+                    # it exactly what the LDAP Connector needs. The administrator keeps
+                    # populating data and asserting against the directory directly.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "dc=yellowstone,dc=local"
                     UserContainer    = "ou=People,dc=yellowstone,dc=local"
@@ -440,6 +468,7 @@ function Get-DirectoryConfig {
                     # Second suffix for multi-partition testing
                     SecondSuffix     = "dc=glitterband,dc=local"
                     SecondBindDN     = "cn=admin,dc=glitterband,dc=local"
+                    SecondJimBindDN  = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
                 }
                 # Source and Target use the same OpenLDAP container but different suffixes
                 # for cross-domain sync testing (Scenario 2)
@@ -450,6 +479,10 @@ function Get-DirectoryConfig {
                     UseSSL           = $false
                     BindDN           = "cn=admin,dc=yellowstone,dc=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, not the rootDN; see the Primary
+                    # instance's comment above.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "dc=yellowstone,dc=local"
                     UserContainer    = "ou=People,dc=yellowstone,dc=local"
@@ -478,6 +511,10 @@ function Get-DirectoryConfig {
                     UseSSL           = $false
                     BindDN           = "cn=admin,dc=glitterband,dc=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, not the rootDN; see the Primary
+                    # instance's comment above.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "dc=glitterband,dc=local"
                     UserContainer    = "ou=People,dc=glitterband,dc=local"
