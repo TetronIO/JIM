@@ -39,15 +39,17 @@
 
     private string ChipIcon => Status switch
     {
-        null or { NeverFullySynchronised: true } => Icons.Material.Filled.HelpOutline,
+        null or { NeverFullySynchronised: true } => Icons.Material.Outlined.NotStarted,
         { HighestChangeClass: ConfigurationChangeClass.Destructive } => Icons.Material.Filled.Warning,
         _ => Icons.Material.Filled.Sync
     };
 
+    // The never-synchronised chip is icon-only: the words "Never synchronised" were the widest thing in the
+    // Connected Systems list's Stats column, and at a laptop width they took the room from the Description
+    // column beside it. The state is said in full by the tooltip, as it is for the count chips around it.
     private string ChipLabel => Status switch
     {
-        null => string.Empty,
-        { NeverFullySynchronised: true } => "Never synchronised",
+        null or { NeverFullySynchronised: true } => string.Empty,
         _ => Status.ChangeCount.ToString("N0")
     };
 
