@@ -68,12 +68,9 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 ? await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs, apiKey)
                 : await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs);
 
-            // The three password figures are row counts returned by methods with "Password" in their
-            // names; CodeQL's name heuristic reads them as credential material stored in the log.
-            _logger.LogInformation(
-                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}, Security: {SecurityActivityCount}, Initial passwords: {InitialPasswordCount}, Password activities: {PasswordActivityCount}, Password queue: {PasswordQueueCount}",
-                // codeql[cs/cleartext-storage-of-sensitive-information] counts of deleted rows, not credentials
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted);
+            // The per-type breakdown is logged by ChangeHistoryServer on every cleanup, scheduled or manual,
+            // and returned in the response below; repeating it here only duplicated the line.
+            _logger.LogInformation("Manual history cleanup completed");
 
             var response = new HistoryCleanupResponse
             {
