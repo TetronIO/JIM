@@ -289,7 +289,7 @@ See [Stating Container Scope as text](../configuration/connected-systems.md#stat
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| Username | Service account username for connecting to the directory. | `corp\svc-jim-ldap` |
+| Username | Service account username for connecting to the directory. | `corp\svc-jim-ldap` (Active Directory), `cn=svc-jim,ou=Services,dc=example,dc=com` (OpenLDAP) |
 | Password | Service account password (stored encrypted). | *(encrypted)* |
 | Authentication Type | Type of authentication: Simple or NTLM. | `Simple` |
 
@@ -471,6 +471,50 @@ The LDAP service account used by JIM should follow the principle of least privil
 
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
+
+The bullets above describe Active Directory's delegation model: control access rights, delegated OU control, and the rest. OpenLDAP has none of that machinery; permissions come from `olcAccess` rules on the directory's own configuration, so the recipe looks different even though the goal, least privilege, is the same.
+
+#### OpenLDAP
+
+Bind JIM as a dedicated service account, never the directory's rootDN. Any entry with a `userPassword` attribute can bind; a typical shape is an `organizationalRole` plus `simpleSecurityObject` entry such as `cn=svc-jim,ou=Services,dc=example,dc=com`.
+
+The access-control and password-policy rules below are exactly what JIM's own integration tests run under, so they are proven working, not illustrative. Three placeholders run through them: the suffix DN (`__SUFFIX__`, for example `dc=example,dc=com`), the suffix database's configuration entry (`__DB_DN__`, its `olcDatabase={n}mdb,cn=config` DN, found with `ldapsearch -b cn=config "(olcSuffix=<suffix>)" dn`), and the service account's own DN (`__SERVICE_DN__`).
+
+Apply the access-control files bound as the configuration administrator (`cn=admin,cn=config`), since `olcAccess` and `olcOverlay` entries live under `cn=config`; apply the password policy files bound as the suffix's own administrator, since those are ordinary directory entries. Substitute the placeholders in a copy of each file, then apply it with `ldapmodify`.
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-service-account-access.ldif"
+```
+
+Rule `{3}` is what lets JIM create organisational units when "Create Containers as Needed" is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
+
+Delta import reads `cn=accesslog` one level deep. Grant that database's own access-control rule too:
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-accesslog-access.ldif"
+```
+
+OpenLDAP enforces `olcSizeLimit` against non-rootDN clients even with paging controls in play, so a large accesslog query can be truncated silently unless you raise the limit or, as the integration lab does, set it unlimited on the accesslog database. A server hosting only one suffix has only one service account: delete the second `by dn.exact=... read` clause and its placeholder. Under this rule a suffix administrator can no longer read `cn=accesslog` themselves; that is intended, since only the service accounts that run delta imports need to. An administrator who needs to inspect it can still bind as the accesslog database's own rootDN.
+
+A frontend rule covers what every client, including anonymous ones, needs for ordinary connection setup:
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-frontend-access.ldif"
+```
+
+This set withdraws anonymous read and grants nothing to authenticated users other than the service account: OpenLDAP's own default (`to * by * read`) lets anonymous binds read the whole tree, which these rules deliberately close. If you already have "by users read" style rules for other applications, append them after JIM's rather than replacing JIM's with them, so JIM's `by * none` fallback stays last.
+
+##### Password policy
+
+JIM cannot yet discover an OpenLDAP password policy the way it discovers Active Directory's (a requirements document for it exists; the work is not yet scheduled). Until then, a password the policy refuses is parked with the server's own words, exactly as a policy refusal from Active Directory is. The ppolicy overlay only applies to non-rootDN binders, which is another reason to keep JIM off the rootDN: binding it as the service account is what makes password quality checking, lockout, expiry and history apply to JIM's password writes at all.
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-password-policy.ldif"
+```
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-ppolicy-overlay.ldif"
+```
 
 ### Network Considerations
 
