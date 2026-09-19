@@ -53,10 +53,10 @@ internal class LdapConnectorPreflight
     /// The Distinguished Names of the containers this Connected System manages. Rights are checked in these,
     /// because a directory grants them per part of the tree and checking elsewhere answers a question nobody asked.
     /// </param>
-    /// <param name="domainRootDn">The domain naming context, where the target publishes one.</param>
+    /// <param name="scope">Where the directory keeps its data and configuration, from the rootDSE.</param>
     internal async Task<List<PasswordPreflightCheckResult>> RunAsync(
         IReadOnlyList<string> containerExternalIds,
-        string? domainRootDn,
+        LdapPasswordPolicyScope scope,
         CancellationToken cancellationToken)
     {
         var checks = new List<PasswordPreflightCheckResult>
@@ -69,7 +69,7 @@ internal class LdapConnectorPreflight
         checks.Add(await CheckResetRightsAsync(containerExternalIds, cancellationToken));
 
         cancellationToken.ThrowIfCancellationRequested();
-        checks.Add(await CheckPolicyDiscoveryAsync(domainRootDn));
+        checks.Add(await CheckPolicyDiscoveryAsync(scope));
 
         return checks;
     }
@@ -204,21 +204,43 @@ internal class LdapConnectorPreflight
     /// configures the generator from what they know rather than from what the target published, and finds out
     /// about a mismatch through a rejection instead of up front.
     /// </para>
+    /// <para>
+    /// The wording follows the directory: Active Directory has a domain password policy and Fine-Grained Password
+    /// Policies; everything else has a directory password policy and some other mechanism for overriding it.
+    /// </para>
     /// </summary>
-    private async Task<PasswordPreflightCheckResult> CheckPolicyDiscoveryAsync(string? domainRootDn)
+    private async Task<PasswordPreflightCheckResult> CheckPolicyDiscoveryAsync(LdapPasswordPolicyScope scope)
     {
-        if (!IsActiveDirectory)
-            return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
-                "This directory does not publish a password policy that a client can read, so JIM cannot pre-fill the password generator from it.",
-                ["Set the password requirements on the Synchronisation Rule to match the target's policy by hand, and expect a rejection to be how a mismatch shows up."]);
-
         var policyReader = new LdapConnectorPasswordPolicy(_executor, _logger, _directoryType);
-        var policy = await policyReader.GetPasswordPolicyAsync(domainRootDn ?? string.Empty);
+        var policy = await policyReader.GetPasswordPolicyAsync(scope);
 
-        if (policy == null || !policy.HasAnyDiscoveredConstraint)
+        if (policy == null)
             return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
-                "JIM could not read the domain password policy, so it cannot pre-fill the password generator from it.",
-                ["Check that the account JIM connects as can read the domain root object."]);
+                $"JIM could not read {PolicyNoun}, so it cannot pre-fill the password generator from it.",
+                [PolicyReadRemedy]);
+
+        switch (policy.DiscoveryOutcome)
+        {
+            case PasswordPolicyDiscoveryOutcome.NotPublished:
+                return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
+                    "This directory does not publish a password policy that a client can read, so JIM cannot pre-fill the password generator from it.",
+                    NotPublishedDetails());
+
+            case PasswordPolicyDiscoveryOutcome.ConfigurationNotReadable:
+                return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
+                    "JIM could not read the directory's password policy: the account it connects as cannot read the server configuration that holds it.",
+                    [ConfigurationRemedy]);
+
+            case PasswordPolicyDiscoveryOutcome.NoPolicyConfigured:
+                return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery,
+                    "JIM read the directory's password policy configuration: no policy is configured, so no rules apply to a generated password.",
+                    DescribeCaveats(policy));
+        }
+
+        if (!policy.HasAnyDiscoveredConstraint)
+            return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
+                $"JIM could not read {PolicyNoun}, so it cannot pre-fill the password generator from it.",
+                [PolicyReadRemedy]);
 
         var details = new List<string>();
         if (policy.MinimumLength is { } minimumLength)
@@ -227,17 +249,65 @@ internal class LdapConnectorPreflight
             details.Add(complexityRequired
                 ? $"Complexity is required: a password must use at least {policy.RequiredCharacterClassCount} of the 5 character categories."
                 : "Complexity is not required.");
-
-        // Worth surfacing here as well as on the policy panel: a preflight is what an administrator runs when they
-        // want to know whether this will work, and "the policy JIM read may not be the policy that applies" is
-        // exactly the caveat that belongs in that answer.
-        if (policy.PolicyOverrideSignal != PolicyOverrideSignal.Absent)
-            details.Add(policy.PolicyOverrideSignal == PolicyOverrideSignal.Present
-                ? "This domain has Fine-Grained Password Policies, which apply stricter rules to some accounts. What JIM read is a floor, not the whole story."
-                : "JIM could not establish whether this domain has Fine-Grained Password Policies, which would apply stricter rules to some accounts. Treat what it read as a floor.");
+        details.AddRange(DescribeCaveats(policy));
 
         return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery,
-            "JIM read the domain password policy and can pre-fill the password generator from it.",
+            $"JIM read {PolicyNoun} and can pre-fill the password generator from it.",
             details);
+    }
+
+    private string PolicyNoun => IsActiveDirectory ? "the domain password policy" : "the directory's password policy";
+
+    private string PolicyReadRemedy => _directoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD =>
+            "Check that the account JIM connects as can read the domain root object.",
+        LdapDirectoryType.OpenLDAP =>
+            "Check that the account JIM connects as can read the policy entry the ppolicy overlay applies by default.",
+        LdapDirectoryType.DirectoryServer389 =>
+            "Check that the account JIM connects as can read the password attributes on cn=config.",
+        _ => "Check that the account JIM connects as can read where this directory holds its password policy."
+    };
+
+    private string ConfigurationRemedy => _directoryType switch
+    {
+        LdapDirectoryType.OpenLDAP =>
+            "Grant the account JIM connects as read access to the ppolicy overlay configuration under cn=config and to the policy entry it names, then check again.",
+        LdapDirectoryType.DirectoryServer389 =>
+            "Grant the account JIM connects as read access to the password attributes on cn=config, then check again.",
+        _ => "Grant the account JIM connects as read access to the server configuration that holds the password policy, then check again."
+    };
+
+    private List<string> NotPublishedDetails()
+    {
+        var details = new List<string>();
+        if (_directoryType == LdapDirectoryType.OpenLDAP)
+            details.Add("The directory does not advertise the password policy control, so the ppolicy overlay is not loaded.");
+        details.Add("Set the password requirements on the Synchronisation Rule to match the target's policy by hand, and expect a rejection to be how a mismatch shows up.");
+        return details;
+    }
+
+    /// <summary>
+    /// The caveats worth surfacing here as well as on the policy panel: a preflight is what an administrator runs
+    /// when they want to know whether this will work, and "the policy JIM read may not be the policy that
+    /// applies" is exactly the caveat that belongs in that answer.
+    /// </summary>
+    private List<string> DescribeCaveats(ConnectedSystemPasswordPolicy policy)
+    {
+        var details = new List<string>();
+
+        if (policy.PolicyOverrideSignal == PolicyOverrideSignal.Present)
+            details.Add(IsActiveDirectory
+                ? "This domain has Fine-Grained Password Policies, which apply stricter rules to some accounts. What JIM read is a floor, not the whole story."
+                : "Some objects in this directory are governed by a password policy other than the one JIM read, which may be stricter. What JIM read is a floor, not the whole story.");
+        else if (policy.PolicyOverrideSignal == PolicyOverrideSignal.CouldNotDetermine)
+            details.Add(IsActiveDirectory
+                ? "JIM could not establish whether this domain has Fine-Grained Password Policies, which would apply stricter rules to some accounts. Treat what it read as a floor."
+                : "JIM could not establish whether some objects in this directory are governed by a password policy other than the one it read, which could be stricter. Treat what it read as a floor.");
+
+        if (policy.FurtherChecksApply)
+            details.Add("The directory applies further checks JIM cannot see, so a password satisfying everything above can still be refused.");
+
+        return details;
     }
 }
