@@ -51,8 +51,12 @@
     which is the setting that makes the negative control airtight; 1 would let a hashed value through
     unchecked and a "refused" assertion could then pass for the wrong reason.
 
-    Idempotent: every modify is replace-or-check-first, every add tolerates "already exists", and the
-    probe user's password is reset to its known value on every run.
+    Idempotent: every modify is replace-or-check-first, every add tolerates "already exists", the
+    provisioner's password is reset to its known value on every run, and the probe user is deleted and
+    recreated on every run. Recreated rather than reset, because a reset is itself a password change
+    the overlay records in pwdHistory with a timestamp of one-second resolution, and the scenario's own
+    change moments later would then try to record an identical history value and be refused with
+    "Type or value exists (20)" (found on the first full run). A fresh entry carries no history.
 
 .PARAMETER Container
     The Docker container name running OpenLDAP (default: openldap-primary).
@@ -320,6 +324,16 @@ Write-TestStep "Step 3" "Creating ou=Policies, the default policy, the provision
 $probeUid = if ($ProbeBindDN -match '^uid=([^,]+)') { $matches[1] } else { throw "ProbeBindDN must start with uid=" }
 $provisionerCn = if ($ProvisionerBindDN -match '^cn=([^,]+)') { $matches[1] } else { throw "ProvisionerBindDN must start with cn=" }
 
+# The probe user is recreated from scratch on every run. Its previous life may hold pwdHistory values
+# stamped to the second, and the scenario's negative control and compliant change follow within
+# seconds of this script; a history value identical to one the overlay is about to write is refused
+# with "Type or value exists (20)", which would read as the channel failing. "No such object (32)" on
+# the delete is the first run.
+$deleteResult = & docker exec $containerName ldapdelete -x -H $ldapUri -D $dataAdminDN -w $dataAdminPassword $ProbeBindDN 2>&1
+if ($LASTEXITCODE -ne 0 -and "$deleteResult" -notmatch "No such object") {
+    throw "ldapdelete failed (probe user reset) (exit code $LASTEXITCODE): $deleteResult"
+}
+
 # The data admin is the rootdn and so is exempt from the policy; that is what lets these entries be
 # created with whatever password the fixture needs, and why nothing below proves enforcement.
 Invoke-Scenario22Ldap -Tool ldapadd -BindDN $dataAdminDN -BindPassword $dataAdminPassword -What "fixture entries" -Ldif @"
@@ -357,20 +371,17 @@ userPassword: $ProbePassword
 "@
 Write-Host "  OK ou=Policies, $policyDN, $ProvisionerBindDN and $ProbeBindDN present" -ForegroundColor Green
 
-# Reset the two passwords to their known values so a re-run after the scenario changed them still
-# starts from the same place. The rootdn is exempt from pwdInHistory, so the reset cannot be refused.
-Invoke-Scenario22Ldap -Tool ldapmodify -BindDN $dataAdminDN -BindPassword $dataAdminPassword -What "password reset" -Ldif @"
+# Reset the provisioner's password to its known value so a re-run still starts from the same place (the
+# probe user was recreated above, so it needs no reset). The rootdn is exempt from pwdInHistory, so
+# the reset cannot be refused; the overlay does record it in pwdHistory, which is harmless here because
+# nothing changes the provisioner's password again.
+Invoke-Scenario22Ldap -Tool ldapmodify -BindDN $dataAdminDN -BindPassword $dataAdminPassword -What "provisioner password reset" -Ldif @"
 dn: $ProvisionerBindDN
 changetype: modify
 replace: userPassword
 userPassword: $ProvisionerPassword
-
-dn: $ProbeBindDN
-changetype: modify
-replace: userPassword
-userPassword: $ProbePassword
 "@
-Write-Host "  OK Provisioner and probe passwords set to their known values" -ForegroundColor Green
+Write-Host "  OK Provisioner password set to its known value; probe user recreated with its known password" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------------------------
 # Step 4: Prove the fixture from the provisioner's side
