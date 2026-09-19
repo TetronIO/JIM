@@ -6,17 +6,17 @@
 # a suffix's own directory administrator.
 #
 # A server hosting more than one suffix shares a single accesslog database
-# across all of them, so every suffix's service account needs its own "by
-# dn.exact=... read" clause here; a single-suffix deployment only has one
-# service account and should delete the second clause below.
+# across all of them, so every suffix's cn=jim group needs its own
+# "by group.exact=... read" clause here; a single-suffix deployment only has
+# one group and should delete the second clause below.
 #
 # Placeholders (substituted by the build script before this file is applied):
-#   __DB_DN__        - the olcDatabase={n}mdb,cn=config entry for cn=accesslog
-#   __SERVICE_DN__   - a JIM service account DN allowed to read it
-#   __SERVICE_DN_2__ - a second JIM service account DN (delete this clause,
-#                      and the "by dn.exact=... read" it belongs to, for a
-#                      single-suffix deployment)
+#   __DB_DN__          - the olcDatabase={n}mdb,cn=config entry for cn=accesslog
+#   __JIM_GROUP_DN__   - a suffix's cn=jim,ou=Services,<suffix> group DN
+#   __JIM_GROUP_DN_2__ - a second suffix's cn=jim group DN (delete this
+#                        clause, and the "by group.exact=... read" it belongs
+#                        to, for a single-suffix deployment)
 dn: __DB_DN__
 changetype: modify
 replace: olcAccess
-olcAccess: {0}to * by dn.exact="__SERVICE_DN__" read by dn.exact="__SERVICE_DN_2__" read by * none
+olcAccess: {0}to * by group.exact="__JIM_GROUP_DN__" read by group.exact="__JIM_GROUP_DN_2__" read by * none

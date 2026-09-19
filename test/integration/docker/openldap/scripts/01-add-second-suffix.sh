@@ -232,6 +232,13 @@ objectClass: simpleSecurityObject
 cn: svc-jim
 description: Delegated account JIM's Connected Systems bind as (#1715). Not for interactive or administrative use.
 userPassword: ${HASHED_SVC_JIM_PW}
+
+dn: cn=jim,ou=Services,dc=glitterband,dc=local
+objectClass: groupOfNames
+cn: jim
+description: JIM service accounts permitted to manage dc=glitterband,dc=local (#1715). Membership, not the ACL, controls which accounts this grants.
+member: cn=svc-jim,ou=Services,dc=glitterband,dc=local
+member: cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local
 LDIF
 
 echo "[openldap-init] Glitterband base entries loaded"
@@ -304,13 +311,16 @@ fi
 # Dockerfile): the same files are published verbatim in
 # docs/connectors/jim-ldap-connector.md as the customer recipe, so the lab
 # runs exactly what customers are told to set up. Templated with
-# placeholders substituted here via sed; applied once all three databases'
-# DNs (Yellowstone, Glitterband, accesslog) and both service accounts are
-# known. This lives in cn=config, which the snapshot images preserve, so
-# there is nothing for start-openldap.sh to reconcile at container start.
+# placeholders substituted here via sed; applied once both suffixes' cn=jim
+# groups (created above, in the bootstrap LDIF and this script's Glitterband
+# block) and all three database DNs (Yellowstone, Glitterband, accesslog) are
+# known. Access is granted to each suffix's cn=jim group, not to an
+# individual service account's DN, so this lives in cn=config, which the
+# snapshot images preserve, so there is nothing for start-openldap.sh to
+# reconcile at container start.
 ACL_DIR="/acl"
-YELLOWSTONE_SVC_DN="cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
-GLITTERBAND_SVC_DN="cn=svc-jim,ou=Services,dc=glitterband,dc=local"
+YELLOWSTONE_GROUP_DN="cn=jim,ou=Services,dc=yellowstone,dc=local"
+GLITTERBAND_GROUP_DN="cn=jim,ou=Services,dc=glitterband,dc=local"
 
 # Applies an acl/*.ldif template, substituting placeholders and binding as
 # the given identity. Two different binds are needed across these files:
@@ -339,23 +349,21 @@ if [ -n "$YELLOWSTONE_DB_DN" ] && [ -n "$GLITTERBAND_DB_DN" ] && [ -n "$ACCESSLO
     echo "[openldap-init] Applying JIM service account access control (Yellowstone)..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-service-account-access.ldif" \
         "s#__DB_DN__#$YELLOWSTONE_DB_DN#g" \
-        "s#__SUFFIX__#dc=yellowstone,dc=local#g" \
-        "s#__SERVICE_DN__#$YELLOWSTONE_SVC_DN#g"
+        "s#__SUFFIX__#dc=yellowstone,dc=local#g"
 
     echo "[openldap-init] Applying JIM service account access control (Glitterband)..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-service-account-access.ldif" \
         "s#__DB_DN__#$GLITTERBAND_DB_DN#g" \
-        "s#__SUFFIX__#dc=glitterband,dc=local#g" \
-        "s#__SERVICE_DN__#$GLITTERBAND_SVC_DN#g"
+        "s#__SUFFIX__#dc=glitterband,dc=local#g"
 
     echo "[openldap-init] Applying JIM frontend (rootDSE/subschema) access control..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-frontend-access.ldif"
 
-    echo "[openldap-init] Applying JIM accesslog access control (both service accounts)..."
+    echo "[openldap-init] Applying JIM accesslog access control (both suffixes' groups)..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-accesslog-access.ldif" \
         "s#__DB_DN__#$ACCESSLOG_DB_DN#g" \
-        "s#__SERVICE_DN_2__#$GLITTERBAND_SVC_DN#g" \
-        "s#__SERVICE_DN__#$YELLOWSTONE_SVC_DN#g"
+        "s#__JIM_GROUP_DN_2__#$GLITTERBAND_GROUP_DN#g" \
+        "s#__JIM_GROUP_DN__#$YELLOWSTONE_GROUP_DN#g"
 
     echo "[openldap-init] Applying JIM password policy entries (Yellowstone)..."
     apply_ldif_template "cn=admin,dc=yellowstone,dc=local" "$DATA_ADMIN_PW" "jim-password-policy.ldif" \
