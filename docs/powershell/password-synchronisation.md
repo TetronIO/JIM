@@ -70,6 +70,8 @@ In the default and `-All` parameter sets, one `PSCustomObject` per queued change
 | `MetaverseObjectTypePluralName` | Its Metaverse Object Type's plural name, which is what a link to it is built from. |
 | `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
 | `Status` | `Pending`, `Delivering`, `Parked`, `Expired` or `Cancelled`. `Delivering` is momentary: the Password Delivery Service is writing the change to the Connected System right now. |
+| `Origin` | `Explicit` (an administrator's named set), `Propagated` (JIM carried it to every configured system after the person's own password change), or `Provisioned` (the first password for an account an export has just created). |
+| `SyncRuleId` | The Synchronisation Rule a `Provisioned` change generates its password from at each delivery attempt. `$null` for every other origin. |
 | `Due` | Whether the Password Delivery Service would attempt this change now. A `Pending` change may be waiting out a retry backoff, or be `Held`, neither of which `Status` alone can tell you. Never `$true` while `Held` is. |
 | `Held` | Whether the change is waiting on Password Synchronisation being switched back on for its Connected System, rather than on JIM. A switched-off system accumulates changes instead of discarding them; switching it on delivers what accumulated. |
 | `FailureReason`, `TargetMessage` | How the last attempt failed, and the target's own words. Both `$null` for a change that has not been attempted. |

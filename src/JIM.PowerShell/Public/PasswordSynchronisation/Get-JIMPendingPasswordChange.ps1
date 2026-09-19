@@ -26,6 +26,12 @@ function Get-JIMPendingPasswordChange {
           can deliver it now.
         - Cancelled: an administrator stopped it. CancelledAt and CancelledByName record who and when.
 
+        Every change also carries an Origin: Explicit (an administrator's named set), Propagated (JIM carried
+        it to every configured system after the person's own password change), or Provisioned (the first
+        password for an account an export has just created). A Provisioned change carries SyncRuleId, the
+        Synchronisation Rule its password is generated from at each delivery attempt; SyncRuleId is $null for
+        every other origin.
+
         No password is returned, in any form. The queued value is encrypted in the database and has no
         representation on this or any other surface.
 
@@ -68,7 +74,8 @@ function Get-JIMPendingPasswordChange {
         Returns the queue's counts by state instead of its rows.
 
     .OUTPUTS
-        PSCustomObject per queued password change, or a single summary object with -Summary.
+        PSCustomObject per queued password change, or a single summary object with -Summary. Each row carries
+        Origin (Explicit, Propagated or Provisioned) and SyncRuleId (populated only for Provisioned).
 
     .EXAMPLE
         Get-JIMPendingPasswordChange -Summary
