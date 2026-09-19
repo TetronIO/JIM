@@ -120,3 +120,32 @@ public enum PendingPasswordChangeOrigin
     /// </summary>
     Provisioned = 2
 }
+
+/// <summary>
+/// What staging a <see cref="PendingPasswordChangeOrigin.Provisioned"/> change did, decided by the narrower
+/// conflict clause in <c>SyncRepository.PasswordOperations.cs</c>'s <c>StageProvisionedPasswordChangesAsync</c>
+/// (#1697). Unlike the ordinary coalescing UPSERT behind <see cref="PendingPasswordChangeOrigin"/>'s other two
+/// origins, a provisioned row is not allowed to overwrite the person's real password.
+/// </summary>
+public enum ProvisionedPasswordStagingDisposition
+{
+    /// <summary>
+    /// No row existed for the (Metaverse Object, Connected System) key, so the change was inserted as a new row.
+    /// </summary>
+    Inserted = 0,
+
+    /// <summary>
+    /// A row existed but carried nothing worth keeping (it was Expired, Cancelled, or itself Provisioned): the
+    /// new change's values replaced it in place. The row now in the table keeps its own id rather than taking
+    /// the change's, so a caller must adopt the row's id for anything it does with the change afterwards.
+    /// </summary>
+    Superseded = 1,
+
+    /// <summary>
+    /// A row existed carrying the person's real password (Pending, Delivering, or Parked and of Explicit or
+    /// Propagated origin) and won: nothing was written. The provisioned change is discarded, because that
+    /// password is already on its way, or waiting on a person to fix it, and must not be overwritten by the
+    /// account's throwaway first one.
+    /// </summary>
+    Coalesced = 2
+}

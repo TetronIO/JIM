@@ -7,6 +7,7 @@ using JIM.Application.Services;
 using JIM.Application.Staging;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -618,7 +619,7 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name);
                             }
                         }
                         catch (OperationCanceledException)
@@ -1198,7 +1199,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, unresolvedReferenceNotes);
+                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, unresolvedReferenceNotes);
             }
 
             processedCount += batch.Count;
@@ -1318,7 +1319,7 @@ public class ExportExecutionServer
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult { ClassMembershipRefusedCount = batchRefused };
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1601,6 +1602,10 @@ public class ExportExecutionServer
     /// a single SaveChanges for all CSO updates.
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
+    /// <param name="connectedSystemName">
+    /// The Connected System's name, carried onto the parent Activity a provisioned password change stages
+    /// (#1697), so the queue page and the Activity list can name the target without a join.
+    /// </param>
     /// <param name="unresolvedReferenceNotes">
     /// Per Pending Export id, the message describing the references it could not write this run because
     /// the referenced object has no Connected System Object in the target (issue #1398), built by
@@ -1614,6 +1619,7 @@ public class ExportExecutionServer
         ExportExecutionResult result,
         ISyncRepository repository,
         TimeSpan initialPasswordTimeToLive,
+        string connectedSystemName,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
     {
         var exportsToUpdate = new List<PendingExport>();
@@ -1768,7 +1774,7 @@ public class ExportExecutionServer
         // record work against an account JIM could not yet address.
         if (provisionedAccounts.Count > 0)
         {
-            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository, initialPasswordTimeToLive);
+            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository, initialPasswordTimeToLive, connectedSystemName);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
@@ -1781,7 +1787,9 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Records that this batch's newly provisioned accounts are owed an initial password (issue #1121).
+    /// Records that this batch's newly provisioned accounts are owed a first password (issue #1121, #1697): one
+    /// row on the queued password pipeline per account, delivered by the Password Delivery Service rather than
+    /// here.
     /// <para>
     /// Staged, not delivered. Setting a password is a round trip to the Connected System, and doing it here
     /// would put a second network call inside the loop that is persisting the results of one that has already
@@ -1791,7 +1799,8 @@ public class ExportExecutionServer
     /// <para>
     /// Which rules ask for a password is read now rather than stamped onto the export when it was staged, so
     /// that switching the feature on reaches work already queued, and so that a deployment not using it writes
-    /// no rows at all.
+    /// no rows at all. A live user-set or propagated password for the same person and system wins over a
+    /// provisioned row: the queue's own coalescing decides that, not this method.
     /// </para>
     /// <para>
     /// Failure is contained but not swallowed. The accounts exist in the Connected System and their exports are
@@ -1805,7 +1814,8 @@ public class ExportExecutionServer
         List<PendingExport> provisionedAccounts,
         ExportExecutionResult result,
         ISyncRepository repository,
-        TimeSpan initialPasswordTimeToLive)
+        TimeSpan initialPasswordTimeToLive,
+        string connectedSystemName)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("StageInitialPasswords")
             .SetTag("count", provisionedAccounts.Count);
@@ -1813,7 +1823,7 @@ public class ExportExecutionServer
         // Declared out here so the failure count below is the number of accounts genuinely owed a password,
         // once that is known. A failure in the lookup itself leaves it null, and every provisioned account in
         // the batch is reported as unrecorded because JIM cannot tell which of them needed recording.
-        List<PendingInitialPassword>? staging = null;
+        List<PendingPasswordChange>? staging = null;
         try
         {
             var provisioningRuleIds = provisionedAccounts
@@ -1825,26 +1835,102 @@ public class ExportExecutionServer
             if (rulesAskingForAPassword.Count == 0)
                 return;
 
-            staging = provisionedAccounts
+            var eligible = provisionedAccounts
                 .Where(pe => rulesAskingForAPassword.Contains(pe.ProvisioningSyncRuleId!.Value))
-                .Select(pe => new PendingInitialPassword
-                {
-                    ConnectedSystemObjectId = pe.ConnectedSystemObject!.Id,
-                    ConnectedSystemId = pe.ConnectedSystemId,
-                    SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
-                    Status = PendingInitialPasswordStatus.Pending,
-                    CreatedAt = DateTime.UtcNow,
-                    ExpiresAt = DateTime.UtcNow.Add(initialPasswordTimeToLive)
-                })
                 .ToList();
+
+            if (eligible.Count == 0)
+                return;
+
+            var now = DateTime.UtcNow;
+            staging = new List<PendingPasswordChange>(eligible.Count);
+            var unaddressableCount = 0;
+
+            foreach (var pe in eligible)
+            {
+                var metaverseObjectId = pe.ConnectedSystemObject!.MetaverseObjectId;
+                if (metaverseObjectId == null)
+                {
+                    // The queue's coalescing key is (Metaverse Object, Connected System); an account with no
+                    // Metaverse Object could never be found again to deliver, supersede or expire.
+                    unaddressableCount++;
+                    Log.Error("StageInitialPasswordsForBatchAsync: Connected System Object {CsoId} on Connected System {ConnectedSystemId} " +
+                        "was provisioned but has no Metaverse Object; its initial password cannot be queued",
+                        pe.ConnectedSystemObject!.Id, pe.ConnectedSystemId);
+                    continue;
+                }
+
+                staging.Add(new PendingPasswordChange
+                {
+                    Id = Guid.NewGuid(),
+                    MetaverseObjectId = metaverseObjectId.Value,
+                    ConnectedSystemId = pe.ConnectedSystemId,
+                    ConnectedSystemObjectId = pe.ConnectedSystemObject!.Id,
+                    SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
+                    Origin = PendingPasswordChangeOrigin.Provisioned,
+                    EncryptedPassword = null,
+                    // ExpiryBehaviour is left at its default: a placeholder, since a provisioned row generates
+                    // its password at delivery time from the rule's own settings, which are read fresh then.
+                    Status = PendingPasswordChangeStatus.Pending,
+                    CreatedAt = now,
+                    ExpiresAt = now.Add(initialPasswordTimeToLive),
+                    ActivityId = Guid.NewGuid()
+                });
+            }
+
+            result.InitialPasswordStagingFailedCount += unaddressableCount;
 
             if (staging.Count == 0)
                 return;
 
-            await repository.StageInitialPasswordsAsync(staging);
-            result.InitialPasswordsStagedCount += staging.Count;
+            // Looked up by the id each change was offered under: a Superseded outcome mutates the change's own
+            // Id to the row it took over (#1697), so RequestedId is the only key still pointing back here.
+            var byRequestedId = staging.ToDictionary(c => c.Id);
+
+            var outcomes = await repository.StageProvisionedPasswordChangesAsync(staging);
+
+            var activities = new List<Activity>(outcomes.Count);
+            var stagedCount = 0;
+            foreach (var outcome in outcomes)
+            {
+                // A row already there carries the person's real password and won (#1697): nothing was written,
+                // and that row already has its own Activity, so this attempt gets none.
+                if (outcome.Disposition == ProvisionedPasswordStagingDisposition.Coalesced)
+                    continue;
+
+                var change = byRequestedId[outcome.RequestedId];
+                stagedCount++;
+
+                // A parent Activity for the change, mirroring what PasswordSynchronisationServer.SetPasswordAsync
+                // writes for an administrator's own set, but system-initiated and already complete: nobody is
+                // waiting at a screen for this to finish, because delivery happens on a later, unrelated pass.
+                activities.Add(new Activity
+                {
+                    Id = change.ActivityId,
+                    TargetType = ActivityTargetType.PasswordSynchronisation,
+                    TargetOperationType = ActivityTargetOperationType.SetPassword,
+                    TargetContext = nameof(PendingPasswordChangeOrigin.Provisioned),
+                    TargetName = connectedSystemName,
+                    MetaverseObjectId = change.MetaverseObjectId,
+                    ConnectedSystemId = change.ConnectedSystemId,
+                    ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+                    InitiatedByType = ActivityInitiatorType.System,
+                    InitiatedByName = "System",
+                    Status = ActivityStatus.Complete,
+                    Created = now,
+                    Executed = now,
+                    ExecutionTime = TimeSpan.Zero,
+                    TotalActivityTime = TimeSpan.Zero,
+                    Message = $"Initial password queued for delivery to {connectedSystemName}."
+                });
+            }
+
+            if (activities.Count > 0)
+                await repository.CreateActivitiesAsync(activities);
+
+            result.InitialPasswordsStagedCount += stagedCount;
             Log.Debug("StageInitialPasswordsForBatchAsync: Staged initial passwords for {Count} newly provisioned accounts on Connected System {ConnectedSystemId}",
-                staging.Count, provisionedAccounts[0].ConnectedSystemId);
+                stagedCount, provisionedAccounts[0].ConnectedSystemId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

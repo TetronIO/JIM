@@ -1,11 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace JIM.PostgresData.Repositories;
@@ -68,6 +70,147 @@ public partial class SyncRepository
                 BulkSqlHelpers.NullableParam(change.EnableAccount, NpgsqlTypes.NpgsqlDbType.Boolean),
                 BulkSqlHelpers.NullableParam(change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
+    {
+        var staging = changes.ToList();
+        var outcomes = new List<ProvisionedPasswordStagingOutcome>(staging.Count);
+        if (staging.Count == 0)
+            return outcomes;
+
+        foreach (var change in staging.Where(c => c.Id == Guid.Empty))
+            change.Id = Guid.NewGuid();
+
+        // The same coalescing UPSERT as QueuePasswordChangesAsync, one statement per row, but with a narrower
+        // conflict clause: a provisioned row's first password must never overwrite the person's real one. An
+        // existing Pending, Delivering or Parked Explicit/Propagated row is that real password, already on its
+        // way or waiting on a person to fix it, so it wins and the offered change is discarded (no row
+        // returned). An Expired or Cancelled row carries a dead password that must not block the account's
+        // first one, and an existing Provisioned row means the account was deleted and re-provisioned, so in
+        // both cases the new row wins.
+        //
+        // Run through raw Npgsql rather than EF's Database.SqlQueryRaw: EF composes a SqlQuery as a subquery
+        // (SELECT s."Value" FROM (<sql>) AS s), and PostgreSQL refuses a data-modifying statement inside a
+        // subquery (a data-modifying CTE is only allowed at the statement's top level), so an
+        // INSERT ... ON CONFLICT ... RETURNING run that way fails at runtime against real PostgreSQL even
+        // though it type-checks and the in-memory tests pass. ExecuteScalarAsync runs the statement directly:
+        // it returns the returned "Id" when a row was inserted or taken over, and null when the WHERE clause
+        // above filtered the conflicting update out.
+        //
+        // Column lists come from the constants so they cannot drift from the model; the parameter order below
+        // MUST match PendingPasswordChangeBulkColumns.PendingPasswordChanges exactly.
+        var columns = BulkSqlHelpers.ToQuotedList(PendingPasswordChangeBulkColumns.PendingPasswordChanges);
+        var paramNames = Enumerable.Range(0, PendingPasswordChangeBulkColumns.PendingPasswordChanges.Length)
+            .Select(i => $"p{i}")
+            .ToArray();
+        var placeholders = string.Join(", ", paramNames.Select(p => "@" + p));
+        var assignments = string.Join(", ", PendingPasswordChangeBulkColumns.PendingPasswordChangesSupersedeUpdate
+            .Select(c => $"\"{c}\" = EXCLUDED.\"{c}\""));
+
+        var sql = $"""
+            INSERT INTO "PendingPasswordChanges" ({columns}) VALUES ({placeholders})
+            ON CONFLICT ("MetaverseObjectId", "ConnectedSystemId") DO UPDATE SET {assignments}
+            WHERE "PendingPasswordChanges"."Origin" = @origin
+               OR "PendingPasswordChanges"."Status" IN (@expired, @cancelled)
+            RETURNING "Id"
+            """;
+
+        // Releases a propagated change that was held waiting for this exact account to come into existence: the
+        // account now does (this batch is staging its first password), so the change is due immediately rather
+        // than waiting out whatever backoff it was under. A plain top-level UPDATE, so EF's own
+        // ExecuteSqlRawAsync (which does not wrap this in a subquery) is fine for it.
+        const string releaseWaitingSql = """
+            UPDATE "PendingPasswordChanges" SET "NextRetryAt" = NULL
+            WHERE "MetaverseObjectId" = {0} AND "ConnectedSystemId" = {1} AND "Status" = {2} AND "NextRetryAt" IS NOT NULL
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        foreach (var change in staging)
+        {
+            var requestedId = change.Id;
+
+            await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+            command.Parameters.Add(new NpgsqlParameter(paramNames[0], change.Id));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[1], change.MetaverseObjectId));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[2], change.ConnectedSystemId));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[3], NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)change.ConnectedSystemObjectId ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[4], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.EncryptedPassword ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[5], (int)change.ExpiryBehaviour));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[6], (int)change.Status));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[7], NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)(int?)change.FailureReason ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[8], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.TargetMessage ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[9], change.AttemptCount));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[10], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.NextRetryAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[11], change.CreatedAt));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[12], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.LastAttemptedAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[13], change.ExpiresAt));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[14], change.ActivityId));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[15], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.CancelledAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[16], NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)change.CancelledById ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[17], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.CancelledByName ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[18], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.ClaimedAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[19], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.ClaimedBy ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[20], (int)change.Origin));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[21], NpgsqlTypes.NpgsqlDbType.Boolean) { Value = (object?)change.EnableAccount ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[22], NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)change.SyncRuleId ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter("origin", (int)PendingPasswordChangeOrigin.Provisioned));
+            command.Parameters.Add(new NpgsqlParameter("expired", (int)PendingPasswordChangeStatus.Expired));
+            command.Parameters.Add(new NpgsqlParameter("cancelled", (int)PendingPasswordChangeStatus.Cancelled));
+
+            var returned = await command.ExecuteScalarAsync();
+
+            if (returned is null)
+            {
+                await _context.Database.ExecuteSqlRawAsync(releaseWaitingSql,
+                    change.MetaverseObjectId, change.ConnectedSystemId, (int)PendingPasswordChangeStatus.Pending);
+
+                outcomes.Add(new ProvisionedPasswordStagingOutcome
+                {
+                    RowId = Guid.Empty,
+                    RequestedId = requestedId,
+                    Disposition = ProvisionedPasswordStagingDisposition.Coalesced
+                });
+                continue;
+            }
+
+            var returnedId = (Guid)returned;
+            if (returnedId != requestedId)
+                // The existing row's id is the one now in the table; the caller must hold that rather than the
+                // id it offered, or a later write against this change would target a row that no longer exists.
+                change.Id = returnedId;
+
+            outcomes.Add(new ProvisionedPasswordStagingOutcome
+            {
+                RowId = returnedId,
+                RequestedId = requestedId,
+                Disposition = returnedId == requestedId
+                    ? ProvisionedPasswordStagingDisposition.Inserted
+                    : ProvisionedPasswordStagingDisposition.Superseded
+            });
+        }
+
+        return outcomes;
+    }
+
+    /// <inheritdoc />
+    public async Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
+    {
+        if (activities.Count == 0)
+            return;
+
+        _context.Activities.AddRange(activities);
+        await _context.SaveChangesAsync();
+
+        // Detached so a run-long tracker does not accumulate these: callers set no navigations, so nothing else
+        // needs tracking on their account, and the Worker's DbContext otherwise lives for the whole run profile
+        // execution.
+        foreach (var activity in activities)
+            _context.Entry(activity).State = EntityState.Detached;
     }
 
     /// <inheritdoc />

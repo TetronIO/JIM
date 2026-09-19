@@ -697,6 +697,34 @@ public interface ISyncRepository
     Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes);
 
     /// <summary>
+    /// Offers <see cref="PendingPasswordChangeOrigin.Provisioned"/> changes to the queue, one per newly
+    /// provisioned account, coalescing on the same (Metaverse Object, Connected System) key as
+    /// <see cref="QueuePasswordChangesAsync"/> but under a narrower conflict clause (#1697): a provisioned row's
+    /// first password must never overwrite the person's real one.
+    /// <para>
+    /// An existing row is replaced only when it carries nothing worth keeping: it is itself
+    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted and re-provisioned), or it
+    /// is <see cref="PendingPasswordChangeStatus.Expired"/> or <see cref="PendingPasswordChangeStatus.Cancelled"/>
+    /// (a dead password that must not block the account's first one). Anything else, a Pending, Delivering or
+    /// Parked row of Explicit or Propagated origin, is the person's real password already on its way, or waiting
+    /// on a person to fix it, and wins: the offered change is discarded.
+    /// </para>
+    /// <para>
+    /// A discard releases any propagated row found waiting on this exact account: its
+    /// <see cref="PendingPasswordChange.NextRetryAt"/> is cleared so a change that was held for the account to
+    /// exist is attempted on the very next delivery pass, now that it does.
+    /// </para>
+    /// </summary>
+    Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes);
+
+    /// <summary>
+    /// Creates Activities in one batch, for callers recording several at once (#1697: one parent Activity per
+    /// provisioned password change staged in a batch). No navigation properties are expected to be set, so this
+    /// walks nothing beyond the Activities themselves.
+    /// </summary>
+    Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities);
+
+    /// <summary>
     /// The password changes owed to a Connected System that are due for a delivery attempt now: pending, and
     /// either never attempted or past their scheduled retry. Oldest first, capped at <paramref name="maximum"/>.
     /// A read with no side effect; delivery itself goes through <see cref="ClaimDuePasswordChangesAsync"/>.

@@ -64,11 +64,11 @@ public class SyncRepository : ISyncRepository
     public string? FailActivityMessageUpdateFor { get; set; }
 
     /// <summary>
-    /// When set, <see cref="StageInitialPasswordsAsync"/> throws it. Lets tests prove that failing to record
-    /// that a newly provisioned account is owed a password leaves the export that created the account
+    /// When set, <see cref="StageProvisionedPasswordChangesAsync"/> throws it. Lets tests prove that failing to
+    /// record that a newly provisioned account is owed a password leaves the export that created the account
     /// successful, which is the whole reason the password is staged rather than delivered inline.
     /// </summary>
-    public Exception? FailInitialPasswordStagingWith { get; set; }
+    public Exception? FailProvisionedPasswordStagingWith { get; set; }
 
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
@@ -1475,9 +1475,6 @@ public class SyncRepository : ISyncRepository
 
     public Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
     {
-        if (FailInitialPasswordStagingWith != null)
-            throw FailInitialPasswordStagingWith;
-
         // One outstanding record per account, matching the unique index in the real schema: two would mean two
         // deliveries racing to set a password on the same object. The filter stays lazy on purpose, so that it
         // is re-evaluated as the loop adds, and two records for the same account in one batch dedupe against
@@ -2922,6 +2919,90 @@ public class SyncRepository : ISyncRepository
 
             _pendingPasswordChanges[change.Id] = change;
         }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
+    {
+        if (FailProvisionedPasswordStagingWith != null)
+            throw FailProvisionedPasswordStagingWith;
+
+        var outcomes = new List<ProvisionedPasswordStagingOutcome>(changes.Count);
+
+        foreach (var change in changes)
+        {
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            var requestedId = change.Id;
+
+            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema
+            // and the narrower conflict clause the real repository applies for a provisioned change (#1697): the
+            // existing row wins unless it carries nothing worth keeping.
+            var existing = _pendingPasswordChanges.Values.SingleOrDefault(c =>
+                c.MetaverseObjectId == change.MetaverseObjectId && c.ConnectedSystemId == change.ConnectedSystemId);
+
+            if (existing != null && !CanBeSupersededByAProvisionedChange(existing))
+            {
+                // The existing row is the person's real password, already on its way or waiting on a person to
+                // fix it: nothing is written, and a propagated row held waiting on this exact account is
+                // released now that the account exists.
+                if (existing.Status == PendingPasswordChangeStatus.Pending && existing.NextRetryAt != null)
+                    existing.NextRetryAt = null;
+
+                outcomes.Add(new ProvisionedPasswordStagingOutcome
+                {
+                    RowId = Guid.Empty,
+                    RequestedId = requestedId,
+                    Disposition = ProvisionedPasswordStagingDisposition.Coalesced
+                });
+                continue;
+            }
+
+            if (existing != null)
+            {
+                // The row now in the table keeps its own id rather than taking the change's, matching the real
+                // repository, so the caller must adopt it for anything it does with the change afterwards.
+                existing.Supersede(change);
+                change.Id = existing.Id;
+
+                outcomes.Add(new ProvisionedPasswordStagingOutcome
+                {
+                    RowId = existing.Id,
+                    RequestedId = requestedId,
+                    Disposition = ProvisionedPasswordStagingDisposition.Superseded
+                });
+                continue;
+            }
+
+            _pendingPasswordChanges[change.Id] = change;
+            outcomes.Add(new ProvisionedPasswordStagingOutcome
+            {
+                RowId = change.Id,
+                RequestedId = requestedId,
+                Disposition = ProvisionedPasswordStagingDisposition.Inserted
+            });
+        }
+
+        return Task.FromResult(outcomes);
+    }
+
+    /// <summary>
+    /// Whether an existing queue row carries nothing worth keeping against a provisioned change trying to take
+    /// it over (#1697): itself <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted
+    /// and re-provisioned), or <see cref="PendingPasswordChangeStatus.Expired"/> /
+    /// <see cref="PendingPasswordChangeStatus.Cancelled"/> (a dead password). Anything else is the person's real
+    /// password and must win.
+    /// </summary>
+    private static bool CanBeSupersededByAProvisionedChange(PendingPasswordChange existing) =>
+        existing.Origin == PendingPasswordChangeOrigin.Provisioned
+        || existing.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled;
+
+    public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
+    {
+        foreach (var activity in activities)
+            _activities[activity.Id] = activity;
 
         return Task.CompletedTask;
     }

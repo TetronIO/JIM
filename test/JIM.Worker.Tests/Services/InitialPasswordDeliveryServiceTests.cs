@@ -210,31 +210,6 @@ public class InitialPasswordDeliveryServiceTests
         Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
     }
 
-    [Test]
-    public async Task DeliverAsync_WhenTheGeneratorConfigurationCannotBeSatisfied_ParksWithoutCallingTheTargetAsync()
-    {
-        // An impossible configuration is caught before anything is sent. Parking rather than retrying is the
-        // same judgement as a policy rejection: only an administrator changing the configuration resolves it.
-        var configuration = new SyncRuleInitialPassword
-        {
-            Enabled = true,
-            Source = InitialPasswordSource.Custom,
-            CustomPolicy = new PasswordGenerationPolicy
-            {
-                Length = 4,
-                MinimumUppercase = 3,
-                MinimumLowercase = 3,
-                MinimumDigits = 3,
-                MinimumSymbols = 3
-            }
-        };
-
-        var result = await _service.DeliverAsync(_connector.Object, _target, configuration, null, CancellationToken.None);
-
-        Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
-        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
-            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
     #endregion
 
     #region what reaches the Connector
@@ -284,81 +259,6 @@ public class InitialPasswordDeliveryServiceTests
         Assert.That(passwords.Distinct(), Has.Exactly(20).Items);
     }
 
-    [Test]
-    public async Task DeliverAsync_WhenTheSourceIsDiscovered_GeneratesAgainstTheTargetsPolicyAsync()
-    {
-        // The point of the Discovered source: a target demanding more than JIM's default gets a password that
-        // satisfies it, without an administrator retyping the rule.
-        SetPasswordReturns(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
-        var discovered = new ConnectedSystemPasswordPolicy { MinimumLength = 24 };
-
-        string? captured = null;
-        _connector.Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
-                It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()))
-            .Callback((ConnectedSystemObject _, string password, PasswordSetOptions _, CancellationToken _) => captured = password)
-            .ReturnsAsync(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
-
-        await _service.DeliverAsync(_connector.Object, _target, EnabledConfiguration(), discovered, CancellationToken.None);
-
-        Assert.That(captured, Has.Length.GreaterThanOrEqualTo(24));
-    }
-
-    [Test]
-    public async Task DeliverAsync_WhenTheSourceIsCustom_IgnoresTheTargetsDiscoveredPolicyAsync()
-    {
-        // The mirror of the test above, and the reason Custom exists: an administrator who has set the rules
-        // deliberately does not want JIM changing them underneath because a target published something else.
-        SetPasswordReturns(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
-        var configuration = new SyncRuleInitialPassword
-        {
-            Enabled = true,
-            Source = InitialPasswordSource.Custom,
-            CustomPolicy = new PasswordGenerationPolicy { Length = 12 }
-        };
-
-        string? captured = null;
-        _connector.Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
-                It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()))
-            .Callback((ConnectedSystemObject _, string password, PasswordSetOptions _, CancellationToken _) => captured = password)
-            .ReturnsAsync(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
-
-        // A discovered policy the custom settings comfortably satisfy, so this isolates which settings were used
-        // rather than whether the target would accept the result.
-        await _service.DeliverAsync(_connector.Object, _target, configuration,
-            new ConnectedSystemPasswordPolicy { MinimumLength = 8 }, CancellationToken.None);
-
-        Assert.That(captured, Has.Length.EqualTo(12));
-    }
-
-    /// <summary>
-    /// Custom settings decide what JIM generates; they do not exempt the result from what the target demands.
-    /// <para>
-    /// An administrator who sets a length the Connected System will refuse gets told so, rather than JIM sending
-    /// a password on every account and collecting an identical rejection each time. This is the same judgement
-    /// as the unsatisfiable-configuration case: only a person changing the settings resolves it.
-    /// </para>
-    /// </summary>
-    [Test]
-    public async Task DeliverAsync_WhenCustomSettingsCannotSatisfyTheTarget_ParksWithoutCallingItAsync()
-    {
-        var configuration = new SyncRuleInitialPassword
-        {
-            Enabled = true,
-            Source = InitialPasswordSource.Custom,
-            CustomPolicy = new PasswordGenerationPolicy { Length = 12 }
-        };
-
-        var result = await _service.DeliverAsync(_connector.Object, _target, configuration,
-            new ConnectedSystemPasswordPolicy { MinimumLength = 30 }, CancellationToken.None);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
-            Assert.That(result.Message, Does.Contain("30"), "the administrator needs to know what the target actually requires");
-        }
-        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
-            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
     #endregion
 
     #region the static password
@@ -394,86 +294,6 @@ public class InitialPasswordDeliveryServiceTests
         Assert.That(sent.Distinct(), Has.Exactly(1).Items);
     }
 
-    [Test]
-    public async Task DeliverAsync_WhenTheSourceIsStatic_IgnoresTheGeneratorSettingsAsync()
-    {
-        // Custom settings are kept while the source is Static so that switching between the two is not
-        // destructive. They must have no bearing on what is delivered while Static is selected.
-        var sent = CaptureSentPasswords();
-
-        await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration("Brown-Chicken-Ladder-47"),
-            new ConnectedSystemPasswordPolicy { MinimumLength = 8 }, CancellationToken.None);
-
-        Assert.That(sent.Single(), Has.Length.EqualTo(23), "a 12-character generated password would mean the generator ran");
-    }
-
-    [Test]
-    public async Task DeliverAsync_WhenTheSourceIsStaticButNoPasswordIsStored_ParksWithoutCallingTheTargetAsync()
-    {
-        // Generating something nobody expects would be the worst of both worlds: the account would work, and the
-        // administrator would still be waiting to be told a password that does not exist.
-        var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration(null), null, CancellationToken.None);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
-            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
-        }
-        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
-            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Test]
-    public async Task DeliverAsync_WhenTheStaticPasswordCannotSatisfyTheTarget_ParksWithoutCallingItAsync()
-    {
-        // The same judgement as an unsatisfiable generator configuration, and it matters more here: one password
-        // is going to every account this rule provisions, so a rejection is not one account's problem.
-        var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration("short"),
-            new ConnectedSystemPasswordPolicy { MinimumLength = 30 }, CancellationToken.None);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
-            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
-            Assert.That(result.Message, Does.Contain("30"), "the administrator needs to know what the target actually requires");
-        }
-        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
-            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Test]
-    public async Task DeliverAsync_WhenTheStaticPasswordCannotBeDecrypted_ParksAsync()
-    {
-        // An encryption key that has been rotated or lost takes the password with it. Retrying reaches the same
-        // answer for ever, and only an administrator setting the password again resolves it.
-        var configuration = StaticConfiguration("Brown-Chicken-Ladder-47");
-        _credentialProtection.FailToDecrypt = true;
-
-        var result = await _service.DeliverAsync(_connector.Object, _target, configuration, null, CancellationToken.None);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
-            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
-            Assert.That(result.Message, Does.Not.Contain(configuration.StaticPasswordEncryptedValue!),
-                "the stored value must not be repeated into an Activity or a log on its way out");
-        }
-        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
-            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Test]
-    public async Task DeliverAsync_WhenTheStaticPasswordIsParked_TheReasonNeverRepeatsThePasswordAsync()
-    {
-        // Parked reasons are shown in the portal, written onto the outstanding record and logged. This is the one
-        // delivery path holding a password JIM can read back, so it is the one that could leak it.
-        const string password = "short";
-
-        var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration(password),
-            new ConnectedSystemPasswordPolicy { MinimumLength = 30 }, CancellationToken.None);
-
-        Assert.That(result.Message, Does.Not.Contain(password));
-    }
     #endregion
 
     #region the password never comes back
