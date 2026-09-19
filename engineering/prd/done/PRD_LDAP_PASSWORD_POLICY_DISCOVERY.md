@@ -1,6 +1,6 @@
 # Password Policy Discovery for OpenLDAP and 389 Directory Server
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-19
 - **Author:** JayVDZ (PRD drafted via Claude Code)
 - **Issue:** [#1702](https://github.com/TetronIO/JIM/issues/1702)
@@ -130,7 +130,7 @@ The consequences for those deployments are the ones discovery exists to prevent:
 
 ## Decisions
 
-Both open questions were settled on 2026-09-19. Five further points where the code makes a requirement harder than written are recorded under Decisions in the [implementation plan](../../plans/doing/LDAP_PASSWORD_POLICY_DISCOVERY.md); requirement 4, Scenario 1 and Scenario 5 above were amended to match.
+Both open questions were settled on 2026-09-19. Five further points where the code makes a requirement harder than written are recorded under Decisions in the [implementation plan](../../plans/done/LDAP_PASSWORD_POLICY_DISCOVERY.md); requirement 4, Scenario 1 and Scenario 5 above were amended to match.
 
 1. **389 Directory Server is a first-class `LdapDirectoryType`.** Detection is one root DSE check, and the type is useful beyond passwords (its own changelog for delta import, its own concurrency characteristics), where the Connector already tunes per type. A probe under Generic would spend searches on every unknown directory and still leave 389 undistinguished elsewhere.
 2. **The API property is renamed outright, with no deprecated alias.** An alias is two names for one thing on the API surface, which is the vocabulary problem the surrounding work removed, and it needs a removal step nobody would schedule. The rename goes under Changed in the changelog.
