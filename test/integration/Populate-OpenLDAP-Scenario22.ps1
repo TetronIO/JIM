@@ -299,21 +299,39 @@ olcAccess: {1}$selfWriteMarker
     Write-Host "  OK Accounts may change their own userPassword on $databaseDN" -ForegroundColor Green
 }
 
-# A narrow read on cn=config for the provisioner: the database and overlay entries and the attributes
-# JIM's reader asks for, nothing else (no olcRootPW, no ACLs). This is what a customer would grant a
-# service account so JIM can tell which policy is the default for which database.
+# A narrow read on cn=config for the provisioner: the Yellowstone database's own subtree (its
+# database entry and the ppolicy overlay entry beneath it, since overlays are children of the
+# database they attach to), and only the attributes JIM's reader asks for, nothing else (no
+# olcRootPW, no ACLs). This is what a customer would grant a service account so JIM can tell which
+# policy is the default for which database.
+#
+# Scoped to $databaseDN, not the whole cn=config subtree: the lab's base image (#1715) now attaches
+# a default policy to BOTH suffix databases (Yellowstone and Glitterband share the same lab default,
+# pwdMinLength 7), and this fixture then repoints only Yellowstone's to a stricter one (pwdMinLength
+# 12). A grant covering the whole of cn=config would let the provisioner also read Glitterband's
+# olcOverlay=ppolicy entry, and JIM's override heuristic treats "two databases with different
+# default policies" as evidence an override exists (see docs/connectors/jim-ldap-connector.md >
+# Password policy discovery) - which would make Step 5's later assertion see Present before Step 6
+# ever sets a pwdPolicySubentry, for a reason that has nothing to do with what Step 6 is testing.
 $configDatabaseDN = "olcDatabase={0}config,cn=config"
 if (Test-Scenario22AccessRulePresent -DatabaseDN $configDatabaseDN -Marker $ProvisionerBindDN) {
     Write-Host "  Provisioner read access already granted on cn=config" -ForegroundColor Gray
 }
 else {
+    # Two rules, not one: JIM's reader issues its search with "cn=config" itself as the base (the
+    # rootDSE's configContext) and Subtree scope, and a search whose declared base is not covered by
+    # any olcAccess at all is refused outright before candidates are even filtered, regardless of
+    # what is readable underneath. A bare `search` grant on the literal "cn=config" entry (never
+    # matched by the reader's own filter, so nothing about it is ever returned) satisfies that; the
+    # actual data stays governed by the narrower `read` grant on $databaseDN below.
     Invoke-Scenario22Ldap -Tool ldapmodify -BindDN $configAdminDN -BindPassword $configAdminPassword -What "cn=config read olcAccess" -Ldif @"
 dn: $configDatabaseDN
 changetype: modify
 add: olcAccess
-olcAccess: {0}to dn.subtree="cn=config" attrs=entry,objectClass,olcDatabase,olcSuffix,olcOverlay,olcPPolicyDefault,olcPPolicyCheckModule by dn.exact="$ProvisionerBindDN" read by * break
+olcAccess: {0}to dn.exact="cn=config" by dn.exact="$ProvisionerBindDN" search by * break
+olcAccess: {1}to dn.subtree="$databaseDN" attrs=entry,objectClass,olcDatabase,olcSuffix,olcOverlay,olcPPolicyDefault,olcPPolicyCheckModule by dn.exact="$ProvisionerBindDN" read by * break
 "@
-    Write-Host "  OK Provisioner granted a narrow read on cn=config (database, overlay and policy-default attributes)" -ForegroundColor Green
+    Write-Host "  OK Provisioner granted search on cn=config (base resolution) and a narrow read on $databaseDN (database, overlay and policy-default attributes)" -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -370,6 +388,33 @@ userPassword: $ProbePassword
 
 "@
 Write-Host "  OK ou=Policies, $policyDN, $ProvisionerBindDN and $ProbeBindDN present" -ForegroundColor Green
+
+# The lab's base image (docker/openldap/scripts/01-add-second-suffix.sh, #1715) now creates its own
+# cn=default,ou=Policies,<suffix> entry on every container (pwdMinLength 7, matching the Samba domain
+# minimum), so the ldapadd above tolerates "already exists" on $policyDN and moves on without touching
+# it, leaving the lab's baseline values in place rather than this fixture's stricter ones. Force this
+# fixture's values with an idempotent replace, the same pattern Step 2 already uses for
+# olcPPolicyDefault: harmless (a no-op) on a genuinely fresh entry the add just created, and the fix on
+# a directory that already carried the lab's own default policy.
+Invoke-Scenario22Ldap -Tool ldapmodify -BindDN $dataAdminDN -BindPassword $dataAdminPassword -What "policy values (idempotent)" -Ldif @"
+dn: $policyDN
+changetype: modify
+replace: description
+description: Scenario 22 default password policy (minimum length 12, history 5, maximum age 90 days)
+-
+replace: pwdMinLength
+pwdMinLength: 12
+-
+replace: pwdInHistory
+pwdInHistory: 5
+-
+replace: pwdMaxAge
+pwdMaxAge: 7776000
+-
+replace: pwdCheckQuality
+pwdCheckQuality: 2
+"@
+Write-Host "  OK $policyDN carries Scenario 22's values (pwdMinLength 12, pwdInHistory 5, pwdMaxAge 7776000, pwdCheckQuality 2)" -ForegroundColor Green
 
 # Reset the provisioner's password to its known value so a re-run still starts from the same place (the
 # probe user was recreated above, so it needs no reset). The rootdn is exempt from pwdInHistory, so

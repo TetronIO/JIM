@@ -51,24 +51,6 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Load the ppolicy module (issue #1715). Its schema (the pwdPolicy object
-# class and pwd* attributes) is registered dynamically when the module is
-# loaded into a running slapd, which is why this happens here rather than in
-# the bootstrap LDIF: Bitnami loads /ldifs/* through its own ldap_initialize()
-# step, before slapd is ever started with our modules configured, so a
-# pwdPolicy entry in that LDIF would fail with "object class not defined".
-# Loading it before the schema extensions and the Glitterband/policy work
-# below means every later step in this script can safely add pwdPolicy
-# entries and the ppolicy overlay on either suffix.
-echo "[openldap-init] Loading ppolicy module..."
-ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<PPOLICYMOD
-dn: cn=module{1},cn=config
-changetype: modify
-add: olcModuleLoad
-olcModuleLoad: ppolicy.so
-PPOLICYMOD
-echo "[openldap-init] ppolicy module loaded"
-
 # Load custom JIM schema extensions.
 # Defines jimGroup (SUP groupOfNames STRUCTURAL) with additional MAY attributes:
 #   - mail (from cosine schema, already loaded by Bitnami)
@@ -371,6 +353,22 @@ PPOVERLAY
     echo "[openldap-init] ppolicy overlay added to $DB_DN"
 done
 
+# slapd assigns the new overlay an ordinal RDN (olcOverlay={0}ppolicy,...) on add; the unindexed
+# name used above is only accepted there because slapd is resolving an X-ORDERED RDN for an ADD.
+# A later ldapmodify against the same unindexed name gets "No such object (32)", so look each
+# overlay's real DN up by its distinguishing objectClass rather than guessing the index.
+YELLOWSTONE_PPOLICY_OVERLAY_DN=""
+GLITTERBAND_PPOLICY_OVERLAY_DN=""
+if [ -n "$YELLOWSTONE_DB_DN" ]; then
+    YELLOWSTONE_PPOLICY_OVERLAY_DN=$(ldapsearch -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" \
+        -b "$YELLOWSTONE_DB_DN" "(objectClass=olcPPolicyConfig)" dn -LLL 2>/dev/null | grep "^dn:" | head -1 | sed 's/^dn: //')
+fi
+if [ -n "$GLITTERBAND_DB_DN" ]; then
+    GLITTERBAND_PPOLICY_OVERLAY_DN=$(ldapsearch -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" \
+        -b "$GLITTERBAND_DB_DN" "(objectClass=olcPPolicyConfig)" dn -LLL 2>/dev/null | grep "^dn:" | head -1 | sed 's/^dn: //')
+fi
+echo "[openldap-init] ppolicy overlay DNs: Yellowstone=$YELLOWSTONE_PPOLICY_OVERLAY_DN Glitterband=$GLITTERBAND_PPOLICY_OVERLAY_DN"
+
 # Apply the JIM service account's access control and password policy (issue
 # #1715). Single-sourced from acl/*.ldif (copied into the image by the
 # Dockerfile): the same files are published verbatim in
@@ -413,7 +411,8 @@ apply_ldif_template() {
         | ldapmodify -x -H "$LDAP_URI" -D "$bind_dn" -w "$bind_pw"
 }
 
-if [ -n "$YELLOWSTONE_DB_DN" ] && [ -n "$GLITTERBAND_DB_DN" ] && [ -n "$ACCESSLOG_DB_DN" ]; then
+if [ -n "$YELLOWSTONE_DB_DN" ] && [ -n "$GLITTERBAND_DB_DN" ] && [ -n "$ACCESSLOG_DB_DN" ] \
+    && [ -n "$YELLOWSTONE_PPOLICY_OVERLAY_DN" ] && [ -n "$GLITTERBAND_PPOLICY_OVERLAY_DN" ]; then
     echo "[openldap-init] Applying JIM service account access control (Yellowstone)..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-service-account-access.ldif" \
         "s#__DB_DN__#$YELLOWSTONE_DB_DN#g" \
@@ -443,17 +442,17 @@ if [ -n "$YELLOWSTONE_DB_DN" ] && [ -n "$GLITTERBAND_DB_DN" ] && [ -n "$ACCESSLO
 
     echo "[openldap-init] Pointing ppolicy overlay's default policy (Yellowstone)..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-ppolicy-overlay.ldif" \
-        "s#__DB_DN__#$YELLOWSTONE_DB_DN#g" \
+        "s#__OVERLAY_DN__#$YELLOWSTONE_PPOLICY_OVERLAY_DN#g" \
         "s#__SUFFIX__#dc=yellowstone,dc=local#g"
 
     echo "[openldap-init] Pointing ppolicy overlay's default policy (Glitterband)..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-ppolicy-overlay.ldif" \
-        "s#__DB_DN__#$GLITTERBAND_DB_DN#g" \
+        "s#__OVERLAY_DN__#$GLITTERBAND_PPOLICY_OVERLAY_DN#g" \
         "s#__SUFFIX__#dc=glitterband,dc=local#g"
 
     echo "[openldap-init] JIM service account access control and password policy applied"
 else
-    echo "[openldap-init] ERROR: one or more database DNs (Yellowstone/Glitterband/accesslog) not found; cannot apply access control or password policy" >&2
+    echo "[openldap-init] ERROR: one or more database or ppolicy overlay DNs (Yellowstone/Glitterband/accesslog database; Yellowstone/Glitterband ppolicy overlay) not found; cannot apply access control or password policy" >&2
     exit 1
 fi
 
