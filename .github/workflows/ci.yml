@@ -359,6 +359,17 @@ jobs:
           --exit-code 0 \
           "$IMAGE_REF"
 
+    # Keep the raw SARIF for two weeks. The Security tab is the only other copy, it is not
+    # readable through the API from every environment, and the counts below cannot say which
+    # CVEs they are; a finding that a local rebuild cannot reproduce is undiagnosable without it.
+    - name: Upload Trivy SARIF as a workflow artifact
+      if: always() && hashFiles('trivy-results.sarif') != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      with:
+        name: trivy-sarif-${{ matrix.image_name }}
+        path: trivy-results.sarif
+        retention-days: 14
+
     - name: Fail build on fixable HIGH/CRITICAL Trivy findings
       shell: pwsh
       run: |
