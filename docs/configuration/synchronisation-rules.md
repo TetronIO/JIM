@@ -300,36 +300,38 @@ A password the Connected System would refuse is rejected when you set it, rather
 
 ### What happens after provisioning
 
-Setting the password is a separate step from creating the Connected System Object, and deliberately cannot fail the export that created it. The object exists; reporting its export as failed would have JIM retry the create.
+Setting the password is a separate concern from creating the Connected System Object, and deliberately cannot fail the export that created it. The Connected System Object exists; reporting its export as failed would have JIM retry the create.
 
-The password is therefore delivered in its own pass at the end of every export run, over everything the Connected System still owes rather than only what this run created. An ordinary export run is consequently the retry vehicle: a directory brought back online, or a right granted to JIM's service account, is picked up by the next run that was going to happen anyway, with no separate Run Profile to schedule.
+Instead, the moment the export gives the new account its external id, JIM queues a password change for it and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. An unreachable or refused account is retried on the Connected System's own [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) schedule, or JIM's default (five attempts, backing off from five minutes) where the system has none configured, capped by the time to live below, rather than waiting for another export run.
 
-Each Connected System Object ends up in one of these states, all of them reported on the export's Activity:
+Each Connected System Object ends up in one of these states, each recorded as a child Activity of the one written when the password was queued:
 
 | State | Meaning | What clears it |
 |-------|---------|----------------|
 | Delivered | The password was set. | Nothing; the Connected System Object no longer owes one and JIM keeps no record beyond the Activity. |
-| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the Connected System Object was not visible yet (after a create, usually replication catching up). | The next export run over that Connected System. |
-| Parked | The target refused the password itself, for not satisfying the rules in force for that Connected System Object. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
-| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the Connected System Object. | Nothing automatic; the object needs a password set by other means. |
+| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the Connected System Object was not visible yet (after a create, usually replication catching up, which a directory with several domain controllers can need an extra attempt for). | The next attempt on the Connected System's own schedule. |
+| Parked | The target refused the password itself, or the settings cannot produce one at all, for not satisfying the rules in force for that Connected System Object. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
+| Withdrawn | The Connected System Object or the Synchronisation Rule that provisioned it has since been removed, so there is nothing left to deliver a password to. | Nothing; this is not a failure. |
+| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the Connected System Object. | Nothing automatic; the Connected System Object needs a password set by other means. |
 
 The target's own words are kept verbatim on a parked Connected System Object, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
 
 ### Clearing parked Connected System Objects
 
-Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every Connected System Object parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
+Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every Connected System Object parked against that rule**, and the Password Delivery Service attempts them again within seconds, with no export run needed. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
 
 Saving an unrelated part of the same rule releases nothing. Those Connected System Objects were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
 
-The typical loop is therefore: read what the target said on the parked Connected System Object, correct the generator settings (most often length or the character classes), save, and let the next export run deliver.
+The typical loop is therefore: read what the target said on the parked Connected System Object, correct the generator settings (most often length or the character classes), and save; delivery follows within seconds.
 
 ### Where JIM tells you
 
-You do not have to go looking. Parked and expired Connected System Objects are reported in three places:
+You do not have to go looking. Parked and expired Connected System Objects are reported in two places:
 
-- **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the Connected System Objects parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
-- **The rule's Passwords tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the Connected System Objects grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many objects saving will release; it stays quiet for an edit that would not change what is delivered.
-- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons. `Get-JIMConnectedSystem -Id <id>` carries the two counts for a whole Connected System.
+- **The rule's Passwords tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the Connected System Objects grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many Connected System Objects saving will release; it stays quiet for an edit that would not change what is delivered.
+- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons.
+
+An initial password also shows up wherever JIM shows any other password change: on **Operations > Passwords**, labelled with origin **Initial**, and on the identity's own Password panel, as an **Initial** entry with a child Activity naming the system it was set on.
 
 ## Attribute mappings
 
