@@ -1,6 +1,6 @@
 # A Delegated JIM Service Account for the OpenLDAP Integration Lab
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1715](https://github.com/TetronIO/JIM/issues/1715)
 - **Related:** [#1716](https://github.com/TetronIO/JIM/issues/1716) Samba AD lab: bind JIM as a delegated account, not Administrator
 - **Created:** 2026-09-19
