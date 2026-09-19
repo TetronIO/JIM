@@ -113,6 +113,8 @@ public class PasswordDeliveryClaimDatabaseTests
 
     private static void Explicit(PendingPasswordChange change) => change.Origin = PendingPasswordChangeOrigin.Explicit;
 
+    private static void Provisioned(PendingPasswordChange change) => change.Origin = PendingPasswordChangeOrigin.Provisioned;
+
     /// <summary>
     /// One queued change for a fresh identity on the given system, adjusted as the test wants, inserted directly
     /// so a test can seed any state the queue can hold. Returns the row's id.
@@ -333,7 +335,7 @@ public class PasswordDeliveryClaimDatabaseTests
     /// sets. The filter is inside the one claiming statement, so it holds under SKIP LOCKED like everything else.
     /// </summary>
     [Test]
-    public async Task ClaimDuePasswordChangesAsync_ExplicitOnly_LeavesPropagatedRowsUnclaimedAsync()
+    public async Task ClaimDuePasswordChangesAsync_ExcludePropagated_LeavesPropagatedRowsUnclaimedAsync()
     {
         var systemId = await SeedSystemAsync(enabled: false);
         var propagatedId = await SeedChangeAsync(systemId, createdAt: AsOf.AddMinutes(-10));
@@ -347,6 +349,28 @@ public class PasswordDeliveryClaimDatabaseTests
             Assert.That(claimed[0].Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
             Assert.That((await StoredAsync(propagatedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Pending), "Held, and untouched.");
             Assert.That((await StoredAsync(explicitId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Delivering));
+        }
+    }
+
+    /// <summary>
+    /// The origin filter excludes only propagated changes; a provisioned first password is claimed exactly like
+    /// an administrator's explicit set (#1697, widening #1635's decision D1).
+    /// </summary>
+    [Test]
+    public async Task ClaimDuePasswordChangesAsync_ExcludePropagated_ClaimsProvisionedRowsAsync()
+    {
+        var systemId = await SeedSystemAsync(enabled: false);
+        var propagatedId = await SeedChangeAsync(systemId, createdAt: AsOf.AddMinutes(-10));
+        var provisionedId = await SeedChangeAsync(systemId, Provisioned, createdAt: AsOf.AddMinutes(-5));
+
+        var claimed = await ClaimAsync(systemId, excludePropagated: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(claimed.Select(c => c.Id), Is.EqualTo(new[] { provisionedId }));
+            Assert.That(claimed[0].Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That((await StoredAsync(propagatedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Pending), "Held, and untouched.");
+            Assert.That((await StoredAsync(provisionedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Delivering));
         }
     }
 
@@ -393,8 +417,61 @@ public class PasswordDeliveryClaimDatabaseTests
         Assert.That(outlook.DueCount, Is.EqualTo(1), "The explicit set counts; the held propagated change does not.");
     }
 
+    /// <summary>
+    /// The sibling of the explicit-set case above, for a provisioned first password (#1697).
+    /// </summary>
     [Test]
-    public async Task ExpirePasswordChangesAsync_ExplicitOnly_LeavesHeldPropagatedRowsAloneAsync()
+    public async Task GetPasswordQueueDeliveryOutlookAsync_CountsAProvisionedRowOnAPausedSystemAsDueAsync()
+    {
+        var paused = await SeedSystemAsync("Paused", enabled: false);
+        await SeedChangeAsync(paused, Provisioned);
+        await SeedChangeAsync(paused);
+
+        await using var ctx = NewContext();
+        var outlook = await new PostgresDataRepository(ctx).Sync.GetPasswordQueueDeliveryOutlookAsync(AsOf, Lease);
+
+        Assert.That(outlook.DueCount, Is.EqualTo(1), "The provisioned first password counts; the held propagated change does not.");
+    }
+
+    /// <summary>
+    /// The summary-page sibling of the two outlook tests above.
+    /// </summary>
+    [Test]
+    public async Task GetPasswordQueueSummaryAsync_ProvisionedRowOnAPausedSystem_IsDueAsync()
+    {
+        var paused = await SeedSystemAsync("Paused", enabled: false);
+        await SeedChangeAsync(paused, Provisioned);
+        await SeedChangeAsync(paused);
+
+        await using var ctx = NewContext();
+        var summary = await new PostgresDataRepository(ctx).Sync.GetPasswordQueueSummaryAsync(AsOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.WaitingCount, Is.EqualTo(2), "Both changes are still outstanding work.");
+            Assert.That(summary.DueCount, Is.EqualTo(1), "The provisioned first password counts; the held propagated change does not.");
+        }
+    }
+
+    /// <summary>
+    /// A provisioned first password makes its otherwise-unconfigured or paused system due, exactly as an
+    /// administrator's explicit set does (#1697, widening #1635's decision D1).
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemIdsWithDuePasswordChangesAsync_IncludesAPausedSystemWithAProvisionedRowAsync()
+    {
+        var paused = await SeedSystemAsync("Paused", enabled: false);
+        await SeedChangeAsync(paused, Provisioned);
+
+        await using var ctx = NewContext();
+        var systems = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemIdsWithDuePasswordChangesAsync(AsOf, Lease);
+
+        Assert.That(systems, Is.EqualTo(new[] { paused }),
+            "A provisioned first password is due whatever the configuration says.");
+    }
+
+    [Test]
+    public async Task ExpirePasswordChangesAsync_ExcludePropagated_LeavesHeldPropagatedRowsAloneAsync()
     {
         var systemId = await SeedSystemAsync(enabled: false);
         var propagatedId = await SeedChangeAsync(systemId, c => c.ExpiresAt = AsOf.AddMinutes(-1));
@@ -411,6 +488,31 @@ public class PasswordDeliveryClaimDatabaseTests
         {
             Assert.That(expired, Is.EqualTo(1));
             Assert.That((await StoredAsync(explicitId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
+            Assert.That((await StoredAsync(propagatedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    /// <summary>
+    /// The sibling of the explicit-only expiry case above, for a provisioned first password (#1697).
+    /// </summary>
+    [Test]
+    public async Task ExpirePasswordChangesAsync_ExcludePropagated_ExpiresProvisionedRowsAsync()
+    {
+        var systemId = await SeedSystemAsync(enabled: false);
+        var propagatedId = await SeedChangeAsync(systemId, c => c.ExpiresAt = AsOf.AddMinutes(-1));
+        var provisionedId = await SeedChangeAsync(systemId, c =>
+        {
+            Provisioned(c);
+            c.ExpiresAt = AsOf.AddMinutes(-1);
+        });
+
+        await using var ctx = NewContext();
+        var expired = await new PostgresDataRepository(ctx).Sync.ExpirePasswordChangesAsync(systemId, AsOf, excludePropagated: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(expired, Is.EqualTo(1));
+            Assert.That((await StoredAsync(provisionedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Expired));
             Assert.That((await StoredAsync(propagatedId)).Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
         }
     }
@@ -725,6 +827,65 @@ public class PasswordDeliveryClaimDatabaseTests
             Assert.That(outlook.RetryingCount, Is.Zero);
             Assert.That(outlook.NextAttemptAt, Is.Null);
         }
+    }
+
+    /// <summary>
+    /// A row superseded while a delivery was already in flight is Pending again by the time the delivery's own
+    /// success write runs (#1697, decision D9). Deleting it out from under the newer work would silently drop a
+    /// password nobody knows is missing.
+    /// </summary>
+    [Test]
+    public async Task DeletePasswordChangesAsync_LeavesARowSupersededMeanwhileAloneAsync()
+    {
+        var systemId = await SeedSystemAsync();
+        var id = await SeedChangeAsync(systemId);
+        var claimed = (await ClaimAsync(systemId)).Single();
+
+        await using (var supersede = NewContext())
+            await new PostgresDataRepository(supersede).Sync.QueuePasswordChangesAsync([
+                new PendingPasswordChange
+                {
+                    MetaverseObjectId = claimed.MetaverseObjectId,
+                    ConnectedSystemId = systemId,
+                    EncryptedPassword = "$JIMPW$v1$newer",
+                    CreatedAt = AsOf.AddMinutes(1),
+                    ExpiresAt = AsOf.AddMinutes(1).AddDays(7),
+                    ActivityId = Guid.NewGuid()
+                }
+            ]);
+
+        await using var ctx = NewContext();
+        await new PostgresDataRepository(ctx).Sync.DeletePasswordChangesAsync([id]);
+
+        var stored = await StoredAsync(id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending),
+                "The delivery that just finished must not remove the newer work superseding it.");
+            Assert.That(stored.EncryptedPassword, Is.EqualTo("$JIMPW$v1$newer"));
+        }
+    }
+
+    /// <summary>
+    /// A cancellation and a delivery can race; if the password lands anyway the row is still removed once
+    /// cancelled, because there is nothing left divergent to report either way.
+    /// </summary>
+    [Test]
+    public async Task DeletePasswordChangesAsync_RemovesACancelledRowWhosePasswordLandedAsync()
+    {
+        var systemId = await SeedSystemAsync();
+        var id = await SeedChangeAsync(systemId);
+        await ClaimAsync(systemId);
+        await using (var cancel = NewContext())
+            await new PostgresDataRepository(cancel).Sync.CancelPasswordChangesAsync(
+                new PendingPasswordChangeFilter { Ids = [id] }, null, null, AsOf.AddSeconds(1));
+
+        await using var ctx = NewContext();
+        await new PostgresDataRepository(ctx).Sync.DeletePasswordChangesAsync([id]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleOrDefaultAsync(c => c.Id == id);
+        Assert.That(stored, Is.Null, "The password reached the target after the cancellation raced it; the row is done either way.");
     }
 
     [Test]
