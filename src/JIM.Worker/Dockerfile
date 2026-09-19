@@ -27,10 +27,15 @@ WORKDIR /app
 # shipped image carry the fixes rather than wait for the rebuild. It runs before the pinned
 # installs so a pin is never silently moved: a pin older than what the upgrade installed fails
 # the build outright (and apt-pin-check will already have proposed the bump).
-# CI and release builds pass no-cache-filters=base so this layer is rebuilt from the live archive on
-# every build; replayed from the build cache it would carry the archive as it stood when it last ran.
-# See engineering/DEPENDENCY_PINNING.md.
-RUN apt-get update \
+# CI and release builds pass today's date as APT_REFRESH, which is part of this layer's cache key, so
+# the upgrade runs against the live archive at least once a day instead of being replayed from the
+# build cache as it stood when it last ran. Re-running the step without changing its key is not
+# enough: BuildKit keys a layer's descendants on the instruction chain, not on the parent's output,
+# so a no-cache-filter rebuild of this stage was discarded and the final stage served from the cache
+# with the stale layer underneath. See engineering/DEPENDENCY_PINNING.md.
+ARG APT_REFRESH
+RUN echo "apt refresh: ${APT_REFRESH}" \
+    && apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \

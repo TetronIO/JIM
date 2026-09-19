@@ -144,6 +144,14 @@ jobs:
             type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
 
       # Phase 3 & 4: Build locally first, scan, smoke-test, then push
+      # Today's date is part of the apt upgrade layer's cache key, so the release image carries
+      # what the noble archive holds today rather than what it held when the cached layer was
+      # last built (see the same step on the scan-images job in ci.yml for why a no-cache filter
+      # is not enough). The SDK build stage still comes from the cache.
+      - name: Date the apt upgrade layer
+        id: apt_refresh
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
       - name: Build Docker image (local)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
         with:
@@ -154,12 +162,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
+            APT_REFRESH=${{ steps.apt_refresh.outputs.date }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
-          # Rebuild the base stage uncached so its apt-get upgrade applies what the noble archive
-          # holds today, not what it held when the cached layer was last built (see the same
-          # setting on the scan-images job in ci.yml). The SDK build stage still comes from cache.
-          no-cache-filters: base
 
       # Phase 3: Container vulnerability scanning
       - name: Scan image for vulnerabilities
