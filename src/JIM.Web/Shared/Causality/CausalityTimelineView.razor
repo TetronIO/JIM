@@ -28,25 +28,26 @@
                 @GetSourceDetailSuffix()
             </div>
             @{
-                var recordLabel = GetRecordLabel();
+                var recordName = GetRecordName();
                 // The record's own Connected System (paired with the record chip below), not the
                 // run's system named in the sentence above them; the two diverge for cross-system
                 // cascades.
                 var systemName = Model.Context.CsoConnectedSystemName;
             }
-            @if (recordLabel != null || !string.IsNullOrWhiteSpace(systemName))
+            @if (recordName != null || !string.IsNullOrWhiteSpace(systemName))
             {
                 <div class="evt-entities">
-                    @if (recordLabel != null)
+                    @if (recordName != null)
                     {
-                        <CausalityEntityChip Label="@recordLabel" Href="@GetRecordHref()"
-                                             Kind="CausalityEntityKind.Record"
-                                             SubLabel="@Model.Context.CsoObjectTypeName" />
+                        <ObjectChip Name="@recordName" Href="@GetRecordHref()"
+                                    Kind="ObjectChipKind.ConnectedSystemObject"
+                                    TypeName="@Model.Context.CsoObjectTypeName"
+                                    Tooltip="@GetRecordTooltip()" />
                     }
                     @if (!string.IsNullOrWhiteSpace(systemName))
                     {
-                        <CausalityEntityChip Label="@systemName" Href="@GetSystemHref()"
-                                             Kind="CausalityEntityKind.ConnectedSystem" />
+                        <ObjectChip Name="@systemName" Href="@GetSystemHref()"
+                                    Kind="ObjectChipKind.ConnectedSystem" />
                     }
                 </div>
             }
@@ -127,7 +128,7 @@
                     <div class="evt-entities">
                         @foreach (var link in chipLinks)
                         {
-                            <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" SubLabel="@link.ObjectTypeName" />
+                            <ObjectChip Name="@link.Label" Href="@link.Href" Kind="@link.Kind.ToObjectChipKind()" TypeName="@link.ObjectTypeName" />
                         }
                     </div>
                 }
@@ -208,7 +209,15 @@
         return ExpandedEventChanged.InvokeAsync(newValue);
     }
 
-    private string? GetRecordLabel() => Model.Context.RecordLabel;
+    private string? GetRecordName() => ObjectDescription.ChipName(Model.Context.CsoDisplayName, Model.Context.CsoExternalId);
+
+    /// <summary>
+    /// The source row's chip tooltip: the external id and the record's own Connected System, which the
+    /// chip text itself no longer carries now that the record is named by <see cref="GetRecordName"/> alone.
+    /// </summary>
+    private string GetRecordTooltip() => ObjectDescription.ForConnectedSystemObjectChipTooltip(
+        Model.Context.CsoObjectTypeName, Model.Context.CsoDisplayName, Model.Context.CsoExternalId,
+        Model.Context.CsoConnectedSystemName);
 
     private string? GetRecordHref()
     {

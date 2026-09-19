@@ -15,7 +15,7 @@ The queue cmdlets exist because a recovery is not a job for a browser. When a di
 
 ## Putting a password change on the queue
 
-Every password JIM sets goes through this queue, whichever way it was aimed. The command is `Set-JIMMetaverseObjectPassword`, documented under [Metaverse](metaverse.md#set-jimmetaverseobjectpassword): name Connected Systems with `-ConnectedSystemId` to reset the person's password there, or name none to propagate it to every Connected System configured for Password Synchronisation. `Set-JIMConnectedSystemObjectPassword` ([Connected Systems](connected-systems.md#set-jimconnectedsystemobjectpassword)) is the same operation with one account named. Both return the same per-target outcome, and both take `-Wait` to be told what each system did with the password before returning.
+Every password JIM sets goes through this queue, whichever way it was aimed. The command is `Set-JIMMetaverseObjectPassword`, documented under [Metaverse](metaverse.md#set-jimmetaverseobjectpassword): name Connected Systems with `-ConnectedSystemId` to reset the Metaverse Object's password there, or name none to propagate it to every Connected System configured for Password Synchronisation. `Set-JIMConnectedSystemObjectPassword` ([Connected Systems](connected-systems.md#set-jimconnectedsystemobjectpassword)) is the same operation with one Connected System Object named. Both return the same per-target outcome, and both take `-Wait` to be told what each system did with the password before returning.
 
 The cmdlets below are what you use once a change is on the queue.
 
@@ -49,8 +49,8 @@ Get-JIMPendingPasswordChange -Summary
 | `ConnectedSystemId` | `int` | No | | Restrict to one Connected System. Accepts pipeline input by property name, so a Connected System can be piped in. |
 | `Status` | `string` | No | | One of `Pending`, `Delivering`, `Parked`, `Expired`, `Cancelled`. |
 | `FailureReason` | `string` | No | | One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound`, `UnsupportedOperation`. Only meaningful for changes that have been attempted. |
-| `MetaverseObjectId` | `guid` | No | | Restrict to one identity's queued changes. |
-| `Search` | `string` | No | | Free-text search over the identity and Connected System names. |
+| `MetaverseObjectId` | `guid` | No | | Restrict to one Metaverse Object's queued changes. |
+| `Search` | `string` | No | | Free-text search over the Metaverse Object and Connected System names. |
 | `SortBy` | `string` | No | `queued` | One of `queued`, `identity`, `system`, `status`, `attempts`, `nextAttempt`, `expires`. |
 | `SortDirection` | `string` | No | `asc` | `asc` or `desc`. |
 | `Page` | `int` | No | `1` | Page number. Not available with `-All`. |
@@ -66,8 +66,8 @@ In the default and `-All` parameter sets, one `PSCustomObject` per queued change
 | Property | Description |
 |----------|-------------|
 | `Id` | The change's unique identifier, as passed to `Resume-` and `Stop-JIMPendingPasswordChange`. |
-| `MetaverseObjectId`, `MetaverseObjectDisplayName` | The person whose password this is. |
-| `MetaverseObjectTypePluralName` | Their Metaverse Object Type's plural name, which is what a link to them is built from. |
+| `MetaverseObjectId`, `MetaverseObjectDisplayName` | The Metaverse Object whose password this is. |
+| `MetaverseObjectTypePluralName` | Its Metaverse Object Type's plural name, which is what a link to it is built from. |
 | `ConnectedSystemId`, `ConnectedSystemName` | Where it is going. |
 | `Status` | `Pending`, `Delivering`, `Parked`, `Expired` or `Cancelled`. `Delivering` is momentary: the Password Delivery Service is writing the change to the Connected System right now. |
 | `Due` | Whether the Password Delivery Service would attempt this change now. A `Pending` change may be waiting out a retry backoff, or be `Held`, neither of which `Status` alone can tell you. Never `$true` while `Held` is. |
@@ -138,8 +138,8 @@ Resume-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Stat
 | `ConnectedSystemId` | `int` | No | | Retry the changes queued for one Connected System. Accepts pipeline input by property name. |
 | `Status` | `string` | No | | Retry only changes in this state. |
 | `FailureReason` | `string` | No | | Retry only changes whose last attempt failed this way. |
-| `MetaverseObjectId` | `guid` | No | | Retry only one identity's changes. |
-| `Search` | `string` | No | | Retry only changes matching this search over the identity and Connected System names. |
+| `MetaverseObjectId` | `guid` | No | | Retry only one Metaverse Object's changes. |
+| `Search` | `string` | No | | Retry only changes matching this search over the Metaverse Object and Connected System names. |
 | `EntireQueue` | `switch` | No | | Retry every queued password change. Required when nothing else narrows the request. |
 | `Force` | `switch` | No | | Skip the confirmation prompt. |
 
@@ -209,7 +209,7 @@ Stop-JIMPendingPasswordChange -ConnectedSystemId 7
 
 Each change this cancels leaves somebody's password unchanged on that system. Run the `Get-` above first and read what it lists; without `-Force` the cancellation prompts for confirmation.
 
-```powershell title="See what would be cancelled for one person"
+```powershell title="See what would be cancelled for one Metaverse Object"
 Stop-JIMPendingPasswordChange -MetaverseObjectId 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -WhatIf
 ```
 
@@ -218,5 +218,5 @@ Stop-JIMPendingPasswordChange -MetaverseObjectId 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3
 ## Related
 
 - [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) explains what the queue is and how a change moves through it, and [The Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) what delivers it
-- [Metaverse](metaverse.md#set-jimmetaverseobjectpassword) covers `Set-JIMMetaverseObjectPassword`, which puts a password change on this queue, aimed at named accounts or at every configured system
+- [Metaverse](metaverse.md#set-jimmetaverseobjectpassword) covers `Set-JIMMetaverseObjectPassword`, which puts a password change on this queue, aimed at named Connected System Objects or at every configured system
 - [Connected Systems](connected-systems.md) covers `Get-` and `Set-JIMConnectedSystemPasswordSynchronisation`, which decide which systems receive them

@@ -257,104 +257,15 @@
     padding: 24px;
 }
 
-/* ─── Entity chips ─── */
+/* ─── Entity chips ───
 
-.causality-panel .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 100%;
-    background: var(--cz-chip-bg);
-    border-radius: 999px;
-    padding: 2px 10px 2px 3px;
-    /* Normal body size, per JIM's "default sizing unless asked otherwise" UI rule: the entity name in
-       a chip is the thing being linked to, so it reads at the same size as the sentence naming it. */
-    font-size: 1rem;
-    font-weight: 550;
-    color: var(--cz-text);
-    white-space: nowrap;
-    text-decoration: none;
-    transition: background 0.15s;
-}
-
-/* A chip with no leading glyph (a Lineage card's object chip, whose column head wears the glyph)
-   pads both ends alike, so the name sits centred in the pill rather than hugging the left edge. */
-.causality-panel .chip.plain {
-    padding-left: 10px;
-}
-
-/* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip
-   convention (background/avatar colour change) rather than a border outline. */
-.causality-panel a.chip:hover {
-    text-decoration: none;
-    background: color-mix(in srgb, var(--mud-palette-text-primary) 18%, transparent);
-}
-
-.causality-panel a.chip:hover .glyph {
-    filter: brightness(1.12);
-}
-
-/* Sized to the chip's own line box (1rem text at MudBlazor's line height), so the circle reads as
-   part of the chip rather than a smaller badge sunk into it. */
-.causality-panel .chip .glyph {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    background: var(--cz-secondary);
-    color: var(--mud-palette-secondary-text, #fff);
-    transition: filter 0.15s;
-}
-
-.causality-panel .chip .glyph.sys {
-    background: var(--cz-info);
-    color: var(--mud-palette-info-text, #fff);
-}
-
-.causality-panel .chip .glyph.rule {
-    background: var(--cz-warning);
-    color: var(--mud-palette-warning-text, #fff);
-}
-
-/* The two object glyphs carry three letters, so they widen into a pill of the same height rather
-   than squeezing the text into the circle; the letters drop a step to keep the pill compact. The
-   Connected System Object keeps the secondary colour and the Metaverse Object the primary, JIM's
-   own, as the R and ID glyphs they replace did. */
-.causality-panel .chip .glyph.cso,
-.causality-panel .chip .glyph.mvo {
-    width: auto;
-    min-width: 24px;
-    padding: 0 6px;
-    border-radius: 12px;
-    font-size: 0.6875rem;
-    letter-spacing: 0.03em;
-}
-
-.causality-panel .chip .glyph.cso {
-    background: var(--cz-secondary);
-    color: var(--mud-palette-secondary-text, #fff);
-}
-
-.causality-panel .chip .glyph.mvo {
-    background: var(--cz-primary);
-    color: var(--mud-palette-primary-text, #fff);
-}
-
-.causality-panel .chip .sub {
-    color: var(--cz-text-faint);
-    font-weight: 450;
-}
-
-.causality-panel .chip .name-ellip {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+   The chip itself (a glyph, dimmed type prefix and name in an ellipsis-clipped pill) moved out of this
+   panel-scoped stylesheet into site.css's .jim-object-chip rules: it is ObjectChip.razor's own
+   markup now, rendered by every event card, chain card and the Timeline's source row alike, so it must
+   look identical inside this panel and everywhere else the same component names an object. Nothing here
+   derives from a token this panel declares only for itself; site.css's rules use the same MudBlazor
+   palette derivations --cz-secondary/--cz-primary/--cz-info/--cz-warning did, so moving them changed
+   nothing about how a chip looks in this panel, in any theme. */
 
 /* ─── Event badges and entity rows (shared by views) ─── */
 

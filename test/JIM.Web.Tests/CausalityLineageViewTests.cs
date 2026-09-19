@@ -326,12 +326,12 @@ public class CausalityLineageViewTests
 
         // The new joiner's cards name the Metaverse Object (Projected, Attributes flowed) and the
         // provisioned Connected System Objects, beside their Synchronisation Rules.
-        var glyphs = cut.FindAll(".ln-now .chip .glyph").Select(g => g.TextContent.Trim()).ToList();
+        var glyphs = cut.FindAll(".ln-now .jim-object-chip .jim-object-chip-glyph").Select(g => g.TextContent.Trim()).ToList();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(glyphs, Does.Contain("SR"));
             Assert.That(glyphs, Has.None.EqualTo("CSO").And.None.EqualTo("MVO"));
-            Assert.That(cut.FindAll(".ln-now .chip.plain"), Is.Not.Empty, "the object chips render without a glyph");
+            Assert.That(cut.FindAll(".ln-now .jim-object-chip.plain"), Is.Not.Empty, "the object chips render without a glyph");
         }
     }
 

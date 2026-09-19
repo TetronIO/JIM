@@ -254,6 +254,7 @@
             <MudTabPanel Text="Password" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Error"
                          BadgeData="@(_passwordAttentionCount > 0 ? _passwordAttentionCount.ToString("N0") : null)">
                 <MetaverseObjectPasswordPanel MetaverseObjectId="@(MetaverseObject?.Id ?? Guid.Empty)"
+                                              MetaverseObjectTypeName="@(MetaverseObjectType?.Name ?? "Metaverse Object")"
                                               Events="@_passwordEvents"
                                               QueuedChanges="@_queuedPasswordChanges"
                                               Accounts="@_passwordAccounts"
