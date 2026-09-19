@@ -1420,7 +1420,6 @@ public class Worker : BackgroundService
         Add(result.ActivitiesDeleted, "Activity", "Activities");
         Add(result.ConfigurationChangeActivitiesDeleted, "configuration change Activity", "configuration change Activities");
         Add(result.SecurityEventActivitiesDeleted, "security event Activity", "security event Activities");
-        Add(result.InitialPasswordWorkRecordsDeleted, "initial password record", "initial password records");
         Add(result.PasswordEventActivitiesDeleted, "Password Synchronisation Activity", "Password Synchronisation Activities");
         Add(result.PasswordQueueRecordsDeleted, "queued password change", "queued password changes");
 

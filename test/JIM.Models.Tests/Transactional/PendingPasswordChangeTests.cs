@@ -11,10 +11,9 @@ namespace JIM.Models.Tests.Transactional;
 /// <summary>
 /// The Password Synchronisation queue row (#1119): one password change owed to one Connected System.
 /// <para>
-/// Unlike <see cref="PendingInitialPassword"/>, which records only that an account is owed a password, this row
-/// carries the password itself. That single difference is what forces everything distinctive about it: the value
-/// is encrypted at rest, a newer change for the same target must replace an older one rather than queue behind
-/// it, and delivery is scheduled on a clock of its own rather than riding an export run.
+/// It carries the password itself, encrypted at rest, so a newer change for the same target must replace an
+/// older one rather than queue behind it, and delivery is scheduled on a clock of its own rather than riding an
+/// export run.
 /// </para>
 /// </summary>
 [TestFixture]

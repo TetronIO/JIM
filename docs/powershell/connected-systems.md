@@ -186,27 +186,6 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
     Removing a configuration would discard every password change queued against it. Disabling it keeps them,
     and is reversible, so `-Enabled $false` is the supported way to stop delivery.
 
-#### Initial password attention (ById only)
-
-How many accounts in the Connected System are waiting on a person over their initial password.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `ParkedInitialPasswordCount` | `int?` | Accounts whose target refused the password and which JIM has stopped retrying |
-| `ExpiredInitialPasswordCount` | `int?` | Accounts never given an initial password within its time to live |
-
-The two are never summed, because they ask for different things. Parked accounts are released by correcting the
-initial password settings on the [Synchronisation Rule](synchronisation-rules.md) that provisioned them and saving;
-`Get-JIMSyncRuleInitialPassword` reports what the target actually said. Expired accounts cannot be helped that way at
-all and need a password set by other means.
-
-```powershell title="Find the systems with initial password work waiting"
-Get-JIMConnectedSystem -All |
-    ForEach-Object { Get-JIMConnectedSystem -Id $_.Id } |
-    Where-Object { $_.ParkedInitialPasswordCount -or $_.ExpiredInitialPasswordCount } |
-    Select-Object Name, ParkedInitialPasswordCount, ExpiredInitialPasswordCount
-```
-
 #### Stranded-value sweep (ById only)
 
 Whether a stranded-value sweep is armed following a Connector Space clear, and what it is waiting for. See

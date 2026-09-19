@@ -8,8 +8,8 @@ using JIM.Models.Staging;
 namespace JIM.Worker.Tests.Services;
 
 /// <summary>
-/// Covers the decision of which password an initial-password configuration resolves to, split out of
-/// <see cref="InitialPasswordDeliveryServiceTests"/> (#1697) so it is reusable without a Connector to send to.
+/// Covers the decision of which password an initial-password configuration resolves to, split out on its own
+/// (#1697) so it is reusable without a Connector to send to.
 /// <para>
 /// The interesting behaviour here is not the happy path. It is which configurations JIM refuses to send at all,
 /// because a refusal always parks: only a person changing the configuration can produce a different answer, so

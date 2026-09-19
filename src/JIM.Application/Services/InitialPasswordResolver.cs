@@ -13,7 +13,7 @@ namespace JIM.Application.Services;
 /// <summary>
 /// Decides which password an initial-password configuration resolves to, or why none can be sent (#1697).
 /// <para>
-/// Split out of <see cref="InitialPasswordDeliveryService"/> so the decision is reusable wherever a first
+/// Split out on its own so the decision is reusable wherever a first
 /// password needs resolving without needing a Connector to send it to: the staging path queues a
 /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row without ever generating a value, and resolves the
 /// password only when the Password Delivery Service is about to attempt it.

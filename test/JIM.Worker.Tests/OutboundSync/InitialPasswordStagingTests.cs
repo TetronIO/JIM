@@ -21,7 +21,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 /// Staging of a first password during export execution (#1121, #1697): a Create that provisions an account whose
 /// Synchronisation Rule asks for an initial password writes one row onto the queued password pipeline
 /// (<see cref="PendingPasswordChange"/>, <see cref="PendingPasswordChangeOrigin.Provisioned"/>) plus a parent
-/// Activity, rather than a <see cref="PendingInitialPassword"/> row.
+/// Activity.
 /// <para>
 /// The behaviour under test is a containment rule as much as a feature. An account that has been created in a
 /// Connected System is created; nothing about its password can be allowed to alter that record. Half of these
@@ -248,8 +248,8 @@ public class InitialPasswordStagingTests
         {
             Assert.That(system.InitialPasswordTimeToLive, Is.Null);
             Assert.That(staged.ExpiresAt, Is.InRange(
-                before.Add(PendingInitialPassword.DefaultTimeToLive),
-                after.Add(PendingInitialPassword.DefaultTimeToLive)));
+                before.Add(PendingPasswordChange.DefaultTimeToLive),
+                after.Add(PendingPasswordChange.DefaultTimeToLive)));
         }
     }
 

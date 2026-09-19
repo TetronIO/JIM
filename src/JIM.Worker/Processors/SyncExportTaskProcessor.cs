@@ -124,14 +124,6 @@ public class SyncExportTaskProcessor
         if (pendingExportCount == 0)
         {
             Log.Information("PerformExportAsync: No Pending Exports for {SystemName}", _connectedSystem.Name);
-
-            // #1121: still worth a delivery pass. An account whose initial password could not be set last time
-            // is waiting on a retry, and a run with nothing to export is exactly what an administrator does
-            // after granting the missing right or bringing the directory back up.
-            await DeliverOutstandingInitialPasswordsAsync();
-
-            // Last, because the delivery pass above enters a step of its own and narrates into the
-            // Activity's message; the run's outcome has to be what an administrator is left reading.
             await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
             return;
         }
@@ -293,13 +285,6 @@ public class SyncExportTaskProcessor
                 }
             }
 
-            // #1121: after the export phase, because delivery needs the accounts to exist and to carry the
-            // external ids the Create results assigned. Inside the try so a failure here is reported the same
-            // way any other part of the run is.
-            await DeliverOutstandingInitialPasswordsAsync();
-
-            // The run's own outcome has the last word, after every step that narrates into the
-            // message has finished doing so.
             await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
 
             exportSpan.SetSuccess();
@@ -315,73 +300,6 @@ public class SyncExportTaskProcessor
             await _syncServer.FailActivityWithErrorAsync(_activity, ex);
             throw;
         }
-    }
-
-    /// <summary>
-    /// Gives the accounts this Connected System has provisioned the initial passwords they are owed (#1121).
-    /// <para>
-    /// Runs over everything outstanding, not only what this run staged, so an export run is also the retry
-    /// vehicle for an account whose password could not be set last time.
-    /// </para>
-    /// </summary>
-    private async Task DeliverOutstandingInitialPasswordsAsync()
-    {
-        // A preview run answers "what would happen"; setting a password is not a preview of anything, and an
-        // account given one cannot be un-given it. Deliberately before entering the step, so a preview run
-        // records it skipped rather than entered-and-instantly-finished.
-        if (_runMode != SyncRunMode.PreviewAndSync)
-            return;
-
-        // Its own step: this opens a second connection to the Connected System and sets passwords on
-        // accounts, which is Connected System work rather than bookkeeping, and it narrates its own
-        // outcome. Without a step of its own that narration landed under whichever step ran last.
-        await _phases.EnterAsync(RunPhaseKeys.ExportDeliverInitialPasswords);
-
-        using var span = Diagnostics.Sync.StartSpan("DeliverInitialPasswords")
-            .SetTag("connectedSystemId", _connectedSystem.Id);
-
-        var result = await _syncServer.DeliverOutstandingInitialPasswordsAsync(
-            _connectedSystem, _connector, _cancellationTokenSource.Token);
-
-        span.SetTag("attempted", result.AttemptedCount);
-        span.SetTag("delivered", result.DeliveredCount);
-        span.SetTag("parked", result.ParkedCount);
-        span.SetTag("expired", result.ExpiredCount);
-
-        if (!result.HasSomethingToReport)
-            return;
-
-        await _syncRepo.UpdateActivityMessageAsync(_activity, DescribeInitialPasswordOutcome(result));
-    }
-
-    /// <summary>
-    /// Puts an initial password pass into words for the Activity, leading with whatever needs an administrator.
-    /// </summary>
-    private static string DescribeInitialPasswordOutcome(InitialPasswordRunResult result)
-    {
-        if (result.ConnectorCannotSetPasswords)
-            return "Initial passwords: this Connected System's Connector cannot set passwords";
-
-        if (result.CouldNotOpenPasswordConnection)
-            return $"Initial passwords: the password connection could not be opened; {result.PasswordConnectionErrorMessage}";
-
-        // Lead with this rather than reporting nothing delivered: the accounts are owed passwords and are not
-        // getting them, and the fix is a Connected System setting rather than anything about the accounts.
-        if (result.PasswordChannelNotSecure)
-            return "Initial passwords: this Connected System requires a secure transport for passwords and the " +
-                   "password connection is not encrypted, so none were sent";
-
-        var parts = new List<string> { $"{result.DeliveredCount:N0} delivered" };
-        if (result.ParkedCount > 0)
-            parts.Add($"{result.ParkedCount:N0} needing attention");
-        if (result.RetryingCount > 0)
-            parts.Add($"{result.RetryingCount:N0} to retry");
-        // Named on the Activity rather than left to the log. These accounts were provisioned and will never now
-        // get an initial password from JIM, which an administrator has to be told rather than left to discover.
-        if (result.ExpiredCount > 0)
-            parts.Add($"{result.ExpiredCount:N0} expired without one");
-
-        return $"Initial passwords: {string.Join(", ", parts)}";
     }
 
     /// <summary>

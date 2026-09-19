@@ -229,22 +229,6 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
-    public void PendingInitialPasswordBulkColumns_MatchMappedColumnsExactly()
-    {
-        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingInitialPassword), "PendingInitialPasswords", PendingInitialPasswordBulkColumns.PendingInitialPasswords);
-    }
-
-    [Test]
-    public void PendingInitialPasswordUpdateColumns_HaveAConsciousHomeForEveryColumn()
-    {
-        AssertUpdateListsCoverInsertList(
-            "PendingInitialPasswords",
-            PendingInitialPasswordBulkColumns.PendingInitialPasswords,
-            [PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate],
-            PendingInitialPasswordBulkColumns.PendingInitialPasswordsUpdateExclusions);
-    }
-
-    [Test]
     public void PendingPasswordChangeBulkColumns_MatchMappedColumnsExactly()
     {
         AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingPasswordChange), "PendingPasswordChanges", PendingPasswordChangeBulkColumns.PendingPasswordChanges);

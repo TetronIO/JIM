@@ -13,8 +13,8 @@ namespace JIM.Models.Staging;
 /// </para>
 /// <para>
 /// Held here, in one place, rather than as copy inside a dialog. The same classification is recorded against
-/// parked provisioning passwords (<see cref="PendingInitialPassword.FailureReason"/>), so the panel that shows
-/// those meets exactly the same words rather than a second set that drifts.
+/// parked provisioned password changes (<see cref="JIM.Models.Transactional.PendingPasswordChange.FailureReason"/>),
+/// so the panel that shows those meets exactly the same words rather than a second set that drifts.
 /// </para>
 /// </summary>
 public class PasswordFailureGuidance

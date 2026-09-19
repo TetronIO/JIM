@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -14,6 +15,26 @@ namespace JIM.PostgresData.Repositories;
 
 public partial class SyncRepository
 {
+    /// <inheritdoc />
+    public async Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        return await _context.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .Where(ip => syncRuleIds.Contains(ip.SyncRuleId))
+            .ToDictionaryAsync(ip => ip.SyncRuleId);
+    }
+
+    /// <inheritdoc />
+    public async Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await _context.ConnectedSystemPasswordPolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
     #region Password Synchronisation queue (#1119)
 
     /// <inheritdoc />
@@ -493,9 +514,8 @@ public partial class SyncRepository
             .Select(g => new { g.Key.ConnectedSystemId, g.Key.Status, Count = g.Count() })
             .ToListAsync();
 
-        // A settled Connected System is absent from the dictionary rather than present with zeroes, matching
-        // GetInitialPasswordAttentionByConnectedSystemAsync, so a caller can tell "nothing to report" from
-        // "reported nothing".
+        // A settled Connected System is absent from the dictionary rather than present with zeroes, so a
+        // caller can tell "nothing to report" from "reported nothing".
         return counts
             .GroupBy(c => c.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => new PasswordQueueAttention
@@ -523,9 +543,8 @@ public partial class SyncRepository
             .Select(g => new { g.Key.SyncRuleId, g.Key.Status, Count = g.Count() })
             .ToListAsync();
 
-        // A settled rule is absent from the dictionary rather than present with zeroes, matching
-        // GetInitialPasswordAttentionBySyncRuleAsync, so a caller can tell "nothing to report" from "reported
-        // nothing".
+        // A settled rule is absent from the dictionary rather than present with zeroes, so a caller can tell
+        // "nothing to report" from "reported nothing".
         return counts
             .GroupBy(c => c.SyncRuleId)
             .ToDictionary(g => g.Key, g => new InitialPasswordAttention
@@ -732,8 +751,7 @@ public partial class SyncRepository
     /// <inheritdoc />
     public async Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId)
     {
-        // The Synchronisation Rule counterpart of GetParkedInitialPasswordReasonsAsync, over this queue's
-        // Provisioned rows rather than the old initial-password store.
+        // The rule surfaces' rejection-reasons source, over this queue's Provisioned rows.
         return await _context.PendingPasswordChanges
             .AsNoTracking()
             .Where(c => c.SyncRuleId == syncRuleId

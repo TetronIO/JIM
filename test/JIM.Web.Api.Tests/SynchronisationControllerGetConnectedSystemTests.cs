@@ -62,10 +62,8 @@ public class SynchronisationControllerGetConnectedSystemTests
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
         // Passed explicitly: JimApplication.SyncRepo comes from this constructor parameter rather than from
-        // IRepository.Sync, and the endpoint reports a Connected System's initial-password counts.
+        // IRepository.Sync.
         var mockSyncRepo = new Mock<ISyncRepository>();
-        mockSyncRepo.Setup(r => r.GetInitialPasswordAttentionByConnectedSystemAsync(It.IsAny<IReadOnlyCollection<int>>()))
-            .ReturnsAsync([]);
 
         _application = new JimApplication(_mockRepository.Object, syncRepository: mockSyncRepo.Object);
         _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator, _mockCredentialProtection.Object);

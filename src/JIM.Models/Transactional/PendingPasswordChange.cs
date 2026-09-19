@@ -29,6 +29,15 @@ namespace JIM.Models.Transactional;
 /// </summary>
 public class PendingPasswordChange
 {
+    /// <summary>
+    /// JIM's own default time to live for a queued password change, applied when nothing more specific
+    /// configures one: <see cref="ConnectedSystem.EffectiveInitialPasswordTimeToLive"/> falls back to this when
+    /// <see cref="ConnectedSystem.InitialPasswordTimeToLive"/> is unset, and
+    /// <see cref="ConnectedSystemPasswordSynchronisation.CalculateRetryDelay"/> caps its retry backoff the same
+    /// way.
+    /// </summary>
+    public static readonly TimeSpan DefaultTimeToLive = TimeSpan.FromDays(7);
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>

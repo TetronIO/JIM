@@ -364,7 +364,7 @@ public class PasswordSynchronisationServer
     /// <summary>
     /// How many queued password changes one lane will attempt against a Connected System before handing back.
     /// <para>
-    /// A bound rather than a page size, matching the initial-password pass: a misconfigured target must not turn
+    /// A bound rather than a page size: a misconfigured target must not turn
     /// one lane into an unbounded run of failing round trips. What is left over is taken by the next lane, oldest
     /// first, so nothing starves; the rows the lane wrote wake the service for it.
     /// </para>

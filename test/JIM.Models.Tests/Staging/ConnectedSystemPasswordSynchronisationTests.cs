@@ -126,7 +126,7 @@ public class ConnectedSystemPasswordSynchronisationTests
         var configuration = Configuration();
 
         Assert.That(configuration.CalculateRetryDelay(int.MaxValue, TimeSpan.Zero),
-            Is.EqualTo(PendingInitialPassword.DefaultTimeToLive));
+            Is.EqualTo(PendingPasswordChange.DefaultTimeToLive));
     }
 
     [Test]

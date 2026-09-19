@@ -38,13 +38,6 @@ public class ChangeHistoryServer
         public int SecurityEventActivitiesDeleted { get; set; }
 
         /// <summary>
-        /// Initial-password records (#1121) that had been parked or expired for longer than their own retention
-        /// period. Reported separately because it counts outstanding-work records rather than history: the
-        /// account's Activity is unaffected and long outlives it.
-        /// </summary>
-        public int InitialPasswordWorkRecordsDeleted { get; set; }
-
-        /// <summary>
         /// Password Synchronisation Activities (#1119) past their own retention period: the delivery passes, the
         /// fan-out records, and the per-system outcome children.
         /// </summary>
@@ -106,7 +99,6 @@ public class ChangeHistoryServer
             General = asOf - await _application.ServiceSettings.GetHistoryRetentionPeriodAsync(),
             ConfigurationChange = asOf - await _application.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync(),
             SecurityEvent = asOf - await _application.ServiceSettings.GetSecurityEventRetentionPeriodAsync(),
-            InitialPassword = asOf - await _application.ServiceSettings.GetInitialPasswordRetentionPeriodAsync(),
             PasswordEvent = asOf - await _application.ServiceSettings.GetPasswordEventRetentionPeriodAsync(),
             MaxRecordsPerType = await _application.ServiceSettings.GetHistoryCleanupBatchSizeAsync()
         };
@@ -408,7 +400,6 @@ public class ChangeHistoryServer
         var olderThan = cutoffs.General;
         var configurationOlderThan = cutoffs.ConfigurationChange;
         var securityOlderThan = cutoffs.SecurityEvent;
-        var initialPasswordOlderThan = cutoffs.InitialPassword;
         var passwordOlderThan = cutoffs.PasswordEvent;
         var maxRecordsPerType = cutoffs.MaxRecordsPerType;
 
@@ -439,13 +430,6 @@ public class ChangeHistoryServer
             // Delete security event Activities (TargetType Authentication) at their own retention cutoff
             Log.Information("ChangeHistoryCleanup: Deleting expired security event activities (older than {SecurityOlderThan})", securityOlderThan);
             result.SecurityEventActivitiesDeleted = await _application.Repository.ChangeHistory.DeleteExpiredSecurityEventActivitiesAsync(securityOlderThan, maxRecordsPerType);
-
-            // Remove initial-password work records that reached a terminal state and have since had their own
-            // retention period (#1121). Nothing else ages them out, and they are retained on purpose until then,
-            // so without this pass a Synchronisation Rule provisioning into a target that refuses its passwords
-            // grows one permanent row per account.
-            Log.Information("ChangeHistoryCleanup: Removing initial-password records parked or expired before {InitialPasswordOlderThan}", initialPasswordOlderThan);
-            result.InitialPasswordWorkRecordsDeleted = await _application.InitialPasswords.DeleteExpiredWorkRecordsAsync(initialPasswordOlderThan, maxRecordsPerType);
 
             // Password Synchronisation history at its own retention cutoff (#1119, requirements 28 and 29). The
             // Activities are spared by the general Activity pass above, so this is the only thing that removes
@@ -478,8 +462,8 @@ public class ChangeHistoryServer
             if (completeActivity)
                 await _application.Activities.CompleteActivityAsync(activity);
 
-            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {InitialPasswordCount} initial-password records, {PasswordActivityCount} Password Synchronisation activities, {PasswordQueueCount} queued password changes deleted",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted);
+            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {PasswordActivityCount} Password Synchronisation activities, {PasswordQueueCount} queued password changes deleted",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted);
 
             return result;
         }

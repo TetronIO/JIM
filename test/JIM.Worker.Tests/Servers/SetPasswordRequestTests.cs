@@ -215,7 +215,7 @@ public class SetPasswordRequestTests
         await _server.SetPasswordAsync(Request([account.Id]), CancellationToken.None);
 
         var row = QueuedRow();
-        Assert.That(row.ExpiresAt - row.CreatedAt, Is.EqualTo(PendingInitialPassword.DefaultTimeToLive));
+        Assert.That(row.ExpiresAt - row.CreatedAt, Is.EqualTo(PendingPasswordChange.DefaultTimeToLive));
     }
 
     /// <summary>

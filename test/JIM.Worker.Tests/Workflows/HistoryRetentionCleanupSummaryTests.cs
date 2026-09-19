@@ -38,7 +38,6 @@ public class HistoryRetentionCleanupSummaryTests
             ActivitiesDeleted = 40,
             ConfigurationChangeActivitiesDeleted = 1,
             SecurityEventActivitiesDeleted = 5,
-            InitialPasswordWorkRecordsDeleted = 7,
             PasswordEventActivitiesDeleted = 9,
             PasswordQueueRecordsDeleted = 4
         });
@@ -52,7 +51,6 @@ public class HistoryRetentionCleanupSummaryTests
             Assert.That(summary, Does.Contain("40 Activities"));
             Assert.That(summary, Does.Contain("1 configuration change Activity"));
             Assert.That(summary, Does.Contain("5 security event Activities"));
-            Assert.That(summary, Does.Contain("7 initial password records"));
             Assert.That(summary, Does.Contain("9 Password Synchronisation Activities"));
             Assert.That(summary, Does.Contain("4 queued password changes"));
         }

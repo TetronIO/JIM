@@ -92,10 +92,9 @@ public class RunProfilePhaseCatalogueTests
     }
 
     /// <summary>
-    /// An export's rail showed three steps while the run narrated work belonging to none of them:
-    /// giving provisioned accounts their initial passwords, and selecting containers the export had
-    /// just created. Both do real work against the Connected System after the objects are written,
-    /// and the first writes its own message, so the message changed while the rail stood still.
+    /// An export's rail showed two steps while the run narrated work belonging to neither of them:
+    /// resolving change history references, and selecting containers the export had just created.
+    /// Both do real work against the Connected System after the objects are written.
     /// </summary>
     [Test]
     public void GetPhases_Export_DeclaresTheWorkThatFollowsWritingTheObjects()
@@ -108,8 +107,6 @@ public class RunProfilePhaseCatalogueTests
                 "An export's second pass re-resolves references that did not exist yet and writes what it can; at scale that pass is most of the run.");
             Assert.That(keys, Does.Contain(RunPhaseKeys.ExportSelectNewContainers),
                 "An export that creates containers then goes and selects them; that is Connected System work with no step of its own.");
-            Assert.That(keys, Does.Contain(RunPhaseKeys.ExportDeliverInitialPasswords),
-                "Initial password delivery opens its own connection and narrates its own outcome, so it needs a step to narrate into.");
         }
     }
 
@@ -124,8 +121,7 @@ public class RunProfilePhaseCatalogueTests
             RunPhaseKeys.ExportExecute,
             RunPhaseKeys.ExportDeferred,
             RunPhaseKeys.ExportResolveReferences,
-            RunPhaseKeys.ExportSelectNewContainers,
-            RunPhaseKeys.ExportDeliverInitialPasswords
+            RunPhaseKeys.ExportSelectNewContainers
         }));
     }
 

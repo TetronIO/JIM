@@ -176,7 +176,7 @@ public class ConnectedSystem : IAuditable
     public bool RequireSecureTransport { get; set; }
 
     /// <summary>
-    /// The time to live actually applied to a new <see cref="PendingInitialPassword"/> for this Connected System.
+    /// The time to live actually applied to a new provisioned password change queued for this Connected System.
     /// A value of zero or less is treated as unconfigured rather than obeyed, because it would expire every
     /// account the instant it was provisioned, which is the one outcome nobody setting this can be asking for.
     /// </summary>
@@ -184,7 +184,7 @@ public class ConnectedSystem : IAuditable
     public TimeSpan EffectiveInitialPasswordTimeToLive =>
         InitialPasswordTimeToLive is { } timeToLive && timeToLive > TimeSpan.Zero
             ? timeToLive
-            : PendingInitialPassword.DefaultTimeToLive;
+            : PendingPasswordChange.DefaultTimeToLive;
 
     /// <summary>
     /// Set when the Connector Space is cleared: clearing hard-deletes Connected System Objects without

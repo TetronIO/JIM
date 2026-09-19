@@ -6,7 +6,6 @@ namespace JIM.Models.Transactional;
 /// <summary>
 /// Where a queued password change stands in reaching its Connected System (#1119).
 /// <para>
-/// Deliberately the same three states as <see cref="PendingInitialPasswordStatus"/>, and for the same reasons.
 /// There is no "delivered" state: a successful delivery removes the row, because this is a list of work
 /// outstanding rather than a history of work done, and the Activity is the history. Keeping delivered rows would
 /// grow a table by one row per password change per system, to answer a question Activities already answer, while
