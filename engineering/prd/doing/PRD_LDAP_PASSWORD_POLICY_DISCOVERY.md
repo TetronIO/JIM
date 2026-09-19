@@ -1,6 +1,6 @@
 # Password Policy Discovery for OpenLDAP and 389 Directory Server
 
-- **Status:** Planned
+- **Status:** Doing
 - **Created:** 2026-09-19
 - **Author:** JayVDZ (PRD drafted via Claude Code)
 - **Issue:** [#1702](https://github.com/TetronIO/JIM/issues/1702)
