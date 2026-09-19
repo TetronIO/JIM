@@ -1,6 +1,6 @@
 # Initial Passwords on the Password Delivery Service: Implementation Plan
 
-- **Status:** Doing (Layer 1 complete; Layer 2 docs and changelog delivered, origin-on-surfaces and Connected System removals outstanding)
+- **Status:** Done
 - **Issue:** [#1697](https://github.com/TetronIO/JIM/issues/1697)
 - **PRD:** [PRD_PASSWORD_SYNCHRONISATION.md](../../prd/doing/PRD_PASSWORD_SYNCHRONISATION.md)
 - **Created:** 2026-09-19
