@@ -70,7 +70,7 @@ public class JimApplication : IDisposable
     public DriftDetectionService DriftDetection { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
-    public InitialPasswordDeliveryServer InitialPasswords { get; }
+    public InitialPasswordServer InitialPasswords { get; }
 
     /// <summary>
     /// Fan-out and the queue behind Password Synchronisation (#1119).
@@ -152,7 +152,7 @@ public class JimApplication : IDisposable
         // constructing this facade, so a value read here would always be the null that precedes it. The fallback
         // is the same one ExportExecutionServer uses, and reads the same shared key directory, so a caller that
         // never had one set still decrypts what the portal encrypted.
-        InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, PasswordGenerator,
+        InitialPasswords = new InitialPasswordServer(SyncRepo, PasswordGenerator,
             () => CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()));
 
         // Password protection resolves the same way and for the same reason as credential protection above: the
@@ -182,7 +182,7 @@ public class JimApplication : IDisposable
             activity => Activities.CompleteActivityAsync(activity),
             (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage),
             // Resolves a Provisioned row's first password (#1697): the same generator instance and the
-            // same credential protection fallback InitialPasswordDeliveryServer above is built with.
+            // same credential protection fallback InitialPasswordServer above is built with.
             PasswordGenerator,
             () => CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()));
         ScopingEvaluation = new ScopingEvaluationServer();

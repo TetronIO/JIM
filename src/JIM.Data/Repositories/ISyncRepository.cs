@@ -838,10 +838,36 @@ public interface ISyncRepository
     Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId);
 
     /// <summary>
+    /// Makes every parked <see cref="PendingPasswordChangeOrigin.Provisioned"/> change against one Synchronisation
+    /// Rule due again, returning how many were released (#1697). The Synchronisation Rule counterpart of
+    /// <see cref="ReleasePasswordChangesForDeliveryAsync"/>: a rule's initial-password settings park accounts, so
+    /// correcting them releases by rule rather than by Connected System.
+    /// <para>
+    /// The update fires the queue's own NOTIFY trigger, so the Password Delivery Service attempts the released
+    /// rows within seconds; the caller does not schedule or wake anything itself, and the Parked filter lives in
+    /// the SQL rather than in the caller.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose parked provisioned accounts to release.</param>
+    Task<int> ReleaseParkedProvisionedPasswordChangesAsync(int syncRuleId);
+
+    /// <summary>
     /// How much queued password work on each Connected System is waiting on a person. A system with nothing to
     /// report is absent from the dictionary rather than present with zeroes.
     /// </summary>
     Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// Counts the accounts needing a person's attention over their initial password, by Synchronisation Rule, now
+    /// that initial passwords are staged onto this queue as <see cref="PendingPasswordChangeOrigin.Provisioned"/>
+    /// rows (#1697). The Synchronisation Rule surfaces' counterpart of <see cref="GetPasswordQueueAttentionAsync"/>.
+    /// <para>
+    /// A rule with nothing outstanding is absent from the result rather than present with zeroes, matching
+    /// <see cref="GetInitialPasswordAttentionBySyncRuleAsync"/>, which this supersedes as the rule surfaces'
+    /// source of truth.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetProvisionedPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds);
 
     /// <summary>
     /// Removes terminal password changes last touched before <paramref name="olderThan"/>, up to
@@ -900,6 +926,15 @@ public interface ISyncRepository
         Guid? cancelledById,
         string? cancelledByName,
         DateTime asOf);
+
+    /// <summary>
+    /// The distinct reasons a target gave for refusing the <see cref="PendingPasswordChangeOrigin.Provisioned"/>
+    /// changes parked against a Synchronisation Rule, each with how many accounts it is holding up, most accounts
+    /// first (#1697). The Synchronisation Rule surfaces' counterpart of the queue's rejection reasons, over this
+    /// queue rather than the old initial-password store: see <see cref="GetParkedInitialPasswordReasonsAsync"/>,
+    /// which this supersedes as the rule surfaces' source of truth.
+    /// </summary>
+    Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId);
 
     #endregion
 

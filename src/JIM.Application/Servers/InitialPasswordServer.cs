@@ -15,21 +15,23 @@ using Serilog;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Gives the accounts JIM has provisioned the initial passwords they are owed (issue #1121).
+/// Owns initial-password configuration and the Synchronisation Rule-side attention it produces (issue #1121).
 /// <para>
-/// Runs as its own pass after the export phase, over everything outstanding on the Connected System rather
-/// than only what this run staged. That makes an ordinary export run the retry vehicle for an account whose
-/// password could not be set last time, with no separate Run Profile to remember to schedule, and it means a
-/// right granted or a directory brought back online is picked up by the next run that happens anyway.
+/// That is: assessing a rule's initial-password settings before they are saved, protecting the one static
+/// password an administrator may set on a rule, releasing a rule's parked provisioned accounts so they are
+/// attempted again, and answering the rule surfaces' "does this need a person" and "why is it stuck" reads.
+/// Delivering the password itself belongs to the Password Delivery Service (#1697): provisioned accounts are
+/// staged onto its queue as <see cref="PendingPasswordChangeOrigin.Provisioned"/> rows at export time, and that
+/// service is what attempts, retries and parks them. This class has nothing left to do with delivery.
 /// </para>
 /// <para>
 /// <b>No password value leaves this class, or is written anywhere.</b> A generated password is produced at the
 /// moment of delivery, handed to the Connector and dropped; a rule set to use one static password decrypts it
-/// here and drops it the same way. What is recorded is that a password was owed, how many times JIM has tried,
-/// and what the target said when it refused.
+/// only to protect it again for storage. What is recorded elsewhere is that a password was owed, how many times
+/// JIM has tried, and what the target said when it refused.
 /// </para>
 /// </summary>
-public class InitialPasswordDeliveryServer
+public class InitialPasswordServer
 {
     /// <summary>
     /// The most accounts one pass will attempt.
@@ -50,7 +52,7 @@ public class InitialPasswordDeliveryServer
     /// <see cref="JimApplication.CredentialProtection"/> after constructing the facade, so anything captured here
     /// would capture the null that precedes it.
     /// </param>
-    internal InitialPasswordDeliveryServer(
+    internal InitialPasswordServer(
         ISyncRepository syncRepository,
         IPasswordGeneratorService passwordGenerator,
         Func<ICredentialProtectionService> credentialProtection)
@@ -260,9 +262,10 @@ public class InitialPasswordDeliveryServer
     /// event reaches the parked work. Without it, parking is a one-way door.
     /// </para>
     /// <para>
-    /// Releasing makes the accounts outstanding again rather than delivering to them here. Delivery needs an
-    /// open Connector connection, so it belongs to the export pass that already owns one; the released accounts
-    /// are picked up by the next run over that Connected System with no backoff to wait out. Nothing is
+    /// Releasing makes the accounts due again rather than delivering to them here (#1697): each is a
+    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row on the Password Delivery Service's queue, and
+    /// the update that releases it fires the queue's own NOTIFY trigger, so the service attempts the released
+    /// rows within seconds rather than waiting for the Connected System's next export run. Nothing is
     /// regenerated or invalidated in the meantime because no password was ever stored: each is generated at the
     /// moment of delivery, so the retry uses the corrected configuration by construction.
     /// </para>
@@ -270,11 +273,11 @@ public class InitialPasswordDeliveryServer
     /// <param name="syncRuleId">The Synchronisation Rule whose parked accounts to release.</param>
     public async Task<int> ReleaseParkedForSyncRuleAsync(int syncRuleId)
     {
-        var released = await _syncRepo.ReleaseParkedInitialPasswordsAsync(syncRuleId);
+        var released = await _syncRepo.ReleaseParkedProvisionedPasswordChangesAsync(syncRuleId);
 
         if (released > 0)
             Log.Information("ReleaseParkedForSyncRuleAsync: {Count} accounts parked against Synchronisation Rule {SyncRuleId} " +
-                "have been released and will be attempted again on its Connected System's next export run", released, syncRuleId);
+                "have been released and will be attempted again by the Password Delivery Service", released, syncRuleId);
 
         return released;
     }
@@ -318,7 +321,7 @@ public class InitialPasswordDeliveryServer
     {
         ArgumentNullException.ThrowIfNull(syncRuleIds);
 
-        return await _syncRepo.GetInitialPasswordAttentionBySyncRuleAsync(syncRuleIds);
+        return await _syncRepo.GetProvisionedPasswordAttentionBySyncRuleAsync(syncRuleIds);
     }
 
     /// <summary>
@@ -341,7 +344,7 @@ public class InitialPasswordDeliveryServer
     /// </summary>
     public async Task<List<InitialPasswordRejection>> GetParkedReasonsAsync(int syncRuleId)
     {
-        return await _syncRepo.GetParkedInitialPasswordReasonsAsync(syncRuleId);
+        return await _syncRepo.GetParkedProvisionedPasswordReasonsAsync(syncRuleId);
     }
 
     /// <summary>

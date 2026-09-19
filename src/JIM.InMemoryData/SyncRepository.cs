@@ -3205,6 +3205,20 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(releasing.Count);
     }
 
+    public Task<int> ReleaseParkedProvisionedPasswordChangesAsync(int syncRuleId)
+    {
+        var releasing = _pendingPasswordChanges.Values
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
+            .ToList();
+
+        foreach (var change in releasing)
+            change.Retry();
+
+        return Task.FromResult(releasing.Count);
+    }
+
     public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
     {
         var attention = _pendingPasswordChanges.Values
@@ -3218,6 +3232,49 @@ public class SyncRepository : ISyncRepository
             });
 
         return Task.FromResult(attention);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetProvisionedPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var attention = _pendingPasswordChanges.Values
+            .Where(c => c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.SyncRuleId.HasValue && syncRuleIds.Contains(c.SyncRuleId.Value))
+            .GroupBy(c => c.SyncRuleId!.Value)
+            .Select(g => new { SyncRuleId = g.Key, Attention = SummarisePasswordChangeAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.SyncRuleId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId)
+    {
+        var reasons = _pendingPasswordChanges.Values
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
+            .GroupBy(c => c.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Select(c => c.FailureReason).FirstOrDefault(r => r.HasValue),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(c => c.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToList();
+
+        return Task.FromResult(reasons);
+    }
+
+    private static InitialPasswordAttention SummarisePasswordChangeAttention(IEnumerable<PendingPasswordChange> records)
+    {
+        var byStatus = records.ToLookup(c => c.Status);
+        return new InitialPasswordAttention
+        {
+            ParkedCount = byStatus[PendingPasswordChangeStatus.Parked].Count(),
+            ExpiredCount = byStatus[PendingPasswordChangeStatus.Expired].Count()
+        };
     }
 
     public Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangeHeadersAsync(

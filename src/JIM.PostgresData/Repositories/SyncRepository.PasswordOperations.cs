@@ -456,6 +456,27 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> ReleaseParkedProvisionedPasswordChangesAsync(int syncRuleId)
+    {
+        // The Synchronisation Rule counterpart of ReleasePasswordChangesForDeliveryAsync above: same columns,
+        // scoped to the one rule's Provisioned rows rather than a whole Connected System. The update fires the
+        // queue's own NOTIFY trigger, so the Password Delivery Service attempts the released rows within
+        // seconds; the Parked filter lives here, not in the caller.
+        return await _context.PendingPasswordChanges
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, PendingPasswordChangeStatus.Pending)
+                .SetProperty(c => c.AttemptCount, 0)
+                .SetProperty(c => c.NextRetryAt, (DateTime?)null)
+                .SetProperty(c => c.FailureReason, (Models.Staging.PasswordSetFailureReason?)null)
+                .SetProperty(c => c.TargetMessage, (string?)null)
+                .SetProperty(c => c.ClaimedAt, (DateTime?)null)
+                .SetProperty(c => c.ClaimedBy, (string?)null));
+    }
+
+    /// <inheritdoc />
     public async Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
     {
         if (connectedSystemIds.Count == 0)
@@ -478,6 +499,36 @@ public partial class SyncRepository
         return counts
             .GroupBy(c => c.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => new PasswordQueueAttention
+            {
+                ParkedCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Parked).Sum(c => c.Count),
+                ExpiredCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Expired).Sum(c => c.Count)
+            });
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetProvisionedPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        // The Synchronisation Rule counterpart of GetPasswordQueueAttentionAsync above, over the same table but
+        // grouped by rule and narrowed to Provisioned rows: those are the ones a rule's own settings can park.
+        var counts = await _context.PendingPasswordChanges
+            .AsNoTracking()
+            .Where(c => c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.SyncRuleId.HasValue && syncRuleIds.Contains(c.SyncRuleId.Value)
+                        && (c.Status == PendingPasswordChangeStatus.Parked
+                            || c.Status == PendingPasswordChangeStatus.Expired))
+            .GroupBy(c => new { SyncRuleId = c.SyncRuleId!.Value, c.Status })
+            .Select(g => new { g.Key.SyncRuleId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        // A settled rule is absent from the dictionary rather than present with zeroes, matching
+        // GetInitialPasswordAttentionBySyncRuleAsync, so a caller can tell "nothing to report" from "reported
+        // nothing".
+        return counts
+            .GroupBy(c => c.SyncRuleId)
+            .ToDictionary(g => g.Key, g => new InitialPasswordAttention
             {
                 ParkedCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Parked).Sum(c => c.Count),
                 ExpiredCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Expired).Sum(c => c.Count)
@@ -676,6 +727,28 @@ public partial class SyncRepository
                 .SetProperty(c => c.CancelledByName, cancelledByName)
                 .SetProperty(c => c.ClaimedAt, (DateTime?)null)
                 .SetProperty(c => c.ClaimedBy, (string?)null));
+    }
+
+    /// <inheritdoc />
+    public async Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId)
+    {
+        // The Synchronisation Rule counterpart of GetParkedInitialPasswordReasonsAsync, over this queue's
+        // Provisioned rows rather than the old initial-password store.
+        return await _context.PendingPasswordChanges
+            .AsNoTracking()
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
+            .GroupBy(c => c.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Max(c => c.FailureReason),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(c => c.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToListAsync();
     }
 
     /// <summary>

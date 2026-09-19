@@ -89,7 +89,7 @@ public class PasswordSynchronisationServer
     /// </param>
     /// <param name="passwordGenerator">
     /// Generates a Provisioned row's first password from its Synchronisation Rule's settings at the moment of
-    /// delivery (#1697): mirrors <see cref="InitialPasswordDeliveryServer"/>, which resolves the same way
+    /// delivery (#1697): mirrors <see cref="InitialPasswordServer"/>, which resolves the same way
     /// for the pass that preceded this one.
     /// </param>
     /// <param name="credentialProtection">
@@ -928,8 +928,8 @@ public class PasswordSynchronisationServer
     }
 
     /// <summary>
-    /// Records that a Provisioned row was removed from the queue without a password ever being sent (#1697's
-    /// WP3), as a completed child Activity carrying why. Completed rather than failed: nothing went wrong, the
+    /// Records that a Provisioned row was removed from the queue without a password ever being sent (#1697),
+    /// as a completed child Activity carrying why. Completed rather than failed: nothing went wrong, the
     /// work simply stopped being needed, either because the account it was for is gone or because the
     /// Synchronisation Rule that provisioned it no longer sets one.
     /// </summary>

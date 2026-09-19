@@ -56,8 +56,8 @@ public class SynchronisationControllerInitialPasswordTests
         // IRepository.Sync, so omitting it leaves the initial-password server with a null repository and the
         // parked-work reporting on this endpoint throws. All three hosts pass it.
         _mockSyncRepo = new Mock<ISyncRepository>();
-        _mockSyncRepo.Setup(r => r.GetParkedInitialPasswordReasonsAsync(It.IsAny<int>())).ReturnsAsync([]);
-        _mockSyncRepo.Setup(r => r.GetInitialPasswordAttentionBySyncRuleAsync(It.IsAny<IReadOnlyCollection<int>>()))
+        _mockSyncRepo.Setup(r => r.GetParkedProvisionedPasswordReasonsAsync(It.IsAny<int>())).ReturnsAsync([]);
+        _mockSyncRepo.Setup(r => r.GetProvisionedPasswordAttentionBySyncRuleAsync(It.IsAny<IReadOnlyCollection<int>>()))
             .ReturnsAsync([]);
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
@@ -285,7 +285,7 @@ public class SynchronisationControllerInitialPasswordTests
     {
         var rule = BuildProvisioningRule(5);
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(5)).ReturnsAsync(rule);
-        _mockSyncRepo.Setup(r => r.GetParkedInitialPasswordReasonsAsync(5)).ReturnsAsync([
+        _mockSyncRepo.Setup(r => r.GetParkedProvisionedPasswordReasonsAsync(5)).ReturnsAsync([
             new InitialPasswordRejection
             {
                 TargetMessage = "0000052D: CONSTRAINT_ATT_TYPE",
@@ -295,7 +295,7 @@ public class SynchronisationControllerInitialPasswordTests
             },
             new InitialPasswordRejection { TargetMessage = "Too short.", AccountCount = 3 }
         ]);
-        _mockSyncRepo.Setup(r => r.GetInitialPasswordAttentionBySyncRuleAsync(It.IsAny<IReadOnlyCollection<int>>()))
+        _mockSyncRepo.Setup(r => r.GetProvisionedPasswordAttentionBySyncRuleAsync(It.IsAny<IReadOnlyCollection<int>>()))
             .ReturnsAsync(new Dictionary<int, InitialPasswordAttention>
             {
                 [5] = new InitialPasswordAttention { ParkedCount = 14, ExpiredCount = 2 }
@@ -341,7 +341,7 @@ public class SynchronisationControllerInitialPasswordTests
     public async Task GetSyncRuleInitialPassword_NeverReturnsAPasswordAlongsideTheReasonsAsync()
     {
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(5)).ReturnsAsync(BuildProvisioningRule(5));
-        _mockSyncRepo.Setup(r => r.GetParkedInitialPasswordReasonsAsync(5)).ReturnsAsync([
+        _mockSyncRepo.Setup(r => r.GetParkedProvisionedPasswordReasonsAsync(5)).ReturnsAsync([
             new InitialPasswordRejection { TargetMessage = "Rejected.", AccountCount = 1 }
         ]);
 
