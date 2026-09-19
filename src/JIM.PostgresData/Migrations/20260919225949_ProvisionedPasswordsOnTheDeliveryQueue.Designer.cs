@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260919095623_ProvisionedPasswordsOnTheDeliveryQueue")]
+    [Migration("20260919225949_ProvisionedPasswordsOnTheDeliveryQueue")]
     partial class ProvisionedPasswordsOnTheDeliveryQueue
     {
         /// <inheritdoc />
@@ -3435,8 +3435,11 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Discovered")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("FineGrainedPolicySignal")
+                    b.Property<int>("DiscoveryOutcome")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("FurtherChecksApply")
+                        .HasColumnType("boolean");
 
                     b.Property<TimeSpan?>("MaximumPasswordAge")
                         .HasColumnType("interval");
@@ -3448,6 +3451,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("interval");
 
                     b.Property<int?>("PasswordHistoryLength")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PolicyOverrideSignal")
                         .HasColumnType("integer");
 
                     b.Property<int>("RecognisedCharacterClasses")
