@@ -87,6 +87,35 @@ internal class LdapConnectorRootDse
     /// </summary>
     public List<string>? NamingContexts { get; set; }
 
+    /// <summary>
+    /// The vendorVersion attribute from rootDSE, where the directory publishes one (for example
+    /// "389-Directory/2.4.5"). Used alongside <see cref="VendorName"/> for directory type detection and retained
+    /// for diagnostics. Null when not published, and null in persisted JSON written before it was captured.
+    /// </summary>
+    public string? VendorVersion { get; set; }
+
+    /// <summary>
+    /// The DN of the directory's configuration naming context, from rootDSE's configContext ("cn=config" on
+    /// OpenLDAP and 389 Directory Server). This is where those directories hold their password policy
+    /// configuration, so password policy discovery reads it from here rather than assuming a location. Null
+    /// when the directory does not publish one; Active Directory does not.
+    /// </summary>
+    public string? ConfigContext { get; set; }
+
+    /// <summary>
+    /// The control OIDs the directory advertises in rootDSE's supportedControl. Password policy discovery uses it
+    /// to tell whether OpenLDAP has the ppolicy overlay loaded at all. Null when the rootDSE query did not return
+    /// the attribute, which is "unknown" rather than "none".
+    /// </summary>
+    public List<string>? SupportedControls { get; set; }
+
+    /// <summary>
+    /// The directory's defaultNamingContext, which Active Directory publishes as the domain root and which
+    /// other directories may or may not publish. Null when absent; password policy discovery then falls back to
+    /// <see cref="NamingContexts"/>.
+    /// </summary>
+    public string? DefaultNamingContext { get; set; }
+
     // -----------------------------------------------------------------------
     // Computed properties — centralised directory-type-specific behaviour
     // -----------------------------------------------------------------------
@@ -101,7 +130,9 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.SambaAD => "objectGUID",
         LdapDirectoryType.OpenLDAP => "entryUUID",
         LdapDirectoryType.Generic => "entryUUID",
+        LdapDirectoryType.DirectoryServer389 => "entryUUID",
         _ => "entryUUID"
+
     };
 
     /// <summary>
@@ -114,7 +145,9 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.SambaAD => AttributeDataType.Guid,
         LdapDirectoryType.OpenLDAP => AttributeDataType.Text,
         LdapDirectoryType.Generic => AttributeDataType.Text,
+        LdapDirectoryType.DirectoryServer389 => AttributeDataType.Text,
         _ => AttributeDataType.Text
+
     };
 
     /// <summary>
@@ -124,7 +157,8 @@ internal class LdapConnectorRootDse
 
     /// <summary>
     /// Whether delta imports should use the OpenLDAP accesslog overlay (cn=accesslog with reqStart timestamps).
-    /// Falls back to standard changelog (cn=changelog with changeNumber) for Generic directories.
+    /// Falls back to standard changelog (cn=changelog with changeNumber) for Generic and 389 Directory Server.
+
     /// </summary>
     public bool UseAccesslogDeltaImport => DirectoryType is LdapDirectoryType.OpenLDAP;
 
@@ -145,7 +179,9 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.OpenLDAP => 16,
         LdapDirectoryType.SambaAD => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         LdapDirectoryType.Generic => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
+        LdapDirectoryType.DirectoryServer389 => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         _ => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY
+
     };
 
     /// <summary>
@@ -159,6 +195,8 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.SambaAD => false,
         LdapDirectoryType.OpenLDAP => true,
         LdapDirectoryType.Generic => true,
+        LdapDirectoryType.DirectoryServer389 => true,
         _ => true
+
     };
 }

@@ -800,3 +800,130 @@ function Set-LDAPUserPasswordAsAccountHolder {
         Output   = $outputText
     }
 }
+
+# LDAP result codes an RFC 3062 Password Modify can answer with, as ldappasswd prints them
+# ("Result: <text> (<code>)"). The number is what is matched on; the text varies by server.
+$script:LDAPPasswordModifyResultCodes = @{
+    '19' = 'ConstraintViolation'   # the directory's password policy refused the new value
+    '49' = 'InvalidCredentials'    # the bind that carries the operation was refused
+    '50' = 'InsufficientAccess'    # bound, but not permitted to write this entry's password
+    '53' = 'UnwillingToPerform'    # for example a cleartext operation the directory will not take
+}
+
+function Get-LDAPPasswordModifyOutcome {
+    <#
+    .SYNOPSIS
+        Classify the outcome of an RFC 3062 Password Modify from ldappasswd's exit code and output.
+
+    .DESCRIPTION
+        Turns ldappasswd's exit code and diagnostic text into one word describing what the directory
+        decided. The distinction that matters for Scenario 22 is between 'ConstraintViolation' (the
+        password policy did its job and refused the value) and everything else: a refusal for want of
+        access, or a bind failure, is a test-fixture problem that would otherwise pass as "enforced".
+
+        Anything unrecognised is reported as 'Failed' rather than being guessed at, so a new failure
+        mode surfaces as a test failure instead of being quietly folded into an existing category.
+
+    .PARAMETER ExitCode
+        The client's exit code. Zero means the operation succeeded.
+
+    .PARAMETER Output
+        The client's combined output, which carries "Result: ... (<code>)" on failure.
+
+    .OUTPUTS
+        One of: Success, ConstraintViolation, InvalidCredentials, InsufficientAccess,
+        UnwillingToPerform, Failed.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ExitCode,
+
+        [Parameter(Mandatory=$false)]
+        [AllowEmptyString()]
+        [string]$Output = ""
+    )
+
+    if ($ExitCode -eq 0) {
+        return 'Success'
+    }
+
+    if ($Output -match '\((\d+)\)') {
+        $resultCode = $matches[1]
+        if ($script:LDAPPasswordModifyResultCodes.ContainsKey($resultCode)) {
+            return $script:LDAPPasswordModifyResultCodes[$resultCode]
+        }
+    }
+
+    return 'Failed'
+}
+
+function Set-LDAPUserPasswordWithPasswordModify {
+    <#
+    .SYNOPSIS
+        Change a password with the RFC 3062 Password Modify extended operation, as a given account.
+
+    .DESCRIPTION
+        Runs ldappasswd inside the directory container, bound as -BindDN, against -TargetDN (the bound
+        account itself when -TargetDN is omitted). This is the operation JIM's LDAP Connector uses to
+        set a password on every directory that is not Active Directory, so an outcome observed here is
+        an outcome JIM's password channel would see too.
+
+        Two things this proves that a Modify of userPassword would not: that the directory takes the
+        extended operation at all over the scheme in use (the Scenario 22 "step 0 spike"), and that a
+        password policy overlay sees the cleartext value it needs for a quality check. The rootdn is
+        exempt from OpenLDAP's password policy, so bind as an ordinary account to observe enforcement.
+
+    .PARAMETER BindDN
+        The Distinguished Name to bind as.
+
+    .PARAMETER BindPassword
+        The password to bind with.
+
+    .PARAMETER NewPassword
+        The password to set.
+
+    .PARAMETER TargetDN
+        The entry whose password is set. Defaults to the bound account (a self change).
+
+    .PARAMETER DirectoryConfig
+        Directory configuration hashtable from Get-DirectoryConfig (container, port and scheme).
+
+    .OUTPUTS
+        A hashtable with Outcome (see Get-LDAPPasswordModifyOutcome), ExitCode and Output.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$BindDN,
+
+        [Parameter(Mandatory=$true)]
+        [string]$BindPassword,
+
+        [Parameter(Mandatory=$true)]
+        [string]$NewPassword,
+
+        [Parameter(Mandatory=$false)]
+        [string]$TargetDN,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig
+    )
+
+    $ldapUri = "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)"
+
+    # -s carries the new password; without a target DN ldappasswd changes the bound account's own.
+    $ldapArgs = @("exec", $DirectoryConfig.ContainerName, "ldappasswd", "-x", "-H", $ldapUri,
+                  "-D", $BindDN, "-w", $BindPassword, "-s", $NewPassword)
+    if ($TargetDN) {
+        $ldapArgs += $TargetDN
+    }
+
+    $output = & docker @ldapArgs 2>&1
+    $exitCode = $LASTEXITCODE
+    $outputText = ($output | Out-String).Trim()
+
+    return @{
+        Outcome  = Get-LDAPPasswordModifyOutcome -ExitCode $exitCode -Output $outputText
+        ExitCode = $exitCode
+        Output   = $outputText
+    }
+}

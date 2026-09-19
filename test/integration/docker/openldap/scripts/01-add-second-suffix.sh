@@ -255,6 +255,68 @@ ALMODIFY
     echo "[openldap-init] Accesslog database configured (mapsize=128GB, sizeLimit=unlimited)"
 fi
 
+# Load the password policy overlay (slapo-ppolicy) and attach it to BOTH databases.
+#
+# The overlay is attached with NO default policy (no olcPPolicyDefault) and no policy entries
+# exist in the image, so it enforces nothing here: with no policy in effect it only stamps
+# pwdChangedTime on password writes, which no scenario reads. Scenario 22
+# (Populate-OpenLDAP-Scenario22.ps1) points the Yellowstone overlay at a policy entry it creates
+# itself; every other scenario's behaviour is unchanged. What the image provides is the ppolicy
+# request control in the rootDSE's supportedControl, which is what JIM's OpenLDAP password
+# policy reader looks for before it reads anything (#1702).
+#
+# OpenLDAP 2.5 and later build the ppolicy schema into the overlay; 2.4 shipped it as a separate
+# ppolicy.ldif under the schema directory, which must be loaded before the overlay will start.
+# The Dockerfile pins bitnamilegacy/openldap:latest (2.6 at the time of writing), so the schema
+# file is not expected, but the version is not asserted: the file is loaded if it is there and
+# the version is logged either way, so a base image change shows up in the build log.
+#
+# *** CHANGING THIS FILE CHANGES THE BASE IMAGE HASH. *** Build-OpenLdapImage.ps1 hashes this
+# script into the jim.openldap.build-hash label, Run-IntegrationTests.ps1 rebuilds the base image
+# when that label no longer matches, and Get-OpenLDAPPopulateScriptHash folds this file into every
+# OpenLDAP snapshot's hash, so every existing OpenLDAP snapshot is invalidated and rebuilt on its
+# next use (Build-OpenLDAPSnapshots.ps1). That is the intended way to roll a base change out.
+echo "[openldap-init] Loading the ppolicy overlay module..."
+echo "[openldap-init] slapd version: $($SLAPD -VV 2>&1 | head -1)"
+
+PPOLICY_MODULE_PATH="/opt/bitnami/openldap/lib/openldap"
+PPOLICY_SCHEMA_LDIF="/opt/bitnami/openldap/etc/schema/ppolicy.ldif"
+
+if [ -f "$PPOLICY_SCHEMA_LDIF" ]; then
+    echo "[openldap-init] ppolicy.ldif found (OpenLDAP 2.4 layout); loading the ppolicy schema..."
+    ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" -f "$PPOLICY_SCHEMA_LDIF"
+    echo "[openldap-init] ppolicy schema loaded"
+else
+    echo "[openldap-init] No ppolicy.ldif under the schema directory (OpenLDAP 2.5+ builds the ppolicy schema into the overlay)"
+fi
+
+if [ -f "$PPOLICY_MODULE_PATH/ppolicy.so" ]; then
+    ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<PPMODULE
+dn: cn=module,cn=config
+objectClass: olcModuleList
+cn: module
+olcModulePath: ${PPOLICY_MODULE_PATH}
+olcModuleLoad: ppolicy.so
+PPMODULE
+    echo "[openldap-init] ppolicy module loaded from ${PPOLICY_MODULE_PATH}/ppolicy.so"
+else
+    echo "[openldap-init] ${PPOLICY_MODULE_PATH}/ppolicy.so not found; assuming the overlay is compiled into slapd (the overlay add below fails if it is not)"
+fi
+
+for DB_DN in "$YELLOWSTONE_DB_DN" "$GLITTERBAND_DB_DN"; do
+    if [ -z "$DB_DN" ]; then
+        continue
+    fi
+    echo "[openldap-init] Adding ppolicy overlay (no default policy) to $DB_DN..."
+    ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<PPOVERLAY
+dn: olcOverlay=ppolicy,$DB_DN
+objectClass: olcOverlayConfig
+objectClass: olcPPolicyConfig
+olcOverlay: ppolicy
+PPOVERLAY
+    echo "[openldap-init] ppolicy overlay added to $DB_DN"
+done
+
 # Relax MDB write durability for test speed unless explicitly disabled.
 # 'olcDbEnvFlags: nosync' skips the per-transaction fsync that otherwise caps
 # LDAP write throughput at ~70 adds/sec (single-writer MDB, two fsyncs per

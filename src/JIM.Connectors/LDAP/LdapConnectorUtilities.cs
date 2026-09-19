@@ -416,8 +416,10 @@ internal static class LdapConnectorUtilities
     /// <param name="supportedCapabilities">OIDs from the rootDSE supportedCapabilities attribute.</param>
     /// <param name="vendorName">The vendorName attribute from rootDSE (may be null).</param>
     /// <param name="structuralObjectClass">The structuralObjectClass from rootDSE (may be null). OpenLDAP uses "OpenLDAProotDSE".</param>
-    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName, string? structuralObjectClass = null)
+    /// <param name="vendorVersion">The vendorVersion from rootDSE (may be null). 389 Directory Server publishes "389-Directory/x.y.z".</param>
+    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName, string? structuralObjectClass = null, string? vendorVersion = null)
     {
+
         var hasAdCapability = supportedCapabilities != null &&
             (supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
              supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
@@ -444,8 +446,42 @@ internal static class LdapConnectorUtilities
             return LdapDirectoryType.OpenLDAP;
         }
 
+        // 389 Directory Server publishes vendorName "389 Project"; Red Hat Directory Server builds brand the vendor
+        // differently but keep the 389-Directory version prefix, so either is enough.
+        if ((vendorName != null && vendorName.Contains("389", StringComparison.Ordinal)) ||
+            (vendorVersion != null && vendorVersion.StartsWith(DirectoryServer389VendorVersionPrefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            return LdapDirectoryType.DirectoryServer389;
+        }
+
         return LdapDirectoryType.Generic;
     }
+
+    /// <summary>
+    /// The prefix of the vendorVersion 389 Directory Server publishes on its rootDSE.
+    /// </summary>
+    internal const string DirectoryServer389VendorVersionPrefix = "389-Directory";
+
+    /// <summary>
+    /// The rootDSE attributes every directory-type read requests beyond the ones that identify the server:
+    /// the facts password policy discovery needs to know where a policy lives and whether one is advertised.
+    /// </summary>
+    internal static readonly string[] RootDseDiscoveryAttributes =
+        ["vendorVersion", "namingContexts", "configContext", "supportedControl", "defaultNamingContext"];
+
+    /// <summary>
+    /// Reads the discovery facts listed in <see cref="RootDseDiscoveryAttributes"/> off a rootDSE entry onto a
+    /// root DSE record, so the two rootDSE reads populate them identically.
+    /// </summary>
+    internal static void ApplyRootDseDiscoveryAttributes(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse)
+    {
+        rootDse.VendorVersion = GetEntryAttributeStringValue(rootDseEntry, "vendorVersion");
+        rootDse.NamingContexts = GetEntryAttributeStringValues(rootDseEntry, "namingContexts");
+        rootDse.ConfigContext = GetEntryAttributeStringValue(rootDseEntry, "configContext");
+        rootDse.SupportedControls = GetEntryAttributeStringValues(rootDseEntry, "supportedControl");
+        rootDse.DefaultNamingContext = GetEntryAttributeStringValue(rootDseEntry, "defaultNamingContext");
+    }
+
 
     /// <summary>
     /// Queries the rootDSE to detect directory type and basic capabilities.
@@ -455,8 +491,10 @@ internal static class LdapConnectorUtilities
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
         request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass", "DNSHostName"]);
+        request.Attributes.AddRange(RootDseDiscoveryAttributes);
 
         var response = (SearchResponse)connection.SendRequest(request);
+
 
         if (response?.Entries.Count == 0 || response == null)
         {
@@ -470,8 +508,9 @@ internal static class LdapConnectorUtilities
         var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
         var structuralObjectClass = GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
         var dnsHostName = GetEntryAttributeStringValue(rootDseEntry, "DNSHostName");
+        var vendorVersion = GetEntryAttributeStringValue(rootDseEntry, "vendorVersion");
 
-        var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
+        var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass, vendorVersion);
 
         var rootDse = new LdapConnectorRootDse
         {
@@ -479,6 +518,7 @@ internal static class LdapConnectorUtilities
             VendorName = vendorName,
             DnsHostName = dnsHostName
         };
+        ApplyRootDseDiscoveryAttributes(rootDseEntry, rootDse);
 
         logger.Debug("GetBasicRootDseInformation: DirectoryType={DirectoryType}, VendorName={VendorName}",
             rootDse.DirectoryType, rootDse.VendorName ?? "(not set)");

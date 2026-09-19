@@ -76,6 +76,18 @@ public class LdapConnectorDetectedCapabilitiesTests
     }
 
     [Test]
+    public void GetDetectedCapabilities_DirectoryServer389_ReturnsItsLabelWithPagingSupported()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389, VendorName = "389 Project" };
+        var persistedData = JsonSerializer.Serialize(rootDse);
+
+        var capabilities = _connector.GetDetectedCapabilities(persistedData, Logger);
+
+        Assert.That(GetValue(capabilities, "Directory Type"), Is.EqualTo("389 Directory Server"));
+        Assert.That(GetValue(capabilities, "Paging"), Is.EqualTo("Supported"));
+    }
+
+    [Test]
     public void GetDetectedCapabilities_MinimalLegacyJsonMissingNewFields_OmitsAbsentFactsButStillReturnsKnownOnes()
     {
         // Simulates persisted data from before Pinned Directory Server / Invocation Id existed (issue #230):

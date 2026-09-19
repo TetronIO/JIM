@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260919104433_RenamePolicyOverrideSignalAddDiscoveryOutcome")]
+    partial class RenamePolicyOverrideSignalAddDiscoveryOutcome
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4144,6 +4147,56 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("PendingExportAttributeValueChanges");
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.PendingInitialPassword", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FailureReason")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastAttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetMessage")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemObjectId_Unique");
+
+                    b.HasIndex("SyncRuleId");
+
+                    b.HasIndex("ConnectedSystemId", "Status")
+                        .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
+
+                    b.ToTable("PendingInitialPasswords");
+                });
+
             modelBuilder.Entity("JIM.Models.Transactional.PendingPasswordChange", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4185,6 +4238,7 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("EncryptedPassword")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime>("ExpiresAt")
@@ -4211,9 +4265,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("SyncRuleId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("TargetMessage")
                         .HasColumnType("text");
 
@@ -4223,10 +4274,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
-
-                    b.HasIndex("SyncRuleId")
-                        .HasDatabaseName("IX_PendingPasswordChanges_SyncRuleId")
-                        .HasFilter("\"SyncRuleId\" IS NOT NULL");
 
                     b.HasIndex("MetaverseObjectId", "ConnectedSystemId")
                         .IsUnique()
@@ -5600,6 +5647,24 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Attribute");
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.PendingInitialPassword", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ConnectedSystemObject")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
+                        .WithMany()
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ConnectedSystemObject");
+
+                    b.Navigation("SyncRule");
+                });
+
             modelBuilder.Entity("JIM.Models.Transactional.PendingPasswordChange", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
@@ -5618,11 +5683,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("MetaverseObjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("JIM.Models.Logic.SyncRule", null)
-                        .WithMany()
-                        .HasForeignKey("SyncRuleId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>

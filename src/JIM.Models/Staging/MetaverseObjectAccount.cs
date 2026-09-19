@@ -40,11 +40,18 @@ public class MetaverseObjectAccount
     public ConnectedSystemPasswordPolicy? DiscoveredPolicy { get; init; }
 
     /// <summary>
-    /// Whether this Connected System's Connector can read the system's password rules at all.
+    /// Whether this Connected System's password rules can be read by JIM at all.
     /// <para>
     /// The difference between "JIM has not read the rules yet" and "there are no rules to read" decides whether
     /// an administrator has anything to do about it. Only some systems publish a password policy a client can
     /// read; where none is published, an absent policy is expected rather than a gap to close.
+    /// </para>
+    /// <para>
+    /// Derived from two facts: the Connector's own capability, and the outcome recorded on the discovered
+    /// policy row (<see cref="ConnectedSystemPasswordPolicy.DiscoveryOutcome"/>). A Connector that can read
+    /// policies still cannot read one from a directory that publishes none, so a row whose outcome is
+    /// <see cref="PasswordPolicyDiscoveryOutcome.NotPublished"/> makes this false; no row at all leaves it to the
+    /// Connector's capability, because the schema has simply not been read yet.
     /// </para>
     /// </summary>
     public bool ConnectorCanDiscoverPasswordPolicy { get; init; }

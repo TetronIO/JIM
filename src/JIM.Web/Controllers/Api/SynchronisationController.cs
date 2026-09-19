@@ -821,8 +821,9 @@ public class SynchronisationController(
     /// Every field is nullable, and a null means JIM could not read that rule rather than that no such rule
     /// exists: a directory withholds what a caller may not see by omitting it rather than refusing. Check
     /// `hasAnyDiscoveredConstraint` before treating the figures as a description of what the system will accept.
-    /// Where the domain has policies applying to only some accounts, the figures are a floor rather than a
-    /// guarantee; `fineGrainedPolicySignal` says which case this is.
+    /// Where the directory has policies applying to only some accounts, the figures are a floor rather than a
+    /// guarantee; `policyOverrideSignal` says which case this is. `discoveryOutcome` says why nothing was read
+    /// when nothing was, and `furtherChecksApply` whether the directory applies checks JIM cannot see.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <response code="200">The discovered policy, or an empty one where nothing has been discovered.</response>

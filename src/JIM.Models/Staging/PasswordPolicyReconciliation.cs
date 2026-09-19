@@ -34,6 +34,19 @@ public class PasswordPolicyReconciliation
     public required IReadOnlyList<string> SystemsWithNoDiscoveredPolicy { get; init; }
 
     /// <summary>
+    /// The systems whose policy JIM read, and which also apply checks it cannot read (a password-quality module,
+    /// a dictionary check). Their rules are in <see cref="Policy"/> as far as they were published, but a
+    /// password satisfying them can still be refused, and the administrator should expect that rather than
+    /// treat it as JIM having the rules wrong.
+    /// <para>
+    /// Only systems counted in <see cref="Constraints"/> appear here. One whose row discovered nothing is
+    /// already named in <see cref="SystemsWithNoDiscoveredPolicy"/>, and naming it twice would say the same
+    /// thing about the same system in two vocabularies.
+    /// </para>
+    /// </summary>
+    public required IReadOnlyList<string> SystemsApplyingFurtherChecks { get; init; }
+
+    /// <summary>
     /// Systems the derived settings would not satisfy, named with the reason.
     /// <para>
     /// A guard rather than an expected outcome. The settings are derived <i>from</i> the combined constraints,

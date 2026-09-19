@@ -58,10 +58,27 @@ public class ConnectedSystemPasswordPolicyResponse
     public int? MinimumPasswordAgeDays { get; set; }
 
     /// <summary>
-    /// Whether the domain has password policies that apply to only some accounts. Where these are present, or
-    /// where JIM was not permitted to find out, the figures above are a floor rather than a guarantee.
+    /// Whether the directory has password policies that apply to only some accounts (Active Directory's
+    /// Fine-Grained Password Policies, OpenLDAP's per-entry policy subentries, 389 Directory Server's subtree
+    /// policies). Where these are present, or where JIM was not permitted to find out, the figures above are a
+    /// floor rather than a guarantee. One of <c>Absent</c>, <c>Present</c> or <c>CouldNotDetermine</c>.
     /// </summary>
-    public string FineGrainedPolicySignal { get; set; } = string.Empty;
+    public string PolicyOverrideSignal { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether the directory applies checks beyond the rules above that JIM cannot read, such as a dictionary
+    /// check or a password-quality module. When true, a password satisfying everything above can still be
+    /// refused.
+    /// </summary>
+    public bool FurtherChecksApply { get; set; }
+
+    /// <summary>
+    /// Why the policy says what it says: <c>Read</c>, <c>NotPublished</c> (the directory publishes no policy
+    /// a client can read), <c>ConfigurationNotReadable</c> (the account JIM connects as cannot read the server
+    /// configuration that holds it) or <c>NoPolicyConfigured</c> (the mechanism is loaded but no policy is
+    /// configured). Null when nothing has been read yet, which is not an outcome of reading.
+    /// </summary>
+    public string? DiscoveryOutcome { get; set; }
 
     /// <summary>
     /// Whether JIM discovered anything at all. False means the figures above say nothing about what this system
@@ -78,7 +95,7 @@ public class ConnectedSystemPasswordPolicyResponse
         if (entity == null)
             return new ConnectedSystemPasswordPolicyResponse
             {
-                FineGrainedPolicySignal = JIM.Models.Staging.FineGrainedPolicySignal.CouldNotDetermine.ToString()
+                PolicyOverrideSignal = JIM.Models.Staging.PolicyOverrideSignal.CouldNotDetermine.ToString()
             };
 
         return new ConnectedSystemPasswordPolicyResponse
@@ -91,7 +108,9 @@ public class ConnectedSystemPasswordPolicyResponse
             PasswordHistoryLength = entity.PasswordHistoryLength,
             MaximumPasswordAgeDays = entity.MaximumPasswordAge.HasValue ? (int)entity.MaximumPasswordAge.Value.TotalDays : null,
             MinimumPasswordAgeDays = entity.MinimumPasswordAge.HasValue ? (int)entity.MinimumPasswordAge.Value.TotalDays : null,
-            FineGrainedPolicySignal = entity.FineGrainedPolicySignal.ToString(),
+            PolicyOverrideSignal = entity.PolicyOverrideSignal.ToString(),
+            FurtherChecksApply = entity.FurtherChecksApply,
+            DiscoveryOutcome = entity.DiscoveryOutcome.ToString(),
             HasAnyDiscoveredConstraint = entity.HasAnyDiscoveredConstraint
         };
     }
@@ -171,6 +190,14 @@ public class GeneratedPasswordResponse
     public List<string> SystemsWithNoDiscoveredPolicy { get; set; } = [];
 
     /// <summary>
+    /// Where several systems were asked for at once: those whose directory applies checks beyond the rules JIM
+    /// read (a password-quality module, a dictionary check). The password satisfies what those systems
+    /// published, and can still be refused by what they did not; a caller seeing a refusal there should expect
+    /// it rather than treat the generated password as wrong. Empty for a single-system generate.
+    /// </summary>
+    public List<string> SystemsApplyingFurtherChecks { get; set; } = [];
+
+    /// <summary>
     /// Where several systems were asked for at once: the rules the password had to satisfy, in the words the
     /// portal uses, so a script can report what it generated against.
     /// </summary>
@@ -186,6 +213,7 @@ public class GeneratedPasswordResponse
     {
         var response = FromGenerated(password, assessment, reconciliation.Constraints.Count > 0);
         response.SystemsWithNoDiscoveredPolicy = [.. reconciliation.SystemsWithNoDiscoveredPolicy];
+        response.SystemsApplyingFurtherChecks = [.. reconciliation.SystemsApplyingFurtherChecks];
         response.Constraints = [.. reconciliation.Constraints];
 
         // A system that disclosed nothing may be stricter than the reconciled policy knows, so JIM must not

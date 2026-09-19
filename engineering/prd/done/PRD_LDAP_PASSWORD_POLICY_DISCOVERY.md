@@ -1,6 +1,6 @@
 # Password Policy Discovery for OpenLDAP and 389 Directory Server
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-19
 - **Author:** JayVDZ (PRD drafted via Claude Code)
 - **Issue:** [#1702](https://github.com/TetronIO/JIM/issues/1702)
@@ -52,7 +52,7 @@ The consequences for those deployments are the ones discovery exists to prevent:
    - **OpenLDAP:** any entry in the search base carrying `pwdPolicySubentry`, or more than one `pwdPolicy` entry under the default policy's parent.
    - **389 Directory Server:** any `nsPwPolicyContainer` entry, or any entry carrying `pwdpolicysubentry`.
    - An empty search result must map to "could not determine", never to "none", for the same reason as today: directories filter searches silently for a caller without rights.
-4. `SupportsPasswordPolicyDiscovery` on the LDAP Connector must reflect the connected directory type once it is known (true for Active Directory, Samba AD, OpenLDAP and 389 Directory Server; false for Generic), so that the "JIM has not read the rules yet" and "there are no rules to read" states the portal already distinguishes are reported correctly.
+4. Whether a given Connected System can have its policy discovered must follow the detected directory type (yes for Active Directory, Samba AD, OpenLDAP and 389 Directory Server; no for Generic), so that the "JIM has not read the rules yet" and "there are no rules to read" states the portal already distinguishes are reported correctly. `SupportsPasswordPolicyDiscovery` is a per-Connector capability mirrored at startup and stays `true` on the LDAP Connector; the per-directory answer is recorded on the discovered policy row as a discovery outcome, from which the per-Connected-System flag is derived (see the plan's Decisions).
 5. Discovery must degrade to "could not determine" or "not published" rather than fail when the service account cannot read `cn=config` or the overlay configuration, and the panel must say which it was.
 6. The policy panel and the Set Password dialog's policy summary must say "the directory applies further checks JIM cannot see" when `pwdCheckQuality` (OpenLDAP) or a dictionary or syntax check beyond categories (389) is on, so that a refusal after a satisfied policy is explained.
 7. The REST API and PowerShell surfaces that already return the discovered policy (`Get-JIMConnectedSystemPasswordPolicy` and its endpoint) must return the renamed signal under the neutral property name. The old `fineGrainedPolicySignal` name is dropped outright (no alias): it is read-only diagnostic output shipped recently under #1121, and JIM is pre-1.0. The rename is recorded under Changed in the changelog.
@@ -70,7 +70,7 @@ The consequences for those deployments are the ones discovery exists to prevent:
 
 **Given**: a Connected System using the LDAP Connector against OpenLDAP whose default policy sets `pwdMinLength: 12`, `pwdInHistory: 5`, `pwdMaxAge: 7776000`
 **When**: the administrator refreshes the schema, then opens the Password Policy panel
-**Then**: the panel shows minimum length 12, history 5, maximum age 90 days, minimum age "can be changed straight away", character classes "not published by this directory", and no override warning where no entry carries `pwdPolicySubentry`
+**Then**: the panel shows minimum length 12, history 5, maximum age 90 days, minimum age "can be changed straight away", character classes "not published by this directory", and the softer "could not establish whether some objects are governed by another policy" alert: an empty `pwdPolicySubentry` probe is "could not determine" by requirement 3, because the attribute is operational and may be hidden by access control, so "none" is reported only when the overlay is not loaded at all
 
 ### Scenario 2: Generated initial password satisfies OpenLDAP
 
@@ -94,7 +94,7 @@ The consequences for those deployments are the ones discovery exists to prevent:
 
 **Given**: an RFC 4512 directory JIM does not recognise
 **When**: the administrator opens the Password Policy panel
-**Then**: it says "This directory publishes no password policy that JIM can read", and `SupportsPasswordPolicyDiscovery` is false for the Connected System
+**Then**: it says "This directory publishes no password policy that JIM can read", the policy endpoint reports a discovery outcome of "not published", and the Set Password dialog reports the system as publishing no rules rather than as awaiting a schema refresh
 
 ## Constraints
 
@@ -130,7 +130,7 @@ The consequences for those deployments are the ones discovery exists to prevent:
 
 ## Decisions
 
-Both open questions were settled on 2026-09-19:
+Both open questions were settled on 2026-09-19. Five further points where the code makes a requirement harder than written are recorded under Decisions in the [implementation plan](../../plans/done/LDAP_PASSWORD_POLICY_DISCOVERY.md); requirement 4, Scenario 1 and Scenario 5 above were amended to match.
 
 1. **389 Directory Server is a first-class `LdapDirectoryType`.** Detection is one root DSE check, and the type is useful beyond passwords (its own changelog for delta import, its own concurrency characteristics), where the Connector already tunes per type. A probe under Generic would spend searches on every unknown directory and still leave 389 undistinguished elsewhere.
 2. **The API property is renamed outright, with no deprecated alias.** An alias is two names for one thing on the API surface, which is the vocabulary problem the surrounding work removed, and it needs a removal step nobody would schedule. The rename goes under Changed in the changelog.
@@ -141,7 +141,7 @@ Both open questions were settled on 2026-09-19:
 - [ ] Generated initial passwords into that OpenLDAP satisfy its minimum length and none are parked (Scenario 2), verified by the same scenario.
 - [ ] 389 Directory Server policy mapping, including `passwordMinCategories`, is covered by unit tests against a mocked executor (Scenario 3).
 - [ ] A service account without rights on the policy source yields "could not determine" and a panel explanation naming the cause (Scenario 4).
-- [ ] A Generic directory reports `SupportsPasswordPolicyDiscovery = false` and the panel says no policy is published (Scenario 5).
+- [ ] A Generic directory reports a "not published" discovery outcome, the Set Password dialog treats it as publishing no rules, and the panel says no policy is published (Scenario 5).
 - [ ] The override signal has a directory-neutral name across model, database, API, PowerShell and portal, and no product surface names Active Directory except where the directory in front of it is Active Directory.
 - [ ] Reconciliation across a system with an unknown character-class count and one with a known count produces the known count (unit test).
 - [ ] Docs listed above updated in the same PR.

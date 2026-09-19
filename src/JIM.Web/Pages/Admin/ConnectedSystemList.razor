@@ -65,7 +65,7 @@
         </MudSelect>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Name" Sortable="false">
+        <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Name" Name="name" />
             </HeaderTemplate>
@@ -73,7 +73,7 @@
                 <MudLink Href="@(Utilities.GetConnectedSystemHref(context.Item))">@context.Item.Name</MudLink>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Description" Sortable="false">
+        <TemplateColumn Title="Description" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Description" Name="description" />
             </HeaderTemplate>
@@ -83,7 +83,7 @@
                 <OneLineText Text="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Stats" Sortable="false">
+        <TemplateColumn Title="Stats" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Stats</MudText>
             </HeaderTemplate>
@@ -119,7 +119,7 @@
         </TemplateColumn>
         @* Its own column rather than another chip in Stats, because unlike the counts beside it this one has a
            state as well as a size, and the column is what the sort header can hang off (requirement 26). *@
-        <TemplateColumn Title="Password Sync" Sortable="false">
+        <TemplateColumn Title="Password Sync" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Password Sync" Name="passwordsync" />
             </HeaderTemplate>
@@ -131,7 +131,7 @@
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Connector" Sortable="false">
+        <TemplateColumn Title="Connector" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Connector" Name="connector" />
             </HeaderTemplate>
@@ -139,7 +139,7 @@
                 @context.Item.ConnectorName
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Created" Sortable="false">
+        <TemplateColumn Title="Created" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Created" Name="created" />
             </HeaderTemplate>
@@ -149,7 +149,7 @@
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Action" Sortable="false">
+        <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Action</MudText>
             </HeaderTemplate>

@@ -175,7 +175,8 @@ internal class LdapConnectorImport
         // For AD directories, this block is skipped entirely — AD supports multiple concurrent
         // paged searches on a single connection, so the original multi-combo-per-page logic below
         // is used instead.
-        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic;
+        var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic or LdapDirectoryType.DirectoryServer389;
+
 
         if (isConnectionScopedPaging)
         {
@@ -953,9 +954,10 @@ internal class LdapConnectorImport
             "supportedCapabilities",
             "vendorName",
             "structuralObjectClass",
-            "dsServiceName",
-            "namingContexts"
+            "dsServiceName"
         });
+        request.Attributes.AddRange(LdapConnectorUtilities.RootDseDiscoveryAttributes);
+
 
         var response = (SearchResponse)_connection.SendRequest(request);
 
@@ -974,16 +976,17 @@ internal class LdapConnectorImport
         var capabilities = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
         var vendorName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorName");
         var structuralObjectClass = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
-        var directoryType = LdapConnectorUtilities.DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
+        var vendorVersion = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorVersion");
+        var directoryType = LdapConnectorUtilities.DetectDirectoryType(capabilities, vendorName, structuralObjectClass, vendorVersion);
 
         var rootDse = new LdapConnectorRootDse
         {
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
             DirectoryType = directoryType,
-            VendorName = vendorName,
-            NamingContexts = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "namingContexts")
+            VendorName = vendorName
         };
+        LdapConnectorUtilities.ApplyRootDseDiscoveryAttributes(rootDseEntry, rootDse);
 
         // For AD-family directories, capture the DC's invocationId so a later delta import can detect
         // it has connected to a different DC than the one that produced the persisted USN watermark

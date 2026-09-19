@@ -41,7 +41,7 @@
         <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show overridden only" Color="Color.Primary" />
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Category" Sortable="false">
+        <TemplateColumn Title="Category" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Category" Name="category" />
             </HeaderTemplate>
@@ -49,35 +49,42 @@
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetCategoryDisplayName(context.Item.Category.ToString())</MudText>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Setting" Sortable="false">
+        <TemplateColumn Title="Setting" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Setting" Name="setting" />
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line, and a MudText renders a paragraph, so the description
                    under the name was a second line and a second row height. It reads inline after the name
-                   instead, low-lighted, with both available in full on hover. *@
+                   instead, low-lighted, with both available in full on hover. The clamp only clips inside a
+                   bounded box, so this is the table's fill column: it takes the width the other columns (each
+                   kept to one line with .jim-nowrap) do not need, rather than growing to its longest
+                   description and pushing the table past the page. *@
                 <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Value" Sortable="false" CellClass="jim-nowrap">
+        <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Value</MudText>
             </HeaderTemplate>
             <CellTemplate>
-                @* Controls sit to the left of the value so values stay left-aligned regardless of their length. *@
+                @* Controls sit to the left of the value so values stay left-aligned regardless of their length.
+                   The column is capped rather than sized to its longest value (a Service ID, an SSO authority URL),
+                   which would otherwise take the width from the Setting column beside it; a value past the cap
+                   is clipped, with the whole of it on hover and, where there is a copy button, on the clipboard. *@
+                <div class="jim-one-line-list jim-column-cap" style="--jim-column-cap: 20rem;">
                 @if (context.Item.ValueType == ServiceSettingValueType.StringEncrypted)
                 {
                     var encryptedKey = context.Item.Key;
                     @if (_revealedSecrets.Contains(encryptedKey) && _decryptedCache.TryGetValue(encryptedKey, out var decrypted))
                     {
-                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => HideSecret(encryptedKey)" />
-                        <span class="jim-text-code">@(decrypted.Value ?? "(not set)")</span>
+                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" OnClick="() => HideSecret(encryptedKey)" />
+                        <span class="jim-text-code jim-one-line-list-value" title="@decrypted.Value">@(decrypted.Value ?? "(not set)")</span>
                     }
                     else
                     {
-                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => RevealSecretAsync(encryptedKey)" />
-                        <span class="jim-text-code">********</span>
+                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" OnClick="() => RevealSecretAsync(encryptedKey)" />
+                        <span class="jim-text-code jim-one-line-list-value">********</span>
                     }
                 }
                 else if (context.Item.ValueType == ServiceSettingValueType.Guid)
@@ -86,19 +93,21 @@
                     @if (!string.IsNullOrEmpty(guidValue))
                     {
                         <MudTooltip Text="Copy to clipboard" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small" Class="me-2"
+                            <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small"
                                            OnClick="() => CopyToClipboardAsync(guidValue)" />
                         </MudTooltip>
                     }
-                    <span class="jim-text-code">@(guidValue ?? "(not set)")</span>
+                    <span class="jim-text-code jim-one-line-list-value" title="@guidValue">@(guidValue ?? "(not set)")</span>
                 }
                 else
                 {
-                    <span class="jim-text-code">@(context.Item.GetEffectiveValue() ?? "(not set)")</span>
+                    var effectiveValue = context.Item.GetEffectiveValue();
+                    <span class="jim-text-code jim-one-line-list-value" title="@effectiveValue">@(effectiveValue ?? "(not set)")</span>
                 }
+                </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Status" Sortable="false">
+        <TemplateColumn Title="Status" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Status" Name="status" />
             </HeaderTemplate>
@@ -133,7 +142,7 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Actions" Sortable="false">
+        <TemplateColumn Title="Actions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Actions</MudText>
             </HeaderTemplate>

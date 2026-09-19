@@ -42,15 +42,21 @@ public class LdapConnectorPreflightTests
         bool isConnectionEncrypted = true) =>
         new(_executor.Object, Log.Logger, directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
 
+    /// <summary>
+    /// What the rootDSE of an Active Directory domain yields: the domain root as defaultNamingContext.
+    /// </summary>
+    private static readonly LdapPasswordPolicyScope AdScope = new(DomainRoot, [DomainRoot], null, false);
+
     private async Task<PasswordPreflightCheckResult> RunAndGetAsync(
         PasswordPreflightCheck check,
         LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory,
         bool supportsPasswordModifyExtension = false,
         bool isConnectionEncrypted = true,
-        IReadOnlyList<string>? containerExternalIds = null)
+        IReadOnlyList<string>? containerExternalIds = null,
+        LdapPasswordPolicyScope? scope = null)
     {
         var preflight = CreatePreflight(directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
-        var results = await preflight.RunAsync(containerExternalIds ?? [], DomainRoot, CancellationToken.None);
+        var results = await preflight.RunAsync(containerExternalIds ?? [], scope ?? AdScope, CancellationToken.None);
         return results.Single(r => r.Check == check);
     }
 
@@ -251,13 +257,110 @@ public class LdapConnectorPreflightTests
     /// is an unknown with a specific remedy, which the message has to carry.
     /// </summary>
     [Test]
-    public async Task RunAsync_AgainstADirectoryThatPublishesNoPolicy_ReportsUndeterminedWithAdviceAsync()
+    public async Task RunAsync_AgainstAGenericDirectoryThatPublishesNoPolicy_ReportsUndeterminedWithAdviceAsync()
     {
         var check = await RunAndGetAsync(PasswordPreflightCheck.PolicyDiscovery,
-            directoryType: LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true);
+            directoryType: LdapDirectoryType.Generic, supportsPasswordModifyExtension: true,
+            scope: new LdapPasswordPolicyScope(null, [DomainRoot], null, false));
+
+        Assert.That(check.State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine));
+        Assert.That(check.Message, Does.Contain("publish"));
+        Assert.That(check.Details, Has.Some.Contains("Synchronisation Rule"));
+    }
+
+    /// <summary>
+    /// OpenLDAP without the ppolicy overlay loaded publishes nothing either, and the preflight must say that
+    /// rather than pretend to have looked for a policy.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_AgainstOpenLdapWithoutTheOverlay_ReportsUndeterminedWithAdviceAsync()
+    {
+        var check = await RunAndGetAsync(PasswordPreflightCheck.PolicyDiscovery,
+            directoryType: LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true,
+            scope: new LdapPasswordPolicyScope(null, [DomainRoot], "cn=config", AdvertisesPasswordPolicyControl: false));
 
         Assert.That(check.State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine));
         Assert.That(check.Details, Has.Some.Contains("Synchronisation Rule"));
+    }
+
+    [Test]
+    public async Task RunAsync_AgainstOpenLdapWhereThePolicyCanBeRead_PassesWithTheDirectoryWordingAsync()
+    {
+        const string policyDn = "cn=default,ou=Policies,DC=testdomain,DC=local";
+        _executor.Setup(x => x.SendRequestAsync(It.Is<SearchRequest>(r => r.Filter.ToString()!.Contains("pwdPolicy)"))))
+            .ReturnsAsync(LdapTestResponses.SearchResponseWith(policyDn, ("pwdMinLength", "12")));
+
+        var check = await RunAndGetAsync(PasswordPreflightCheck.PolicyDiscovery,
+            directoryType: LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true,
+            scope: new LdapPasswordPolicyScope(null, [DomainRoot], "cn=config", AdvertisesPasswordPolicyControl: true));
+
+        Assert.That(check.State, Is.EqualTo(PasswordPreflightState.Passed));
+        Assert.That(check.Message, Does.Contain("directory's password policy"));
+        Assert.That(check.Message, Does.Not.Contain("domain"));
+        Assert.That(check.Details, Has.Some.Contains("Minimum length: 12"));
+        Assert.That(check.Details, Has.None.Contains("Fine-Grained"));
+    }
+
+    /// <summary>
+    /// PRD Scenario 4 as the preflight reports it: the configuration exists and the account cannot read it, so the
+    /// remedy is a right on the server configuration.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_Against389WhereTheConfigurationIsUnreadable_ReportsUndeterminedNamingTheConfigurationAsync()
+    {
+        var check = await RunAndGetAsync(PasswordPreflightCheck.PolicyDiscovery,
+            directoryType: LdapDirectoryType.DirectoryServer389, supportsPasswordModifyExtension: true,
+            scope: new LdapPasswordPolicyScope(null, [DomainRoot], null, false));
+
+        Assert.That(check.State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine));
+        Assert.That(check.Message, Does.Contain("server configuration"));
+        Assert.That(check.Details, Has.Some.Contains("cn=config"));
+    }
+
+    [Test]
+    public async Task RunAsync_Against389WhereThePolicyCanBeRead_PassesWithTheCategoryRuleAsync()
+    {
+        _executor.Setup(x => x.SendRequestAsync(It.Is<SearchRequest>(r => r.DistinguishedName == "cn=config")))
+            .ReturnsAsync(LdapTestResponses.SearchResponseWith("cn=config",
+                ("passwordCheckSyntax", "on"), ("passwordMinLength", "10"), ("passwordMinCategories", "3")));
+
+        var check = await RunAndGetAsync(PasswordPreflightCheck.PolicyDiscovery,
+            directoryType: LdapDirectoryType.DirectoryServer389, supportsPasswordModifyExtension: true,
+            scope: new LdapPasswordPolicyScope(null, [DomainRoot], null, false));
+
+        Assert.That(check.State, Is.EqualTo(PasswordPreflightState.Passed));
+        Assert.That(check.Details, Has.Some.Contains("Minimum length: 10"));
+        Assert.That(check.Details, Has.Some.Contains("3 of the 5"));
+    }
+
+    /// <summary>
+    /// The overlay is loaded and no policy is configured: JIM did establish that, so it is a pass that says no
+    /// rules apply, not an unknown.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_AgainstOpenLdapWithNoPolicyConfigured_PassesSayingNoRulesApplyAsync()
+    {
+        var check = await RunAndGetAsync(PasswordPreflightCheck.PolicyDiscovery,
+            directoryType: LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true,
+            scope: new LdapPasswordPolicyScope(null, [DomainRoot], "cn=config", AdvertisesPasswordPolicyControl: true));
+
+        Assert.That(check.State, Is.EqualTo(PasswordPreflightState.Passed));
+        Assert.That(check.Message, Does.Contain("no policy is configured"));
+    }
+
+    [Test]
+    public async Task RunAsync_WhereFurtherChecksApply_SaysAPasswordCanStillBeRefusedAsync()
+    {
+        const string policyDn = "cn=default,ou=Policies,DC=testdomain,DC=local";
+        _executor.Setup(x => x.SendRequestAsync(It.Is<SearchRequest>(r => r.Filter.ToString()!.Contains("pwdPolicy)"))))
+            .ReturnsAsync(LdapTestResponses.SearchResponseWith(policyDn,
+                ("pwdMinLength", "12"), ("pwdCheckQuality", "2"), ("pwdCheckModule", "check_password.so")));
+
+        var check = await RunAndGetAsync(PasswordPreflightCheck.PolicyDiscovery,
+            directoryType: LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true,
+            scope: new LdapPasswordPolicyScope(null, [DomainRoot], "cn=config", AdvertisesPasswordPolicyControl: true));
+
+        Assert.That(check.Details, Has.Some.Contains("further checks"));
     }
 
     /// <summary>
@@ -289,7 +392,7 @@ public class LdapConnectorPreflightTests
     {
         var preflight = CreatePreflight();
 
-        var results = await preflight.RunAsync([], DomainRoot, CancellationToken.None);
+        var results = await preflight.RunAsync([], AdScope, CancellationToken.None);
 
         Assert.That(results.Select(r => r.Check), Is.EquivalentTo(new[]
         {
@@ -341,7 +444,7 @@ public class LdapConnectorPreflightTests
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        Assert.That(async () => await preflight.RunAsync([], DomainRoot, cancellation.Token),
+        Assert.That(async () => await preflight.RunAsync([], AdScope, cancellation.Token),
             Throws.InstanceOf<OperationCanceledException>());
     }
 
