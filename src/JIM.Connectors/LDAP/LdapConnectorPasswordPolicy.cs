@@ -98,7 +98,7 @@ internal class LdapConnectorPasswordPolicy
             PasswordHistoryLength = ReadInt(entry, AttributePwdHistoryLength),
             MaximumPasswordAge = ParseInterval(ReadLong(entry, AttributeMaxPwdAge)),
             MinimumPasswordAge = ParseInterval(ReadLong(entry, AttributeMinPwdAge)),
-            FineGrainedPolicySignal = await DetectFineGrainedPoliciesAsync(domainRootDn)
+            PolicyOverrideSignal = await DetectFineGrainedPoliciesAsync(domainRootDn)
         };
 
         // Active Directory's complexity rule is fixed rather than configurable: when the flag is on, a password
@@ -116,7 +116,7 @@ internal class LdapConnectorPasswordPolicy
         }
 
         _logger.Debug("LdapConnectorPasswordPolicy: Read policy from '{DomainRoot}'. MinimumLength={MinimumLength}, ComplexityRequired={Complexity}, FineGrained={FineGrained}",
-            LogSanitiser.Sanitise(domainRootDn), policy.MinimumLength, policy.ComplexityRequired, policy.FineGrainedPolicySignal);
+            LogSanitiser.Sanitise(domainRootDn), policy.MinimumLength, policy.ComplexityRequired, policy.PolicyOverrideSignal);
 
         return policy;
     }
@@ -142,12 +142,12 @@ internal class LdapConnectorPasswordPolicy
     /// feature, where they cannot exist at all.
     /// </para>
     /// </summary>
-    private async Task<FineGrainedPolicySignal> DetectFineGrainedPoliciesAsync(string domainRootDn)
+    private async Task<PolicyOverrideSignal> DetectFineGrainedPoliciesAsync(string domainRootDn)
     {
         if (await IsBelowFineGrainedPolicyFunctionalLevelAsync())
         {
             _logger.Debug("LdapConnectorPasswordPolicy: The domain functional level predates Fine-Grained Password Policies, so none can exist.");
-            return FineGrainedPolicySignal.Absent;
+            return PolicyOverrideSignal.Absent;
         }
 
         var containerDn = $"{PasswordSettingsContainerRdn},{domainRootDn}";
@@ -157,11 +157,11 @@ internal class LdapConnectorPasswordPolicy
         {
             var response = (SearchResponse)await _executor.SendRequestAsync(request);
             if (response.Entries.Count > 0)
-                return FineGrainedPolicySignal.Present;
+                return PolicyOverrideSignal.Present;
 
             _logger.Debug("LdapConnectorPasswordPolicy: No Fine-Grained Password Policies were returned from the Password Settings Container in '{Domain}'. This cannot be told apart from having no rights over it, so the result is undetermined.",
                 LogSanitiser.Sanitise(domainRootDn));
-            return FineGrainedPolicySignal.CouldNotDetermine;
+            return PolicyOverrideSignal.CouldNotDetermine;
         }
         catch (DirectoryOperationException ex)
         {
@@ -169,13 +169,13 @@ internal class LdapConnectorPasswordPolicy
             // is not evidence that the container does not exist.
             _logger.Debug("LdapConnectorPasswordPolicy: Could not determine whether Fine-Grained Password Policies exist in the Password Settings Container in '{Domain}': {Message}",
                 LogSanitiser.Sanitise(domainRootDn), LogSanitiser.Sanitise(ex.Message));
-            return FineGrainedPolicySignal.CouldNotDetermine;
+            return PolicyOverrideSignal.CouldNotDetermine;
         }
         catch (LdapException ex)
         {
             _logger.Debug("LdapConnectorPasswordPolicy: Could not determine whether Fine-Grained Password Policies exist in the Password Settings Container in '{Domain}': {Message}",
                 LogSanitiser.Sanitise(domainRootDn), LogSanitiser.Sanitise(ex.Message));
-            return FineGrainedPolicySignal.CouldNotDetermine;
+            return PolicyOverrideSignal.CouldNotDetermine;
         }
     }
 

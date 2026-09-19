@@ -253,7 +253,7 @@ public class LdapConnectorPasswordPolicyTests
 
         var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.CouldNotDetermine));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.CouldNotDetermine));
     }
 
     [Test]
@@ -266,7 +266,7 @@ public class LdapConnectorPasswordPolicyTests
 
         var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.Present));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.Present));
     }
 
     /// <summary>
@@ -286,7 +286,7 @@ public class LdapConnectorPasswordPolicyTests
 
         var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.Absent));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.Absent));
     }
 
     /// <summary>
@@ -310,7 +310,7 @@ public class LdapConnectorPasswordPolicyTests
 
         var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.CouldNotDetermine));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.CouldNotDetermine));
     }
 
     #endregion

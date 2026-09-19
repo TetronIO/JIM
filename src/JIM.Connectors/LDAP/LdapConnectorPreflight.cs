@@ -231,8 +231,8 @@ internal class LdapConnectorPreflight
         // Worth surfacing here as well as on the policy panel: a preflight is what an administrator runs when they
         // want to know whether this will work, and "the policy JIM read may not be the policy that applies" is
         // exactly the caveat that belongs in that answer.
-        if (policy.FineGrainedPolicySignal != FineGrainedPolicySignal.Absent)
-            details.Add(policy.FineGrainedPolicySignal == FineGrainedPolicySignal.Present
+        if (policy.PolicyOverrideSignal != PolicyOverrideSignal.Absent)
+            details.Add(policy.PolicyOverrideSignal == PolicyOverrideSignal.Present
                 ? "This domain has Fine-Grained Password Policies, which apply stricter rules to some accounts. What JIM read is a floor, not the whole story."
                 : "JIM could not establish whether this domain has Fine-Grained Password Policies, which would apply stricter rules to some accounts. Treat what it read as a floor.");
 

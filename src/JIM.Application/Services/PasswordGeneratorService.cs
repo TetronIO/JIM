@@ -550,7 +550,7 @@ public class PasswordGeneratorService : IPasswordGeneratorService
             Conflicts = conflicts,
             // Any system that may hold a stricter policy for some accounts, or that JIM could not ask, makes the
             // whole combination a floor rather than a guarantee.
-            MayBeStricterThanDiscovered = known.Any(p => p.Policy!.FineGrainedPolicySignal != FineGrainedPolicySignal.Absent)
+            MayBeStricterThanDiscovered = known.Any(p => p.Policy!.PolicyOverrideSignal != PolicyOverrideSignal.Absent)
         };
     }
 
@@ -586,11 +586,11 @@ public class PasswordGeneratorService : IPasswordGeneratorService
             PasswordHistoryLength = policies.Select(p => p.PasswordHistoryLength).Max(),
             MaximumPasswordAge = policies.Select(p => p.MaximumPasswordAge).Min(),
             MinimumPasswordAge = policies.Select(p => p.MinimumPasswordAge).Max(),
-            FineGrainedPolicySignal = policies.Any(p => p.FineGrainedPolicySignal == FineGrainedPolicySignal.Present)
-                ? FineGrainedPolicySignal.Present
-                : policies.Any(p => p.FineGrainedPolicySignal == FineGrainedPolicySignal.CouldNotDetermine)
-                    ? FineGrainedPolicySignal.CouldNotDetermine
-                    : FineGrainedPolicySignal.Absent
+            PolicyOverrideSignal = policies.Any(p => p.PolicyOverrideSignal == PolicyOverrideSignal.Present)
+                ? PolicyOverrideSignal.Present
+                : policies.Any(p => p.PolicyOverrideSignal == PolicyOverrideSignal.CouldNotDetermine)
+                    ? PolicyOverrideSignal.CouldNotDetermine
+                    : PolicyOverrideSignal.Absent
         };
     }
 

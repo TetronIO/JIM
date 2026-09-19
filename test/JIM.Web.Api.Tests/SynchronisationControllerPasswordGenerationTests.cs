@@ -80,7 +80,7 @@ public class SynchronisationControllerPasswordGenerationTests
             RecognisedCharacterClasses = PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase | PasswordCharacterClasses.Digit,
             PasswordHistoryLength = 24,
             MaximumPasswordAge = TimeSpan.FromDays(90),
-            FineGrainedPolicySignal = FineGrainedPolicySignal.Absent,
+            PolicyOverrideSignal = PolicyOverrideSignal.Absent,
             Discovered = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc)
         });
 
@@ -115,6 +115,73 @@ public class SynchronisationControllerPasswordGenerationTests
             Assert.That(response.Discovered, Is.Null);
             Assert.That(response.HasAnyDiscoveredConstraint, Is.False);
             Assert.That(response.MinimumLength, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The outcome and the further-checks flag are what let a script tell "publishes nothing" from "not read
+    /// yet" and "may still refuse a compliant password", so both travel with the policy, named as strings so a
+    /// caller in another language need not know JIM's ordinals.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemPasswordPolicy_WithADiscoveredPolicy_ReportsTheOutcomeAndFurtherChecksAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(ConnectedSystemId)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = ConnectedSystemId,
+            MinimumLength = 12,
+            PolicyOverrideSignal = PolicyOverrideSignal.Present,
+            FurtherChecksApply = true,
+            DiscoveryOutcome = PasswordPolicyDiscoveryOutcome.Read
+        });
+
+        var result = await _controller.GetConnectedSystemPasswordPolicyAsync(ConnectedSystemId);
+        var response = (ConnectedSystemPasswordPolicyResponse)((OkObjectResult)result).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.PolicyOverrideSignal, Is.EqualTo("Present"));
+            Assert.That(response.FurtherChecksApply, Is.True);
+            Assert.That(response.DiscoveryOutcome, Is.EqualTo("Read"));
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemPasswordPolicy_WhenTheDirectoryPublishesNoPolicy_SaysSoInTheOutcomeAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(ConnectedSystemId)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = ConnectedSystemId,
+            DiscoveryOutcome = PasswordPolicyDiscoveryOutcome.NotPublished
+        });
+
+        var result = await _controller.GetConnectedSystemPasswordPolicyAsync(ConnectedSystemId);
+        var response = (ConnectedSystemPasswordPolicyResponse)((OkObjectResult)result).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.DiscoveryOutcome, Is.EqualTo("NotPublished"));
+            Assert.That(response.HasAnyDiscoveredConstraint, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// No row means nothing has been read, which is not an outcome of reading: the field is null rather than
+    /// borrowing one of the outcomes and implying a read that never happened.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemPasswordPolicy_WithNothingDiscovered_HasNoOutcomeAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(ConnectedSystemId)).ReturnsAsync((ConnectedSystemPasswordPolicy?)null);
+
+        var result = await _controller.GetConnectedSystemPasswordPolicyAsync(ConnectedSystemId);
+        var response = (ConnectedSystemPasswordPolicyResponse)((OkObjectResult)result).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.DiscoveryOutcome, Is.Null);
+            Assert.That(response.FurtherChecksApply, Is.False);
+            Assert.That(response.PolicyOverrideSignal, Is.EqualTo("CouldNotDetermine"));
         }
     }
 

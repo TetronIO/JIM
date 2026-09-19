@@ -35,14 +35,14 @@ public class PasswordPolicyReconciliationTests
         bool? complexityRequired = null,
         int? requiredClasses = null,
         PasswordCharacterClasses recognised = PasswordCharacterClasses.None,
-        FineGrainedPolicySignal fineGrained = FineGrainedPolicySignal.Absent) =>
+        PolicyOverrideSignal overrideSignal = PolicyOverrideSignal.Absent) =>
         new()
         {
             MinimumLength = minimumLength,
             ComplexityRequired = complexityRequired,
             RequiredCharacterClassCount = requiredClasses,
             RecognisedCharacterClasses = recognised,
-            FineGrainedPolicySignal = fineGrained
+            PolicyOverrideSignal = overrideSignal
         };
 
     #region length folds to the strictest
@@ -206,7 +206,7 @@ public class PasswordPolicyReconciliationTests
     public void Reconcile_WhenOneSystemMayHoldStricterPolicies_ReportsTheCombinationAsAFloor()
     {
         var reconciliation = _generator.Reconcile([
-            System("Contoso AD", Policy(minimumLength: 15, fineGrained: FineGrainedPolicySignal.Present)),
+            System("Contoso AD", Policy(minimumLength: 15, overrideSignal: PolicyOverrideSignal.Present)),
             System("Fabrikam HR", Policy(minimumLength: 8))
         ]);
 
@@ -221,7 +221,7 @@ public class PasswordPolicyReconciliationTests
     public void Reconcile_WhenOneSystemCouldNotBeAsked_ReportsTheCombinationAsAFloor()
     {
         var reconciliation = _generator.Reconcile([
-            System("Contoso AD", Policy(minimumLength: 15, fineGrained: FineGrainedPolicySignal.CouldNotDetermine))
+            System("Contoso AD", Policy(minimumLength: 15, overrideSignal: PolicyOverrideSignal.CouldNotDetermine))
         ]);
 
         Assert.That(reconciliation.MayBeStricterThanDiscovered, Is.True);
@@ -231,8 +231,8 @@ public class PasswordPolicyReconciliationTests
     public void Reconcile_WhenEverySystemProvedNoneExist_DoesNotWarn()
     {
         var reconciliation = _generator.Reconcile([
-            System("Contoso AD", Policy(minimumLength: 15, fineGrained: FineGrainedPolicySignal.Absent)),
-            System("Fabrikam HR", Policy(minimumLength: 8, fineGrained: FineGrainedPolicySignal.Absent))
+            System("Contoso AD", Policy(minimumLength: 15, overrideSignal: PolicyOverrideSignal.Absent)),
+            System("Fabrikam HR", Policy(minimumLength: 8, overrideSignal: PolicyOverrideSignal.Absent))
         ]);
 
         Assert.That(reconciliation.MayBeStricterThanDiscovered, Is.False);
