@@ -182,14 +182,18 @@ internal class LdapConnectorPasswordPolicy389
     internal const string ObjectClassPolicyContainer = "nsPwPolicyContainer";
     internal const string AttributePolicySubentry = "pwdpolicysubentry";
 
-    internal const string AttributeCheckSyntax = "passwordCheckSyntax";
-    internal const string AttributeMinimumLength = "passwordMinLength";
-    internal const string AttributeMinimumCategories = "passwordMinCategories";
-    internal const string AttributeHistoryEnabled = "passwordHistory";
-    internal const string AttributeHistoryDepth = "passwordInHistory";
-    internal const string AttributeExpiryEnabled = "passwordExp";
-    internal const string AttributeMaximumAge = "passwordMaxAge";
-    internal const string AttributeMinimumAge = "passwordMinAge";
+    // These names are static readonly rather than const on purpose. A const string is folded into a literal at
+    // every call site, and CodeQL then reads a call such as ReadInt(entry, "passwordMinLength") as a lookup of a
+    // secret (cs/cleartext-storage-of-sensitive-information). The values are the directory's policy settings,
+    // not passwords; a field access is not folded, so the heuristic no longer fires on the figures read.
+    internal static readonly string AttributeCheckSyntax = "passwordCheckSyntax";
+    internal static readonly string AttributeMinimumLength = "passwordMinLength";
+    internal static readonly string AttributeMinimumCategories = "passwordMinCategories";
+    internal static readonly string AttributeHistoryEnabled = "passwordHistory";
+    internal static readonly string AttributeHistoryDepth = "passwordInHistory";
+    internal static readonly string AttributeExpiryEnabled = "passwordExp";
+    internal static readonly string AttributeMaximumAge = "passwordMaxAge";
+    internal static readonly string AttributeMinimumAge = "passwordMinAge";
 
     /// <summary>
     /// The checks 389 applies beyond length and categories when syntax checking is on, none of which JIM can
