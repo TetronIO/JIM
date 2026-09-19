@@ -79,12 +79,11 @@ public enum PendingPasswordChangeStatus
 /// <summary>
 /// Where a queued password change came from (#1635): the one fact that decides how it is delivered.
 /// <para>
-/// Both origins share the queue, the retry policy, the coalescing key, the Activity shape and the person's
-/// password history; that is the point of having one pipeline. They differ in exactly two places. A propagated
-/// change is aimed at whichever account the Connected System's configuration nominates and is held while that
-/// system is paused for Password Synchronisation; an explicit set is aimed at the account the administrator
-/// named and is delivered whether or not the system is configured, because the administrator has already made
-/// the decision a configuration exists to make (decision D1).
+/// All three origins share the queue, the retry policy, the coalescing key, the Activity shape and the person's
+/// password history; that is the point of having one pipeline. A propagated change is aimed at whichever account
+/// the Connected System's configuration nominates and is held while that system is paused for Password
+/// Synchronisation; an explicit set and a provisioned row are both aimed at the account named on the row and are
+/// delivered whether or not the system is configured, because that account is already decided (decision D1).
 /// </para>
 /// </summary>
 public enum PendingPasswordChangeOrigin
@@ -102,5 +101,22 @@ public enum PendingPasswordChangeOrigin
     /// configuration or has it switched off. Every row queued before origins existed was propagated, which is
     /// why that value is zero and this one is not.
     /// </summary>
-    Explicit = 1
+    Explicit = 1,
+
+    /// <summary>
+    /// The first password for an account an export has just provisioned. Delivered whatever the system's
+    /// Password Synchronisation configuration says, exactly like an explicit set: the account already exists and
+    /// is already named, so there is no configuration decision left to defer to.
+    /// <para>
+    /// Carries no password value: the row's <see cref="PendingPasswordChange.EncryptedPassword"/> is always null
+    /// for this origin. The password is resolved from the provisioning Synchronisation Rule's initial-password
+    /// settings at each delivery attempt, rather than generated once and stored, so a settings change before
+    /// delivery succeeds takes effect on the next try.
+    /// </para>
+    /// <para>
+    /// The account is named by <see cref="PendingPasswordChange.ConnectedSystemObjectId"/>, which is never null
+    /// for a row of this origin: the export that created the row already knows which account it provisioned.
+    /// </para>
+    /// </summary>
+    Provisioned = 2
 }

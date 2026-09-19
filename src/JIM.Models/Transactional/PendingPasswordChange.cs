@@ -41,7 +41,7 @@ public class PendingPasswordChange
     /// The Connected System this change is owed to. The other half of the coalescing key.
     /// <para>
     /// Denormalised rather than reached through the Connected System Object, deliberately and for the same reason
-    /// <see cref="PendingInitialPassword.ConnectedSystemId"/> is: "what is outstanding on this system?" is asked
+    /// an initial password's own Connected System reference is: "what is outstanding on this system?" is asked
     /// on every delivery pass and on every list page, and it must not need a join. It is also the only way to
     /// hold a change for a system where the account does not exist yet.
     /// </para>
@@ -59,13 +59,26 @@ public class PendingPasswordChange
     public Guid? ConnectedSystemObjectId { get; set; }
 
     /// <summary>
+    /// The Synchronisation Rule whose initial-password settings decide the password for a
+    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> row. Null for every other origin, and set to null by
+    /// the database when the rule is deleted: no navigation property, matching the other foreign keys on this
+    /// entity.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
     /// The password, encrypted under the Password Synchronisation protection purpose.
     /// <para>
     /// Decrypted only in the delivery processor, only for the duration of one attempt. It is never returned by
     /// any surface, and no DTO built from this row carries it.
     /// </para>
+    /// <para>
+    /// Null for a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row, which never carries a value: its
+    /// password is resolved from <see cref="SyncRuleId"/>'s initial-password settings at each delivery attempt
+    /// instead.
+    /// </para>
     /// </summary>
-    public string EncryptedPassword { get; set; } = null!;
+    public string? EncryptedPassword { get; set; }
 
     /// <summary>
     /// What should happen to the password once set, carried from the change rather than from the Connected
@@ -117,9 +130,9 @@ public class PendingPasswordChange
     /// <summary>
     /// When the next delivery attempt falls due, or null for a change that is due now.
     /// <para>
-    /// The genuine addition over <see cref="PendingInitialPassword"/>, which has no such field because its
-    /// retries ride the next export run. A synchronised password is not tied to a run, so it needs a clock, and
-    /// the backoff between attempts is what stops a refusing target being hammered.
+    /// The genuine addition over an initial password, which has no such field because its retries ride the next
+    /// export run. A synchronised password is not tied to a run, so it needs a clock, and the backoff between
+    /// attempts is what stops a refusing target being hammered.
     /// </para>
     /// </summary>
     public DateTime? NextRetryAt { get; set; }
@@ -193,6 +206,18 @@ public class PendingPasswordChange
     /// as opposed to JIM propagating a password to whichever account the system's configuration nominates.
     /// </summary>
     public bool IsExplicit => Origin == PendingPasswordChangeOrigin.Explicit;
+
+    /// <summary>
+    /// Whether this is the first password for an account an export has just provisioned
+    /// (<see cref="PendingPasswordChangeOrigin.Provisioned"/>).
+    /// </summary>
+    public bool IsProvisioned => Origin == PendingPasswordChangeOrigin.Provisioned;
+
+    /// <summary>
+    /// Whether JIM is carrying this password to every Connected System configured to receive synchronised
+    /// passwords (<see cref="PendingPasswordChangeOrigin.Propagated"/>), as opposed to an account named on the row.
+    /// </summary>
+    public bool IsPropagated => Origin == PendingPasswordChangeOrigin.Propagated;
 
     /// <summary>
     /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is still pending, and
@@ -311,6 +336,11 @@ public class PendingPasswordChange
     /// identity and system whatever the origin (#1635); an administrator's reset replaces a propagated change
     /// that was still waiting, and a later propagated change replaces the reset.
     /// </para>
+    /// <para>
+    /// The Synchronisation Rule follows the same rule: an explicit set replacing a provisioned row clears it,
+    /// because the administrator's own password has nothing left to generate from; a provisioned row replacing
+    /// an expired propagated one sets it, because the new row is the one that knows how to generate its password.
+    /// </para>
     /// </summary>
     /// <param name="newer">
     /// The change taking this row over. Its <see cref="CreatedAt"/> is the instant of the supersession and its
@@ -325,6 +355,7 @@ public class PendingPasswordChange
         Origin = newer.Origin;
         EnableAccount = newer.EnableAccount;
         ConnectedSystemObjectId = newer.ConnectedSystemObjectId;
+        SyncRuleId = newer.SyncRuleId;
         ActivityId = newer.ActivityId;
         CreatedAt = newer.CreatedAt;
         ExpiresAt = newer.ExpiresAt;

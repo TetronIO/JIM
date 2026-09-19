@@ -682,7 +682,8 @@ public class PasswordSynchronisationServer
         try
         {
             // The one point at which a queued password exists in cleartext, and only for this attempt.
-            password = _passwordProtection().UnprotectPassword(change.EncryptedPassword)!;
+            // change.EncryptedPassword! : null only for a Provisioned row, which a later package handles.
+            password = _passwordProtection().UnprotectPassword(change.EncryptedPassword!)!;
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException)
         {

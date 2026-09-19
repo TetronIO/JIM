@@ -832,6 +832,25 @@ public class JimDbContext : DbContext
             .HasForeignKey(ppc => ppc.ConnectedSystemObjectId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // The Synchronisation Rule whose initial-password settings a Provisioned row generates from (#1635). Set
+        // null rather than cascade, mirroring PendingInitialPassword.SyncRuleId above: deleting a rule must not
+        // erase the record that an account is still owed a password, which is a fact about the account rather
+        // than about the rule. The lane withdraws the row itself once it finds there is nothing left to generate
+        // from; the database's job here is only to stop the delete failing on a dangling reference.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<SyncRule>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.SyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // What a provisioned row's delivery attempt asks for: the rule whose settings it generates from. Filtered
+        // because most rows carry no rule at all, and an unfiltered index over a mostly-null column indexes
+        // nothing useful.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.SyncRuleId)
+            .HasFilter("\"SyncRuleId\" IS NOT NULL")
+            .HasDatabaseName("IX_PendingPasswordChanges_SyncRuleId");
+
         // Requirement 8's coalescing, enforced by the database rather than by the code that writes it. The
         // fan-out UPSERTs on this key, so two near-simultaneous password changes for one identity cannot both
         // insert: the second updates the first in place, and last-write-wins is atomic. Application-side

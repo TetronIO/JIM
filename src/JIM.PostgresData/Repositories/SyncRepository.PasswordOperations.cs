@@ -48,7 +48,7 @@ public partial class SyncRepository
                 change.MetaverseObjectId,
                 change.ConnectedSystemId,
                 BulkSqlHelpers.NullableParam(change.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
-                change.EncryptedPassword,
+                BulkSqlHelpers.NullableParam(change.EncryptedPassword, NpgsqlTypes.NpgsqlDbType.Text),
                 (int)change.ExpiryBehaviour,
                 (int)change.Status,
                 BulkSqlHelpers.NullableParam((int?)change.FailureReason, NpgsqlTypes.NpgsqlDbType.Integer),
@@ -65,7 +65,8 @@ public partial class SyncRepository
                 BulkSqlHelpers.NullableParam(change.ClaimedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                 BulkSqlHelpers.NullableParam(change.ClaimedBy, NpgsqlTypes.NpgsqlDbType.Text),
                 (int)change.Origin,
-                BulkSqlHelpers.NullableParam(change.EnableAccount, NpgsqlTypes.NpgsqlDbType.Boolean));
+                BulkSqlHelpers.NullableParam(change.EnableAccount, NpgsqlTypes.NpgsqlDbType.Boolean),
+                BulkSqlHelpers.NullableParam(change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
         }
     }
 
@@ -385,6 +386,7 @@ public partial class SyncRepository
                 ConnectedSystemTakingPasswords = _context.ConnectedSystemPasswordSynchronisations
                     .Any(ps => ps.ConnectedSystemId == change.ConnectedSystemId && ps.Enabled),
                 Origin = change.Origin,
+                SyncRuleId = change.SyncRuleId,
                 Status = change.Status,
                 FailureReason = change.FailureReason,
                 TargetMessage = change.TargetMessage,

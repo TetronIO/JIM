@@ -3075,7 +3075,8 @@ public class SyncRepository : ISyncRepository
         ClaimedAt = source.ClaimedAt,
         ClaimedBy = source.ClaimedBy,
         Origin = source.Origin,
-        EnableAccount = source.EnableAccount
+        EnableAccount = source.EnableAccount,
+        SyncRuleId = source.SyncRuleId
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
@@ -3156,6 +3157,7 @@ public class SyncRepository : ISyncRepository
                     ConnectedSystemId = c.ConnectedSystemId,
                     ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
                     Origin = c.Origin,
+                    SyncRuleId = c.SyncRuleId,
                     Status = c.Status,
                     FailureReason = c.FailureReason,
                     TargetMessage = c.TargetMessage,
