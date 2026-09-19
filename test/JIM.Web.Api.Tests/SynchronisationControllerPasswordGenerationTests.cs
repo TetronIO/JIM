@@ -397,5 +397,37 @@ public class SynchronisationControllerPasswordGenerationTests
         }
     }
 
+    /// <summary>
+    /// A system whose directory applies checks JIM cannot model (a quality module, a dictionary check) is named on
+    /// the response, so a caller knows a password that satisfies the discovered rules can still be refused there.
+    /// </summary>
+    [Test]
+    public async Task GeneratePasswordForSystems_WhereOneSystemAppliesFurtherChecks_NamesItAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(7))
+            .ReturnsAsync(new ConnectedSystem { Id = 7, Name = "Research LDAP" });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(ConnectedSystemId)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = ConnectedSystemId,
+            MinimumLength = 14
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(7)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = 7,
+            MinimumLength = 12,
+            FurtherChecksApply = true
+        });
+
+        var result = await _controller.GeneratePasswordForSystemsAsync(
+            new GeneratePasswordForSystemsRequest { ConnectedSystemIds = [ConnectedSystemId, 7] });
+        var response = (GeneratedPasswordResponse)((OkObjectResult)result).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.SystemsApplyingFurtherChecks, Is.EqualTo(new[] { "Research LDAP" }));
+            Assert.That(response.SystemsWithNoDiscoveredPolicy, Is.Empty);
+        }
+    }
+
     #endregion
 }

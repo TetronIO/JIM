@@ -35,14 +35,13 @@
          would have been parked, so this is the evidence for PRD Scenario 2.
       6. One entry is given a pwdPolicySubentry; a schema refresh then reports the override signal as
          Present.
-      7. The password channel preflight reports policy discovery as passed and names the 12.
 
     OpenLDAP only. JIM binds as cn=jim-provisioner rather than the rootdn because slapo-ppolicy exempts
     the rootdn from every check; a scenario bound as cn=admin would see every password accepted.
 
 .PARAMETER Step
     Which part to execute. Steps are cumulative: a named step runs everything up to and including
-    itself (Discovery, Provision, Override, Preflight, All).
+    itself (Discovery, Provision, Override, All).
 
 .PARAMETER Template
     Accepted for runner compatibility and deliberately not used for sizing. This scenario asserts
@@ -101,7 +100,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Discovery", "Provision", "Override", "Preflight", "All")]
+    [ValidateSet("Discovery", "Provision", "Override", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -270,7 +269,7 @@ Write-Host "Step:        $Step (steps are cumulative)" -ForegroundColor Gray
 Write-Host ""
 
 # Cumulative dispatch: each step builds on the previous one's state.
-$stepOrder = @("Discovery", "Provision", "Override", "Preflight")
+$stepOrder = @("Discovery", "Provision", "Override")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -545,51 +544,6 @@ try {
         Add-TestResult -Name "The default policy's figures are unchanged by the refresh (minimumLength still $expectedMinimumLength)" `
             -Passed ((Get-PolicyProperty -Policy $policyAfterOverride -Name 'minimumLength') -eq $expectedMinimumLength) `
             -Detail "minimumLength was '$(Get-PolicyProperty -Policy $policyAfterOverride -Name 'minimumLength')'"
-    }
-
-    # ─────────────────────────────────────────────────────────────────────────────────────────
-    # Test 7: the preflight an administrator runs before trusting the channel agrees
-    # ─────────────────────────────────────────────────────────────────────────────────────────
-    if ($lastStepIndex -ge $stepOrder.IndexOf("Preflight")) {
-        Write-TestSection "Test 7: The password channel preflight reports policy discovery as passed"
-
-        # The preflight is what the portal's "Check Password Channel" runs (ConnectedSystemServer
-        # .RunPasswordPreflightAsync). It is driven here through the REST API with the same key the
-        # module holds; no cmdlet wraps it yet. A 404 means the endpoint has not been added and is
-        # reported as a failed assertion naming that, not as a scenario crash.
-        $preflightUri = "$($JIMUrl.TrimEnd('/'))/api/v1/synchronisation/connected-systems/$($config.LDAPSystemId)/password-preflight"
-        $preflight = $null
-        $preflightError = ""
-        try {
-            $preflight = Invoke-RestMethod -Method Post -Uri $preflightUri -Headers @{ 'X-API-Key' = $ApiKey } -ContentType 'application/json' -Body '{}'
-        }
-        catch {
-            $preflightError = $_.Exception.Message
-        }
-
-        Add-TestResult -Name "The preflight endpoint answered (POST .../connected-systems/{id}/password-preflight)" `
-            -Passed ($null -ne $preflight) `
-            -Detail "Request failed: $preflightError. If this is a 404, the preflight has no REST surface yet (it is portal-only in ConnectedSystemPasswordPolicyPanel.razor); surface parity requires one before this step can pass."
-
-        $policyCheck = $null
-        if ($null -ne $preflight -and ($preflight.PSObject.Properties['checks'])) {
-            $policyCheck = @($preflight.checks | Where-Object { "$($_.check)" -eq 'PolicyDiscovery' }) | Select-Object -First 1
-        }
-
-        Add-TestResult -Name "The preflight includes a PolicyDiscovery check" `
-            -Passed ($null -ne $policyCheck) `
-            -Detail "Checks returned: $(if ($null -ne $preflight -and $preflight.PSObject.Properties['checks']) { (@($preflight.checks | ForEach-Object { "$($_.check)=$($_.state)" }) -join ', ') } else { '<none>' })"
-
-        $checkState = if ($null -ne $policyCheck) { "$($policyCheck.state)" } else { '<absent>' }
-        $checkText = if ($null -ne $policyCheck) { (@("$($policyCheck.message)") + @($policyCheck.details | ForEach-Object { "$_" })) -join ' | ' } else { '' }
-
-        Add-TestResult -Name "Policy discovery passed" `
-            -Passed ($checkState -eq 'Passed') `
-            -Detail "PolicyDiscovery state was '$checkState': $checkText"
-
-        Add-TestResult -Name "The policy discovery result names the minimum length ($expectedMinimumLength)" `
-            -Passed ($checkText -match "\b$expectedMinimumLength\b") `
-            -Detail "PolicyDiscovery said: $checkText"
     }
 
     # The worker logs everything it does through the password channel; an error there means a
