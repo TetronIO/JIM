@@ -564,6 +564,17 @@ public class SyncImportTaskProcessor
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
                 deletionsSw.Elapsed.TotalSeconds, existingCsoCount);
+
+            // Retry an exported Create this Full Import never confirmed. Separate from deletion
+            // detection above, which deliberately excludes Pending Provisioning CSOs (an absent one must
+            // never be marked Obsolete); see SyncEngine.IsExportedCreateUnseenByFullImport.
+            var retrySw = System.Diagnostics.Stopwatch.StartNew();
+            using (Diagnostics.Sync.StartSpan("RetryUnconfirmedExportedCreates"))
+            {
+                await RetryUnconfirmedExportedCreatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, deletionPartitionId, totalObjectsImported);
+            }
+            retrySw.Stop();
+            Log.Information("PerformImportAsync: PHASE TIMING: Unconfirmed Create retry: {RetrySeconds:F1}s", retrySw.Elapsed.TotalSeconds);
         }
 
         importPhaseSw.Stop();
@@ -1431,6 +1442,156 @@ public class SyncImportTaskProcessor
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         _csoIdsQueuedForUpdate.Add(cso.Id);
         connectedSystemObjectsToBeUpdated.Add(cso);
+    }
+
+    /// <summary>
+    /// Finds every exported Create Pending Export this Full Import did not confirm, and marks it for
+    /// retry. Deliberately separate from <see cref="ProcessConnectedSystemObjectDeletionsAsync"/>:
+    /// deletion detection excludes Pending Provisioning CSOs outright
+    /// (<c>ConnectedSystemRepository.BuildDeletionDetectionQuery</c>), because an absent one must never
+    /// be marked Obsolete; so a Create that was exported and simply never reported back by any
+    /// subsequent import is invisible to it, and nothing else ever revisits such an object: reconciliation
+    /// (<see cref="SyncEngine.Reconciliation.ReconcileCsoAgainstPendingExport"/>) only runs for a CSO an
+    /// import actually returned. Without this step the Pending Export sits Status Exported forever and
+    /// the CSO never leaves Pending Provisioning (see <see cref="ISyncEngine.IsExportedCreateUnseenByFullImport"/>'s
+    /// own doc comment for the full mechanics of why).
+    /// </summary>
+    /// <param name="externalIdsImported">Every External Id this run actually saw, across all pages, by Object Type.</param>
+    /// <param name="connectedSystemObjectsToBeUpdated">CSOs already processed elsewhere in this import run: a CSO in here was
+    /// seen this run even if its current External Id is not (yet) reflected in <paramref name="externalIdsImported"/>.</param>
+    /// <param name="partitionId">The run's partition, if partitioned.</param>
+    /// <param name="totalObjectsImported">How many objects this run read in total, across every object type - the same
+    /// "no objects imported means do nothing" guard the caller already applies before deletion detection.</param>
+    private async Task RetryUnconfirmedExportedCreatesAsync(
+        IReadOnlyCollection<ExternalIdPair> externalIdsImported,
+        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated,
+        int? partitionId,
+        int totalObjectsImported)
+    {
+        if (_connectedSystem.ObjectTypes == null)
+            return;
+
+        var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
+        var retried = new List<PendingExport>();
+
+        foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
+        {
+            var candidates = await _syncRepo.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+                _connectedSystem.Id, selectedObjectType.Id, partitionId);
+
+            if (candidates.Count == 0)
+                continue;
+
+            var importedExternalIdsForType = ImportedExternalIdSet.Build(externalIdsImported
+                .Where(pair => pair.ConnectedSystemObjectTypeId == selectedObjectType.Id)
+                .Select(pair => pair.ConnectedSystemImportObjectAttribute));
+
+            foreach (var pendingExport in candidates)
+            {
+                var cso = pendingExport.ConnectedSystemObject;
+                if (cso == null)
+                    continue;
+
+                var wasSeen = processedCsoIds.Contains(cso.Id) || importedExternalIdsForType.Contains(cso.ExternalIdAttributeValue);
+                if (!_syncEngine.IsExportedCreateUnseenByFullImport(_connectedSystemRunProfile.RunType, totalObjectsImported, wasSeen))
+                    continue;
+
+                MarkExportedCreateForRetry(pendingExport);
+                retried.Add(pendingExport);
+            }
+        }
+
+        if (retried.Count == 0)
+            return;
+
+        await _syncRepo.UpdateUntrackedPendingExportsAsync(retried);
+
+        foreach (var pendingExport in retried)
+        {
+            var cso = pendingExport.ConnectedSystemObject!;
+            var executionItem = new ActivityRunProfileExecutionItem
+            {
+                Activity = _activity,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                ObjectChangeType = ObjectChangeType.Updated,
+                ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
+                ErrorMessage = "The Create export succeeded, but this Full Import did not report the object back at all. " +
+                    "The Create will be retried on the next export."
+            };
+            executionItem.SnapshotCsoDisplayFields(cso);
+
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                SyncOutcomeBuilder.AddRootOutcome(executionItem, ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed);
+
+            _activityRunProfileExecutionItems.Add(executionItem);
+        }
+
+        Log.Information("RetryUnconfirmedExportedCreatesAsync: {Count} exported Create(s) not seen by this Full Import; marked for retry.",
+            retried.Count);
+    }
+
+    /// <summary>
+    /// The External Id values a Full Import reported for one Object Type, held as typed sets so each
+    /// Pending Provisioning CSO's own External Id is a constant-time lookup rather than a scan of every
+    /// imported object (per type, mirroring <see cref="ResolveDeletionCandidatesAsync"/>'s own per-type
+    /// comparison).
+    /// </summary>
+    private sealed class ImportedExternalIdSet
+    {
+        private readonly HashSet<string> _strings = [];
+        private readonly HashSet<int> _ints = [];
+        private readonly HashSet<long> _longs = [];
+        private readonly HashSet<decimal> _decimals = [];
+        private readonly HashSet<Guid> _guids = [];
+
+        public static ImportedExternalIdSet Build(IEnumerable<ConnectedSystemImportObjectAttribute> importedExternalIdAttributes)
+        {
+            var set = new ImportedExternalIdSet();
+            foreach (var attribute in importedExternalIdAttributes)
+            {
+                set._strings.UnionWith(attribute.StringValues);
+                set._ints.UnionWith(attribute.IntValues);
+                set._longs.UnionWith(attribute.LongValues);
+                set._decimals.UnionWith(attribute.DecimalValues);
+                set._guids.UnionWith(attribute.GuidValues);
+            }
+            return set;
+        }
+
+        public bool Contains(ConnectedSystemObjectAttributeValue? externalIdValue)
+        {
+            if (externalIdValue == null)
+                return false;
+
+            return (externalIdValue.StringValue != null && _strings.Contains(externalIdValue.StringValue)) ||
+                   (externalIdValue.IntValue.HasValue && _ints.Contains(externalIdValue.IntValue.Value)) ||
+                   (externalIdValue.LongValue.HasValue && _longs.Contains(externalIdValue.LongValue.Value)) ||
+                   (externalIdValue.DecimalValue.HasValue && _decimals.Contains(externalIdValue.DecimalValue.Value)) ||
+                   (externalIdValue.GuidValue.HasValue && _guids.Contains(externalIdValue.GuidValue.Value));
+        }
+    }
+
+    /// <summary>
+    /// Applies the retry transition to one exported Create a Full Import did not see at all: the same
+    /// per-change retry accounting reconciliation applies to a change that fails to confirm
+    /// (<see cref="SyncEngine.ShouldMarkAsFailed"/>), applied here to every change still awaiting
+    /// confirmation, since none of them were confirmed - nothing was seen at all. The Pending Export's
+    /// ChangeType stays Create (unlike <see cref="SyncEngine.TransitionCreateToUpdateOnceObjectConfirmed"/>:
+    /// there is nothing here to prove the object exists), so the retry correctly goes out as a Create.
+    /// </summary>
+    private static void MarkExportedCreateForRetry(PendingExport pendingExport)
+    {
+        foreach (var attrChange in pendingExport.AttributeValueChanges.Where(ac =>
+                     ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                     ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
+        {
+            attrChange.Status = SyncEngine.ShouldMarkAsFailed(attrChange)
+                ? PendingExportAttributeChangeStatus.Failed
+                : PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+        }
+
+        SyncEngine.UpdatePendingExportStatus(pendingExport);
     }
 
     /// <summary>

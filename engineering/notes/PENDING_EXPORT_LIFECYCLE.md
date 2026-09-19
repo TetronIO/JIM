@@ -131,16 +131,53 @@ or `Pending` for a retrying attempt) are left untouched; the appended change is 
 same guard that already refused a re-exported Delete), so the queued change is never sent while the
 Create itself is still awaiting confirmation.
 
-Once a confirming import confirms the Create's own exported changes, `SyncEngine.Reconciliation`'s
-`TransitionCreateToUpdateIfSecondaryExternalIdConfirmed` flips the PE's `ChangeType` from `Create` to
-`Update` (generalised beyond its original Secondary External ID trigger to also fire once every exported
-change is confirmed and a queued `Pending` change remains), and the ordinary `UpdatePendingExportStatus`
-sets `Status` back to `Pending`. The next export then sends exactly one Update carrying the queued
-change - never a second Create, and never before the Create is confirmed.
+`SyncEngine.Reconciliation.ReconcileCsoAgainstPendingExport` only ever runs for a CSO an import actually
+returned and matched, so a Create PE reaching it already proves the object exists on the target -
+regardless of which attribute(s) confirmed. Once reconciliation has processed the round, `SyncEngine`'s
+`TransitionCreateToUpdateOnceObjectConfirmed` flips the PE's `ChangeType` from `Create` to `Update`
+whenever any changes remain outstanding (queued `Pending`, still `ExportedNotConfirmed`, or `Failed`),
+and the ordinary `UpdatePendingExportStatus` sets `Status` accordingly (`ExportNotConfirmed` if anything
+needs resending, `Pending` if only unsent queued changes remain). The next export then sends exactly one
+Update carrying the outstanding change(s) - never a second Create, and never before the object has been
+matched by an import.
+
+This generalises the transition beyond two narrower triggers it used to require individually (a
+confirmed Secondary External ID; every originally-exported change confirmed together with a queued
+`Pending` change remaining): a single still-unconfirmed attribute no longer blocks it. Previously, a
+confirming import that matched the object by its primary External Id but reported one exported attribute
+back with a different value left the PE Create-shaped, and the retry went out as a second Create instead
+of an Update - fixed by the generalisation.
 
 `IsProvisioningNeverExported` still returns `false` for an exported Create carrying an appended `Pending`
 change (its `Status` is `Exported`, not `Pending`), so a withdrawal in this window still stages a Delete
 against the CSO, never a cancellation.
+
+### An exported Create a Full Import never reports back at all
+
+The case above assumes the confirming import returns the object, even if some attribute values differ.
+If it does not return the object at all, `ReconcileCsoAgainstPendingExport` never runs for it (it only
+processes CSOs an import actually returned), so nothing transitions the Create's `Status` away from
+`Exported`, and `ExportExecutionServer.IsReadyForExecution` refuses to re-execute a Create with Status
+`Exported` (re-sending it would ask the Connector to create a duplicate of an object it believes already
+exists). Without a separate mechanism the Connected System Object stays `PendingProvisioning` forever.
+
+Ordinary import deletion detection cannot fill this gap either: it deliberately excludes
+`PendingProvisioning` CSOs (`ConnectedSystemRepository.BuildDeletionDetectionQuery`), because they have
+no External Id yet for it to compare - the same exclusion the Delete case below relies on.
+
+`SyncImportTaskProcessor` therefore runs a second, narrow step alongside deletion detection, gated by the
+same "no objects imported means do nothing" guard: for each selected Object Type (and the run's
+partition), it loads the `PendingProvisioning` CSOs of that type still holding an exported Create
+(`ISyncRepository.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync`), compares their
+External Id against what the run actually saw, and marks the unseen ones for retry
+(`SyncEngine.IsExportedCreateUnseenByFullImport` is the pure decision: only a Full Import that read at
+least one object can prove absence). A retried Create keeps its `ChangeType` (there is nothing here to
+prove the object exists, unlike the Update case above), its `Status` moves to `ExportNotConfirmed` so
+`IsReadyForExecution` accepts it again, and each `ExportedPendingConfirmation`/`ExportedNotConfirmed`
+attribute change moves to `ExportedNotConfirmed` through the same per-change retry accounting
+reconciliation uses (`SyncEngine.ShouldMarkAsFailed`), so the ordinary retry limit and `Failed` state
+still apply. A Delta Import never triggers this: it only reports changes, so an object missing from its
+payload proves nothing about whether it still exists.
 
 ### Delete against an unconfirmed-provisioning CSO
 

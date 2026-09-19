@@ -751,6 +751,267 @@ public class StageToExecuteContractTests : WorkflowTestBase
 
     #endregion
 
+    #region A Create whose confirming import does not confirm it: retry shape
+
+    /// <summary>
+    /// Sub-case A: the connector reports the Create's export as successful, and a confirming import
+    /// matches the object by its (primary) External Id - so the CSO transitions Pending Provisioning to
+    /// Normal, per the doctrine that the confirming import is what establishes the object exists - but one
+    /// exported attribute (DisplayName) is reported back with a DIFFERENT value than what was sent (e.g.
+    /// the target normalised it), so that one change stays unconfirmed and must retry.
+    ///
+    /// Expected, derived from the same doctrine: the retry travels as an UPDATE of the unconfirmed
+    /// attribute(s), never a second Create; exactly one Create ever reaches the connector; the Update
+    /// carries the originally-exported (still wanted) value; once a second confirming import reports that
+    /// value back, the Pending Export is gone and the CSO is Normal.
+    ///
+    /// This topology has no Secondary External Id configured (see <see cref="BuildTopologyAsync"/> - the
+    /// primary External Id is itself the flowed attribute), so the old, narrower
+    /// <c>TransitionCreateToUpdateIfSecondaryExternalIdConfirmed</c> never fired for this shape: its first
+    /// trigger (a confirmed Secondary External Id) could never fire here, and its second trigger required
+    /// EVERY originally-exported change to be confirmed before transitioning, which the one still-
+    /// unconfirmed DisplayName change prevented - so a second Create went out for an object reconciliation
+    /// had already matched. Fixed by generalising the transition
+    /// (<c>SyncEngine.Reconciliation.TransitionCreateToUpdateOnceObjectConfirmed</c>): reconciliation only
+    /// ever runs for a CSO an import actually matched, so a Create reaching it already proves the object
+    /// exists, and any changes still outstanding after confirmation now travel as an Update regardless of
+    /// which attribute(s) confirmed.
+    ///
+    /// Does not cover FileAutoConfirm: auto-confirm deletes the Create Pending Export the moment the
+    /// export succeeds, so there is no confirming step for the Create to NOT confirm - the axis this test
+    /// exercises does not apply to that path.
+    /// </summary>
+    [Test]
+    [TestCaseSource(nameof(ObjectPresentUnconfirmedAttributeCases))]
+    public async Task UnconfirmedCreate_ObjectPresentOneAttributeUnconfirmed_RetriesAsUpdateAsync(ExportPath exportPath)
+    {
+        var caseName = $"UnconfirmedCreate_ObjectPresent_{exportPath}";
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disconnect);
+        var (sourceCso, _) = await CreateSourceCsoAsync(topology, $"{caseName} User", "EMP3000");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+        Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            $"[{caseName}] arrange: provisioning must stage a Pending Provisioning target CSO");
+
+        var connector = CreateExportConnector(exportPath);
+        // Frozen call-history snapshot, same reason as ExportedUnconfirmed_AttributeUpdate_UpdateFollowsOnceCreateConfirmedAsync:
+        // reconciliation genuinely mutates a Pending Export's ChangeType in place, so reading the
+        // connector's live log at the end cannot tell "one Create, renamed in place" apart from "one
+        // Create, then a second logged as Update" - both would show as one Create + one Update in a live
+        // read. Snapshotting each newly logged call's ChangeType the moment it is sent is what makes
+        // "exactly one Create ever reached the connector" an honest assertion.
+        var callHistory = new List<PendingExport>();
+        void RecordNewCalls() => callHistory.AddRange(GetExportedItems(connector).Skip(callHistory.Count)
+            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = pe.AttributeValueChanges.ToList() }));
+
+        // Export the Create; the connector reports success.
+        var createActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly($"{caseName} (create)", createActivity);
+        RecordNewCalls();
+        Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
+            $"[{caseName}] arrange: exactly one Create must have been sent");
+
+        var targetDisplayNameAttr = topology.TargetType.Attributes.Single(a => a.Name == "DisplayName");
+        var targetExternalIdAttr = topology.TargetType.Attributes.Single(a => a.IsExternalId);
+        var externalId = targetCso.AttributeValues.SingleOrDefault(av => av.AttributeId == targetExternalIdAttr.Id)?.StringValue;
+        Assert.That(externalId, Is.Not.Null, $"[{caseName}] arrange: the Create export must have assigned/echoed an External Id");
+        var exportedDisplayName = $"{caseName} User";
+
+        // Confirming import that does NOT confirm: the object is present (matched by External Id) but
+        // reports a DIFFERENT DisplayName than what was exported.
+        var mismatchedImportObject = new ConnectedSystemImportObject { ObjectType = topology.TargetType.Name, ChangeType = ObjectChangeType.Updated };
+        mismatchedImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ExternalId", StringValues = { externalId! } });
+        mismatchedImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "DisplayName", StringValues = { $"{caseName} Normalised" } });
+
+        var importConnector1 = new MockCallConnector();
+        importConnector1.QueueImportObjects(mismatchedImportObject);
+        await RunConfirmingImportAsync(topology.Target, importConnector1);
+
+        Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal),
+            $"[{caseName}] arrange: a confirming import matching the object by External Id must transition it to Normal " +
+            "even though one exported attribute stays unconfirmed - the import is what establishes the object exists");
+
+        // Sync: the ordinary next cycle, even though nothing new changed at the source.
+        await RunFullSyncAsync(topology.Source, "Sync After Partial Confirmation");
+
+        // Retry export attempt.
+        var retryActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly($"{caseName} (retry)", retryActivity);
+        RecordNewCalls();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
+                $"[{caseName}] exactly one Create must ever reach the connector - the retry must travel as an Update, " +
+                "never a second Create, for an object the confirming import has already matched");
+            Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Update), Is.EqualTo(1),
+                $"[{caseName}] the retry must be exactly one Update");
+        }
+
+        var updatePe = callHistory.Last(pe => pe.ChangeType == PendingExportChangeType.Update);
+        var updateChange = updatePe.AttributeValueChanges.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+        Assert.That(updateChange?.StringValue, Is.EqualTo(exportedDisplayName),
+            $"[{caseName}] the Update must carry the originally-exported (still wanted) DisplayName value, not the " +
+            "target's mismatched/normalised one");
+
+        // Final confirming import now returns the exported value.
+        var confirmedImportObject = new ConnectedSystemImportObject { ObjectType = topology.TargetType.Name, ChangeType = ObjectChangeType.Updated };
+        confirmedImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ExternalId", StringValues = { externalId! } });
+        confirmedImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "DisplayName", StringValues = { exportedDisplayName } });
+        var importConnector2 = new MockCallConnector();
+        importConnector2.QueueImportObjects(confirmedImportObject);
+        await RunConfirmingImportAsync(topology.Target, importConnector2);
+        await RunFullSyncAsync(topology.Source, "Final Full Sync");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(PendingExportsFor(targetCso.Id), Is.Empty, $"[{caseName}] the Pending Export must be gone once confirmed");
+            Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), $"[{caseName}] final CSO status");
+            Assert.That(targetCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned), $"[{caseName}] final CSO join type");
+        }
+
+        AssertContract(caseName,
+            stagedBeforeExecution: [],
+            executedActivities: [createActivity, retryActivity],
+            expectedCreates: 1, expectedUpdates: 1, expectedDeletes: 0,
+            connectorCallLogs: [callHistory]);
+    }
+
+    /// <summary>
+    /// One case per export path that has a confirming step for the Create to not confirm (see the test
+    /// method's own doc comment for why FileAutoConfirm is excluded).
+    /// </summary>
+    private static IEnumerable<TestCaseData> ObjectPresentUnconfirmedAttributeCases()
+    {
+        foreach (var exportPath in new[] { ExportPath.Call, ExportPath.FileNoAutoConfirm })
+        {
+            yield return new TestCaseData(exportPath)
+                .SetName($"UnconfirmedCreate_ObjectPresentOneAttributeUnconfirmed_{exportPath}");
+        }
+    }
+
+    /// <summary>
+    /// Sub-case B: the connector reports the Create's export as successful, but a confirming import does
+    /// not return the object AT ALL (absent from the Full Import payload entirely - e.g. it has not landed
+    /// wherever the target's own read-back source looks yet). Expected: the Create is retried as a
+    /// CREATE - a second Create is correct here, since as far as JIM can tell there is genuinely nothing in
+    /// the target; the CSO stays Pending Provisioning until an import confirms it; no stranded state
+    /// (contract clause 3's invariants, including the one added specifically for an unconfirmable Exported
+    /// Pending Export against a NotJoined CSO, are asserted at the end).
+    ///
+    /// Fixed via <c>SyncEngine.IsExportedCreateUnseenByFullImport</c> +
+    /// <c>SyncImportTaskProcessor</c>'s Full Import deletion-detection phase: when a Full Import completes
+    /// without seeing a Pending Provisioning CSO whose Create Pending Export is Status Exported, that
+    /// Create is marked for retry (Pending Export Status -&gt; ExportNotConfirmed, its
+    /// ExportedPendingConfirmation/ExportedNotConfirmed attribute changes -&gt; ExportedNotConfirmed with
+    /// the usual retry accounting), so the next export re-sends the Create. A Delta Import cannot prove
+    /// absence and leaves it alone.
+    ///
+    /// Does not cover FileAutoConfirm, for the same reason as sub-case A above.
+    /// </summary>
+    [Test]
+    [TestCaseSource(nameof(ObjectAbsentCases))]
+    public async Task UnconfirmedCreate_ObjectAbsent_RetriesAsCreateAsync(ExportPath exportPath)
+    {
+        var caseName = $"UnconfirmedCreate_ObjectAbsent_{exportPath}";
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disconnect);
+        var (sourceCso, _) = await CreateSourceCsoAsync(topology, $"{caseName} User", "EMP4000");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+        Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            $"[{caseName}] arrange: provisioning must stage a Pending Provisioning target CSO");
+
+        var connector = CreateExportConnector(exportPath);
+        var callHistory = new List<PendingExport>();
+        void RecordNewCalls() => callHistory.AddRange(GetExportedItems(connector).Skip(callHistory.Count)
+            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = pe.AttributeValueChanges.ToList() }));
+
+        // Export the Create; the connector reports success.
+        var createActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly($"{caseName} (create)", createActivity);
+        RecordNewCalls();
+        Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(1),
+            $"[{caseName}] arrange: exactly one Create must have been sent");
+
+        // Confirming import that does not return our object at all - but the run must still read
+        // something, unrelated noise, so it is not itself an empty Full Import (which the retry step
+        // deliberately treats as "no objects imported means do nothing", mirroring the same guard
+        // deletion detection applies: a Full Import that reads literally nothing may be the symptom of
+        // a connector/configuration problem, not proof that everything outstanding is now absent).
+        var importConnector1 = new MockCallConnector();
+        var noiseImportObject = new ConnectedSystemImportObject { ObjectType = topology.TargetType.Name, ChangeType = ObjectChangeType.Updated };
+        noiseImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "ExternalId", StringValues = { $"noise-{Guid.NewGuid()}" } });
+        noiseImportObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "DisplayName", StringValues = { "Unrelated Noise Object" } });
+        importConnector1.QueueImportObjects(noiseImportObject);
+        await RunConfirmingImportAsync(topology.Target, importConnector1);
+
+        Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
+            $"[{caseName}] arrange: an import that never reports the object must leave it unconfirmed");
+
+        await RunFullSyncAsync(topology.Source, "Sync After No Confirmation");
+
+        var retryActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly($"{caseName} (retry)", retryActivity);
+        RecordNewCalls();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Create), Is.EqualTo(2),
+                $"[{caseName}] the retry must travel as a second Create - there is nothing in the target for an Update " +
+                "to address, and the CSO must not be left permanently stuck on the first, still-Exported Create");
+            Assert.That(callHistory.Count(pe => pe.ChangeType == PendingExportChangeType.Update), Is.EqualTo(0),
+                $"[{caseName}] no Update may be sent - nothing has ever been confirmed to exist");
+        }
+
+        // Confirming import that now returns the object.
+        var targetExternalIdAttr = topology.TargetType.Attributes.Single(a => a.IsExternalId);
+        var externalId = targetCso.AttributeValues.SingleOrDefault(av => av.AttributeId == targetExternalIdAttr.Id)?.StringValue;
+        Assert.That(externalId, Is.Not.Null, $"[{caseName}] arrange: the retried Create must have assigned/echoed an External Id");
+        var confirmedImportObject = BuildConfirmingImportObject(topology, sourceCso, targetCso);
+        var importConnector2 = new MockCallConnector();
+        importConnector2.QueueImportObjects(confirmedImportObject);
+        await RunConfirmingImportAsync(topology.Target, importConnector2);
+        await RunFullSyncAsync(topology.Source, "Final Full Sync");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(targetCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), $"[{caseName}] final CSO status");
+            Assert.That(targetCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned), $"[{caseName}] final CSO join type");
+        }
+
+        AssertContract(caseName,
+            stagedBeforeExecution: [],
+            executedActivities: [createActivity, retryActivity],
+            expectedCreates: 2, expectedUpdates: 0, expectedDeletes: 0,
+            connectorCallLogs: [callHistory]);
+    }
+
+    /// <summary>
+    /// One case per export path that has a confirming step for the Create to not confirm (see the sub-case
+    /// B test method's own doc comment for why FileAutoConfirm is excluded).
+    ///
+    /// Fixed the same way as sub-case A's doc comment describes for the general mechanism, but via a
+    /// different code path: <c>ReconcileCsoAgainstPendingExport</c> is only ever invoked per imported
+    /// object, so an object genuinely absent from every subsequent import is never reconciled by it.
+    /// <c>SyncImportTaskProcessor</c>'s Full Import deletion-detection phase now runs a second, narrow
+    /// step (<c>SyncEngine.IsExportedCreateUnseenByFullImport</c>) that finds exactly this shape - a
+    /// Pending Provisioning CSO whose Create Pending Export is Status Exported but whose External Id
+    /// never appeared in the run's own imported set - and marks it for retry, so the next export re-sends
+    /// the Create.
+    /// </summary>
+    private static IEnumerable<TestCaseData> ObjectAbsentCases()
+    {
+        foreach (var exportPath in new[] { ExportPath.Call, ExportPath.FileNoAutoConfirm })
+        {
+            yield return new TestCaseData(exportPath)
+                .SetName($"UnconfirmedCreate_ObjectAbsent_{exportPath}");
+        }
+    }
+
+    #endregion
+
     #region Shared contract assertions
 
     /// <summary>

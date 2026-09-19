@@ -141,6 +141,31 @@ public partial class SyncEngine
         };
 
     /// <summary>
+    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from a
+    /// Full Import's payload, must be marked for retry. Reconciliation
+    /// (<see cref="ReconcileCsoAgainstPendingExport"/>) only ever runs for a CSO an import actually
+    /// returned and matched, so a CSO genuinely absent from every subsequent import never reaches it:
+    /// without this decision, its exported Create sits Status Exported forever
+    /// (<c>ExportExecutionServer.IsReadyForExecution</c> refuses to re-execute a Create with Status
+    /// Exported, since re-sending it would normally mean asking the connector to create a duplicate of
+    /// an object that already exists there), and the CSO never leaves Pending Provisioning.
+    /// </summary>
+    /// <param name="runType">The import run's type. Only a Full Import can prove absence; a Delta Import
+    /// reports only changes, so an object missing from its payload says nothing about whether it still
+    /// exists.</param>
+    /// <param name="totalObjectsImported">How many objects the run read from the Connected System in
+    /// total, across every object type. Mirrors the "no objects imported means do nothing" guard
+    /// deletion detection applies (<c>SyncImportTaskProcessor.PerformImportAsync</c>): a Full Import
+    /// that read literally nothing may itself be the symptom of a connector or configuration problem,
+    /// so it must not be read as proof that every outstanding Create is now absent.</param>
+    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the Full
+    /// Import's payload (or the object was otherwise processed this run).</param>
+    public bool IsExportedCreateUnseenByFullImport(ConnectedSystemRunType runType, int totalObjectsImported, bool wasSeen) =>
+        runType == ConnectedSystemRunType.FullImport &&
+        totalObjectsImported > 0 &&
+        !wasSeen;
+
+    /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
     /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
     /// CSO from the object's collection: no connectors remaining is the collection being empty. Only a Projected
