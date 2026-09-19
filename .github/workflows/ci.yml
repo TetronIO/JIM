@@ -298,6 +298,19 @@ jobs:
     # daemon for Trivy to read via --image-src docker; nothing is pushed. OPENAPI_STAGE
     # skips the JIM.Web OpenAPI generation stage, which costs about five minutes and
     # contributes nothing to what is scanned; the openapi-document job proves it separately.
+    # The base stage's apt-get upgrade has to run against the live noble archive, and served from
+    # the cache that layer is replayed as it stood when it last ran (Dockerfile and digest
+    # unchanged): the "upgraded" images carried fixes up to two weeks stale and Trivy reported 31
+    # fixable MEDIUM CVEs a fresh build did not have. Today's date goes into the layer's cache key
+    # as the APT_REFRESH build argument, so the upgrade runs afresh once a day and every layer
+    # above it is rebuilt on the result. no-cache-filters=base was tried first and does not work:
+    # BuildKit keys the final stage on the instruction chain rather than on the base stage's
+    # output, so it matched the cache and the rebuilt base layer was discarded (#1705). The SDK
+    # build stage is unaffected either way and still comes from the cache.
+    - name: Date the apt upgrade layer
+      id: apt_refresh
+      run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
     - name: Build image
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
       with:
@@ -308,14 +321,9 @@ jobs:
         build-args: |
           VERSION=scan
           OPENAPI_STAGE=publish
+          APT_REFRESH=${{ steps.apt_refresh.outputs.date }}
         cache-from: type=gha,scope=${{ matrix.image_name }}
         cache-to: type=gha,scope=${{ matrix.image_name }},mode=max
-        # The base stage's apt-get upgrade has to run against the live noble archive on every
-        # build. Served from the cache, that layer is replayed as it stood when it last ran (the
-        # Dockerfile and digest unchanged), so the "upgraded" images carried fixes up to two weeks
-        # stale and Trivy reported 31 fixable MEDIUM CVEs that a fresh build did not have. Only the
-        # base stage is excluded; the SDK build stage still comes from the cache.
-        no-cache-filters: base
 
     - name: Scan image for vulnerabilities
       id: trivy
