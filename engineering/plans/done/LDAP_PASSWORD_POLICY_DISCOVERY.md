@@ -1,9 +1,9 @@
 # Password Policy Discovery for OpenLDAP and 389 Directory Server
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-19
 - **Issue:** [#1702](https://github.com/TetronIO/JIM/issues/1702)
-- **PRD:** [PRD_LDAP_PASSWORD_POLICY_DISCOVERY.md](../../prd/doing/PRD_LDAP_PASSWORD_POLICY_DISCOVERY.md)
+- **PRD:** [PRD_LDAP_PASSWORD_POLICY_DISCOVERY.md](../../prd/done/PRD_LDAP_PASSWORD_POLICY_DISCOVERY.md)
 - **Follows:** [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (introduced discovery and reconciliation), [#1699](https://github.com/TetronIO/JIM/pull/1699) (neutralised the panel wording)
 
 ## Overview

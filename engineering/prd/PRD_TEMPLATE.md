@@ -19,8 +19,9 @@
   Lifecycle: the Status field below drives which folder the PRD lives in.
     Planned -> engineering/prd/        (not yet started)
     Doing   -> engineering/prd/doing/  (work has started)
-    Done    -> engineering/prd/done/   (implemented and issue closed)
-  Update Status and `git mv` the file together; see engineering/CLAUDE.md.
+    Done    -> engineering/prd/done/   (implemented; moved by the PR that closes the issue)
+  Update Status and `git mv` the file together, in the implementing PR rather than
+  a follow-up PR for the move alone; see engineering/CLAUDE.md.
 
   Tips:
     - Be specific: "filter the activity list by outcome type" is better than
