@@ -231,7 +231,7 @@ Get-JIMConnectedSystem |
 
 ## Invoke-JIMHistoryCleanup
 
-Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, initial-password records, and Pending Password Changes that reached a terminal state. Records still being worked are never removed, however old.
+Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, and Pending Password Changes that reached a terminal state (including a provisioned account's initial password). Records still being worked are never removed, however old.
 
 This also runs on its own, daily, on the built-in [History Retention Cleanup Schedule](../configuration/schedules.md#built-in-schedules). Use this cmdlet to run a pass now, or to drain a large backlog faster than one pass a day.
 
@@ -259,7 +259,6 @@ When `PassThru` is specified, returns a `PSCustomObject` with the following prop
 | `ActivitiesDeleted` | `int` | Number of general Activity records deleted, under the general retention period. |
 | `ConfigurationChangeActivitiesDeleted` | `int` | Configuration change Activities deleted, under their own retention period. |
 | `SecurityEventActivitiesDeleted` | `int` | Security event Activities deleted, under their own retention period. |
-| `InitialPasswordWorkRecordsDeleted` | `int` | Terminal initial-password records deleted, under their own retention period. |
 | `PasswordEventActivitiesDeleted` | `int` | Password Synchronisation Activities deleted, under their own retention period. |
 | `PasswordQueueRecordsDeleted` | `int` | Terminal Pending Password Changes deleted. Also the number of encrypted passwords JIM stopped holding. |
 | `OldestRecordDeleted` | `DateTime` | Timestamp of the oldest record removed. |
@@ -268,7 +267,6 @@ When `PassThru` is specified, returns a `PSCustomObject` with the following prop
 | `RetentionPeriodDays` | `int` | The configured general retention period in days. |
 | `ConfigurationChangeRetentionPeriodDays` | `int` | The configured configuration change retention period in days. |
 | `SecurityEventRetentionPeriodDays` | `int` | The configured security event retention period in days. |
-| `InitialPasswordRetentionPeriodDays` | `int` | The configured initial-password record retention period in days. |
 | `PasswordEventRetentionPeriodDays` | `int` | The configured Password Synchronisation retention period in days. |
 | `BatchSize` | `int` | Maximum number of records of any one kind processed per invocation. |
 
