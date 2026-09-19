@@ -5,6 +5,7 @@
 - **Author:** JayVDZ (PRD drafted via Claude Code)
 - **Issue:** *(not yet filed)*
 - **Related:** [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (introduced discovery and reconciliation), [#1635](https://github.com/TetronIO/JIM/issues/1635) Set Password, [#1699](https://github.com/TetronIO/JIM/pull/1699) (neutralised the portal wording that presumed a domain)
+- **Summary with diagrams:** [Password Policy Discovery](https://claude.ai/artifact/Jg8VJqDhFKNSr4YraCpYvE) (the problem today, the per-directory dispatch, the attribute mapping, the override signal, and where the policy is consumed)
 
 ## Problem Statement
 
