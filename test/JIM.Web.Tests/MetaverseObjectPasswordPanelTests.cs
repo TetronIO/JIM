@@ -563,6 +563,21 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// The first password an export just provisioned reads as its own kind, "Initial": neither an administrator's
+    /// explicit set nor a propagation of the person's own password change (#1697).
+    /// </summary>
+    [Test]
+    public void Panel_ProvisionedChange_CarriesAnInitialChip()
+    {
+        var cut = RenderPanel(events:
+        [
+            Change(Recently, PendingPasswordChangeOrigin.Provisioned, Outcome("Corporate AD", ActivityStatus.Complete))
+        ]);
+
+        Assert.That(FindAll(cut, KindMarker).Single().TextContent.Trim(), Is.EqualTo("Initial"));
+    }
+
     [Test]
     public void Panel_ChangeThatReachedNoSystem_SaysSoRatherThanLookingSuccessful()
     {

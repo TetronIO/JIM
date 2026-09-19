@@ -73,6 +73,7 @@ public class PasswordSynchronisationEventOriginTests
 
     [TestCase("Explicit", PendingPasswordChangeOrigin.Explicit)]
     [TestCase("Propagated", PendingPasswordChangeOrigin.Propagated)]
+    [TestCase("Provisioned", PendingPasswordChangeOrigin.Provisioned)]
     public async Task GetPasswordSynchronisationEventsAsync_ChangeWithAnOrigin_ProjectsItAsync(string targetContext, PendingPasswordChangeOrigin expected)
     {
         await SeedChangeAsync(targetContext, new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc));
