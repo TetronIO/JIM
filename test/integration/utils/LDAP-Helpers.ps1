@@ -634,9 +634,14 @@ function Get-LDAPBindOutcome {
         Turns ldapwhoami's exit code and diagnostic text into one word describing what the directory
         actually decided. The distinction that matters is between 'InvalidCredentials' (the password is
         wrong) and 'MustChangePassword' (the password is right, and the directory is insisting the
-        account holder chooses a new one). Both arrive as LDAP result code 49.
+        account holder chooses a new one). Both arrive as LDAP result code 49 on Active Directory.
 
-        Anything unrecognised is reported as 'Failed' rather than being guessed at, so a new failure
+        OpenLDAP has no equivalent of Active Directory's hexadecimal sub-code (there is no portable
+        "must change" state to distinguish there in the first place; see
+        LdapConnectorPassword.BuildNonActiveDirectoryResult), so a bare 'ldap_bind: Invalid credentials'
+        message with none of the AD-style sub-codes present is classified as InvalidCredentials directly.
+
+        Anything else unrecognised is reported as 'Failed' rather than being guessed at, so a new failure
         mode surfaces as a test failure instead of being quietly folded into an existing category.
 
     .PARAMETER ExitCode
@@ -668,6 +673,13 @@ function Get-LDAPBindOutcome {
         if ($script:LDAPBindSubCodes.ContainsKey($subCode)) {
             return $script:LDAPBindSubCodes[$subCode]
         }
+    }
+
+    # No AD-style sub-code: OpenLDAP's own diagnostic for a wrong password is exactly this, with nothing
+    # further to parse. Checked only once the sub-code match above has failed, so an Active Directory
+    # message this does not recognise still falls through to Failed rather than being misread as this.
+    if ($BindOutput -match '^ldap_bind:\s*Invalid credentials') {
+        return 'InvalidCredentials'
     }
 
     return 'Failed'

@@ -6,8 +6,11 @@
     Test Scenario 20: Password Synchronisation
 
 .DESCRIPTION
-    Proves that a password change recorded against an identity reaches the account that identity holds in a
-    Connected System, by signing in to the directory with it.
+    Proves the OUTBOUND half of Password Synchronisation end to end: a password handed to JIM (by the REST API,
+    PowerShell, or an administrator in the portal) is queued and delivered to the Connected Systems an identity
+    holds an account in, by signing in to the directory with it. Inbound capture, a directory-side password
+    change flowing back into JIM, is a separate capability and is not exercised here; see
+    [#1625](https://github.com/TetronIO/JIM/issues/1625).
 
     Everything else in JIM's Password Synchronisation coverage stops short of a directory. The unit tests assert
     against a mocked LDAP executor and an in-memory queue, so they prove JIM *emits* the right write and moves
@@ -36,13 +39,17 @@
          not delay a password. The measured latency is printed so a regression in the Password Delivery Service
          shows as a number before it shows as a failure.
       6. **Is a retry attempted when asked, not when the Worker is next idle?** A password the directory refuses
-         is queued, parks, and is retried from the queue; the new attempt must be made within five seconds.
+         is queued, parks, and is retried from the queue; the new attempt must be made within five seconds. Samba
+         AD only: the OpenLDAP lab runs no password policy, so nothing sent to it is ever genuinely refused, and
+         this question is skipped there with a note rather than answered against a refusal that cannot occur.
 
     Two invariants are asserted throughout rather than as a step: no password value appears in any JIM log, and
     no queue response carries one. They are the reason the feature is allowed to hold passwords at all.
 
-    Samba AD only. Provisioning enables each account as its Initial Password lands, which is an Active Directory
-    operation; an account left disabled cannot be signed in as, and signing in is the whole proof here.
+    Runs against Samba AD or OpenLDAP. On Samba AD, provisioning enables each account as its Initial Password
+    lands (an Active Directory operation), which is what makes signing in the proof this scenario relies on
+    throughout. OpenLDAP accounts have no disabled state to begin with, so nothing needs enabling there; the
+    directory-side assertions below (bind outcomes, account flags) are adapted per directory accordingly.
 
 .PARAMETER Step
     Which part to execute (Provision, Synchronise, All)
@@ -114,12 +121,12 @@ if (-not $ApiKey) {
     throw "API key required for authentication. Create one via the JIM portal: Admin > API Keys."
 }
 
-if ($DirectoryConfig.UserObjectClass -ne "user") {
-    throw "Scenario 20 requires Samba AD. Provisioning enables each account as its Initial Password lands, which " +
-          "is an Active Directory operation with no equivalent on $($DirectoryConfig.ConnectedSystemName); an " +
-          "account left disabled cannot be signed in as, and signing in is how this scenario proves a " +
-          "synchronised password arrived."
-}
+# Runs against Samba AD or OpenLDAP. The one directory-specific gap is Test 8 (a parked change retried on
+# demand), which needs a password the directory genuinely refuses: the OpenLDAP lab runs no password policy
+# overlay, so nothing it is sent is ever refused on content or length grounds. That test is skipped on
+# OpenLDAP below, with a note explaining why, rather than weakened to something that would not prove the
+# same thing.
+$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
 
 <#
     The passwords this scenario sends.
@@ -195,31 +202,40 @@ function Add-TestResult {
 .DESCRIPTION
     Scenario 17 parses the first entry only, inline. This scenario needs several, so it parses properly: entries
     are separated by a blank line in LDIF, and a dn line starts one.
+
+    Directory-agnostic: the account-name attribute is passed in (sAMAccountName on Samba AD, uid on OpenLDAP),
+    and every parsed account carries it under the fixed key 'AccountName' regardless of which directory attribute
+    supplied it. userAccountControl is Active Directory-only and is simply absent from an OpenLDAP entry's hashtable.
 #>
 function Get-LDIFAccounts {
-    # AllowEmptyString, because LDIF separates entries with a blank line and PowerShell validates every
-    # element of a Mandatory [string[]]: without it, binding fails with "argument is an empty string" on
-    # the first entry separator, which reads as though the search returned nothing.
-    param([Parameter(Mandatory=$true)][AllowEmptyString()][string[]]$RawLines)
+    param(
+        # AllowEmptyString, because LDIF separates entries with a blank line and PowerShell validates every
+        # element of a Mandatory [string[]]: without it, binding fails with "argument is an empty string" on
+        # the first entry separator, which reads as though the search returned nothing.
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string[]]$RawLines,
+        [Parameter(Mandatory=$true)][string]$UserNameAttr
+    )
 
     $accounts = @()
     $current = $null
+    $attrPattern = [regex]::Escape($UserNameAttr)
 
     foreach ($line in $RawLines) {
         if ($line -match '^\s*#') { continue }
 
         if ($line -match '^dn:\s*(.+)$') {
-            if ($current -and $current.ContainsKey('sAMAccountName')) { $accounts += $current }
+            if ($current -and $current.ContainsKey('AccountName')) { $accounts += $current }
             $current = @{ dn = $matches[1].Trim() }
             continue
         }
 
-        if ($null -ne $current -and $line -match '^(sAMAccountName|userAccountControl):\s*(.+)$') {
-            $current[$matches[1]] = $matches[2].Trim()
+        if ($null -ne $current -and $line -match "^($attrPattern|userAccountControl):\s*(.+)$") {
+            $key = if ($matches[1] -eq $UserNameAttr) { 'AccountName' } else { 'userAccountControl' }
+            $current[$key] = $matches[2].Trim()
         }
     }
 
-    if ($current -and $current.ContainsKey('sAMAccountName')) { $accounts += $current }
+    if ($current -and $current.ContainsKey('AccountName')) { $accounts += $current }
     return $accounts
 }
 
@@ -336,8 +352,8 @@ try {
         -BaseDN $DirectoryConfig.UserContainer `
         -BindDN $DirectoryConfig.BindDN `
         -BindPassword $DirectoryConfig.BindPassword `
-        -Filter "(&(objectClass=user)(sAMAccountName=*))" `
-        -Attributes @("sAMAccountName", "userAccountControl")
+        -Filter "(&(objectClass=$($DirectoryConfig.UserObjectClass))($($DirectoryConfig.UserNameAttr)=*))" `
+        -Attributes @($DirectoryConfig.UserNameAttr, "userAccountControl")
 
     if (-not $searchOutput) {
         throw "The directory search returned nothing under $($DirectoryConfig.UserContainer). Either the export " +
@@ -345,13 +361,16 @@ try {
     }
 
     $lines = Expand-LDIFFoldedLine -RawLdif ($searchOutput -join "`n")
+    $accounts = @(Get-LDIFAccounts -RawLines $lines -UserNameAttr $DirectoryConfig.UserNameAttr)
 
     # Enabled accounts only. Bit 0x2 is ACCOUNTDISABLE, and a disabled account cannot be bound as whatever
     # password it holds, so one would fail every assertion below for a reason that is not the one under test.
     # The HR template marks some people Archived, and Setup-Scenario1's userAccountControl expression disables
-    # exactly those.
-    $accounts = @(Get-LDIFAccounts -RawLines $lines |
-        Where-Object { $_.ContainsKey('userAccountControl') -and (([int]$_.userAccountControl) -band 0x2) -eq 0 })
+    # exactly those. OpenLDAP has no userAccountControl equivalent (Setup-Scenario1 does not map one), so every
+    # provisioned account there is already usable and none are filtered out.
+    if (-not $isOpenLDAP) {
+        $accounts = @($accounts | Where-Object { $_.ContainsKey('userAccountControl') -and (([int]$_.userAccountControl) -band 0x2) -eq 0 })
+    }
 
     if ($accounts.Count -lt 3) {
         throw "Only $($accounts.Count) enabled account(s) found under $($DirectoryConfig.UserContainer); this " +
@@ -360,24 +379,45 @@ try {
     }
 
     # Sorted so a re-run picks the same people, which makes a failure reproducible rather than a lottery.
-    $chosen = @($accounts | Sort-Object { $_.sAMAccountName } | Select-Object -First 3)
+    # OpenLDAP's snapshot seeds baseline accounts unrelated to this scenario alongside the ones JIM
+    # provisions (a "General" snapshot shared with other scenarios; Samba AD's target directory starts
+    # empty, so this only bites there), distinguishable only by having no Metaverse Object behind them.
+    # Walking the whole sorted candidate list and skipping those, rather than taking the first three and
+    # throwing on the first miss, is what makes this directory-agnostic without hard-coding a naming
+    # convention that happens to separate the two groups on this particular snapshot.
+    $sortedCandidates = @($accounts | Sort-Object { $_.AccountName })
 
     $people = @()
-    foreach ($account in $chosen) {
+    $skipped = @()
+    foreach ($account in $sortedCandidates) {
+        if ($people.Count -ge 3) { break }
+
         $mvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" `
-            -AttributeValue $account.sAMAccountName -PageSize 5) | Select-Object -First 1
+            -AttributeValue $account.AccountName -PageSize 5) | Select-Object -First 1
 
         if (-not $mvo) {
-            throw "No Metaverse Object holds Account Name '$($account.sAMAccountName)', though the directory " +
-                  "holds an account with it. The account was provisioned by a Synchronisation Rule, so its " +
-                  "identity must exist; check the Directory Delta Sync Activity."
+            # Not necessarily a fault: a directory that carries accounts JIM never provisioned (OpenLDAP's
+            # shared snapshot) will always have some of these among the candidates.
+            $skipped += $account.AccountName
+            continue
         }
 
         $people += [PSCustomObject]@{
-            AccountName = $account.sAMAccountName
+            AccountName = $account.AccountName
             Dn          = $account.dn
             MvoId       = [guid]$mvo.id
         }
+    }
+
+    if ($skipped.Count -gt 0) {
+        Write-Host "  Skipped $($skipped.Count) account(s) with no Metaverse Object (not provisioned by this scenario): $($skipped -join ', ')" -ForegroundColor Gray
+    }
+
+    if ($people.Count -lt 3) {
+        throw "Only $($people.Count) of $($sortedCandidates.Count) candidate account(s) under " +
+              "$($DirectoryConfig.UserContainer) resolve to a Metaverse Object; this scenario needs three. " +
+              "Check the Directory Export and Delta Sync Activities: an account JIM provisioned must have " +
+              "projected an identity."
     }
 
     $held = $people[0]
@@ -596,6 +636,21 @@ try {
     # ─────────────────────────────────────────────────────────────────────────────────────────
     # Test 8: a retry is attempted when asked for, not when the Worker is next idle (#1635)
     # ─────────────────────────────────────────────────────────────────────────────────────────
+    if ($isOpenLDAP) {
+        # Skipped rather than weakened. This test needs a password the directory genuinely refuses so there
+        # is something real to park and retry; the OpenLDAP lab container runs no ppolicy overlay (or any
+        # other password policy), so nothing sent to it over the RFC 3062 Password Modify extended operation
+        # is ever refused on length or content grounds (confirmed empirically against this container: a
+        # six-character value that Samba AD refuses outright is accepted without complaint here). A test
+        # built around a refusal that cannot occur on this directory would prove nothing; recording it as a
+        # pass would be worse, since it would read as coverage that does not exist. Adding a password policy
+        # to the OpenLDAP test image is a bigger, riskier change (its accesslog/MDB tuning is already
+        # documented as sensitive; see engineering/INTEGRATION_TESTING.md) than adapting one scenario
+        # assertion, and is not something this change makes.
+        Write-TestSection "Test 8: A parked change retried from the queue is attempted within seconds (Skipped - not applicable to OpenLDAP)"
+        Write-Host "  The OpenLDAP lab applies no password policy, so no password sent to it is ever genuinely refused. Skipping." -ForegroundColor Yellow
+    }
+    else {
     Write-TestSection "Test 8: A parked change retried from the queue is attempted within seconds"
 
     $refusedSecure = ConvertTo-SecureString -String $passwords.Refused -AsPlainText -Force
@@ -662,6 +717,7 @@ try {
     # Cancelled rather than left parked, so the final summary below reads a queue this scenario has finished
     # with. Cancelling keeps the change, marked Cancelled, which is what the summary's cancelledCount reports.
     Stop-JIMPendingPasswordChange -Id ([guid]$parkedRow.id) -Force | Out-Null
+    } # end else (not OpenLDAP)
 
     # ─────────────────────────────────────────────────────────────────────────────────────────
     # Test 9: delivery leaves nothing behind, and nothing parked
