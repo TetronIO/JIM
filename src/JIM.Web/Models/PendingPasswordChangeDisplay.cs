@@ -81,7 +81,7 @@ public static class PendingPasswordChangeDisplay
             // "Waiting" indistinguishable from an ordinary propagated change, when what it is actually waiting
             // for is its very first delivery attempt (#1697).
             return change.Origin == PendingPasswordChangeOrigin.Provisioned
-                ? "Initial password for a newly provisioned account"
+                ? "Initial password for a newly provisioned Connected System Object"
                 : null;
         }
 

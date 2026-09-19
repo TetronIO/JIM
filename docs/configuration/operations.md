@@ -11,7 +11,7 @@ title: Operations
 - **Queue**<br /> The work in flight and the work waiting behind it: Run Profile executions, schema imports, deletions and the other background tasks, with live progress per row. Running Schedules are grouped under a header drawn as a rail of their steps. See [The Operations queue](../administration/portal-lists.md#the-operations-queue) and [Live progress](activities.md#live-progress).
 - **History**<br /> The [Activities](activities.md) record of everything JIM has done, filterable by outcome, type and Schedule, with a side panel for each one.
 - **Schedules**<br /> The [Schedules](schedules.md) that run work automatically, each with its last run and how that run ended.
-- **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#-giving-new-accounts-their-first-password) on a newly provisioned account travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/passwords.md#-watching-the-queue).
+- **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#-giving-new-connected-system-objects-their-first-password) on a newly provisioned Connected System Object travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/passwords.md#-watching-the-queue).
 
 ## Service Health
 

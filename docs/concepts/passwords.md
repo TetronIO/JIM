@@ -220,7 +220,7 @@ What happens to a queued change:
 
 A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
 
-An [initial password](#-giving-new-accounts-their-first-password) queued by an export travels the same way, with one difference: the queued change carries no password value at all, because it never leaves the account's Synchronisation Rule. JIM resolves what to send from that rule's Initial Password settings at each attempt, so a later change to those settings is picked up by the very next attempt rather than only by the account's next export.
+An [initial password](#-giving-new-connected-system-objects-their-first-password) queued by an export travels the same way, with one difference: the queued change carries no password value at all, because it never leaves the Connected System Object's Synchronisation Rule. JIM resolves what to send from that rule's Initial Password settings at each attempt, so a later change to those settings is picked up by the very next attempt rather than only by the Connected System Object's next export.
 
 ### ⚡ The Password Delivery Service
 
@@ -238,7 +238,7 @@ The service reports its own health. Its **Worker · Passwords** card on the [Ser
 
 Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Passwords** tab of **Administration > Operations** lists every change on its way to a Connected System, one row per Metaverse Object per system, with what the target said about it. It sits beside the Queue, History and Schedules tabs because it answers the same question they do: what JIM is doing, and what it has stopped doing. The tab is badged with how many changes are waiting on a person (parked plus expired), so a backlog is visible from anywhere on the Operations page.
 
-An [initial password](#-giving-new-accounts-their-first-password) queued by an export appears here too, labelled with origin **Initial** alongside **Set** and **Propagated**, because it is the same queue, the same delivery service and the same outcomes as every other password change.
+An [initial password](#-giving-new-connected-system-objects-their-first-password) queued by an export appears here too, labelled with origin **Initial** alongside **Set** and **Propagated**, because it is the same queue, the same delivery service and the same outcomes as every other password change.
 
 It never shows a password, and cannot: the queued value is encrypted in the database and has no representation on any page, in any API response, or in any log line.
 

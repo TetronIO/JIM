@@ -302,7 +302,7 @@ A password the Connected System would refuse is rejected when you set it, rather
 
 Setting the password is a separate concern from creating the Connected System Object, and deliberately cannot fail the export that created it. The Connected System Object exists; reporting its export as failed would have JIM retry the create.
 
-Instead, the moment the export gives the new account its external id, JIM queues a password change for it and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. An unreachable or refused account is retried on the Connected System's own [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) schedule, or JIM's default (five attempts, backing off from five minutes) where the system has none configured, capped by the time to live below, rather than waiting for another export run.
+Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. An unreachable or refused Connected System Object is retried on the Connected System's own [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) schedule, or JIM's default (five attempts, backing off from five minutes) where the system has none configured, capped by the time to live below, rather than waiting for another export run.
 
 Each Connected System Object ends up in one of these states, each recorded as a child Activity of the one written when the password was queued:
 
