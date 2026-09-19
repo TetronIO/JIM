@@ -103,4 +103,21 @@ internal static class LdapTestResponses
         return (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
             args: [distinguishedName, attributeCollection], culture: null)!;
     }
+
+    /// <summary>
+    /// Creates a successful SearchResponse holding one entry with a single multi-valued attribute, as the
+    /// rootDSE's namingContexts attribute is (RFC 4512).
+    /// </summary>
+    internal static SearchResponse SearchResponseWithMultiValuedAttribute(string distinguishedName, string attributeName, params string[] values)
+    {
+        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
+        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", NonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
+
+        add.Invoke(attributeCollection, [attributeName, new DirectoryAttribute(attributeName, values.Cast<object>().ToArray())]);
+
+        var entry = (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
+            args: [distinguishedName, attributeCollection], culture: null)!;
+
+        return SearchResponseWithEntries(entry);
+    }
 }
