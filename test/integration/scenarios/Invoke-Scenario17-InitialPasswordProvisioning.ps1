@@ -18,6 +18,9 @@
     The chain, in order, and why each link is needed:
 
       1. Provision an account through the ordinary path (HR CSV, Metaverse, Create export to Samba AD).
+         The export queues an Initial Password rather than setting it directly; the Password Delivery
+         Service delivers it within seconds, on the Connected System's own retry schedule if the first
+         attempt does not land. This step waits for the queue to drain before anything reads the account.
       2. Read the account back: it must be enabled, and must carry pwdLastSet = 0.
       3. Bind as the account holder with the Initial Password. Active Directory answers a correct
          password on a must-change account with result 49 and sub-code 773, which is a *success*
@@ -186,11 +189,60 @@ try {
         $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Delta Sync"
 
-        # The Create exports land here, and each one stages a Pending Initial Password that the
-        # delivery pass then sets through the Connector's password channel.
-        Write-Host "  [3/5] Directory Export (accounts created, Initial Passwords set)..." -ForegroundColor DarkGray
+        # The Create exports land here, and each one stages a Pending Initial Password. The Activity
+        # completing only means the export wrote the account; delivery is the Password Delivery
+        # Service's job, done asynchronously through the Connector's password channel, so it is not
+        # done yet just because this Activity is.
+        Write-Host "  [3/5] Directory Export (accounts created, Initial Passwords queued)..." -ForegroundColor DarkGray
         $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Export"
+
+        # The export's Activity says the account was created; it says nothing about whether the Initial
+        # Password has reached it yet. Wait for the Password Delivery Service to drain the queue before
+        # doing anything that depends on the password being live, the LDAP bind steps below included.
+        $exportFinishedAt = [System.Diagnostics.Stopwatch]::StartNew()
+        $drainTimeoutSeconds = 30
+        $drained = $false
+        while ($exportFinishedAt.Elapsed.TotalSeconds -lt $drainTimeoutSeconds) {
+            $stillQueued = @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Pending)
+            if ($stillQueued.Count -eq 0) {
+                $drained = $true
+                break
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        $drainedAfter = $exportFinishedAt.Elapsed
+
+        if ($drained) {
+            Write-Host ("  Initial passwords delivered {0:N1} s after the export finished" -f $drainedAfter.TotalSeconds) -ForegroundColor Cyan
+        }
+        else {
+            # A row's own status, held flag, attempts and target message say far more than "it timed
+            # out": a Parked row names the target's refusal, a Held one means Password Synchronisation is
+            # switched off on the Connected System, which would be this scenario's own misconfiguration.
+            foreach ($change in @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Pending)) {
+                Write-Host ("      still queued: {0} on {1}, status {2}, held {3}, attempts {4}, {5}" -f `
+                    $change.metaverseObjectDisplayName, $change.connectedSystemName, $change.status, `
+                    $change.held, $change.attemptCount, $change.targetMessage) -ForegroundColor Yellow
+            }
+        }
+
+        Add-TestResult -Name "Initial passwords are delivered by the Password Delivery Service within $drainTimeoutSeconds seconds of the export" `
+            -Passed $drained `
+            -Detail "The Password Synchronisation queue for $($DirectoryConfig.ConnectedSystemName) still held Pending or Delivering rows after $drainTimeoutSeconds seconds. See the rows printed above for status, held state and target message."
+
+        # A refusal or an expiry here is the same failure Test 6 checks for later, surfaced now: without
+        # this, the scenario would carry on to bind against an account whose Initial Password never
+        # arrived and fail opaquely at the LDAP bind step instead of naming the real cause.
+        $exportParked = @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Parked)
+        Add-TestResult -Name "No Initial Password was parked by the target refusing it" `
+            -Passed ($exportParked.Count -eq 0) `
+            -Detail "$($exportParked.Count) row(s) parked. Reasons: $(($exportParked | ForEach-Object { $_.failureReason }) -join ', ')"
+
+        $exportExpired = @(Get-JIMPendingPasswordChange -ConnectedSystemId $config.LDAPSystemId -Status Expired)
+        Add-TestResult -Name "No Initial Password expired waiting for delivery" `
+            -Passed ($exportExpired.Count -eq 0) `
+            -Detail "$($exportExpired.Count) row(s) expired."
 
         # A Full Import, not a Delta Import. This is the Connected System's first import, so there is no
         # persisted baseline for a delta to compare against and the Connector refuses it outright. Scenario 1

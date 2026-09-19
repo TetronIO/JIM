@@ -53,6 +53,19 @@ public class PendingPasswordChangeResponse
     public PendingPasswordChangeStatus Status { get; set; }
 
     /// <summary>
+    /// Where the change came from: <c>Explicit</c> (an administrator's named set), <c>Propagated</c> (JIM
+    /// carried it to every configured system after the person's own password change), or <c>Provisioned</c>
+    /// (the first password for an account an export has just created).
+    /// </summary>
+    public PendingPasswordChangeOrigin Origin { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule a <see cref="PendingPasswordChangeOrigin.Provisioned"/> row generates its
+    /// password from at each delivery attempt, or null for every other origin.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
     /// Whether a delivery pass would attempt this change right now. Distinguishes a change waiting out a retry
     /// backoff from one that is due and simply has not been reached, which <see cref="Status"/> alone cannot.
     /// Never true while <see cref="Held"/> is: a pass steps over a system that is switched off.
@@ -127,6 +140,8 @@ public class PendingPasswordChangeResponse
             ConnectedSystemId = header.ConnectedSystemId,
             ConnectedSystemName = header.ConnectedSystemName,
             Status = header.Status,
+            Origin = header.Origin,
+            SyncRuleId = header.SyncRuleId,
             Due = header.IsDue(asOf),
             Held = header.IsHeld,
             FailureReason = header.FailureReason,

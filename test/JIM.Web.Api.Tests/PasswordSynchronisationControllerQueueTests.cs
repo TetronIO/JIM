@@ -136,14 +136,16 @@ public class PasswordSynchronisationControllerQueueTests
         int connectedSystemId,
         PendingPasswordChangeStatus status = PendingPasswordChangeStatus.Pending,
         PasswordSetFailureReason? failureReason = null,
-        DateTime? nextRetryAt = null)
+        DateTime? nextRetryAt = null,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated,
+        int? syncRuleId = null)
     {
         var change = new PendingPasswordChange
         {
             Id = Guid.NewGuid(),
             MetaverseObjectId = metaverseObjectId,
             ConnectedSystemId = connectedSystemId,
-            EncryptedPassword = ThePassword,
+            EncryptedPassword = origin == PendingPasswordChangeOrigin.Provisioned ? null : ThePassword,
             Status = status,
             FailureReason = failureReason,
             TargetMessage = failureReason == null ? null : "The directory refused it.",
@@ -151,7 +153,9 @@ public class PasswordSynchronisationControllerQueueTests
             NextRetryAt = nextRetryAt,
             CreatedAt = DateTime.UtcNow.AddMinutes(-10),
             ExpiresAt = DateTime.UtcNow.AddDays(7),
-            ActivityId = Guid.NewGuid()
+            ActivityId = Guid.NewGuid(),
+            Origin = origin,
+            SyncRuleId = syncRuleId
         };
 
         await _syncRepo.QueuePasswordChangesAsync([change]);
@@ -200,6 +204,39 @@ public class PasswordSynchronisationControllerQueueTests
         var body = await ListAsync();
 
         Assert.That(body.Items.Single().MetaverseObjectTypePluralName, Is.EqualTo("Users"));
+    }
+
+    /// <summary>
+    /// A caller scripting the queue needs to tell a provisioned row from an administrator's explicit set or an
+    /// ordinary propagation, and which Synchronisation Rule generates its password, without a second request
+    /// (#1697).
+    /// </summary>
+    [Test]
+    public async Task Queue_ProvisionedRow_CarriesItsOriginAndSyncRuleIdAsync()
+    {
+        await SeedChangeAsync(_adaId, CorporateAdId, origin: PendingPasswordChangeOrigin.Provisioned, syncRuleId: 42);
+
+        var row = (await ListAsync()).Items.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(row.SyncRuleId, Is.EqualTo(42));
+        }
+    }
+
+    [Test]
+    public async Task Queue_OrdinaryRow_CarriesNoSyncRuleIdAsync()
+    {
+        await SeedChangeAsync(_adaId, CorporateAdId);
+
+        var row = (await ListAsync()).Items.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(row.SyncRuleId, Is.Null);
+        }
     }
 
     [Test]

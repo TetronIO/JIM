@@ -87,7 +87,8 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
         string who,
         string system,
         PendingPasswordChangeStatus status = PendingPasswordChangeStatus.Pending,
-        string? targetMessage = null) => new()
+        string? targetMessage = null,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated) => new()
     {
         Id = Guid.NewGuid(),
         MetaverseObjectId = Guid.NewGuid(),
@@ -100,7 +101,8 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
         TargetMessage = targetMessage,
         AttemptCount = status == PendingPasswordChangeStatus.Parked ? 3 : 0,
         CreatedAt = DateTime.UtcNow,
-        ExpiresAt = DateTime.UtcNow.AddDays(7)
+        ExpiresAt = DateTime.UtcNow.AddDays(7),
+        Origin = origin
     };
 
     [Test]
@@ -158,6 +160,28 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
                 Assert.That(cut.Markup, Does.Not.Contain("Due now"));
                 Assert.That(cut.FindAll("[aria-label='Retry this password change']"), Is.Empty);
                 Assert.That(cut.FindAll("[aria-label='Cancel this password change']"), Has.Count.EqualTo(1));
+            }
+        });
+    }
+
+    /// <summary>
+    /// A row for the first password an export just provisioned reads with an "Initial" chip beside the identity,
+    /// and its Detail wording says what it is waiting on rather than reading as a bare "Waiting" (#1697).
+    /// </summary>
+    [Test]
+    public void OperationsPasswordsTab_ProvisionedRow_ShowsTheInitialChipAndItsWording()
+    {
+        _navigation.NavigateTo("/admin/operations?t=passwords");
+        ArrangeWindow([Change("Grace Hopper", "Corporate Directory", origin: PendingPasswordChangeOrigin.Provisioned)]);
+
+        var cut = Render<OperationsPasswordsTab>();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.FindAll("[data-testid='jim-queue-origin']").Single().TextContent.Trim(), Is.EqualTo("Initial"));
+                Assert.That(cut.Markup, Does.Contain("Initial password for a newly provisioned Connected System Object"));
             }
         });
     }

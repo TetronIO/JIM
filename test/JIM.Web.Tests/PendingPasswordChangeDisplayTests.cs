@@ -26,13 +26,15 @@ public class PendingPasswordChangeDisplayTests
         PasswordSetFailureReason? reason = null,
         string? targetMessage = null,
         string? cancelledByName = null,
-        bool takingPasswords = true) => new()
+        bool takingPasswords = true,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated) => new()
     {
         Status = status,
         FailureReason = reason,
         TargetMessage = targetMessage,
         CancelledByName = cancelledByName,
-        ConnectedSystemTakingPasswords = takingPasswords
+        ConnectedSystemTakingPasswords = takingPasswords,
+        Origin = origin
     };
 
     [Test]
@@ -119,6 +121,42 @@ public class PendingPasswordChangeDisplayTests
             "Alex Admin"));
 
         Assert.That(detail, Is.EqualTo("Cancelled by Alex Admin"));
+    }
+
+    [TestCase(PendingPasswordChangeOrigin.Explicit, "Set")]
+    [TestCase(PendingPasswordChangeOrigin.Propagated, "Propagated")]
+    [TestCase(PendingPasswordChangeOrigin.Provisioned, "Initial")]
+    public void OriginLabel_EveryOrigin_ReadsAsItsKindWord(PendingPasswordChangeOrigin origin, string expected)
+    {
+        Assert.That(PendingPasswordChangeDisplay.OriginLabel(origin), Is.EqualTo(expected));
+    }
+
+    /// <summary>
+    /// An initial password queued by an export has no failure yet, so without this it would fall through to
+    /// "Waiting" with nothing beneath it, indistinguishable from an ordinary propagated change on its way.
+    /// </summary>
+    [Test]
+    public void Detail_ProvisionedPendingRow_SaysInitialPassword()
+    {
+        var detail = PendingPasswordChangeDisplay.Detail(Change(origin: PendingPasswordChangeOrigin.Provisioned));
+
+        Assert.That(detail, Is.EqualTo("Initial password for a newly provisioned Connected System Object"));
+    }
+
+    /// <summary>
+    /// Once a target has refused it, the refusal is the more useful thing to say; the generic "initial password"
+    /// sentence would otherwise mask why it is parked.
+    /// </summary>
+    [Test]
+    public void Detail_ProvisionedParkedRow_NamesTheRefusalRatherThanTheGenericWording()
+    {
+        var detail = PendingPasswordChangeDisplay.Detail(Change(
+            PendingPasswordChangeStatus.Parked,
+            PasswordSetFailureReason.PolicyRejection,
+            "password does not meet complexity requirements",
+            origin: PendingPasswordChangeOrigin.Provisioned));
+
+        Assert.That(detail, Is.EqualTo("Policy rejection: password does not meet complexity requirements"));
     }
 
     [Test]

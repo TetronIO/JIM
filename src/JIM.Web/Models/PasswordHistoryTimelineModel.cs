@@ -71,7 +71,7 @@ public static class PasswordHistoryTimelineModel
     /// </summary>
     /// <param name="ActivityId">The change's Activity, and the entry's identity in a render loop.</param>
     /// <param name="LocalTime">When the change was made, in the viewer's local time.</param>
-    /// <param name="Origin">Set or Propagated, or null for an Activity from before origins were recorded (no kind chip).</param>
+    /// <param name="Origin">Explicit, Propagated or Provisioned, or null for an Activity from before origins were recorded (no kind chip).</param>
     /// <param name="InitiatorLead">"by" for a person, "via" for an API key.</param>
     /// <param name="InitiatorName">Who made the change, or null where the Activity did not record one.</param>
     /// <param name="InitiatorTrail">"(API key)" after an automation's name; null for a person.</param>
@@ -173,6 +173,7 @@ public static class PasswordHistoryTimelineModel
     {
         // One chip per system, in the order the systems were first reached, then any system the queue still holds
         // for this change that no attempt has been recorded against (queued or held, typically).
+        var isProvisioned = change.Origin == PendingPasswordChangeOrigin.Provisioned;
         var targets = new List<Target>();
         var seen = new HashSet<int>();
         foreach (var group in change.Outcomes.GroupBy(o => o.ConnectedSystemId))
@@ -181,7 +182,7 @@ public static class PasswordHistoryTimelineModel
             var row = group.Key is { } systemId ? ownedRows.FirstOrDefault(r => r.ConnectedSystemId == systemId) : null;
             if (group.Key is { } id)
                 seen.Add(id);
-            targets.Add(row != null ? FromRow(row, nowUtc) : FromOutcome(newest, change.Created));
+            targets.Add(row != null ? FromRow(row, nowUtc) : FromOutcome(newest, change.Created, isProvisioned));
         }
 
         foreach (var row in ownedRows.Where(r => !seen.Contains(r.ConnectedSystemId)))
@@ -263,7 +264,7 @@ public static class PasswordHistoryTimelineModel
             CanStopTrying: state == TargetState.Retrying);
     }
 
-    private static Target FromOutcome(PasswordSynchronisationEventOutcome outcome, DateTime requestedAt)
+    private static Target FromOutcome(PasswordSynchronisationEventOutcome outcome, DateTime requestedAt, bool isProvisioned)
     {
         var state = outcome.Succeeded switch
         {
@@ -281,7 +282,13 @@ public static class PasswordHistoryTimelineModel
             _ => null
         };
 
-        var words = FirstNonBlank(outcome.ErrorMessage, outcome.Message) ?? (state == TargetState.Set ? "Password set" : "The attempt is still running");
+        // A provisioned change's ordinary success has nothing more to say than "it worked", and that fallback
+        // must not read as an administrator or a propagation resetting an existing password (#1697).
+        var words = FirstNonBlank(outcome.ErrorMessage, outcome.Message) ?? state switch
+        {
+            TargetState.Set => isProvisioned ? "Initial password set" : "Password set",
+            _ => "The attempt is still running"
+        };
 
         return new Target(
             outcome.ConnectedSystemId,

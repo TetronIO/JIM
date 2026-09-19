@@ -158,6 +158,14 @@ ldap_bind: Invalid credentials (49)
         Get-LDAPBindOutcome -ExitCode 49 -BindOutput $output | Should -Be 'UserNotFound'
     }
 
+    It 'classifies OpenLDAP''s plain wrong-password message, which carries no AD-style sub-code' {
+        # Captured verbatim from a live OpenLDAP container (jim-openldap:primary): OpenLDAP has no
+        # equivalent of Active Directory's hexadecimal sub-code, so this is the only signal available to
+        # distinguish a wrong password from a directory the client simply could not reach.
+        Get-LDAPBindOutcome -ExitCode 49 -BindOutput 'ldap_bind: Invalid credentials (49)' |
+            Should -Be 'InvalidCredentials'
+    }
+
     It 'reports an unrecognised failure as Failed rather than guessing' {
         Get-LDAPBindOutcome -ExitCode 1 -BindOutput 'ldap_sasl_bind(SIMPLE): Cannot contact LDAP server (-1)' |
             Should -Be 'Failed'

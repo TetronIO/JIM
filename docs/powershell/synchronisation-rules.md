@@ -1412,9 +1412,9 @@ Get-JIMSyncRule -All | ForEach-Object {
 
 ### Set-JIMSyncRuleInitialPassword
 
-Replaces the configuration above. Saving a change that alters what would be delivered releases every Connected
-System Object parked against the rule, and they are attempted again on the Connected System's next export run; saving a change
-that would deliver the same password in the same way releases nothing.
+Replaces the configuration above. Saving a change that alters what would be delivered releases every Connected System Object
+parked against the rule, and the Password Delivery Service attempts them again within seconds, with no export run
+needed; saving a change that would deliver the same password in the same way releases nothing.
 
 Only what you supply changes, with one exception: the generator settings travel as a set, so supplying any one of
 them sends the whole policy.
