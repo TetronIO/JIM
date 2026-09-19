@@ -18,6 +18,12 @@
     - olcPPolicyDefault on the Yellowstone ppolicy overlay is pointed at
       cn=default,ou=Policies,dc=yellowstone,dc=local, so the policy applies to every entry in the
       suffix that does not name its own with pwdPolicySubentry.
+    - The Bitnami image gives the Yellowstone database no olcAccess of its own, so slapd's implicit
+      default ("to * by * read", which is what lets anyone bind: read implies auth) is what has been
+      in force. The first explicit rule replaces that implicit one with an implicit DENY for anything
+      it does not decide, so before any rule is prepended the default is written out as an explicit
+      last rule. Without it, every non-rootdn bind on the suffix fails with Invalid credentials (49)
+      the moment the rules below exist (found when this fixture was first run).
     - An olcAccess granting cn=jim-provisioner,dc=yellowstone,dc=local write on the whole Yellowstone
       database is PREPENDED to the database's ACL, so the provisioner can create entries and set their
       passwords without being the rootdn.
@@ -150,6 +156,36 @@ function Get-Scenario22ConfigEntryDN {
     return ("$($dnLine[0])" -replace '^dn:\s*', '')
 }
 
+function Get-Scenario22AccessRules {
+    <#
+    .SYNOPSIS
+        The olcAccess values on a cn=config database entry, in order; an empty array when it has none.
+    #>
+    param(
+        [Parameter(Mandatory=$true)] [string]$DatabaseDN
+    )
+
+    $raw = & docker exec $containerName ldapsearch -x -LLL -H $ldapUri -D $configAdminDN -w $configAdminPassword `
+        -b $DatabaseDN -s base "(objectClass=*)" olcAccess 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not read olcAccess on $DatabaseDN (exit code $LASTEXITCODE): $raw"
+    }
+    # ldapsearch folds long values at 78 columns with a leading space on the continuation line.
+    $logical = @()
+    foreach ($line in @($raw)) {
+        $text = "$line"
+        if ($text -match '^ ' -and $logical.Count -gt 0) {
+            $logical[$logical.Count - 1] += $text.Substring(1)
+        }
+        else {
+            $logical += $text
+        }
+    }
+    # Emitted unwrapped: a leading comma would hand the caller a one-element array holding an empty array
+    # when there are no rules, and the callers wrap the result in @() themselves.
+    return @($logical | Where-Object { $_ -match '^olcAccess:\s*' } | ForEach-Object { $_ -replace '^olcAccess:\s*', '' })
+}
+
 function Test-Scenario22AccessRulePresent {
     <#
     .SYNOPSIS
@@ -160,12 +196,13 @@ function Test-Scenario22AccessRulePresent {
         [Parameter(Mandatory=$true)] [string]$Marker
     )
 
-    $raw = & docker exec $containerName ldapsearch -x -LLL -H $ldapUri -D $configAdminDN -w $configAdminPassword `
-        -b $DatabaseDN -s base "(objectClass=*)" olcAccess 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not read olcAccess on $DatabaseDN (exit code $LASTEXITCODE): $raw"
+    # Matched per unfolded rule: ldapsearch folds values at 78 columns, and a marker that straddles the
+    # fold (the provisioner's DN does, on the cn=config rule) would otherwise never be found, so the rule
+    # would be added again on every run.
+    foreach ($rule in @(Get-Scenario22AccessRules -DatabaseDN $DatabaseDN)) {
+        if ($rule -match [regex]::Escape($Marker)) { return $true }
     }
-    return (($raw -join "`n") -match [regex]::Escape($Marker))
+    return $false
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -201,6 +238,28 @@ replace: olcPPolicyDefault
 olcPPolicyDefault: $policyDN
 "@
 Write-Host "  OK olcPPolicyDefault = $policyDN" -ForegroundColor Green
+
+# A database with no olcAccess runs on slapd's implicit default, "to * by * read" (slapd.access(5)),
+# and that is what every non-rootdn bind on this suffix has relied on: read on userPassword implies
+# auth. The first explicit rule switches the implicit default to deny, so the rules prepended below,
+# each ending in "by * break", would fall through to a refusal for everyone they do not name and every
+# bind but the rootdn's would answer Invalid credentials (49). The default is therefore written out as
+# the last rule first, before anything is prepended in front of it. A database that already carries
+# rules keeps them as its tail and needs nothing added.
+$defaultReadRule = 'to * by * read'
+$existingRules = @(Get-Scenario22AccessRules -DatabaseDN $databaseDN)
+if ($existingRules.Count -eq 0) {
+    Invoke-Scenario22Ldap -Tool ldapmodify -BindDN $configAdminDN -BindPassword $configAdminPassword -What "explicit default olcAccess" -Ldif @"
+dn: $databaseDN
+changetype: modify
+add: olcAccess
+olcAccess: {0}$defaultReadRule
+"@
+    Write-Host "  OK $databaseDN had no olcAccess; slapd's implicit default ($defaultReadRule) written as its last rule" -ForegroundColor Green
+}
+else {
+    Write-Host "  $databaseDN already carries $($existingRules.Count) olcAccess rule(s); they remain its tail" -ForegroundColor Gray
+}
 
 # olcAccess is X-ORDERED: adding a value with the {0} prefix inserts it first and renumbers the
 # rest, which is how a rule is prepended. "by * break" hands everyone else on to the rules that
@@ -320,7 +379,15 @@ Write-TestStep "Step 4" "Verifying the provisioner can bind and read the policy"
 
 $whoami = & docker exec $containerName ldapwhoami -x -H $ldapUri -D $ProvisionerBindDN -w $ProvisionerPassword 2>&1
 if ($LASTEXITCODE -ne 0) {
-    throw "The provisioner cannot bind as $ProvisionerBindDN`: $whoami"
+    throw "The provisioner cannot bind as $ProvisionerBindDN`: $whoami. If the answer is Invalid credentials (49) " +
+          "and the password is right, the database's ACL ends in a rule that falls through to a deny; read the " +
+          "olcAccess on $databaseDN and check the explicit default read rule is its last value."
+}
+
+$probeWhoami = & docker exec $containerName ldapwhoami -x -H $ldapUri -D $ProbeBindDN -w $ProbePassword 2>&1
+if ($LASTEXITCODE -ne 0) {
+    throw "The probe user cannot bind as $ProbeBindDN`: $probeWhoami. The negative control changes this account's own " +
+          "password, so a bind that fails here would read as a refusal there."
 }
 
 $policyRead = & docker exec $containerName ldapsearch -x -LLL -H $ldapUri -D $ProvisionerBindDN -w $ProvisionerPassword `
@@ -328,7 +395,11 @@ $policyRead = & docker exec $containerName ldapsearch -x -LLL -H $ldapUri -D $Pr
 if ($LASTEXITCODE -ne 0 -or (($policyRead -join "`n") -notmatch 'pwdMinLength:\s*12')) {
     throw "The provisioner cannot read pwdMinLength on $policyDN (exit code $LASTEXITCODE): $policyRead"
 }
-Write-Host "  OK $ProvisionerBindDN binds and reads pwdMinLength 12 on $policyDN" -ForegroundColor Green
+Write-Host "  OK $ProvisionerBindDN and $ProbeBindDN bind; the provisioner reads pwdMinLength 12 on $policyDN" -ForegroundColor Green
+
+Write-Host "  olcAccess on $databaseDN, in order:" -ForegroundColor Gray
+$finalRules = @(Get-Scenario22AccessRules -DatabaseDN $databaseDN)
+foreach ($rule in $finalRules) { Write-Host "    $rule" -ForegroundColor DarkGray }
 
 Write-TestSection "Scenario 22 OpenLDAP Population Complete"
 Write-Host "Suffix:          $suffix" -ForegroundColor Cyan
