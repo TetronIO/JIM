@@ -19,7 +19,7 @@
     list is read from the same paths-ignore block the interpreted languages use, so there is exactly
     one place a path is excluded, and this script cannot drift from it.
 
-    Two rules decide what is removed:
+    Three rules decide what is removed:
 
       1. A result whose primary location is inside an excluded path.
 
@@ -31,9 +31,24 @@
          end of the flow. A result is removed on this rule only when EVERY code flow it carries
          starts in an excluded path: one flow from shipped code is a real finding.
 
-    Every removed result is logged individually (rule id, file, and for rule 2 the excluded source),
-    so a filtered upload never reads as "the analysis found nothing there"; the log says what was
-    dropped and why.
+      3. A result whose flagged line is immediately preceded by an in-code suppression comment naming
+         its rule, with a rationale:
+
+             // codeql[cs/cleartext-storage-of-sensitive-information] counts of deleted rows, not credentials
+
+         This is the placement CodeQL's own alert-suppression query honours (a comment alone on the line
+         above the alert), but that query is not part of the code-scanning suite the workflow runs, and
+         GitHub does not document honouring SARIF suppressions, so without this rule the comment does
+         nothing. PR #1637 added two such comments in good faith and both alerts stayed open; editing the
+         lines even re-minted them under new alert numbers. The comment marker may be // or #, so the
+         same convention covers C#, workflow YAML and PowerShell. The rule id must be listed inside the
+         brackets (several may be, comma-separated); a comment with no rationale after the brackets is
+         ignored and logged, because a suppression nobody can review is a dismissal in disguise. A
+         trailing comment on the flagged line itself is not honoured, matching CodeQL.
+
+    Every removed result is logged individually (rule id, file, and for rule 2 the excluded source, for
+    rule 3 the line and rationale), so a filtered upload never reads as "the analysis found nothing
+    there"; the log says what was dropped and why.
 
 .PARAMETER SarifDirectory
     Directory containing the .sarif file(s) the analysis produced. Searched recursively; the files
@@ -41,6 +56,10 @@
 
 .PARAMETER ConfigFile
     The CodeQL configuration file whose paths-ignore block defines the exclusions.
+
+.PARAMETER SourceRoot
+    The checkout the SARIF results' file paths are relative to, read by the suppression rule. Defaults
+    to the current directory, which is the repository root when the workflow runs this script.
 
 .EXAMPLE
     ./scripts/Filter-Sarif.ps1 -SarifDirectory sarif-results -ConfigFile .github/codeql/codeql-config.yml
@@ -51,10 +70,13 @@ param(
     [string]$SarifDirectory,
 
     [Parameter(Mandatory)]
-    [string]$ConfigFile
+    [string]$ConfigFile,
+
+    [string]$SourceRoot = (Get-Location).Path
 )
 
 $ErrorActionPreference = 'Stop'
+$script:SourceRoot = $SourceRoot
 
 if (-not (Test-Path $ConfigFile)) {
     throw "CodeQL configuration file not found: $ConfigFile"
@@ -127,6 +149,37 @@ function Get-ExcludedSources($result) {
     return ,$sources.ToArray()
 }
 
+# Rule 3 above. Returns the rationale when the line immediately above the result's flagged line is a
+# comment of the form `// codeql[rule-id, ...] rationale` (or `# codeql[...]`) naming the result's
+# rule, and $null otherwise. A matching comment with no rationale is logged and treated as absent.
+# Files are read once and cached; a file that cannot be found under the source root never suppresses.
+$script:sourceLineCache = @{}
+function Get-SuppressionRationale($result) {
+    $location = if ($result.locations) { $result.locations[0].physicalLocation } else { $null }
+    $uri = $location.artifactLocation.uri
+    $line = $location.region.startLine
+    if (-not $uri -or -not $line -or $line -lt 2) { return $null }
+
+    if (-not $script:sourceLineCache.ContainsKey($uri)) {
+        $path = Join-Path $script:SourceRoot $uri
+        $script:sourceLineCache[$uri] = if (Test-Path $path -PathType Leaf) { @(Get-Content $path) } else { $null }
+    }
+    $lines = $script:sourceLineCache[$uri]
+    if ($null -eq $lines -or $lines.Count -lt $line - 1) { return $null }
+
+    $above = $lines[$line - 2]
+    if ($above -notmatch '^\s*(//|#)\s*codeql\[(?<rules>[^\]]*)\](?<rationale>.*)$') { return $null }
+    $rules = @($Matches.rules -split ',' | ForEach-Object { $_.Trim() })
+    if ($rules -notcontains $result.ruleId) { return $null }
+
+    $rationale = $Matches.rationale.Trim().TrimStart(':', '-').Trim()
+    if (-not $rationale) {
+        Write-Host "  Ignored: codeql[] comment at ${uri}:$($line - 1) names $($result.ruleId) but gives no rationale; the result is kept"
+        return $null
+    }
+    return $rationale
+}
+
 $sarifFiles = @(Get-ChildItem -Path $SarifDirectory -Filter '*.sarif' -Recurse -File)
 if ($sarifFiles.Count -eq 0) {
     throw "No .sarif files found under ${SarifDirectory}. The analysis output path and the filter step's input have diverged."
@@ -136,6 +189,7 @@ foreach ($file in $sarifFiles) {
     $sarif = Get-Content $file.FullName -Raw | ConvertFrom-Json -Depth 100
     $totalKept = 0
     $totalRemoved = 0
+    $totalSuppressed = 0
 
     foreach ($run in $sarif.runs) {
         if ($null -eq $run.results) { continue }
@@ -159,6 +213,13 @@ foreach ($file in $sarifFiles) {
                 continue
             }
 
+            $rationale = Get-SuppressionRationale $result
+            if ($rationale) {
+                $totalSuppressed++
+                Write-Host "  Suppressed: $($result.ruleId) at ${uri}:$($result.locations[0].physicalLocation.region.startLine) ($rationale)"
+                continue
+            }
+
             $kept.Add($result)
         }
 
@@ -166,8 +227,8 @@ foreach ($file in $sarifFiles) {
         $totalKept += $kept.Count
     }
 
-    if ($totalRemoved -gt 0) {
+    if ($totalRemoved -gt 0 -or $totalSuppressed -gt 0) {
         $sarif | ConvertTo-Json -Depth 100 -Compress | Set-Content $file.FullName -NoNewline
     }
-    Write-Host "$($file.Name): kept $totalKept result(s), removed $totalRemoved reported in, or sourced from, excluded paths."
+    Write-Host "$($file.Name): kept $totalKept result(s), removed $totalRemoved reported in, or sourced from, excluded paths, suppressed $totalSuppressed by in-code codeql[] comments."
 }
