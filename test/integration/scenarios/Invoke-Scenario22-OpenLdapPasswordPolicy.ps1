@@ -229,7 +229,9 @@ function Get-ProvisionedEntries {
         pwdChangedTime is an operational attribute stamped by the ppolicy overlay whenever it processes
         a password write, so its presence is the directory's own record that JIM's password reached the
         overlay. It has to be asked for by name. Returns an array of hashtables with dn, uid and
-        pwdChangedTime (absent key when the entry carries none).
+        pwdChangedTime (absent key when the entry carries none). Emitted unwrapped (no leading comma):
+        the callers wrap the result in @(), and a comma here would hand them a one-element array holding
+        the whole array, so every entry's DN would read as one joined string.
     #>
     $raw = Invoke-LDAPSearch `
         -ContainerName $DirectoryConfig.ContainerName `
@@ -243,7 +245,7 @@ function Get-ProvisionedEntries {
         -Attributes @("uid", "pwdChangedTime")
 
     $entries = @()
-    if (-not $raw) { return ,$entries }
+    if (-not $raw) { return $entries }
 
     $current = $null
     foreach ($line in (Expand-LDIFFoldedLine -RawLdif ($raw -join "`n"))) {
@@ -258,7 +260,7 @@ function Get-ProvisionedEntries {
         }
     }
     if ($current) { $entries += $current }
-    return ,$entries
+    return $entries
 }
 
 Write-TestSection "Scenario 22: OpenLDAP Password Policy"
