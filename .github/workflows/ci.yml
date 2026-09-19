@@ -310,6 +310,12 @@ jobs:
           OPENAPI_STAGE=publish
         cache-from: type=gha,scope=${{ matrix.image_name }}
         cache-to: type=gha,scope=${{ matrix.image_name }},mode=max
+        # The base stage's apt-get upgrade has to run against the live noble archive on every
+        # build. Served from the cache, that layer is replayed as it stood when it last ran (the
+        # Dockerfile and digest unchanged), so the "upgraded" images carried fixes up to two weeks
+        # stale and Trivy reported 31 fixable MEDIUM CVEs that a fresh build did not have. Only the
+        # base stage is excluded; the SDK build stage still comes from the cache.
+        no-cache-filters: base
 
     - name: Scan image for vulnerabilities
       id: trivy
