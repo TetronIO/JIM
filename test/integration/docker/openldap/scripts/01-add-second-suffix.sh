@@ -51,6 +51,24 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+# Load the ppolicy module (issue #1715). Its schema (the pwdPolicy object
+# class and pwd* attributes) is registered dynamically when the module is
+# loaded into a running slapd, which is why this happens here rather than in
+# the bootstrap LDIF: Bitnami loads /ldifs/* through its own ldap_initialize()
+# step, before slapd is ever started with our modules configured, so a
+# pwdPolicy entry in that LDIF would fail with "object class not defined".
+# Loading it before the schema extensions and the Glitterband/policy work
+# below means every later step in this script can safely add pwdPolicy
+# entries and the ppolicy overlay on either suffix.
+echo "[openldap-init] Loading ppolicy module..."
+ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<PPOLICYMOD
+dn: cn=module{1},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: ppolicy.so
+PPOLICYMOD
+echo "[openldap-init] ppolicy module loaded"
+
 # Load custom JIM schema extensions.
 # Defines jimGroup (SUP groupOfNames STRUCTURAL) with additional MAY attributes:
 #   - mail (from cosine schema, already loaded by Bitnami)
@@ -137,8 +155,12 @@ olcDbIndex: uid eq
 olcDbIndex: cn eq
 olcDbIndex: entryUUID eq
 olcSizeLimit: unlimited
-olcAccess: {0}to * by dn.exact="cn=admin,dc=glitterband,dc=local" manage by * read
 LDIF
+# No olcAccess set here deliberately: the database falls back to slapd's
+# hardcoded default ("to * by * read") only for the few minutes it takes this
+# script to finish provisioning it. The real access-control set (issue
+# #1715) is applied further down, once the service account exists, replacing
+# this database's rules with the JIM-scoped set from acl/jim-service-account-access.ldif.
 
 echo "[openldap-init] Second MDB database added to cn=config"
 
@@ -172,7 +194,18 @@ ALDIF
     echo "[openldap-init] Accesslog overlay added to Glitterband database"
 fi
 
-# Populate the second database with root entry and base OUs
+# Delegated JIM service account for Glitterband (issue #1715), mirroring the
+# one Bitnami's bootstrap LDIF adds for Yellowstone. Password is
+# "Svc-Jim@123!", deliberately different from the admin password so an
+# accidental rootDN bind by a Connected System does not pass unnoticed.
+# Hashed here (rather than a hardcoded hash as in the Yellowstone LDIF)
+# because this script already has a live slapd and slappasswd to hand.
+SVC_JIM_PW="Svc-Jim@123!"
+HASHED_SVC_JIM_PW=$($SLAPPASSWD -s "$SVC_JIM_PW")
+
+# Populate the second database with root entry, base OUs and the service
+# account. ou=Policies and its ppolicy default policy are added further
+# down, once the ppolicy overlay is attached to this database.
 echo "[openldap-init] Loading Glitterband base entries..."
 ldapadd -x -H "$LDAP_URI" -D "cn=admin,dc=glitterband,dc=local" -w "$DATA_ADMIN_PW" <<LDIF
 dn: dc=glitterband,dc=local
@@ -188,6 +221,24 @@ ou: People
 dn: ou=Groups,dc=glitterband,dc=local
 objectClass: organizationalUnit
 ou: Groups
+
+dn: ou=Services,dc=glitterband,dc=local
+objectClass: organizationalUnit
+ou: Services
+
+dn: cn=svc-jim,ou=Services,dc=glitterband,dc=local
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: svc-jim
+description: Delegated account JIM's Connected Systems bind as (#1715). Not for interactive or administrative use.
+userPassword: ${HASHED_SVC_JIM_PW}
+
+dn: cn=jim,ou=Services,dc=glitterband,dc=local
+objectClass: groupOfNames
+cn: jim
+description: JIM service accounts permitted to manage dc=glitterband,dc=local (#1715). Membership, not the ACL, controls which accounts this grants.
+member: cn=svc-jim,ou=Services,dc=glitterband,dc=local
+member: cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local
 LDIF
 
 echo "[openldap-init] Glitterband base entries loaded"
@@ -253,6 +304,89 @@ add: olcSizeLimit
 olcSizeLimit: unlimited
 ALMODIFY
     echo "[openldap-init] Accesslog database configured (mapsize=128GB, sizeLimit=unlimited)"
+fi
+
+# Apply the JIM service account's access control and password policy (issue
+# #1715). Single-sourced from acl/*.ldif (copied into the image by the
+# Dockerfile): the same files are published verbatim in
+# docs/connectors/jim-ldap-connector.md as the customer recipe, so the lab
+# runs exactly what customers are told to set up. Templated with
+# placeholders substituted here via sed; applied once both suffixes' cn=jim
+# groups (created above, in the bootstrap LDIF and this script's Glitterband
+# block) and all three database DNs (Yellowstone, Glitterband, accesslog) are
+# known. Access is granted to each suffix's cn=jim group, not to an
+# individual service account's DN, so this lives in cn=config, which the
+# snapshot images preserve, so there is nothing for start-openldap.sh to
+# reconcile at container start.
+ACL_DIR="/acl"
+YELLOWSTONE_GROUP_DN="cn=jim,ou=Services,dc=yellowstone,dc=local"
+GLITTERBAND_GROUP_DN="cn=jim,ou=Services,dc=glitterband,dc=local"
+
+# Applies an acl/*.ldif template, substituting placeholders and binding as
+# the given identity. Two different binds are needed across these files:
+# cn=config entries (the olcAccess and olcOverlay templates) require the
+# configuration rootDN; ordinary suffix data (the pwdPolicy entries) requires
+# that suffix's own rootDN. Neither bind can write the other's entries.
+apply_ldif_template() {
+    local bind_dn="$1" bind_pw="$2" template="$3"
+    shift 3
+    # Files with no placeholders (e.g. the frontend rules) are called with no
+    # substitutions; a bare `sed FILE` with no -e would then treat FILE's
+    # path as the script instead of the input, so use cat in that case.
+    if [ "$#" -eq 0 ]; then
+        cat "$ACL_DIR/$template" | ldapmodify -x -H "$LDAP_URI" -D "$bind_dn" -w "$bind_pw"
+        return
+    fi
+    local sed_args=()
+    for expr in "$@"; do
+        sed_args+=(-e "$expr")
+    done
+    sed "${sed_args[@]}" "$ACL_DIR/$template" \
+        | ldapmodify -x -H "$LDAP_URI" -D "$bind_dn" -w "$bind_pw"
+}
+
+if [ -n "$YELLOWSTONE_DB_DN" ] && [ -n "$GLITTERBAND_DB_DN" ] && [ -n "$ACCESSLOG_DB_DN" ]; then
+    echo "[openldap-init] Applying JIM service account access control (Yellowstone)..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-service-account-access.ldif" \
+        "s#__DB_DN__#$YELLOWSTONE_DB_DN#g" \
+        "s#__SUFFIX__#dc=yellowstone,dc=local#g"
+
+    echo "[openldap-init] Applying JIM service account access control (Glitterband)..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-service-account-access.ldif" \
+        "s#__DB_DN__#$GLITTERBAND_DB_DN#g" \
+        "s#__SUFFIX__#dc=glitterband,dc=local#g"
+
+    echo "[openldap-init] Applying JIM frontend (rootDSE/subschema) access control..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-frontend-access.ldif"
+
+    echo "[openldap-init] Applying JIM accesslog access control (both suffixes' groups)..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-accesslog-access.ldif" \
+        "s#__DB_DN__#$ACCESSLOG_DB_DN#g" \
+        "s#__JIM_GROUP_DN_2__#$GLITTERBAND_GROUP_DN#g" \
+        "s#__JIM_GROUP_DN__#$YELLOWSTONE_GROUP_DN#g"
+
+    echo "[openldap-init] Applying JIM password policy entries (Yellowstone)..."
+    apply_ldif_template "cn=admin,dc=yellowstone,dc=local" "$DATA_ADMIN_PW" "jim-password-policy.ldif" \
+        "s#__SUFFIX__#dc=yellowstone,dc=local#g"
+
+    echo "[openldap-init] Applying JIM password policy entries (Glitterband)..."
+    apply_ldif_template "cn=admin,dc=glitterband,dc=local" "$DATA_ADMIN_PW" "jim-password-policy.ldif" \
+        "s#__SUFFIX__#dc=glitterband,dc=local#g"
+
+    echo "[openldap-init] Attaching ppolicy overlay (Yellowstone)..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-ppolicy-overlay.ldif" \
+        "s#__DB_DN__#$YELLOWSTONE_DB_DN#g" \
+        "s#__SUFFIX__#dc=yellowstone,dc=local#g"
+
+    echo "[openldap-init] Attaching ppolicy overlay (Glitterband)..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-ppolicy-overlay.ldif" \
+        "s#__DB_DN__#$GLITTERBAND_DB_DN#g" \
+        "s#__SUFFIX__#dc=glitterband,dc=local#g"
+
+    echo "[openldap-init] JIM service account access control and password policy applied"
+else
+    echo "[openldap-init] ERROR: one or more database DNs (Yellowstone/Glitterband/accesslog) not found; cannot apply access control or password policy" >&2
+    exit 1
 fi
 
 # Relax MDB write durability for test speed unless explicitly disabled.

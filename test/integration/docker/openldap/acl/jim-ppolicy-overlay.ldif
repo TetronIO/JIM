@@ -1,0 +1,22 @@
+# JIM password policy: overlay attachment (issue #1715)
+#
+# Attaches the default policy from jim-password-policy.ldif to a suffix
+# database, so every non-rootDN password change against it is checked
+# against that policy. Split into its own file because this entry lives
+# under cn=config and must be applied bound as the configuration rootDN,
+# whereas jim-password-policy.ldif's entries are ordinary suffix data and
+# need that suffix's own rootDN; a single bind cannot write both.
+#
+# Placeholders (substituted by the build script before this file is applied):
+#   __SUFFIX__ - the suffix DN, e.g. dc=example,dc=com
+#   __DB_DN__  - the olcDatabase={n}mdb,cn=config entry for this suffix
+#
+# Requires the ppolicy module to be loaded (olcModuleLoad: ppolicy.so) and
+# jim-password-policy.ldif already applied to the same suffix. Apply once
+# per suffix database.
+dn: olcOverlay=ppolicy,__DB_DN__
+changetype: add
+objectClass: olcOverlayConfig
+objectClass: olcPPolicyConfig
+olcOverlay: ppolicy
+olcPPolicyDefault: cn=default,ou=Policies,__SUFFIX__

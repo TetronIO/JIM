@@ -1693,9 +1693,8 @@ if ($Scenario -eq "All") {
     # only because "must change at next sign-in" (its central assertion) is an Active Directory behaviour with
     # no portable equivalent; JIM reports it as a downgrade on every other directory. Scenario 20 runs on
     # either directory: OpenLDAP's RFC 3062 Password Modify path works over plain LDAP against the test
-    # container (no TLS required there), verified end to end (#1697); only its parked-change retry test is
-    # skipped on OpenLDAP internally, because the lab applies no password policy for a password to be
-    # genuinely refused by.
+    # container (no TLS required there), verified end to end (#1697); its parked-change retry test also runs
+    # on OpenLDAP now that the lab's ppolicy overlay genuinely refuses an under-length password there.
     if ($DirectoryType -eq "OpenLDAP") {
         $sambaOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario17*" })
         if ($sambaOnly.Count -gt 0) {
@@ -2007,6 +2006,10 @@ if ($DirectoryType -eq "OpenLDAP" -and -not $PSBoundParameters.ContainsKey('Expo
 
 Write-Host "${GRAY}Configuration:${NC}"
 Write-Host "  Scenario:                ${CYAN}$Scenario${NC}"
+Write-Host "  Directory:               ${CYAN}$DirectoryType${NC}"
+if ($script:DirectoryConfig -and $script:DirectoryConfig.JimBindDN) {
+    Write-Host "  JIM Bind Identity:       ${CYAN}$($script:DirectoryConfig.JimBindDN)${NC}"
+}
 if ($templateRelevant) {
     Write-Host "  Template:                ${CYAN}$Template${NC}"
 } else {
@@ -3154,6 +3157,9 @@ if ($templateRelevant) {
 }
 Write-Host "  Step:                    $Step"
 Write-Host "  Directory Type:          $DirectoryType"
+if ($script:DirectoryConfig -and $script:DirectoryConfig.JimBindDN) {
+    Write-Host "  JIM Bind Identity:       $($script:DirectoryConfig.JimBindDN)"
+}
 Write-Host "  Skip Reset:              $SkipReset"
 Write-Host "  Skip Build:              $SkipBuild"
 Write-Host "  Setup Only:              $SetupOnly"

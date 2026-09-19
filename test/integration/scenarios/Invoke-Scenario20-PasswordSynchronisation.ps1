@@ -39,9 +39,10 @@
          not delay a password. The measured latency is printed so a regression in the Password Delivery Service
          shows as a number before it shows as a failure.
       6. **Is a retry attempted when asked, not when the Worker is next idle?** A password the directory refuses
-         is queued, parks, and is retried from the queue; the new attempt must be made within five seconds. Samba
-         AD only: the OpenLDAP lab runs no password policy, so nothing sent to it is ever genuinely refused, and
-         this question is skipped there with a note rather than answered against a refusal that cannot occur.
+         is queued, parks, and is retried from the queue; the new attempt must be made within five seconds. Runs
+         on both directories: the OpenLDAP lab enforces a `pwdMinLength 7` password policy (see
+         `test/integration/docker/openldap/acl/jim-password-policy.ldif`), matching the Samba AD domain's minimum,
+         so the same six-character password is refused on either directory.
 
     Two invariants are asserted throughout rather than as a step: no password value appears in any JIM log, and
     no queue response carries one. They are the reason the feature is allowed to hold passwords at all.
@@ -121,11 +122,8 @@ if (-not $ApiKey) {
     throw "API key required for authentication. Create one via the JIM portal: Admin > API Keys."
 }
 
-# Runs against Samba AD or OpenLDAP. The one directory-specific gap is Test 8 (a parked change retried on
-# demand), which needs a password the directory genuinely refuses: the OpenLDAP lab runs no password policy
-# overlay, so nothing it is sent is ever refused on content or length grounds. That test is skipped on
-# OpenLDAP below, with a note explaining why, rather than weakened to something that would not prove the
-# same thing.
+# Runs against Samba AD or OpenLDAP; both directories enforce a password policy (Samba AD's domain minimum,
+# OpenLDAP's ppolicy overlay), so Test 8's deliberately-too-short password is refused on either one.
 $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
 
 <#
@@ -636,21 +634,10 @@ try {
     # ─────────────────────────────────────────────────────────────────────────────────────────
     # Test 8: a retry is attempted when asked for, not when the Worker is next idle (#1635)
     # ─────────────────────────────────────────────────────────────────────────────────────────
-    if ($isOpenLDAP) {
-        # Skipped rather than weakened. This test needs a password the directory genuinely refuses so there
-        # is something real to park and retry; the OpenLDAP lab container runs no ppolicy overlay (or any
-        # other password policy), so nothing sent to it over the RFC 3062 Password Modify extended operation
-        # is ever refused on length or content grounds (confirmed empirically against this container: a
-        # six-character value that Samba AD refuses outright is accepted without complaint here). A test
-        # built around a refusal that cannot occur on this directory would prove nothing; recording it as a
-        # pass would be worse, since it would read as coverage that does not exist. Adding a password policy
-        # to the OpenLDAP test image is a bigger, riskier change (its accesslog/MDB tuning is already
-        # documented as sensitive; see engineering/INTEGRATION_TESTING.md) than adapting one scenario
-        # assertion, and is not something this change makes.
-        Write-TestSection "Test 8: A parked change retried from the queue is attempted within seconds (Skipped - not applicable to OpenLDAP)"
-        Write-Host "  The OpenLDAP lab applies no password policy, so no password sent to it is ever genuinely refused. Skipping." -ForegroundColor Yellow
-    }
-    else {
+    # Runs on both directories: the OpenLDAP lab enforces a `pwdMinLength 7` ppolicy overlay on its suffix
+    # databases (matching the Samba AD domain's minimum), so the deliberately six-character password below
+    # is refused via RFC 3062 Password Modify on either directory, giving Test 8 something real to park and
+    # retry.
     Write-TestSection "Test 8: A parked change retried from the queue is attempted within seconds"
 
     $refusedSecure = ConvertTo-SecureString -String $passwords.Refused -AsPlainText -Force
@@ -717,7 +704,6 @@ try {
     # Cancelled rather than left parked, so the final summary below reads a queue this scenario has finished
     # with. Cancelling keeps the change, marked Cancelled, which is what the summary's cancelledCount reports.
     Stop-JIMPendingPasswordChange -Id ([guid]$parkedRow.id) -Force | Out-Null
-    } # end else (not OpenLDAP)
 
     # ─────────────────────────────────────────────────────────────────────────────────────────
     # Test 9: delivery leaves nothing behind, and nothing parked

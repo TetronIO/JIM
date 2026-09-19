@@ -1,0 +1,15 @@
+# JIM service account access control: frontend database (issue #1715)
+#
+# Rules that are not suffix-specific, so this file has no placeholders and is
+# applied once regardless of how many suffixes the server hosts. LDAP clients
+# read the root DSE and the subschema subentry as part of ordinary connection
+# setup (JIM's discovery reads both while probing server capabilities and
+# schema). Neither exposes directory data, so both stay world-readable;
+# anything else that would otherwise fall through to the frontend database is
+# refused.
+dn: olcDatabase={-1}frontend,cn=config
+changetype: modify
+replace: olcAccess
+olcAccess: {0}to dn.base="" by * read
+olcAccess: {1}to dn.subtree="cn=Subschema" by * read
+olcAccess: {2}to * by * none
