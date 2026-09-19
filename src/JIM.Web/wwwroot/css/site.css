@@ -4190,10 +4190,24 @@ html[lang] .jim-scope-text .mud-input-slot {
    its own width and gain a horizontal scrollbar. width: 100% claims the remaining space; max-width: 0 stops
    the cell's content counting towards the column's minimum, so the other columns (kept to one line with
    .jim-nowrap) size to their content and this one absorbs the rest. Fixed layout is not the answer: it splits
-   the spare width evenly, so a short Name column is handed as much room as the Description beside it. */
+   the spare width evenly, so a short Name column is handed as much room as the Description beside it. No
+   minimum: on a row whose other columns are wide (the Connected Systems list's Stats chips at a laptop width)
+   the header clips before the table scrolls, and a clipped header beside a clipped value is the lesser fault
+   than an Action column pushed off the screen. */
 .mud-table-root .mud-table-cell.jim-fill-column {
     width: 100%;
     max-width: 0;
+}
+
+/* A capped column: the wrapper inside a cell whose content would otherwise set the column's width. Auto layout
+   sizes a column to its widest content, and some content is arbitrarily long without being the point of the
+   row (a password target's own message, a Service Setting's URL or identifier), so it would take the width
+   from the column that is the point of the row. The wrapper bounds the .jim-one-line or .jim-one-line-list
+   inside it, which clips the content with an ellipsis and keeps the whole of it on the element's title. The
+   cap is a variable so a call site can tighten it inline (a value beside a name needs less than a message
+   beside a status) without a class per width. */
+.jim-column-cap {
+    max-width: var(--jim-column-cap, 30rem);
 }
 
 /* ---------------------------------------------------------------------------
