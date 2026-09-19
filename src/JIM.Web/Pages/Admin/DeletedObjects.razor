@@ -80,7 +80,7 @@
                              PluralName="Deleted Connected System Objects"
                              SearchPlaceholder="Search External ID">
             <Columns>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate></HeaderTemplate>
                     <CellTemplate>
                         @* The row opens the history dialog on click and so does this button; stopping the click
@@ -95,7 +95,7 @@
                         </span>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">External ID</MudText>
                     </HeaderTemplate>
@@ -103,7 +103,7 @@
                         <span class="jim-text-code">@(context.Item.DeletedObjectExternalId ?? "N/A")</span>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Display Name</MudText>
                     </HeaderTemplate>
@@ -114,7 +114,7 @@
                                      Secondary="@GetCsoPlace(context.Item)" />
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Connected System</MudText>
                     </HeaderTemplate>
@@ -127,7 +127,7 @@
                         </span>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Deleted</MudText>
                     </HeaderTemplate>
@@ -222,7 +222,7 @@
                              PluralName="Deleted Metaverse Objects"
                              SearchPlaceholder="Search Display Name">
             <Columns>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate></HeaderTemplate>
                     <CellTemplate>
                         @* The row opens the history dialog on click and so does this button; stopping the click
@@ -237,7 +237,7 @@
                         </span>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Display Name</MudText>
                     </HeaderTemplate>
@@ -248,7 +248,7 @@
                                      Secondary="@ObjectDescription.ForMetaverseObjectPlace(context.Item.DeletedObjectType?.Name)" />
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Deleted</MudText>
                     </HeaderTemplate>
@@ -258,7 +258,7 @@
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Sortable="false">
+                <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Deleted By</MudText>
                     </HeaderTemplate>
