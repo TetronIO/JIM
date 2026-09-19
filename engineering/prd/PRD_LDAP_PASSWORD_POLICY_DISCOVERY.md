@@ -55,7 +55,7 @@ The consequences for those deployments are the ones discovery exists to prevent:
 4. `SupportsPasswordPolicyDiscovery` on the LDAP Connector must reflect the connected directory type once it is known (true for Active Directory, Samba AD, OpenLDAP and 389 Directory Server; false for Generic), so that the "JIM has not read the rules yet" and "there are no rules to read" states the portal already distinguishes are reported correctly.
 5. Discovery must degrade to "could not determine" or "not published" rather than fail when the service account cannot read `cn=config` or the overlay configuration, and the panel must say which it was.
 6. The policy panel and the Set Password dialog's policy summary must say "the directory applies further checks JIM cannot see" when `pwdCheckQuality` (OpenLDAP) or a dictionary or syntax check beyond categories (389) is on, so that a refusal after a satisfied policy is explained.
-7. The REST API and PowerShell surfaces that already return the discovered policy (`Get-JIMConnectedSystemPasswordPolicy` and its endpoint) must return the renamed signal under a neutral property name, with the old name kept as a deprecated alias for one release so that scripts do not break.
+7. The REST API and PowerShell surfaces that already return the discovered policy (`Get-JIMConnectedSystemPasswordPolicy` and its endpoint) must return the renamed signal under the neutral property name. The old `fineGrainedPolicySignal` name is dropped outright (no alias): it is read-only diagnostic output shipped recently under #1121, and JIM is pre-1.0. The rename is recorded under Changed in the changelog.
 8. `PasswordPolicyReconciliation` must treat an unknown required character-class count from one system as "no constraint from that system", which is its behaviour for an absent policy today; this must be covered by a unit test.
 
 ### Non-Functional Requirements
@@ -110,7 +110,7 @@ The consequences for those deployments are the ones discovery exists to prevent:
 | Models | `FineGrainedPolicySignal` renamed to a neutral name; `ConnectedSystemPasswordPolicy` gains a "further checks apply" flag and a "why nothing was read" reason |
 | Database | migration for the renamed column and the two new fields |
 | Application | `PasswordPolicyReconciliation` handles an unknown character-class count (test only, if the behaviour already holds) |
-| API | policy DTO gains the neutral property name, old name kept as a deprecated alias |
+| API | policy DTO property renamed to the neutral name; no alias |
 | PowerShell | `Get-JIMConnectedSystemPasswordPolicy` output shape updated and documented |
 | UI | `ConnectedSystemPasswordPolicyPanel` wording per directory type; Set Password dialog policy summary |
 | Integration tests | an OpenLDAP scenario with the overlay configured; the `Build-OpenLDAPSnapshots.ps1` image gains the overlay |
@@ -122,16 +122,18 @@ The consequences for those deployments are the ones discovery exists to prevent:
 | `docs/concepts/passwords.md` | "Discovering the target's rules" section: which directories publish what, and the override signal per directory |
 | `docs/connectors/jim-ldap-connector.md` | Password policy discovery per directory type; the rights the service account needs (`cn=config` for 389, overlay config for OpenLDAP) |
 | `docs/powershell/connected-systems.md` | `Get-JIMConnectedSystemPasswordPolicy` output shape |
-| `docs/api/index.md` | Deprecated alias note if the DTO property is renamed |
+| `docs/api/index.md` | Note the renamed policy property |
 
 ## Dependencies
 
 - Integration test infrastructure must run OpenLDAP with the `ppolicy` overlay; `Build-OpenLDAPSnapshots.ps1` currently does not configure it. A 389 Directory Server image is not in the harness; Scenario 3 may be covered by unit tests against a mocked executor until one is added.
 
-## Open Questions
+## Decisions
 
-1. Should 389 Directory Server be a first-class `LdapDirectoryType`, or should discovery probe for its policy attributes under Generic? A first-class type is proposed, because delta import and export tuning will also want to know.
-2. Is a one-release deprecated alias on the API property worth carrying, or is the signal obscure enough that a straight rename is acceptable? The PRD assumes the alias.
+Both open questions were settled on 2026-09-19:
+
+1. **389 Directory Server is a first-class `LdapDirectoryType`.** Detection is one root DSE check, and the type is useful beyond passwords (its own changelog for delta import, its own concurrency characteristics), where the Connector already tunes per type. A probe under Generic would spend searches on every unknown directory and still leave 389 undistinguished elsewhere.
+2. **The API property is renamed outright, with no deprecated alias.** An alias is two names for one thing on the API surface, which is the vocabulary problem the surrounding work removed, and it needs a removal step nobody would schedule. The rename goes under Changed in the changelog.
 
 ## Acceptance Criteria
 
