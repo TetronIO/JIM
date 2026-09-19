@@ -5,7 +5,7 @@ A newly provisioned Connected System Object is not much use until somebody gives
 It can also set a password on demand: on the Connected System Objects you name, or on every system configured to receive a Metaverse Object's password changes.
 
 !!! info "Nothing happens until you ask for it"
-    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named Connected System Object. Today the [LDAP Connector](../connectors/jim-ldap-connector.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP and generic LDAP directories.
+    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named Connected System Object. Today the [LDAP Connector](../connectors/jim-ldap-connector.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP, 389 Directory Server and generic LDAP directories.
 
 This page covers what JIM does with passwords and why. To actually configure it, follow the links in [Where to go next](#where-to-go-next).
 
@@ -77,11 +77,33 @@ A password JIM generates has to satisfy rules JIM did not write, so JIM reads th
 
 Whenever a Connected System's schema is retrieved or refreshed, JIM also reads its password policy and remembers it: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age. Those figures pre-fill the generator, so a compliant password normally needs no configuration from you at all.
 
+### Discovering the target's rules
+
+What JIM can read depends on the directory, because each one keeps its policy in a different place and none of them publishes all of it. The LDAP Connector recognises three that publish one, and reads each where it keeps its rules; the [LDAP Connector reference](../connectors/jim-ldap-connector.md#password-policy-discovery) says where, and what your service account needs to be allowed to read.
+
+| Rule | Active Directory and Samba AD | OpenLDAP (`ppolicy` overlay) | 389 Directory Server |
+|------|-------------------------------|------------------------------|----------------------|
+| Minimum length | ✅ | ✅ | ✅ When syntax checking is on |
+| Password history | ✅ | ✅ | ✅ When history is on |
+| Maximum age | ✅ | ✅ | ✅ When expiry is on |
+| Minimum age | ✅ | ✅ | ✅ |
+| Character classes | ✅ Complexity means three of five | ❌ Not published | ✅ A count of its five, when syntax checking is on |
+| Further checks | ❌ A password filter is invisible | ✅ JIM sees that a check module is configured | ✅ JIM sees that dictionary, palindrome, repetition, sequence or per-class checks are on |
+
+A blank figure on the panel means that directory does not publish the rule, or has it switched off. It never means "no rule".
+
 **What JIM cannot always find out is worth knowing up front:**
 
-- **Most systems publish nothing.**<br /> Only Active Directory and Samba AD expose a password policy a client can read. Other directories keep their rules in configuration an ordinary connection cannot see, and no cross-vendor standard exists for exposing them. JIM tells you it found nothing rather than implying the system has no rules.
-- **A policy can apply to only some objects.**<br /> Active Directory's Fine-Grained Password Policies apply a different policy to the objects they govern, and JIM checks for them. Reading them needs privileges your JIM service account should not have, so JIM checks whether any exist rather than reading them, and gives you one of three answers: none, some exist, or it could not tell. "Could not tell" is kept separate from "none" on purpose, because a directory hides what you may not see by returning nothing, which looks identical to there being nothing.
-- **A system can enforce rules nothing can discover.**<br /> A custom password filter is exposed over no protocol at all. A password meeting everything JIM read can still be refused.
+- **Some directories publish nothing.**<br /> A generic LDAP directory, and an OpenLDAP without the `ppolicy` overlay, keep whatever rules they enforce in configuration an ordinary connection cannot see, and no cross-vendor standard exists for exposing them. JIM tells you it found nothing rather than implying the system has no rules.
+- **A policy can apply to only some objects.**<br /> Every directory above has a way to give some objects a different policy from the one JIM read: Active Directory's Fine-Grained Password Policies, an OpenLDAP entry's own `pwdPolicySubentry` (or a second `pwdPolicy` entry beside the default), and 389 Directory Server's subtree and per-object policies (`nsPwPolicyContainer` and `pwdpolicysubentry`). Reading them needs privileges your JIM service account should not have, so JIM checks whether any exist rather than reading them, and gives you one of three answers: none, some exist, or it could not tell. "Could not tell" is kept separate from "none" on purpose, because a directory hides what you may not see by returning nothing, which looks identical to there being nothing; a search that finds nothing is therefore always "could not tell". A definite "none" needs something JIM can prove: an Active Directory domain at a functional level that cannot carry Fine-Grained Password Policies, or an OpenLDAP that does not load the overlay which would enforce an override. 389 Directory Server offers no such proof, so "could not tell" is the best answer it can give.
+- **A system can enforce rules nothing can discover.**<br /> Where the directory tells JIM that further checks are configured (an OpenLDAP check module, or 389 Directory Server's dictionary and character checks), the panel says so: the directory applies further checks JIM cannot see. A custom Active Directory password filter is exposed over no protocol at all, so there the panel cannot even say that. Either way, a password meeting everything JIM read can still be refused.
+
+**When the panel shows no rules, it says why**, and the four reasons want different responses:
+
+- **Read**<br /> JIM read the policy, and any blank figure is a rule that directory does not publish. If nothing at all is shown, JIM has not read this system yet; **Refresh Schema** reads it.
+- **Not published**<br /> This directory publishes no password policy that JIM can read. There is nothing to grant and nothing to refresh; configure the generator's rules by hand if the directory enforces any.
+- **Configuration not readable**<br /> The directory keeps its policy in server configuration, and the account JIM connects as may not read it. Grant the read described under [Service Account Permissions](../connectors/jim-ldap-connector.md#service-account-permissions), then refresh the schema.
+- **No policy configured**<br /> The directory's password policy mechanism is loaded but no policy is configured, so no rules apply.
 
 So treat what JIM discovered as a **floor, not a guarantee**, and read a blank value as "JIM could not find this out", never as "there is no such rule". That is also why the parked state above exists: handling a refusal is part of how this works, not a sign something went wrong.
 

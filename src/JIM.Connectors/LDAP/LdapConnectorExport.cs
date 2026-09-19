@@ -1240,7 +1240,9 @@ internal class LdapConnectorExport
             }
             case LdapDirectoryType.OpenLDAP:
             case LdapDirectoryType.Generic:
+            case LdapDirectoryType.DirectoryServer389:
             {
+
                 // OpenLDAP entryUUID is a string-formatted UUID (RFC 4530)
                 var uuidString = entry.Attributes[externalIdAttr][0] as string;
                 return uuidString?.Trim();

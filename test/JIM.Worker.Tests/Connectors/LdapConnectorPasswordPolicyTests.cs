@@ -26,6 +26,11 @@ public class LdapConnectorPasswordPolicyTests
     private const string DomainRoot = "DC=testdomain,DC=local";
     private const string PasswordSettingsContainer = "CN=Password Settings Container,CN=System,DC=testdomain,DC=local";
 
+    /// <summary>
+    /// What the rootDSE of an Active Directory domain yields: the domain root as defaultNamingContext.
+    /// </summary>
+    private static readonly LdapPasswordPolicyScope AdScope = new(DomainRoot, [DomainRoot], null, false);
+
     private Mock<ILdapOperationExecutor> _executor = null!;
 
     [SetUp]
@@ -144,7 +149,7 @@ public class LdapConnectorPasswordPolicyTests
                 ("minPwdAge", (-TimeSpan.FromDays(1).Ticks).ToString())),
             fineGrained: LdapTestResponses.EmptySearchResponse());
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
         Assert.That(policy, Is.Not.Null);
         Assert.That(policy!.MinimumLength, Is.EqualTo(12));
@@ -167,7 +172,7 @@ public class LdapConnectorPasswordPolicyTests
             domainPolicy: LdapTestResponses.SearchResponseWith(DomainRoot, ("pwdProperties", "1")),
             fineGrained: LdapTestResponses.EmptySearchResponse());
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
         Assert.That(policy!.RequiredCharacterClassCount, Is.EqualTo(3));
         Assert.That(policy.RecognisedCharacterClasses, Is.EqualTo(
@@ -182,7 +187,7 @@ public class LdapConnectorPasswordPolicyTests
             domainPolicy: LdapTestResponses.SearchResponseWith(DomainRoot, ("pwdProperties", "0")),
             fineGrained: LdapTestResponses.EmptySearchResponse());
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
         Assert.That(policy!.ComplexityRequired, Is.False);
         Assert.That(policy.RequiredCharacterClassCount, Is.Null);
@@ -200,7 +205,7 @@ public class LdapConnectorPasswordPolicyTests
             domainPolicy: LdapTestResponses.SearchResponseWith(DomainRoot, ("minPwdLength", "8")),
             fineGrained: LdapTestResponses.EmptySearchResponse());
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
         Assert.That(policy!.MinimumLength, Is.EqualTo(8));
         Assert.That(policy.ComplexityRequired, Is.Null);
@@ -209,17 +214,63 @@ public class LdapConnectorPasswordPolicyTests
     }
 
     /// <summary>
-    /// Directories that are not Active Directory hold their policy in an entry whose location is local
-    /// configuration and is not advertised to clients, so there is nothing to find. Returning an empty policy
-    /// would imply JIM had looked and found no constraints.
+    /// PRD Scenario 5. A directory JIM does not recognise publishes no policy a client can read, so there is
+    /// nothing to find and no search worth spending. The row says so, rather than a null that would read as
+    /// "could not say anything" and keep whatever was there before.
     /// </summary>
     [Test]
-    public async Task GetPasswordPolicyAsync_AgainstADirectoryThatPublishesNoPolicy_ReturnsNullAsync()
+    public async Task GetPasswordPolicyAsync_AgainstAGenericDirectory_ReportsNotPublishedWithoutSearchingAsync()
     {
-        var policy = await CreateReader(LdapDirectoryType.OpenLDAP).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.Generic).GetPasswordPolicyAsync(AdScope);
+
+        Assert.That(policy, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(policy!.DiscoveryOutcome, Is.EqualTo(PasswordPolicyDiscoveryOutcome.NotPublished));
+            Assert.That(policy.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.Absent));
+            Assert.That(policy.FurtherChecksApply, Is.False);
+            Assert.That(policy.HasAnyDiscoveredConstraint, Is.False);
+        }
+        _executor.Verify(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()), Times.Never);
+    }
+
+    /// <summary>
+    /// The domain root is read from the rootDSE's defaultNamingContext, and Active Directory always publishes one.
+    /// Without it there is nothing to read, and no other naming context is a substitute.
+    /// </summary>
+    [Test]
+    public async Task GetPasswordPolicyAsync_AgainstActiveDirectoryWithoutADefaultNamingContext_ReturnsNullAsync()
+    {
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory)
+            .GetPasswordPolicyAsync(new LdapPasswordPolicyScope(null, [DomainRoot], null, false));
 
         Assert.That(policy, Is.Null);
         _executor.Verify(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetPasswordPolicyAsync_AgainstActiveDirectory_ReportsTheOutcomeAsReadAsync()
+    {
+        SetupDirectory(
+            domainPolicy: LdapTestResponses.SearchResponseWith(DomainRoot, ("minPwdLength", "8")),
+            fineGrained: LdapTestResponses.EmptySearchResponse());
+
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
+
+        Assert.That(policy!.DiscoveryOutcome, Is.EqualTo(PasswordPolicyDiscoveryOutcome.Read));
+        Assert.That(policy.FurtherChecksApply, Is.False);
+    }
+
+    [Test]
+    public async Task GetPasswordPolicyAsync_AgainstActiveDirectory_SpendsExactlyThreeSearchesAsync()
+    {
+        SetupDirectory(
+            domainPolicy: LdapTestResponses.SearchResponseWith(DomainRoot, ("minPwdLength", "8")),
+            fineGrained: LdapTestResponses.EmptySearchResponse());
+
+        await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
+
+        _executor.Verify(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()), Times.Exactly(3));
     }
 
     [Test]
@@ -228,7 +279,7 @@ public class LdapConnectorPasswordPolicyTests
         _executor.Setup(e => e.SendRequestAsync(It.IsAny<SearchRequest>()))
             .ThrowsAsync(new LdapException(81, "server down"));
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
         Assert.That(policy, Is.Null, "A failed policy read must never fail the schema import that triggered it.");
     }
@@ -251,9 +302,9 @@ public class LdapConnectorPasswordPolicyTests
             domainPolicy: LdapTestResponses.SearchResponseWith(DomainRoot, ("minPwdLength", "8")),
             fineGrained: LdapTestResponses.EmptySearchResponse());
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.CouldNotDetermine));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.CouldNotDetermine));
     }
 
     [Test]
@@ -264,9 +315,9 @@ public class LdapConnectorPasswordPolicyTests
             fineGrained: LdapTestResponses.SearchResponseWithEntries(
                 LdapTestResponses.Entry($"CN=Executives,{PasswordSettingsContainer}", ("objectClass", "msDS-PasswordSettings"))));
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.Present));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.Present));
     }
 
     /// <summary>
@@ -284,9 +335,9 @@ public class LdapConnectorPasswordPolicyTests
                         ? LdapTestResponses.SearchResponseWith("", ("domainFunctionality", "2"))
                         : LdapTestResponses.EmptySearchResponse()));
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.Absent));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.Absent));
     }
 
     /// <summary>
@@ -308,9 +359,9 @@ public class LdapConnectorPasswordPolicyTests
                 throw new LdapException((int)ResultCode.InsufficientAccessRights, "insufficient access rights");
             });
 
-        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(DomainRoot);
+        var policy = await CreateReader(LdapDirectoryType.ActiveDirectory).GetPasswordPolicyAsync(AdScope);
 
-        Assert.That(policy!.FineGrainedPolicySignal, Is.EqualTo(FineGrainedPolicySignal.CouldNotDetermine));
+        Assert.That(policy!.PolicyOverrideSignal, Is.EqualTo(PolicyOverrideSignal.CouldNotDetermine));
     }
 
     #endregion

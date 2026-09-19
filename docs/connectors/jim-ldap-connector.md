@@ -14,7 +14,8 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 | **Active Directory Lightweight Directory Services (AD LDS)** | Full support with AD-specific features |
 | **OpenLDAP** | Full support including parallel import, changelog-based delta import, and RFC 4512 schema discovery |
 | **Samba AD** | Full support with Active Directory compatibility |
-| **Other RFC 4512-compliant directories** (for example 389 Directory Server) | Supported via generic LDAP mode with automatic directory type detection |
+| **389 Directory Server** | Detected from the root DSE vendor name "389 Project", or a vendor version beginning "389-Directory". Behaves as a generic directory (`entryUUID` identity, `cn=changelog` delta import, paged results, parallel import) except that JIM reads its password policy; see [Password policy discovery](#password-policy-discovery) |
+| **Other RFC 4512-compliant directories** | Supported via generic LDAP mode with automatic directory type detection |
 
 JIM automatically detects the directory type during schema discovery by inspecting the Root DSE and adjusts its behaviour accordingly. No manual directory type configuration is required.
 
@@ -62,7 +63,7 @@ The Connected System's **Details** tab shows a **Directory Capabilities** card w
 
 | Fact | Shown when |
 |------|------------|
-| Directory Type | Always, once detected (Active Directory, Samba AD, OpenLDAP, or Generic) |
+| Directory Type | Always, once detected (Active Directory, Samba AD, OpenLDAP, 389 Directory Server, or Generic) |
 | Vendor | The directory reported one |
 | DNS Host Name | The directory reported one |
 | Paging | Always, once detected (Supported / Not Supported; Samba AD reports Not Supported, see [Supported Directories](#supported-directories)) |
@@ -180,7 +181,7 @@ Administrators often do not know which domain controller to enter in Preferred D
 
 Discovery only ever informs; it never writes to the setting on its own. Preferred Domain Controller remains ordinary free text throughout, and nothing changes until you click a discovered server (or type a value yourself) and save the Connected System's settings.
 
-The action is enabled once the connectivity settings above (Host, Port, Username, Password) are filled in; you do not need to have saved them first, so a system can be configured and its domain controllers discovered in one sitting. Discovery is only supported for Active Directory and Samba AD; for OpenLDAP or Generic directories, which have no concept of Sites, the dialog reports that discovery is not supported and you can simply type a hostname instead. Discovery works by querying the forest's `CN=Sites,CN=Configuration` hierarchy, so it uses the same credentials already configured for this Connected System and needs no extra directory permissions or DNS lookups. If the directory cannot be reached, or the credentials are refused, the dialog shows the failure with a Retry action rather than crashing the page.
+The action is enabled once the connectivity settings above (Host, Port, Username, Password) are filled in; you do not need to have saved them first, so a system can be configured and its domain controllers discovered in one sitting. Discovery is only supported for Active Directory and Samba AD; for OpenLDAP, 389 Directory Server or Generic directories, which have no concept of Sites, the dialog reports that discovery is not supported and you can simply type a hostname instead. Discovery works by querying the forest's `CN=Sites,CN=Configuration` hierarchy, so it uses the same credentials already configured for this Connected System and needs no extra directory permissions or DNS lookups. If the directory cannot be reached, or the credentials are refused, the dialog shows the failure with a Retry action rather than crashing the page.
 
 The same discovery is available beyond the portal:
 
@@ -207,7 +208,7 @@ For Active Directory and Samba AD, JIM connects to a single, consistent domain c
 
 **If the pinned domain controller becomes unavailable:** the Run Profile execution fails outright rather than silently failing over mid-run, and the pin is cleared. The next Run Profile execution resolves via Host again, discovers whichever domain controller answers, and re-pins to it. Because that may be a different domain controller than before, a Full Import is needed to re-establish the Delta Import baseline; see [Delta import fails with a domain controller mismatch error](#delta-import-fails-with-a-domain-controller-mismatch-error).
 
-Pinning only applies to Active Directory and Samba AD; OpenLDAP and other generic directories are unaffected.
+Pinning only applies to Active Directory and Samba AD; OpenLDAP, 389 Directory Server and generic directories are unaffected.
 
 ### Multi-domain forests
 
@@ -297,7 +298,7 @@ See [Stating Container Scope as text](../configuration/connected-systems.md#stat
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Search Timeout | Maximum time in seconds to wait for LDAP search results. | `300` (5 minutes) |
-| Import Concurrency | Number of parallel LDAP connections for OpenLDAP/generic directory imports. Each connection handles one container and object type combination independently. Not used for Active Directory. | `4` |
+| Import Concurrency | Number of parallel LDAP connections for OpenLDAP, 389 Directory Server and generic directory imports. Each connection handles one container and object type combination independently. Not used for Active Directory. | `4` |
 
 ### Retry Settings
 
@@ -436,9 +437,20 @@ Active Directory decides for itself regardless. It refuses a password write unle
 
 Active Directory and Samba AD use `unicodePwd`, which the Connector encodes correctly on your behalf.
 
-**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the domain password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
+**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the directory's password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
 
 There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
+
+### Password policy discovery
+
+Whenever JIM retrieves or refreshes the schema, and again when the Password Channel preflight runs, the Connector reads the directory's password policy so a generated password satisfies it. [Passwords](../concepts/passwords.md#discovering-the-targets-rules) explains what the figures mean and how to read a blank one; this section says where each directory type keeps its policy, what JIM reads from it, and how it decides that some objects may be governed by a different policy. Discovery never fails a schema refresh: where a search is refused or returns nothing, the Connector records why and the panel says so.
+
+- **Active Directory and Samba AD**<br /> The domain policy is read from the domain root (the root DSE's `defaultNamingContext`): `minPwdLength`, `pwdHistoryLength`, `maxPwdAge`, `minPwdAge`, and the complexity flag in `pwdProperties`, which JIM reports as three of five character classes. Fine-Grained Password Policies are detected, not read, by searching the Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`): any result means some exist, an empty result means JIM could not tell, and only a domain whose functional level is below Windows Server 2008 (where they cannot exist) is reported as having none.
+- **OpenLDAP**<br /> The policy is the `ppolicy` overlay's, and JIM looks for it only when the root DSE advertises the password policy request control (`1.3.6.1.4.1.42.2.27.8.5.1`) in `supportedControl`; without it the directory is reported as publishing no policy. JIM reads the overlay's configuration under `cn=config` (the `olcOverlay=ppolicy` entries, whose `olcPPolicyDefault` names the default policy entry and whose `olcPPolicyCheckModule` names a check module), then the `pwdPolicy` entries under the first user naming context: `pwdMinLength`, `pwdInHistory`, `pwdMaxAge` and `pwdMinAge` (the ages in seconds, shown as days). A value of zero means the rule is off and shows as blank; required character classes are not published. When the overlay's configuration cannot be read and exactly one `pwdPolicy` entry exists, that entry is the policy; when several exist, JIM cannot know which is the default and reports the configuration as not readable. No `pwdPolicy` entry at all is reported as no policy configured. The directory applies further checks JIM cannot see when `pwdCheckQuality` is 1 or 2 and a check module is named (`pwdCheckModule` on the policy, or `olcPPolicyCheckModule` on the overlay); when the overlay configuration could not be read, `pwdCheckQuality` alone decides. Overrides: any entry carrying `pwdPolicySubentry`, more than one `pwdPolicy` entry, or two databases with different default policies means some exist; an empty probe or a refused search means JIM could not tell.
+- **389 Directory Server**<br /> The global policy is read from `cn=config`, honouring the switches that gate each rule: `passwordMinLength` and `passwordMinCategories` only when `passwordCheckSyntax` is on (more than one category is reported as complexity required, counted over 389's five classes: upper, lower, digit, special and 8-bit), `passwordInHistory` only when `passwordHistory` is on, `passwordMaxAge` only when `passwordExp` is on, and `passwordMinAge` when it is above zero; the ages are in seconds. The directory applies further checks JIM cannot see when syntax checking is on and any of `passwordDictCheck`, `passwordPalindrome`, `passwordMaxRepeats`, `passwordMaxSequence`, `passwordMaxSeqSets`, `passwordMaxClassChars`, `passwordMinDigits`, `passwordMinAlphas`, `passwordMinUppers`, `passwordMinLowers`, `passwordMinSpecials`, `passwordMin8Bit` or `passwordMinTokenLength` is set. Overrides are subtree and per-object policies, probed in each user naming context (up to five) for an `nsPwPolicyContainer` entry or an entry carrying `pwdpolicysubentry`: a result means some exist; an empty result, a refused search or an administrative limit on an unindexed search means JIM could not tell. 389 offers no way to prove that none exist. If `cn=config` cannot be read, the configuration is reported as not readable and the override answer is could not tell.
+- **Generic directories**<br /> No policy is read; the directory is reported as publishing none.
+
+Discovery costs at most three searches per directory type, so it adds nothing you will notice to a schema refresh.
 
 ### Service Account Permissions
 
@@ -450,7 +462,10 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For delta import**<br /> The service account needs read access to the directory's change tracking mechanism (USN attributes for AD, accesslog for OpenLDAP).
 - **For setting passwords**<br /> Grant the **Reset Password** permission on the containers JIM manages. In Active Directory this is a control access right, delegated on the OU (Delegate Control, "Reset user passwords and force password change at next logon"), and it is a separate thing from write access to attributes: an account with full write permission on an OU still cannot set a password without it. **The service account does not need to be a Domain Admin**, and should not be.
 - **For checking reset rights**<br /> To answer the reset-rights preflight rather than reporting that it could not tell, the service account also needs read access to the `nTSecurityDescriptor` attribute of accounts in those containers. Reading an object's permissions is normally covered by ordinary read access; where it is not, the check reports an unknown rather than a denial.
-- **For discovering Fine-Grained Password Policies**<br /> Detecting whether any exist requires read access to the domain's Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`), which by default is restricted to Domain Admins. Without it JIM reports that it could not tell, and treats the domain policy it read as a floor. Granting read on that container is optional; it buys a definite answer in the Password Channel panel and nothing else.
+- **For discovering Fine-Grained Password Policies (Active Directory)**<br /> Detecting whether any exist requires read access to the domain's Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`), which by default is restricted to Domain Admins. Without it JIM reports that it could not tell, and treats the domain policy it read as a floor. Granting read on that container is optional; it buys a definite answer in the Password Channel panel and nothing else.
+- **For reading the password policy (389 Directory Server)**<br /> Grant read on `cn=config`, whose `password*` attributes hold the global policy. This is optional, and it buys the policy itself: without it the panel reports the configuration as not readable, the override answer is could not tell, and generated passwords follow JIM's defaults rather than the directory's rules, so a stricter rule parks the Connected System Objects it refuses.
+- **For reading the password policy (OpenLDAP)**<br /> Two optional reads, each buying something different. Read on the policy entry named by `olcPPolicyDefault` (and its siblings) gives JIM the rules themselves. Read on the overlay's configuration under `cn=config` (the `olcOverlay=ppolicy` entries) tells JIM which policy is the default where more than one exists, and whether a check module is configured; without it, a directory with a single policy entry is still read in full, while one with several is reported as not readable.
+- **For a definite answer on policy overrides (OpenLDAP and 389 Directory Server)**<br /> Read access over the objects JIM manages that includes the operational `pwdPolicySubentry` attribute (OpenLDAP) or the policy containers (389) lets JIM report that overrides exist. Neither directory offers a way to prove that none do, so the best answer there is could not tell, and the figures shown remain a floor.
 
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.

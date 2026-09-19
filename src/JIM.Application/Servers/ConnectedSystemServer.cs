@@ -2898,7 +2898,9 @@ public partial class ConnectedSystemServer
             return;
         }
 
-        result.PasswordPolicyDiscovered = true;
+        // A row with no constraints is kept for its outcome (why nothing was read), but is not a discovery: the
+        // refresh result tells the administrator whether JIM now knows the target's rules, and it does not.
+        result.PasswordPolicyDiscovered = discovered.HasAnyDiscoveredConstraint;
 
         // Update the existing row in place where there is one. Replacing the navigation with a fresh object would
         // leave it with no id, which the persistence path reads as an insert, and the one-to-one unique index then
@@ -2918,7 +2920,10 @@ public partial class ConnectedSystemServer
         existing.PasswordHistoryLength = discovered.PasswordHistoryLength;
         existing.MaximumPasswordAge = discovered.MaximumPasswordAge;
         existing.MinimumPasswordAge = discovered.MinimumPasswordAge;
-        existing.FineGrainedPolicySignal = discovered.FineGrainedPolicySignal;
+        existing.PolicyOverrideSignal = discovered.PolicyOverrideSignal;
+        existing.FurtherChecksApply = discovered.FurtherChecksApply;
+        existing.DiscoveryOutcome = discovered.DiscoveryOutcome;
+        // ConnectedSystemPasswordPolicyDiscoveryTests holds this block to every settable property of the model.
     }
     #endregion
 
@@ -3047,11 +3052,18 @@ public partial class ConnectedSystemServer
                 ? passwordConnector.SupportedExpiryBehaviours
                 : [];
 
+            var policy = expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null;
+
+            // The Connector's flag says it can read a policy where the directory publishes one; the row's outcome
+            // says whether this directory does. A directory that publishes nothing has no policy to refresh, so
+            // the dialog must not send the administrator to refresh the schema for it. No row yet means the
+            // schema has not been read with this Connector, which is exactly the "refresh" case.
             systems[connectedSystemId] = (
                 connectedSystem.Name,
                 expiryBehaviours,
-                expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null,
-                connectedSystem.ConnectorDefinition.SupportsPasswordPolicyDiscovery);
+                policy,
+                connectedSystem.ConnectorDefinition.SupportsPasswordPolicyDiscovery
+                    && policy?.DiscoveryOutcome != PasswordPolicyDiscoveryOutcome.NotPublished);
         }
 
         return connectedSystemObjects

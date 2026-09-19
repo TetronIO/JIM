@@ -451,7 +451,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         LdapDirectoryType.SambaAD => "Samba AD",
         LdapDirectoryType.OpenLDAP => "OpenLDAP",
         LdapDirectoryType.Generic => "Generic",
+        LdapDirectoryType.DirectoryServer389 => "389 Directory Server",
         _ => "Generic"
+
     };
     #endregion
 
@@ -1036,35 +1038,17 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         try
         {
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
-            var domainRootDn = GetDefaultNamingContext(_connection);
 
             var policyReader = new LdapConnectorPasswordPolicy(new LdapOperationExecutor(_connection), logger, rootDse.DirectoryType);
-            return await policyReader.GetPasswordPolicyAsync(domainRootDn ?? string.Empty);
+            return await policyReader.GetPasswordPolicyAsync(LdapPasswordPolicyScope.From(rootDse));
         }
         finally
         {
             CloseImportConnection();
         }
     }
-
-    /// <summary>
-    /// Reads defaultNamingContext from the rootDSE, which is where Active Directory holds its domain-wide
-    /// password policy. Directories that are not Active Directory do not publish this, and do not need to: their
-    /// policy is not discoverable anyway.
-    /// </summary>
-    private static string? GetDefaultNamingContext(LdapConnection connection)
-    {
-        var request = new SearchRequest { Scope = SearchScope.Base };
-        request.Attributes.Add("defaultNamingContext");
-
-        var response = (SearchResponse)connection.SendRequest(request);
-        if (response.Entries.Count == 0)
-            return null;
-
-        var attribute = response.Entries[0].Attributes["defaultNamingContext"];
-        return attribute == null || attribute.Count == 0 ? null : attribute[0]?.ToString();
-    }
     #endregion
+
 
     #region IConnectorPasswordManagement members
     private LdapConnectorPassword? _passwordChannel;
@@ -1208,13 +1192,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // this method is called by an administrator asking what is wrong.
             LdapConnectorRootDse rootDse;
             bool supportsPasswordModifyExtension;
-            string? domainRootDn;
             try
             {
                 rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(connection, logger);
                 supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
-                domainRootDn = GetDefaultNamingContext(connection);
             }
+
             catch (DirectoryOperationException ex)
             {
                 logger.Warning("RunPasswordPreflightAsync: The directory refused to describe itself: {Message}", LogSanitiser.Sanitise(ex.Message));
@@ -1234,7 +1217,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
                     "JIM connected to this Connected System and authenticated successfully.")
             };
-            checks.AddRange(await preflight.RunAsync(containerExternalIds, domainRootDn, cancellationToken));
+            checks.AddRange(await preflight.RunAsync(containerExternalIds, LdapPasswordPolicyScope.From(rootDse), cancellationToken));
+
 
             return new PasswordPreflightResult
             {
@@ -1280,7 +1264,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         LdapDirectoryType.ActiveDirectory => "Active Directory",
         LdapDirectoryType.SambaAD => "Samba Active Directory",
         LdapDirectoryType.OpenLDAP => "OpenLDAP",
+        LdapDirectoryType.DirectoryServer389 => "389 Directory Server",
         _ => "an LDAP directory"
+
     };
 
     /// <summary>

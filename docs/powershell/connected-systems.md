@@ -106,15 +106,20 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
 | `passwordHistoryLength` | `int?` | How many previous passwords it remembers and refuses |
 | `maximumPasswordAgeDays` | `int?` | How long a password may live |
 | `minimumPasswordAgeDays` | `int?` | How soon it may be changed again |
-| `fineGrainedPolicySignal` | `string` | `Absent`, `Present` or `CouldNotDetermine` |
+| `policyOverrideSignal` | `string` | `Absent`, `Present` or `CouldNotDetermine`: whether some accounts may be governed by a policy other than this one |
+| `furtherChecksApply` | `bool` | Whether the directory applies checks JIM cannot see, such as a dictionary check, so a password satisfying every figure can still be refused |
+| `discoveryOutcome` | `string?` | `Read`, `NotPublished`, `ConfigurationNotReadable` or `NoPolicyConfigured`; `$null` when nothing has been read yet |
 | `hasAnyDiscoveredConstraint` | `bool` | Whether JIM discovered anything at all |
 
 !!! warning "A null means JIM could not read that rule, not that no such rule exists"
     A directory withholds what a caller may not see by omitting it rather than refusing, so a null minimum
     length does not mean any length is acceptable. Check `hasAnyDiscoveredConstraint` before treating the
-    figures as a description of what the system will accept. Where `fineGrainedPolicySignal` is `Present` or
+    figures as a description of what the system will accept. Where `policyOverrideSignal` is `Present` or
     `CouldNotDetermine`, the figures are a floor rather than a guarantee, because some accounts may be governed
-    by a stricter policy.
+    by a stricter policy (Active Directory's Fine-Grained Password Policies, OpenLDAP's per-entry policy
+    subentries, 389 Directory Server's subtree policies). Where nothing was discovered, `discoveryOutcome` says
+    why, and whether there is anything to do about it: `NotPublished` means the directory has nothing to read,
+    `ConfigurationNotReadable` means the account JIM connects as needs read access to the server configuration.
 
 ### Get-JIMConnectedSystemPasswordSynchronisation
 
