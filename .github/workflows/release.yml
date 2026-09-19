@@ -156,6 +156,10 @@ jobs:
             VERSION=${{ steps.version.outputs.VERSION }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
+          # Rebuild the base stage uncached so its apt-get upgrade applies what the noble archive
+          # holds today, not what it held when the cached layer was last built (see the same
+          # setting on the scan-images job in ci.yml). The SDK build stage still comes from cache.
+          no-cache-filters: base
 
       # Phase 3: Container vulnerability scanning
       - name: Scan image for vulnerabilities
