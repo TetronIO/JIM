@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
@@ -70,7 +71,9 @@ public class PasswordChangeOutcomesTests
             (_, _, _) => Task.CompletedTask,
             _ => Task.CompletedTask,
             _ => Task.CompletedTask,
-            (_, _) => Task.CompletedTask);
+            (_, _) => Task.CompletedTask,
+            new PasswordGeneratorService(),
+            () => new TestCredentialProtection());
     }
 
     private async Task<PendingPasswordChange> RowAsync(int connectedSystemId, Action<PendingPasswordChange>? adjust = null)
@@ -173,6 +176,30 @@ public class PasswordChangeOutcomesTests
     {
         _targets.Single(t => t.ConnectedSystemId == CorporateAdId).Enabled = false;
         await RowAsync(CorporateAdId, r => r.Origin = PendingPasswordChangeOrigin.Explicit);
+
+        var outcomes = await _server.GetChangeOutcomesAsync(_changeActivity!.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes!.Targets.Single().State, Is.EqualTo(PasswordChangeTargetState.Queued));
+            Assert.That(outcomes.IsSettled, Is.False, "The Password Delivery Service is about to claim it; a caller can wait for that.");
+        }
+    }
+
+    /// <summary>
+    /// Decision D1, widened by #1697: a Provisioned row's account is already named, exactly like an
+    /// explicit set, so it is delivered on a paused system rather than held.
+    /// </summary>
+    [Test]
+    public async Task GetChangeOutcomesAsync_ProvisionedRowOnAPausedSystem_IsQueuedNotHeldAsync()
+    {
+        _targets.Single(t => t.ConnectedSystemId == CorporateAdId).Enabled = false;
+        await RowAsync(CorporateAdId, r =>
+        {
+            r.Origin = PendingPasswordChangeOrigin.Provisioned;
+            r.EncryptedPassword = null;
+            r.SyncRuleId = 500;
+        });
 
         var outcomes = await _server.GetChangeOutcomesAsync(_changeActivity!.Id);
 

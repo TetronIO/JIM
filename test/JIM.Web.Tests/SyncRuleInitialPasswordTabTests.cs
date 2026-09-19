@@ -64,7 +64,7 @@ public class SyncRuleInitialPasswordTabTests : JimComponentTestContext
             .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
             .ReturnsAsync(CreateFileConnectorConnectedSystem());
         mockSyncRepo
-            .Setup(r => r.GetParkedInitialPasswordReasonsAsync(SyncRuleId))
+            .Setup(r => r.GetParkedProvisionedPasswordReasonsAsync(SyncRuleId))
             .ReturnsAsync([]);
 
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));

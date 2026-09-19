@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -81,13 +83,16 @@ public class PasswordSynchronisationQueueDatabaseTests
     public async Task QueuePasswordChangesAsync_PersistsEveryFieldAsync()
     {
         var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
         var createdAt = new DateTime(2026, 8, 20, 9, 0, 0, DateTimeKind.Utc);
         var change = new PendingPasswordChange
         {
             MetaverseObjectId = mvoId,
             ConnectedSystemId = systemId,
             ConnectedSystemObjectId = csoId,
-            EncryptedPassword = "$JIMPW$v1$ciphertext",
+            // Null rather than a ciphertext, matching a Provisioned row: its password is resolved from
+            // SyncRuleId's settings at each attempt, never stored on the row (#1697).
+            EncryptedPassword = null,
             ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
             Status = PendingPasswordChangeStatus.Pending,
             FailureReason = PasswordSetFailureReason.Transient,
@@ -102,7 +107,8 @@ public class PasswordSynchronisationQueueDatabaseTests
             CancelledById = Guid.NewGuid(),
             CancelledByName = "Ada Lovelace",
             ClaimedAt = createdAt.AddMinutes(3),
-            ClaimedBy = "worker-1a2b3c4d"
+            ClaimedBy = "worker-1a2b3c4d",
+            SyncRuleId = syncRuleId
         };
 
         await using (var write = NewContext())
@@ -116,7 +122,7 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.MetaverseObjectId, Is.EqualTo(mvoId));
             Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
             Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
-            Assert.That(stored.EncryptedPassword, Is.EqualTo("$JIMPW$v1$ciphertext"));
+            Assert.That(stored.EncryptedPassword, Is.Null);
             Assert.That(stored.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
             Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
             Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
@@ -132,6 +138,47 @@ public class PasswordSynchronisationQueueDatabaseTests
             Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
             Assert.That(stored.ClaimedAt, Is.EqualTo(change.ClaimedAt));
             Assert.That(stored.ClaimedBy, Is.EqualTo("worker-1a2b3c4d"));
+            Assert.That(stored.SyncRuleId, Is.EqualTo(syncRuleId));
+        }
+    }
+
+    /// <summary>
+    /// An administrator's own set replaces a provisioned row's link to the rule that generated it: the
+    /// administrator's password has nothing left to generate from (#1697).
+    /// </summary>
+    [Test]
+    public async Task QueuePasswordChangesAsync_ExplicitSetOverAProvisionedRow_ClearsSyncRuleIdAndCarriesThePasswordAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+
+        var provisioned = NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([provisioned]);
+
+        var explicitSet = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoId,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            EncryptedPassword = "$JIMPW$v1$administrator-set",
+            Origin = PendingPasswordChangeOrigin.Explicit,
+            EnableAccount = true,
+            CreatedAt = DateTime.UtcNow.AddMinutes(1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(1).AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([explicitSet]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That(stored.SyncRuleId, Is.Null, "The administrator's own password has nothing left to generate from.");
+            Assert.That(stored.EncryptedPassword, Is.EqualTo("$JIMPW$v1$administrator-set"));
         }
     }
 
@@ -256,7 +303,7 @@ public class PasswordSynchronisationQueueDatabaseTests
         PendingPasswordChange change;
         await using (var claim = NewContext())
             change = (await new PostgresDataRepository(claim).Sync.ClaimDuePasswordChangesAsync(
-                systemId, "worker-1a2b3c4d", DateTime.UtcNow, PendingPasswordChange.ClaimLease, 10, explicitOnly: false)).Single();
+                systemId, "worker-1a2b3c4d", DateTime.UtcNow, PendingPasswordChange.ClaimLease, 10, excludePropagated: false)).Single();
 
         // The account is resolved on the attempt, which is how a change queued before provisioning gains one; the
         // outcome goes through the model's own transition, as the lane's does, so the claim ends with it.
@@ -300,7 +347,7 @@ public class PasswordSynchronisationQueueDatabaseTests
 
         int expired;
         await using (var write = NewContext())
-            expired = await new PostgresDataRepository(write).Sync.ExpirePasswordChangesAsync(systemId, now, explicitOnly: false);
+            expired = await new PostgresDataRepository(write).Sync.ExpirePasswordChangesAsync(systemId, now, excludePropagated: false);
 
         await using var verify = NewContext();
         var stored = await verify.PendingPasswordChanges.AsNoTracking().ToListAsync();
@@ -414,12 +461,12 @@ public class PasswordSynchronisationQueueDatabaseTests
         ActivityId = Guid.NewGuid()
     };
 
-    private async Task<(int SystemId, Guid MetaverseObjectId, Guid ConnectedSystemObjectId)> SeedSystemIdentityAndAccountAsync()
+    private async Task<(int SystemId, Guid MetaverseObjectId, Guid ConnectedSystemObjectId)> SeedSystemIdentityAndAccountAsync(string name = "Corporate AD")
     {
         await using var seed = NewContext();
 
-        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true, SupportsPasswordSet = true };
-        var system = new ConnectedSystem { Name = "Corporate AD", ConnectorDefinition = connectorDefinition };
+        var connectorDefinition = new ConnectorDefinition { Name = $"{name} Connector", BuiltIn = true, SupportsPasswordSet = true };
+        var system = new ConnectedSystem { Name = name, ConnectorDefinition = connectorDefinition };
         var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
         var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = false };
         seed.AddRange(connectorDefinition, system, csType, mvType);
@@ -470,6 +517,69 @@ public class PasswordSynchronisationQueueDatabaseTests
         await seed.SaveChangesAsync();
         return mvo.Id;
     }
+
+    /// <summary>
+    /// A provisioning Synchronisation Rule over an already-seeded Connected System, following the same pattern
+    /// as <c>InitialPasswordProvisioningDatabaseTests.SeedSystemAndRuleAsync</c>. Returns the rule's id.
+    /// </summary>
+    private async Task<int> SeedSyncRuleAsync(int systemId)
+    {
+        await using var seed = NewContext();
+        var csType = await seed.ConnectedSystemObjectTypes.SingleAsync(t => t.ConnectedSystemId == systemId);
+        var mvType = await seed.MetaverseObjectTypes.FirstAsync();
+
+        var syncRule = new SyncRule
+        {
+            Name = "Provision Users",
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectTypeId = csType.Id,
+            MetaverseObjectTypeId = mvType.Id,
+            ProvisionToConnectedSystem = true
+        };
+        seed.SyncRules.Add(syncRule);
+        await seed.SaveChangesAsync();
+        return syncRule.Id;
+    }
+
+    /// <summary>
+    /// A second Connected System Object on an already-seeded system, for the "account deleted and re-provisioned"
+    /// staging scenario: the same identity and system, a different account.
+    /// </summary>
+    private async Task<Guid> SeedAdditionalConnectedSystemObjectAsync(int systemId)
+    {
+        await using var seed = NewContext();
+        var csType = await seed.ConnectedSystemObjectTypes.SingleAsync(t => t.ConnectedSystemId == systemId);
+        var externalIdAttribute = await seed.ConnectedSystemAttributes.SingleAsync(a => a.ConnectedSystemObjectType.Id == csType.Id);
+
+        var cso = new ConnectedSystemObject
+        {
+            TypeId = csType.Id,
+            ConnectedSystemId = systemId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            ExternalIdAttributeId = externalIdAttribute.Id
+        };
+        seed.Add(cso);
+        await seed.SaveChangesAsync();
+        return cso.Id;
+    }
+
+    /// <summary>
+    /// A Provisioned change ready to offer to <c>StageProvisionedPasswordChangesAsync</c>: no password value, the
+    /// provisioning rule set, everything else the caller wants to vary.
+    /// </summary>
+    private static PendingPasswordChange NewProvisionedChange(Guid mvoId, int systemId, Guid csoId, int syncRuleId, Guid activityId, DateTime createdAt) => new()
+    {
+        MetaverseObjectId = mvoId,
+        ConnectedSystemId = systemId,
+        ConnectedSystemObjectId = csoId,
+        EncryptedPassword = null,
+        Origin = PendingPasswordChangeOrigin.Provisioned,
+        SyncRuleId = syncRuleId,
+        CreatedAt = createdAt,
+        ExpiresAt = createdAt.AddDays(7),
+        ActivityId = activityId
+    };
 
     /// <summary>
     /// The list projection resolves both names and, deliberately, has nowhere to carry the password.
@@ -745,6 +855,568 @@ public class PasswordSynchronisationQueueDatabaseTests
                 "a delivery pass would step over the system, so nothing about this change is due");
         }
     }
+
+    #region staging provisioned passwords (#1697)
+
+    /// <summary>
+    /// The raw-SQL write path's own round trip: every field a Provisioned row can carry survives, including the
+    /// null <see cref="PendingPasswordChange.EncryptedPassword"/> and the provisioning rule.
+    /// </summary>
+    [Test]
+    public async Task StageProvisionedPasswordChangesAsync_RoundTripsEveryFieldAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var createdAt = new DateTime(2026, 9, 1, 9, 0, 0, DateTimeKind.Utc);
+        var change = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoId,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            EncryptedPassword = null,
+            ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+            Status = PendingPasswordChangeStatus.Pending,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = syncRuleId,
+            CreatedAt = createdAt,
+            ExpiresAt = createdAt.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+
+        List<ProvisionedPasswordStagingOutcome> outcomes;
+        await using (var write = NewContext())
+            outcomes = await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([change]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes, Has.Count.EqualTo(1));
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Inserted));
+            Assert.That(outcomes[0].RowId, Is.EqualTo(change.Id));
+            Assert.That(outcomes[0].RequestedId, Is.EqualTo(change.Id));
+            Assert.That(stored.MetaverseObjectId, Is.EqualTo(mvoId));
+            Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
+            Assert.That(stored.EncryptedPassword, Is.Null);
+            Assert.That(stored.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(stored.SyncRuleId, Is.EqualTo(syncRuleId));
+            Assert.That(stored.CreatedAt, Is.EqualTo(createdAt));
+            Assert.That(stored.ExpiresAt, Is.EqualTo(change.ExpiresAt));
+            Assert.That(stored.ActivityId, Is.EqualTo(change.ActivityId));
+        }
+    }
+
+    /// <summary>
+    /// A pending propagated change is the person's real password, still on its way; the provisioned first
+    /// password loses, and nothing is written. The wait is released anyway, because the account it was waiting
+    /// for now exists.
+    /// </summary>
+    [Test]
+    public async Task StageProvisionedPasswordChangesAsync_ConflictWithAPendingPropagatedRow_LeavesItAndMakesItDueNowAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var existing = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoId,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = null,
+            EncryptedPassword = "$JIMPW$v1$propagated",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid(),
+            NextRetryAt = DateTime.UtcNow.AddMinutes(10)
+        };
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([existing]);
+
+        var provisioned = NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+
+        List<ProvisionedPasswordStagingOutcome> outcomes;
+        await using (var write = NewContext())
+            outcomes = await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([provisioned]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Coalesced));
+            Assert.That(outcomes[0].RowId, Is.EqualTo(Guid.Empty));
+            Assert.That(stored.Id, Is.EqualTo(existing.Id), "The account's real password wins; nothing about it changes identity.");
+            Assert.That(stored.EncryptedPassword, Is.EqualTo("$JIMPW$v1$propagated"));
+            Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(stored.NextRetryAt, Is.Null, "Released to run now that the account it was waiting for exists.");
+        }
+    }
+
+    /// <summary>
+    /// A parked row is an administrator's to resolve, not a wait to release: it carries no scheduled retry to
+    /// clear, so this conflict leaves it exactly as it was.
+    /// </summary>
+    [Test]
+    public async Task StageProvisionedPasswordChangesAsync_ConflictWithAParkedRow_LeavesItAloneAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var existing = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoId,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            EncryptedPassword = "$JIMPW$v1$parked",
+            Origin = PendingPasswordChangeOrigin.Explicit,
+            Status = PendingPasswordChangeStatus.Parked,
+            FailureReason = PasswordSetFailureReason.PolicyRejection,
+            TargetMessage = "Password too short",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([existing]);
+
+        var provisioned = NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+
+        List<ProvisionedPasswordStagingOutcome> outcomes;
+        await using (var write = NewContext())
+            outcomes = await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([provisioned]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Coalesced));
+            Assert.That(outcomes[0].RowId, Is.EqualTo(Guid.Empty));
+            Assert.That(stored.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+            Assert.That(stored.NextRetryAt, Is.Null, "Untouched: there was nothing scheduled to clear.");
+            Assert.That(stored.TargetMessage, Is.EqualTo("Password too short"));
+        }
+    }
+
+    /// <summary>
+    /// An expired row carries a dead password; the provisioned first password is what the account gets instead.
+    /// The row keeps its own id, so a caller must adopt it for anything it does with the change afterwards.
+    /// </summary>
+    [Test]
+    public async Task StageProvisionedPasswordChangesAsync_ConflictWithAnExpiredRow_SupersedesAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var existing = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoId,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            EncryptedPassword = "$JIMPW$v1$stale",
+            Status = PendingPasswordChangeStatus.Expired,
+            CreatedAt = DateTime.UtcNow.AddDays(-10),
+            ExpiresAt = DateTime.UtcNow.AddDays(-3),
+            ActivityId = Guid.NewGuid()
+        };
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([existing]);
+
+        var provisionedActivityId = Guid.NewGuid();
+        var provisioned = NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, provisionedActivityId, DateTime.UtcNow);
+        var requestedId = provisioned.Id;
+
+        List<ProvisionedPasswordStagingOutcome> outcomes;
+        await using (var write = NewContext())
+            outcomes = await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([provisioned]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Superseded));
+            Assert.That(outcomes[0].RowId, Is.EqualTo(existing.Id));
+            Assert.That(outcomes[0].RequestedId, Is.EqualTo(requestedId));
+            Assert.That(provisioned.Id, Is.EqualTo(existing.Id), "The caller must hold the row's id, not the one it offered.");
+            Assert.That(stored.Id, Is.EqualTo(existing.Id));
+            Assert.That(stored.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(stored.ActivityId, Is.EqualTo(provisionedActivityId));
+            Assert.That(stored.EncryptedPassword, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The account was deleted and re-provisioned: an existing Provisioned row means there is nothing worth
+    /// keeping, so the new row's account and Activity replace it.
+    /// </summary>
+    [Test]
+    public async Task StageProvisionedPasswordChangesAsync_ConflictWithAProvisionedRow_SupersedesAsync()
+    {
+        var (systemId, mvoId, firstCsoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var existing = NewProvisionedChange(mvoId, systemId, firstCsoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow.AddDays(-1));
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([existing]);
+
+        var newCsoId = await SeedAdditionalConnectedSystemObjectAsync(systemId);
+        var newActivityId = Guid.NewGuid();
+        var provisionedAgain = NewProvisionedChange(mvoId, systemId, newCsoId, syncRuleId, newActivityId, DateTime.UtcNow);
+
+        List<ProvisionedPasswordStagingOutcome> outcomes;
+        await using (var write = NewContext())
+            outcomes = await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([provisionedAgain]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ProvisionedPasswordStagingDisposition.Superseded));
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(newCsoId), "the re-provisioned account replaces the deleted one");
+            Assert.That(stored.ActivityId, Is.EqualTo(newActivityId));
+        }
+    }
+
+    /// <summary>
+    /// One statement per row, and one outcome per row in the order offered: a batch mixing all three dispositions
+    /// must not let one row's outcome bleed into another's, or reorder what the caller gets back.
+    /// </summary>
+    [Test]
+    public async Task StageProvisionedPasswordChangesAsync_ReturnsInsertedSupersededAndCoalescedPerRowAsync()
+    {
+        var (systemId, mvoA, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var mvoB = await SeedIdentityAsync();
+        var mvoC = await SeedIdentityAsync();
+
+        var expiredExisting = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoB,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            Status = PendingPasswordChangeStatus.Expired,
+            CreatedAt = DateTime.UtcNow.AddDays(-10),
+            ExpiresAt = DateTime.UtcNow.AddDays(-3),
+            ActivityId = Guid.NewGuid()
+        };
+        var pendingExplicitExisting = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoC,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            EncryptedPassword = "$JIMPW$v1$real",
+            Origin = PendingPasswordChangeOrigin.Explicit,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([expiredExisting, pendingExplicitExisting]);
+
+        var toInsert = NewProvisionedChange(mvoA, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+        var toSupersede = NewProvisionedChange(mvoB, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+        var toCoalesce = NewProvisionedChange(mvoC, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+
+        List<ProvisionedPasswordStagingOutcome> outcomes;
+        await using (var write = NewContext())
+            outcomes = await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([toInsert, toSupersede, toCoalesce]);
+
+        Assert.That(outcomes.Select(o => o.Disposition), Is.EqualTo(new[]
+        {
+            ProvisionedPasswordStagingDisposition.Inserted,
+            ProvisionedPasswordStagingDisposition.Superseded,
+            ProvisionedPasswordStagingDisposition.Coalesced
+        }), "One outcome per row, in the order offered.");
+    }
+
+    /// <summary>
+    /// Deleting the provisioning Synchronisation Rule must not erase the fact that an account is still owed a
+    /// first password; that is a fact about the account, not about the rule.
+    /// </summary>
+    [Test]
+    public async Task DeletingTheSyncRule_NullsSyncRuleIdAndKeepsTheRowAsync()
+    {
+        var (systemId, mvoId, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var syncRuleId = await SeedSyncRuleAsync(systemId);
+        var change = NewProvisionedChange(mvoId, systemId, csoId, syncRuleId, Guid.NewGuid(), DateTime.UtcNow);
+
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.StageProvisionedPasswordChangesAsync([change]);
+
+        await using (var delete = NewContext())
+        {
+            delete.SyncRules.Remove(await delete.SyncRules.SingleAsync(sr => sr.Id == syncRuleId));
+            await delete.SaveChangesAsync();
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingPasswordChanges.AsNoTracking().SingleOrDefaultAsync(c => c.Id == change.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored, Is.Not.Null, "deleting the rule must not delete the account's outstanding first password");
+            Assert.That(stored!.SyncRuleId, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The Activity write path detaches what it persists, so the run-long Worker context does not accumulate one
+    /// entry per delivered password over the course of a run.
+    /// </summary>
+    [Test]
+    public async Task CreateActivitiesAsync_PersistsCompletedSystemAttributedActivitiesAsync()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystem,
+            Status = ActivityStatus.Complete,
+            InitiatedByType = ActivityInitiatorType.System,
+            Message = "Provisioned password delivered"
+        };
+
+        await using var write = NewContext();
+        await new PostgresDataRepository(write).Sync.CreateActivitiesAsync([activity]);
+
+        Assert.That(write.ChangeTracker.Entries().Count(), Is.Zero, "the run-long context must not accumulate these");
+
+        await using var verify = NewContext();
+        var stored = await verify.Activities.AsNoTracking().SingleAsync(a => a.Id == activity.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(stored.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+            Assert.That(stored.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystem));
+        }
+    }
+
+    /// <summary>
+    /// Releasing is scoped to the one rule's Provisioned rows: another rule's parked row, and a parked Explicit
+    /// row on the same system, are both none of this release's business.
+    /// </summary>
+    [Test]
+    public async Task ReleaseParkedProvisionedPasswordChangesAsync_ReleasesOnlyThatRulesProvisionedRowsAsync()
+    {
+        var (systemA, mvoA, csoA) = await SeedSystemIdentityAndAccountAsync("System A");
+        var ruleA = await SeedSyncRuleAsync(systemA);
+        var (systemB, mvoB, csoB) = await SeedSystemIdentityAndAccountAsync("System B");
+        var ruleB = await SeedSyncRuleAsync(systemB);
+        var mvoC = await SeedIdentityAsync();
+
+        var releasable = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoA,
+            ConnectedSystemId = systemA,
+            ConnectedSystemObjectId = csoA,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = ruleA,
+            Status = PendingPasswordChangeStatus.Parked,
+            FailureReason = PasswordSetFailureReason.PolicyRejection,
+            TargetMessage = "Password too short",
+            AttemptCount = 3,
+            ClaimedAt = DateTime.UtcNow,
+            ClaimedBy = "worker-a",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        var otherRulesRow = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoB,
+            ConnectedSystemId = systemB,
+            ConnectedSystemObjectId = csoB,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = ruleB,
+            Status = PendingPasswordChangeStatus.Parked,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        var explicitOnSameSystem = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoC,
+            ConnectedSystemId = systemA,
+            Origin = PendingPasswordChangeOrigin.Explicit,
+            Status = PendingPasswordChangeStatus.Parked,
+            EncryptedPassword = "$JIMPW$v1$explicit",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([releasable, otherRulesRow, explicitOnSameSystem]);
+
+        await using var ctx = NewContext();
+        var released = await new PostgresDataRepository(ctx).Sync.ReleaseParkedProvisionedPasswordChangesAsync(ruleA);
+
+        await using var verify = NewContext();
+        var releasedRow = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync(c => c.Id == releasable.Id);
+        var otherRuleRow = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync(c => c.Id == otherRulesRow.Id);
+        var explicitRow = await verify.PendingPasswordChanges.AsNoTracking().SingleAsync(c => c.Id == explicitOnSameSystem.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(released, Is.EqualTo(1));
+            Assert.That(releasedRow.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(releasedRow.AttemptCount, Is.Zero);
+            Assert.That(releasedRow.NextRetryAt, Is.Null);
+            Assert.That(releasedRow.FailureReason, Is.Null);
+            Assert.That(releasedRow.TargetMessage, Is.Null);
+            Assert.That(releasedRow.ClaimedAt, Is.Null);
+            Assert.That(releasedRow.ClaimedBy, Is.Null);
+            Assert.That(otherRuleRow.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked), "a different rule's own parked row is not this rule's to release");
+            Assert.That(explicitRow.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked), "an administrator's own set is not provisioning work");
+        }
+    }
+
+    /// <summary>
+    /// Parked and expired are reported apart: one is fixed by correcting the rule's settings, the other cannot
+    /// be fixed there at all. A rule with neither is absent rather than present with zeroes.
+    /// </summary>
+    [Test]
+    public async Task GetProvisionedPasswordAttentionBySyncRuleAsync_CountsParkedAndExpiredSeparatelyAsync()
+    {
+        var (systemId, mvoA, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var ruleWithAttention = await SeedSyncRuleAsync(systemId);
+        var ruleSettled = await SeedSyncRuleAsync(systemId);
+        var mvoB = await SeedIdentityAsync();
+        var mvoC = await SeedIdentityAsync();
+
+        var parked = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoA,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = ruleWithAttention,
+            Status = PendingPasswordChangeStatus.Parked,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        var expired = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoB,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = ruleWithAttention,
+            Status = PendingPasswordChangeStatus.Expired,
+            CreatedAt = DateTime.UtcNow.AddDays(-10),
+            ExpiresAt = DateTime.UtcNow.AddDays(-3),
+            ActivityId = Guid.NewGuid()
+        };
+        var settledElsewhere = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoC,
+            ConnectedSystemId = systemId,
+            ConnectedSystemObjectId = csoId,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = ruleSettled,
+            Status = PendingPasswordChangeStatus.Pending,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync([parked, expired, settledElsewhere]);
+
+        await using var ctx = NewContext();
+        var attention = await new PostgresDataRepository(ctx).Sync.GetProvisionedPasswordAttentionBySyncRuleAsync([ruleWithAttention, ruleSettled]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attention[ruleWithAttention].ParkedCount, Is.EqualTo(1));
+            Assert.That(attention[ruleWithAttention].ExpiredCount, Is.EqualTo(1));
+            Assert.That(attention.ContainsKey(ruleSettled), Is.False, "a settled rule reports nothing rather than zeroes");
+        }
+    }
+
+    /// <summary>
+    /// Rejection reasons are grouped by message, biggest group first: an administrator is fixing a setting, not
+    /// reading a list of accounts.
+    /// </summary>
+    [Test]
+    public async Task GetParkedProvisionedPasswordReasonsAsync_GroupsByMessageBiggestFirstAsync()
+    {
+        var (systemId, mvoA, csoId) = await SeedSystemIdentityAndAccountAsync();
+        var ruleId = await SeedSyncRuleAsync(systemId);
+        var mvoB = await SeedIdentityAsync();
+        var mvoC = await SeedIdentityAsync();
+
+        var earliestTooShort = new DateTime(2026, 9, 1, 9, 0, 0, DateTimeKind.Utc);
+        var laterTooShort = new DateTime(2026, 9, 3, 9, 0, 0, DateTimeKind.Utc);
+        var policyViolationSeenAt = new DateTime(2026, 9, 2, 9, 0, 0, DateTimeKind.Utc);
+
+        var changes = new[]
+        {
+            new PendingPasswordChange
+            {
+                MetaverseObjectId = mvoA,
+                ConnectedSystemId = systemId,
+                ConnectedSystemObjectId = csoId,
+                Origin = PendingPasswordChangeOrigin.Provisioned,
+                SyncRuleId = ruleId,
+                Status = PendingPasswordChangeStatus.Parked,
+                FailureReason = PasswordSetFailureReason.PolicyRejection,
+                TargetMessage = "Password too short",
+                LastAttemptedAt = earliestTooShort,
+                CreatedAt = DateTime.UtcNow.AddDays(-5),
+                ExpiresAt = DateTime.UtcNow.AddDays(2),
+                ActivityId = Guid.NewGuid()
+            },
+            new PendingPasswordChange
+            {
+                MetaverseObjectId = mvoB,
+                ConnectedSystemId = systemId,
+                ConnectedSystemObjectId = csoId,
+                Origin = PendingPasswordChangeOrigin.Provisioned,
+                SyncRuleId = ruleId,
+                Status = PendingPasswordChangeStatus.Parked,
+                FailureReason = PasswordSetFailureReason.PolicyRejection,
+                TargetMessage = "Password too short",
+                LastAttemptedAt = laterTooShort,
+                CreatedAt = DateTime.UtcNow.AddDays(-5),
+                ExpiresAt = DateTime.UtcNow.AddDays(2),
+                ActivityId = Guid.NewGuid()
+            },
+            new PendingPasswordChange
+            {
+                MetaverseObjectId = mvoC,
+                ConnectedSystemId = systemId,
+                ConnectedSystemObjectId = csoId,
+                Origin = PendingPasswordChangeOrigin.Provisioned,
+                SyncRuleId = ruleId,
+                Status = PendingPasswordChangeStatus.Parked,
+                FailureReason = PasswordSetFailureReason.UnsupportedOperation,
+                TargetMessage = "Policy violation",
+                LastAttemptedAt = policyViolationSeenAt,
+                CreatedAt = DateTime.UtcNow.AddDays(-5),
+                ExpiresAt = DateTime.UtcNow.AddDays(2),
+                ActivityId = Guid.NewGuid()
+            }
+        };
+
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.QueuePasswordChangesAsync(changes);
+
+        await using var ctx = NewContext();
+        var reasons = await new PostgresDataRepository(ctx).Sync.GetParkedProvisionedPasswordReasonsAsync(ruleId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reasons, Has.Count.EqualTo(2));
+            Assert.That(reasons[0].TargetMessage, Is.EqualTo("Password too short"));
+            Assert.That(reasons[0].AccountCount, Is.EqualTo(2));
+            Assert.That(reasons[0].FirstSeenAt, Is.EqualTo(earliestTooShort));
+            Assert.That(reasons[1].TargetMessage, Is.EqualTo("Policy violation"));
+            Assert.That(reasons[1].AccountCount, Is.EqualTo(1));
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// Seeds one queued change, optionally adjusted, and returns its identifier.

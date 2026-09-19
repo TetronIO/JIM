@@ -18,7 +18,10 @@ using SyncRepository = JIM.InMemoryData.SyncRepository;
 namespace JIM.Worker.Tests.OutboundSync;
 
 /// <summary>
-/// Staging of initial passwords during export execution (#1121).
+/// Staging of a first password during export execution (#1121, #1697): a Create that provisions an account whose
+/// Synchronisation Rule asks for an initial password writes one row onto the queued password pipeline
+/// (<see cref="PendingPasswordChange"/>, <see cref="PendingPasswordChangeOrigin.Provisioned"/>) plus a parent
+/// Activity.
 /// <para>
 /// The behaviour under test is a containment rule as much as a feature. An account that has been created in a
 /// Connected System is created; nothing about its password can be allowed to alter that record. Half of these
@@ -120,9 +123,9 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
-    /// A Create exported by a Synchronisation Rule that asks for an initial password leaves a record that the
-    /// account is owed one, carrying enough to attempt delivery later: the account, its Connected System, and
-    /// the rule whose settings govern the password.
+    /// A Create exported by a Synchronisation Rule that asks for an initial password leaves a queued
+    /// <see cref="PendingPasswordChangeOrigin.Provisioned"/> change, carrying enough to attempt delivery later:
+    /// the account, its Connected System, and the rule whose settings govern the password.
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_StagesTheAccountAsync()
@@ -132,17 +135,80 @@ public class InitialPasswordStagingTests
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
         Assert.That(result.SuccessCount, Is.EqualTo(1));
-        Assert.That(SyncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1));
 
-        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        var staged = SyncRepo.PendingPasswordChanges.Values.Single();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(staged.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
             Assert.That(staged.ConnectedSystemId, Is.EqualTo(system.Id));
+            Assert.That(staged.MetaverseObjectId, Is.EqualTo(cso.MetaverseObjectId));
             Assert.That(staged.SyncRuleId, Is.EqualTo(ProvisioningRuleId));
-            Assert.That(staged.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
+            Assert.That(staged.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
             Assert.That(staged.AttemptCount, Is.Zero, "nothing has been attempted at staging time");
             Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A provisioned row carries no password of its own: it is generated from the Synchronisation Rule's
+    /// initial-password settings at delivery time, not at staging time.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_StagesARowWithOriginProvisionedAndNoPasswordAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var staged = SyncRepo.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(staged.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(staged.EncryptedPassword, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The Synchronisation Rule that provisioned the account, not just the account itself, is stamped onto the
+    /// row: it is what a delivery attempt reads to resolve the password.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_SyncRuleIdIsStampedFromTheProvisioningRuleAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var staged = SyncRepo.PendingPasswordChanges.Values.Single();
+        Assert.That(staged.SyncRuleId, Is.EqualTo(ProvisioningRuleId));
+    }
+
+    /// <summary>
+    /// Staging also writes a parent Activity for the change, already complete: nobody is waiting at a screen for
+    /// delivery, which happens on an unrelated later pass.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_CreatesACompletedParentActivityNamingTheSystemAsync()
+    {
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var staged = SyncRepo.PendingPasswordChanges.Values.Single();
+        var activity = SyncRepo.Activities[staged.ActivityId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.TargetType, Is.EqualTo(ActivityTargetType.PasswordSynchronisation));
+            Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetPassword));
+            Assert.That(activity.TargetContext, Is.EqualTo("Provisioned"));
+            Assert.That(activity.TargetName, Is.EqualTo(system.Name));
+            Assert.That(activity.MetaverseObjectId, Is.EqualTo(cso.MetaverseObjectId));
+            Assert.That(activity.ConnectedSystemId, Is.EqualTo(system.Id));
+            Assert.That(activity.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(activity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(activity.Message, Does.Contain(system.Name));
         }
     }
 
@@ -160,7 +226,7 @@ public class InitialPasswordStagingTests
         await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
         var after = DateTime.UtcNow;
 
-        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        var staged = SyncRepo.PendingPasswordChanges.Values.Single();
         Assert.That(staged.ExpiresAt, Is.InRange(before.AddDays(30), after.AddDays(30)));
     }
 
@@ -177,13 +243,13 @@ public class InitialPasswordStagingTests
         await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
         var after = DateTime.UtcNow;
 
-        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        var staged = SyncRepo.PendingPasswordChanges.Values.Single();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(system.InitialPasswordTimeToLive, Is.Null);
             Assert.That(staged.ExpiresAt, Is.InRange(
-                before.Add(PendingInitialPassword.DefaultTimeToLive),
-                after.Add(PendingInitialPassword.DefaultTimeToLive)));
+                before.Add(PendingPasswordChange.DefaultTimeToLive),
+                after.Add(PendingPasswordChange.DefaultTimeToLive)));
         }
     }
 
@@ -202,7 +268,7 @@ public class InitialPasswordStagingTests
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
         Assert.That(result.SuccessCount, Is.EqualTo(1));
-        Assert.That(SyncRepo.PendingInitialPasswords, Is.Empty);
+        Assert.That(SyncRepo.PendingPasswordChanges, Is.Empty);
         Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
     }
 
@@ -219,7 +285,7 @@ public class InitialPasswordStagingTests
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
         Assert.That(result.SuccessCount, Is.EqualTo(1));
-        Assert.That(SyncRepo.PendingInitialPasswords, Is.Empty);
+        Assert.That(SyncRepo.PendingPasswordChanges, Is.Empty);
     }
 
     /// <summary>
@@ -233,7 +299,7 @@ public class InitialPasswordStagingTests
         var result = await ExportAsync(system, ConnectedSystemExportResult.Failed("The directory refused the object."));
 
         Assert.That(result.FailedCount, Is.EqualTo(1));
-        Assert.That(SyncRepo.PendingInitialPasswords, Is.Empty);
+        Assert.That(SyncRepo.PendingPasswordChanges, Is.Empty);
     }
 
     /// <summary>
@@ -249,7 +315,7 @@ public class InitialPasswordStagingTests
     public async Task ExecuteExportsAsync_WhenStagingFails_TheExportStaysSuccessfulAsync()
     {
         var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
-        SyncRepo.FailInitialPasswordStagingWith = new InvalidOperationException("The database rejected the work list row.");
+        SyncRepo.FailProvisionedPasswordStagingWith = new InvalidOperationException("The database rejected the work list row.");
 
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
@@ -278,7 +344,7 @@ public class InitialPasswordStagingTests
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
         Assert.That(result.SuccessCount, Is.EqualTo(1));
-        Assert.That(SyncRepo.PendingInitialPasswords, Is.Empty);
+        Assert.That(SyncRepo.PendingPasswordChanges, Is.Empty);
     }
 
     /// <summary>
@@ -300,14 +366,116 @@ public class InitialPasswordStagingTests
         var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
 
         Assert.That(result.SuccessCount, Is.EqualTo(2));
-        Assert.That(SyncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1));
 
-        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        var staged = SyncRepo.PendingPasswordChanges.Values.Single();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(staged.ConnectedSystemObjectId, Is.EqualTo(passwordCso.Id));
             Assert.That(staged.ConnectedSystemObjectId, Is.Not.EqualTo(otherCso.Id));
             Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A provisioned account with no Metaverse Object cannot be queued at all: the queue's coalescing key is
+    /// (Metaverse Object, Connected System), so nothing could ever find such a row again to deliver, supersede,
+    /// or expire it. Counted as a staging failure rather than silently dropped.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_AccountWithNoMetaverseObject_CountsAsAStagingFailureAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, withMetaverseObject: false);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1), "the account was created; nothing about its password can alter that");
+            Assert.That(SyncRepo.PendingPasswordChanges, Is.Empty);
+            Assert.That(result.InitialPasswordStagingFailedCount, Is.EqualTo(1));
+            Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// An existing Pending, Propagated row for the same account and Connected System is the person's real
+    /// password, already on its way: the provisioned change must not overwrite it. Instead, the row is made due
+    /// immediately, since it may have been waiting on this very account to come into existence.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExistingPendingPropagatedRow_IsLeftAndMadeDueNowAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending,
+            nextRetryAt: DateTime.UtcNow.AddMinutes(30));
+        var activityCountBefore = SyncRepo.Activities.Count;
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1));
+        var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Id, Is.EqualTo(existing.Id), "the existing row survives untouched, not replaced");
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Propagated));
+            Assert.That(row.NextRetryAt, Is.Null, "released so it is attempted on the very next delivery pass");
+            Assert.That(SyncRepo.Activities, Has.Count.EqualTo(activityCountBefore), "the row already had its own Activity");
+            Assert.That(result.InitialPasswordsStagedCount, Is.Zero);
+        }
+        Assert.That(cso.Id, Is.Not.EqualTo(existing.ConnectedSystemObjectId));
+    }
+
+    /// <summary>
+    /// An existing Expired row carries a dead password: it must not block the account's first one, so the
+    /// provisioned change takes it over in place.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ExistingExpiredRow_IsSupersededAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Expired);
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1));
+        var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Id, Is.EqualTo(existing.Id), "the row now in the table keeps its own id");
+            Assert.That(row.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(row.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(SyncRepo.Activities, Contains.Key(row.ActivityId));
+        }
+    }
+
+    /// <summary>
+    /// An account deleted and re-provisioned leaves behind a Provisioned row from its first life; the new one
+    /// must win, because the old account and its password no longer exist.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ReprovisionedAccount_SupersedesTheOldProvisionedRowAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        var existing = await SeedExistingChangeAsync(metaverseObjectId, system.Id,
+            PendingPasswordChangeOrigin.Provisioned, PendingPasswordChangeStatus.Parked,
+            connectedSystemObjectId: Guid.NewGuid());
+
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        Assert.That(SyncRepo.PendingPasswordChanges, Has.Count.EqualTo(1));
+        var row = SyncRepo.PendingPasswordChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Id, Is.EqualTo(existing.Id));
+            Assert.That(row.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(row.ConnectedSystemObjectId, Is.EqualTo(cso.Id), "the new account, not the deleted one");
         }
     }
 
@@ -322,7 +490,9 @@ public class InitialPasswordStagingTests
     /// </summary>
     private (ConnectedSystem System, ConnectedSystemObject Cso, PendingExport Export) ArrangeProvisioningCreate(
         bool initialPasswordEnabled,
-        int syncRuleId = ProvisioningRuleId)
+        int syncRuleId = ProvisioningRuleId,
+        bool withMetaverseObject = true,
+        Guid? metaverseObjectId = null)
     {
         var system = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var userType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
@@ -345,7 +515,8 @@ public class InitialPasswordStagingTests
             ConnectedSystemId = system.Id,
             Type = userType,
             TypeId = userType.Id,
-            AttributeValues = []
+            AttributeValues = [],
+            MetaverseObjectId = withMetaverseObject ? metaverseObjectId ?? Guid.NewGuid() : null
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -377,6 +548,37 @@ public class InitialPasswordStagingTests
         SyncRepo.SeedPendingExport(export);
 
         return (system, cso, export);
+    }
+
+    /// <summary>
+    /// Seeds a row already on the queue for a (Metaverse Object, Connected System) key a provisioned change is
+    /// about to be offered against, so the coalescing tests can arrange what it finds there.
+    /// </summary>
+    private async Task<PendingPasswordChange> SeedExistingChangeAsync(
+        Guid metaverseObjectId,
+        int connectedSystemId,
+        PendingPasswordChangeOrigin origin,
+        PendingPasswordChangeStatus status,
+        Guid? connectedSystemObjectId = null,
+        DateTime? nextRetryAt = null)
+    {
+        var existing = new PendingPasswordChange
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = metaverseObjectId,
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemObjectId = connectedSystemObjectId,
+            Origin = origin,
+            Status = status,
+            NextRetryAt = nextRetryAt,
+            EncryptedPassword = origin == PendingPasswordChangeOrigin.Provisioned ? null : "encrypted-value",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+
+        await SyncRepo.QueuePasswordChangesAsync([existing]);
+        return existing;
     }
 
     private Task<ExportExecutionResult> ExportAsync(ConnectedSystem system, ConnectedSystemExportResult exportResult)

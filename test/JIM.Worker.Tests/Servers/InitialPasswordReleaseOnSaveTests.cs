@@ -8,8 +8,10 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using Moq;
 using NUnit.Framework;
+using InMemorySyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Servers;
 
@@ -59,7 +61,7 @@ public class InitialPasswordReleaseOnSaveTests
         // violation that should fail loudly rather than be swallowed.
         _mockCsRepo.Setup(r => r.GetImportMappingTargetMetaverseAttributesAsync(It.IsAny<int>()))
             .ReturnsAsync(new Dictionary<int, int>());
-        _mockSyncRepo.Setup(r => r.ReleaseParkedInitialPasswordsAsync(It.IsAny<int>())).ReturnsAsync(0);
+        _mockSyncRepo.Setup(r => r.ReleaseParkedProvisionedPasswordChangesAsync(It.IsAny<int>())).ReturnsAsync(0);
 
         _initiatedBy = TestUtilities.GetInitiatedBy();
         // Passed explicitly because JimApplication takes the sync repository as its own argument rather than
@@ -130,8 +132,62 @@ public class InitialPasswordReleaseOnSaveTests
     {
         await SaveAsync(stored: Configuration(), saving: Configuration(length: 24));
 
-        _mockSyncRepo.Verify(r => r.ReleaseParkedInitialPasswordsAsync(SyncRuleId), Times.Once);
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(SyncRuleId), Times.Once);
     }
+
+    /// <summary>
+    /// The release is scoped to the queue's own filter (rule, Provisioned origin, Parked status), not just to
+    /// whatever this rule happens to be saving. Run over the real in-memory queue rather than a mock, because the
+    /// filter itself is what is under test here: an administrator's own explicit password on the same Connected
+    /// System, and another rule's parked provisioned accounts, must both survive a save that only ever named one
+    /// rule.
+    /// </summary>
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenTheGeneratorSettingsChange_ReleasesOnlyThatRulesProvisionedRowsAsync()
+    {
+        const int otherSyncRuleId = SyncRuleId + 1;
+        var queue = new InMemorySyncRepository();
+        using var jim = new JimApplication(_mockRepository.Object, syncRepository: queue);
+
+        var thisRulesProvisionedRow = ParkedChange(PendingPasswordChangeOrigin.Provisioned, SyncRuleId);
+        var anotherRulesProvisionedRow = ParkedChange(PendingPasswordChangeOrigin.Provisioned, otherSyncRuleId);
+        var explicitRowOnTheSameSystem = ParkedChange(PendingPasswordChangeOrigin.Explicit, syncRuleId: null);
+        await queue.QueuePasswordChangesAsync([thisRulesProvisionedRow, anotherRulesProvisionedRow, explicitRowOnTheSameSystem]);
+
+        _mockCsRepo.Setup(r => r.GetSyncRuleInitialPasswordAsync(SyncRuleId)).ReturnsAsync(Configuration());
+        var saved = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(Rule(Configuration(length: 24)), _initiatedBy);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(saved, Is.True, "precondition: the Synchronisation Rule must have saved");
+            Assert.That(thisRulesProvisionedRow.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(thisRulesProvisionedRow.NextRetryAt, Is.Null);
+            Assert.That(thisRulesProvisionedRow.FailureReason, Is.Null);
+            Assert.That(thisRulesProvisionedRow.TargetMessage, Is.Null);
+            Assert.That(anotherRulesProvisionedRow.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked),
+                "saving one rule must not release another rule's parked provisioned accounts");
+            Assert.That(explicitRowOnTheSameSystem.Status, Is.EqualTo(PendingPasswordChangeStatus.Parked),
+                "an administrator's own explicit password is not touched by a rule save");
+        }
+    }
+
+    /// <summary>
+    /// One parked queue row, distinguished by origin and Synchronisation Rule so the release test above can tell
+    /// them apart afterwards.
+    /// </summary>
+    private static PendingPasswordChange ParkedChange(PendingPasswordChangeOrigin origin, int? syncRuleId) => new()
+    {
+        MetaverseObjectId = Guid.NewGuid(),
+        ConnectedSystemId = 1,
+        SyncRuleId = syncRuleId,
+        Origin = origin,
+        Status = PendingPasswordChangeStatus.Parked,
+        FailureReason = PasswordSetFailureReason.PolicyRejection,
+        TargetMessage = "The password does not meet the complexity requirements of the domain.",
+        AttemptCount = 3,
+        CreatedAt = DateTime.UtcNow,
+        ExpiresAt = DateTime.UtcNow.AddDays(1)
+    };
 
     /// <summary>
     /// Editing something else on the rule must not set parked accounts retrying. The target has already given
@@ -143,7 +199,7 @@ public class InitialPasswordReleaseOnSaveTests
     {
         await SaveAsync(stored: Configuration(), saving: Configuration());
 
-        _mockSyncRepo.Verify(r => r.ReleaseParkedInitialPasswordsAsync(It.IsAny<int>()), Times.Never);
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(It.IsAny<int>()), Times.Never);
     }
 
     /// <summary>
@@ -155,7 +211,7 @@ public class InitialPasswordReleaseOnSaveTests
     {
         await SaveAsync(stored: null, saving: Configuration());
 
-        _mockSyncRepo.Verify(r => r.ReleaseParkedInitialPasswordsAsync(SyncRuleId), Times.Once);
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(SyncRuleId), Times.Once);
     }
 
     /// <summary>
@@ -167,7 +223,7 @@ public class InitialPasswordReleaseOnSaveTests
     {
         await SaveAsync(stored: null, saving: null);
 
-        _mockSyncRepo.Verify(r => r.ReleaseParkedInitialPasswordsAsync(It.IsAny<int>()), Times.Never);
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(It.IsAny<int>()), Times.Never);
     }
 
     #region an initial password only survives on a rule that can deliver one
@@ -239,7 +295,7 @@ public class InitialPasswordReleaseOnSaveTests
 
         await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(Rule(Configuration(), provisions: false), _initiatedBy);
 
-        _mockSyncRepo.Verify(r => r.ReleaseParkedInitialPasswordsAsync(SyncRuleId), Times.Once);
+        _mockSyncRepo.Verify(r => r.ReleaseParkedProvisionedPasswordChangesAsync(SyncRuleId), Times.Once);
     }
 
     #endregion

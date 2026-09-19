@@ -44,8 +44,8 @@ public class ChangeHistoryRetentionServerTests
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
-        // The cleanup now trims initial-password work records too, which reach the database through the sync
-        // repository rather than the change-history one.
+        // The cleanup also trims terminal Password Synchronisation queue rows, which reach the database
+        // through the sync repository rather than the change-history one.
         _jim = new JimApplication(_repo.Object, syncRepository: _syncRepo.Object);
     }
 
@@ -62,7 +62,6 @@ public class ChangeHistoryRetentionServerTests
         _changeHistoryRepo.Setup(r => r.DeleteExpiredConfigurationChangeActivitiesAsync(cutoffs.ConfigurationChange, 100)).ReturnsAsync(2);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredSecurityEventActivitiesAsync(cutoffs.SecurityEvent, 100)).ReturnsAsync(7);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredPasswordEventActivitiesAsync(cutoffs.PasswordEvent, 100)).ReturnsAsync(11);
-        _syncRepo.Setup(r => r.DeleteTerminalInitialPasswordsAsync(cutoffs.InitialPassword, 100)).ReturnsAsync(9);
         _syncRepo.Setup(r => r.DeleteTerminalPasswordChangesAsync(cutoffs.PasswordEvent, 100)).ReturnsAsync(13);
 
         var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs);
@@ -72,13 +71,10 @@ public class ChangeHistoryRetentionServerTests
             Assert.That(result.ActivitiesDeleted, Is.EqualTo(3));
             Assert.That(result.ConfigurationChangeActivitiesDeleted, Is.EqualTo(2));
             Assert.That(result.SecurityEventActivitiesDeleted, Is.EqualTo(7));
-            Assert.That(result.InitialPasswordWorkRecordsDeleted, Is.EqualTo(9));
             Assert.That(result.PasswordEventActivitiesDeleted, Is.EqualTo(11));
             Assert.That(result.PasswordQueueRecordsDeleted, Is.EqualTo(13));
         }
 
-        _syncRepo.Verify(r => r.DeleteTerminalInitialPasswordsAsync(cutoffs.InitialPassword, 100), Times.Once,
-            "initial-password work records are trimmed at their own cutoff, not the general one");
         _changeHistoryRepo.Verify(r => r.DeleteExpiredActivitiesAsync(cutoffs.General, 100), Times.Once,
             "general Activities are flushed at the general retention cutoff");
         _changeHistoryRepo.Verify(r => r.DeleteExpiredConfigurationChangeActivitiesAsync(cutoffs.ConfigurationChange, 100), Times.Once,
@@ -155,7 +151,6 @@ public class ChangeHistoryRetentionServerTests
         StoreTimeSpanSetting(Constants.SettingKeys.HistoryRetentionPeriod, TimeSpan.FromDays(10));
         StoreTimeSpanSetting(Constants.SettingKeys.ConfigurationChangeRetentionPeriod, TimeSpan.FromDays(20));
         StoreTimeSpanSetting(Constants.SettingKeys.SecurityEventRetentionPeriod, TimeSpan.FromDays(30));
-        StoreTimeSpanSetting(Constants.SettingKeys.InitialPasswordRetentionPeriod, TimeSpan.FromDays(40));
         StoreTimeSpanSetting(Constants.SettingKeys.PasswordEventRetentionPeriod, TimeSpan.FromDays(50));
         _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.HistoryCleanupBatchSize))
             .ReturnsAsync(new ServiceSetting
@@ -174,7 +169,6 @@ public class ChangeHistoryRetentionServerTests
             Assert.That(cutoffs.General, Is.EqualTo(asOf.AddDays(-10)));
             Assert.That(cutoffs.ConfigurationChange, Is.EqualTo(asOf.AddDays(-20)));
             Assert.That(cutoffs.SecurityEvent, Is.EqualTo(asOf.AddDays(-30)));
-            Assert.That(cutoffs.InitialPassword, Is.EqualTo(asOf.AddDays(-40)));
             Assert.That(cutoffs.PasswordEvent, Is.EqualTo(asOf.AddDays(-50)));
             Assert.That(cutoffs.MaxRecordsPerType, Is.EqualTo(250),
                 "the shared cleanup batch size bounds every trim in the pass (requirement 30)");
@@ -273,7 +267,6 @@ public class ChangeHistoryRetentionServerTests
         General = DateTime.UtcNow.AddDays(-90),
         ConfigurationChange = DateTime.UtcNow.AddDays(-3650),
         SecurityEvent = DateTime.UtcNow.AddDays(-365),
-        InitialPassword = DateTime.UtcNow.AddDays(-120),
         PasswordEvent = DateTime.UtcNow.AddDays(-200),
         MaxRecordsPerType = 100
     };

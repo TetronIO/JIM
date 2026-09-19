@@ -20,7 +20,7 @@ internal static class PendingPasswordChangeBulkColumns
         "Id", "MetaverseObjectId", "ConnectedSystemId", "ConnectedSystemObjectId", "EncryptedPassword",
         "ExpiryBehaviour", "Status", "FailureReason", "TargetMessage", "AttemptCount", "NextRetryAt",
         "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId", "CancelledAt", "CancelledById",
-        "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount"
+        "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount", "SyncRuleId"
     ];
 
     /// <summary>
@@ -44,12 +44,17 @@ internal static class PendingPasswordChangeBulkColumns
     /// change's values replace the older's: an administrator's reset replaces a held propagated change and is
     /// delivered as a reset; a later propagated change replaces the reset and carries no enable decision.
     /// </para>
+    /// <para>
+    /// SyncRuleId goes with them for the same reason: it describes the password the row carries, like Origin, so
+    /// a newer row's value (a rule for a provisioned row, or null for anything else) must replace the older one's.
+    /// </para>
     /// </summary>
     internal static readonly string[] PendingPasswordChangesSupersedeUpdate =
     [
         "ConnectedSystemObjectId", "EncryptedPassword", "ExpiryBehaviour", "Status", "FailureReason",
         "TargetMessage", "AttemptCount", "NextRetryAt", "CreatedAt", "LastAttemptedAt", "ExpiresAt", "ActivityId",
-        "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount"
+        "CancelledAt", "CancelledById", "CancelledByName", "ClaimedAt", "ClaimedBy", "Origin", "EnableAccount",
+        "SyncRuleId"
     ];
 
     /// <summary>

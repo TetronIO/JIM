@@ -41,8 +41,7 @@ public static class RunPhaseIcons
         [RunPhaseKeys.ExportExecute] = Icons.Material.Filled.CloudUpload,
         [RunPhaseKeys.ExportDeferred] = Icons.Material.Filled.Replay,
         [RunPhaseKeys.ExportResolveReferences] = Icons.Material.Filled.Link,
-        [RunPhaseKeys.ExportSelectNewContainers] = Icons.Material.Filled.CreateNewFolder,
-        [RunPhaseKeys.ExportDeliverInitialPasswords] = Icons.Material.Filled.Key
+        [RunPhaseKeys.ExportSelectNewContainers] = Icons.Material.Filled.CreateNewFolder
     };
 
     /// <summary>

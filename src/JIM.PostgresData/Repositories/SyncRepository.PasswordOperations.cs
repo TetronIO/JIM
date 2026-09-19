@@ -1,17 +1,40 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace JIM.PostgresData.Repositories;
 
 public partial class SyncRepository
 {
+    /// <inheritdoc />
+    public async Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        return await _context.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .Where(ip => syncRuleIds.Contains(ip.SyncRuleId))
+            .ToDictionaryAsync(ip => ip.SyncRuleId);
+    }
+
+    /// <inheritdoc />
+    public async Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await _context.ConnectedSystemPasswordPolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
     #region Password Synchronisation queue (#1119)
 
     /// <inheritdoc />
@@ -48,7 +71,7 @@ public partial class SyncRepository
                 change.MetaverseObjectId,
                 change.ConnectedSystemId,
                 BulkSqlHelpers.NullableParam(change.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
-                change.EncryptedPassword,
+                BulkSqlHelpers.NullableParam(change.EncryptedPassword, NpgsqlTypes.NpgsqlDbType.Text),
                 (int)change.ExpiryBehaviour,
                 (int)change.Status,
                 BulkSqlHelpers.NullableParam((int?)change.FailureReason, NpgsqlTypes.NpgsqlDbType.Integer),
@@ -65,8 +88,150 @@ public partial class SyncRepository
                 BulkSqlHelpers.NullableParam(change.ClaimedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                 BulkSqlHelpers.NullableParam(change.ClaimedBy, NpgsqlTypes.NpgsqlDbType.Text),
                 (int)change.Origin,
-                BulkSqlHelpers.NullableParam(change.EnableAccount, NpgsqlTypes.NpgsqlDbType.Boolean));
+                BulkSqlHelpers.NullableParam(change.EnableAccount, NpgsqlTypes.NpgsqlDbType.Boolean),
+                BulkSqlHelpers.NullableParam(change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
+    {
+        var staging = changes.ToList();
+        var outcomes = new List<ProvisionedPasswordStagingOutcome>(staging.Count);
+        if (staging.Count == 0)
+            return outcomes;
+
+        foreach (var change in staging.Where(c => c.Id == Guid.Empty))
+            change.Id = Guid.NewGuid();
+
+        // The same coalescing UPSERT as QueuePasswordChangesAsync, one statement per row, but with a narrower
+        // conflict clause: a provisioned row's first password must never overwrite the person's real one. An
+        // existing Pending, Delivering or Parked Explicit/Propagated row is that real password, already on its
+        // way or waiting on a person to fix it, so it wins and the offered change is discarded (no row
+        // returned). An Expired or Cancelled row carries a dead password that must not block the account's
+        // first one, and an existing Provisioned row means the account was deleted and re-provisioned, so in
+        // both cases the new row wins.
+        //
+        // Run through raw Npgsql rather than EF's Database.SqlQueryRaw: EF composes a SqlQuery as a subquery
+        // (SELECT s."Value" FROM (<sql>) AS s), and PostgreSQL refuses a data-modifying statement inside a
+        // subquery (a data-modifying CTE is only allowed at the statement's top level), so an
+        // INSERT ... ON CONFLICT ... RETURNING run that way fails at runtime against real PostgreSQL even
+        // though it type-checks and the in-memory tests pass. ExecuteScalarAsync runs the statement directly:
+        // it returns the returned "Id" when a row was inserted or taken over, and null when the WHERE clause
+        // above filtered the conflicting update out.
+        //
+        // Column lists come from the constants so they cannot drift from the model; the parameter order below
+        // MUST match PendingPasswordChangeBulkColumns.PendingPasswordChanges exactly.
+        var columns = BulkSqlHelpers.ToQuotedList(PendingPasswordChangeBulkColumns.PendingPasswordChanges);
+        var paramNames = Enumerable.Range(0, PendingPasswordChangeBulkColumns.PendingPasswordChanges.Length)
+            .Select(i => $"p{i}")
+            .ToArray();
+        var placeholders = string.Join(", ", paramNames.Select(p => "@" + p));
+        var assignments = string.Join(", ", PendingPasswordChangeBulkColumns.PendingPasswordChangesSupersedeUpdate
+            .Select(c => $"\"{c}\" = EXCLUDED.\"{c}\""));
+
+        var sql = $"""
+            INSERT INTO "PendingPasswordChanges" ({columns}) VALUES ({placeholders})
+            ON CONFLICT ("MetaverseObjectId", "ConnectedSystemId") DO UPDATE SET {assignments}
+            WHERE "PendingPasswordChanges"."Origin" = @origin
+               OR "PendingPasswordChanges"."Status" IN (@expired, @cancelled)
+            RETURNING "Id"
+            """;
+
+        // Releases a propagated change that was held waiting for this exact account to come into existence: the
+        // account now does (this batch is staging its first password), so the change is due immediately rather
+        // than waiting out whatever backoff it was under. A plain top-level UPDATE, so EF's own
+        // ExecuteSqlRawAsync (which does not wrap this in a subquery) is fine for it.
+        const string releaseWaitingSql = """
+            UPDATE "PendingPasswordChanges" SET "NextRetryAt" = NULL
+            WHERE "MetaverseObjectId" = {0} AND "ConnectedSystemId" = {1} AND "Status" = {2} AND "NextRetryAt" IS NOT NULL
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        foreach (var change in staging)
+        {
+            var requestedId = change.Id;
+
+            await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+            command.Parameters.Add(new NpgsqlParameter(paramNames[0], change.Id));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[1], change.MetaverseObjectId));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[2], change.ConnectedSystemId));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[3], NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)change.ConnectedSystemObjectId ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[4], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.EncryptedPassword ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[5], (int)change.ExpiryBehaviour));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[6], (int)change.Status));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[7], NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)(int?)change.FailureReason ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[8], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.TargetMessage ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[9], change.AttemptCount));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[10], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.NextRetryAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[11], change.CreatedAt));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[12], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.LastAttemptedAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[13], change.ExpiresAt));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[14], change.ActivityId));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[15], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.CancelledAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[16], NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)change.CancelledById ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[17], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.CancelledByName ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[18], NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.ClaimedAt ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[19], NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.ClaimedBy ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[20], (int)change.Origin));
+            command.Parameters.Add(new NpgsqlParameter(paramNames[21], NpgsqlTypes.NpgsqlDbType.Boolean) { Value = (object?)change.EnableAccount ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter(paramNames[22], NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)change.SyncRuleId ?? DBNull.Value });
+            command.Parameters.Add(new NpgsqlParameter("origin", (int)PendingPasswordChangeOrigin.Provisioned));
+            command.Parameters.Add(new NpgsqlParameter("expired", (int)PendingPasswordChangeStatus.Expired));
+            command.Parameters.Add(new NpgsqlParameter("cancelled", (int)PendingPasswordChangeStatus.Cancelled));
+
+            var returned = await command.ExecuteScalarAsync();
+
+            if (returned is null)
+            {
+                await _context.Database.ExecuteSqlRawAsync(releaseWaitingSql,
+                    change.MetaverseObjectId, change.ConnectedSystemId, (int)PendingPasswordChangeStatus.Pending);
+
+                outcomes.Add(new ProvisionedPasswordStagingOutcome
+                {
+                    RowId = Guid.Empty,
+                    RequestedId = requestedId,
+                    Disposition = ProvisionedPasswordStagingDisposition.Coalesced
+                });
+                continue;
+            }
+
+            var returnedId = (Guid)returned;
+            if (returnedId != requestedId)
+                // The existing row's id is the one now in the table; the caller must hold that rather than the
+                // id it offered, or a later write against this change would target a row that no longer exists.
+                change.Id = returnedId;
+
+            outcomes.Add(new ProvisionedPasswordStagingOutcome
+            {
+                RowId = returnedId,
+                RequestedId = requestedId,
+                Disposition = returnedId == requestedId
+                    ? ProvisionedPasswordStagingDisposition.Inserted
+                    : ProvisionedPasswordStagingDisposition.Superseded
+            });
+        }
+
+        return outcomes;
+    }
+
+    /// <inheritdoc />
+    public async Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
+    {
+        if (activities.Count == 0)
+            return;
+
+        _context.Activities.AddRange(activities);
+        await _context.SaveChangesAsync();
+
+        // Detached so a run-long tracker does not accumulate these: callers set no navigations, so nothing else
+        // needs tracking on their account, and the Worker's DbContext otherwise lives for the whole run profile
+        // execution.
+        foreach (var activity in activities)
+            _context.Entry(activity).State = EntityState.Detached;
     }
 
     /// <inheritdoc />
@@ -91,14 +256,15 @@ public partial class SyncRepository
         // A propagated change on a system that is not taking passwords is held, not due: once a switched-off
         // system accumulates changes rather than discarding them, counting them would make the service see
         // permanent work and run a lane on every poll, for as long as the system stayed off, each one finding
-        // nothing it may deliver. Enabling the system releases them, and that row update wakes the service. An
-        // explicit set (#1635, decision D1) is claimed whatever the configuration says, so it always counts.
+        // nothing it may deliver. Enabling the system releases them, and that row update wakes the service.
+        // Anything but a propagated change (explicit sets, #1635 decision D1; provisioned first passwords,
+        // #1697) is claimed whatever the configuration says, so it always counts.
         var claimExpiredBefore = asOf - claimLease;
         return await _context.PendingPasswordChanges
             .AsNoTracking()
             .Where(c => (c.Status == PendingPasswordChangeStatus.Pending && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
                          || c.Status == PendingPasswordChangeStatus.Delivering && c.ClaimedAt != null && c.ClaimedAt <= claimExpiredBefore)
-                        && (c.Origin == PendingPasswordChangeOrigin.Explicit
+                        && (c.Origin != PendingPasswordChangeOrigin.Propagated
                             || _context.ConnectedSystemPasswordSynchronisations
                                 .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled)))
             .Select(c => c.ConnectedSystemId)
@@ -107,7 +273,7 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
+    public async Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool excludePropagated)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
         if (maximum < 1)
@@ -124,8 +290,9 @@ public partial class SyncRepository
         // caller holds exactly what it claimed.
         //
         // The origin filter is a parameter rather than two statements: over a system that is not taking
-        // propagated passwords the lane passes the explicit origin and claims only administrators' sets; over a
-        // live system it passes null and claims everything due (#1635).
+        // propagated passwords the lane passes the propagated origin to exclude and claims everything but
+        // administrators' sets and provisioned first passwords; over a live system it passes null and claims
+        // everything due (#1635; widened from explicit-only by #1697, decision D1).
         var claimExpiredBefore = asOf - lease;
         const string sql = """
             WITH due AS (
@@ -134,7 +301,7 @@ public partial class SyncRepository
                 WHERE "ConnectedSystemId" = {0}
                   AND (("Status" = {1} AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= {2}))
                     OR ("Status" = {3} AND "ClaimedAt" IS NOT NULL AND "ClaimedAt" <= {4}))
-                  AND ({7} IS NULL OR "Origin" = {7})
+                  AND ({7} IS NULL OR "Origin" <> {7})
                 ORDER BY "CreatedAt", "Id"
                 LIMIT {5}
                 FOR UPDATE SKIP LOCKED
@@ -155,7 +322,7 @@ public partial class SyncRepository
                 new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.TimestampTz, Value = claimExpiredBefore },
                 maximum,
                 claimedBy,
-                BulkSqlHelpers.NullableParam(explicitOnly ? (int?)PendingPasswordChangeOrigin.Explicit : null, NpgsqlTypes.NpgsqlDbType.Integer))
+                BulkSqlHelpers.NullableParam(excludePropagated ? (int?)PendingPasswordChangeOrigin.Propagated : null, NpgsqlTypes.NpgsqlDbType.Integer))
             .AsNoTracking()
             // Materialised in the statement's own order: EF Core composes nothing over a query that is read
             // straight out, so the ORDER BY inside the claim is the order the caller sees.
@@ -185,10 +352,11 @@ public partial class SyncRepository
         // One grouped round trip, read on every iteration of the delivery loop: three numbers from one scan of a
         // table that is small whenever the service is keeping up. Restricted to what a lane would claim, so a
         // paused system's held propagated changes neither inflate the counts nor wake the service for retries it
-        // will not make (see PasswordQueueDeliveryOutlook); an explicit set counts wherever it is (#1635).
+        // will not make (see PasswordQueueDeliveryOutlook); anything but a propagated change counts wherever it
+        // is (#1635; widened by #1697).
         var claimExpiredBefore = asOf - claimLease;
         var outlook = await _context.PendingPasswordChanges.AsNoTracking()
-            .Where(c => c.Origin == PendingPasswordChangeOrigin.Explicit
+            .Where(c => c.Origin != PendingPasswordChangeOrigin.Propagated
                         || _context.ConnectedSystemPasswordSynchronisations
                             .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))
             .GroupBy(_ => 1)
@@ -260,13 +428,18 @@ public partial class SyncRepository
         if (deleting.Count == 0)
             return;
 
+        // Guarded on status (#1697, decision D9), mirroring RecordPasswordChangeAttemptsAsync: a row
+        // superseded or retried mid-flight is Pending again and carries newer work, so the older delivery's
+        // success must not delete it out from under the retry. A Cancelled row whose password nevertheless
+        // landed at the target is still removed.
         await _context.PendingPasswordChanges
-            .Where(c => deleting.Contains(c.Id))
+            .Where(c => deleting.Contains(c.Id)
+                        && (c.Status == PendingPasswordChangeStatus.Delivering || c.Status == PendingPasswordChangeStatus.Cancelled))
             .ExecuteDeleteAsync();
     }
 
     /// <inheritdoc />
-    public async Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
+    public async Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool excludePropagated)
     {
         // Deliberately hand-written rather than driven from the bulk-columns constant: this marks exactly three
         // columns, and a future column must not be swept into it. The status filter lives in the WHERE rather
@@ -276,7 +449,7 @@ public partial class SyncRepository
             .Where(c => c.ConnectedSystemId == connectedSystemId
                         && c.Status == PendingPasswordChangeStatus.Pending
                         && c.ExpiresAt <= asOf
-                        && (!explicitOnly || c.Origin == PendingPasswordChangeOrigin.Explicit))
+                        && (!excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(c => c.Status, PendingPasswordChangeStatus.Expired)
                 .SetProperty(c => c.NextRetryAt, (DateTime?)null));
@@ -304,6 +477,27 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> ReleaseParkedProvisionedPasswordChangesAsync(int syncRuleId)
+    {
+        // The Synchronisation Rule counterpart of ReleasePasswordChangesForDeliveryAsync above: same columns,
+        // scoped to the one rule's Provisioned rows rather than a whole Connected System. The update fires the
+        // queue's own NOTIFY trigger, so the Password Delivery Service attempts the released rows within
+        // seconds; the Parked filter lives here, not in the caller.
+        return await _context.PendingPasswordChanges
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, PendingPasswordChangeStatus.Pending)
+                .SetProperty(c => c.AttemptCount, 0)
+                .SetProperty(c => c.NextRetryAt, (DateTime?)null)
+                .SetProperty(c => c.FailureReason, (Models.Staging.PasswordSetFailureReason?)null)
+                .SetProperty(c => c.TargetMessage, (string?)null)
+                .SetProperty(c => c.ClaimedAt, (DateTime?)null)
+                .SetProperty(c => c.ClaimedBy, (string?)null));
+    }
+
+    /// <inheritdoc />
     public async Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
     {
         if (connectedSystemIds.Count == 0)
@@ -320,12 +514,40 @@ public partial class SyncRepository
             .Select(g => new { g.Key.ConnectedSystemId, g.Key.Status, Count = g.Count() })
             .ToListAsync();
 
-        // A settled Connected System is absent from the dictionary rather than present with zeroes, matching
-        // GetInitialPasswordAttentionByConnectedSystemAsync, so a caller can tell "nothing to report" from
-        // "reported nothing".
+        // A settled Connected System is absent from the dictionary rather than present with zeroes, so a
+        // caller can tell "nothing to report" from "reported nothing".
         return counts
             .GroupBy(c => c.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => new PasswordQueueAttention
+            {
+                ParkedCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Parked).Sum(c => c.Count),
+                ExpiredCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Expired).Sum(c => c.Count)
+            });
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetProvisionedPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        // The Synchronisation Rule counterpart of GetPasswordQueueAttentionAsync above, over the same table but
+        // grouped by rule and narrowed to Provisioned rows: those are the ones a rule's own settings can park.
+        var counts = await _context.PendingPasswordChanges
+            .AsNoTracking()
+            .Where(c => c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.SyncRuleId.HasValue && syncRuleIds.Contains(c.SyncRuleId.Value)
+                        && (c.Status == PendingPasswordChangeStatus.Parked
+                            || c.Status == PendingPasswordChangeStatus.Expired))
+            .GroupBy(c => new { SyncRuleId = c.SyncRuleId!.Value, c.Status })
+            .Select(g => new { g.Key.SyncRuleId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        // A settled rule is absent from the dictionary rather than present with zeroes, so a caller can tell
+        // "nothing to report" from "reported nothing".
+        return counts
+            .GroupBy(c => c.SyncRuleId)
+            .ToDictionary(g => g.Key, g => new InitialPasswordAttention
             {
                 ParkedCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Parked).Sum(c => c.Count),
                 ExpiredCount = g.Where(c => c.Status == PendingPasswordChangeStatus.Expired).Sum(c => c.Count)
@@ -385,6 +607,7 @@ public partial class SyncRepository
                 ConnectedSystemTakingPasswords = _context.ConnectedSystemPasswordSynchronisations
                     .Any(ps => ps.ConnectedSystemId == change.ConnectedSystemId && ps.Enabled),
                 Origin = change.Origin,
+                SyncRuleId = change.SyncRuleId,
                 Status = change.Status,
                 FailureReason = change.FailureReason,
                 TargetMessage = change.TargetMessage,
@@ -455,10 +678,11 @@ public partial class SyncRepository
                 // Due, matching GetConnectedSystemIdsWithDuePasswordChangesAsync and the number's own meaning: a
                 // lane would not attempt them. Counting them here would make a large Due count, which is meant to
                 // read as "the queue is not being drained", the ordinary state of any deployment with a system
-                // switched off. An explicit set is due wherever it is (#1635).
+                // switched off. Anything but a propagated change is due wherever it is (#1635; widened by
+                // #1697).
                 DueCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending
                                         && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
-                                        && (c.Origin == PendingPasswordChangeOrigin.Explicit
+                                        && (c.Origin != PendingPasswordChangeOrigin.Propagated
                                             || _context.ConnectedSystemPasswordSynchronisations
                                                 .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))),
                 ParkedCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Parked),
@@ -522,6 +746,27 @@ public partial class SyncRepository
                 .SetProperty(c => c.CancelledByName, cancelledByName)
                 .SetProperty(c => c.ClaimedAt, (DateTime?)null)
                 .SetProperty(c => c.ClaimedBy, (string?)null));
+    }
+
+    /// <inheritdoc />
+    public async Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId)
+    {
+        // The rule surfaces' rejection-reasons source, over this queue's Provisioned rows.
+        return await _context.PendingPasswordChanges
+            .AsNoTracking()
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
+            .GroupBy(c => c.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Max(c => c.FailureReason),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(c => c.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToListAsync();
     }
 
     /// <summary>

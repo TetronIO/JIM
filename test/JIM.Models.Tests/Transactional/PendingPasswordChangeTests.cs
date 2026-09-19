@@ -11,10 +11,9 @@ namespace JIM.Models.Tests.Transactional;
 /// <summary>
 /// The Password Synchronisation queue row (#1119): one password change owed to one Connected System.
 /// <para>
-/// Unlike <see cref="PendingInitialPassword"/>, which records only that an account is owed a password, this row
-/// carries the password itself. That single difference is what forces everything distinctive about it: the value
-/// is encrypted at rest, a newer change for the same target must replace an older one rather than queue behind
-/// it, and delivery is scheduled on a clock of its own rather than riding an export run.
+/// It carries the password itself, encrypted at rest, so a newer change for the same target must replace an
+/// older one rather than queue behind it, and delivery is scheduled on a clock of its own rather than riding an
+/// export run.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -33,13 +32,14 @@ public class PendingPasswordChangeTests
     /// <see cref="PendingPasswordChange.Supersede"/> takes its replacement values from.
     /// </summary>
     private static PendingPasswordChange Newer(
-        string encryptedPassword,
+        string? encryptedPassword,
         PasswordExpiryBehaviour expiryBehaviour,
         Guid activityId,
         TimeSpan timeToLive,
         DateTime createdAt,
         PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated,
-        bool? enableAccount = null) => new()
+        bool? enableAccount = null,
+        int? syncRuleId = null) => new()
     {
         EncryptedPassword = encryptedPassword,
         ExpiryBehaviour = expiryBehaviour,
@@ -47,7 +47,8 @@ public class PendingPasswordChangeTests
         CreatedAt = createdAt,
         ExpiresAt = createdAt + timeToLive,
         Origin = origin,
-        EnableAccount = enableAccount
+        EnableAccount = enableAccount,
+        SyncRuleId = syncRuleId
     };
 
     [Test]
@@ -728,6 +729,88 @@ public class PendingPasswordChangeTests
         change.Supersede(newer);
 
         Assert.That(change.ConnectedSystemObjectId, Is.EqualTo(accountId));
+    }
+
+    /// <summary>
+    /// The Synchronisation Rule follows the same rule as the origin and the enable decision: it describes the
+    /// password the row is carrying now, so a newer row's value replaces the older one's, whatever it is.
+    /// </summary>
+    [Test]
+    public void Supersede_CarriesTheNewerRowsSyncRuleId()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var syncRuleId = 42;
+        var change = Change();
+
+        change.Supersede(Newer(null, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Provisioned, syncRuleId: syncRuleId));
+
+        Assert.That(change.SyncRuleId, Is.EqualTo(syncRuleId));
+    }
+
+    /// <summary>
+    /// An administrator's own password has nothing left to generate from, so the rule that would have generated
+    /// the provisioned row's password is cleared along with it.
+    /// </summary>
+    [Test]
+    public void Supersede_ExplicitOverProvisioned_ClearsSyncRuleIdAndSetsThePassword()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Supersede(Newer(null, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Provisioned, syncRuleId: 42));
+
+        change.Supersede(Newer("$JIMPW$v1$reset", PasswordExpiryBehaviour.RequireChangeAtNextSignIn, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now.AddMinutes(1), PendingPasswordChangeOrigin.Explicit, enableAccount: true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Explicit));
+            Assert.That(change.SyncRuleId, Is.Null,
+                "The administrator's own password has nothing left to generate from.");
+            Assert.That(change.EncryptedPassword, Is.EqualTo("$JIMPW$v1$reset"));
+        }
+    }
+
+    /// <summary>
+    /// The mirror image: a provisioned row replacing an expired propagated one carries a rule and no password,
+    /// and must not leave the previous row's password behind.
+    /// </summary>
+    [Test]
+    public void Supersede_ProvisionedOverExpiredPropagated_LeavesNoPasswordBehind()
+    {
+        var now = new DateTime(2026, 9, 5, 9, 0, 0, DateTimeKind.Utc);
+        var change = Change();
+        change.Status = PendingPasswordChangeStatus.Expired;
+
+        change.Supersede(Newer(null, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, Guid.NewGuid(),
+            TimeSpan.FromDays(7), now, PendingPasswordChangeOrigin.Provisioned, syncRuleId: 42));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(change.SyncRuleId, Is.EqualTo(42));
+            Assert.That(change.EncryptedPassword, Is.Null);
+            Assert.That(change.Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    /// <summary>
+    /// A provisioned row is neither an administrator's explicit set nor an ordinary propagation: it is a third,
+    /// distinct origin, and the two existing predicates must not accidentally claim it.
+    /// </summary>
+    [Test]
+    public void IsProvisioned_IsNeitherExplicitNorPropagated()
+    {
+        var change = Change();
+        change.Origin = PendingPasswordChangeOrigin.Provisioned;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.IsProvisioned, Is.True);
+            Assert.That(change.IsExplicit, Is.False);
+            Assert.That(change.IsPropagated, Is.False);
+        }
     }
 
     #endregion

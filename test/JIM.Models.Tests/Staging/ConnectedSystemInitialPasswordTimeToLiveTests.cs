@@ -25,7 +25,7 @@ public class ConnectedSystemInitialPasswordTimeToLiveTests
         {
             Assert.That(connectedSystem.InitialPasswordTimeToLive, Is.Null);
             Assert.That(connectedSystem.EffectiveInitialPasswordTimeToLive,
-                Is.EqualTo(PendingInitialPassword.DefaultTimeToLive));
+                Is.EqualTo(PendingPasswordChange.DefaultTimeToLive));
         }
     }
 
@@ -57,7 +57,7 @@ public class ConnectedSystemInitialPasswordTimeToLiveTests
         };
 
         Assert.That(connectedSystem.EffectiveInitialPasswordTimeToLive,
-            Is.EqualTo(PendingInitialPassword.DefaultTimeToLive));
+            Is.EqualTo(PendingPasswordChange.DefaultTimeToLive));
     }
 
     [Test]
@@ -65,6 +65,6 @@ public class ConnectedSystemInitialPasswordTimeToLiveTests
     {
         // Pinned because the Connected System setting defaults to it, so changing one without the other would
         // silently change what every existing deployment does.
-        Assert.That(PendingInitialPassword.DefaultTimeToLive, Is.EqualTo(TimeSpan.FromDays(7)));
+        Assert.That(PendingPasswordChange.DefaultTimeToLive, Is.EqualTo(TimeSpan.FromDays(7)));
     }
 }

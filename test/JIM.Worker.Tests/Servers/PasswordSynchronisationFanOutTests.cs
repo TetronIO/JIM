@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -83,7 +84,9 @@ public class PasswordSynchronisationFanOutTests
                 return Task.CompletedTask;
             },
             _ => Task.CompletedTask,
-            (_, _) => Task.CompletedTask);
+            (_, _) => Task.CompletedTask,
+            new PasswordGeneratorService(),
+            () => _protection);
     }
 
     private void ArrangeTargets(params PasswordSynchronisationTarget[] targets) =>

@@ -46,19 +46,6 @@ public class HistoryCleanupResponse
     public int SecurityEventRetentionPeriodDays { get; set; }
 
     /// <summary>
-    /// Number of initial-password records removed: those parked for an administrator, or expired without a
-    /// password having been set, for longer than the initial password retention period. Records still being
-    /// worked are never removed, however old, and the Activity recording what happened to the account is
-    /// unaffected.
-    /// </summary>
-    public int InitialPasswordWorkRecordsDeleted { get; set; }
-
-    /// <summary>
-    /// Configured initial password record retention period in days.
-    /// </summary>
-    public int InitialPasswordRetentionPeriodDays { get; set; }
-
-    /// <summary>
     /// Number of Password Synchronisation Activity records deleted (the delivery passes, the fan-out records, and
     /// the per-system outcome children), per the Password Synchronisation retention period.
     /// </summary>

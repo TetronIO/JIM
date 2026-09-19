@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Connectors.Mock;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -117,7 +118,9 @@ public class SetPasswordRequestTests
                 activity.Status = ActivityStatus.FailedWithError;
                 activity.ErrorMessage = errorMessage;
                 return Task.CompletedTask;
-            });
+            },
+            new PasswordGeneratorService(),
+            () => _protection);
     }
 
     #region arrangement
@@ -212,7 +215,7 @@ public class SetPasswordRequestTests
         await _server.SetPasswordAsync(Request([account.Id]), CancellationToken.None);
 
         var row = QueuedRow();
-        Assert.That(row.ExpiresAt - row.CreatedAt, Is.EqualTo(PendingInitialPassword.DefaultTimeToLive));
+        Assert.That(row.ExpiresAt - row.CreatedAt, Is.EqualTo(PendingPasswordChange.DefaultTimeToLive));
     }
 
     /// <summary>

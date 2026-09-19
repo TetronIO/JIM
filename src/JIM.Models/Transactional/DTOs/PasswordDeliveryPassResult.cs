@@ -30,6 +30,12 @@ public class PasswordDeliveryPassResult
     public int ExpiredCount { get; private set; }
 
     /// <summary>
+    /// Provisioned rows removed from the queue without a password ever being sent (#1697): the account no
+    /// longer exists, or the Synchronisation Rule that provisioned it no longer sets one.
+    /// </summary>
+    public int WithdrawnCount { get; private set; }
+
+    /// <summary>
     /// Systems the pass could not deliver to at all, one line each, named so an administrator reading the
     /// Activity knows where to look. Never contains a password or anything derived from one.
     /// </summary>
@@ -39,7 +45,8 @@ public class PasswordDeliveryPassResult
     /// Whether this pass has anything worth telling an administrator about.
     /// </summary>
     public bool HasSomethingToReport =>
-        DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0 || Problems.Count > 0;
+        DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0 || WithdrawnCount > 0
+        || Problems.Count > 0;
 
     /// <summary>
     /// Rolls one Connected System's pass into the total, recording anything that stopped it delivering.
@@ -55,6 +62,7 @@ public class PasswordDeliveryPassResult
         RetryingCount += result.RetryingCount;
         ParkedCount += result.ParkedCount;
         ExpiredCount += result.ExpiredCount;
+        WithdrawnCount += result.WithdrawnCount;
 
         if (result.CouldNotOpenPasswordConnection)
             Problems.Add($"{connectedSystemName}: the password channel could not be opened, so nothing was attempted.");
@@ -97,6 +105,8 @@ public class PasswordDeliveryPassResult
             parts.Add($"{ParkedCount} parked for review");
         if (ExpiredCount > 0)
             parts.Add($"{ExpiredCount} expired before they could be delivered");
+        if (WithdrawnCount > 0)
+            parts.Add($"{WithdrawnCount} withdrawn because they were no longer needed");
 
         var summary = parts.Count > 0
             ? string.Join(", ", parts) + "."

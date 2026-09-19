@@ -76,7 +76,4 @@ public static class RunPhaseKeys
 
     /// <summary>Bringing containers the export created into JIM's picture of the Connected System, and selecting them.</summary>
     public const string ExportSelectNewContainers = "export.containers";
-
-    /// <summary>Giving the accounts this export provisioned the initial passwords they are owed, and retrying any still outstanding.</summary>
-    public const string ExportDeliverInitialPasswords = "export.passwords";
 }
