@@ -67,12 +67,12 @@ internal class LdapConnectorPasswordPolicy389
     /// </summary>
     private static void Map(SearchResultEntry configuration, ConnectedSystemPasswordPolicy policy)
     {
-        var syntaxChecking = IsOn(configuration, AttributePasswordCheckSyntax);
+        var syntaxChecking = IsOn(configuration, AttributeCheckSyntax);
         if (syntaxChecking)
         {
-            policy.MinimumLength = PositiveOrNull(ReadInt(configuration, AttributePasswordMinLength));
+            policy.MinimumLength = PositiveOrNull(ReadInt(configuration, AttributeMinimumLength));
 
-            if (ReadInt(configuration, AttributePasswordMinCategories) is { } categories)
+            if (ReadInt(configuration, AttributeMinimumCategories) is { } categories)
             {
                 policy.ComplexityRequired = categories > 1;
                 if (categories > 1)
@@ -85,13 +85,13 @@ internal class LdapConnectorPasswordPolicy389
             policy.FurtherChecksApply = FurtherCheckAttributes.Any(attribute => IsSet(configuration, attribute));
         }
 
-        if (IsOn(configuration, AttributePasswordHistory))
-            policy.PasswordHistoryLength = PositiveOrNull(ReadInt(configuration, AttributePasswordInHistory));
+        if (IsOn(configuration, AttributeHistoryEnabled))
+            policy.PasswordHistoryLength = PositiveOrNull(ReadInt(configuration, AttributeHistoryDepth));
 
-        if (IsOn(configuration, AttributePasswordExp))
-            policy.MaximumPasswordAge = ParseSeconds(ReadLong(configuration, AttributePasswordMaxAge));
+        if (IsOn(configuration, AttributeExpiryEnabled))
+            policy.MaximumPasswordAge = ParseSeconds(ReadLong(configuration, AttributeMaximumAge));
 
-        policy.MinimumPasswordAge = ParseSeconds(ReadLong(configuration, AttributePasswordMinAge));
+        policy.MinimumPasswordAge = ParseSeconds(ReadLong(configuration, AttributeMinimumAge));
     }
 
     private static bool IsOn(SearchResultEntry entry, string attributeName) =>
@@ -155,7 +155,7 @@ internal class LdapConnectorPasswordPolicy389
         foreach (var namingContext in namingContexts.Take(MaximumNamingContextsToProbe))
         {
             var request = new SearchRequest(namingContext,
-                $"(|(objectClass={ObjectClassPolicyContainer})({AttributePwdPolicySubentry}=*))",
+                $"(|(objectClass={ObjectClassPolicyContainer})({AttributePolicySubentry}=*))",
                 SearchScope.Subtree, "objectClass");
 
             var signal = await LdapConnectorPasswordPolicy.ProbeForOverridesAsync(_executor, _logger, request, "subtree or user password policies");
@@ -180,16 +180,16 @@ internal class LdapConnectorPasswordPolicy389
     internal const int MaximumNamingContextsToProbe = 5;
 
     internal const string ObjectClassPolicyContainer = "nsPwPolicyContainer";
-    internal const string AttributePwdPolicySubentry = "pwdpolicysubentry";
+    internal const string AttributePolicySubentry = "pwdpolicysubentry";
 
-    internal const string AttributePasswordCheckSyntax = "passwordCheckSyntax";
-    internal const string AttributePasswordMinLength = "passwordMinLength";
-    internal const string AttributePasswordMinCategories = "passwordMinCategories";
-    internal const string AttributePasswordHistory = "passwordHistory";
-    internal const string AttributePasswordInHistory = "passwordInHistory";
-    internal const string AttributePasswordExp = "passwordExp";
-    internal const string AttributePasswordMaxAge = "passwordMaxAge";
-    internal const string AttributePasswordMinAge = "passwordMinAge";
+    internal const string AttributeCheckSyntax = "passwordCheckSyntax";
+    internal const string AttributeMinimumLength = "passwordMinLength";
+    internal const string AttributeMinimumCategories = "passwordMinCategories";
+    internal const string AttributeHistoryEnabled = "passwordHistory";
+    internal const string AttributeHistoryDepth = "passwordInHistory";
+    internal const string AttributeExpiryEnabled = "passwordExp";
+    internal const string AttributeMaximumAge = "passwordMaxAge";
+    internal const string AttributeMinimumAge = "passwordMinAge";
 
     /// <summary>
     /// The checks 389 applies beyond length and categories when syntax checking is on, none of which JIM can
@@ -205,8 +205,8 @@ internal class LdapConnectorPasswordPolicy389
 
     private static readonly string[] PolicyAttributes =
     [
-        AttributePasswordCheckSyntax, AttributePasswordMinLength, AttributePasswordMinCategories,
-        AttributePasswordHistory, AttributePasswordInHistory, AttributePasswordExp, AttributePasswordMaxAge, AttributePasswordMinAge,
+        AttributeCheckSyntax, AttributeMinimumLength, AttributeMinimumCategories,
+        AttributeHistoryEnabled, AttributeHistoryDepth, AttributeExpiryEnabled, AttributeMaximumAge, AttributeMinimumAge,
         .. FurtherCheckAttributes
     ];
     #endregion

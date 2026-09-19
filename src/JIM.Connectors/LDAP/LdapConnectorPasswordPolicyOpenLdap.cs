@@ -55,8 +55,8 @@ internal class LdapConnectorPasswordPolicyOpenLdap
         var configuration = await ReadOverlayConfigurationAsync(scope.ConfigContext);
         var policyEntries = await ReadPolicyEntriesAsync(userContext);
         var probe = await ProbeForOverridesAsync(_executor, _logger,
-            new SearchRequest(userContext, $"({AttributePwdPolicySubentry}=*)", SearchScope.Subtree, "objectClass"),
-            "entries carrying their own password policy");
+            new SearchRequest(userContext, $"({AttributePolicySubentry}=*)", SearchScope.Subtree, "objectClass"),
+            "entries carrying their own policy");
 
         var policy = new ConnectedSystemPasswordPolicy
         {
@@ -115,7 +115,7 @@ internal class LdapConnectorPasswordPolicyOpenLdap
 
         Map(defaultEntry, policy);
         policy.FurtherChecksApply = IsQualityCheckingOn(defaultEntry) &&
-            (ReadRaw(defaultEntry, AttributePwdCheckModule) != null || overlay.CheckModule != null);
+            (ReadRaw(defaultEntry, AttributeCheckModule) != null || overlay.CheckModule != null);
         policy.DiscoveryOutcome = PasswordPolicyDiscoveryOutcome.Read;
     }
 
@@ -154,10 +154,10 @@ internal class LdapConnectorPasswordPolicyOpenLdap
     /// </summary>
     private static void Map(SearchResultEntry entry, ConnectedSystemPasswordPolicy policy)
     {
-        policy.MinimumLength = PositiveOrNull(ReadInt(entry, AttributePwdMinLength));
-        policy.PasswordHistoryLength = PositiveOrNull(ReadInt(entry, AttributePwdInHistory));
-        policy.MaximumPasswordAge = ParseSeconds(ReadLong(entry, AttributePwdMaxAge));
-        policy.MinimumPasswordAge = ParseSeconds(ReadLong(entry, AttributePwdMinAge));
+        policy.MinimumLength = PositiveOrNull(ReadInt(entry, AttributeMinimumLength));
+        policy.PasswordHistoryLength = PositiveOrNull(ReadInt(entry, AttributeHistoryDepth));
+        policy.MaximumPasswordAge = ParseSeconds(ReadLong(entry, AttributeMaximumAge));
+        policy.MinimumPasswordAge = ParseSeconds(ReadLong(entry, AttributeMinimumAge));
     }
 
     /// <summary>
@@ -165,7 +165,7 @@ internal class LdapConnectorPasswordPolicyOpenLdap
     /// where it can read it (1). At 0 no check runs and any module named is inert.
     /// </summary>
     private static bool IsQualityCheckingOn(SearchResultEntry entry) =>
-        ReadInt(entry, AttributePwdCheckQuality) is 1 or 2;
+        ReadInt(entry, AttributeCheckQuality) is 1 or 2;
 
     /// <summary>
     /// Reads the databases and ppolicy overlays under cn=config, so the default policy per database is known.
@@ -182,7 +182,7 @@ internal class LdapConnectorPasswordPolicyOpenLdap
         }
 
         var request = new SearchRequest(configContext,
-            $"(|(objectClass={ObjectClassPPolicyConfig})(objectClass={ObjectClassDatabaseConfig}))",
+            $"(|(objectClass={ObjectClassOverlayConfig})(objectClass={ObjectClassDatabaseConfig}))",
             SearchScope.Subtree, AttributeOlcPPolicyDefault, AttributeOlcPPolicyCheckModule, AttributeOlcSuffix)
         {
             SizeLimit = MaximumConfigurationEntries
@@ -219,8 +219,8 @@ internal class LdapConnectorPasswordPolicyOpenLdap
     /// </summary>
     private async Task<List<SearchResultEntry>?> ReadPolicyEntriesAsync(string userContext)
     {
-        var request = new SearchRequest(userContext, $"(objectClass={ObjectClassPwdPolicy})", SearchScope.Subtree,
-            AttributePwdMinLength, AttributePwdInHistory, AttributePwdMaxAge, AttributePwdMinAge, AttributePwdCheckQuality, AttributePwdCheckModule)
+        var request = new SearchRequest(userContext, $"(objectClass={ObjectClassPolicy})", SearchScope.Subtree,
+            AttributeMinimumLength, AttributeHistoryDepth, AttributeMaximumAge, AttributeMinimumAge, AttributeCheckQuality, AttributeCheckModule)
         {
             SizeLimit = MaximumPolicyEntries
         };
@@ -319,17 +319,17 @@ internal class LdapConnectorPasswordPolicyOpenLdap
     }
 
     #region constants
-    internal const string ObjectClassPwdPolicy = "pwdPolicy";
-    internal const string ObjectClassPPolicyConfig = "olcPPolicyConfig";
+    internal const string ObjectClassPolicy = "pwdPolicy";
+    internal const string ObjectClassOverlayConfig = "olcPPolicyConfig";
     internal const string ObjectClassDatabaseConfig = "olcDatabaseConfig";
 
-    internal const string AttributePwdMinLength = "pwdMinLength";
-    internal const string AttributePwdInHistory = "pwdInHistory";
-    internal const string AttributePwdMaxAge = "pwdMaxAge";
-    internal const string AttributePwdMinAge = "pwdMinAge";
-    internal const string AttributePwdCheckQuality = "pwdCheckQuality";
-    internal const string AttributePwdCheckModule = "pwdCheckModule";
-    internal const string AttributePwdPolicySubentry = "pwdPolicySubentry";
+    internal const string AttributeMinimumLength = "pwdMinLength";
+    internal const string AttributeHistoryDepth = "pwdInHistory";
+    internal const string AttributeMaximumAge = "pwdMaxAge";
+    internal const string AttributeMinimumAge = "pwdMinAge";
+    internal const string AttributeCheckQuality = "pwdCheckQuality";
+    internal const string AttributeCheckModule = "pwdCheckModule";
+    internal const string AttributePolicySubentry = "pwdPolicySubentry";
 
     internal const string AttributeOlcPPolicyDefault = "olcPPolicyDefault";
     internal const string AttributeOlcPPolicyCheckModule = "olcPPolicyCheckModule";
