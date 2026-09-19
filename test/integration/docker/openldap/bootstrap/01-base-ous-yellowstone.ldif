@@ -39,3 +39,35 @@ objectClass: simpleSecurityObject
 cn: svc-jim
 description: Delegated account JIM's Connected Systems bind as (#1715). Not for interactive or administrative use.
 userPassword: {SSHA}r7H2mmv2uzFq1oLpedFt7GS+XFIYGWDL
+
+# Dedicated account for a Connected System that imports MORE THAN ONE
+# partition from this server (issue #1715): a single import scoped across
+# both the Yellowstone and Glitterband suffixes needs one identity that can
+# bind against both, which a single-suffix service account cannot do (each
+# suffix's cn=jim group only grants its own suffix's account). This account
+# is added as a member of both suffixes' cn=jim groups (see the group entry
+# below, and scripts/01-add-second-suffix.sh for Glitterband's). A
+# single-partition Connected System keeps using its own suffix's cn=svc-jim
+# account and is unaffected: isolation between suffixes still holds for it.
+# Password is "Svc-Jim-Partitions@123!", hashed with slappasswd -s.
+dn: cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: svc-jim-partitions
+description: Delegated account for a JIM Connected System that imports more than one partition from this server (#1715); a member of every suffix's cn=jim group it manages. Not for interactive or administrative use.
+userPassword: {SSHA}9wQ2EQ4pXjXIti57jJjDuqNEKEcVMdOB
+
+# Members of this group may bind as JIM's Connected System service account
+# for THIS suffix (issue #1715): the access-control set in
+# ../acl/jim-service-account-access.ldif grants to "group.exact" this DN,
+# not to an individual account's DN. To delegate a new Connected System (or a
+# second one against the same suffix), add its service account as a further
+# "member" here; no ACL change is needed. A Connected System that imports
+# more than one partition from this server is a member of each partition's
+# cn=jim group (see cn=svc-jim-partitions above).
+dn: cn=jim,ou=Services,dc=yellowstone,dc=local
+objectClass: groupOfNames
+cn: jim
+description: JIM service accounts permitted to manage dc=yellowstone,dc=local (#1715). Membership, not the ACL, controls which accounts this grants.
+member: cn=svc-jim,ou=Services,dc=yellowstone,dc=local
+member: cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local

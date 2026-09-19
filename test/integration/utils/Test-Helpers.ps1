@@ -301,11 +301,22 @@ function Get-DirectoryConfig {
         administrator (used to populate data and assert against the directory directly, e.g.
         ldapmodify/ldapsearch, snapshot verification, the compose healthcheck), and
         JimBindDN/JimBindPassword is the identity JIM's Connected System binds as. On OpenLDAP
-        these differ (JIM binds as a delegated service account, cn=svc-jim, under an explicit,
-        versioned access-control set; see test/integration/docker/openldap/acl/). On Samba AD
-        JimBindDN/JimBindPassword currently equal the Administrator BindDN/BindPassword: the lab
-        still binds JIM as the domain Administrator there, and delegating that bind is tracked as
-        follow-up work (#1716), not done here.
+        these differ (JIM binds as a delegated service account, cn=svc-jim, granted access via
+        membership of that suffix's cn=jim,ou=Services,<suffix> group; see
+        test/integration/docker/openldap/acl/). On Samba AD JimBindDN/JimBindPassword currently
+        equal the Administrator BindDN/BindPassword: the lab still binds JIM as the domain
+        Administrator there, and delegating that bind is tracked as follow-up work (#1716), not
+        done here.
+
+        A third identity, MultiPartitionJimBindDN/MultiPartitionJimBindPassword, is what a
+        Connected System that imports MORE THAN ONE partition from the same server binds as
+        (Scenario 9 is the only current example: one Connected System scoped across both the
+        Yellowstone and Glitterband suffixes). On OpenLDAP this is cn=svc-jim-partitions, a member
+        of every suffix's cn=jim group rather than just one, so a single bind can read/write both
+        partitions; a single-partition Connected System keeps using JimBindDN and is unaffected.
+        On Samba AD these two fields equal JimBindDN/JimBindPassword (single partition per
+        instance today), so callers can always read MultiPartitionJimBindDN/Password without
+        branching on directory type.
 
     .PARAMETER DirectoryType
         Which directory type to configure for (SambaAD or OpenLDAP)
@@ -337,6 +348,10 @@ function Get-DirectoryConfig {
                     # least-privilege account is tracked separately (#1716), not done here.
                     JimBindDN        = "CN=Administrator,CN=Users,DC=panoply,DC=local"
                     JimBindPassword  = "Test@123!"
+                    # Single partition per instance today, so the multi-partition identity is
+                    # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
+                    MultiPartitionJimBindDN       = "CN=Administrator,CN=Users,DC=panoply,DC=local"
+                    MultiPartitionJimBindPassword = "Test@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=panoply,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=panoply,DC=local"
@@ -369,6 +384,10 @@ function Get-DirectoryConfig {
                     # least-privilege account is tracked separately (#1716), not done here.
                     JimBindDN        = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
                     JimBindPassword  = "Test@123!"
+                    # Single partition per instance today, so the multi-partition identity is
+                    # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
+                    MultiPartitionJimBindDN       = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
+                    MultiPartitionJimBindPassword = "Test@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=resurgam,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=resurgam,DC=local"
@@ -401,6 +420,10 @@ function Get-DirectoryConfig {
                     # least-privilege account is tracked separately (#1716), not done here.
                     JimBindDN        = "CN=Administrator,CN=Users,DC=gentian,DC=local"
                     JimBindPassword  = "Test@123!"
+                    # Single partition per instance today, so the multi-partition identity is
+                    # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
+                    MultiPartitionJimBindDN       = "CN=Administrator,CN=Users,DC=gentian,DC=local"
+                    MultiPartitionJimBindPassword = "Test@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=gentian,DC=local"
                     UserContainer    = "OU=Users,OU=CorpManaged,DC=gentian,DC=local"
@@ -445,6 +468,15 @@ function Get-DirectoryConfig {
                     # populating data and asserting against the directory directly.
                     JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
                     JimBindPassword  = "Svc-Jim@123!"
+                    # Identity for a Connected System that imports MORE THAN ONE partition from
+                    # this server (Scenario 9: one Connected System scoped across both
+                    # Yellowstone and Glitterband). cn=svc-jim-partitions is a member of every
+                    # suffix's cn=jim group (see bootstrap/01-base-ous-yellowstone.ldif and
+                    # scripts/01-add-second-suffix.sh), not just its own suffix's, so a single
+                    # bind can read/write both partitions; a single-partition Connected System
+                    # keeps using JimBindDN/Password above and is unaffected.
+                    MultiPartitionJimBindDN       = "cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim-Partitions@123!"
                     AuthType         = "Simple"
                     BaseDN           = "dc=yellowstone,dc=local"
                     UserContainer    = "ou=People,dc=yellowstone,dc=local"
