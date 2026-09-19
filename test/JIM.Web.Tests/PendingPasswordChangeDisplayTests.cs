@@ -140,7 +140,7 @@ public class PendingPasswordChangeDisplayTests
     {
         var detail = PendingPasswordChangeDisplay.Detail(Change(origin: PendingPasswordChangeOrigin.Provisioned));
 
-        Assert.That(detail, Is.EqualTo("Initial password for a newly provisioned account"));
+        Assert.That(detail, Is.EqualTo("Initial password for a newly provisioned Connected System Object"));
     }
 
     /// <summary>

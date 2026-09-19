@@ -231,7 +231,7 @@ Get-JIMConnectedSystem |
 
 ## Invoke-JIMHistoryCleanup
 
-Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, and Pending Password Changes that reached a terminal state (including a provisioned account's initial password). Records still being worked are never removed, however old.
+Runs a history retention pass on demand. Removes history that has had the retention period set for its kind: Connected System Object and Metaverse Object change history, configuration change previews, Activities, and Pending Password Changes that reached a terminal state (including a provisioned Connected System Object's initial password). Records still being worked are never removed, however old.
 
 This also runs on its own, daily, on the built-in [History Retention Cleanup Schedule](../configuration/schedules.md#built-in-schedules). Use this cmdlet to run a pass now, or to drain a large backlog faster than one pass a day.
 

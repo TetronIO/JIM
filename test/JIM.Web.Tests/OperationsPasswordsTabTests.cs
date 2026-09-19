@@ -181,7 +181,7 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(cut.FindAll("[data-testid='jim-queue-origin']").Single().TextContent.Trim(), Is.EqualTo("Initial"));
-                Assert.That(cut.Markup, Does.Contain("Initial password for a newly provisioned account"));
+                Assert.That(cut.Markup, Does.Contain("Initial password for a newly provisioned Connected System Object"));
             }
         });
     }
