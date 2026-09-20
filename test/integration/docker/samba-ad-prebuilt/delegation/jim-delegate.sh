@@ -124,12 +124,14 @@ EOF
         return 0
     fi
 
-    # List Contents and Read Property is all a Delta Import needs: tombstones are only ever read.
+    # List Contents and Read Property are what a Delta Import needs: tombstones are only ever read.
+    # Read Control (Read Permissions) is what lets the account read the container's own permissions,
+    # which is how JIM confirms the grant is in place rather than discovering its absence by silence.
     cat > /tmp/jim-tombstone-dacl.ldif << EOF
 dn: ${container_dn}
 changetype: modify
 replace: nTSecurityDescriptor
-nTSecurityDescriptor: ${existing}(A;;LCRP;;;${sid})
+nTSecurityDescriptor: ${existing}(A;;LCRPRC;;;${sid})
 EOF
     if ! ${SAMBA_BIN}/ldbmodify -H "$LDAP_URL" --simple-bind-dn="$ADMIN_DN" --password="$ADMIN_PASSWORD" \
             --controls="$controls" /tmp/jim-tombstone-dacl.ldif > /dev/null; then

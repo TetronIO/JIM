@@ -204,12 +204,6 @@ EOF
 ${SAMBA_BIN}/ldbmodify -H ${SAMBA_PRIVATE}/sam.ldb /tmp/svc-jim-uac.ldif
 rm -f /tmp/svc-jim-uac.ldif
 
-# Samba creates the Deleted Objects container on the domain's first deletion, so a freshly
-# provisioned domain has nothing to delegate read over yet. One throwaway account, created and
-# deleted, brings the container into being.
-${SAMBA_BIN}/samba-tool user create jim-tombstone-seed "${JIM_SERVICE_PASSWORD}" --userou="OU=Services" > /dev/null
-${SAMBA_BIN}/samba-tool user delete jim-tombstone-seed > /dev/null
-
 echo "Delegating JIM's access over the managed containers..."
 for jim_container_dn in "OU=Corp,${DOMAIN_DC}" "OU=TestUsers,${DOMAIN_DC}" "OU=TestGroups,${DOMAIN_DC}"; do
     /usr/local/sbin/jim-delegate.sh "${jim_container_dn}"
