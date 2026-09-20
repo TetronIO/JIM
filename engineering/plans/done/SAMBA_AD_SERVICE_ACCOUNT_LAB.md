@@ -1,6 +1,6 @@
 # A Delegated JIM Service Account for the Samba AD Integration Lab
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1716](https://github.com/TetronIO/JIM/issues/1716)
 - **Related:** [#1715](https://github.com/TetronIO/JIM/issues/1715) the same work for the OpenLDAP lab, done first
 - **Created:** 2026-09-20
@@ -50,7 +50,9 @@ This work is the sibling of the OpenLDAP service account lab (#1715): each Samba
 
 ## Deviations
 
-*(recorded as the verification sweep forces them)*
+- The Deleted Objects grant is `LCRPRC`, not the `LCRP` first planned: Read Control is what lets the account read the container's own permissions, and #1723 (built on top of this work) uses exactly that to tell a missing grant from an empty container.
+- The "Samba creates the Deleted Objects container on the first deletion" step was a misreading of a Read Control failure and was removed before the images shipped.
+- The sweep found no insufficient-access failure anywhere: every Samba AD capable scenario (1, 2, 4 to 13, 17, 18, 20, 21) passed at Nano under `svc-jim` on 2026-09-20; Scenario 3 is a placeholder with no test logic and was not counted.
 
 ## Success Criteria
 
