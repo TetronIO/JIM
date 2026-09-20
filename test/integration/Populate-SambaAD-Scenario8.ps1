@@ -158,6 +158,11 @@ else {
     Write-Host "    ✓ OU created: Corp" -ForegroundColor Green
 }
 
+# JIM manages objects under Corp, so its service account needs the delegation over it. The Users
+# and Entitlements OUs created below it inherit the delegation and need no call of their own.
+Grant-JimAdDelegation -ContainerName $container -ContainerDn $corpOU
+Write-Host "    ✓ JIM delegation granted: Corp (inherited by everything below it)" -ForegroundColor Green
+
 # Create Users OU under Corp
 $usersOU = "OU=Users,$corpOU"
 Write-Host "  Creating OU: Users (under Corp)" -ForegroundColor Gray
@@ -192,6 +197,11 @@ if ($Instance -eq "Target") {
     else {
         Write-Host "    ✓ OU created: CorpManaged" -ForegroundColor Green
     }
+
+    # JIM provisions into CorpManaged, so its service account needs the delegation over it. The
+    # Users and Entitlements OUs created below it inherit the delegation.
+    Grant-JimAdDelegation -ContainerName $container -ContainerDn $corpManagedOU
+    Write-Host "    ✓ JIM delegation granted: CorpManaged (inherited by everything below it)" -ForegroundColor Green
 
     $targetUsersOU = "OU=Users,$corpManagedOU"
     Write-Host "  Creating OU: Users (under CorpManaged)" -ForegroundColor Gray
