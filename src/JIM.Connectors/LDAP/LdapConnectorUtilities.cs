@@ -539,6 +539,16 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// The name of the pagination token a Delta Import's tombstone search keeps per partition. A partition head is
+    /// also a selectable container keyed by the same DN, so the suffix is what keeps the two apart: a container
+    /// token's suffix is an Object Type id, which can never read "deleted-objects".
+    /// </summary>
+    internal static string GetDeletedObjectsPaginationTokenName(ConnectedSystemPartition partition)
+    {
+        return $"{partition.ExternalId}|deleted-objects";
+    }
+
+    /// <summary>
     /// Escapes a value for safe inclusion in an LDAP search filter, per RFC 4515 § 3.
     /// </summary>
     /// <remarks>
