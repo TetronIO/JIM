@@ -59,6 +59,7 @@ This work is the sibling of the OpenLDAP service account lab (#1715): each Samba
 - Every Samba AD image carries `svc-jim`, the group and the delegation, and fails its own build if any part of it does not work.
 - Every Samba AD capable scenario passes at its smallest template with JIM bound as `svc-jim`.
 - `docs/connectors/jim-ldap-connector.md` publishes the same access control entries the lab applies.
+- The shipped delegation produces no deletion-detection finding from JIM (#1723): Schema Discovery preview clean, Delta Import "Complete" and a directory deletion arrives as an Obsolete Connected System Object. The same account with the group's entry removed from the Deleted Objects container produces the "could not confirm" warning at both, and with Read Control alone the Delta Import refuses to run. Verified against `samba-ad-primary` on 2026-09-20.
 
 ## Risks and Mitigations
 
