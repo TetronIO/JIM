@@ -74,7 +74,12 @@ $scriptDir = $PSScriptRoot
 $postProvisionContent = Get-Content -Path (Join-Path $scriptDir "post-provision.sh") -Raw
 $startSambaContent = Get-Content -Path (Join-Path $scriptDir "start-samba.sh") -Raw
 $buildScriptContent = Get-Content -Path (Join-Path $scriptDir "Build-SambaImages.ps1") -Raw
-$combinedContent = $postProvisionContent + $startSambaContent + $buildScriptContent
+# The delegation files are baked into the image and applied to the domain during post-provisioning,
+# so a change to either changes image content. They are hashed last; Get-SambaBaseBuildHash in
+# Run-IntegrationTests.ps1 hashes the same files in the same order.
+$delegationAclContent = Get-Content -Path (Join-Path $scriptDir "delegation" "jim-ad-delegation.acl") -Raw
+$delegationScriptContent = Get-Content -Path (Join-Path $scriptDir "delegation" "jim-delegate.sh") -Raw
+$combinedContent = $postProvisionContent + $startSambaContent + $buildScriptContent + $delegationAclContent + $delegationScriptContent
 $buildContentHash = [System.BitConverter]::ToString(
     [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
 ).Replace("-", "").Substring(0, 16).ToLower()
@@ -250,6 +255,13 @@ foreach ($imageName in $imagesToBuild) {
     Write-Host "Step 4: Running post-provisioning setup (TLS, OUs)..." -ForegroundColor Cyan
     docker cp "$scriptDir/post-provision.sh" "${containerName}:/post-provision.sh"
     docker exec $containerName chmod +x /post-provision.sh
+    # JIM's delegation, and the script that applies it. Both are baked into the image rather than
+    # only used during the build: populate and scenario scripts create containers of their own at
+    # run time and delegate JIM's access over them by calling the same script.
+    docker exec $containerName mkdir -p /usr/local/share/jim
+    docker cp "$scriptDir/delegation/jim-ad-delegation.acl" "${containerName}:/usr/local/share/jim/jim-ad-delegation.acl"
+    docker cp "$scriptDir/delegation/jim-delegate.sh" "${containerName}:/usr/local/sbin/jim-delegate.sh"
+    docker exec $containerName chmod +x /usr/local/sbin/jim-delegate.sh
     # The Compose service name is the Host administrators configure on the Connected System, and the
     # certificate has to carry it or the very first connection fails validation. It cannot be derived
     # inside the container, so it is passed in.

@@ -300,13 +300,13 @@ function Get-DirectoryConfig {
         Every returned config carries two identities: BindDN/BindPassword is the directory
         administrator (used to populate data and assert against the directory directly, e.g.
         ldapmodify/ldapsearch, snapshot verification, the compose healthcheck), and
-        JimBindDN/JimBindPassword is the identity JIM's Connected System binds as. On OpenLDAP
-        these differ (JIM binds as a delegated service account, cn=svc-jim, granted access via
-        membership of that suffix's cn=jim,ou=Services,<suffix> group; see
-        test/integration/docker/openldap/acl/). On Samba AD JimBindDN/JimBindPassword currently
-        equal the Administrator BindDN/BindPassword: the lab still binds JIM as the domain
-        Administrator there, and delegating that bind is tracked as follow-up work (#1716), not
-        done here.
+        JimBindDN/JimBindPassword is the identity JIM's Connected System binds as. They differ on
+        both directory types: JIM binds as a delegated service account, never the administrator.
+        On OpenLDAP that is cn=svc-jim, granted access through membership of that suffix's
+        cn=jim,ou=Services,<suffix> group (see test/integration/docker/openldap/acl/). On Samba AD
+        it is CN=svc-jim,OU=Services,<domain DN>, granted access through membership of the
+        CN=JIM Connectors,OU=Services,<domain DN> group; the access control entries live in
+        test/integration/docker/samba-ad-prebuilt/delegation/jim-ad-delegation.acl.
 
         A third identity, MultiPartitionJimBindDN/MultiPartitionJimBindPassword, is what a
         Connected System that imports MORE THAN ONE partition from the same server binds as
@@ -344,14 +344,15 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=panoply,DC=local"
                     BindPassword     = "Test@123!"
-                    # JIM still binds as the domain Administrator here; delegating this to a
-                    # least-privilege account is tracked separately (#1716), not done here.
-                    JimBindDN        = "CN=Administrator,CN=Users,DC=panoply,DC=local"
-                    JimBindPassword  = "Test@123!"
+                    # JIM binds as the delegated service account, not the domain Administrator:
+                    # everything the LDAP Connector needs is granted to the CN=JIM Connectors
+                    # group it belongs to (delegation/jim-ad-delegation.acl in the image sources).
+                    JimBindDN        = "CN=svc-jim,OU=Services,DC=panoply,DC=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     # Single partition per instance today, so the multi-partition identity is
                     # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
-                    MultiPartitionJimBindDN       = "CN=Administrator,CN=Users,DC=panoply,DC=local"
-                    MultiPartitionJimBindPassword = "Test@123!"
+                    MultiPartitionJimBindDN       = "CN=svc-jim,OU=Services,DC=panoply,DC=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=panoply,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=panoply,DC=local"
@@ -380,14 +381,15 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
                     BindPassword     = "Test@123!"
-                    # JIM still binds as the domain Administrator here; delegating this to a
-                    # least-privilege account is tracked separately (#1716), not done here.
-                    JimBindDN        = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
-                    JimBindPassword  = "Test@123!"
+                    # JIM binds as the delegated service account, not the domain Administrator:
+                    # everything the LDAP Connector needs is granted to the CN=JIM Connectors
+                    # group it belongs to (delegation/jim-ad-delegation.acl in the image sources).
+                    JimBindDN        = "CN=svc-jim,OU=Services,DC=resurgam,DC=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     # Single partition per instance today, so the multi-partition identity is
                     # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
-                    MultiPartitionJimBindDN       = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
-                    MultiPartitionJimBindPassword = "Test@123!"
+                    MultiPartitionJimBindDN       = "CN=svc-jim,OU=Services,DC=resurgam,DC=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=resurgam,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=resurgam,DC=local"
@@ -416,14 +418,15 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=gentian,DC=local"
                     BindPassword     = "Test@123!"
-                    # JIM still binds as the domain Administrator here; delegating this to a
-                    # least-privilege account is tracked separately (#1716), not done here.
-                    JimBindDN        = "CN=Administrator,CN=Users,DC=gentian,DC=local"
-                    JimBindPassword  = "Test@123!"
+                    # JIM binds as the delegated service account, not the domain Administrator:
+                    # everything the LDAP Connector needs is granted to the CN=JIM Connectors
+                    # group it belongs to (delegation/jim-ad-delegation.acl in the image sources).
+                    JimBindDN        = "CN=svc-jim,OU=Services,DC=gentian,DC=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     # Single partition per instance today, so the multi-partition identity is
                     # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
-                    MultiPartitionJimBindDN       = "CN=Administrator,CN=Users,DC=gentian,DC=local"
-                    MultiPartitionJimBindPassword = "Test@123!"
+                    MultiPartitionJimBindDN       = "CN=svc-jim,OU=Services,DC=gentian,DC=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=gentian,DC=local"
                     UserContainer    = "OU=Users,OU=CorpManaged,DC=gentian,DC=local"
@@ -711,6 +714,56 @@ function Add-SambaCertificateToJimStore {
     finally {
         Disconnect-JIM -ErrorAction SilentlyContinue
         Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Grant-JimAdDelegation {
+    <#
+    .SYNOPSIS
+        Delegate JIM's access over a container (an OU) on a Samba AD domain controller.
+
+    .DESCRIPTION
+        JIM's Connected Systems bind to the Samba AD lab as a delegated service account
+        (CN=svc-jim,OU=Services,<domain DN>), never the domain Administrator, and the access
+        that account has is granted per container through the CN=JIM Connectors,OU=Services
+        group it belongs to. The images bake the delegation over the containers they create at
+        build time (OU=Corp, OU=TestUsers, OU=TestGroups and the Deleted Objects container), so
+        anything below one of those inherits it and needs nothing here.
+
+        A container the lab creates at RUN time, directly under a domain root, carries no
+        delegation at all. JIM then imports from it happily and fails at export with an access
+        error, which reads like a JIM bug rather than a missing access control entry in the
+        test lab; the diagnosis costs far more than the one call this function makes. So every
+        run-time-created container JIM manages gets delegated the moment it is created.
+
+        This runs the image's own /usr/local/sbin/jim-delegate.sh, the same idempotent script
+        the image build uses, so calling it for a container that already carries the delegation
+        is harmless. The access control entries it writes live in
+        test/integration/docker/samba-ad-prebuilt/delegation/jim-ad-delegation.acl.
+
+    .PARAMETER ContainerName
+        The Docker container name of the Samba AD instance, e.g. samba-ad-primary,
+        samba-ad-source, samba-ad-target.
+
+    .PARAMETER ContainerDn
+        The Distinguished Name of the container (OU) to delegate over. The delegation applies to
+        that container and everything below it.
+
+    .EXAMPLE
+        Grant-JimAdDelegation -ContainerName "samba-ad-primary" -ContainerDn "OU=Corp,DC=panoply,DC=local"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerDn
+    )
+
+    $output = docker exec $ContainerName /usr/local/sbin/jim-delegate.sh "$ContainerDn" 2>&1
+    $outputText = ($output -join [Environment]::NewLine).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Grant-JimAdDelegation: could not delegate JIM's access over '$ContainerDn' on '$ContainerName'. JIM's Connected System will fail at export with an access error until this is granted. jim-delegate.sh output: $outputText"
     }
 }
 

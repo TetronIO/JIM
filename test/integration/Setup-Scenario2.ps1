@@ -346,6 +346,10 @@ try {
             Write-Host "    ⚠ Failed to create OU=TestUsers in Source AD: $result" -ForegroundColor Yellow
         }
 
+        # JIM provisions into this OU, so its service account needs the delegation over it.
+        Grant-JimAdDelegation -ContainerName $SourceConfig.ContainerName -ContainerDn "OU=TestUsers,$($SourceConfig.BaseDN)"
+        Write-Host "    ✓ JIM delegation granted over OU=TestUsers in Source AD" -ForegroundColor Green
+
         Write-Host "  Creating TestUsers OU in Target AD..." -ForegroundColor Gray
         $result = docker exec $TargetConfig.ContainerName samba-tool ou create "OU=TestUsers,$($TargetConfig.BaseDN)" 2>&1
         if ($LASTEXITCODE -eq 0) {
@@ -357,6 +361,10 @@ try {
         else {
             Write-Host "    ⚠ Failed to create OU=TestUsers in Target AD: $result" -ForegroundColor Yellow
         }
+
+        # JIM provisions into this OU, so its service account needs the delegation over it.
+        Grant-JimAdDelegation -ContainerName $TargetConfig.ContainerName -ContainerDn "OU=TestUsers,$($TargetConfig.BaseDN)"
+        Write-Host "    ✓ JIM delegation granted over OU=TestUsers in Target AD" -ForegroundColor Green
     }
 
     # Re-import hierarchy to pick up the new OUs
