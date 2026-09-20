@@ -211,6 +211,24 @@ public class LdapConnectorUtilitiesTests
         Assert.That(result, Does.StartWith("OU=Test|Pipe,DC=corp,DC=local|"));
     }
 
+    [Test]
+    public void GetDeletedObjectsPaginationTokenName_PartitionSharingAContainersExternalId_NeverCollidesWithTheContainersToken()
+    {
+        // The partition head is itself a selectable container, so both tokens are keyed by the same DN. A
+        // collision would hand the tombstone search a container's cookie, or the other way round, on page two.
+        var partition = new ConnectedSystemPartition { ExternalId = "DC=corp,DC=local" };
+        var container = new ConnectedSystemContainer { ExternalId = "DC=corp,DC=local" };
+        var objectType = new ConnectedSystemObjectType { Id = 42 };
+
+        var result = LdapConnectorUtilities.GetDeletedObjectsPaginationTokenName(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.EqualTo("DC=corp,DC=local|deleted-objects"));
+            Assert.That(result, Is.Not.EqualTo(LdapConnectorUtilities.GetPaginationTokenName(container, objectType)));
+        }
+    }
+
     #endregion
 
     #region ParseDistinguishedName tests

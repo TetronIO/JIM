@@ -269,6 +269,15 @@ internal class LdapConnectorDeletedObjectsAccess
         "Objects deleted since the last import may still be present in JIM.";
 
     /// <summary>
+    /// The note a Delta Import records when the directory stopped the tombstone search at its own size limit, so
+    /// that nothing from it could safely be imported (#1724). Definite, like a refusal: none of the deletions since
+    /// the last import were detected, and a Full Import is the way to catch them up.
+    /// </summary>
+    internal static string DescribeLimitExceeded(string containerDn) =>
+        $"Deletions were not detected in {containerDn}: the directory returned more deleted objects than it answers in one search, and none of them were imported. " +
+        "Objects deleted since the last import are still present in JIM; a Full Import detects them by absence.";
+
+    /// <summary>
     /// The note a Delta Import records when the partition has no Deleted Objects container to search.
     /// </summary>
     internal static string DescribeMissingContainer(string containerDn) =>
