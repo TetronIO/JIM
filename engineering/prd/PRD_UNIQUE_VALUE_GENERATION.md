@@ -261,7 +261,7 @@ A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after th
 | Collision Remediation | Post-probe collision remediated within the export run and committed; the accepted value reaching the second directory on its next export; remediation off recording an ordinary export error; a CSV target with no classification recording an ordinary export error while the LDAP targets remediate (mixed capability) |
 | Anchoring | Value accepted by one directory then rejected by the other: Needs Decision entered, no rename performed, needs-attention indicators present; each exit exercised: Allow the rename (rename carried out on the next runs and recorded as authorised), Retry after removing the conflicting object, release on flow configuration change |
 | Tokens | Only-if-taken with number and letter styles; sequence with start, increment, fixed width, seeding from an existing population, block reservation under parallel runs, raising "Start at" skipping ahead and lowering it having no effect, overflow stop versus allow; random GUID, hex and digits; prefixed combinations |
-| Never reuse | Retired value treated as taken after object deletion and after "Generate a new value"; option off releasing it; sequence numbers never reused regardless |
+| Never reuse | Retired value treated as taken after object deletion and after supersession; option off releasing it; sequence numbers never reused regardless |
 | Adopt before generate | Brownfield join, clear and re-import, and withdrawn higher-priority source all adopt the accepted value; no rename exported |
 | Failure | Attempt limit exhausted: object failed via RPEI, nothing written |
 | Stability | Full and delta re-runs leave committed values unchanged; a higher-priority source later supplying a value supersedes the generated one visibly |
@@ -278,7 +278,7 @@ Four releases, each independently shippable:
 
 | Release | Delivers | Needs |
 |---|---|---|
-| 1 | Generation with all three tokens, counters, adopt before generate, case-insensitive and cross-run uniqueness, assignment lifecycle, "Generate a new value", configuration surfaces, Scenario 22's generation cases, docs. Target-side collisions are ordinary export errors naming the value and system. Scenario 1 converts Account Name only. | Nothing new |
+| 1 | Generation with all three tokens, counters, adopt before generate, case-insensitive and cross-run uniqueness, assignment lifecycle, configuration surfaces, Scenario 22's generation cases, docs. Target-side collisions are ordinary export errors naming the value and system. Scenario 1 converts Account Name only. | Nothing new |
 | 2 | Metaverse-Derived Attribute Flows (own PRD) and the retired values register; Scenario 1 conversion completed with Email and UPN derived. | Release 1 |
 | 3 | Probing: connector capability, LDAP first, SCIM and SQL after. | Release 1 |
 | 4 | Collision Remediation, anchoring, Needs Decision and its surfaces. | Releases 2 and 3 |
