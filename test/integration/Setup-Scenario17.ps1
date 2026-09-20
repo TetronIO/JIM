@@ -7,9 +7,10 @@
 
 .DESCRIPTION
     Configures JIM to set an Initial Password on every account its outbound Synchronisation Rule
-    provisions into Samba AD, so that Scenario 17 can prove the account holder can actually use it.
+    provisions, so that Scenario 17 (Samba AD only) and Scenario 20 (either directory) can prove the
+    account holder can actually use it.
 
-    The provisioning substrate is Scenario 1's: HR CSV source, Samba AD target, an Export
+    The provisioning substrate is Scenario 1's: HR CSV source, directory target, an Export
     Synchronisation Rule that provisions Users. This script composes Setup-Scenario1.ps1 rather than
     rebuilding it, the same way Scenario 6 does, and then turns on the one thing Scenario 1 does not
     configure: the Initial Password.
@@ -20,9 +21,13 @@
     exercised (stage a Pending Initial Password on a Create export, then have the Password Delivery
     Service set it through the Connector's password channel) is the same one the generated sources use.
 
-    Expiry behaviour is RequireChangeAtNextSignIn and the account is enabled once the password lands,
-    which together are the configuration an administrator would choose for a new starter, and the two
-    the scenario then holds the directory to.
+    The account is enabled once the password lands, which together with the caller's chosen expiry
+    behaviour is the configuration an administrator would choose for a new starter. Both are Active
+    Directory operations; on a directory with no equivalent (OpenLDAP) the Connector reports them as
+    caveats on an otherwise successful password set rather than refusing it, because OpenLDAP accounts
+    have no disabled state to begin with. RequireChangeAtNextSignIn is the one behaviour with no portable
+    meaning at all, so it is the one this script actually gates on Samba AD (see the -ExpiryBehaviour
+    parameter and the guard below).
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -89,15 +94,18 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
 }
 
-# Active Directory is the only directory type this scenario can assert against: "must change at next
-# sign-in" is an Active Directory behaviour, and JIM reports it as a downgrade everywhere else (see
-# LdapConnectorPassword.BuildNonActiveDirectoryResult). Failing here is better than running a scenario
-# whose central assertion is inapplicable.
-if ($DirectoryConfig.UserObjectClass -ne "user") {
-    throw "This setup requires Samba AD: it provisions accounts and enables them as the Initial Password lands, " +
-          "which is an Active Directory operation with no portable equivalent on " +
-          "$($DirectoryConfig.ConnectedSystemName). An account left disabled there cannot be signed in as, so " +
-          "nothing built on this substrate can assert anything about the password."
+# "Must change at next sign-in" is an Active Directory behaviour: JIM reports it as a downgrade on every
+# other directory (see LdapConnectorPassword.BuildNonActiveDirectoryResult), so a caller asking for it
+# against a directory that cannot honour it would build a substrate whose central promise cannot hold.
+# Every other expiry behaviour is portable: EnableAccount is likewise an Active Directory-only operation,
+# but the Connector treats it as a caveat rather than a refusal on a directory with no equivalent flag
+# (OpenLDAP accounts have no disabled state to begin with, so there is nothing to enable), so it is not
+# gated here. This is what lets Setup-Scenario20.ps1 compose this script against OpenLDAP.
+if ($ExpiryBehaviour -eq "RequireChangeAtNextSignIn" -and $DirectoryConfig.UserObjectClass -ne "user") {
+    throw "This setup requires Samba AD when -ExpiryBehaviour is RequireChangeAtNextSignIn: 'must change at " +
+          "next sign-in' is an Active Directory operation with no portable equivalent on " +
+          "$($DirectoryConfig.ConnectedSystemName). Choose a different -ExpiryBehaviour for that directory, " +
+          "or run this against Samba AD."
 }
 
 <#
