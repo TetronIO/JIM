@@ -4,6 +4,7 @@
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using MudBlazor;
 
 namespace JIM.Web.Models;
 
@@ -75,7 +76,14 @@ public static class PendingPasswordChangeDisplay
         }
 
         if (change.FailureReason is null or PasswordSetFailureReason.None)
-            return null;
+        {
+            // A provisioned row with nothing wrong yet is still worth a line: without this it reads as a bare
+            // "Waiting" indistinguishable from an ordinary propagated change, when what it is actually waiting
+            // for is its very first delivery attempt (#1697).
+            return change.Origin == PendingPasswordChangeOrigin.Provisioned
+                ? "Initial password for a newly provisioned Connected System Object"
+                : null;
+        }
 
         var reason = Reason(change.FailureReason.Value);
         return string.IsNullOrWhiteSpace(change.TargetMessage) ? reason : $"{reason}: {change.TargetMessage}";
@@ -92,5 +100,27 @@ public static class PendingPasswordChangeDisplay
         PasswordSetFailureReason.TargetObjectNotFound => "Connected System Object not found",
         PasswordSetFailureReason.UnsupportedOperation => "Unsupported operation",
         _ => reason.ToString()
+    };
+
+    /// <summary>
+    /// The kind chip's word for where a change came from: an administrator's explicit set, a password JIM
+    /// propagated on the person's behalf, or the first password an export just provisioned (#1697).
+    /// </summary>
+    public static string OriginLabel(PendingPasswordChangeOrigin origin) => origin switch
+    {
+        PendingPasswordChangeOrigin.Explicit => "Set",
+        PendingPasswordChangeOrigin.Provisioned => "Initial",
+        _ => "Propagated"
+    };
+
+    /// <summary>
+    /// The kind chip's colour, kept in step with <see cref="OriginLabel"/> so a call site cannot show one
+    /// origin's word beside another's colour.
+    /// </summary>
+    public static Color OriginColour(PendingPasswordChangeOrigin origin) => origin switch
+    {
+        PendingPasswordChangeOrigin.Explicit => Color.Primary,
+        PendingPasswordChangeOrigin.Provisioned => Color.Secondary,
+        _ => Color.Default
     };
 }

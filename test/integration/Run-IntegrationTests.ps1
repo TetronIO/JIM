@@ -1693,16 +1693,18 @@ if ($Scenario -eq "All") {
     }
 
     # The mirror of the rule above, and it exists for the same reason: a scenario that cannot hold on the
-    # directory being swept must be skipped rather than run to a guaranteed failure. Scenarios 17 and 19 are
-    # Samba AD only because both provision accounts and enable them as a password lands, which is an Active
-    # Directory operation; an account left disabled on OpenLDAP cannot be signed in as, and signing in is what
-    # both of them prove. The test OpenLDAP container also serves no TLS, so the RFC 3062 password path JIM
-    # would use there cannot be exercised at all.
+    # directory being swept must be skipped rather than run to a guaranteed failure. Scenario 17 is Samba AD
+    # only because "must change at next sign-in" (its central assertion) is an Active Directory behaviour with
+    # no portable equivalent; JIM reports it as a downgrade on every other directory. Scenario 20 runs on
+    # either directory: OpenLDAP's RFC 3062 Password Modify path works over plain LDAP against the test
+    # container (no TLS required there), verified end to end (#1697); only its parked-change retry test is
+    # skipped on OpenLDAP internally, because the lab applies no password policy for a password to be
+    # genuinely refused by.
     if ($DirectoryType -eq "OpenLDAP") {
-        $sambaOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario17*" -or $_ -like "*Scenario20*" })
+        $sambaOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario17*" })
         if ($sambaOnly.Count -gt 0) {
             Write-Host "${YELLOW}Skipping Samba AD-only scenario(s) on OpenLDAP: $($sambaOnly -join ', ')${NC}"
-            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario17*" -and $_ -notlike "*Scenario20*" })
+            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario17*" })
         }
     }
 

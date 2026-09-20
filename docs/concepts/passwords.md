@@ -17,34 +17,34 @@ By default that password is different for every Connected System Object and JIM 
 
 --8<-- "assets/diagrams/initial-password.svg"
 
-<p class="jim-diagram-caption">The password is set in its own pass at the end of the export run, not as part of creating the Connected System Object.<span class="jimdg-caption-motion"> Moving dots trace a Connected System Object through to a delivered password.</span></p>
+<p class="jim-diagram-caption">The Connected System Object joins the same queue and delivery service as every other password change, and is usually set within seconds of the Connected System Object existing.<span class="jimdg-caption-motion"> Moving dots trace a Connected System Object through to a delivered password.</span></p>
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM separates populations: contractors and permanent staff provisioned into the same directory can want different password rules.
 
-### Why it is a separate step
-
-Setting the password happens after the Connected System Object is created, and cannot fail the export that created it. If it could, JIM would treat the object as never created and try to create it again.
-
-Instead the password is delivered in its own pass at the end of every export run, covering every Connected System Object on that system still owing one, not just the ones this run created. **An ordinary export run is therefore the retry.** A directory that was offline, or a permission your service account was missing, is picked up by the next run that was going to happen anyway. There is nothing extra to schedule.
+The Connected System Object exists before its password does: setting a password cannot fail the export that created it, because if it could, JIM would treat the Connected System Object as never created and try to create it again. Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it, recorded as "Initial password queued for delivery to {system}", and the [Password Delivery Service](#-the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. Because it shares the queue with every other password change, a refused or unreachable Connected System Object is retried on the Connected System's own [Password Synchronisation schedule](#-password-synchronisation) rather than waiting for another export run.
 
 ### What you will see afterwards
 
-Every Connected System Object ends up in one of four states, reported on the export's Activity.
+Every Connected System Object ends up in one of five states, each recorded as a child Activity of the one written when the password was queued.
 
 | State | What it means | What you do |
 |---|---|---|
 | Delivered | The password was set and the Connected System Object is ready to use. | Nothing. |
-| Retrying | JIM could not reach the system, or the Connected System Object was not visible yet. | Nothing; JIM tries again on the next export run. |
-| Parked | The system refused the password itself, for not meeting the rules that apply to that Connected System Object. Another password generated the same way would be refused for the same reason, so JIM stops rather than spending attempts on the same answer. | Correct the rule's password settings. See below. |
-| Expired | The Connected System's initial password window passed without success, a week by default. JIM stops trying, and records that it did rather than quietly forgetting the Connected System Object. | Set a password on those objects another way. |
+| Retrying | JIM could not reach the system, or the Connected System Object was not visible yet. | Nothing; JIM retries on the Connected System's own Password Synchronisation schedule. |
+| Parked | The system refused the password itself, or the settings cannot produce one at all (a stored static password that can no longer be decrypted, say). Another attempt under the same settings would be refused for the same reason, so JIM stops rather than spending attempts on the same answer. | Correct the rule's password settings. See below. |
+| Withdrawn | The Connected System Object or the Synchronisation Rule that provisioned it has since been removed, so there is nothing left to deliver a password to. | Nothing; this is not a failure, it is JIM noticing there is no longer a job to do. |
+| Expired | The Connected System's initial password window passed without success, a week by default. JIM stops trying, and records that it did rather than quietly forgetting the Connected System Object. | Set a password on those Connected System Objects another way. |
 
 A parked Connected System Object keeps **the system's own words, unaltered**, because why a directory refused a password is a fact about that directory, and it is the most useful thing you can be shown.
 
+!!! note "Several domain controllers can mean one extra retry"
+    Against a directory with several domain controllers, JIM's first attempt can arrive before the new Connected System Object has finished replicating to the one it reaches. That attempt retries on the Connected System's ordinary schedule like any other, and normally succeeds within the same run.
+
 ### Getting parked Connected System Objects moving again
 
-Parking is not a dead end. **Saving a change to the rule's initial password settings releases every Connected System Object parked against it**, and they are tried again on that Connected System's next export run. There is nothing to regenerate or invalidate first: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work, so the retry uses your corrected settings either way. Before you save, the portal tells you how many Connected System Objects saving will release, and says nothing at all for an edit that would not change what gets delivered.
+Parking is not a dead end. **Saving a change to the rule's initial password settings releases every Connected System Object parked against it**, and the Password Delivery Service attempts them again within seconds, with no export run needed. There is nothing to regenerate or invalidate first: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work, so the retry uses your corrected settings either way. Before you save, the portal tells you how many Connected System Objects saving will release, and says nothing at all for an edit that would not change what gets delivered.
 
-You are told where the work is waiting without going looking for it: parked and expired counts appear on the Synchronisation Rules and Connected Systems list pages, on the rule's own Passwords tab, and through `Get-JIMSyncRuleInitialPassword` and `Get-JIMConnectedSystem`. The two counts are shown separately and never added together, because parked work is fixable where it is reported and expired work is not.
+You are told where the work is waiting without going looking for it: on **Operations > Passwords**, where an initial password appears alongside every other kind with origin **Initial**; on the identity's own Password panel; and on the Synchronisation Rule's own Passwords tab, with parked and expired counts and the parked reasons.
 
 ### How long JIM keeps trying
 
@@ -52,7 +52,7 @@ A Connected System Object stays owed its first password for **seven days** by de
 
 **Raise it before taking a system out of service for longer than the current window.** Every Connected System Object provisioned while the target is unreachable otherwise expires without a password, and each one then needs a password set by hand. Set it on the Connected System's Settings tab, under **Initial Passwords**, or with `Set-JIMConnectedSystem -Id 1 -InitialPasswordTimeToLive (New-TimeSpan -Days 30)`.
 
-Parked and expired records are kept so you can see what became of a Connected System Object. They are removed once they have been in that state for the **initial password record retention period** (90 days by default, under Admin > Service Settings), which stops a rule provisioning into a system that refuses its passwords accumulating a record per object for ever. A record still being worked is never removed, however old, and the Activity recording what happened to the object outlives the record either way.
+Parked, withdrawn and expired records are kept so you can see what became of a Connected System Object, under the same [Password Synchronisation retention period](#-how-long-any-of-it-is-kept) as every other finished password change, a year by default. A record still being worked is never removed, however old, and the Activity recording what happened to the Connected System Object outlives the record either way.
 
 ### One password for every Connected System Object
 
@@ -242,6 +242,8 @@ What happens to a queued change:
 
 A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
 
+An [initial password](#-giving-new-connected-system-objects-their-first-password) queued by an export travels the same way, with one difference: the queued change carries no password value at all, because it never leaves the Connected System Object's Synchronisation Rule. JIM resolves what to send from that rule's Initial Password settings at each attempt, so a later change to those settings is picked up by the very next attempt rather than only by the Connected System Object's next export.
+
 ### ⚡ The Password Delivery Service
 
 Delivery is not a synchronisation task and never waits behind one. The Worker runs a separate Password Delivery Service alongside its synchronisation loop, and the two share nothing but the process: a change queued while a Full Import is running is attempted within about a second of being queued, and a retry is attempted when it falls due rather than when the Worker next has nothing to do. That is what "on its own clock" means: the service's clock, not the synchronisation engine's.
@@ -257,6 +259,8 @@ The service reports its own health. Its **Worker · Passwords** card on the [Ser
 ### 🔎 Watching the queue
 
 Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Passwords** tab of **Administration > Operations** lists every change on its way to a Connected System, one row per Metaverse Object per system, with what the target said about it. It sits beside the Queue, History and Schedules tabs because it answers the same question they do: what JIM is doing, and what it has stopped doing. The tab is badged with how many changes are waiting on a person (parked plus expired), so a backlog is visible from anywhere on the Operations page.
+
+An [initial password](#-giving-new-connected-system-objects-their-first-password) queued by an export appears here too, labelled with origin **Initial** alongside **Set** and **Propagated**, because it is the same queue, the same delivery service and the same outcomes as every other password change.
 
 It never shows a password, and cannot: the queued value is encrypted in the database and has no representation on any page, in any API response, or in any log line.
 

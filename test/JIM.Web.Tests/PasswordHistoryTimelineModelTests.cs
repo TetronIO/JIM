@@ -431,6 +431,31 @@ public class PasswordHistoryTimelineModelTests
         Assert.That(target.Detail, Is.Null, "successes carry no words; the chip is the whole story");
     }
 
+    /// <summary>
+    /// A provisioned change's success carries no recorded words in the ordinary case (there is nothing to say
+    /// beyond "it worked"), so the fallback wording must say what actually happened: a first password was set on
+    /// a newly provisioned account, not an administrator or a propagation resetting an existing one (#1697).
+    /// </summary>
+    [Test]
+    public void Build_ProvisionedSuccessWithNoRecordedWords_ReadsAsAnInitialPassword()
+    {
+        var outcome = new PasswordSynchronisationEventOutcome
+        {
+            ActivityId = Guid.NewGuid(),
+            ConnectedSystemId = 1,
+            ConnectedSystemName = "Corporate Directory",
+            Status = ActivityStatus.Complete,
+            ErrorMessage = null,
+            Message = string.Empty,
+            OccurredAt = Now
+        };
+
+        var target = Single(PasswordHistoryTimelineModel.Build(
+            [Change(Now, PendingPasswordChangeOrigin.Provisioned, outcomes: [outcome])], [], Now)).Targets.Single();
+
+        Assert.That(target.Tooltip, Does.StartWith("Initial password set."));
+    }
+
     [Test]
     public void Build_SuccessThatLaggedTheRequest_SaysWhenItLandedAndByHowMuch()
     {

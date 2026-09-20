@@ -17,8 +17,8 @@
     The password source is Static, which is the only source whose value the test can know. A generated
     password is never persisted and never returned, by design, so a test cannot bind with one; what
     Static gives up in realism it buys back in being provable end to end. The delivery path being
-    exercised (stage a Pending Initial Password on a Create export, then set it through the Connector's
-    password channel) is the same one the generated sources use.
+    exercised (stage a Pending Initial Password on a Create export, then have the Password Delivery
+    Service set it through the Connector's password channel) is the same one the generated sources use.
 
     Expiry behaviour is RequireChangeAtNextSignIn and the account is enabled once the password lands,
     which together are the configuration an administrator would choose for a new starter, and the two
