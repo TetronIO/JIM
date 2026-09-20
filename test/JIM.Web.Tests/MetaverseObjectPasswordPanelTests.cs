@@ -28,6 +28,15 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 {
+    // Connected System ids for the fixtures, one per distinct name and stable within the run. These were
+    // derived from string.GetHashCode() % 1000, which .NET randomises per process, so two names could land on
+    // the same id and a test that expected two detail lines saw one (a flake on main, seen 2026-09-19).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> SystemIds = new();
+    private static int _nextSystemId;
+
+    private static int SystemId(string name) =>
+        SystemIds.GetOrAdd(name, _ => System.Threading.Interlocked.Increment(ref _nextSystemId));
+
     private const string AttentionMarker = "jim-password-attention";
     private const string AttentionRetryMarker = "jim-password-attention-retry";
     private const string CoverageMarker = "jim-password-coverage";
@@ -69,7 +78,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     {
         ActivityId = Guid.NewGuid(),
         // A stable id per system name, so two outcomes on one system coalesce into one chip and two systems do not.
-        ConnectedSystemId = Math.Abs(system.GetHashCode() % 1000),
+        ConnectedSystemId = SystemId(system),
         ConnectedSystemName = system,
         Status = status,
         ErrorMessage = error,
@@ -103,7 +112,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     private static MetaverseObjectAccount Account(string system, bool canSetPasswords) => new()
     {
         ConnectedSystemObjectId = Guid.NewGuid(),
-        ConnectedSystemId = Math.Abs(system.GetHashCode() % 1000),
+        ConnectedSystemId = SystemId(system),
         ConnectedSystemName = system,
         AccountIdentifier = $"uid=alovelace,{system}",
         ConnectorCanSetPasswords = canSetPasswords,
@@ -378,8 +387,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             events: [parked, retrying, allSet, nothingYet],
             queued:
             [
-                Queued(Math.Abs("HR SQL".GetHashCode() % 1000), "HR SQL", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: parked.Created),
-                Queued(Math.Abs("Badge System".GetHashCode() % 1000), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: retrying.Created)
+                Queued(SystemId("HR SQL"), "HR SQL", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: parked.Created),
+                Queued(SystemId("Badge System"), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: retrying.Created)
             ]);
 
         var dots = cut.FindComponents<MudTimelineItem>().Select(i => i.Instance.Color).ToList();
@@ -402,7 +411,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             Outcome("HR SQL", ActivityStatus.Complete));
         var cut = RenderPanel(
             events: [newer, older],
-            queued: [Queued(Math.Abs("Corporate AD".GetHashCode() % 1000), "Corporate AD", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: newer.Created)]);
+            queued: [Queued(SystemId("Corporate AD"), "Corporate AD", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: newer.Created)]);
 
         var entries = FindAll(cut, EntryMarker);
         var newerChips = entries[0].QuerySelectorAll($"[data-testid='{TargetMarker}']");
@@ -482,8 +491,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             events: [change],
             queued:
             [
-                Queued(Math.Abs("HR Portal".GetHashCode() % 1000), "HR Portal", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: change.Created),
-                Queued(Math.Abs("Badge System".GetHashCode() % 1000), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: change.Created)
+                Queued(SystemId("HR Portal"), "HR Portal", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: change.Created),
+                Queued(SystemId("Badge System"), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: change.Created)
             ],
             onRetry: retried.Add,
             onStopTrying: stopped.Add);
@@ -501,8 +510,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(retried, Is.EqualTo(new[] { Math.Abs("HR Portal".GetHashCode() % 1000) }));
-            Assert.That(stopped, Is.EqualTo(new[] { Math.Abs("Badge System".GetHashCode() % 1000) }));
+            Assert.That(retried, Is.EqualTo(new[] { SystemId("HR Portal") }));
+            Assert.That(stopped, Is.EqualTo(new[] { SystemId("Badge System") }));
         }
     }
 

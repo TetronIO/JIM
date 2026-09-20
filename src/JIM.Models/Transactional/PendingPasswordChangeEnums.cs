@@ -6,7 +6,6 @@ namespace JIM.Models.Transactional;
 /// <summary>
 /// Where a queued password change stands in reaching its Connected System (#1119).
 /// <para>
-/// Deliberately the same three states as <see cref="PendingInitialPasswordStatus"/>, and for the same reasons.
 /// There is no "delivered" state: a successful delivery removes the row, because this is a list of work
 /// outstanding rather than a history of work done, and the Activity is the history. Keeping delivered rows would
 /// grow a table by one row per password change per system, to answer a question Activities already answer, while
@@ -79,12 +78,11 @@ public enum PendingPasswordChangeStatus
 /// <summary>
 /// Where a queued password change came from (#1635): the one fact that decides how it is delivered.
 /// <para>
-/// Both origins share the queue, the retry policy, the coalescing key, the Activity shape and the person's
-/// password history; that is the point of having one pipeline. They differ in exactly two places. A propagated
-/// change is aimed at whichever account the Connected System's configuration nominates and is held while that
-/// system is paused for Password Synchronisation; an explicit set is aimed at the account the administrator
-/// named and is delivered whether or not the system is configured, because the administrator has already made
-/// the decision a configuration exists to make (decision D1).
+/// All three origins share the queue, the retry policy, the coalescing key, the Activity shape and the person's
+/// password history; that is the point of having one pipeline. A propagated change is aimed at whichever account
+/// the Connected System's configuration nominates and is held while that system is paused for Password
+/// Synchronisation; an explicit set and a provisioned row are both aimed at the account named on the row and are
+/// delivered whether or not the system is configured, because that account is already decided (decision D1).
 /// </para>
 /// </summary>
 public enum PendingPasswordChangeOrigin
@@ -102,5 +100,80 @@ public enum PendingPasswordChangeOrigin
     /// configuration or has it switched off. Every row queued before origins existed was propagated, which is
     /// why that value is zero and this one is not.
     /// </summary>
-    Explicit = 1
+    Explicit = 1,
+
+    /// <summary>
+    /// The first password for an account an export has just provisioned. Delivered whatever the system's
+    /// Password Synchronisation configuration says, exactly like an explicit set: the account already exists and
+    /// is already named, so there is no configuration decision left to defer to.
+    /// <para>
+    /// Carries no password value: the row's <see cref="PendingPasswordChange.EncryptedPassword"/> is always null
+    /// for this origin. The password is resolved from the provisioning Synchronisation Rule's initial-password
+    /// settings at each delivery attempt, rather than generated once and stored, so a settings change before
+    /// delivery succeeds takes effect on the next try.
+    /// </para>
+    /// <para>
+    /// The account is named by <see cref="PendingPasswordChange.ConnectedSystemObjectId"/>, which is never null
+    /// for a row of this origin: the export that created the row already knows which account it provisioned.
+    /// </para>
+    /// </summary>
+    Provisioned = 2
+}
+
+/// <summary>
+/// What staging a <see cref="PendingPasswordChangeOrigin.Provisioned"/> change did, decided by the narrower
+/// conflict clause in <c>SyncRepository.PasswordOperations.cs</c>'s <c>StageProvisionedPasswordChangesAsync</c>
+/// (#1697). Unlike the ordinary coalescing UPSERT behind <see cref="PendingPasswordChangeOrigin"/>'s other two
+/// origins, a provisioned row is not allowed to overwrite the person's real password.
+/// </summary>
+public enum ProvisionedPasswordStagingDisposition
+{
+    /// <summary>
+    /// No row existed for the (Metaverse Object, Connected System) key, so the change was inserted as a new row.
+    /// </summary>
+    Inserted = 0,
+
+    /// <summary>
+    /// A row existed but carried nothing worth keeping (it was Expired, Cancelled, or itself Provisioned): the
+    /// new change's values replaced it in place. The row now in the table keeps its own id rather than taking
+    /// the change's, so a caller must adopt the row's id for anything it does with the change afterwards.
+    /// </summary>
+    Superseded = 1,
+
+    /// <summary>
+    /// A row existed carrying the person's real password (Pending, Delivering, or Parked and of Explicit or
+    /// Propagated origin) and won: nothing was written. The provisioned change is discarded, because that
+    /// password is already on its way, or waiting on a person to fix it, and must not be overwritten by the
+    /// account's throwaway first one.
+    /// </summary>
+    Coalesced = 2
+}
+
+/// <summary>
+/// What one attempt at delivering a queued password change did with the row (#1697). Replaces a plain
+/// bool return from the delivery lane's per-change step, because a Provisioned row that no longer needs a
+/// password is neither a delivery nor a retry: it must be removed from the queue without being counted, or
+/// logged, as either.
+/// </summary>
+public enum PasswordDeliveryDisposition
+{
+    /// <summary>
+    /// The password was set at the target and the row is removed from the queue. The Activity recording the
+    /// change is what survives; nothing else needed to know the password ever existed.
+    /// </summary>
+    Delivered = 0,
+
+    /// <summary>
+    /// The row stays in the queue, either waiting out a backoff for the next attempt or parked for a person to
+    /// look at. Nothing was delivered, and there is still something to deliver.
+    /// </summary>
+    Kept = 1,
+
+    /// <summary>
+    /// There is nothing left to deliver, so the row is removed from the queue without a password ever being
+    /// sent: the account a Provisioned row named no longer exists, or the Synchronisation Rule that provisioned
+    /// it no longer sets one. The child Activity records why, completed rather than failed, since nothing went
+    /// wrong; the work simply stopped being needed.
+    /// </summary>
+    Withdrawn = 2
 }

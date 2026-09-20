@@ -38,6 +38,14 @@ public class PasswordDeliveryRunResult
     public int ReleasedCount { get; set; }
 
     /// <summary>
+    /// Provisioned rows removed from the queue without a password ever being sent (#1697): the account no
+    /// longer exists, or the Synchronisation Rule that provisioned it no longer sets one. Neither a delivery nor
+    /// a retry, so it is counted on its own rather than folded into <see cref="DeliveredCount"/> or
+    /// <see cref="ParkedCount"/>.
+    /// </summary>
+    public int WithdrawnCount { get; set; }
+
+    /// <summary>
     /// True where the Connector could not open its password channel at all, so nothing was attempted. Reported
     /// once for the pass rather than as a failure per change, which would inflate every attempt count for a
     /// problem that belongs to the connection.
@@ -67,7 +75,7 @@ public class PasswordDeliveryRunResult
     /// Whether this pass has anything worth telling an administrator about.
     /// </summary>
     public bool HasSomethingToReport =>
-        DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0
+        DeliveredCount > 0 || RetryingCount > 0 || ParkedCount > 0 || ExpiredCount > 0 || WithdrawnCount > 0
         || CouldNotOpenPasswordConnection || ConnectorCannotSetPasswords || PasswordChannelNotSecure
         || ConnectorCouldNotBeResolved;
 }

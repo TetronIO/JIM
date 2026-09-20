@@ -34,7 +34,6 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, ConnectedSystemObject> _csos = new();
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
-    private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
     private readonly Dictionary<Guid, PendingPasswordChange> _pendingPasswordChanges = new();
 
     /// <summary>
@@ -64,11 +63,11 @@ public class SyncRepository : ISyncRepository
     public string? FailActivityMessageUpdateFor { get; set; }
 
     /// <summary>
-    /// When set, <see cref="StageInitialPasswordsAsync"/> throws it. Lets tests prove that failing to record
-    /// that a newly provisioned account is owed a password leaves the export that created the account
+    /// When set, <see cref="StageProvisionedPasswordChangesAsync"/> throws it. Lets tests prove that failing to
+    /// record that a newly provisioned account is owed a password leaves the export that created the account
     /// successful, which is the whole reason the password is staged rather than delivered inline.
     /// </summary>
-    public Exception? FailInitialPasswordStagingWith { get; set; }
+    public Exception? FailProvisionedPasswordStagingWith { get; set; }
 
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
@@ -102,7 +101,6 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
-    public IReadOnlyDictionary<Guid, PendingInitialPassword> PendingInitialPasswords => _pendingInitialPasswords;
     public IReadOnlyDictionary<Guid, PendingPasswordChange> PendingPasswordChanges => _pendingPasswordChanges;
 
     /// <summary>All activities, keyed by activity ID.</summary>
@@ -1497,43 +1495,6 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(count);
     }
 
-    public Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
-    {
-        if (FailInitialPasswordStagingWith != null)
-            throw FailInitialPasswordStagingWith;
-
-        // One outstanding record per account, matching the unique index in the real schema: two would mean two
-        // deliveries racing to set a password on the same object. The filter stays lazy on purpose, so that it
-        // is re-evaluated as the loop adds, and two records for the same account in one batch dedupe against
-        // each other exactly as ON CONFLICT does in the real one.
-        foreach (var pending in pendingInitialPasswords.Where(p =>
-                     !_pendingInitialPasswords.Values.Any(existing => existing.ConnectedSystemObjectId == p.ConnectedSystemObjectId)))
-        {
-            if (pending.Id == Guid.Empty)
-                pending.Id = Guid.NewGuid();
-
-            _pendingInitialPasswords[pending.Id] = pending;
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum)
-    {
-        var outstanding = _pendingInitialPasswords.Values
-            .Where(p => p.ConnectedSystemId == connectedSystemId && p.Status == PendingInitialPasswordStatus.Pending)
-            .OrderBy(p => p.CreatedAt)
-            .Take(maximum)
-            .ToList();
-
-        // The real query brings the account with it; the fake has to be asked to as well, or a delivery test
-        // would have nothing to set a password on.
-        foreach (var pending in outstanding.Where(p => p.ConnectedSystemObject == null! && _csos.ContainsKey(p.ConnectedSystemObjectId)))
-            pending.ConnectedSystemObject = _csos[pending.ConnectedSystemObjectId];
-
-        return Task.FromResult(outstanding);
-    }
-
     public Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         var configurations = _syncRules.Values
@@ -1548,136 +1509,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(system?.PasswordPolicy);
     }
 
-    public Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts)
-    {
-        foreach (var attempt in attempts.Where(a => _pendingInitialPasswords.ContainsKey(a.Id)))
-        {
-            var stored = _pendingInitialPasswords[attempt.Id];
-            stored.Status = attempt.Status;
-            stored.FailureReason = attempt.FailureReason;
-            stored.TargetMessage = attempt.TargetMessage;
-            stored.AttemptCount = attempt.AttemptCount;
-            stored.LastAttemptedAt = attempt.LastAttemptedAt;
-            stored.ExpiresAt = attempt.ExpiresAt;
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids)
-    {
-        foreach (var id in ids)
-            _pendingInitialPasswords.Remove(id);
-
-        return Task.CompletedTask;
-    }
-
     public virtual Task SetPendingExportQueueingItemsAsync(
         IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
     {
         foreach (var stamp in stamps.Where(s => _pendingExports.ContainsKey(s.PendingExportId)))
             _pendingExports[stamp.PendingExportId].QueuedByRunProfileExecutionItemId = stamp.QueuedByRunProfileExecutionItemId;
         return Task.CompletedTask;
-    }
-
-    public Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
-    {
-        var expiring = _pendingInitialPasswords.Values
-            .Where(p => p.ConnectedSystemId == connectedSystemId &&
-                        p.ExpiresAt.HasValue && p.ExpiresAt.Value < asOf &&
-                        p.Status != PendingInitialPasswordStatus.Expired)
-            .ToList();
-
-        foreach (var pending in expiring)
-            pending.Status = PendingInitialPasswordStatus.Expired;
-
-        return Task.FromResult(expiring.Count);
-    }
-
-    public Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords)
-    {
-        if (maxRecords <= 0)
-            return Task.FromResult(0);
-
-        var trimming = _pendingInitialPasswords.Values
-            .Where(p => p.Status is PendingInitialPasswordStatus.Parked or PendingInitialPasswordStatus.Expired &&
-                        (p.LastAttemptedAt ?? p.CreatedAt) < olderThan)
-            .OrderBy(p => p.LastAttemptedAt ?? p.CreatedAt)
-            .Take(maxRecords)
-            .ToList();
-
-        foreach (var pending in trimming)
-            _pendingInitialPasswords.Remove(pending.Id);
-
-        return Task.FromResult(trimming.Count);
-    }
-
-    public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
-    {
-        var parked = _pendingInitialPasswords.Values
-            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
-            .ToList();
-
-        foreach (var pending in parked)
-        {
-            pending.Status = PendingInitialPasswordStatus.Pending;
-            pending.FailureReason = null;
-            pending.TargetMessage = null;
-        }
-
-        return Task.FromResult(parked.Count);
-    }
-
-    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
-    {
-        var attention = _pendingInitialPasswords.Values
-            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value))
-            .GroupBy(p => p.SyncRuleId!.Value)
-            .Select(g => new { SyncRuleId = g.Key, Attention = SummariseAttention(g) })
-            .Where(x => x.Attention.NeedsAttention)
-            .ToDictionary(x => x.SyncRuleId, x => x.Attention);
-
-        return Task.FromResult(attention);
-    }
-
-    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
-    {
-        var attention = _pendingInitialPasswords.Values
-            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId))
-            .GroupBy(p => p.ConnectedSystemId)
-            .Select(g => new { ConnectedSystemId = g.Key, Attention = SummariseAttention(g) })
-            .Where(x => x.Attention.NeedsAttention)
-            .ToDictionary(x => x.ConnectedSystemId, x => x.Attention);
-
-        return Task.FromResult(attention);
-    }
-
-    public Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
-    {
-        var reasons = _pendingInitialPasswords.Values
-            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
-            .GroupBy(p => p.TargetMessage)
-            .Select(g => new InitialPasswordRejection
-            {
-                TargetMessage = g.Key,
-                FailureReason = g.Select(p => p.FailureReason).FirstOrDefault(r => r.HasValue),
-                AccountCount = g.Count(),
-                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
-            })
-            .OrderByDescending(r => r.AccountCount)
-            .ToList();
-
-        return Task.FromResult(reasons);
-    }
-
-    private static InitialPasswordAttention SummariseAttention(IEnumerable<PendingInitialPassword> records)
-    {
-        var byStatus = records.ToLookup(p => p.Status);
-        return new InitialPasswordAttention
-        {
-            ParkedCount = byStatus[PendingInitialPasswordStatus.Parked].Count(),
-            ExpiredCount = byStatus[PendingInitialPasswordStatus.Expired].Count()
-        };
     }
 
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
@@ -2950,6 +2787,90 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
+    {
+        if (FailProvisionedPasswordStagingWith != null)
+            throw FailProvisionedPasswordStagingWith;
+
+        var outcomes = new List<ProvisionedPasswordStagingOutcome>(changes.Count);
+
+        foreach (var change in changes)
+        {
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            var requestedId = change.Id;
+
+            // Coalescing on (Metaverse Object, Connected System), matching the unique index in the real schema
+            // and the narrower conflict clause the real repository applies for a provisioned change (#1697): the
+            // existing row wins unless it carries nothing worth keeping.
+            var existing = _pendingPasswordChanges.Values.SingleOrDefault(c =>
+                c.MetaverseObjectId == change.MetaverseObjectId && c.ConnectedSystemId == change.ConnectedSystemId);
+
+            if (existing != null && !CanBeSupersededByAProvisionedChange(existing))
+            {
+                // The existing row is the person's real password, already on its way or waiting on a person to
+                // fix it: nothing is written, and a propagated row held waiting on this exact account is
+                // released now that the account exists.
+                if (existing.Status == PendingPasswordChangeStatus.Pending && existing.NextRetryAt != null)
+                    existing.NextRetryAt = null;
+
+                outcomes.Add(new ProvisionedPasswordStagingOutcome
+                {
+                    RowId = Guid.Empty,
+                    RequestedId = requestedId,
+                    Disposition = ProvisionedPasswordStagingDisposition.Coalesced
+                });
+                continue;
+            }
+
+            if (existing != null)
+            {
+                // The row now in the table keeps its own id rather than taking the change's, matching the real
+                // repository, so the caller must adopt it for anything it does with the change afterwards.
+                existing.Supersede(change);
+                change.Id = existing.Id;
+
+                outcomes.Add(new ProvisionedPasswordStagingOutcome
+                {
+                    RowId = existing.Id,
+                    RequestedId = requestedId,
+                    Disposition = ProvisionedPasswordStagingDisposition.Superseded
+                });
+                continue;
+            }
+
+            _pendingPasswordChanges[change.Id] = change;
+            outcomes.Add(new ProvisionedPasswordStagingOutcome
+            {
+                RowId = change.Id,
+                RequestedId = requestedId,
+                Disposition = ProvisionedPasswordStagingDisposition.Inserted
+            });
+        }
+
+        return Task.FromResult(outcomes);
+    }
+
+    /// <summary>
+    /// Whether an existing queue row carries nothing worth keeping against a provisioned change trying to take
+    /// it over (#1697): itself <see cref="PendingPasswordChangeOrigin.Provisioned"/> (the account was deleted
+    /// and re-provisioned), or <see cref="PendingPasswordChangeStatus.Expired"/> /
+    /// <see cref="PendingPasswordChangeStatus.Cancelled"/> (a dead password). Anything else is the person's real
+    /// password and must win.
+    /// </summary>
+    private static bool CanBeSupersededByAProvisionedChange(PendingPasswordChange existing) =>
+        existing.Origin == PendingPasswordChangeOrigin.Provisioned
+        || existing.Status is PendingPasswordChangeStatus.Expired or PendingPasswordChangeStatus.Cancelled;
+
+    public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
+    {
+        foreach (var activity in activities)
+            _activities[activity.Id] = activity;
+
+        return Task.CompletedTask;
+    }
+
     public Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum)
     {
         var due = _pendingPasswordChanges.Values
@@ -2976,7 +2897,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(systems);
     }
 
-    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool excludePropagated)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
 
@@ -2986,7 +2907,7 @@ public class SyncRepository : ISyncRepository
         // as it must against PostgreSQL.
         var claimed = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
-            .Where(c => !explicitOnly || c.IsExplicit)
+            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
             .OrderBy(c => c.CreatedAt)
             .ThenBy(c => c.Id)
             .Take(maximum)
@@ -3099,13 +3020,23 @@ public class SyncRepository : ISyncRepository
         ClaimedAt = source.ClaimedAt,
         ClaimedBy = source.ClaimedBy,
         Origin = source.Origin,
-        EnableAccount = source.EnableAccount
+        EnableAccount = source.EnableAccount,
+        SyncRuleId = source.SyncRuleId
     };
 
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
     {
+        // Guarded on status (#1697, decision D9), mirroring the Postgres repository: a row superseded or
+        // retried mid-flight is Pending again and carries newer work, so the older delivery's success must not
+        // delete it out from under the retry. A Cancelled row whose password nevertheless landed is still
+        // removed.
         foreach (var id in ids)
         {
+            if (_pendingPasswordChanges.TryGetValue(id, out var stored)
+                && stored.Status != PendingPasswordChangeStatus.Delivering
+                && stored.Status != PendingPasswordChangeStatus.Cancelled)
+                continue;
+
             _pendingPasswordChanges.Remove(id);
             _claimedPasswordChangeIds.Remove(id);
         }
@@ -3113,11 +3044,11 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool excludePropagated)
     {
         var expiring = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.HasExpired(asOf))
-            .Where(c => !explicitOnly || c.IsExplicit)
+            .Where(c => !excludePropagated || c.Origin != PendingPasswordChangeOrigin.Propagated)
             .ToList();
 
         foreach (var change in expiring)
@@ -3130,6 +3061,20 @@ public class SyncRepository : ISyncRepository
     {
         var releasing = _pendingPasswordChanges.Values
             .Where(c => c.ConnectedSystemId == connectedSystemId && c.Status == PendingPasswordChangeStatus.Parked)
+            .ToList();
+
+        foreach (var change in releasing)
+            change.Retry();
+
+        return Task.FromResult(releasing.Count);
+    }
+
+    public Task<int> ReleaseParkedProvisionedPasswordChangesAsync(int syncRuleId)
+    {
+        var releasing = _pendingPasswordChanges.Values
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
             .ToList();
 
         foreach (var change in releasing)
@@ -3151,6 +3096,49 @@ public class SyncRepository : ISyncRepository
             });
 
         return Task.FromResult(attention);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetProvisionedPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var attention = _pendingPasswordChanges.Values
+            .Where(c => c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.SyncRuleId.HasValue && syncRuleIds.Contains(c.SyncRuleId.Value))
+            .GroupBy(c => c.SyncRuleId!.Value)
+            .Select(g => new { SyncRuleId = g.Key, Attention = SummarisePasswordChangeAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.SyncRuleId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId)
+    {
+        var reasons = _pendingPasswordChanges.Values
+            .Where(c => c.SyncRuleId == syncRuleId
+                        && c.Origin == PendingPasswordChangeOrigin.Provisioned
+                        && c.Status == PendingPasswordChangeStatus.Parked)
+            .GroupBy(c => c.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Select(c => c.FailureReason).FirstOrDefault(r => r.HasValue),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(c => c.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToList();
+
+        return Task.FromResult(reasons);
+    }
+
+    private static InitialPasswordAttention SummarisePasswordChangeAttention(IEnumerable<PendingPasswordChange> records)
+    {
+        var byStatus = records.ToLookup(c => c.Status);
+        return new InitialPasswordAttention
+        {
+            ParkedCount = byStatus[PendingPasswordChangeStatus.Parked].Count(),
+            ExpiredCount = byStatus[PendingPasswordChangeStatus.Expired].Count()
+        };
     }
 
     public Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangeHeadersAsync(
@@ -3180,6 +3168,7 @@ public class SyncRepository : ISyncRepository
                     ConnectedSystemId = c.ConnectedSystemId,
                     ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
                     Origin = c.Origin,
+                    SyncRuleId = c.SyncRuleId,
                     Status = c.Status,
                     FailureReason = c.FailureReason,
                     TargetMessage = c.TargetMessage,

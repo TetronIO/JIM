@@ -79,7 +79,6 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 ActivitiesDeleted = result.ActivitiesDeleted,
                 ConfigurationChangeActivitiesDeleted = result.ConfigurationChangeActivitiesDeleted,
                 SecurityEventActivitiesDeleted = result.SecurityEventActivitiesDeleted,
-                InitialPasswordWorkRecordsDeleted = result.InitialPasswordWorkRecordsDeleted,
                 PasswordEventActivitiesDeleted = result.PasswordEventActivitiesDeleted,
                 PasswordQueueRecordsDeleted = result.PasswordQueueRecordsDeleted,
                 OldestRecordDeleted = result.OldestRecordDeleted,
@@ -88,7 +87,6 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 RetentionPeriodDays = (int)(asOf - cutoffs.General).TotalDays,
                 ConfigurationChangeRetentionPeriodDays = (int)(asOf - cutoffs.ConfigurationChange).TotalDays,
                 SecurityEventRetentionPeriodDays = (int)(asOf - cutoffs.SecurityEvent).TotalDays,
-                InitialPasswordRetentionPeriodDays = (int)(asOf - cutoffs.InitialPassword).TotalDays,
                 PasswordEventRetentionPeriodDays = (int)(asOf - cutoffs.PasswordEvent).TotalDays,
                 BatchSize = cutoffs.MaxRecordsPerType
             };

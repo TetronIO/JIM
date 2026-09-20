@@ -114,8 +114,6 @@
                         </MudTooltip>
                     }
                     <ConfigurationDriftIndicator Status="@GetDrift(context.Item.Id)" ConnectedSystemName="@context.Item.Name" />
-                    <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Item.Id)"
-                                                       SubjectName="@context.Item.Name" IsConnectedSystem="true" />
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
@@ -186,7 +184,6 @@
     private VirtualisedDataGrid<ConnectedSystemHeader>? _grid;
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
     private Dictionary<int, ConfigurationDriftStatus>? _drift;
-    private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
     private Dictionary<int, PasswordSynchronisationState>? _passwordSynchronisationStates;
     private Dictionary<int, PasswordQueueAttention>? _passwordQueueAttention;
     private PasswordSynchronisationFilter _passwordSyncFilter = PasswordSynchronisationFilter.Any;
@@ -239,9 +236,6 @@
         {
             var ids = _connectedSystemHeaders.Select(cs => cs.Id).ToList();
             _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(ids);
-
-            // One grouped count for the whole page, for the same reason: a per-row query here would be an N+1.
-            _initialPasswordAttention = await jim.InitialPasswords.GetAttentionByConnectedSystemAsync(ids);
 
             // Two more batched reads for the Password Synchronisation column: where each system stands, and how
             // much of its queued work is waiting on a person.
@@ -298,9 +292,6 @@
 
     private ConfigurationDriftStatus? GetDrift(int connectedSystemId) =>
         _drift != null && _drift.TryGetValue(connectedSystemId, out var status) ? status : null;
-
-    private InitialPasswordAttention? GetInitialPasswordAttention(int connectedSystemId) =>
-        _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;
 
     private PasswordSynchronisationState? GetPasswordSynchronisationState(int connectedSystemId) =>
         _passwordSynchronisationStates != null && _passwordSynchronisationStates.TryGetValue(connectedSystemId, out var state) ? state : null;
