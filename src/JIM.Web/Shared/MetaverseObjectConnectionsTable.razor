@@ -68,10 +68,7 @@ else if (IsLoaded)
             </MudTd>
             <MudTd DataLabel="State">
                 <MudStack Spacing="0">
-                    <MudChip T="string" Variant="Variant.Text" Color="GetConnectionStateColor(context.State)"
-                             Class="jim-connection-state-chip ma-0" data-state="@context.State">
-                        @GetConnectionStateLabel(context.State)
-                    </MudChip>
+                    <ConnectionStateChip State="context.State" />
                     @if (context.State == ConnectedSystemObjectConnectionState.UpdatePending && context.PendingAttributeChangeCount is { } count)
                     {
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -173,41 +170,4 @@ else if (IsLoaded)
             (false, true) => "2 target",
             _ => "3 none"
         };
-
-    /// <summary>
-    /// The State chip's colour (D-S7): success for in sync, info for an update in flight, warning for
-    /// the provisioning states and an unconfirmed export (retryable, not yet a failure), error for a
-    /// failed export or a pending delete, and the default tone for Obsolete (a fact, not itself a
-    /// problem to fix).
-    /// </summary>
-    public static MudBlazor.Color GetConnectionStateColor(ConnectedSystemObjectConnectionState state)
-    {
-        return state switch
-        {
-            ConnectedSystemObjectConnectionState.InSync => MudBlazor.Color.Success,
-            ConnectedSystemObjectConnectionState.UpdatePending => MudBlazor.Color.Info,
-            ConnectedSystemObjectConnectionState.ProvisioningExportPending
-                or ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation
-                or ConnectedSystemObjectConnectionState.ExportNotConfirmed => MudBlazor.Color.Warning,
-            ConnectedSystemObjectConnectionState.ExportFailed
-                or ConnectedSystemObjectConnectionState.DeletePending => MudBlazor.Color.Error,
-            _ => MudBlazor.Color.Default
-        };
-    }
-
-    public static string GetConnectionStateLabel(ConnectedSystemObjectConnectionState state)
-    {
-        return state switch
-        {
-            ConnectedSystemObjectConnectionState.InSync => "In sync",
-            ConnectedSystemObjectConnectionState.UpdatePending => "Update pending",
-            ConnectedSystemObjectConnectionState.ProvisioningExportPending => "Pending export",
-            ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation => "Awaiting confirmation",
-            ConnectedSystemObjectConnectionState.ExportNotConfirmed => "Export not confirmed",
-            ConnectedSystemObjectConnectionState.ExportFailed => "Export failed",
-            ConnectedSystemObjectConnectionState.DeletePending => "Delete pending",
-            ConnectedSystemObjectConnectionState.Obsolete => "Obsolete",
-            _ => state.ToString()
-        };
-    }
 }

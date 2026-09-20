@@ -37,6 +37,8 @@ This two-stage approach gives you:
 
 A Connected System's page carries two buttons above its tabs, each showing how much is there: **Connector Space** opens the Connected System Objects staged for this system, and **Pending Exports** opens the changes waiting to be written back to it. Both sit above the tabs rather than on one of them, so they are reachable from wherever you are on the page; the Pending Exports count is highlighted whenever changes are waiting.
 
+The list's **State** column says where each object stands right now: **In sync**, **Update pending**, **Pending export**, **Awaiting confirmation**, **Export not confirmed**, **Export failed**, **Delete pending** or **Obsolete**. It combines the object's status with any queued Pending Export, so an account a run could not write reads as Export failed on the row itself rather than having to be pieced together from the status and the Pending Exports page. It is the same state a Metaverse Object's [Connections tab](sync-preview.md) shows for the same object, and it is carried by `GET /connected-systems/{id}/connector-space` and `Get-JIMConnectedSystemObject` too.
+
 ### Connected System Objects (CSOs)
 
 A **CSO** is JIM's local representation of an object in an external system. Each CSO holds:
