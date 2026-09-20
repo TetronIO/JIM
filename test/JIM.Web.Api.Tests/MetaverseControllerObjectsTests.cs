@@ -12,6 +12,11 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
+using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -25,6 +30,7 @@ public class MetaverseControllerObjectsTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
+    private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<ILogger<MetaverseController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private MetaverseController _controller = null!;
@@ -35,6 +41,12 @@ public class MetaverseControllerObjectsTests
         _mockRepository = new Mock<IRepository>();
         _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // The single-object GET derives each joined object's role and State (#1519), so every test of it
+        // reaches the connections derivation. Default to "nothing joined"; the tests that care override it.
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync([]);
         _mockLogger = new Mock<ILogger<MetaverseController>>();
         _application = new JimApplication(_mockRepository.Object);
         _controller = new MetaverseController(_mockLogger.Object, _application);
@@ -498,6 +510,67 @@ public class MetaverseControllerObjectsTests
         var result = await _controller.GetObjectAsync(id);
 
         Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+        /// <summary>
+    /// The joined-object rows in the detail response carry the derived connection data the portal's
+    /// Connections tab shows (#1519 parity): the endpoint must put the question to the one derivation
+    /// in JIM.Application rather than re-deriving role or State over the wire, so the portal, the REST
+    /// API and PowerShell cannot drift apart.
+    /// </summary>
+    [Test]
+    public async Task GetObjectAsync_JoinedObject_CarriesRoleJoinTypeAndStateAsync()
+    {
+        var id = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+        var dateJoined = DateTime.UtcNow.AddDays(-7);
+        var cso = new ConnectedSystemObject
+        {
+            Id = csoId,
+            ConnectedSystemId = 3,
+            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "Primary Directory" },
+            TypeId = 9,
+            Type = new ConnectedSystemObjectType { Id = 9, Name = "user" },
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            DateJoined = dateJoined,
+            AttributeValues = []
+        };
+        var mvo = new MetaverseObject
+        {
+            Id = id,
+            Type = new MetaverseObjectType { Id = 1, Name = "User" },
+            AttributeValues = [],
+            ConnectedSystemObjects = [cso]
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectWithProvenanceAsync(id)).ReturnsAsync(mvo);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectHeaderAsync(id))
+            .ReturnsAsync(new MetaverseObjectHeader { Id = id, TypeId = 1, TypeName = "User" });
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(id))
+            .ReturnsAsync([cso]);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>()))
+            .ReturnsAsync(new List<SyncRuleHeader>
+            {
+                new() { Id = 4, Name = "Export Users", ConnectedSystemId = 3, ConnectedSystemObjectTypeId = 9, MetaverseObjectTypeId = 1, Direction = SyncRuleDirection.Export, Enabled = true }
+            });
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, PendingExport>());
+
+        var result = await _controller.GetObjectAsync(id);
+
+        var dto = (MetaverseObjectDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var row = dto.ConnectedSystemObjects[0];
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.Id, Is.EqualTo(csoId));
+            Assert.That(row.ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(row.IsTarget, Is.True, "an enabled export Synchronisation Rule for the object's system and type makes it a target");
+            Assert.That(row.IsSource, Is.False);
+            Assert.That(row.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
+            Assert.That(row.DateJoined, Is.EqualTo(dateJoined));
+            Assert.That(row.State, Is.EqualTo(ConnectedSystemObjectConnectionState.InSync));
+        });
     }
 
     #endregion
