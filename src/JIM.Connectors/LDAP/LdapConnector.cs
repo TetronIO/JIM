@@ -874,11 +874,15 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     /// <summary>
     /// Everything an import session has to say once its work is done, applied to the result it is about to hand
-    /// back: the entries excluded Containers caused it to discard, and any rejected-domain-controller warning.
+    /// back: the entries excluded Containers caused it to discard, any deletion detection it could not vouch for,
+    /// and any rejected-domain-controller warning.
     /// </summary>
     /// <remarks>
-    /// A warning the import raised about itself always wins over the domain controller pinning note (issue #230
-    /// Phase 2): it describes how the import was performed, which matters more than a note about plumbing.
+    /// The result carries one warning, so the first of these to speak wins, in this order: a warning the import
+    /// raised about itself, which describes how the import was performed; then the deletion detection warning
+    /// (#1723), which describes what the import may have missed and so what may now be wrong in JIM; then the
+    /// domain controller pinning note (issue #230 Phase 2), which is about plumbing and changes nothing the
+    /// administrator holds. Each is logged in full where it arises, so nothing is lost by the ranking.
     /// </remarks>
     private static async Task<ConnectedSystemImportResult> FinaliseImportResultAsync(
         LdapConnectorImport import,
@@ -888,8 +892,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
         import.ReportEntriesDiscardedByExclusion(result);
 
-        if (result.WarningMessage == null && import.PinValidationWarning != null)
-            result.WarningMessage = import.PinValidationWarning;
+        result.WarningMessage ??= import.DeletionDetectionWarning ?? import.PinValidationWarning;
 
         return result;
     }

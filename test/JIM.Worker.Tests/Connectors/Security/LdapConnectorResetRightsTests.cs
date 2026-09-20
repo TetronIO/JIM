@@ -42,8 +42,8 @@ public class LdapConnectorResetRightsTests
     {
         _executor.Setup(x => x.SendRequestAsync(It.Is<SearchRequest>(r => string.IsNullOrEmpty(r.DistinguishedName))))
             .ReturnsAsync(LdapTestResponses.SearchResponseWithBinary("",
-                (LdapConnectorResetRights.AttributeTokenGroups, sids.Select(Sid).ToArray()),
-                (LdapConnectorResetRights.AttributePrincipalName, [System.Text.Encoding.UTF8.GetBytes("TESTDOMAIN\\jim-svc")])));
+                (LdapCallerSecurityContext.AttributeTokenGroups, sids.Select(Sid).ToArray()),
+                (LdapCallerSecurityContext.AttributePrincipalName, [System.Text.Encoding.UTF8.GetBytes("TESTDOMAIN\\jim-svc")])));
     }
 
     private void GivenTheRootDseReturns(SearchResponse response) =>

@@ -54,6 +54,17 @@ When a Full Import activity's deletion detection is refused, it completes as **C
 
 A refused detection also means the run does not count as a successful Full Import for the post-clear reconciliation gate; see [Run Profiles > Safeguards > Full Import](run-profiles.md#full-import).
 
+### Delta Import deletion detection (Active Directory)
+
+A Delta Import from Active Directory or Samba AD finds deletions by searching each domain's Deleted Objects container, which no delegation on an OU reaches, and which does not refuse an account that lacks rights over it: the search simply returns nothing. So before it queries any change, the run reads the container's own permissions and evaluates them for the account JIM connects as.
+
+- When the account is provably not allowed to list the container, the run ends as **Failed with error** before importing anything, and its message names the container and the rights to grant. Continuing would have imported every change and no deletion, leaving objects deleted in the directory present in JIM.
+- When JIM could not confirm either way (most often because the account lacks Read Permissions on the container), the run goes ahead and completes as **Complete with warning**, saying what it could not confirm and why, for example:
+
+> JIM could not confirm that the account it connects as can list the Deleted Objects container (CN=Deleted Objects,DC=corp,DC=local): the directory did not return the container's permissions, which needs Read Permissions on it. If it cannot, Delta Imports from this domain import no deletions. Granting Read Permissions on that container alongside List Contents and Read Property lets JIM give a definite answer.
+
+The run also completes as **Complete with warning** when the tombstone search itself is refused or finds no container; that warning is worded differently, beginning "Deletions were not detected in <container>" and noting that objects deleted since the last import may still be present in JIM, with one note per domain. The grant that makes the answer definite is in the [LDAP Connector](../connectors/jim-ldap-connector.md#active-directory) reference.
+
 ## Execution items
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.

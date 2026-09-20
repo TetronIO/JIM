@@ -21,9 +21,17 @@ internal static class SecurityDescriptorTestData
     internal const int AccessAllowedObjectAceType = 0x05;
     internal const int AccessDeniedObjectAceType = 0x06;
 
-    internal const uint ControlAccess = 0x00000100;
-    internal const uint GenericAll = 0x10000000;
+    internal const uint ListContents = 0x00000004;
+    internal const uint ValidatedWrite = 0x00000008;
+    internal const uint ReadProperty = 0x00000010;
     internal const uint WriteProperty = 0x00000020;
+    internal const uint ListObject = 0x00000080;
+    internal const uint ControlAccess = 0x00000100;
+    internal const uint ReadControl = 0x00020000;
+    internal const uint GenericAll = 0x10000000;
+    internal const uint GenericExecute = 0x20000000;
+    internal const uint GenericWrite = 0x40000000;
+    internal const uint GenericRead = 0x80000000;
 
     internal const byte InheritOnlyAce = 0x08;
 
@@ -38,6 +46,24 @@ internal static class SecurityDescriptorTestData
 
     /// <summary>An unrelated control access right, for proving the ObjectType is actually compared.</summary>
     internal static readonly Guid ChangePassword = new("ab721a53-1e2f-11d0-9819-00aa0040529b");
+
+    /// <summary>
+    /// The schemaIDGUID of the description attribute: a property to scope an object ACE to, for proving that a
+    /// property-scoped entry is not read as a grant or deny of the plain right.
+    /// </summary>
+    internal static readonly Guid DescriptionProperty = new("bf967950-0de6-11d0-a285-00aa003049e2");
+
+    /// <summary>
+    /// The schemaIDGUID of the container class, which the Deleted Objects container is an instance of. An object
+    /// ACE whose ObjectType is the object's own class addresses the object as a whole ([MS-ADTS] 5.1.3.3.3).
+    /// </summary>
+    internal static readonly Guid ContainerClass = new("bf967a8b-0de6-11d0-a285-00aa003049e2");
+
+    /// <summary>
+    /// The schemaIDGUID of the user class: a class the container is not, for proving the object's class is
+    /// actually compared rather than any class GUID being accepted.
+    /// </summary>
+    internal static readonly Guid UserClass = new("bf967aba-0de6-11d0-a285-00aa003049e2");
 
     /// <summary>
     /// Encodes a SID in the binary form of [MS-DTYP] 2.4.2.2 from its S-1-... string.
