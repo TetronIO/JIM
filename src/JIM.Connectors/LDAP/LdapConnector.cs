@@ -346,7 +346,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // Detect directory type so partition discovery can use the appropriate mechanism
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
 
-            var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
+            var ldapConnectorPartitions = new LdapConnectorPartitions(new LdapOperationExecutor(_connection), logger, rootDse.DirectoryType);
             return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
         }
         finally

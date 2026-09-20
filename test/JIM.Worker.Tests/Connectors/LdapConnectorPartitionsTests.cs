@@ -1,9 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.DirectoryServices.Protocols;
 using JIM.Connectors.LDAP;
 using JIM.Models.Staging;
+using Moq;
 using NUnit.Framework;
+using Serilog;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -624,6 +627,147 @@ public class LdapConnectorPartitionsTests
         // Assert
         Assert.That(result[0].Name, Is.EqualTo("Sales, EMEA"));
     }
+
+    #endregion
+
+    #region Unreadable partition tests (#1715)
+
+    // A directory hosting several suffixes (an OpenLDAP server serving more than one organisation, or a multi-domain
+    // Active Directory forest) commonly grants JIM's service account rights on only one of them, following
+    // least-privilege practice. Before this fix, a naming context or crossRef partition the account could not read
+    // failed the search with noSuchObject or insufficientAccessRights, and that DirectoryOperationException escaped
+    // GetPartitionsAsync unhandled, failing the whole hierarchy import for the sake of one partition the account was
+    // never meant to see. These tests exercise that path via ILdapOperationExecutor, the seam LdapConnectorPartitions
+    // already uses elsewhere in this class (GetPartitionContainers, GetNamingContexts, GetConfigurationNamingContext)
+    // rather than the concrete, unmockable LdapConnection.
+
+    private const string ReadableNamingContext1 = "dc=readable1,dc=com";
+    private const string UnreadableNamingContext = "dc=unreadable,dc=com";
+    private const string ReadableNamingContext2 = "dc=readable2,dc=com";
+
+    [Test]
+    public async Task GetPartitionsAsync_NamingContextTheAccountCannotRead_IsSkippedAndTheOthersReturnedAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        SetUpNamingContexts(executor, ReadableNamingContext1, UnreadableNamingContext, ReadableNamingContext2);
+        SetUpReadablePartition(executor, ReadableNamingContext1, "ou=Users");
+        SetUpUnreadablePartition(executor, UnreadableNamingContext, ResultCode.NoSuchObject);
+        SetUpReadablePartition(executor, ReadableNamingContext2, "ou=Groups");
+
+        var partitions = new LdapConnectorPartitions(executor.Object, Log.Logger, LdapDirectoryType.OpenLDAP);
+        var result = await partitions.GetPartitionsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Select(p => p.Name), Is.EquivalentTo(new[] { ReadableNamingContext1, ReadableNamingContext2 }),
+                "the unreadable naming context is skipped; the readable ones either side of it still come back");
+            Assert.That(result, Has.Count.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public async Task GetPartitionsAsync_InsufficientAccessOnANamingContext_IsSkippedAsync()
+    {
+        // Some directories answer with insufficientAccessRights rather than noSuchObject for the same underlying
+        // condition (an unprivileged bind account); both must be treated identically.
+        var executor = new Mock<ILdapOperationExecutor>();
+        SetUpNamingContexts(executor, ReadableNamingContext1, UnreadableNamingContext);
+        SetUpReadablePartition(executor, ReadableNamingContext1, "ou=Users");
+        SetUpUnreadablePartition(executor, UnreadableNamingContext, ResultCode.InsufficientAccessRights);
+
+        var partitions = new LdapConnectorPartitions(executor.Object, Log.Logger, LdapDirectoryType.OpenLDAP);
+        var result = await partitions.GetPartitionsAsync();
+
+        Assert.That(result.Select(p => p.Name), Is.EquivalentTo(new[] { ReadableNamingContext1 }));
+    }
+
+    [Test]
+    public void GetPartitionsAsync_EveryNamingContextUnreadable_FailsWithAClearMessage()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        SetUpNamingContexts(executor, UnreadableNamingContext, ReadableNamingContext2);
+        SetUpUnreadablePartition(executor, UnreadableNamingContext, ResultCode.NoSuchObject);
+        SetUpUnreadablePartition(executor, ReadableNamingContext2, ResultCode.InsufficientAccessRights);
+
+        var partitions = new LdapConnectorPartitions(executor.Object, Log.Logger, LdapDirectoryType.OpenLDAP);
+
+        Assert.That(async () => await partitions.GetPartitionsAsync(),
+            Throws.Exception.With.Message.Contain("can read none of the directory's naming contexts"));
+    }
+
+    [Test]
+    public void GetPartitionsAsync_OtherDirectoryErrorsOnANamingContext_StillPropagate()
+    {
+        // A busy or misbehaving directory is a genuine fault, not an access problem; it must fail the import rather
+        // than being silently skipped like an unreadable partition.
+        var executor = new Mock<ILdapOperationExecutor>();
+        SetUpNamingContexts(executor, ReadableNamingContext1);
+        SetUpUnreadablePartition(executor, ReadableNamingContext1, ResultCode.Busy);
+
+        var partitions = new LdapConnectorPartitions(executor.Object, Log.Logger, LdapDirectoryType.OpenLDAP);
+
+        Assert.That(async () => await partitions.GetPartitionsAsync(), Throws.TypeOf<DirectoryOperationException>());
+    }
+
+    [Test]
+    public async Task GetPartitionsAsync_ActiveDirectory_AnUnreadableCrossRefPartitionIsSkippedAsync()
+    {
+        const string configurationNamingContext = "CN=Configuration,DC=contoso,DC=local";
+        const string readableDomain = "DC=contoso,DC=local";
+        const string unreadableDomain = "DC=child,DC=contoso,DC=local";
+        var partitionsDn = $"CN=Partitions,{configurationNamingContext}";
+
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor
+            .Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseScopeSearch(r))))
+            .Returns(LdapTestResponses.SearchResponseWith("", ("configurationNamingContext", configurationNamingContext)));
+
+        executor
+            .Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearchForDn(r, partitionsDn))))
+            .Returns(LdapTestResponses.SearchResponseWithEntries(
+                LdapTestResponses.Entry($"CN=contoso,{partitionsDn}", ("ncname", readableDomain), ("systemflags", "3")),
+                LdapTestResponses.Entry($"CN=child,{partitionsDn}", ("ncname", unreadableDomain), ("systemflags", "3"))));
+
+        SetUpReadablePartition(executor, readableDomain, "OU=Users");
+        SetUpUnreadablePartition(executor, unreadableDomain, ResultCode.InsufficientAccessRights);
+
+        var partitions = new LdapConnectorPartitions(executor.Object, Log.Logger, LdapDirectoryType.ActiveDirectory);
+        var result = await partitions.GetPartitionsAsync();
+
+        Assert.That(result.Select(p => p.Name), Is.EquivalentTo(new[] { readableDomain }));
+    }
+
+    /// <summary>
+    /// Wires up the rootDSE Base-scope search GetNamingContexts issues, returning the given naming contexts as the
+    /// multi-valued namingContexts attribute.
+    /// </summary>
+    private static void SetUpNamingContexts(Mock<ILdapOperationExecutor> executor, params string[] namingContexts) =>
+        executor
+            .Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsBaseScopeSearch(r))))
+            .Returns(LdapTestResponses.SearchResponseWithMultiValuedAttribute("", "namingContexts", namingContexts));
+
+    /// <summary>
+    /// Wires up the subtree search GetPartitionContainers issues for the given partition DN, returning one
+    /// container entry so the partition is not discarded for having none.
+    /// </summary>
+    private static void SetUpReadablePartition(Mock<ILdapOperationExecutor> executor, string partitionDn, string containerRdn) =>
+        executor
+            .Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearchForDn(r, partitionDn))))
+            .Returns(LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry($"{containerRdn},{partitionDn}")));
+
+    /// <summary>
+    /// Wires up the subtree search GetPartitionContainers issues for the given partition DN to fail as it would when
+    /// the bind account cannot read that naming context or crossRef partition.
+    /// </summary>
+    private static void SetUpUnreadablePartition(Mock<ILdapOperationExecutor> executor, string partitionDn, ResultCode resultCode) =>
+        executor
+            .Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearchForDn(r, partitionDn))))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(resultCode), "the directory refused the search"));
+
+    private static bool IsBaseScopeSearch(DirectoryRequest request) => request is SearchRequest { Scope: SearchScope.Base };
+
+    private static bool IsSearchForDn(DirectoryRequest request, string distinguishedName) =>
+        request is SearchRequest searchRequest && searchRequest.DistinguishedName == distinguishedName;
 
     #endregion
 }
