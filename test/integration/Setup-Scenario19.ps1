@@ -178,8 +178,10 @@ function New-Scenario19ConnectedSystem {
     $settings = @{}
     if ($hostSetting) { $settings[$hostSetting.id] = @{ stringValue = $Config.Host } }
     if ($portSetting) { $settings[$portSetting.id] = @{ intValue = $Config.Port } }
-    if ($usernameSetting) { $settings[$usernameSetting.id] = @{ stringValue = $Config.BindDN } }
-    if ($passwordSetting) { $settings[$passwordSetting.id] = @{ stringValue = $Config.BindPassword } }
+    # JIM's Connected System binds as the delegated service account, not the directory
+    # administrator; see Get-DirectoryConfig's comment help for the two-identity model.
+    if ($usernameSetting) { $settings[$usernameSetting.id] = @{ stringValue = $Config.JimBindDN } }
+    if ($passwordSetting) { $settings[$passwordSetting.id] = @{ stringValue = $Config.JimBindPassword } }
     if ($useSSLSetting) { $settings[$useSSLSetting.id] = @{ checkboxValue = $Config.UseSSL } }
     if ($connectionTimeoutSetting) { $settings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
     if ($authTypeSetting) { $settings[$authTypeSetting.id] = @{ stringValue = $Config.AuthType } }

@@ -48,7 +48,12 @@ $fullTag = "$Registry/jim-openldap:primary"
 $filesToHash = @(
     (Join-Path $scriptDir "Dockerfile"),
     (Join-Path $scriptDir "scripts/01-add-second-suffix.sh"),
-    (Join-Path $scriptDir "bootstrap/01-base-ous-yellowstone.ldif")
+    (Join-Path $scriptDir "bootstrap/01-base-ous-yellowstone.ldif"),
+    (Join-Path $scriptDir "acl/jim-service-account-access.ldif"),
+    (Join-Path $scriptDir "acl/jim-frontend-access.ldif"),
+    (Join-Path $scriptDir "acl/jim-accesslog-access.ldif"),
+    (Join-Path $scriptDir "acl/jim-password-policy.ldif"),
+    (Join-Path $scriptDir "acl/jim-ppolicy-overlay.ldif")
 )
 $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
 $buildContentHash = [System.BitConverter]::ToString(

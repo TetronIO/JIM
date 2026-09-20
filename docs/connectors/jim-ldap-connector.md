@@ -289,7 +289,7 @@ See [Stating Container Scope as text](../configuration/connected-systems.md#stat
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| Username | Service account username for connecting to the directory. | `corp\svc-jim-ldap` |
+| Username | Service account username for connecting to the directory. | `corp\svc-jim-ldap` (Active Directory), `cn=svc-jim,ou=Services,dc=example,dc=com` (OpenLDAP) |
 | Password | Service account password (stored encrypted). | *(encrypted)* |
 | Authentication Type | Type of authentication: Simple or NTLM. | `Simple` |
 
@@ -471,6 +471,52 @@ The LDAP service account used by JIM should follow the principle of least privil
 
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
+
+The bullets above describe Active Directory's delegation model: control access rights, delegated OU control, and the rest. OpenLDAP has none of that machinery; permissions come from `olcAccess` rules on the directory's own configuration, so the recipe looks different even though the goal, least privilege, is the same.
+
+#### OpenLDAP
+
+Bind JIM as a dedicated service account, never the directory's rootDN. Any entry with a `userPassword` attribute can bind; a typical shape is an `organizationalRole` plus `simpleSecurityObject` entry such as `cn=svc-jim,ou=Services,dc=example,dc=com`.
+
+Access is granted to a **group**, not to an individual service account's DN. Create `cn=jim,ou=Services,dc=example,dc=com` (a `groupOfNames`) on each suffix and add the service account(s) allowed to manage that suffix as a `member`. Delegating a new Connected System, or adding a second one against the same suffix, is then a membership change, never an ACL edit. A Connected System that imports more than one partition from the same server (one import scoped across two suffix databases) uses a single service account that is a member of each suffix's group, rather than needing a bespoke rule per suffix for that account; OpenLDAP resolves group membership server-wide, so the group and the ACL that names it can live in different databases.
+
+The access-control and password-policy rules below are exactly what JIM's own integration tests run under, so they are proven working, not illustrative. Two placeholders run through the access-control files: the suffix DN (`__SUFFIX__`, for example `dc=example,dc=com`) and the suffix database's configuration entry (`__DB_DN__`, its `olcDatabase={n}mdb,cn=config` DN, found with `ldapsearch -b cn=config "(olcSuffix=<suffix>)" dn`). The accesslog file's placeholders name the group(s) instead (`__JIM_GROUP_DN__`, `__JIM_GROUP_DN_2__`). The ppolicy overlay file's modify form takes the overlay's own DN (`__OVERLAY_DN__`) rather than `__DB_DN__`: slapd assigns the overlay an ordinal RDN when it is added (`olcOverlay={0}ppolicy,<database DN>`, not the unindexed name used to add it), so a later modify has to address the DN slapd actually assigned, found with `ldapsearch -b '<database DN>' "(objectClass=olcPPolicyConfig)" dn`.
+
+Apply the access-control files bound as the configuration administrator (`cn=admin,cn=config`), since `olcAccess` and `olcOverlay` entries live under `cn=config`; apply the password policy files bound as the suffix's own administrator, since those are ordinary directory entries. Substitute the placeholders in a copy of each file, then apply it with `ldapmodify`.
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-service-account-access.ldif"
+```
+
+Rule `{3}` is what lets JIM create organisational units when "Create Containers as Needed" is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
+
+Delta import reads `cn=accesslog` one level deep. Grant that database's own access-control rule too, naming the group(s):
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-accesslog-access.ldif"
+```
+
+OpenLDAP enforces `olcSizeLimit` against non-rootDN clients even with paging controls in play, so a large accesslog query can be truncated silently unless you raise the limit or, as the integration lab does, set it unlimited on the accesslog database. A server hosting only one suffix has only one group: delete the second `by group.exact=... read` clause and its placeholder. Under this rule a suffix administrator can no longer read `cn=accesslog` themselves; that is intended, since only the service accounts that run delta imports need to. An administrator who needs to inspect it can still bind as the accesslog database's own rootDN.
+
+A frontend rule covers what every client, including anonymous ones, needs for ordinary connection setup:
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-frontend-access.ldif"
+```
+
+This set withdraws anonymous read and grants nothing to authenticated users other than the service account: OpenLDAP's own default (`to * by * read`) lets anonymous binds read the whole tree, which these rules deliberately close. If you already have "by users read" style rules for other applications, append them after JIM's rather than replacing JIM's with them, so JIM's `by * none` fallback stays last.
+
+##### Password policy
+
+JIM discovers the `ppolicy` overlay's default policy (see [Password policy discovery](#password-policy-discovery) above) and checks a static Initial Password against it before sending. A password the server still refuses parks with the server's own words, exactly as a policy refusal from Active Directory does. The ppolicy overlay only applies to non-rootDN binders, which is another reason to keep JIM off the rootDN: binding it as the service account is what makes password quality checking, lockout, expiry and history apply to JIM's password writes at all.
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-password-policy.ldif"
+```
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-ppolicy-overlay.ldif"
+```
 
 ### Network Considerations
 

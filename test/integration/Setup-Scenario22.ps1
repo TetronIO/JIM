@@ -37,8 +37,9 @@
     Data scale template, passed through to Setup-Scenario1.ps1
 
 .PARAMETER DirectoryConfig
-    Directory configuration hashtable from Get-DirectoryConfig -DirectoryType OpenLDAP. Its BindDN and
-    BindPassword are replaced with the provisioner's before it reaches Setup-Scenario1.ps1.
+    Directory configuration hashtable from Get-DirectoryConfig -DirectoryType OpenLDAP. Its JimBindDN and
+    JimBindPassword (the Connected System's own bind identity, not the rootdn BindDN/BindPassword) are
+    replaced with the provisioner's before it reaches Setup-Scenario1.ps1.
 
 .PARAMETER ExportConcurrency
     LDAP Connector export concurrency, passed through to Setup-Scenario1.ps1
@@ -109,10 +110,15 @@ Write-TestSection "Scenario 22 Setup: OpenLDAP Password Policy"
 Write-TestStep "Step 1" "Binding the Connected System as the non-root provisioner"
 
 # A shallow copy is enough: only two scalar values change, and the caller's hashtable is left alone so
-# the scenario can keep using the rootdn for its own reads of the directory.
+# the scenario can keep using the rootdn for its own reads of the directory. Setup-Scenario1.ps1
+# configures the Connected System's Username/Password from JimBindDN/JimBindPassword, not
+# BindDN/BindPassword (the two-identity model, #1715): BindDN/BindPassword stays the rootdn
+# throughout, so overriding it here would leave the Connected System bound as whatever
+# Get-DirectoryConfig's JimBindDN already was (the lab's own svc-jim service account) rather than
+# the provisioner this scenario needs.
 $provisionerConfig = $DirectoryConfig.Clone()
-$provisionerConfig.BindDN = $ProvisionerBindDN
-$provisionerConfig.BindPassword = $ProvisionerBindPassword
+$provisionerConfig.JimBindDN = $ProvisionerBindDN
+$provisionerConfig.JimBindPassword = $ProvisionerBindPassword
 Write-Host "  Connected System '$($provisionerConfig.ConnectedSystemName)' will bind as $ProvisionerBindDN" -ForegroundColor Gray
 Write-Host "  (the rootdn $($DirectoryConfig.BindDN) is exempt from the password policy, so it must not be JIM's account)" -ForegroundColor DarkGray
 
