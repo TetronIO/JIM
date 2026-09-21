@@ -5093,9 +5093,11 @@ public partial class ConnectedSystemServer
             .SetTag("hasStatusFilter", statusFilter != null)
             .SetTag("hasObjectTypeFilter", objectTypeFilter != null)
             .SetTag("hasJoinTypeFilter", joinTypeFilter != null);
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+        var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter);
+        ResolveConnectionStates(result.Results);
+        return result;
     }
 
     /// <summary>
@@ -5124,9 +5126,34 @@ public partial class ConnectedSystemServer
             .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
             .SetTag("sortBy", sortBy ?? "default")
             .SetTag("includeTotalCount", includeTotalCount);
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
+        var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
             connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter, includeTotalCount);
+        ResolveConnectionStates(result.Results);
+        return result;
+    }
+
+    /// <summary>
+    /// Resolves each row's connection state from the scalars the projection carries. In memory rather than in
+    /// the query because <see cref="ConnectedSystemObjectConnectionStateResolver"/> cannot be translated into
+    /// SQL, and it lives in this layer, which JIM.PostgresData sits below. The resolver reads only a Pending
+    /// Export's change type and status, so a lightweight instance built from the projected scalars is exactly
+    /// what it expects; no Pending Export is loaded per row.
+    /// </summary>
+    private static void ResolveConnectionStates(List<ConnectedSystemObjectHeader> headers)
+    {
+        foreach (var header in headers)
+        {
+            var pendingExport = header.HasPendingExport
+                ? new PendingExport
+                {
+                    Status = header.PendingExportStatus ?? PendingExportStatus.Pending,
+                    ChangeType = header.PendingExportChangeType ?? PendingExportChangeType.Update
+                }
+                : null;
+
+            header.State = ConnectedSystemObjectConnectionStateResolver.Resolve(header.Status, pendingExport);
+        }
     }
 
     /// <summary>

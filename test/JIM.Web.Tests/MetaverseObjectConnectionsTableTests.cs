@@ -74,7 +74,7 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
     [TestCase(ConnectedSystemObjectConnectionState.DeletePending, "Delete pending")]
     public void GetConnectionStateLabel_NamesWhatIsOutstanding(ConnectedSystemObjectConnectionState state, string expected)
     {
-        Assert.That(MetaverseObjectConnectionsTable.GetConnectionStateLabel(state), Is.EqualTo(expected));
+        Assert.That(ConnectionStateChip.GetConnectionStateLabel(state), Is.EqualTo(expected));
     }
 
     [TestCaseSource(nameof(AllStates))]
@@ -86,7 +86,7 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
             .Add(c => c.IsLoaded, true)
             .Add(c => c.Connections, [connection]));
 
-        var expectedLabel = MetaverseObjectConnectionsTable.GetConnectionStateLabel(state);
+        var expectedLabel = ConnectionStateChip.GetConnectionStateLabel(state);
         var chip = cut.Find(".jim-connection-state-chip");
 
         using (Assert.EnterMultipleScope())
