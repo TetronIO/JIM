@@ -8,11 +8,11 @@
 - **Plan:** [UNIQUE_VALUE_GENERATION.md](../plans/UNIQUE_VALUE_GENERATION.md)
 - **Depends on:** [PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md](PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md) for values derived from a generated value (release 2)
 - **Related:** [#549](https://github.com/TetronIO/JIM/issues/549) example-data expressions (closed; interim tracker), [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (parked-state and queue-and-follow precedents), [#1087](https://github.com/TetronIO/JIM/issues/1087) / [#1495](https://github.com/TetronIO/JIM/issues/1495) causality views, [#1079](https://github.com/TetronIO/JIM/issues/1079) optimistic export apply
-- **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) (design explainers, diagrams and six screens, built against `engineering/DESIGN.md` tokens); [Generated Value Options](https://claude.ai/artifact/AnigVtXRxx1t71qVS41yMr) (release 1 form: uniqueness tokens, sequence state, identity origin chips); [Linked Identifiers](https://claude.ai/artifact/KEbCieWusy8aoxnZqkMagD) (why derived values are expressions, not generated values)
+- **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) (design explainers, diagrams and six screens, built against `engineering/DESIGN.md` tokens); [Generated Value Options](https://claude.ai/artifact/AnigVtXRxx1t71qVS41yMr) (release 1 form: uniqueness tokens, sequence state, attribute origin chips); [Linked Identifiers](https://claude.ai/artifact/KEbCieWusy8aoxnZqkMagD) (why derived values are expressions, not generated values)
 
 ## Problem Statement
 
-In real deployments the HR system is authoritative for identity data (name, employee ID, department, start date) but is **not** the source of the technical identifiers an IDAM team owns: the account name (sAMAccountName), the email address, and the User Principal Name (UPN). Today JIM has no way to generate those identifiers itself. The bundled demo data papers over this by putting IT-owned attributes into the HR CSV feed, which is unrealistic and undermines the demo's credibility.
+In real deployments the HR system is authoritative for Metaverse Object data (name, employee ID, department, start date) but is **not** the source of the technical identifiers an IDAM team owns: the account name (sAMAccountName), the email address, and the User Principal Name (UPN). Today JIM has no way to generate those identifiers itself. The bundled demo data papers over this by putting IT-owned attributes into the HR CSV feed, which is unrealistic and undermines the demo's credibility.
 
 Generating these identifiers is not just string construction; JIM already has an expression engine that can build `firstname.lastname` from source attributes. The missing capability is **uniqueness**: a generated account name must not collide with one already in use, and when the natural candidate is taken the value must be disambiguated deterministically (`joe.bloggs`, then `joe.bloggs1`, `joe.bloggs2`, ...). An expression alone cannot do this, for three concrete architectural reasons found in the current codebase:
 
@@ -29,19 +29,19 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 - Generated values are checked for availability against everything JIM can see before they are proposed: in-run reservations, the Metaverse, the relevant connector spaces, and, where the connector supports it, the target directory itself.
 - When a target nevertheless rejects a generated value as already in use, JIM **self-heals** by generating the next candidate and exporting again, without administrator involvement, unless doing so would rename an account another system has already provisioned; in that case JIM stops and gives the administrator a clear decision with remediation advice. This behaviour is called **Collision Remediation** and is controllable per Attribute Flow.
 - Generated values are **sticky**: assigned once, remembered, never renumbered on a re-run, and never recomputed from the expression once committed.
-- Everything JIM generates, corrects or declines to correct is **fully transparent**: visible on the identity's attribute history, on the Run Profile execution item, and in the causality views, with what happened, why, when and by which Activity.
-- The generation and uniqueness capability is built once, as a service keyed on the object and attribute rather than on the caller, so that internally managed identities and workflow-driven generation can reuse it later without a second implementation.
+- Everything JIM generates, corrects or declines to correct is **fully transparent**: visible on the Metaverse Object's attribute history, on the Run Profile execution item, and in the causality views, with what happened, why, when and by which Activity.
+- The generation and uniqueness capability is built once, as a service keyed on the object and attribute rather than on the caller, so that internally managed Metaverse Objects and workflow-driven generation can reuse it later without a second implementation.
 
 ## Non-Goals
 
-- **No manual setting of a Metaverse attribute value by an administrator (Set Value).** This was designed and is deliberately deferred out of #242: it is the first non-import write of Identity data in JIM and belongs with the internally managed identities design. The analysis is preserved in the linked artefact; the service keeps the manual caller as a seam.
+- **No manual setting of a Metaverse attribute value by an administrator (Set Value).** This was designed and is deliberately deferred out of #242: it is the first non-import write of Metaverse Object data in JIM and belongs with the internally managed Metaverse Objects design. The analysis is preserved in the linked artefact; the service keeps the manual caller as a seam.
 - **No immediate or on-demand export lane.** Generated and remediated values reach targets through ordinary synchronisation and export runs. JIM's password delivery lane (#1121) bypasses Pending Exports because a password is never Metaverse data; that precedent is explicitly not copied for values that are.
 - **No connector calls from the web tier.** `JIM.Web` does not instantiate connectors today and does not start here. Live checks in the authoring dialog use JIM's own data only.
 - **No automatic renaming of a value another target has already provisioned** (see the anchoring rule). JIM will not silently rename a live account.
 - **No workflow engine, approval step, or human override of a generated value** beyond the actions defined for the Needs Decision state.
 - **No named sequences shared between Attribute Flows** in this release. A sequence counter belongs to the target attribute; one counter feeding several attributes or object types is a later addition.
 - **No following of input changes.** A committed value does not change when its inputs change (a surname change does not rename the account).
-- **No "Generate a new value" action.** Designed here and deferred (2026-09-20) to internal Metaverse Object management ([#614](https://github.com/TetronIO/JIM/issues/614)) together with Set Value, so every direct change to identity data is designed once. Until then a committed generated value changes only through Collision Remediation (release 4). The value's origin display on the identity (`Generated by JIM`, `Corrected`, which system and rule set a value, which person, links to the Activity) is delivered through the provenance work in [#399](https://github.com/TetronIO/JIM/issues/399), which #242's chips consume rather than duplicate.
+- **No "Generate a new value" action.** Designed here and deferred (2026-09-20) to internal Metaverse Object management ([#614](https://github.com/TetronIO/JIM/issues/614)) together with Set Value, so every direct change to Metaverse Object data is designed once. Until then a committed generated value changes only through Collision Remediation (release 4). The value's origin display on the Metaverse Object (`Generated by JIM`, `Corrected`, which system and rule set a value, which person, links to the Activity) is delivered through the provenance work in [#399](https://github.com/TetronIO/JIM/issues/399), which #242's chips consume rather than duplicate.
 - **No values derived from a generated value inside this feature.** Email built from a generated Account Name is an ordinary expression, evaluated in dependency order by [Metaverse-Derived Attribute Flows](PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md); this PRD does not make derived values generated, sticky, or uniqueness-checked.
 - **No new expression dialect.** Base values are built with `DynamicExpressoEvaluator`; there is no `{n}` placeholder or similar token for administrators to learn.
 
@@ -67,14 +67,14 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 ## User Stories
 
-1. As an IDAM administrator, I want JIM to generate a unique account name from an identity's first and last name when HR does not supply one, so that I do not have to pollute the HR feed with IT-owned attributes.
+1. As an IDAM administrator, I want JIM to generate a unique account name from a Metaverse Object's first and last name when HR does not supply one, so that I do not have to pollute the HR feed with IT-owned attributes.
 2. As an IDAM administrator, I want the second "John Smith" to receive `john.smith1` automatically, and the third `john.smith2`, so that account names never collide.
 3. As an IDAM administrator onboarding into an existing directory, I want JIM to check the directory itself, including OUs JIM does not import, so that a generated name does not collide with an account JIM has never seen.
 4. As an IDAM administrator, when a directory rejects a generated value as already in use, I want JIM to pick the next value and try again without waking me, and to tell me afterwards what it did and why.
 5. As an IDAM administrator, I do not want JIM to rename an account that already exists in production because a second system happened to have the same name; I want to be told and to decide.
-6. As an IDAM administrator, I want to see on the identity exactly which values JIM generated, which it corrected, when, and because of which system, in the same views I use for everything else JIM does.
+6. As an IDAM administrator, I want to see on the Metaverse Object exactly which values JIM generated, which it corrected, when, and because of which system, in the same views I use for everything else JIM does.
 7. As an IDAM administrator, I want to be able to turn Collision Remediation off for a flow and have collisions recorded as plain export errors instead.
-8. As an IDAM administrator, I want the same feature available on an export Synchronisation Rule for a value that only one target needs and that I do not want held as identity data.
+8. As an IDAM administrator, I want the same feature available on an export Synchronisation Rule for a value that only one target needs and that I do not want held as Metaverse Object data.
 9. As an IDAM administrator, I want a bulk import that forces many collisions to fail loudly if it cannot allocate a unique value within a bounded number of attempts, so that JIM never silently writes a duplicate or hangs.
 
 ## Requirements
@@ -102,15 +102,15 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 **Collision Remediation**
 
 13. When an export fails and the connector classifies the failure as a uniqueness rejection attributable to one generated value, and Collision Remediation is on for the flow, and the value is unanchored: JIM generates the next candidate, updates the assignment to Remediated, revises the Metaverse value (import mode) or the Connected System Object value (export mode), and flags the object for review. The next synchronisation re-stages the whole export with every dependent value recomputed, and the next export run carries it. There is no retry within the export run: a retried export would carry stale dependent values (a DN or UPN built from the old value) and fail again for a different reason. On acceptance the assignment becomes Committed with the accepted value. Attribution: the connector names the attribute where the server does (Active Directory's message codes distinguish an account name, a UPN and a DN collision; Samba names the attribute); otherwise the export carries exactly one generated value; otherwise the probe attributes it; otherwise the rejection is an ordinary export error whose advice says why, and JIM revises nothing.
-14. When the value is anchored (any other target has already accepted it): JIM does not revise it. The assignment enters NeedsDecision, the export item records an error naming the rejecting system, the value, and the system that has provisioned it, and the identity, its Synchronisation Rule and the Connected System carry a needs-attention indicator.
+14. When the value is anchored (any other target has already accepted it): JIM does not revise it. The assignment enters NeedsDecision, the export item records an error naming the rejecting system, the value, and the system that has provisioned it, and the Metaverse Object, its Synchronisation Rule and the Connected System carry a needs-attention indicator.
 15. When Collision Remediation is off, or the connector cannot classify the rejection: an ordinary export error is recorded and the assignment is unchanged.
-16. NeedsDecision has three exits: **Allow the rename** (per identity; a confirmation names every system that will change and states that the new value is decided at the next export, since the worker generates it; records the authorisation on the assignment so the next rejection remediates instead of stopping); **Retry** (releases NeedsDecision so the next export run tries the same value again, for when the conflict has been fixed at its source); **Leave it** (visible until resolved). Saving a change to the flow's configuration also releases NeedsDecision, as #1121 releases parked items. NeedsDecision never expires.
+16. NeedsDecision has three exits: **Allow the rename** (per Metaverse Object; a confirmation names every system that will change and states that the new value is decided at the next export, since the worker generates it; records the authorisation on the assignment so the next rejection remediates instead of stopping); **Retry** (releases NeedsDecision so the next export run tries the same value again, for when the conflict has been fixed at its source); **Leave it** (visible until resolved). Saving a change to the flow's configuration also releases NeedsDecision, as #1121 releases parked items. NeedsDecision never expires.
 17. In import mode, a remediated value flows to every other target through ordinary synchronisation and export: the export run flags the object for review, and the next synchronisation of any joined system (full or delta) re-evaluates its exports through the existing review mechanism (#892). Values derived from the generated value (an email built from the account name) are ordinary derived Attribute Flows and are re-derived in the same review; see the Metaverse-Derived Attribute Flows PRD.
 
 **Transparency**
 
 18. Every generation, remediation, NeedsDecision entry and administrator action is recorded against the assignment and surfaces through the existing causality model (#1087, #1495): a sync outcome `GeneratedValueRemediated` (tone Warning, plain label "Value corrected", technical "Collision Remediation", attribute row Set with the previous value) on the export item; an execution item error type `GeneratedValueCollisionUnresolved` (tone Error, "Needs a decision") for the anchored case; and, for the import-mode consequence that crosses execution items, a new append-only `CausalEdgeType.ExportRejectionCausedGeneratedValueRevision` with reason codes `GeneratedValueAlreadyInUse`, `GeneratedValueAnchoredElsewhere` and `GeneratedValueRenameAuthorised`. A retry within one export item is an outcome, not an edge, per the edge rules in `CausalEdgeEnums.cs`.
-19. The identity's attribute history for a generated attribute is the causality Timeline scoped to that attribute, rendered by the same event model, with `Generated by JIM` and `Corrected` chips on the attribute row. No bespoke history widget.
+19. The Metaverse Object's attribute history for a generated attribute is the causality Timeline scoped to that attribute, rendered by the same event model, with `Generated by JIM` and `Corrected` chips on the attribute row. No bespoke history widget.
 20. The Run Profile execution summary reports counts of values generated, collisions remediated and items needing a decision via the existing stat-counter mechanism; the summary band sentence names the systems involved.
 
 **Reuse**
@@ -119,7 +119,7 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Surface parity**
 
-22. Every configuration element above (source type, generation settings, exclusions, Collision Remediation switch) is settable through the portal, the REST API (Synchronisation Rule and Attribute Flow DTOs) and PowerShell (`New-JIMSyncRuleMapping` / `Set-JIMSyncRuleMapping` for the flow; `Set-JIMSyncRule` where rule-level settings are involved) in the same PR, with tests and docs. The NeedsDecision list and its Allow-the-rename and Retry actions ship across all three surfaces likewise; REST answers `202 Accepted` for actions whose effect lands on a later run, following the #1121 pattern. The identity's generated values (value, state, previous value) and each sequence's state are readable through all three surfaces.
+22. Every configuration element above (source type, generation settings, exclusions, Collision Remediation switch) is settable through the portal, the REST API (Synchronisation Rule and Attribute Flow DTOs) and PowerShell (`New-JIMSyncRuleMapping` / `Set-JIMSyncRuleMapping` for the flow; `Set-JIMSyncRule` where rule-level settings are involved) in the same PR, with tests and docs. The NeedsDecision list and its Allow-the-rename and Retry actions ship across all three surfaces likewise; REST answers `202 Accepted` for actions whose effect lands on a later run, following the #1121 pattern. The Metaverse Object's generated values (value, state, previous value) and each sequence's state are readable through all three surfaces.
 
 **Uniqueness tokens**
 
@@ -131,7 +131,7 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Never reuse a value**
 
-28. "Never reuse a value" is on by default. A value whose assignment is deleted is recorded in the retired values register for its attribute and is treated as taken by every gate thereafter. For sequence tokens the behaviour is inherent and cannot be turned off. The register is never pruned and is visible in the identity's history as a retirement event.
+28. "Never reuse a value" is on by default. A value whose assignment is deleted is recorded in the retired values register for its attribute and is treated as taken by every gate thereafter. For sequence tokens the behaviour is inherent and cannot be turned off. The register is never pruned and is visible in the Metaverse Object's history as a retirement event.
 
 **Generate once**
 
@@ -160,19 +160,19 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 ### Scenario 1: Account name generated when HR supplies none
 
-**Given** an import Synchronisation Rule whose Account Name Attribute Flow uses "JIM generates it" with base `Lower(mv["First Name"]) + "." + Lower(mv["Last Name"])`, and an incoming identity Joe Bloggs with no account name in the feed
+**Given** an import Synchronisation Rule whose Account Name Attribute Flow uses "JIM generates it" with base `Lower(mv["First Name"]) + "." + Lower(mv["Last Name"])`, and an incoming Metaverse Object, Joe Bloggs, with no account name in the feed
 **When** the import runs and all four gates report `joe.bloggs` free
 **Then** the assignment is created as Proposed with `joe.bloggs`, the Metaverse holds it, and the attribute shows `Generated by JIM`.
 
 ### Scenario 2: Collision caught by a local gate
 
 **Given** a Metaverse Object already holds `joe.bloggs`
-**When** a second identity generates the same base value
+**When** a second Metaverse Object generates the same base value
 **Then** it receives `joe.bloggs1` without any probe being made; a third receives `joe.bloggs2`.
 
 ### Scenario 3: Intra-batch collision within one page
 
-**Given** two new identities producing `john.smith` in the same page, neither yet persisted
+**Given** two new Metaverse Objects producing `john.smith` in the same page, neither yet persisted
 **Then** the first gets `john.smith` and the second `john.smith1`; the page flush writes no duplicate.
 
 ### Scenario 4: Brownfield, caught by the probe
@@ -185,12 +185,12 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Given** Scenario 4's account was created after the probe, or the probe reported CouldNotDetermine, so `joe.bloggs` was proposed and staged
 **When** the export to Corporate AD fails with a classified uniqueness rejection and no other target has accepted the value
-**Then** JIM generates `joe.bloggs1`, updates the Pending Export and the assignment (Remediated), retries in the same run, and on acceptance commits `joe.bloggs1`. The export item records `GeneratedValueRemediated`; the identity's history shows the correction with the reason; other targets receive `joe.bloggs1` on their next export.
+**Then** JIM generates `joe.bloggs1`, updates the Pending Export and the assignment (Remediated), retries in the same run, and on acceptance commits `joe.bloggs1`. The export item records `GeneratedValueRemediated`; the Metaverse Object's history shows the correction with the reason; other targets receive `joe.bloggs1` on their next export.
 
 ### Scenario 6: Anchored collision enters Needs Decision
 
 **Given** an import-mode Account Name `r.okafor` accepted by Corporate AD, and a later export to Contractor LDAP rejected as already in use
-**Then** JIM does not revise the value. The assignment enters NeedsDecision; the export item records `GeneratedValueCollisionUnresolved` naming both systems; the identity, Synchronisation Rule and Connected System show needs-attention. The administrator can Allow the rename (JIM then remediates to `r.okafor1` everywhere on the next runs), Retry after fixing the conflict in Contractor LDAP, or leave it.
+**Then** JIM does not revise the value. The assignment enters NeedsDecision; the export item records `GeneratedValueCollisionUnresolved` naming both systems; the Metaverse Object, Synchronisation Rule and Connected System show needs-attention. The administrator can Allow the rename (JIM then remediates to `r.okafor1` everywhere on the next runs), Retry after fixing the conflict in Contractor LDAP, or leave it.
 
 ### Scenario 7: Allocation exhaustion fails hard
 
@@ -201,7 +201,7 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Given** Scenario 5 has committed `joe.bloggs1`
 **When** the same import runs again, in full or delta
-**Then** the identity keeps `joe.bloggs1`; nothing is recomputed or renumbered.
+**Then** the Metaverse Object keeps `joe.bloggs1`; nothing is recomputed or renumbered.
 
 ### Scenario 9: Export-mode generation
 
@@ -226,21 +226,21 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 ### Scenario 13: Never reuse a value
 
-**Given** `joe.bloggs` was assigned to a leaver whose identity was deleted, and "Never reuse a value" is on
+**Given** `joe.bloggs` was assigned to a leaver whose Metaverse Object was deleted, and "Never reuse a value" is on
 **When** a new Joe Bloggs starts
 **Then** `joe.bloggs` is treated as taken and the starter receives `joe.bloggs1`; with the option off, `joe.bloggs` is free again.
 
 ### Scenario 14: Adopt before generate
 
-**Given** a brownfield identity whose Corporate AD account `jsmith` is joined by employee id after HR projected the identity
+**Given** a brownfield Metaverse Object whose Corporate AD account `jsmith` is joined by employee id after HR projected the Metaverse Object
 **When** the generated Account Name flow evaluates
 **Then** JIM adopts `jsmith` as the Committed assignment and does not propose `john.smith`; no rename is exported.
 
 ### Scenario 15: Start again
 
-**Given** a solution being rebuilt: the connector spaces were cleared and the 1,245 identities deleted, so their assignments are gone, 1,245 Employee Numbers up to 101700 are retired, and the counter stands at 101701
+**Given** a solution being rebuilt: the connector spaces were cleared and the 1,245 Metaverse Objects deleted, so their assignments are gone, 1,245 Employee Numbers up to 101700 are retired, and the counter stands at 101701
 **When** the administrator chooses Start again on the flow and confirms
-**Then** the register is emptied and the counter returns to 100456; the next full synchronisation assigns from 100456 again. Had 40 identities survived the rebuild, they would keep their numbers and assignments, and the gates would skip those numbers when the counter reaches them.
+**Then** the register is emptied and the counter returns to 100456; the next full synchronisation assigns from 100456 again. Had 40 Metaverse Objects survived the rebuild, they would keep their numbers and assignments, and the gates would skip those numbers when the counter reaches them.
 
 ## UI Mocks
 
@@ -251,7 +251,7 @@ Mockups for all six screens, plus the design explainers and diagrams (assignment
 | 1 | Add Attribute Flow, source type | `/admin/sync-rules/{id}` | "JIM generates it" beside Attribute and Expression |
 | 2 | Generation form | `/admin/sync-rules/{id}` | Base expression, "Assign the value to", collision strategy, derived system list with both capabilities, Collision Remediation on, live preview |
 | 3 | Collision Remediation, unavailable and off | `/admin/sync-rules/{id}` | Disabled-with-reason and off-with-consequence states |
-| 4 | Identity attribute history | `/t/{type}/v/{id}` | Causality Timeline scoped to the attribute; `Generated by JIM` and `Corrected` chips |
+| 4 | Metaverse Object attribute history | `/t/{type}/v/{id}` | Causality Timeline scoped to the attribute; `Generated by JIM` and `Corrected` chips |
 | 5 | Activity, Timeline view | `/activity/{id}` | Summary band and pills; remediated (Warning) and needs-a-decision (Error) events with the three exits |
 | 6 | Allow the rename | `/t/{type}/v/{id}` | Confirmation naming every system that will change, and when |
 
@@ -273,10 +273,10 @@ A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after th
 | Tokens | Only-if-taken with number and letter styles; sequence with start, increment, fixed width, seeding from an existing population, block reservation under parallel runs, raising "Start at" skipping ahead and lowering it having no effect, overflow stop versus allow; random GUID, hex and digits; prefixed combinations |
 | Never reuse | Retired value treated as taken after object deletion and after supersession; option off releasing it; sequence numbers never reused regardless |
 | Adopt before generate | Brownfield join, clear and re-import, and withdrawn higher-priority source all adopt the accepted value; no rename exported |
-| Start again | Register emptied and counter returned to start; assignment from the start of the range on the next synchronisation; surviving identities keep their values and their numbers are skipped; the same through REST and PowerShell |
+| Start again | Register emptied and counter returned to start; assignment from the start of the range on the next synchronisation; surviving Metaverse Objects keep their values and their numbers are skipped; the same through REST and PowerShell |
 | Failure | Attempt limit exhausted: object failed via RPEI, nothing written |
 | Stability | Full and delta re-runs leave committed values unchanged; a higher-priority source later supplying a value supersedes the generated one visibly |
-| Transparency | Assertions against the Activity's outcomes and causal edges (`GeneratedValueRemediated`, `GeneratedValueCollisionUnresolved`, the revision edge and its reason codes) and against the identity's attribute history |
+| Transparency | Assertions against the Activity's outcomes and causal edges (`GeneratedValueRemediated`, `GeneratedValueCollisionUnresolved`, the revision edge and its reason codes) and against the Metaverse Object's attribute history |
 | Surface parity | The same flow configured through the REST API and through PowerShell produces identical behaviour; Needs Decision listing and actions exercised through both |
 
 ### Converting existing scenarios
@@ -311,7 +311,7 @@ Four releases, each independently shippable:
 | Application | New unique value service (pattern, candidates, four-gate oracle, assignment persistence) in `JIM.Application/Servers/`. `SyncEngine.AttributeFlow.cs`: generated source type evaluated as a contribution under attribute priority; sticky assignment short-circuits recomputation. `ExportExecutionServer`: classified rejection, remediation retry loop, anchoring check, NeedsDecision entry. `ExportCausalEdgeBuilder`: the new edge. NeedsDecision release on configuration change in `ConnectedSystemServer`, mirroring `ReleaseParkedInitialPasswordsIfDeliveryChangedAsync`. |
 | Data | Repository methods: Metaverse-by-attribute-value lookup (index exists); assignment CRUD; NeedsDecision listing. Reuse of connector-space by-value lookups. |
 | Worker | Own and pass the reservation set across pages; thread the service into the import processors; remediation loop inside the export processor. |
-| Web | `SyncRuleAttributeFlowTab.razor`: source type, generation form, derived system list, Collision Remediation switch. Identity page: attribute chips and scoped Timeline. Activity page: new event labels, tones and the Allow/Retry actions. Needs-attention indicators on Synchronisation Rule and Connected System lists. |
+| Web | `SyncRuleAttributeFlowTab.razor`: source type, generation form, derived system list, Collision Remediation switch. Metaverse Object page: attribute chips and scoped Timeline. Activity page: new event labels, tones and the Allow/Retry actions. Needs-attention indicators on Synchronisation Rule and Connected System lists. |
 | API / PowerShell | Attribute Flow DTOs and cmdlets gain the generation settings and switch; NeedsDecision list and actions (`202 Accepted` with optional wait); Pester and API tests. |
 | Tests | Unit: candidate sequencing, suffix position, four-gate ordering and probe three-state handling, reservation set, stickiness, priority interaction, anchoring, remediation loop, exhaustion, enum ordinals. Database tier: assignment persistence and by-value lookups. Integration: a dedicated scenario covering every positive and negative path and configuration permutation, plus conversion of existing scenarios that source IT-owned attributes from HR feeds (see Integration Testing). bUnit: causality rendering of the new outcomes. Red first. |
 
@@ -363,7 +363,7 @@ Taken after the adversarial review (2026-09-19):
 17. **Derived values are expressions,** ordered by the Metaverse-Derived Attribute Flows PRD; nothing derived is generated or sticky.
 18. **Uniqueness is case-insensitive** and enforced across concurrent runs at the database.
 19. **Delivery in four releases:** generation and tokens; derived flows and the retired register; probing; Collision Remediation and Needs Decision.
-20. **No administrator action on a generated value in this feature.** "Generate a new value" joins Set Value under #614; provenance display on the identity is #399's, and #242's chips ride on it.
+20. **No administrator action on a generated value in this feature.** "Generate a new value" joins Set Value under #614; provenance display on the Metaverse Object is #399's, and #242's chips ride on it.
 
 ## Acceptance Criteria
 
@@ -383,7 +383,7 @@ Taken after the adversarial review (2026-09-19):
 - [ ] An anchored rejection enters Needs Decision with the three exits, needs-attention indicators, release on configuration change and no expiry (FR 14, 16, Scenario 6).
 - [ ] Collision Remediation off, or an unclassified rejection, records an ordinary export error (FR 15, Scenario 10).
 - [ ] Export-mode generation keys on the Connected System Object and never touches the Metaverse (Scenario 9).
-- [ ] All events render through the causality model with the members named in FR 18; the identity attribute history is the scoped Timeline; ordinal tests cover every appended enum member (FR 18-20).
+- [ ] All events render through the causality model with the members named in FR 18; the Metaverse Object attribute history is the scoped Timeline; ordinal tests cover every appended enum member (FR 18-20).
 - [ ] The unique value service is caller-agnostic and unit-testable without a synchronisation run (FR 21).
 - [ ] Portal, REST and PowerShell parity for configuration and for the Needs Decision list and actions, with tests and docs (FR 22).
 - [ ] `JIM.Web` gains no connector dependency.

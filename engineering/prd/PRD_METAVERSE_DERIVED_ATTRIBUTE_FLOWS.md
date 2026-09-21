@@ -25,7 +25,7 @@ Deriving values inside the Metaverse also raises a question JIM has never had to
 ## Non-Goals
 
 - **No cross-object derivation.** `mv["Manager"]` is read as the reference value, never traversed to the manager's attributes. A cross-object graph would make every manager change fan out to their reports; that is a different feature.
-- **No Metaverse-owned rules.** Derived flows are hosted on import Synchronisation Rules and are connected, prioritised and recalled through that rule, as every mapping is today. Attribute logic with no Connected System belongs with internally managed identities.
+- **No Metaverse-owned rules.** Derived flows are hosted on import Synchronisation Rules and are connected, prioritised and recalled through that rule, as every mapping is today. Attribute logic with no Connected System belongs with internally managed Metaverse Objects.
 - **No change to export expressions.** They continue to read the Metaverse Object only.
 - **No detection of loops through connector spaces** (export Account Name to a directory, import it back into an attribute Email reads). Those are not graph-visible and are already possible today.
 - **No new expression syntax.** `mv["..."]` already exists for export expressions; it becomes available on import expressions.
@@ -85,14 +85,14 @@ Deriving values inside the Metaverse also raises a question JIM has never had to
 ### Scenario 1: Email from Account Name
 
 **Given** an import rule with Email = `mv["Account Name"] + "@corp.local"` and UPN = `mv["Email"]`
-**When** an identity's Account Name is contributed
+**When** a Metaverse Object's Account Name is contributed
 **Then** Email is evaluated after Account Name and UPN after Email in the same synchronisation, and all three reach the Metaverse together.
 
 ### Scenario 2: Input from another system
 
 **Given** Email = `mv["Account Name"] + "@" + mv["Region"] + ".corp"` hosted on the HR rule, with Region contributed by the AD rule
 **When** AD's delta synchronisation changes Region
-**Then** Email is re-evaluated in that synchronisation, provided the identity is joined and in scope for the HR rule.
+**Then** Email is re-evaluated in that synchronisation, provided the Metaverse Object is joined and in scope for the HR rule.
 
 ### Scenario 3: Cycle rejected
 
@@ -101,7 +101,7 @@ Deriving values inside the Metaverse also raises a question JIM has never had to
 
 ### Scenario 4: Missing input
 
-**Given** Email reads `mv["Account Name"]` with Missing Input Behaviour "contribute no value" and an identity with no Account Name yet
+**Given** Email reads `mv["Account Name"]` with Missing Input Behaviour "contribute no value" and a Metaverse Object with no Account Name yet
 **Then** Email contributes nothing and is resolved by priority; when Account Name later arrives, Email is derived.
 
 ### Scenario 5: Re-derived after a correction
@@ -149,7 +149,7 @@ Deriving values inside the Metaverse also raises a question JIM has never had to
 ## Open Questions
 
 1. Should a warning be raised at save for non-pure expressions (dates, `Now()`) in derived flows, since they re-evaluate to a new value every run and would churn exports?
-2. Metaverse-owned attribute rules (no hosting Connected System) are the natural evolution; decide whether to design them with internally managed identities or earlier.
+2. Metaverse-owned attribute rules (no hosting Connected System) are the natural evolution; decide whether to design them with internally managed Metaverse Objects or earlier.
 
 ## Acceptance Criteria
 
