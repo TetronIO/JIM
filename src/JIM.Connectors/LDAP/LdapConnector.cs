@@ -477,7 +477,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 throw new InvalidOperationException("No connection available to discover directory servers with");
 
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
-            if (!rootDse.UseUsnDeltaImport)
+            if (!rootDse.IsActiveDirectoryFamily)
                 throw new NotSupportedException(
                     $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
 
@@ -946,7 +946,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             var preferredDomainController = settings
                 .FirstOrDefault(s => s.Setting.Name == _settingPreferredDomainController)?.StringValue;
 
-            if (rootDse.UseUsnDeltaImport &&
+            if (rootDse.IsActiveDirectoryFamily &&
                 string.IsNullOrWhiteSpace(preferredDomainController) &&
                 _lastResolutionSource != LdapServerResolutionSource.Pinned &&
                 !string.IsNullOrEmpty(rootDse.DnsHostName))
@@ -956,7 +956,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 // has no Activity-level warning channel (its results are per object), so the administrator's
                 // warning comes from the next import, which rediscovers, re-validates and reports.
                 var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-                    rootDse.UseUsnDeltaImport, preferredDomainController, rootDse.DnsHostName,
+                    rootDse.IsActiveDirectoryFamily, preferredDomainController, rootDse.DnsHostName,
                     _openConnectionPlan?.EffectiveServer ?? string.Empty,
                     server => CanConnectTo(server, Log.Logger), Log.Logger);
 

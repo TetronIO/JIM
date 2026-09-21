@@ -305,7 +305,7 @@ internal class LdapConnectorImport
             // controller than the one that produced the persisted watermark (see #230). This must
             // run before any delta querying below, on the same connection that just answered the
             // rootDSE query above.
-            if (_previousRootDse.UseUsnDeltaImport)
+            if (_previousRootDse.IsActiveDirectoryFamily)
                 LdapConnectorUtilities.VerifyDomainControllerIdentity(_previousRootDse, _currentRootDse, _logger);
 
             // Guard against silently importing zero objects from a Partition the connected domain
@@ -317,12 +317,12 @@ internal class LdapConnectorImport
             // there, its tombstone search succeeds with no rows, so continuing would import every change
             // and no deletion and provably leave deleted objects in JIM. Runs before any change is queried.
             // A denial JIM could prove stops the run; a right JIM could not confirm becomes a warning.
-            if (_previousRootDse.UseUsnDeltaImport)
+            if (_previousRootDse.IsActiveDirectoryFamily)
                 await VerifyDeletedObjectsCanBeListedAsync();
         }
 
         // Determine which delta strategy to use
-        if (_previousRootDse.UseUsnDeltaImport)
+        if (_previousRootDse.IsActiveDirectoryFamily)
         {
             if (!_previousRootDse.HighestCommittedUsn.HasValue)
             {
@@ -387,7 +387,7 @@ internal class LdapConnectorImport
                     () => GetDeletedObjectsUsingUsn(result, selectedPartition, previousUsn, deletedObjectsToken?.ByteValue));
             }
         }
-        else if (_previousRootDse.UseAccesslogDeltaImport)
+        else if (_previousRootDse.DeltaSourceKind == LdapDeltaSourceKind.Accesslog)
         {
             // For OpenLDAP with accesslog overlay
             if (string.IsNullOrEmpty(_previousRootDse.LastAccesslogTimestamp))
@@ -1020,7 +1020,7 @@ internal class LdapConnectorImport
         // (see VerifyDomainControllerIdentity in LdapConnectorUtilities). invocationId is not itself
         // a rootDSE attribute: dsServiceName gives the DN of the DC's NTDS Settings object, which is
         // queried separately below.
-        if (rootDse.UseUsnDeltaImport)
+        if (rootDse.IsActiveDirectoryFamily)
         {
             var dsServiceName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "dsServiceName");
             if (string.IsNullOrEmpty(dsServiceName))
@@ -1038,9 +1038,9 @@ internal class LdapConnectorImport
         // This must run during BOTH full and delta imports:
         // - Full import: establishes the baseline watermark for the first delta import
         // - Delta import: captures the current position so the next delta starts from here
-        if (!rootDse.UseUsnDeltaImport)
+        if (!rootDse.IsActiveDirectoryFamily)
         {
-            if (rootDse.UseAccesslogDeltaImport)
+            if (rootDse.DeltaSourceKind == LdapDeltaSourceKind.Accesslog)
             {
                 // OpenLDAP: query cn=accesslog for the latest reqStart timestamp
                 rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp();
@@ -1069,7 +1069,7 @@ internal class LdapConnectorImport
         // Domain Controller is configured, the setting owns selection, so any pin from a previous
         // configuration is cleared rather than carried forward into the new baseline.
         var pinDecision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            rootDse.UseUsnDeltaImport, _preferredDomainController, rootDse.DnsHostName,
+            rootDse.IsActiveDirectoryFamily, _preferredDomainController, rootDse.DnsHostName,
             _connectedServer, _canConnectTo, _logger);
         rootDse.PinnedDirectoryServer = pinDecision.PinnedServer;
         PinValidationWarning = pinDecision.WarningMessage;
