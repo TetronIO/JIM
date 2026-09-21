@@ -118,6 +118,14 @@ internal class LdapConnectorDeletedObjectsSearch
         {
             response = (SearchResponse)_executor.SendRequest(request, timeout);
         }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            // Some configurations have no Deleted Objects container to search. This is the shape the client library
+            // gives a missing base, so it has to come before the generic refusal below, or it would be reported as
+            // one; the LdapException form further down is the legacy shape of the same answer.
+            _logger.Debug("LdapConnectorDeletedObjectsSearch: Deleted Objects container not found at {Container}.", LogSanitiser.Sanitise(containerDn));
+            return new DeletedObjectsPage { Entries = [], Outcome = DeletedObjectsSearchOutcome.ContainerMissing };
+        }
         catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded)
         {
             // The directory stopped short. The exception carries the entries it did answer, but with no cookie
@@ -148,7 +156,7 @@ internal class LdapConnectorDeletedObjectsSearch
         }
         catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject
         {
-            // Some configurations have no Deleted Objects container to search.
+            // The legacy shape of a missing container; the DirectoryOperationException form above is the usual one.
             _logger.Debug("LdapConnectorDeletedObjectsSearch: Deleted Objects container not found at {Container}.", LogSanitiser.Sanitise(containerDn));
             return new DeletedObjectsPage { Entries = [], Outcome = DeletedObjectsSearchOutcome.ContainerMissing };
         }

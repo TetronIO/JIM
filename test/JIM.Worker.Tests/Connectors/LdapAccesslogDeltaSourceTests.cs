@@ -4,6 +4,7 @@
 using JIM.Connectors.LDAP;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -19,9 +20,9 @@ namespace JIM.Worker.Tests.Connectors;
 /// <summary>
 /// The accesslog change source an OpenLDAP Delta Import reads through, as extracted from the import: the watermark
 /// it captures from cn=accesslog (by server-side sort when the directory allows it, by walking the size limit
-/// forward when it does not), and the reading of write operations at or after that watermark into import objects.
-/// These characterise the behaviour as it stood before the extraction; where a later layer changes it, the test
-/// says so.
+/// forward when it does not), the reading of write operations at or after that watermark into import objects, and
+/// what happens when cn=accesslog cannot be read at all: the readiness check names it, the watermark stays empty
+/// rather than being invented, and a Delta Import refuses rather than importing nothing and calling it "no changes".
 /// </summary>
 [TestFixture]
 public class LdapAccesslogDeltaSourceTests
@@ -97,30 +98,53 @@ public class LdapAccesslogDeltaSourceTests
     }
 
     [Test]
-    public async Task CaptureWatermarkAsync_AccesslogEmpty_RecordsANowTimestamp()
+    public async Task CaptureWatermarkAsync_AccesslogReadableButEmpty_RecordsANowTimestampAsync()
     {
+        // The one case a generated timestamp is right for: the accesslog answered, and holds nothing (a snapshot
+        // restore clears it). Without a baseline the next Delta Import would fall back to a Full Import for nothing.
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout)).Returns(LdapTestResponses.EmptySearchResponse());
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+        var log = new CapturingSink();
         var before = DateTime.UtcNow.AddSeconds(-1);
 
-        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(rootDse.LastAccesslogTimestamp, Does.Match(@"^\d{14}\.\d{6}Z$"), "a generalised-time watermark so the next Delta Import has a baseline");
             Assert.That(ParseGeneralisedTime(rootDse.LastAccesslogTimestamp!), Is.InRange(before, DateTime.UtcNow.AddSeconds(1)));
+            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Information && e.MessageTemplate.Text.Contains("empty")), Is.True,
+                "an empty accesslog is ordinary and is said so at Information, not as a warning");
         }
     }
 
     [Test]
-    public async Task CaptureWatermarkAsync_AccesslogUnreadable_RecordsANowTimestamp()
+    public async Task CaptureWatermarkAsync_AccesslogRefused_LeavesTheWatermarkNullAsync()
     {
-        // Layer 1 characterisation: a refusal from the accesslog search is logged and a generated timestamp stands
-        // in for the watermark, exactly as an empty accesslog does. A later layer tells the two apart.
+        // A refusal used to be swallowed and a generated timestamp recorded, exactly as for an empty accesslog. That
+        // gave the next Delta Import a baseline it had no right to, so it ran, read nothing, and reported no changes.
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout))
             .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.InsufficientAccessRights), "insufficient access rights"));
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = Watermark };
+        var log = new CapturingSink();
+
+        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.Null, "no baseline, so the next Delta Import performs a Full Import and says why");
+            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains("cn=accesslog") && e.RenderMessage().Contains("insufficient access rights")), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_AccesslogNotFound_LeavesTheWatermarkNullAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
         var log = new CapturingSink();
 
@@ -128,8 +152,37 @@ public class LdapAccesslogDeltaSourceTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastAccesslogTimestamp, Does.Match(@"^\d{14}\.\d{6}Z$"));
-            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.MessageTemplate.Text.Contains("Failed to query accesslog")), Is.True);
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.Null, "a directory without the overlay has no accesslog to take a watermark from");
+            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains("cn=accesslog")), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_AccesslogNotFoundAsLdapException32_LeavesTheWatermarkNullAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout)).Throws(new LdapException(32, "no such object"));
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+
+        Assert.That(rootDse.LastAccesslogTimestamp, Is.Null);
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_ConnectionFailure_LeavesTheWatermarkNullAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout)).Throws(new LdapException(81, "server down"));
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+        var log = new CapturingSink();
+
+        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.Null, "an unknown is never turned into a baseline");
+            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains("cn=accesslog")), Is.True);
         }
     }
 
@@ -148,15 +201,148 @@ public class LdapAccesslogDeltaSourceTests
     }
 
     [Test]
-    public async Task VerifyReadinessAsync_Always_ReportsNothingInThisLayer()
+    public async Task VerifyReadinessAsync_AccesslogEntryReadable_ReportsAvailableAsync()
     {
         var executor = new Mock<ILdapOperationExecutor>();
+        SearchRequest? sent = null;
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>()))
+            .Callback<DirectoryRequest>(request => sent = (SearchRequest)request)
+            .Returns(LdapTestResponses.SearchResponseWith("cn=accesslog"));
 
         var findings = await Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [PartitionDn], CancellationToken.None);
 
+        var finding = findings.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(findings, Is.Empty);
+            Assert.That(finding.Subject, Is.EqualTo("cn=accesslog"));
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Available));
+            Assert.That(finding.DeltaImportText, Is.Null, "an availability has nothing to say");
+            Assert.That(finding.SchemaDiscoveryText, Is.Null);
+            Assert.That(sent!.DistinguishedName, Is.EqualTo("cn=accesslog"));
+            Assert.That(sent.Scope, Is.EqualTo(SearchScope.Base), "the entry itself is read, not the log it heads");
+            Assert.That(sent.Filter, Is.EqualTo("(objectClass=*)"));
+            Assert.That(sent.Attributes.Cast<string>(), Is.EqualTo(new[] { "1.1" }), "no attributes: the question is whether the entry is visible at all");
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_NoSuchObject_ReportsUnavailableNamingTheOverlayAndTheAclRemedyAsync()
+    {
+        var executor = ExecutorThrowingOnRead(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
+
+        var findings = await Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [PartitionDn], CancellationToken.None);
+
+        var finding = findings.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Subject, Is.EqualTo("cn=accesslog"));
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Unavailable));
+            Assert.That(finding.DeltaImportText, Does.StartWith("Changes cannot be detected: the directory provides no accesslog at cn=accesslog, or none the account JIM connects as may read"),
+                "some directories answer noSuchObject for a base the account may not read, so absence is never claimed outright");
+            Assert.That(finding.DeltaImportText, Does.Contain("additions, updates and deletions since the last import would go unnoticed"));
+            Assert.That(finding.DeltaImportText, Does.Contain("Run a Full Import, which also detects deletions by absence"));
+            Assert.That(finding.DeltaImportText, Does.Contain("enable the accesslog overlay and grant the account read access to cn=accesslog"));
+            Assert.That(finding.DeltaImportText, Does.Contain("Service Account Permissions"));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_NoSuchObjectAsLdapException32_ReportsUnavailableAsync()
+    {
+        var executor = ExecutorThrowingOnRead(new LdapException(32, "no such object"));
+
+        var findings = await Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [PartitionDn], CancellationToken.None);
+
+        var finding = findings.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Unavailable));
+            Assert.That(finding.DeltaImportText, Does.Contain("provides no accesslog at cn=accesslog"));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_SuccessWithNoEntry_ReportsUnavailableAsync()
+    {
+        // A directory that hides what the account may not see answers a base-scope read with success and no entry.
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>())).Returns(LdapTestResponses.EmptySearchResponse());
+
+        var findings = await Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [PartitionDn], CancellationToken.None);
+
+        var finding = findings.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Unavailable));
+            Assert.That(finding.DeltaImportText, Does.Contain("provides no accesslog at cn=accesslog, or none the account JIM connects as may read"));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_Refused_ReportsUnavailableWithTheDirectorysReasonAsync()
+    {
+        var executor = ExecutorThrowingOnRead(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.InsufficientAccessRights), "insufficient access rights"));
+
+        var findings = await Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [PartitionDn], CancellationToken.None);
+
+        var finding = findings.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Unavailable), "a refusal is read in full; it is not an unknown");
+            Assert.That(finding.DeltaImportText, Does.StartWith("Changes cannot be detected: the directory refused to read cn=accesslog (insufficient access rights)"));
+            Assert.That(finding.DeltaImportText, Does.Contain("Run a Full Import, which also detects deletions by absence"));
+            Assert.That(finding.SchemaDiscoveryText, Does.Contain("refused to read cn=accesslog (insufficient access rights)"));
+            Assert.That(finding.SchemaDiscoveryText, Does.Contain("Delta Import is not available"));
+            Assert.That(finding.Detail, Does.Contain("insufficient access rights"));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_ConnectionFailure_ReportsCouldNotDetermineAsync()
+    {
+        var executor = ExecutorThrowingOnRead(new LdapException(81, "server down"));
+
+        var findings = await Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [PartitionDn], CancellationToken.None);
+
+        var finding = findings.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.CouldNotDetermine), "a fault on the way to the directory says nothing about the accesslog");
+            Assert.That(finding.DeltaImportText, Does.StartWith("JIM could not confirm that the account it connects as can read cn=accesslog: "));
+            Assert.That(finding.DeltaImportText, Does.Contain("server down"));
+            Assert.That(finding.DeltaImportText, Does.EndWith("If it cannot, Delta Imports from this directory detect no changes."));
+            Assert.That(finding.SchemaDiscoveryText, Is.EqualTo(finding.DeltaImportText), "one text for an unknown, in both places");
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_Unavailable_SchemaDiscoveryTextSaysDeltaImportIsNotAvailableAndFullImportDetectsDeletionsAsync()
+    {
+        var executor = ExecutorThrowingOnRead(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
+
+        var findings = await Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [], CancellationToken.None);
+
+        var text = findings.Single().SchemaDiscoveryText;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(text, Does.StartWith("This directory publishes no accesslog at cn=accesslog that the account JIM connects as may read, so Delta Import is not available"));
+            Assert.That(text, Does.Contain("Full Import works as normal and also detects deletions by absence"));
+            Assert.That(text, Does.Contain("enable the accesslog overlay and grant the account read access to cn=accesslog"));
+            Assert.That(text, Does.Contain("Service Account Permissions"));
+        }
+    }
+
+    [Test]
+    public void VerifyReadinessAsync_CancellationRequested_ThrowsBeforeReading()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(() => Source(executor).VerifyReadinessAsync(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }, [PartitionDn], cancellation.Token),
+                Throws.InstanceOf<OperationCanceledException>());
             executor.VerifyNoOtherCalls();
         }
     }
@@ -444,24 +630,58 @@ public class LdapAccesslogDeltaSourceTests
     }
 
     [Test]
-    public async Task ReadChangesAsync_SearchRefused_ImportsNothingWithoutFailing()
+    public async Task ReadChangesAsync_SearchRefused_ThrowsCannotPerformDeltaImportExceptionAsync()
     {
-        // Layer 1 characterisation: a refused accesslog search is logged and the page imports nothing, which reads
-        // as "no changes". A later layer inverts this so that a Delta Import that cannot see its changes says so.
+        // A refused accesslog search used to be logged and the page imported nothing, which the run reported as
+        // "no changes". A Delta Import that cannot see its changes says so and stops instead.
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout))
             .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.InsufficientAccessRights), "insufficient access rights"));
         var host = HostReturningObjects();
-        var log = new CapturingSink();
         var result = new ConnectedSystemImportResult();
 
-        await Source(executor, log).ReadChangesAsync(Context(host), result, CancellationToken.None);
+        await Assert.ThatAsync(() => Source(executor).ReadChangesAsync(Context(host), result, CancellationToken.None),
+            Throws.TypeOf<CannotPerformDeltaImportException>()
+                .With.Message.StartsWith("Changes cannot be detected: the directory refused to read cn=accesslog (insufficient access rights)")
+                .And.Message.Contains("Run a Full Import, which also detects deletions by absence"));
+        Assert.That(result.ImportObjects, Is.Empty);
+    }
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.ImportObjects, Is.Empty);
-            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Error && e.MessageTemplate.Text.Contains("Error querying accesslog")), Is.True);
-        }
+    [Test]
+    public async Task ReadChangesAsync_AccesslogNotFound_ThrowsCannotPerformDeltaImportExceptionAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout))
+            .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
+        var result = new ConnectedSystemImportResult();
+
+        await Assert.ThatAsync(() => Source(executor).ReadChangesAsync(Context(HostReturningObjects()), result, CancellationToken.None),
+            Throws.TypeOf<CannotPerformDeltaImportException>()
+                .With.Message.StartsWith("Changes cannot be detected: the directory provides no accesslog at cn=accesslog, or none the account JIM connects as may read")
+                .And.Message.Contains("enable the accesslog overlay"));
+        Assert.That(result.ImportObjects, Is.Empty);
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_AccesslogNotFoundAsLdapException32_ThrowsCannotPerformDeltaImportExceptionAsync()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout)).Throws(new LdapException(32, "no such object"));
+
+        await Assert.ThatAsync(() => Source(executor).ReadChangesAsync(Context(HostReturningObjects()), new ConnectedSystemImportResult(), CancellationToken.None),
+            Throws.TypeOf<CannotPerformDeltaImportException>().With.Message.Contains("provides no accesslog at cn=accesslog"));
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_ConnectionFailure_PropagatesAsync()
+    {
+        // A fault on the way to the directory is not a verdict on the accesslog; it is the run's failure, in the
+        // directory's own words, and not dressed up as a missing or refused accesslog.
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout)).Throws(new LdapException(81, "server down"));
+
+        await Assert.ThatAsync(() => Source(executor).ReadChangesAsync(Context(HostReturningObjects()), new ConnectedSystemImportResult(), CancellationToken.None),
+            Throws.TypeOf<LdapException>().With.Message.Contains("server down"));
     }
 
     [Test]
@@ -545,6 +765,14 @@ public class LdapAccesslogDeltaSourceTests
             .Callback<DirectoryRequest, TimeSpan>((request, _) => captured.Value = (SearchRequest)request)
             .Returns(response);
         sent = captured;
+        return executor;
+    }
+
+    /// <summary>An executor whose untimed read, the one the readiness check makes, fails with the given exception.</summary>
+    private static Mock<ILdapOperationExecutor> ExecutorThrowingOnRead(Exception exception)
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>())).Throws(exception);
         return executor;
     }
 
