@@ -59,7 +59,7 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 **Uniqueness token.** What JIM adds to the base value, and when. *Only if taken*: nothing until the base value collides, then a number or letter. *Sequence*: always, the next number from a counter kept for the target attribute, with optional fixed width and an explicit behaviour when the number outgrows the width. *Random*: always, a GUID or a short hex or digit string; a clash draws again. Base and token may each be empty, which gives bare numbers, prefixed numbers and name-based values from one form.
 
-**Sequence counter.** Kept per target attribute, not per Attribute Flow, so removing and re-creating a flow continues the sequence. Forward-only: the next number is the higher of the counter and the flow's start value, so it is never below the highest ever assigned, deleted objects free nothing, and raising the start value is the one way to skip ahead (confirmed on save, captured as a configuration change). There is no separate "set the counter" action. Numbers are reserved in blocks per page with an atomic increment, so parallel runs never draw the same number; unused numbers at the end of a block are gaps, never reused. On first use with an existing population the counter seeds from the highest numeric value already held for the attribute, if above the configured start.
+**Sequence counter.** Kept per target attribute, not per Attribute Flow, so removing and re-creating a flow continues the sequence. Forward-only: the next number is the higher of the counter and the flow's start value, so it is never below the highest ever assigned, deleted objects free nothing, and raising the start value is the one way to skip ahead (confirmed on save, captured as a configuration change). There is no separate "set the counter" action; the only backwards move is Start again (FR 33), which regenerates everything. Numbers are reserved in blocks per page with an atomic increment, so parallel runs never draw the same number; unused numbers at the end of a block are gaps, never reused. On first use with an existing population the counter seeds from the highest numeric value already held for the attribute, if above the configured start.
 
 **Retired values register.** With "Never reuse a value" on (the default), a value whose assignment is deleted for any reason (object deleted, supersession, a future administrator action) is recorded as retired for its attribute, and the gates treat retired values as taken. It grows only with leavers and is never pruned. Turning the option off is the deliberate choice for organisations that want a rehire to receive the previous account name; the documentation recommends leaving it on for regulatory and security reasons.
 
@@ -137,6 +137,10 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 
 29. Generation happens for an object being synchronised when three conditions hold, and the form states them: no higher-priority contribution supplies a value (FR 6) and no participating target already holds one (FR 30); every attribute the base expression reads has a value, where "reads" means every `cs["..."]` or `mv["..."]` accessor named anywhere in the expression regardless of conditional branches (the resolver is static), unless the mapping's Missing Input Behaviour is "evaluate anyway"; and the mapping is connected for the object. The Missing Input Behaviour default for a generated mapping is "contribute no value" (wait), not "evaluate anyway" as for ordinary expressions, because a value built from a missing input would be kept for ever. The form lists the inputs it reads. A generated mapping added to an existing population generates (or adopts) for every object lacking a value on the next full synchronisation; the preview shows that count before saving. A committed value never changes with its inputs; changing one is deferred to #614 (see Non-Goals).
 30. **Adopt before generate.** In either mode, when the object already holds a value for the attribute that a participating target has accepted (a joined pre-existing account; an account re-imported after a connector space clear; a value a withdrawn higher-priority source left behind), JIM adopts that value as the Committed assignment instead of generating. JIM never renames a live account by ordinary generation; only Collision Remediation with the anchoring rule, or an administrator, changes an accepted value.
+
+**Start again**
+
+33. A generated Attribute Flow offers **Start again** (portal, REST and PowerShell): in one action it recalls the values the flow contributed (the same recall that removing the flow performs, #1537), deletes their assignments, forgets the attribute's retired values, returns the counter to the flow's start value, and flags the affected objects for review so the next synchronisation generates for them again. Where a participating Connected System still holds a value for an object, adopt-before-generate (FR 30) keeps it. The confirmation states the counts and consequences, requires the attribute name to be typed, and the action is recorded as an Activity. It has no preconditions: if the objects were already deleted it forgets the retired values and resets the counter alone. This is the only way a counter moves backwards.
 
 **Uniqueness semantics**
 
@@ -232,6 +236,12 @@ There is a fourth reason, which the first draft of this PRD underestimated: **un
 **When** the generated Account Name flow evaluates
 **Then** JIM adopts `jsmith` as the Committed assignment and does not propose `john.smith`; no rename is exported.
 
+### Scenario 15: Start again
+
+**Given** a solution being rebuilt: 1,245 identities hold generated Employee Numbers up to 101700, all retired values recorded, the counter at 101701
+**When** the administrator chooses Start again on the flow and confirms
+**Then** the values are recalled, the register is emptied, the counter returns to 100456, and the next full synchronisation assigns from 100456 again; identities whose directory account still holds a number adopt it instead.
+
 ## UI Mocks
 
 Mockups for all six screens, plus the design explainers and diagrams (assignment lifecycle, the service and its callers, the three Set Value shapes), are linked in the document header. Screens extend existing surfaces; none is a new page. Dialog structure and row chips follow the shipped patterns from #843 (Value processing section) and #223 (`Initial Export Only` checkbox and chip); events follow the causality idiom from #1087 and #1495.
@@ -263,6 +273,7 @@ A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after th
 | Tokens | Only-if-taken with number and letter styles; sequence with start, increment, fixed width, seeding from an existing population, block reservation under parallel runs, raising "Start at" skipping ahead and lowering it having no effect, overflow stop versus allow; random GUID, hex and digits; prefixed combinations |
 | Never reuse | Retired value treated as taken after object deletion and after supersession; option off releasing it; sequence numbers never reused regardless |
 | Adopt before generate | Brownfield join, clear and re-import, and withdrawn higher-priority source all adopt the accepted value; no rename exported |
+| Start again | Values recalled, register emptied, counter returned to start, regeneration from the start of the range on the next synchronisation; targets still holding values adopted; the same through REST and PowerShell |
 | Failure | Attempt limit exhausted: object failed via RPEI, nothing written |
 | Stability | Full and delta re-runs leave committed values unchanged; a higher-priority source later supplying a value supersedes the generated one visibly |
 | Transparency | Assertions against the Activity's outcomes and causal edges (`GeneratedValueRemediated`, `GeneratedValueCollisionUnresolved`, the revision edge and its reason codes) and against the identity's attribute history |
@@ -368,6 +379,7 @@ Taken after the adversarial review (2026-09-19):
 - [ ] "Never reuse a value" defaults to on and retires values on every assignment deletion; sequence numbers are never re-issued (FR 28, Scenario 13).
 - [ ] Adopt before generate holds for brownfield joins, clear and re-import, and withdrawn sources (FR 30, Scenario 14).
 - [ ] Uniqueness is case-insensitive and holds across parallel runs (FR 31, 32).
+- [ ] Start again recalls, forgets, resets and regenerates in one audited action on all three surfaces (FR 33, Scenario 15).
 - [ ] An anchored rejection enters Needs Decision with the three exits, needs-attention indicators, release on configuration change and no expiry (FR 14, 16, Scenario 6).
 - [ ] Collision Remediation off, or an unclassified rejection, records an ordinary export error (FR 15, Scenario 10).
 - [ ] Export-mode generation keys on the Connected System Object and never touches the Metaverse (Scenario 9).
