@@ -23,10 +23,31 @@ internal class LdapConnectorRootDse
     public long? HighestCommittedUsn { get; set; }
 
     /// <summary>
-    /// For changelog-based directories (e.g., Oracle Directory): The last change number processed.
-    /// Used for delta imports — we query cn=changelog for entries with changeNumber > this value.
+    /// For changelog-based directories (389 Directory Server, generic directories publishing a
+    /// draft-good-ldap-changelog): the highest change number the last import saw. A Delta Import reads the
+    /// changelog for entries numbered above it. Null when no readable changelog existed at the time, which is
+    /// what makes the next Delta Import fall back to a Full Import rather than read nothing.
     /// </summary>
-    public int? LastChangeNumber { get; set; }
+    public long? LastChangeNumber { get; set; }
+
+    /// <summary>
+    /// Where the directory says its changelog is (the rootDSE's <c>changelog</c> attribute), or null when it
+    /// advertises none, in which case the conventional <c>cn=changelog</c> is tried. Recorded so that a later
+    /// import and Schema Discovery read the same place.
+    /// </summary>
+    public string? ChangelogDn { get; set; }
+
+    /// <summary>
+    /// The oldest change number the changelog still holds, when the rootDSE advertises it. A baseline older than
+    /// this has had changes trimmed from under it, which a Delta Import must refuse rather than silently skip.
+    /// </summary>
+    public long? FirstChangeNumber { get; set; }
+
+    /// <summary>
+    /// The newest change number, when the rootDSE advertises it. Taken as the watermark in preference to
+    /// enumerating the changelog to find it.
+    /// </summary>
+    public long? AdvertisedLastChangeNumber { get; set; }
 
     /// <summary>
     /// For OpenLDAP with accesslog overlay: The reqStart timestamp of the last processed entry.

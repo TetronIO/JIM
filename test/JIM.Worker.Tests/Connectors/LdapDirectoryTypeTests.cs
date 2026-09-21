@@ -441,4 +441,19 @@ public class LdapDirectoryTypeTests
     }
 
     #endregion
+    #region persisted record compatibility
+
+    /// <summary>
+    /// The change number used to be persisted as a 32-bit value; a record written then must still read.
+    /// </summary>
+    [Test]
+    public void LdapConnectorRootDse_PersistedIntLastChangeNumber_ReadsAsLong()
+    {
+        var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>("{\"DirectoryType\":3,\"LastChangeNumber\":42}");
+
+        Assert.That(deserialised!.LastChangeNumber, Is.EqualTo(42L));
+        Assert.That(deserialised.ChangelogDn, Is.Null);
+    }
+
+    #endregion
 }

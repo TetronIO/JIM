@@ -65,7 +65,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// <summary>
     /// For directories that support changelog.
     /// </summary>
-    private int? QueryDirectoryForLastChangeNumber(int lastChangeNumber)
+    private long? QueryDirectoryForLastChangeNumber(long lastChangeNumber)
     {
         // TODO (#878): this needs optimising. If we pass in zero, do we really want to have to enumerate all changes to get the last change number?
         // TODO (#878): make sure this works with a range of directory implementations.
@@ -110,7 +110,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// Gets delta results for changelog-based directories (e.g., OpenLDAP, Oracle Directory).
     /// Queries the cn=changelog container for changes since the last change number.
     /// </summary>
-    private void GetDeltaResultsUsingChangelog(ConnectedSystemImportResult result, int previousChangeNumber, IReadOnlyList<ConnectedSystemContainer> targetContainers,
+    private void GetDeltaResultsUsingChangelog(ConnectedSystemImportResult result, long previousChangeNumber, IReadOnlyList<ConnectedSystemContainer> targetContainers,
         TimeSpan searchTimeout, ILdapDeltaImportHost host, CancellationToken cancellationToken)
     {
         _logger.Debug("GetDeltaResultsUsingChangelog: Querying for changes since changeNumber {PreviousChange}", previousChangeNumber);

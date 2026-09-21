@@ -464,10 +464,12 @@ internal static class LdapConnectorUtilities
 
     /// <summary>
     /// The rootDSE attributes every directory-type read requests beyond the ones that identify the server:
-    /// the facts password policy discovery needs to know where a policy lives and whether one is advertised.
+    /// the facts password policy discovery needs to know where a policy lives and whether one is advertised,
+    /// and the changelog a directory advertises (draft-good-ldap-changelog section 4) so the changelog change
+    /// source reads where the directory says rather than where convention guesses.
     /// </summary>
     internal static readonly string[] RootDseDiscoveryAttributes =
-        ["vendorVersion", "namingContexts", "configContext", "supportedControl", "defaultNamingContext"];
+        ["vendorVersion", "namingContexts", "configContext", "supportedControl", "defaultNamingContext", "changelog", "firstChangeNumber", "lastChangeNumber"];
 
     /// <summary>
     /// Reads the discovery facts listed in <see cref="RootDseDiscoveryAttributes"/> off a rootDSE entry onto a
@@ -480,6 +482,9 @@ internal static class LdapConnectorUtilities
         rootDse.ConfigContext = GetEntryAttributeStringValue(rootDseEntry, "configContext");
         rootDse.SupportedControls = GetEntryAttributeStringValues(rootDseEntry, "supportedControl");
         rootDse.DefaultNamingContext = GetEntryAttributeStringValue(rootDseEntry, "defaultNamingContext");
+        rootDse.ChangelogDn = GetEntryAttributeStringValue(rootDseEntry, "changelog");
+        rootDse.FirstChangeNumber = GetEntryAttributeLongValue(rootDseEntry, "firstChangeNumber");
+        rootDse.AdvertisedLastChangeNumber = GetEntryAttributeLongValue(rootDseEntry, "lastChangeNumber");
     }
 
 
