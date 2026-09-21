@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -18,6 +19,12 @@ namespace JIM.Connectors.LDAP;
 /// alone cannot bypass the limit. Both the watermark capture and the change read work within it: when the size
 /// limit is exceeded, the latest timestamp from the partial results narrows the next query, walking forward
 /// through the accesslog until all entries have been scanned.
+/// </para>
+/// <para>
+/// An accesslog that cannot be read is never taken for one that is empty. The readiness check reads the
+/// cn=accesslog entry and reports what it found; the watermark is left empty rather than invented when the search
+/// is refused or finds nothing to search; and a Delta Import whose search is refused stops with the reason rather
+/// than importing nothing and reporting "no changes".
 /// </para>
 /// </summary>
 internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
@@ -41,23 +48,60 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     /// Runs during both Full and Delta Imports: a Full Import establishes the baseline for the first Delta Import,
     /// and a Delta Import captures the current position so the next one starts from here. The rootDSE entry itself
     /// carries nothing this source needs.
+    /// <para>
+    /// The watermark is left empty when cn=accesslog cannot be read (missing, refused, or unreachable), so that the
+    /// next Delta Import finds no baseline and performs a Full Import rather than reading nothing from a log it
+    /// cannot see and reporting "no changes". Only a readable, empty accesslog gets a generated timestamp: after a
+    /// snapshot restore clears it there is genuinely nothing before now, and a baseline saves the next Delta Import
+    /// an unnecessary Full Import.
+    /// </para>
     /// </remarks>
     public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, TimeSpan searchTimeout)
     {
-        // OpenLDAP: query cn=accesslog for the latest reqStart timestamp
-        rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp(searchTimeout);
+        try
+        {
+            rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp(searchTimeout);
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            LeaveWatermarkEmpty(rootDse, "it was not found");
+            return Task.CompletedTask;
+        }
+        catch (DirectoryOperationException ex)
+        {
+            LeaveWatermarkEmpty(rootDse, $"the directory refused the search: {DirectorysWords(ex)}");
+            return Task.CompletedTask;
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
+        {
+            LeaveWatermarkEmpty(rootDse, "it was not found");
+            return Task.CompletedTask;
+        }
+        catch (LdapException ex)
+        {
+            LeaveWatermarkEmpty(rootDse, $"the directory could not be reached: {DirectorysWords(ex)}");
+            return Task.CompletedTask;
+        }
 
-        // If the accesslog is empty (e.g., after snapshot restore clears stale data),
-        // generate a fallback timestamp so the watermark is never null. This prevents
-        // the next delta import from falling back to a full import unnecessarily.
         if (string.IsNullOrEmpty(rootDse.LastAccesslogTimestamp))
         {
             rootDse.LastAccesslogTimestamp = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
-            _logger.Information("GetRootDseInformation: Accesslog is empty; using fallback timestamp {Timestamp} as watermark",
-                rootDse.LastAccesslogTimestamp);
+            _logger.Information("LdapAccesslogDeltaSource: The accesslog at {AccesslogDn} is readable but empty; using the generated timestamp {Timestamp} as the watermark so the next Delta Import has a baseline",
+                AccesslogDn, rootDse.LastAccesslogTimestamp);
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Records that no watermark could be taken, and why. A generated timestamp would give the next Delta Import a
+    /// baseline it has no right to; an empty one makes it perform a Full Import and say so.
+    /// </summary>
+    private void LeaveWatermarkEmpty(LdapConnectorRootDse rootDse, string reason)
+    {
+        rootDse.LastAccesslogTimestamp = null;
+        _logger.Warning("LdapAccesslogDeltaSource: No watermark was taken from {AccesslogDn}: {Reason}. The next Delta Import will have no baseline and will perform a Full Import.",
+            AccesslogDn, reason);
     }
 
     /// <summary>
@@ -67,29 +111,22 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     ///    This requires the sssvlv overlay to be enabled on the server.
     /// 2. If sorting is not supported, falls back to handling the SizeLimitExceeded exception
     ///    by extracting partial results from the exception response.
+    /// Null when the accesslog is readable and holds no write operations. A missing, refused or unreachable
+    /// accesslog is left to the caller as the exception the directory raised.
     /// </summary>
     private string? QueryAccesslogForLatestTimestamp(TimeSpan searchTimeout)
     {
-        try
-        {
-            // Strategy 1: Server-side sort (reverse) with SizeLimit=1
-            // This gets only the single latest entry, avoiding size limit issues entirely.
-            var result = QueryAccesslogWithServerSideSort(searchTimeout);
-            if (result != null)
-                return result;
+        // Strategy 1: Server-side sort (reverse) with SizeLimit=1
+        // This gets only the single latest entry, avoiding size limit issues entirely.
+        var result = QueryAccesslogWithServerSideSort(searchTimeout);
+        if (result != null)
+            return result;
 
-            // Strategy 2: Simple query with size limit exceeded handling.
-            // If the accesslog has fewer entries than olcSizeLimit, this returns all entries normally.
-            // If it exceeds the limit, we catch the DirectoryOperationException and extract
-            // the latest timestamp from the partial results in the exception's response.
-            return QueryAccesslogWithSizeLimitHandling(searchTimeout);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "QueryAccesslogForLatestTimestamp: Failed to query accesslog. " +
-                "The directory may not have the accesslog overlay enabled.");
-            return null;
-        }
+        // Strategy 2: Simple query with size limit exceeded handling.
+        // If the accesslog has fewer entries than olcSizeLimit, this returns all entries normally.
+        // If it exceeds the limit, we catch the DirectoryOperationException and extract
+        // the latest timestamp from the partial results in the exception's response.
+        return QueryAccesslogWithSizeLimitHandling(searchTimeout);
     }
 
     /// <summary>
@@ -243,14 +280,143 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Reads the cn=accesslog entry itself, base scope and no attributes, which is the least a directory will answer
+    /// about it. OpenLDAP shares one accesslog across every database it serves, so there is a single subject here
+    /// whatever the partitions. An entry answered is an availability. No entry, noSuchObject (in either shape the
+    /// client library gives it) and a refusal are all unavailabilities, because each was read in full: a directory
+    /// that hides what the account may not see answers success with nothing, and some answer noSuchObject for a
+    /// base the account may not read, so a missing entry is never claimed as absence outright. Only a fault on the
+    /// way to the directory is an unknown.
+    /// </remarks>
     public Task<IReadOnlyList<LdapDeltaSourceFinding>> VerifyReadinessAsync(LdapConnectorRootDse rootDse, IReadOnlyCollection<string> namingContexts, CancellationToken cancellationToken)
     {
-        // Nothing is checked in this layer; a later one probes cn=accesslog for readability.
-        return Task.FromResult<IReadOnlyList<LdapDeltaSourceFinding>>([]);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var request = new SearchRequest(AccesslogDn, "(objectClass=*)", SearchScope.Base, "1.1");
+
+        LdapDeltaSourceFinding finding;
+        try
+        {
+            var response = (SearchResponse)_executor.SendRequest(request);
+            finding = response.Entries.Count > 0
+                ? Available()
+                : NotFound("the directory answered the read with no entry");
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            finding = NotFound("the directory answered noSuchObject");
+        }
+        catch (DirectoryOperationException ex)
+        {
+            finding = Refused(DirectorysWords(ex));
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
+        {
+            finding = NotFound("the directory answered noSuchObject");
+        }
+        catch (LdapException ex)
+        {
+            finding = Undetermined($"the directory could not be reached ({DirectorysWords(ex)})");
+        }
+
+        return Task.FromResult<IReadOnlyList<LdapDeltaSourceFinding>>([finding]);
     }
 
     /// <inheritdoc />
     public bool HasBaseline(LdapConnectorRootDse previous) => !string.IsNullOrEmpty(previous.LastAccesslogTimestamp);
+
+    #endregion
+
+    #region Findings and their texts
+
+    private LdapDeltaSourceFinding Available()
+    {
+        _logger.Debug("LdapAccesslogDeltaSource: The account JIM connects as can read {AccesslogDn}.", AccesslogDn);
+        return new LdapDeltaSourceFinding
+        {
+            Subject = AccesslogDn,
+            Outcome = LdapDeltaSourceOutcome.Available,
+            Detail = "the accesslog entry is readable"
+        };
+    }
+
+    private LdapDeltaSourceFinding NotFound(string detail)
+    {
+        _logger.Warning("LdapAccesslogDeltaSource: No accesslog was found at {AccesslogDn}, or none the account JIM connects as may read: {Detail}. A Delta Import from this directory would detect no changes.",
+            AccesslogDn, detail);
+        return new LdapDeltaSourceFinding
+        {
+            Subject = AccesslogDn,
+            Outcome = LdapDeltaSourceOutcome.Unavailable,
+            Detail = detail,
+            DeltaImportText = DescribeNotFoundForDeltaImport(),
+            SchemaDiscoveryText = DescribeNotFoundForSchemaDiscovery()
+        };
+    }
+
+    private LdapDeltaSourceFinding Refused(string reason)
+    {
+        _logger.Warning("LdapAccesslogDeltaSource: The directory refused to read {AccesslogDn}: {Reason}. A Delta Import from this directory would detect no changes.",
+            AccesslogDn, reason);
+        return new LdapDeltaSourceFinding
+        {
+            Subject = AccesslogDn,
+            Outcome = LdapDeltaSourceOutcome.Unavailable,
+            Detail = $"the directory refused the read: {reason}",
+            DeltaImportText = DescribeRefusedForDeltaImport(reason),
+            SchemaDiscoveryText = DescribeRefusedForSchemaDiscovery(reason)
+        };
+    }
+
+    private LdapDeltaSourceFinding Undetermined(string detail)
+    {
+        _logger.Warning("LdapAccesslogDeltaSource: Could not establish whether the account JIM connects as can read {AccesslogDn}: {Detail}", AccesslogDn, detail);
+        var text = DescribeUndetermined(detail);
+        return new LdapDeltaSourceFinding
+        {
+            Subject = AccesslogDn,
+            Outcome = LdapDeltaSourceOutcome.CouldNotDetermine,
+            Detail = detail,
+            DeltaImportText = text,
+            SchemaDiscoveryText = text
+        };
+    }
+
+    /// <summary>The directory's own words for a refusal or a fault, made safe to log and to quote in a finding.</summary>
+    private static string DirectorysWords(Exception ex) => LogSanitiser.Sanitise(ex.Message) ?? string.Empty;
+
+    /// <summary>What every Delta Import text ends with: the two ways out, and where the access-control rule is.</summary>
+    private const string DeltaImportRemedy =
+        "Run a Full Import, which also detects deletions by absence, or enable the accesslog overlay and grant the account read access to " + AccesslogDn + "; " +
+        "the LDAP Connector documentation, under Service Account Permissions, gives the access-control rule.";
+
+    /// <summary>The failure that stops a Delta Import when there is no accesslog to read, or none the account may see.</summary>
+    private static string DescribeNotFoundForDeltaImport() =>
+        $"Changes cannot be detected: the directory provides no accesslog at {AccesslogDn}, or none the account JIM connects as may read, " +
+        "so additions, updates and deletions since the last import would go unnoticed. " + DeltaImportRemedy;
+
+    /// <summary>The failure that stops a Delta Import when the directory refused the accesslog search, in its own words.</summary>
+    private static string DescribeRefusedForDeltaImport(string reason) =>
+        $"Changes cannot be detected: the directory refused to read {AccesslogDn} ({reason}), " +
+        "so additions, updates and deletions since the last import would go unnoticed. " + DeltaImportRemedy;
+
+    /// <summary>What Schema Discovery warns when there is no accesslog, so the administrator learns of it while setting the Connected System up.</summary>
+    private static string DescribeNotFoundForSchemaDiscovery() =>
+        $"This directory publishes no accesslog at {AccesslogDn} that the account JIM connects as may read, so Delta Import is not available; " +
+        "Full Import works as normal and also detects deletions by absence. " +
+        $"To use Delta Import, enable the accesslog overlay and grant the account read access to {AccesslogDn}; see the LDAP Connector documentation, Service Account Permissions.";
+
+    /// <summary>What Schema Discovery warns when the directory refused to read the accesslog.</summary>
+    private static string DescribeRefusedForSchemaDiscovery(string reason) =>
+        $"The directory refused to read {AccesslogDn} ({reason}), so Delta Import is not available; " +
+        "Full Import works as normal and also detects deletions by absence. " +
+        $"To use Delta Import, grant the account JIM connects as read access to {AccesslogDn}; see the LDAP Connector documentation, Service Account Permissions.";
+
+    /// <summary>The one text for an unknown, in both places: what could not be confirmed, why, and what it would mean.</summary>
+    private static string DescribeUndetermined(string detail) =>
+        $"JIM could not confirm that the account it connects as can read {AccesslogDn}: {detail}. " +
+        "If it cannot, Delta Imports from this directory detect no changes.";
 
     #endregion
 
@@ -266,6 +432,7 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     /// walking forward through the accesslog until all changes are found. Everything is read in one call; nothing
     /// is paged across calls.
     /// </remarks>
+    /// <exception cref="CannotPerformDeltaImportException">The directory refused the accesslog search, or has no accesslog to search.</exception>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
     {
         // The import establishes HasBaseline before calling, so the watermark is present.
@@ -319,16 +486,19 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             var hitSizeLimit = false;
             var objectsReadBeforeThisBatch = result.ImportObjects.Count;
 
+            // A search the directory will not answer stops the run rather than ending the read: returning here
+            // would import nothing, which the run would report as "no changes". A fault on the way to the directory
+            // (any other LdapException) propagates as the run's failure, in the directory's own words.
             try
             {
                 response = (SearchResponse)_executor.SendRequest(request, context.SearchTimeout);
 
                 if (response == null || response.ResultCode != ResultCode.Success)
-                {
-                    _logger.Warning("GetDeltaResultsUsingAccesslog: Failed to query accesslog. ResultCode: {ResultCode}",
-                        response?.ResultCode);
-                    return;
-                }
+                    throw RefusedSearch($"result code {response?.ResultCode.ToString() ?? "none"}");
+            }
+            catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+            {
+                throw MissingAccesslog();
             }
             catch (DirectoryOperationException ex) when (ex.Response is SearchResponse partialResponse
                 && partialResponse.ResultCode == ResultCode.SizeLimitExceeded)
@@ -339,10 +509,13 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
                 _logger.Debug("GetDeltaResultsUsingAccesslog: Size limit exceeded on iteration {Iteration}. " +
                     "Processing {Count} partial results.", iterations, response.Entries.Count);
             }
-            catch (Exception ex)
+            catch (DirectoryOperationException ex)
             {
-                _logger.Error(ex, "GetDeltaResultsUsingAccesslog: Error querying accesslog");
-                return;
+                throw RefusedSearch(DirectorysWords(ex));
+            }
+            catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
+            {
+                throw MissingAccesslog();
             }
 
             if (response.Entries.Count == 0)
@@ -471,6 +644,24 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
         _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries in {Iterations} iterations. " +
             "Skipped {SkippedOutOfScope} entries outside partition scope.",
             totalEntries, iterations, skippedOutOfScope);
+    }
+
+    /// <summary>
+    /// The failure a Delta Import stops with when the accesslog search found nothing at cn=accesslog to search.
+    /// </summary>
+    private CannotPerformDeltaImportException MissingAccesslog()
+    {
+        _logger.Warning("GetDeltaResultsUsingAccesslog: No accesslog was found at {AccesslogDn}, or none the account JIM connects as may read. Refusing the Delta Import rather than reporting no changes.", AccesslogDn);
+        return new CannotPerformDeltaImportException(DescribeNotFoundForDeltaImport());
+    }
+
+    /// <summary>
+    /// The failure a Delta Import stops with when the directory refused the accesslog search, in its own words.
+    /// </summary>
+    private CannotPerformDeltaImportException RefusedSearch(string reason)
+    {
+        _logger.Warning("GetDeltaResultsUsingAccesslog: The directory refused the search of {AccesslogDn}: {Reason}. Refusing the Delta Import rather than reporting no changes.", AccesslogDn, reason);
+        return new CannotPerformDeltaImportException(DescribeRefusedForDeltaImport(reason));
     }
 
     /// <summary>

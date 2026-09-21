@@ -54,16 +54,20 @@ When a Full Import activity's deletion detection is refused, it completes as **C
 
 A refused detection also means the run does not count as a successful Full Import for the post-clear reconciliation gate; see [Run Profiles > Safeguards > Full Import](run-profiles.md#full-import).
 
-### Delta Import deletion detection (Active Directory)
+### Delta Import change source checks
 
-A Delta Import from Active Directory or Samba AD finds deletions by searching each domain's Deleted Objects container, which no delegation on an OU reaches, and which does not refuse an account that lacks rights over it: the search simply returns nothing. So before it queries any change, the run reads the container's own permissions and evaluates them for the account JIM connects as.
+A Delta Import reads what changed from wherever the directory keeps that record: the domain's Deleted Objects container for deletions in Active Directory and Samba AD (changes themselves come from `uSNChanged`), `cn=accesslog` for OpenLDAP, and the changelog for 389 Directory Server and generic directories. None of these refuses an account that lacks rights over it in a way JIM can rely on: a search can simply return nothing. So before it queries any change, the run confirms that the account JIM connects as can read the source; the same check runs at Schema Discovery and on the schema refresh preview, where its findings are warnings.
 
-- When the account is provably not allowed to list the container, the run ends as **Failed with error** before importing anything, and its message names the container and the rights to grant. Continuing would have imported every change and no deletion, leaving objects deleted in the directory present in JIM.
-- When JIM could not confirm either way (most often because the account lacks Read Permissions on the container), the run goes ahead and completes as **Complete with warning**, saying what it could not confirm and why, for example:
+- When the source is provably unreadable (the account is not allowed to list the Deleted Objects container; the accesslog or changelog does not exist, or the directory refuses to read it), the run ends as **Failed with error** before importing anything, and its message names the source, the consequence and the remedy. Continuing would have imported what the account could see and provably missed the rest.
+- When JIM could not confirm either way (most often because the account lacks Read Permissions on the Deleted Objects container, or the connection failed during the check), the run goes ahead and completes as **Complete with warning**, saying what it could not confirm and why, for example:
 
 > JIM could not confirm that the account it connects as can list the Deleted Objects container (CN=Deleted Objects,DC=corp,DC=local): the directory did not return the container's permissions, which needs Read Permissions on it. If it cannot, Delta Imports from this domain import no deletions. Granting Read Permissions on that container alongside List Contents and Read Property lets JIM give a definite answer.
 
-The run also completes as **Complete with warning** when the tombstone search itself is refused or finds no container; that warning is worded differently, beginning "Deletions were not detected in <container>" and noting that objects deleted since the last import may still be present in JIM, with one note per domain. The grant that makes the answer definite is in the [LDAP Connector](../connectors/jim-ldap-connector.md#active-directory) reference.
+- When the last import recorded no watermark (its change source could not be read at the time, or the record predates this version of JIM), the run performs a **Full Import** instead, completes as **Complete with warning** saying so, and records the watermark the next Delta Import reads from. This is the same recovery the SQL and SCIM Connectors make.
+- An Active Directory run also completes as **Complete with warning** when the tombstone search itself is refused or finds no container; that warning begins "Deletions were not detected in <container>" and notes that objects deleted since the last import may still be present in JIM, with one note per domain. For OpenLDAP and changelog directories there is no such half-way: a refused search of the one log the run reads from ends the run as Failed with error.
+- A changelog directory whose changelog has been trimmed past the last import's watermark (389 Directory Server: the Retro Changelog plug-in's maximum age) also ends as **Failed with error**, naming the first change number the changelog still holds and the one the last import ended at; a Full Import re-establishes the baseline.
+
+The grants that make each answer definite are in the [LDAP Connector](../connectors/jim-ldap-connector.md#service-account-permissions) reference.
 
 ## Execution items
 

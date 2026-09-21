@@ -326,33 +326,21 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
         if (!source.HasBaseline(_previousRootDse))
         {
-            // TODO (#1725, layer 2): one answer for every source. Until then each keeps the answer it had.
-            if (_previousRootDse.DeltaSourceKind == LdapDeltaSourceKind.Accesslog)
-            {
-                // The accesslog watermark is not available. This can happen when:
-                // - The accesslog has more entries than the server's olcSizeLimit (default 500)
-                //   and the bind account cannot bypass the limit (not the accesslog DB rootDN)
-                // - The accesslog overlay is not enabled or not accessible
-                // - The previous full import failed to capture the watermark
-                //
-                // Rather than failing, fall back to a full import which will correctly import
-                // all objects AND establish the watermark for future delta imports.
-                _logger.Warning("GetDeltaImportObjects: Accesslog watermark not available. " +
-                    "Falling back to full import to establish baseline. " +
-                    "Future delta imports should work normally after this full import completes.");
+            // The last import recorded no watermark: its change source could not be read at the time (a changelog
+            // not yet enabled, an accesslog the account could not see), or the record predates this version. The
+            // source is readable now, or the readiness check above would have refused the run, so a Full Import
+            // both imports everything and records the watermark the next Delta Import reads from. Falling back
+            // rather than failing is what the SQL and SCIM connectors already do; the run says so in its warning.
+            _logger.Warning("GetDeltaImportObjects: The last import recorded no change watermark. " +
+                "Falling back to a full import to establish the baseline; future delta imports read from it.");
 
-                result = await GetFullImportObjectsAsync();
-                result.WarningMessage = "Delta import was requested but the accesslog watermark was not available " +
-                    "(the cn=accesslog database may have exceeded the server's size limit for the bind account). " +
-                    "A full import was performed instead. The watermark has been established and future " +
-                    "delta imports should succeed normally.";
-                result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
-                return result;
-            }
-
-            throw new CannotPerformDeltaImportException(_previousRootDse.DeltaSourceKind == LdapDeltaSourceKind.Usn
-                ? "Previous USN watermark not available. Run a full import first."
-                : "Previous changelog number not available. Run a full import first.");
+            result = await GetFullImportObjectsAsync();
+            result.WarningMessage = "A Delta Import was requested, but the last import recorded no change watermark for this directory " +
+                "(its change source could not be read at the time, or the record predates this version of JIM). " +
+                "A Full Import was performed instead, which also detects deletions by absence; it recorded the watermark, " +
+                "and the next Delta Import will read from it.";
+            result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
+            return result;
         }
 
         var context = new LdapDeltaReadContext
