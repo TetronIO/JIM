@@ -1305,6 +1305,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .Select(pe => (PendingExportStatus?)pe.Status)
                     .FirstOrDefault(),
+                PendingExportChangeType = Repository.Database.PendingExports
+                    .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                    .Select(pe => (PendingExportChangeType?)pe.ChangeType)
+                    .FirstOrDefault(),
                 // Only surfaced when the object has no name yet; the naming tiers already cover cn, so
                 // no ad-hoc attribute-name match is needed here.
                 PendingDisplayName = cso.AttributeValues.Any(av => allNameAttributeIds.Contains(av.AttributeId))

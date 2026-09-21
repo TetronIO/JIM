@@ -950,4 +950,48 @@ public class LdapConnectorUtilitiesTests
     }
 
     #endregion
+    #region rootDSE changelog attributes (draft-good-ldap-changelog)
+
+    /// <summary>
+    /// A directory that keeps a changelog advertises where it is and its bounds on the rootDSE (389 Directory
+    /// Server does so whenever the Retro Changelog plug-in is on). Both rootDSE reads must ask for them, so that
+    /// Schema Discovery probes the advertised DN and a Full Import takes its watermark from it without enumerating.
+    /// </summary>
+    [Test]
+    public void RootDseDiscoveryAttributes_IncludeTheChangelogAttributes() =>
+        Assert.That(LdapConnectorUtilities.RootDseDiscoveryAttributes, Is.SupersetOf(new[] { "changelog", "firstChangeNumber", "lastChangeNumber" }));
+
+    [Test]
+    public void ApplyRootDseDiscoveryAttributes_ChangelogAttributesPresent_RecordsChangelogDnFirstAndLastChangeNumber()
+    {
+        var entry = LdapTestResponses.Entry("", ("changelog", "cn=changelog"), ("firstChangeNumber", "17"), ("lastChangeNumber", "4200000000"));
+        var rootDse = new LdapConnectorRootDse();
+
+        LdapConnectorUtilities.ApplyRootDseDiscoveryAttributes(entry, rootDse);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rootDse.ChangelogDn, Is.EqualTo("cn=changelog"));
+            Assert.That(rootDse.FirstChangeNumber, Is.EqualTo(17L));
+            Assert.That(rootDse.AdvertisedLastChangeNumber, Is.EqualTo(4200000000L));
+        });
+    }
+
+    [Test]
+    public void ApplyRootDseDiscoveryAttributes_ChangelogAttributesAbsent_LeavesThemNull()
+    {
+        var entry = LdapTestResponses.Entry("", ("vendorVersion", "389-Directory/3.1.0"));
+        var rootDse = new LdapConnectorRootDse();
+
+        LdapConnectorUtilities.ApplyRootDseDiscoveryAttributes(entry, rootDse);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rootDse.ChangelogDn, Is.Null);
+            Assert.That(rootDse.FirstChangeNumber, Is.Null);
+            Assert.That(rootDse.AdvertisedLastChangeNumber, Is.Null);
+        });
+    }
+
+    #endregion
 }

@@ -2,9 +2,11 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Collections.Generic;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Web.Models.Api;
 using NUnit.Framework;
 
@@ -180,4 +182,128 @@ public class MetaverseObjectDtoTests
 
         Assert.That(dto.ByteValue, Is.EqualTo(byteValue));
     }
+
+    #region Connections mapping (#1519 parity)
+
+    /// <summary>
+    /// The detail response's joined-object rows carry the same derived data the portal's Connections
+    /// tab shows: role, join type, State and the join dates. Before this, the rows named the Connected
+    /// System and nothing about the join itself, so a script could see that an object was joined but
+    /// not whether it was a source or a target, nor that its export had failed.
+    /// </summary>
+    [Test]
+    public void FromEntity_WithConnections_MapsRoleJoinTypeStateAndDates()
+    {
+        var csoId = Guid.NewGuid();
+        var joined = DateTime.UtcNow.AddDays(-30);
+        var lastSynchronised = DateTime.UtcNow.AddHours(-2);
+        var entity = CreateMetaverseObject(csoId, joined);
+        var connections = new List<MetaverseObjectConnection>
+        {
+            new()
+            {
+                ConnectedSystemObjectId = csoId,
+                ConnectedSystemId = 3,
+                ConnectedSystemName = "Primary Directory",
+                DisplayName = "CN=jsmith,OU=Users,DC=example,DC=com",
+                ObjectTypeName = "user",
+                JoinType = ConnectedSystemObjectJoinType.Joined,
+                IsSource = true,
+                IsTarget = true,
+                State = ConnectedSystemObjectConnectionState.ExportFailed,
+                PendingAttributeChangeCount = 2,
+                LastSynchronised = lastSynchronised
+            }
+        };
+
+        var dto = MetaverseObjectDto.FromEntity(entity, connections);
+
+        Assert.That(dto.ConnectedSystemObjects.Count, Is.EqualTo(1));
+        var row = dto.ConnectedSystemObjects[0];
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.Id, Is.EqualTo(csoId));
+            Assert.That(row.ConnectedSystemId, Is.EqualTo(3));
+            Assert.That(row.ConnectedSystemName, Is.EqualTo("Primary Directory"));
+            Assert.That(row.ObjectTypeName, Is.EqualTo("user"));
+            Assert.That(row.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
+            Assert.That(row.IsSource, Is.True);
+            Assert.That(row.IsTarget, Is.True);
+            Assert.That(row.State, Is.EqualTo(ConnectedSystemObjectConnectionState.ExportFailed));
+            Assert.That(row.PendingAttributeChangeCount, Is.EqualTo(2));
+            Assert.That(row.LastSynchronised, Is.EqualTo(lastSynchronised));
+            Assert.That(row.DateJoined, Is.EqualTo(joined));
+            Assert.That(row.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+        });
+    }
+
+    /// <summary>
+    /// The connections derivation names a row by its external id (the Connections tab's Object column);
+    /// the detail response has always named it by the object's best-ranked name. Keep the richer name
+    /// where the entity has one, so enriching the row does not regress what callers already read.
+    /// </summary>
+    [Test]
+    public void FromEntity_WithConnections_KeepsTheEntitysBestRankedName()
+    {
+        var csoId = Guid.NewGuid();
+        var entity = CreateMetaverseObject(csoId, DateTime.UtcNow.AddDays(-1));
+        var connections = new List<MetaverseObjectConnection>
+        {
+            new()
+            {
+                ConnectedSystemObjectId = csoId,
+                ConnectedSystemId = 3,
+                ConnectedSystemName = "Primary Directory",
+                DisplayName = "CN=jsmith,OU=Users,DC=example,DC=com",
+                State = ConnectedSystemObjectConnectionState.InSync
+            }
+        };
+
+        var dto = MetaverseObjectDto.FromEntity(entity, connections);
+
+        Assert.That(dto.ConnectedSystemObjects[0].DisplayName, Is.EqualTo("John Smith"));
+    }
+
+    /// <summary>
+    /// The connections read runs after the object read, so it is the fresher view of what is joined:
+    /// a row it does not carry is not rendered from the staler entity graph.
+    /// </summary>
+    [Test]
+    public void FromEntity_WithNoConnections_ReturnsNoJoinedObjectRows()
+    {
+        var entity = CreateMetaverseObject(Guid.NewGuid(), DateTime.UtcNow.AddDays(-1));
+
+        var dto = MetaverseObjectDto.FromEntity(entity, []);
+
+        Assert.That(dto.ConnectedSystemObjects, Is.Empty);
+    }
+
+    private static MetaverseObject CreateMetaverseObject(Guid connectedSystemObjectId, DateTime dateJoined)
+    {
+        var nameAttribute = new ConnectedSystemObjectTypeAttribute { Id = 55, Name = "displayName" };
+        return new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = 1, Name = "User" },
+            AttributeValues = [],
+            ConnectedSystemObjects =
+            [
+                new ConnectedSystemObject
+                {
+                    Id = connectedSystemObjectId,
+                    ConnectedSystemId = 3,
+                    ConnectedSystem = new ConnectedSystem { Id = 3, Name = "Primary Directory" },
+                    Status = ConnectedSystemObjectStatus.Normal,
+                    JoinType = ConnectedSystemObjectJoinType.Joined,
+                    DateJoined = dateJoined,
+                    AttributeValues =
+                    [
+                        new ConnectedSystemObjectAttributeValue { Attribute = nameAttribute, AttributeId = 55, StringValue = "John Smith" }
+                    ]
+                }
+            ]
+        };
+    }
+
+    #endregion
 }

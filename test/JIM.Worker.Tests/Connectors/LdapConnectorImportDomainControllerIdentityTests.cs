@@ -215,14 +215,14 @@ public class LdapConnectorImportDomainControllerIdentityTests
     #region Non-AD directories are unaffected
 
     [Test]
-    public void UseUsnDeltaImport_OpenLdapDirectory_IsFalse_SoGuardIsNeverInvoked()
+    public void DeltaSourceKind_OpenLdapDirectory_IsAccesslog_SoTheUsnContinuityCheckIsNeverInvoked()
     {
-        // GetDeltaImportObjectsAsync only calls VerifyDomainControllerIdentity when
-        // _previousRootDse.UseUsnDeltaImport is true. Confirm OpenLDAP (accesslog-based delta
-        // import) does not satisfy that gate, so the DC-mismatch guard is a no-op for it.
+        // Only the USN change source verifies domain controller identity. Confirm OpenLDAP reads its
+        // changes from the accesslog source instead, so the DC-mismatch guard is a no-op for it.
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
 
-        Assert.That(rootDse.UseUsnDeltaImport, Is.False);
+        Assert.That(rootDse.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.False);
     }
 
     #endregion

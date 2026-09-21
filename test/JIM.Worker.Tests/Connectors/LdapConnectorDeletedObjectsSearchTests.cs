@@ -215,8 +215,27 @@ public class LdapConnectorDeletedObjectsSearchTests
     }
 
     [Test]
-    public void Search_ContainerDoesNotExist_ReportsContainerMissing()
+    public void Search_ContainerAnswersNoSuchObjectAsADirectoryOperationException_ReportsContainerMissing()
     {
+        // The shape System.DirectoryServices.Protocols actually gives a missing base: the server's noSuchObject
+        // arrives as a DirectoryOperationException carrying the response, not as an LdapException with code 32.
+        // Caught after the generic refusal, a missing container was reported as a refusal and this arm never ran.
+        var executor = ExecutorThrowing(new DirectoryOperationException(
+            LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
+
+        var page = Search(executor, supportsPaging: true, cookie: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Outcome, Is.EqualTo(DeletedObjectsSearchOutcome.ContainerMissing));
+            Assert.That(page.Entries, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Search_ContainerDoesNotExistAsLdapException32_ReportsContainerMissing()
+    {
+        // The legacy shape, kept for client libraries that surface noSuchObject this way.
         var executor = ExecutorThrowing(new LdapException(32, "no such object"));
 
         var page = Search(executor, supportsPaging: true, cookie: null);

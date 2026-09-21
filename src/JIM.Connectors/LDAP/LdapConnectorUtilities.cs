@@ -464,10 +464,12 @@ internal static class LdapConnectorUtilities
 
     /// <summary>
     /// The rootDSE attributes every directory-type read requests beyond the ones that identify the server:
-    /// the facts password policy discovery needs to know where a policy lives and whether one is advertised.
+    /// the facts password policy discovery needs to know where a policy lives and whether one is advertised,
+    /// and the changelog a directory advertises (draft-good-ldap-changelog section 4) so the changelog change
+    /// source reads where the directory says rather than where convention guesses.
     /// </summary>
     internal static readonly string[] RootDseDiscoveryAttributes =
-        ["vendorVersion", "namingContexts", "configContext", "supportedControl", "defaultNamingContext"];
+        ["vendorVersion", "namingContexts", "configContext", "supportedControl", "defaultNamingContext", "changelog", "firstChangeNumber", "lastChangeNumber"];
 
     /// <summary>
     /// Reads the discovery facts listed in <see cref="RootDseDiscoveryAttributes"/> off a rootDSE entry onto a
@@ -480,6 +482,9 @@ internal static class LdapConnectorUtilities
         rootDse.ConfigContext = GetEntryAttributeStringValue(rootDseEntry, "configContext");
         rootDse.SupportedControls = GetEntryAttributeStringValues(rootDseEntry, "supportedControl");
         rootDse.DefaultNamingContext = GetEntryAttributeStringValue(rootDseEntry, "defaultNamingContext");
+        rootDse.ChangelogDn = GetEntryAttributeStringValue(rootDseEntry, "changelog");
+        rootDse.FirstChangeNumber = GetEntryAttributeLongValue(rootDseEntry, "firstChangeNumber");
+        rootDse.AdvertisedLastChangeNumber = GetEntryAttributeLongValue(rootDseEntry, "lastChangeNumber");
     }
 
 
@@ -890,7 +895,7 @@ internal static class LdapConnectorUtilities
     /// failure over silent corruption is required (see Synchronisation Integrity, root CLAUDE.md).
     /// </summary>
     /// <remarks>
-    /// Applies only to AD-family directories (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>); the
+    /// Applies only to AD-family directories (<see cref="LdapConnectorRootDse.IsActiveDirectoryFamily"/>); the
     /// standard RFC 4512 namingContexts partition discovery used for other directory types has no
     /// equivalent forest-wide-visibility problem. When <paramref name="currentRootDse"/>'s
     /// <see cref="LdapConnectorRootDse.NamingContexts"/> is null or empty (the rootDSE query did not
@@ -909,7 +914,7 @@ internal static class LdapConnectorUtilities
         IEnumerable<ConnectedSystemPartition> selectedPartitions,
         ILogger logger)
     {
-        if (!currentRootDse.UseUsnDeltaImport)
+        if (!currentRootDse.IsActiveDirectoryFamily)
             return;
 
         if (currentRootDse.NamingContexts == null || currentRootDse.NamingContexts.Count == 0)
@@ -1144,7 +1149,7 @@ internal static class LdapConnectorUtilities
     /// introduced) must not survive into the new baseline.
     /// </para>
     /// </remarks>
-    /// <param name="useUsnDeltaImport">Whether the connected directory is AD-family (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>).</param>
+    /// <param name="isActiveDirectoryFamily">Whether the connected directory is AD-family (<see cref="LdapConnectorRootDse.IsActiveDirectoryFamily"/>).</param>
     /// <param name="preferredDomainController">The "Preferred Domain Controller" setting value, or null/blank if not configured.</param>
     /// <param name="dnsHostName">The dnsHostName of the domain controller this connection reached.</param>
     /// <param name="connectedServer">The server this connection was actually opened against, so that a candidate
@@ -1155,14 +1160,14 @@ internal static class LdapConnectorUtilities
     /// <returns>The value to persist as <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/>, and a warning
     /// to surface on the Activity when a discovered domain controller had to be rejected.</returns>
     internal static PinnedDirectoryServerDecision ResolvePinnedDirectoryServerForImport(
-        bool useUsnDeltaImport,
+        bool isActiveDirectoryFamily,
         string? preferredDomainController,
         string? dnsHostName,
         string connectedServer,
         Func<string, bool> canConnectTo,
         ILogger logger)
     {
-        if (!useUsnDeltaImport || !string.IsNullOrWhiteSpace(preferredDomainController) || string.IsNullOrWhiteSpace(dnsHostName))
+        if (!isActiveDirectoryFamily || !string.IsNullOrWhiteSpace(preferredDomainController) || string.IsNullOrWhiteSpace(dnsHostName))
             return new PinnedDirectoryServerDecision(null, null);
 
         // The connection that answered this rootDSE query was opened against connectedServer, so a candidate
