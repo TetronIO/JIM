@@ -151,16 +151,23 @@ internal class LdapConnectorRootDse
     };
 
     /// <summary>
-    /// Whether delta imports should use USN-based change tracking (AD/Samba AD).
+    /// Whether the directory is Active Directory or Samba AD, the family whose domain controllers JIM discovers,
+    /// pins and verifies the identity of, and whose partitions it checks are hosted by the server it reached.
     /// </summary>
-    public bool UseUsnDeltaImport => DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD;
+    public bool IsActiveDirectoryFamily => DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD;
 
     /// <summary>
-    /// Whether delta imports should use the OpenLDAP accesslog overlay (cn=accesslog with reqStart timestamps).
-    /// Falls back to standard changelog (cn=changelog with changeNumber) for Generic and 389 Directory Server.
-
+    /// Where this directory keeps its record of what changed, and so which <see cref="ILdapDeltaSource"/> a Delta
+    /// Import reads through. The one place the directory type is mapped to a change source: Active Directory and
+    /// Samba AD track uSNChanged and keep tombstones in the Deleted Objects container; OpenLDAP logs writes in the
+    /// accesslog overlay; 389 Directory Server and generic directories publish a draft-good-ldap-changelog.
     /// </summary>
-    public bool UseAccesslogDeltaImport => DirectoryType is LdapDirectoryType.OpenLDAP;
+    public LdapDeltaSourceKind DeltaSourceKind => DirectoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD => LdapDeltaSourceKind.Usn,
+        LdapDirectoryType.OpenLDAP => LdapDeltaSourceKind.Accesslog,
+        _ => LdapDeltaSourceKind.Changelog
+    };
 
     /// <summary>
     /// Whether the directory's SAM layer enforces single-valued semantics on certain multi-valued schema attributes

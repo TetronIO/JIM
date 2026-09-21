@@ -47,7 +47,7 @@ internal sealed class DeletedObjectsPage
 
 /// <summary>
 /// Searches a partition's Deleted Objects container for the tombstones a USN Delta Import must turn into deletions,
-/// one page at a time, exactly as <c>GetDeltaResultsUsingUsn</c> pages the changes in an ordinary container.
+/// one page at a time, exactly as <see cref="LdapUsnDeltaSource"/> pages the changes in an ordinary container.
 /// <para>
 /// This lives apart from <c>LdapConnectorImport</c> because that class holds the raw <see cref="LdapConnection"/>,
 /// which is sealed and cannot be driven by a fake directory; the <see cref="ILdapOperationExecutor"/> seam is the
@@ -132,7 +132,7 @@ internal class LdapConnectorDeletedObjectsSearch
             ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))
         {
             // The directory handed back a cookie on the first page and now refuses it (Samba AD does this). It
-            // answered everything on that first page, as GetDeltaResultsUsingUsn already assumes for changes.
+            // answered everything on that first page, as the USN source already assumes for changes.
             _logger.Warning("LdapConnectorDeletedObjectsSearch: The directory rejected the paging cookie for {Container}; assuming all deleted objects were returned on the first page. Error: {Message}",
                 LogSanitiser.Sanitise(containerDn), LogSanitiser.Sanitise(ex.Message));
             return new DeletedObjectsPage { Entries = [], Outcome = DeletedObjectsSearchOutcome.Read };

@@ -73,11 +73,11 @@ public class LdapConnectorImportDeltaFallbackTests
     [Test]
     public void OpenLdapRootDse_WithNullAccesslogTimestamp_IndicatesWatermarkUnavailableAsync()
     {
-        // When an OpenLDAP RootDSE has UseAccesslogDeltaImport=true but no timestamp,
+        // When an OpenLDAP RootDSE reads its changes from the accesslog but has no timestamp,
         // the connector should detect that the watermark is unavailable
         var rootDse = CreateOpenLdapRootDse(lastAccesslogTimestamp: null);
 
-        Assert.That(rootDse.UseAccesslogDeltaImport, Is.True);
+        Assert.That(rootDse.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
         Assert.That(rootDse.LastAccesslogTimestamp, Is.Null);
     }
 
@@ -86,7 +86,7 @@ public class LdapConnectorImportDeltaFallbackTests
     {
         var rootDse = CreateOpenLdapRootDse(lastAccesslogTimestamp: "20260329094128.000033Z");
 
-        Assert.That(rootDse.UseAccesslogDeltaImport, Is.True);
+        Assert.That(rootDse.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
         Assert.That(rootDse.LastAccesslogTimestamp, Is.Not.Null);
         Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260329094128.000033Z"));
     }
@@ -101,7 +101,7 @@ public class LdapConnectorImportDeltaFallbackTests
         var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>(json);
 
         Assert.That(deserialised, Is.Not.Null);
-        Assert.That(deserialised!.UseAccesslogDeltaImport, Is.True);
+        Assert.That(deserialised!.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
         Assert.That(deserialised.LastAccesslogTimestamp, Is.Null);
         Assert.That(deserialised.DirectoryType, Is.EqualTo(LdapDirectoryType.OpenLDAP));
     }
@@ -114,7 +114,7 @@ public class LdapConnectorImportDeltaFallbackTests
         var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>(json);
 
         Assert.That(deserialised, Is.Not.Null);
-        Assert.That(deserialised!.UseAccesslogDeltaImport, Is.True);
+        Assert.That(deserialised!.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
         Assert.That(deserialised.LastAccesslogTimestamp, Is.EqualTo("20260329094128.000033Z"));
     }
 
