@@ -2469,7 +2469,13 @@ $env:OPENLDAP_IMAGE_PRIMARY = $null
 # and "Scenario19-...", so each must be excluded explicitly; Scenarios 14 and 19 are OpenLDAP only
 # (enforced above) and have no Samba AD snapshot of their own, and Scenarios 15 and 16 touch no
 # directory at all.
-if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario15*" -and $Scenario -notlike "*Scenario16*" -and $Scenario -notlike "*Scenario19*") {
+# Samba AD only, as the Scenario 8 block below already guards: an OpenLDAP run uses the
+# openldap-primary container and its own snapshots (handled further down), and has no use for a
+# Samba image. Without this the OpenLDAP path still built a Samba AD snapshot, which costs minutes
+# where the base image is available and fails the run outright where it is not (the prebuilt
+# ghcr.io image is private, so the snapshot build waits 120s for a domain controller that never
+# starts, and the scenario never runs).
+if (-not $IgnoreSnapshots -and $DirectoryType -ne "OpenLDAP" -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario15*" -and $Scenario -notlike "*Scenario16*" -and $Scenario -notlike "*Scenario19*") {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
