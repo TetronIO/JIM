@@ -3,9 +3,9 @@
 
 <#
 .SYNOPSIS
-    Opens (or updates, reopens, or deliberately closes) a pull request publishing
-    the version-pin bumps that a `check-*-pins.ps1 -Apply` step has rewritten in
-    the working tree.
+    Opens (or updates, or deliberately closes) a pull request publishing the
+    version-pin bumps that a `check-*-pins.ps1 -Apply` step has rewritten in the
+    working tree.
 
 .DESCRIPTION
     Run after a detection script (check-apt-pins.ps1, check-tooling-pins.ps1, ...)
@@ -42,10 +42,16 @@
     Worker image at all. The bot branch must therefore never be pointed at the
     base tip, however briefly.
 
-    Belt and braces, because the close is asynchronous and a future change could
-    reintroduce a window: a bump PR found closed (and unmerged) at the start of a
-    run is reopened rather than duplicated, and the PR's state is confirmed once
-    more after the push.
+    A bump PR found closed (and unmerged) is never reopened; a fresh one is
+    raised on the same branch and the closed one is pointed at it. GitHub only
+    reopens a pull request whose head branch still descends from the commit it
+    was closed at, and the branch has just been moved onto a fresh commit built
+    off the base tip, so the reopen can never succeed here (it failed on every
+    weekly tooling-pin run from 7 September 2026, against #1073). Belt and
+    braces, because the close is asynchronous and a future change could
+    reintroduce a window: the PR's state is confirmed once more after the push,
+    and that late reopen does work, because a PR closed by the push itself was
+    closed at the commit the branch now holds.
 
     Requires: GH_TOKEN set to a token carrying `contents: write` and
     `pull-requests: write`. In the pin-check workflows this is a GitHub App
@@ -295,29 +301,46 @@ Remove-BotRef -Name $stagingBranch
 
 $prs = @(ConvertFrom-Json (Get-BotPrJson))
 $openPr = @($prs | Where-Object { $_.state -eq 'OPEN' })[0]
-$closedPr = @($prs | Where-Object { $_.state -eq 'CLOSED' })[0]
 
 if ($openPr) {
     Write-Host "Updated existing PR #$($openPr.number)"
     Invoke-Gh (@('pr', 'edit', "$($openPr.number)") + $ghBaseArgs + @('--body', $commitBody)) | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Failed to update the body of PR #$($openPr.number)." }
     $prNumber = $openPr.number
-} elseif ($closedPr) {
-    # The bump is still needed and the branch still exists, so a closed PR is a
-    # PR that should not be closed. Reopening beats raising a second one: the
-    # evaluation history stays in one place.
-    Write-Host "WARNING: PR #$($closedPr.number) was found closed while its bump is still needed; reopening it."
-    Invoke-Gh (@('pr', 'reopen', "$($closedPr.number)") + $ghBaseArgs) | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to reopen PR #$($closedPr.number)." }
-    Invoke-Gh (@('pr', 'edit', "$($closedPr.number)") + $ghBaseArgs + @('--body', $commitBody)) | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to update the body of PR #$($closedPr.number)." }
-    $prNumber = $closedPr.number
 } else {
+    # A closed (unmerged) bump PR is deliberately NOT reopened, even though the
+    # bump it proposed may still be needed. GitHub refuses to reopen a pull
+    # request unless its head branch still descends from the commit the PR was
+    # closed at ("the branch was force pushed or recreated"; `gh` surfaces it as
+    # "GraphQL: Could not open the pull request. (reopenPullRequest)"). The bot
+    # branch was moved above onto a fresh commit built off the base tip, which
+    # descends from nothing the closed PR ever held, so the reopen can never
+    # succeed on this path: it failed every weekly tooling-pin run from 7
+    # September 2026 against #1073. Reopening before the move would work but
+    # would resurrect a PR that -CloseStalePr, or a person, closed on purpose,
+    # with a body and review history describing a different bump. A fresh PR is
+    # the honest record, and GitHub allows one on a branch whose earlier PRs are
+    # all closed or merged (only an OPEN PR on the same head and base collides).
     Write-Host 'Opening new PR ...'
     Invoke-Gh (@('pr', 'create') + $ghBaseArgs + @('--base', $BaseBranch, '--head', $Branch,
         '--title', $CommitHeadline, '--body', $commitBody, '--label', $Label)) | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Failed to open a PR for $Branch." }
     $prNumber = @(@(ConvertFrom-Json (Get-BotPrJson)) | Where-Object { $_.state -eq 'OPEN' })[0].number
+
+    # Leave a pointer on a closed PR that nothing has superseded yet (the newest
+    # PR on the branch), so its evaluation history leads to the replacement. An
+    # older closed PR has already been overtaken by a later merged one and gets
+    # no comment, or it would collect one on every bump for ever. Best effort: a
+    # refused comment must not fail a run that has just raised the bump.
+    $latestPr = $prs[0]
+    if ($latestPr -and $latestPr.state -eq 'CLOSED') {
+        Write-Host "PR #$($latestPr.number) is the newest on $Branch and is closed; pointing it at PR #$prNumber."
+        $supersededComment = @"
+Superseded by #$prNumber. The pin check has raised the current bump as a fresh pull request rather than reopening this one: GitHub does not reopen a pull request once its head branch has moved to a commit that does not descend from the one it was closed at, and each run rebuilds the bump as a fresh commit off ``$BaseBranch``.
+"@
+        Invoke-Gh (@('pr', 'comment', "$($latestPr.number)") + $ghBaseArgs + @('--body', $supersededComment)) | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: could not comment on PR #$($latestPr.number) to point it at PR #$prNumber; continuing." }
+    }
 }
 
 # Confirm the run ends with the PR open. GitHub's close is asynchronous, so this

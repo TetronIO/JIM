@@ -21,6 +21,13 @@
     auto-close rule above. That rule is what makes the tests meaningful; without
     it the sequence of API calls looks perfectly healthy.
 
+    The fake also enforces GitHub's reopen rule: a closed pull request reopens
+    only while its head branch still descends from the commit it was closed at.
+    That rule is what failed every weekly tooling-pin run from 7 September 2026
+    (#1073): the script moves the branch onto a fresh commit off the base tip and
+    only then reconciles the pull request, so a reopen at that point is refused
+    every time. Without the rule in the fake, the reopen looks like it works.
+
     `gh` and `git` are replaced by PowerShell functions rather than shims on PATH:
     a function beats an external command in PowerShell's command resolution, and
     child scopes inherit it, so the script under test needs no seam of its own.
@@ -64,6 +71,7 @@ BeforeAll {
             RefWrites  = [System.Collections.ArrayList]::new()
             Calls      = [System.Collections.ArrayList]::new()
             RefuseCreate = $false
+            RefuseComment = $false
         }
 
         foreach ($name in $Branches.Keys) { $hub.Refs[$name] = $Branches[$name] }
@@ -74,6 +82,9 @@ BeforeAll {
                 base     = if ($pr.base) { $pr.base } else { 'main' }
                 state    = $pr.state
                 body     = if ($pr.body) { $pr.body } else { 'original body' }
+                # The commit GitHub records as the pull request's head: the
+                # branch tip while it is open, frozen at the moment it closes.
+                headSha  = if ($pr.headSha) { $pr.headSha } else { $hub.Refs[$pr.head] }
                 comments = [System.Collections.ArrayList]::new()
                 closedBy = $null
             }) | Out-Null
@@ -93,6 +104,9 @@ BeforeAll {
 
         foreach ($pr in $global:FakeHub.Prs) {
             if ($pr.state -ne 'OPEN' -or $pr.head -ne $Branch) { continue }
+            # An open pull request follows its head branch; a closed one keeps
+            # the head it was closed at, which is what the reopen rule checks.
+            $pr.headSha = $Sha
             # A head branch carrying no commits ahead of its base is an empty
             # pull request, and GitHub closes it. This is #1374.
             if ($global:FakeHub.Refs.ContainsKey($pr.base) -and $Sha -eq $global:FakeHub.Refs[$pr.base]) {
@@ -100,6 +114,20 @@ BeforeAll {
                 $pr.closedBy = 'github-empty-range'
             }
         }
+    }
+
+    # Whether $Sha is $Ancestor or descends from it, walking the parents the
+    # fake recorded for commits it created. Seeded shas have no recorded parent
+    # and so descend from nothing but themselves.
+    function Test-FakeDescendsFrom {
+        param([string]$Sha, [string]$Ancestor)
+
+        $cursor = $Sha
+        while ($cursor) {
+            if ($cursor -eq $Ancestor) { return $true }
+            $cursor = $global:FakeHub.Parents[$cursor]
+        }
+        return $false
     }
 
     function script:git {
@@ -262,7 +290,7 @@ BeforeAll {
                 $jq = if ($GhArgs -contains '--jq') { $GhArgs[[array]::IndexOf($GhArgs, '--jq') + 1] } else { $null }
                 return (Invoke-FakeJq -Filter $jq -Json $json)
             }
-            { $_ -in @('edit', 'reopen', 'close') } {
+            { $_ -in @('edit', 'reopen', 'close', 'comment') } {
                 $number = [int]$GhArgs[2]
                 $pr = @($global:FakeHub.Prs | Where-Object { $_.number -eq $number })[0]
                 if (-not $pr) { $global:LASTEXITCODE = 1; return "gh: no pull request #$number" }
@@ -270,8 +298,23 @@ BeforeAll {
                 if ($verb -eq 'edit' -and $GhArgs -contains '--body') {
                     $pr.body = $GhArgs[[array]::IndexOf($GhArgs, '--body') + 1]
                 }
+                if ($verb -eq 'comment') {
+                    if ($global:FakeHub.RefuseComment) { $global:LASTEXITCODE = 1; return 'gh: Resource not accessible by integration (HTTP 403)' }
+                    $pr.comments.Add($GhArgs[[array]::IndexOf($GhArgs, '--body') + 1]) | Out-Null
+                }
                 if ($verb -eq 'reopen') {
                     if ($pr.state -eq 'MERGED') { $global:LASTEXITCODE = 1; return 'gh: cannot reopen a merged pull request' }
+                    # GitHub's rule: a closed pull request reopens only while its
+                    # head branch still exists and still descends from the commit
+                    # the pull request was closed at. Otherwise the UI greys the
+                    # button out ("the branch was force pushed or recreated") and
+                    # the API answers with the generic refusal quoted here, which
+                    # is what the tooling-pin bot hit weekly from 7 September 2026.
+                    if (-not $global:FakeHub.Refs.ContainsKey($pr.head) -or
+                        -not (Test-FakeDescendsFrom -Sha $global:FakeHub.Refs[$pr.head] -Ancestor $pr.headSha)) {
+                        $global:LASTEXITCODE = 1
+                        return 'GraphQL: Could not open the pull request. (reopenPullRequest)'
+                    }
                     $pr.state = 'OPEN'
                     $pr.closedBy = $null
                 }
@@ -297,6 +340,7 @@ BeforeAll {
                     base     = $GhArgs[[array]::IndexOf($GhArgs, '--base') + 1]
                     state    = 'OPEN'
                     body     = $GhArgs[[array]::IndexOf($GhArgs, '--body') + 1]
+                    headSha  = $global:FakeHub.Refs[$head]
                     comments = [System.Collections.ArrayList]::new()
                     closedBy = $null
                 }) | Out-Null
@@ -424,25 +468,74 @@ Describe 'open-pin-pr.ps1' {
         }
     }
 
-    Context 'when the bump pull request was closed by an earlier run' {
+    Context 'when the newest bump pull request is closed' {
 
         BeforeEach {
+            # The state every weekly tooling-pin run found from 7 September 2026:
+            # #1073 closed a month earlier (by -CloseStalePr or by hand; it makes
+            # no difference), the branch still at the commit it was closed at,
+            # and a new bump to publish.
             $global:FakeHub = New-FakeHub -BaseSha 'basesha001' `
                 -Branches @{ $script:BotBranch = 'oldbump01' } `
                 -Prs @(@{ head = $script:BotBranch; state = 'CLOSED' })
         }
 
-        It 'reopens it rather than leaving the bump unlandable' {
+        It 'opens a fresh pull request rather than trying to reopen the closed one' {
             $output = Invoke-OpenPinPr -WorkingTree (New-WorkingTree)
 
-            (Get-FakePr -Number 1).state | Should -Be 'OPEN'
-            $output | Should -Match 'reopen'
+            $script:Failed | Should -BeFalse
+            $global:FakeHub.Prs.Count | Should -Be 2
+            (Get-FakePr -Number 1).state | Should -Be 'CLOSED'
+            (Get-FakePr -Number 2).state | Should -Be 'OPEN'
+            $output | Should -Match 'Opening new PR'
+            @($global:FakeHub.Calls | Where-Object { $_[0] -eq 'gh' -and $_[1] -eq 'pr' -and $_[2] -eq 'reopen' }) | Should -BeNullOrEmpty
         }
 
-        It 'does not raise a second pull request for the same branch' {
+        It 'could not have reopened it: the branch no longer descends from the closed head' {
+            # Pins the reason the reopen was dropped, as GitHub applies it. The
+            # branch now holds a fresh commit off the base tip, so a reopen of the
+            # closed pull request is refused however it is attempted.
             Invoke-OpenPinPr -WorkingTree (New-WorkingTree) | Out-Null
 
-            $global:FakeHub.Prs.Count | Should -Be 1
+            gh pr reopen 1 --repo $global:FakeRepository | Out-Null
+
+            $global:LASTEXITCODE | Should -Be 1
+            (Get-FakePr -Number 1).state | Should -Be 'CLOSED'
+        }
+
+        It 'points the closed pull request at its replacement' {
+            Invoke-OpenPinPr -WorkingTree (New-WorkingTree) | Out-Null
+
+            $closed = Get-FakePr -Number 1
+            $closed.comments.Count | Should -Be 1
+            $closed.comments[0] | Should -Match '#2'
+        }
+
+        It 'still succeeds when the closed pull request cannot be commented on' {
+            $global:FakeHub.RefuseComment = $true
+
+            $output = Invoke-OpenPinPr -WorkingTree (New-WorkingTree)
+
+            $script:Failed | Should -BeFalse
+            (Get-FakePr -Number 2).state | Should -Be 'OPEN'
+            $output | Should -Match 'WARNING: could not comment on PR #1'
+        }
+
+        It 'does not comment again on a closed pull request a later merged one has overtaken' {
+            # #1073's actual position: closed, but no longer the newest pull
+            # request on the branch, because #1385 was raised and merged after
+            # it. Commenting on it at every subsequent bump would be noise.
+            $global:FakeHub.Prs.Add([ordered]@{
+                number = 2; head = $script:BotBranch; base = 'main'; state = 'MERGED'
+                body = 'landed'; headSha = 'merged01'; comments = [System.Collections.ArrayList]::new(); closedBy = $null
+            }) | Out-Null
+            $global:FakeHub.NextPr = 3
+
+            Invoke-OpenPinPr -WorkingTree (New-WorkingTree) | Out-Null
+
+            $global:FakeHub.Prs.Count | Should -Be 3
+            (Get-FakePr -Number 3).state | Should -Be 'OPEN'
+            (Get-FakePr -Number 1).comments.Count | Should -Be 0
         }
     }
 
