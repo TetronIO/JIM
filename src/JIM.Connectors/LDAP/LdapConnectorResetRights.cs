@@ -75,7 +75,7 @@ internal class LdapConnectorResetRights
     /// </summary>
     internal async Task<IReadOnlyList<ResetRightsFinding>> CheckAsync(IReadOnlyList<string> containerDns, CancellationToken cancellationToken)
     {
-        var callerSids = await GetCallerSecurityContextAsync();
+        var callerSids = await LdapCallerSecurityContext.ReadAsync(_executor, _logger, nameof(LdapConnectorResetRights));
         if (callerSids == null)
         {
             // Without the full set of groups the account belongs to, no denial can be justified: the right may
@@ -96,73 +96,6 @@ internal class LdapConnectorResetRights
         }
 
         return findings;
-    }
-
-    /// <summary>
-    /// Reads the security identifiers of the account JIM is bound as, from the rootDSE.
-    /// <para>
-    /// The rootDSE form of tokenGroups reports the security context of the connection itself, which sidesteps
-    /// having to work out the bound account's Distinguished Name from a configured username that might be a
-    /// Distinguished Name, a user principal name, or a down-level logon name.
-    /// </para>
-    /// </summary>
-    /// <returns>The security identifiers, or null when the directory did not report them.</returns>
-    private async Task<HashSet<string>?> GetCallerSecurityContextAsync()
-    {
-        var request = new SearchRequest { Scope = SearchScope.Base };
-        request.Attributes.Add(AttributeTokenGroups);
-        request.Attributes.Add(AttributePrincipalName);
-
-        SearchResponse response;
-        try
-        {
-            response = (SearchResponse)await _executor.SendRequestAsync(request);
-        }
-        catch (DirectoryOperationException ex)
-        {
-            _logger.Debug("LdapConnectorResetRights: The directory refused to report the connection's security context: {Message}", LogSanitiser.Sanitise(ex.Message));
-            return null;
-        }
-        catch (LdapException ex)
-        {
-            _logger.Debug("LdapConnectorResetRights: Could not read the connection's security context: {Message}", LogSanitiser.Sanitise(ex.Message));
-            return null;
-        }
-
-        if (response.Entries.Count == 0)
-            return null;
-
-        var attribute = response.Entries[0].Attributes[AttributeTokenGroups];
-
-        // Active Directory omits this entirely, without an error, when it cannot reach a Global Catalog to expand
-        // the memberships. Reading that as "belongs to nothing" would deny an account that holds the right
-        // through a group.
-        if (attribute == null || attribute.Count == 0)
-        {
-            _logger.Debug("LdapConnectorResetRights: The directory reported no group memberships for the connection, so its rights cannot be evaluated.");
-            return null;
-        }
-
-        // Anything that will not parse is dropped rather than failing the read: one unreadable identifier among
-        // many is not a reason to abandon the caller's whole security context.
-        var sids = attribute.GetValues(typeof(byte[])).OfType<byte[]>()
-            .Select(value => SecurityIdentifier.TryParse(value, 0))
-            .Where(sid => sid != null)
-            .Select(sid => sid!.Value)
-            .ToHashSet(StringComparer.Ordinal);
-
-        if (sids.Count == 0)
-            return null;
-
-        // Group expansion does not include the memberships every authenticated network connection has by virtue
-        // of being one, and a directory can legitimately grant a right to those. Note the deliberate absence of
-        // S-1-5-10 (SELF): that identifier stands for the object being examined rather than the caller, so adding
-        // it here would match entries meant for a user acting on their own account.
-        sids.Add(WellKnownSidEveryone);
-        sids.Add(WellKnownSidAuthenticatedUsers);
-        sids.Add(WellKnownSidNetwork);
-
-        return sids;
     }
 
     /// <summary>
@@ -235,16 +168,6 @@ internal class LdapConnectorResetRights
         new() { ContainerDn = containerDn, Outcome = ResetRightsOutcome.CouldNotDetermine, Detail = detail };
 
     #region constants
-    /// <summary>
-    /// The security identifiers of the context the connection authenticated as, read from the rootDSE.
-    /// </summary>
-    internal const string AttributeTokenGroups = "tokenGroups";
-
-    /// <summary>
-    /// Who the directory considers the connection to be. Read for diagnostics rather than for the check itself.
-    /// </summary>
-    internal const string AttributePrincipalName = "msDS-PrincipalName";
-
     internal const string AttributeSecurityDescriptor = "nTSecurityDescriptor";
 
     /// <summary>
@@ -263,9 +186,5 @@ internal class LdapConnectorResetRights
     /// without knowing the current one ([MS-ADTS] 5.1.3.2.1).
     /// </summary>
     internal static readonly Guid ResetPasswordRight = new("00299570-246d-11d0-a768-00aa006e0529");
-
-    private const string WellKnownSidEveryone = "S-1-1-0";
-    private const string WellKnownSidAuthenticatedUsers = "S-1-5-11";
-    private const string WellKnownSidNetwork = "S-1-5-2";
     #endregion
 }

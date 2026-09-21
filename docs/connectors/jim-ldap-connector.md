@@ -461,7 +461,8 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For import only**<br /> Grant read access to the containers and attributes that JIM needs to import.
 - **For export (provisioning)**<br /> Grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
 - **For container provisioning**<br /> If "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
-- **For delta import**<br /> The service account needs read access to the directory's change tracking mechanism (USN attributes for AD, accesslog for OpenLDAP).
+- **For delta import**<br /> The service account needs read access to the directory's change tracking mechanism (USN attributes for Active Directory, accesslog for OpenLDAP).
+- **For importing deletions (Active Directory)**<br /> A Delta Import finds deletions by searching `CN=Deleted Objects,<domain DN>` with the Show Deleted Objects control, so the service account needs **List Contents**, **Read Property** and **Read Permissions** over that container. No delegation on an OU reaches it: its permissions are protected from inheritance and its owner is SYSTEM, so even a domain administrator has to take ownership before granting anything. Withholding this read is not refused by the directory: the search succeeds and returns nothing. JIM does not take that silence at face value: it reads the container's own permissions at Schema Discovery and before every Delta Import, and Read Permissions is what lets that check give a definite answer rather than could not tell. See [Active Directory](#active-directory) below for what JIM does with the answer and for the grant.
 - **For setting passwords**<br /> Grant the **Reset Password** permission on the containers JIM manages. In Active Directory this is a control access right, delegated on the OU (Delegate Control, "Reset user passwords and force password change at next logon"), and it is a separate thing from write access to attributes: an account with full write permission on an OU still cannot set a password without it. **The service account does not need to be a Domain Admin**, and should not be.
 - **For checking reset rights**<br /> To answer the reset-rights preflight rather than reporting that it could not tell, the service account also needs read access to the `nTSecurityDescriptor` attribute of accounts in those containers. Reading an object's permissions is normally covered by ordinary read access; where it is not, the check reports an unknown rather than a denial.
 - **For discovering Fine-Grained Password Policies (Active Directory)**<br /> Detecting whether any exist requires read access to the domain's Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`), which by default is restricted to Domain Admins. Without it JIM reports that it could not tell, and treats the domain policy it read as a floor. Granting read on that container is optional; it buys a definite answer in the Password Channel panel and nothing else.
@@ -472,7 +473,48 @@ The LDAP service account used by JIM should follow the principle of least privil
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
 
-The bullets above describe Active Directory's delegation model: control access rights, delegated OU control, and the rest. OpenLDAP has none of that machinery; permissions come from `olcAccess` rules on the directory's own configuration, so the recipe looks different even though the goal, least privilege, is the same.
+The bullets above say what access JIM needs; the two subsections below are the concrete recipes for granting it. Active Directory delegates on a container, through control access rights and inheritable access control entries. OpenLDAP has none of that machinery: permissions come from `olcAccess` rules on the directory's own configuration. The mechanics differ; the goal, least privilege, does not.
+
+#### Active Directory
+
+Bind JIM as a dedicated account, never a Domain Admin. An ordinary user object is enough; JIM needs no rights at all outside the branch it manages.
+
+Grant the access to a **group** and make the account a member of it, rather than granting anything to the account itself. `CN=JIM Connectors,OU=Services,<domain DN>` holding `CN=svc-jim,OU=Services,<domain DN>` is the shape. Replacing the service account, or adding a second one for another Connected System, is then a membership change and the delegation is left alone.
+
+Delegate on the **container at the top of the branch JIM manages**, normally the OU holding the accounts and groups it provisions. Every entry below is inheritable, so objects and containers created later are covered without a second delegation. That inheritance is also what covers moving an object between containers, which needs delete in the source and create in the target.
+
+These are the access control entries, as SDDL. JIM's integration lab runs against exactly these, which is what keeps them honest: they are the lab's own file, published here verbatim.
+
+```text
+--8<-- "test/integration/docker/samba-ad-prebuilt/delegation/jim-ad-delegation.acl"
+```
+
+On Windows, apply them with `dsacls` against the container's DN, naming the delegation group as the trustee. Substitute your own domain and container:
+
+```text
+dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;user"
+dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;group"
+dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;organizationalUnit"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;user"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;group"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;organizationalUnit"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:CA;Reset Password;user"
+```
+
+Leave the `organizationalUnit` lines out unless "Create Containers as Needed" is switched on.
+
+The Delegation of Control wizard is the other route to the same place: run it on the container and grant the group "Create, delete and manage user accounts", "Create, delete and manage groups", and "Reset user passwords and force password change at next logon".
+
+Then grant read over the Deleted Objects container, which is where a Delta Import finds deletions and which no delegation on an OU reaches. Its permissions are protected from inheritance and its owner is SYSTEM, so take ownership first:
+
+```text
+dsacls "CN=Deleted Objects,DC=corp,DC=local" /takeOwnership
+dsacls "CN=Deleted Objects,DC=corp,DC=local" /G "CORP\JIM Connectors:LCRPRC"
+```
+
+List Contents and Read Property are what the tombstone search needs, and JIM only ever reads tombstones. Read Permissions lets the account read the container's own permissions, which is how JIM confirms the grant is in place. Skip this and the directory refuses nothing: the search succeeds and returns nothing. JIM checks rather than trusts that: Schema Discovery, and the schema refresh preview, warn when the account is not allowed to list the container or JIM cannot confirm that it is, and a Delta Import refuses to run when the account is provably not allowed to list it (the Activity says so and names the container), or completes with a warning when JIM cannot confirm. Without Read Permissions the account cannot read the container's own permissions, so JIM can only report that it could not tell; with it, the answer is definite either way.
+
+Read over the Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`) stays optional and is deliberately not in the entries above. Without it JIM reports that it could not tell whether Fine-Grained Password Policies exist, and treats the domain policy as a floor; with it, the Password Channel panel gives a definite answer.
 
 #### OpenLDAP
 

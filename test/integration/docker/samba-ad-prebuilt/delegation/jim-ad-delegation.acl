@@ -1,0 +1,36 @@
+# The access JIM needs over an Active Directory container it manages, as SDDL access control
+# entries applied to that container (OU). Everything here is inheritable, so objects created in
+# the container later carry it without a second delegation.
+#
+# __JIM_TRUSTEE_SID__ is the security identifier of the group JIM's service account belongs to.
+# Delegating to a group rather than to the account keeps the delegation in place when the
+# account is replaced.
+#
+# Lines starting with # are comments and blank lines are ignored; everything else is
+# concatenated in order into one SDDL string.
+#
+# Class identifiers used below are Active Directory's own, and are the same in every forest:
+#   bf967aba-0de6-11d0-a285-00aa003049e2  user
+#   bf967a9c-0de6-11d0-a285-00aa003049e2  group
+#   bf967aa5-0de6-11d0-a285-00aa003049e2  organizationalUnit
+#   00299570-246d-11d0-a768-00aa006e0529  Reset Password (a control access right, not an attribute)
+
+# Create and delete users, groups and organisational units in this container and below. The
+# organisationalUnit entry is only needed where "Create Containers as Needed" is switched on;
+# leave it out otherwise. Moving an object between containers needs delete here and create there,
+# which a single delegation at the top of the managed branch covers.
+(OA;CI;CCDC;bf967aba-0de6-11d0-a285-00aa003049e2;;__JIM_TRUSTEE_SID__)
+(OA;CI;CCDC;bf967a9c-0de6-11d0-a285-00aa003049e2;;__JIM_TRUSTEE_SID__)
+(OA;CI;CCDC;bf967aa5-0de6-11d0-a285-00aa003049e2;;__JIM_TRUSTEE_SID__)
+
+# Read and write the objects themselves: attribute flow, renames, disables and deletes. Read
+# Control (RC) is what lets JIM read an object's own permissions, which is how the reset-rights
+# preflight answers rather than reporting that it could not tell.
+(OA;CIIO;RPWPLCLORCSDDT;;bf967aba-0de6-11d0-a285-00aa003049e2;__JIM_TRUSTEE_SID__)
+(OA;CIIO;RPWPLCLORCSDDT;;bf967a9c-0de6-11d0-a285-00aa003049e2;__JIM_TRUSTEE_SID__)
+(OA;CIIO;RPWPLCLORCSDDT;;bf967aa5-0de6-11d0-a285-00aa003049e2;__JIM_TRUSTEE_SID__)
+
+# Set passwords on the users in this container. Reset Password is a control access right and is
+# separate from write access: without this entry, an account that can write every attribute of a
+# user still cannot set that user's password.
+(OA;CIIO;CR;00299570-246d-11d0-a768-00aa006e0529;bf967aba-0de6-11d0-a285-00aa003049e2;__JIM_TRUSTEE_SID__)

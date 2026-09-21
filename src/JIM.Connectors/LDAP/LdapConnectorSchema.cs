@@ -29,9 +29,44 @@ internal class LdapConnectorSchema
 
     internal async Task<ConnectorSchema> GetSchemaAsync()
     {
-        return _rootDse.DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD
-            ? await GetActiveDirectorySchemaAsync()
-            : await GetRfcSchemaAsync();
+        if (_rootDse.DirectoryType is not (LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD))
+            return await GetRfcSchemaAsync();
+
+        await GetActiveDirectorySchemaAsync();
+        await WarnWhenDeletedObjectsCannotBeListedAsync();
+        return _schema;
+    }
+
+    /// <summary>
+    /// Warns when the account JIM connects as may not be able to see deletions, by evaluating whether it may list
+    /// the domain's Deleted Objects container (#1723). Active Directory and Samba AD only, because that container
+    /// is where a USN-based Delta Import looks for tombstones.
+    /// <para>
+    /// Schema Discovery is the right first moment: it is the first time a Connected System's credentials are proven
+    /// against the directory, and it runs again from the schema refresh preview, so a grant made in response to the
+    /// warning can be confirmed on the spot rather than by waiting for a Delta Import to find nothing. It never
+    /// fails discovery: deletion detection is a Delta Import concern, and the schema is no less correct for the
+    /// account lacking a right the schema read does not need. The Delta Import itself refuses to run on a proven
+    /// denial; here both a denial and an unknown are a warning.
+    /// </para>
+    /// </summary>
+    private async Task WarnWhenDeletedObjectsCannotBeListedAsync()
+    {
+        var namingContext = LdapPasswordPolicyScope.From(_rootDse).PrimaryNamingContext;
+        if (namingContext == null)
+        {
+            _logger.Debug("GetSchemaAsync: The rootDSE named no naming context, so access to the Deleted Objects container was not checked.");
+            return;
+        }
+
+        var access = new LdapConnectorDeletedObjectsAccess(new LdapOperationExecutor(_connection), _logger);
+        var finding = await access.CheckAsync(namingContext, CancellationToken.None);
+        if (finding.Outcome == DeletedObjectsAccessOutcome.Granted)
+            return;
+
+        var warning = LdapConnectorDeletedObjectsAccess.DescribeForSchemaDiscovery(finding);
+        _schema.Warnings.Add(warning);
+        _logger.Warning("GetSchemaAsync: {Warning}", warning);
     }
 
     // -----------------------------------------------------------------------

@@ -44,6 +44,18 @@ internal class LdapConnectorImport
     /// warning on the result always wins, being about the import itself rather than about its plumbing.
     /// </summary>
     internal string? PinValidationWarning { get; private set; }
+
+    /// <summary>
+    /// Set when this session's deletion detection may have missed something: JIM could not confirm that the account
+    /// it connects as may list a partition's Deleted Objects container, or the tombstone search there was refused
+    /// or found no container (#1723). One note per container, the later and more definite evidence about a
+    /// container replacing the earlier. Read by <see cref="LdapConnector"/> onto the import result, which surfaces
+    /// it on the Activity; a warning about how the import itself was performed still wins, but this beats the
+    /// pinning note, because a deletion JIM may not have seen matters more than plumbing. A proven denial is never
+    /// a warning: the Delta Import refuses to run instead.
+    /// </summary>
+    internal string? DeletionDetectionWarning => _deletionDetectionNotes.Warning;
+    private DeletionDetectionNotes _deletionDetectionNotes = new();
     private readonly TimeSpan _searchTimeout;
     private readonly string _placeholderMemberDn;
     private readonly IConnectorProgress _progress;
@@ -299,6 +311,14 @@ internal class LdapConnectorImport
             // Guard against silently importing zero objects from a Partition the connected domain
             // controller does not host (see #230). AD-family only; a no-op for other directory types.
             LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(_currentRootDse, GetTargetPartitions(), _logger);
+
+            // Guard against silently importing zero deletions (see #1723), for the same reason as the guard
+            // above: an account that may not list a partition's Deleted Objects container is not refused
+            // there, its tombstone search succeeds with no rows, so continuing would import every change
+            // and no deletion and provably leave deleted objects in JIM. Runs before any change is queried.
+            // A denial JIM could prove stops the run; a right JIM could not confirm becomes a warning.
+            if (_previousRootDse.UseUsnDeltaImport)
+                await VerifyDeletedObjectsCanBeListedAsync();
         }
 
         // Determine which delta strategy to use
@@ -355,9 +375,16 @@ internal class LdapConnectorImport
                     return result;
                 }
 
+                var deletedObjectsTokenName = LdapConnectorUtilities.GetDeletedObjectsPaginationTokenName(selectedPartition);
+                var deletedObjectsToken = _paginationTokens.SingleOrDefault(pt => pt.Name == deletedObjectsTokenName);
+
+                // On subsequent pages, skip the tombstone search when it has no pagination token (see full import comment)
+                if (_paginationTokens.Count > 0 && deletedObjectsToken == null)
+                    continue;
+
                 await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryDeletions, $"Querying deleted objects in {selectedPartition.Name}...");
                 await ReportObjectsReadByAsync(result,
-                    () => GetDeletedObjectsUsingUsn(result, selectedPartition, previousUsn));
+                    () => GetDeletedObjectsUsingUsn(result, selectedPartition, previousUsn, deletedObjectsToken?.ByteValue));
             }
         }
         else if (_previousRootDse.UseAccesslogDeltaImport)
@@ -1283,6 +1310,24 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
+    /// Evaluates, for every partition this run targets, whether the account JIM connects as may list its Deleted
+    /// Objects container, where <see cref="GetDeletedObjectsUsingUsn"/> is about to look for tombstones (#1723).
+    /// The decision itself lives in <see cref="LdapConnectorDeletedObjectsAccess.SummariseForDeltaImport"/>, where
+    /// it can be tested: a proven denial stops the run, naming every denied partition at once; the partitions JIM
+    /// could not be sure about become the notes behind <see cref="DeletionDetectionWarning"/>.
+    /// </summary>
+    /// <exception cref="CannotPerformDeltaImportException">At least one partition's container is provably not listable.</exception>
+    private async Task VerifyDeletedObjectsCanBeListedAsync()
+    {
+        var access = new LdapConnectorDeletedObjectsAccess(new LdapOperationExecutor(_connection), _logger);
+        var findings = new List<DeletedObjectsAccessFinding>();
+        foreach (var partition in GetTargetPartitions())
+            findings.Add(await access.CheckAsync(partition.ExternalId, _cancellationToken));
+
+        _deletionDetectionNotes = LdapConnectorDeletedObjectsAccess.SummariseForDeltaImport(findings, _logger);
+    }
+
+    /// <summary>
     /// Gets deleted objects (tombstones) from the AD Deleted Objects container using USN-based change tracking.
     /// This enables delta imports to detect deletions that occurred since the last import.
     ///
@@ -1292,9 +1337,13 @@ internal class LdapConnectorImport
     /// 3. Strips most attributes, keeping only objectGUID, objectSid, distinguishedName (mangled), lastKnownParent
     /// 4. Updates uSNChanged
     ///
-    /// We use the LDAP_SERVER_SHOW_DELETED_OID control to query this container.
+    /// The search is paged, exactly as <see cref="GetDeltaResultsUsingUsn"/> pages a container's changes, under a
+    /// pagination token of the partition's own, so it runs once per Delta Import rather than once per page and a
+    /// clean-up larger than the directory's page size is imported in full rather than refused (#1724). The search
+    /// itself lives in <see cref="LdapConnectorDeletedObjectsSearch"/>, where it can be tested; what becomes of
+    /// each tombstone is decided here.
     /// </summary>
-    private void GetDeletedObjectsUsingUsn(ConnectedSystemImportResult result, ConnectedSystemPartition partition, long previousUsn)
+    private void GetDeletedObjectsUsingUsn(ConnectedSystemImportResult result, ConnectedSystemPartition partition, long previousUsn, byte[]? lastRunsCookie)
     {
         if (_cancellationToken.IsCancellationRequested)
         {
@@ -1310,47 +1359,30 @@ internal class LdapConnectorImport
 
         var stopwatch = Stopwatch.StartNew();
 
-        // Build the Deleted Objects container DN for this partition
-        // Format: CN=Deleted Objects,<partition DN>
-        var deletedObjectsDn = $"CN=Deleted Objects,{partition.ExternalId}";
+        // The same construction the up-front access check used, so a note recorded here about this container
+        // replaces the check's note about it rather than sitting beside it.
+        var deletedObjectsDn = LdapConnectorDeletedObjectsAccess.ContainerDnFor(partition.ExternalId);
 
-        // Build filter for deleted objects changed since last USN
-        // We use (isDeleted=TRUE) to only get tombstones, combined with USN filter
-        var ldapFilter = $"(&(isDeleted=TRUE)(uSNChanged>={previousUsn + 1}))";
+        var page = new LdapConnectorDeletedObjectsSearch(new LdapOperationExecutor(_connection), _logger)
+            .Search(deletedObjectsDn, previousUsn, _connectedSystemRunProfile.PageSize, _currentRootDse?.SupportsPaging ?? true, lastRunsCookie, _searchTimeout);
 
-        // Request minimal attributes needed to identify the deleted object
-        // Most attributes are stripped from tombstones, but objectGUID is preserved
-        // and is the recommended external ID for LDAP connector
-        var queryAttributes = new[] { "objectGUID", "objectClass", "isDeleted", "lastKnownParent", "distinguishedName" };
-
-        var searchRequest = new SearchRequest(deletedObjectsDn, ldapFilter, SearchScope.Subtree, queryAttributes);
-
-        // Add the Show Deleted Objects control - this is required to search the Deleted Objects container
-        var showDeletedControl = new DirectoryControl(
-            LdapConnectorConstants.LDAP_SERVER_SHOW_DELETED_OID,
-            null,
-            true,  // IsCritical - server must support this for the query to work
-            true); // ServerSide
-        searchRequest.Controls.Add(showDeletedControl);
-
-        SearchResponse searchResponse;
-        try
+        switch (page.Outcome)
         {
-            searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+            case DeletedObjectsSearchOutcome.Refused:
+                _deletionDetectionNotes.Record(deletedObjectsDn, LdapConnectorDeletedObjectsAccess.DescribeRefusedSearch(deletedObjectsDn, page.Detail));
+                return;
+            case DeletedObjectsSearchOutcome.ContainerMissing:
+                _deletionDetectionNotes.Record(deletedObjectsDn, LdapConnectorDeletedObjectsAccess.DescribeMissingContainer(deletedObjectsDn));
+                return;
+            case DeletedObjectsSearchOutcome.LimitExceeded:
+                _deletionDetectionNotes.Record(deletedObjectsDn, LdapConnectorDeletedObjectsAccess.DescribeLimitExceeded(deletedObjectsDn));
+                return;
         }
-        catch (DirectoryOperationException ex)
+
+        if (page.NextCookie != null)
         {
-            // The Show Deleted Objects control may not be supported by all directories
-            // (e.g., some Samba AD configurations). Log and continue without failing the import.
-            _logger.Warning("GetDeletedObjectsUsingUsn: Failed to query Deleted Objects container. " +
-                "The directory may not support the Show Deleted Objects control. Error: {Message}", LogSanitiser.Sanitise(ex.Message));
-            return;
-        }
-        catch (LdapException ex) when (ex.ErrorCode == 32) // NoSuchObject
-        {
-            // The Deleted Objects container may not exist in some configurations
-            _logger.Debug("GetDeletedObjectsUsingUsn: Deleted Objects container not found at {Dn}. Skipping deletion detection.", LogSanitiser.Sanitise(deletedObjectsDn));
-            return;
+            var tokenName = LdapConnectorUtilities.GetDeletedObjectsPaginationTokenName(partition);
+            result.PaginationTokens.Add(new ConnectedSystemPaginationToken(tokenName, page.NextCookie));
         }
 
         if (_cancellationToken.IsCancellationRequested)
@@ -1361,7 +1393,7 @@ internal class LdapConnectorImport
 
         // Process each deleted object (tombstone)
         var deletedCount = 0;
-        foreach (SearchResultEntry entry in searchResponse.Entries)
+        foreach (var entry in page.Entries)
         {
             if (_cancellationToken.IsCancellationRequested)
             {

@@ -442,7 +442,11 @@ function Get-SambaBaseBuildHash {
         (Join-Path $sambaScriptDir "start-samba.sh"),
         # The build script performs the provisioning, so the flags it passes (the container hostname
         # above all, which Samba bakes into the DC's dNSHostName and TLS certificate) are image content.
-        (Join-Path $sambaScriptDir "Build-SambaImages.ps1")
+        (Join-Path $sambaScriptDir "Build-SambaImages.ps1"),
+        # JIM's delegation is applied to the domain during post-provisioning and both files are baked
+        # into the image, so either changing makes every existing image and snapshot stale.
+        (Join-Path $sambaScriptDir "delegation" "jim-ad-delegation.acl"),
+        (Join-Path $sambaScriptDir "delegation" "jim-delegate.sh")
     )
     $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
     return [System.BitConverter]::ToString(
@@ -2934,6 +2938,13 @@ if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and $S
     else {
         Write-Warning "Failed to create OU Groups: $result"
     }
+
+    # The subtree delete above took the image's baked delegation over OU=Corp with it, so grant it
+    # again: JIM provisions into this OU and would otherwise fail at export with an access error.
+    # The Users and Groups OUs below Corp inherit the delegation.
+    Write-Step "Delegating JIM's access over the Corp OU..."
+    Grant-JimAdDelegation -ContainerName "samba-ad-primary" -ContainerDn "OU=Corp,DC=panoply,DC=local"
+    Write-Success "Delegated JIM's access over OU: Corp"
 }
 
 # Step 4c: Populate OpenLDAP with test data
