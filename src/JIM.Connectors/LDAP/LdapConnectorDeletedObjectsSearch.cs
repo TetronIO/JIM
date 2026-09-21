@@ -47,7 +47,7 @@ internal sealed class DeletedObjectsPage
 
 /// <summary>
 /// Searches a partition's Deleted Objects container for the tombstones a USN Delta Import must turn into deletions,
-/// one page at a time, exactly as <c>GetDeltaResultsUsingUsn</c> pages the changes in an ordinary container.
+/// one page at a time, exactly as <see cref="LdapUsnDeltaSource"/> pages the changes in an ordinary container.
 /// <para>
 /// This lives apart from <c>LdapConnectorImport</c> because that class holds the raw <see cref="LdapConnection"/>,
 /// which is sealed and cannot be driven by a fake directory; the <see cref="ILdapOperationExecutor"/> seam is the
@@ -118,6 +118,14 @@ internal class LdapConnectorDeletedObjectsSearch
         {
             response = (SearchResponse)_executor.SendRequest(request, timeout);
         }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            // Some configurations have no Deleted Objects container to search. This is the shape the client library
+            // gives a missing base, so it has to come before the generic refusal below, or it would be reported as
+            // one; the LdapException form further down is the legacy shape of the same answer.
+            _logger.Debug("LdapConnectorDeletedObjectsSearch: Deleted Objects container not found at {Container}.", LogSanitiser.Sanitise(containerDn));
+            return new DeletedObjectsPage { Entries = [], Outcome = DeletedObjectsSearchOutcome.ContainerMissing };
+        }
         catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.SizeLimitExceeded)
         {
             // The directory stopped short. The exception carries the entries it did answer, but with no cookie
@@ -132,7 +140,7 @@ internal class LdapConnectorDeletedObjectsSearch
             ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))
         {
             // The directory handed back a cookie on the first page and now refuses it (Samba AD does this). It
-            // answered everything on that first page, as GetDeltaResultsUsingUsn already assumes for changes.
+            // answered everything on that first page, as the USN source already assumes for changes.
             _logger.Warning("LdapConnectorDeletedObjectsSearch: The directory rejected the paging cookie for {Container}; assuming all deleted objects were returned on the first page. Error: {Message}",
                 LogSanitiser.Sanitise(containerDn), LogSanitiser.Sanitise(ex.Message));
             return new DeletedObjectsPage { Entries = [], Outcome = DeletedObjectsSearchOutcome.Read };
@@ -148,7 +156,7 @@ internal class LdapConnectorDeletedObjectsSearch
         }
         catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject
         {
-            // Some configurations have no Deleted Objects container to search.
+            // The legacy shape of a missing container; the DirectoryOperationException form above is the usual one.
             _logger.Debug("LdapConnectorDeletedObjectsSearch: Deleted Objects container not found at {Container}.", LogSanitiser.Sanitise(containerDn));
             return new DeletedObjectsPage { Entries = [], Outcome = DeletedObjectsSearchOutcome.ContainerMissing };
         }

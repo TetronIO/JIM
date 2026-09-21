@@ -62,28 +62,55 @@ public class LdapDirectoryTypeTests
 
     #endregion
 
-    #region RootDse computed properties — UseUsnDeltaImport
+    #region RootDse computed properties — IsActiveDirectoryFamily and DeltaSourceKind
 
     [Test]
-    public void UseUsnDeltaImport_ActiveDirectory_ReturnsTrue()
+    public void IsActiveDirectoryFamily_ActiveDirectory_ReturnsTrue()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.True);
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.True);
     }
 
     [Test]
-    public void UseUsnDeltaImport_OpenLDAP_ReturnsFalse()
+    public void IsActiveDirectoryFamily_SambaAD_ReturnsTrue()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.True);
+    }
+
+    [Test]
+    public void IsActiveDirectoryFamily_OpenLDAP_ReturnsFalse()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.False);
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.False);
     }
 
     [Test]
-    public void UseUsnDeltaImport_Generic_ReturnsFalse()
+    public void IsActiveDirectoryFamily_Generic_ReturnsFalse()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.Generic };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.False);
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.False);
     }
+
+    [Test]
+    public void DeltaSourceKind_ActiveDirectory_IsUsn() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Usn));
+
+    [Test]
+    public void DeltaSourceKind_SambaAD_IsUsn() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Usn));
+
+    [Test]
+    public void DeltaSourceKind_OpenLDAP_IsAccesslog() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
+
+    [Test]
+    public void DeltaSourceKind_Generic_IsChangelog() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.Generic }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Changelog));
+
+    [Test]
+    public void DeltaSourceKind_DirectoryServer389_IsChangelog() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389 }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Changelog));
 
     #endregion
 
@@ -295,8 +322,8 @@ public class LdapDirectoryTypeTests
         {
             Assert.That(directoryServer.ExternalIdAttributeName, Is.EqualTo(generic.ExternalIdAttributeName));
             Assert.That(directoryServer.ExternalIdDataType, Is.EqualTo(generic.ExternalIdDataType));
-            Assert.That(directoryServer.UseUsnDeltaImport, Is.EqualTo(generic.UseUsnDeltaImport));
-            Assert.That(directoryServer.UseAccesslogDeltaImport, Is.EqualTo(generic.UseAccesslogDeltaImport));
+            Assert.That(directoryServer.IsActiveDirectoryFamily, Is.EqualTo(generic.IsActiveDirectoryFamily));
+            Assert.That(directoryServer.DeltaSourceKind, Is.EqualTo(generic.DeltaSourceKind));
             Assert.That(directoryServer.EnforcesSamSingleValuedRules, Is.EqualTo(generic.EnforcesSamSingleValuedRules));
             Assert.That(directoryServer.RecommendedExportConcurrency, Is.EqualTo(generic.RecommendedExportConcurrency));
             Assert.That(directoryServer.SupportsPaging, Is.EqualTo(generic.SupportsPaging));
@@ -378,13 +405,6 @@ public class LdapDirectoryTypeTests
     }
 
     [Test]
-    public void UseUsnDeltaImport_SambaAD_ReturnsTrue()
-    {
-        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.True);
-    }
-
-    [Test]
     public void EnforcesSamSingleValuedRules_SambaAD_ReturnsTrue()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
@@ -418,6 +438,21 @@ public class LdapDirectoryTypeTests
         var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued(
             "description", "user", LdapDirectoryType.SambaAD);
         Assert.That(result, Is.True);
+    }
+
+    #endregion
+    #region persisted record compatibility
+
+    /// <summary>
+    /// The change number used to be persisted as a 32-bit value; a record written then must still read.
+    /// </summary>
+    [Test]
+    public void LdapConnectorRootDse_PersistedIntLastChangeNumber_ReadsAsLong()
+    {
+        var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>("{\"DirectoryType\":3,\"LastChangeNumber\":42}");
+
+        Assert.That(deserialised!.LastChangeNumber, Is.EqualTo(42L));
+        Assert.That(deserialised.ChangelogDn, Is.Null);
     }
 
     #endregion
