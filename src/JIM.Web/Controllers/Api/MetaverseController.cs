@@ -1581,7 +1581,14 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (obj == null)
             return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
-        return Ok(MetaverseObjectDto.FromEntity(obj));
+        // The joined-object rows carry role and State, which are derived rather than stored (#1519). The
+        // derivation lives once in JIM.Application and is what the portal's Connections tab renders; asking it
+        // here is what keeps this response, the portal and PowerShell showing the same answer. It costs two
+        // batched queries (the type's Synchronisation Rule headers, and the joined objects' Pending Exports),
+        // never a query per joined object.
+        var connections = await _application.Metaverse.GetMetaverseObjectConnectionsAsync(id);
+
+        return Ok(MetaverseObjectDto.FromEntity(obj, connections));
     }
 
     /// <summary>

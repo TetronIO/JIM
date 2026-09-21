@@ -1174,7 +1174,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 ### Output
 
-- **List / ListAll**: Lightweight headers for each Connected System Object matching the filters.
+- **List / ListAll**: Lightweight headers for each Connected System Object matching the filters. Each row carries `State`, the derived connection state the portal's Connector Space list and a Metaverse Object's Connections tab both show: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `ExportNotConfirmed`, `ExportFailed`, `DeletePending` or `Obsolete`. It combines the object's own `Status` with any queued Pending Export, so `Where-Object { $_.State -eq "ExportFailed" }` finds the accounts a run could not write without reading the Pending Exports separately.
 - **ById**: A connector space object with its attributes and current values.
 - **AttributeValues / AttributeValuesAll**: Paged or complete list of values for the specified multi-valued attribute.
 
@@ -1182,6 +1182,11 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 ```powershell title="List objects in a Connected System"
 Get-JIMConnectedSystemObject -ConnectedSystemId 3
+```
+
+```powershell title="Find the objects whose export failed"
+Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All |
+    Where-Object { $_.State -eq "ExportFailed" }
 ```
 
 ```powershell title="Find Obsolete objects matching a search term"

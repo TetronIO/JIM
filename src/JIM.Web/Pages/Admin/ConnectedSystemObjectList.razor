@@ -224,6 +224,18 @@
                     <MudChip T="string" Text="@context.Item.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" Class="ma-0" />
                 </CellTemplate>
             </TemplateColumn>
+            @* The derived State, the same one the Metaverse Object's Connections tab shows (#1519, D-S7):
+               Status plus any queued Pending Export, so "Export failed" reads off the row rather than being
+               inferred from a status and a chip. Not sortable: it is resolved after the window is read, so
+               sorting by it would only order the window, not the Connector Space. *@
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.subtitle2">State</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <ConnectionStateChip State="context.Item.State" />
+                </CellTemplate>
+            </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Join Type" Name="jointype" />
