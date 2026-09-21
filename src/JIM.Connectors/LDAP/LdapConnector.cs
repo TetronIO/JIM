@@ -892,7 +892,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
         import.ReportEntriesDiscardedByExclusion(result);
 
-        result.WarningMessage ??= import.DeletionDetectionWarning ?? import.PinValidationWarning;
+        result.WarningMessage ??= import.DeltaSourceWarning ?? import.PinValidationWarning;
 
         return result;
     }
