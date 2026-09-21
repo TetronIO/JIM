@@ -17,7 +17,7 @@
          Governance on 2026-07-31 and pinned exactly per engineering/DEPENDENCY_PINNING.md.
          Microsoft.Data.SqlClient.Extensions.Azure must never be added: cloud authentication is a
          non-goal for this Connector (see engineering/prd/doing/PRD_SQL_DATABASE_CONNECTOR.md). -->
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.3" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.301" />
     <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.12" />
   </ItemGroup>

@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.LDAP.Security;
-using JIM.Models.Exceptions;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
@@ -38,33 +37,6 @@ internal sealed class DeletedObjectsAccessFinding
 
     /// <summary>A plain statement of what was found, and where the outcome is not a grant, why.</summary>
     internal required string Detail { get; init; }
-}
-
-/// <summary>
-/// The warnings a Delta Import gathers about deletions it may not have seen, one per Deleted Objects container.
-/// <para>
-/// Keyed by container so that later, stronger evidence about a container replaces earlier, weaker evidence about
-/// the same one: the up-front access check can only say it was unsure, whereas a tombstone search that is then
-/// refused, or finds no container, knows for certain that no deletions were detected there and why. A note about
-/// one container never displaces a note about another, so a run over several partitions reports each of them.
-/// </para>
-/// </summary>
-internal sealed class DeletionDetectionNotes
-{
-    // Add-only use of Dictionary preserves insertion order, so the notes read in the order the partitions were
-    // checked; a replacement keeps the original position.
-    private readonly Dictionary<string, string> _byContainer = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Records what is known about one container, replacing whatever was noted about it before.
-    /// </summary>
-    internal void Record(string containerDn, string note) => _byContainer[containerDn] = note;
-
-    /// <summary>
-    /// Every note, in one warning, or null when there is nothing to warn about. Null rather than empty because
-    /// the connector chains this with its other import warnings by null-coalescing.
-    /// </summary>
-    internal string? Warning => _byContainer.Count > 0 ? string.Join(" ", _byContainer.Values) : null;
 }
 
 /// <summary>
@@ -236,29 +208,6 @@ internal class LdapConnectorDeletedObjectsAccess
         DeletedObjectsAccessOutcome.CouldNotDetermine => DescribeUndetermined(finding),
         _ => throw new InvalidOperationException("A grant has nothing to describe.")
     };
-
-    /// <summary>
-    /// Folds the findings for every partition a Delta Import targets into what the run does next: throws on any
-    /// proven denial, naming every denied container at once so the administrator fixes them in one go; otherwise
-    /// returns a note per partition JIM could not be sure about, for the run to carry as its warning and to add
-    /// to as the tombstone searches themselves report. Nothing is noted for a grant.
-    /// </summary>
-    /// <exception cref="CannotPerformDeltaImportException">At least one partition's container is provably not listable.</exception>
-    internal static DeletionDetectionNotes SummariseForDeltaImport(IReadOnlyCollection<DeletedObjectsAccessFinding> findings, ILogger logger)
-    {
-        var denied = findings.Where(f => f.Outcome == DeletedObjectsAccessOutcome.Denied).ToList();
-        if (denied.Count > 0)
-        {
-            logger.Warning("LdapConnectorDeletedObjectsAccess: Refusing the Delta Import; the account may not list the Deleted Objects container of {Count} partition(s)", denied.Count);
-            throw new CannotPerformDeltaImportException(string.Join(" ", denied.Select(DescribeForDeltaImport)));
-        }
-
-        var notes = new DeletionDetectionNotes();
-        foreach (var finding in findings.Where(f => f.Outcome == DeletedObjectsAccessOutcome.CouldNotDetermine))
-            notes.Record(finding.ContainerDn, DescribeForDeltaImport(finding));
-
-        return notes;
-    }
 
     /// <summary>
     /// The note a Delta Import records when the directory refuses the tombstone search itself, which is definite
