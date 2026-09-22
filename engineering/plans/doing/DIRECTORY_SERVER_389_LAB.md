@@ -36,7 +36,16 @@ JIM recognises 389 Directory Server and treats it as a generic RFC 4512 director
 
 ## Deviations
 
-Recorded as the work lands.
+Findings against 389-Directory/3.1.2 (the `389ds/dirsrv:3.1` image) that changed the plan as written:
+
+- **The Connected System connects over LDAPS (3636), not plain LDAP.** 389 refuses the RFC 3062 Password Modify operation over an unencrypted connection ("Confidentiality required") and offers no switch to allow it. The image therefore bakes a lab CA and a certificate naming `dirsrv-primary`, and the runner adds that CA to JIM's certificate store before the scenario runs, as the Samba AD lab does. The harness's own `ldapsearch` checks still use 3389 inside the container.
+- **`DS_SUFFIX_NAME` creates no backend.** `dscontainer` only records it as a default base DN; both suffixes are created at image build time with `dsconf backend create --create-suffix`.
+- **`cn=schema` refuses `dITContentRules` over LDAP** ("Only object classes and attribute types may be added"), so the `jimPersonContent` rule the OpenLDAP lab defines is not loaded on 389. Scenario 19 (auxiliary classes) stays OpenLDAP-only for this reason as well as its fixture.
+- **`nsslapd-log-deleted` cannot be named in an ACI attribute list** because 389 ships no schema definition for it. The recipe grants every attribute but `aci` on the plug-in entry instead, which does let the service account read it.
+- **The changelog source requests `changes` on every record**, not only on deletes: one search shape, and the accesslog source requests its equivalents for every record too. Adds and modifies are still fetched by DN; the LDIF of the write is ignored for them.
+- **A move out of the selected containers is skipped, not staged as a deletion.** The object stays in JIM until a Full Import. The accesslog and USN sources have the same window; closing it is not part of this work.
+- **On a changelog directory that is not 389 Directory Server**, the readiness check cannot find the plug-in entry and every Delta Import and Schema Discovery carries the "could not confirm" warning. That is truthful (such a directory's delete records carry no deleted entry, so deletions are missed) and was kept rather than gated on the detected directory type.
+- **A global password policy is baked into the fixture** (`passwordCheckSyntax on`, `passwordMinLength 7`), mirroring the OpenLDAP lab's `pwdMinLength 7`, so the password scenarios have something to refuse and JIM's 389 policy discovery reads a real policy.
 
 ## Success Criteria
 
