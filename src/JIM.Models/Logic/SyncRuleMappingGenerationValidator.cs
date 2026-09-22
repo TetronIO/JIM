@@ -55,7 +55,7 @@ public static class SyncRuleMappingGenerationValidator
 
         // Rule 1: the target must be single-valued.
         if (targetPlurality == AttributePlurality.MultiValued)
-            errors.Add("A generated value can only be assigned to a single-valued attribute; choose a single-valued target, or remove Generation from this mapping.");
+            errors.Add("A generated value can only be assigned to a single-valued attribute; choose a single-valued target, or a different source type.");
 
         // Rule 2: the target type must be Text, or a Number target (Number or Long Number).
         if (targetType.HasValue && targetType != AttributeDataType.Text && !isNumberTarget)
@@ -133,7 +133,7 @@ public static class SyncRuleMappingGenerationValidator
             }
 
             if (!generation.NeverReuse)
-                errors.Add("A sequence token cannot have \"Never reuse a value\" turned off; sequence numbers are inherently never reused.");
+                errors.Add("A sequence token cannot have \"Never reuse a value\" turned off; sequence numbers are never reused.");
         }
 
         // Rule 7: random settings.

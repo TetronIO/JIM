@@ -58,19 +58,19 @@ namespace JIM.PostgresData.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     SyncRuleMappingId = table.Column<int>(type: "integer", nullable: false),
-                    TokenKind = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
-                    SuffixStyle = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
-                    SuffixStart = table.Column<int>(type: "integer", nullable: false, defaultValue: 1),
-                    SequenceStart = table.Column<long>(type: "bigint", nullable: false, defaultValue: 1L),
-                    SequenceIncrement = table.Column<int>(type: "integer", nullable: false, defaultValue: 1),
+                    TokenKind = table.Column<int>(type: "integer", nullable: false),
+                    SuffixStyle = table.Column<int>(type: "integer", nullable: false),
+                    SuffixStart = table.Column<int>(type: "integer", nullable: false),
+                    SequenceStart = table.Column<long>(type: "bigint", nullable: false),
+                    SequenceIncrement = table.Column<int>(type: "integer", nullable: false),
                     FixedWidth = table.Column<int>(type: "integer", nullable: true),
-                    OnWidthExceeded = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
-                    RandomFormat = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    OnWidthExceeded = table.Column<int>(type: "integer", nullable: false),
+                    RandomFormat = table.Column<int>(type: "integer", nullable: false),
                     RandomLength = table.Column<int>(type: "integer", nullable: true),
                     Separator = table.Column<string>(type: "text", nullable: true),
-                    AttemptLimit = table.Column<int>(type: "integer", nullable: false, defaultValue: 1000),
-                    NeverReuse = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
-                    CollisionRemediation = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    AttemptLimit = table.Column<int>(type: "integer", nullable: false),
+                    NeverReuse = table.Column<bool>(type: "boolean", nullable: false),
+                    CollisionRemediation = table.Column<bool>(type: "boolean", nullable: false),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
@@ -241,12 +241,10 @@ namespace JIM.PostgresData.Migrations
                 column: "SyncRuleMappingId",
                 unique: true);
 
-            // Case-insensitive expression indexes backing the uniqueness gates (plan decision 13). EF Core cannot
-            // model an index over a SQL expression, so these are raw SQL. The gates query
-            // LOWER("StringValue") = @normalisedCandidate against these two tables to check whether a candidate
-            // value is already held by a live Metaverse or Connected System attribute value; without the
-            // expression index that query cannot use an index at all (LOWER() defeats a plain btree on
-            // StringValue), forcing a sequential scan on every candidate.
+            // Case-insensitive lookups for the unique value gates (#242, plan decision 13). EF Core cannot model an
+            // expression column, so the two LOWER("StringValue") indexes live here as raw SQL; the gates query
+            // LOWER("StringValue") = ANY(@values) against them. Filtered like the existing (AttributeId, StringValue)
+            // indexes so null values take no space.
             migrationBuilder.Sql(
                 "CREATE INDEX \"IX_MetaverseObjectAttributeValues_AttributeId_LowerStringValue\" " +
                 "ON \"MetaverseObjectAttributeValues\" (\"AttributeId\", LOWER(\"StringValue\")) " +
@@ -266,7 +264,6 @@ namespace JIM.PostgresData.Migrations
 
             migrationBuilder.Sql(
                 "DROP INDEX IF EXISTS \"IX_MetaverseObjectAttributeValues_AttributeId_LowerStringValue\";");
-
             migrationBuilder.DropTable(
                 name: "GeneratedValueAssignments");
 

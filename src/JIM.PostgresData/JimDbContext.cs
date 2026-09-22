@@ -1274,19 +1274,11 @@ public class JimDbContext : DbContext
             .IsUnique()
             .HasDatabaseName("IX_SyncRuleMappingGenerations_SyncRuleMappingId_Unique");
 
-        // Store-level defaults so a raw insert (a future migration backfill, a manual data fix) still gets JIM's
-        // opinionated settings rather than the CLR zero-values; mirrors the convention already used for
-        // SyncRuleMapping's own settings above.
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.TokenKind).HasDefaultValue(GeneratedValueTokenKind.OnlyIfTaken);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SuffixStyle).HasDefaultValue(GeneratedValueSuffixStyle.Number);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SuffixStart).HasDefaultValue(1);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SequenceStart).HasDefaultValue(1L);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SequenceIncrement).HasDefaultValue(1);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.OnWidthExceeded).HasDefaultValue(GeneratedValueWidthOverflowBehaviour.StopAndReport);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.RandomFormat).HasDefaultValue(GeneratedValueRandomFormat.Guid);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.AttemptLimit).HasDefaultValue(1000);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.NeverReuse).HasDefaultValue(true);
-        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.CollisionRemediation).HasDefaultValue(true);
+        // Deliberately no store-level defaults on the generation row. The table is new, so there are no existing
+        // rows to backfill, and the CLR initialisers on SyncRuleMappingGeneration own the defaults. HasDefaultValue
+        // would also be a trap here: EF Core sends the database default whenever a property holds its CLR default on
+        // insert, so a flow created with "Never reuse a value" or Collision Remediation turned off, or a sequence
+        // starting at 0, would silently be stored with the default instead.
 
         // SyncRuleMappingGenerationExclusion: composite key on (generation, excluded system), so a system can be
         // excluded at most once per flow (also enforced by SyncRuleMappingGenerationValidator). Both foreign keys
