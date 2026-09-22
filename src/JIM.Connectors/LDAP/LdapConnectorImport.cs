@@ -57,6 +57,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     internal string? DeltaSourceWarning => _deltaSourceNotes.Warning;
     private LdapDeltaSourceNotes _deltaSourceNotes = new();
     private readonly TimeSpan _searchTimeout;
+
+    /// <summary>
+    /// The identity JIM binds as, from the Connected System's Username setting, for the message an import gives when
+    /// the directory stops a search at a limit that applies to that identity. Null only if the setting is unset.
+    /// </summary>
+    private readonly string? _bindIdentity;
     private readonly string _placeholderMemberDn;
     private readonly IConnectorProgress _progress;
 
@@ -115,6 +121,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         _scopeDecidingContainers = new Lazy<List<ConnectedSystemContainer>>(() => GetScopeDecidingContainers(GetTargetPartitions()));
 
         // Get search timeout from settings, defaulting to 5 minutes
+        _bindIdentity = connectedSystem.SettingValues
+            .SingleOrDefault(s => s.Setting.Name == LdapConnectorConstants.SETTING_USERNAME)?.StringValue;
+
         var searchTimeoutSetting = connectedSystem.SettingValues
             .SingleOrDefault(s => s.Setting.Name == SearchTimeoutSettingName);
         var searchTimeoutSeconds = searchTimeoutSetting?.IntValue ?? DefaultSearchTimeoutSeconds;
@@ -526,6 +535,14 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                 {
                     _logger.Debug("GetFullImportObjectsParallel: Combo {Index} cancelled", index + 1);
                 }
+                catch (OperationalException ex)
+                {
+                    // A refusal the import chose (for example a search stopped at the directory's limit): the
+                    // message says everything, and the Activity reports it without a stack trace.
+                    _logger.Warning("GetFullImportObjectsParallel: Combo {Index} refused — container={Container}, objectType={ObjectType}: {Message}",
+                        index + 1, container.Name, objectType.Name, LogSanitiser.Sanitise(ex.Message));
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.Error(ex, "GetFullImportObjectsParallel: Combo {Index} failed — container={Container}, objectType={ObjectType}",
@@ -735,6 +752,31 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     /// <summary>
     /// Overload that uses the primary connection. Called by the AD (non-connection-scoped) path and delta imports.
     /// </summary>
+    /// <summary>
+    /// Whether a search result says the directory stopped at one of its own limits (size, time or an
+    /// administrative limit) rather than answering the search in full.
+    /// </summary>
+    internal static bool IsSearchLimitExceeded(ResultCode? resultCode) =>
+        resultCode is ResultCode.SizeLimitExceeded or ResultCode.TimeLimitExceeded or ResultCode.AdminLimitExceeded;
+
+    /// <summary>
+    /// The message an import refuses with when the directory stopped a container's search at its limit: which
+    /// container and object type, that nothing from it was imported, which account the limit applied to, and
+    /// the exemption to ask for. Names OpenLDAP's mechanism because that is the directory family that limits a
+    /// paged search as a whole; Active Directory pages within its limits on its own.
+    /// </summary>
+    internal static string DescribeSearchLimitStoppedImport(string containerName, string objectTypeName, string? bindIdentity, string directoryMessage)
+    {
+        var account = string.IsNullOrWhiteSpace(bindIdentity)
+            ? "The account JIM connects as is subject to"
+            : $"The account JIM connects as, {bindIdentity}, is subject to";
+        return $"The directory stopped the import of {objectTypeName} objects from {containerName} at its search limit ({directoryMessage}), " +
+            $"so nothing from {containerName} was imported. {account} the directory's search limits, which its rootDN is not, " +
+            "and a smaller page size does not help: OpenLDAP applies the limit across a paged search as a whole. " +
+            "Ask the directory administrator to exempt the account (on OpenLDAP, an olcLimits entry for the JIM group on each suffix; " +
+            "see Service Account Permissions in the JIM LDAP Connector documentation) rather than raising the limit for every client.";
+    }
+
     private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
         => GetFisoResults(connectedSystemImportResult, _connection, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
 
@@ -801,6 +843,16 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             // Retry without paging control - results should have already been returned on first page
             _logger.Warning("GetFisoResults: Server rejected paging cookie, assuming all results were returned on first page. Error: {Message}", LogSanitiser.Sanitise(ex.Message));
             return;
+        }
+        catch (DirectoryOperationException ex) when (IsSearchLimitExceeded(ex.Response?.ResultCode))
+        {
+            // The directory stopped the search at its own limit, so the rest of this container is unread.
+            // Continuing would import a truncated container and, on a Full Import, treat every object past the
+            // limit as gone. Refuse instead, and say whose limit it was: OpenLDAP applies olcSizeLimit across a
+            // paged search as a whole to every client but the rootDN, so this is what a move from the rootDN to
+            // a delegated service account looks like (#1718), and the page size cannot change it.
+            throw new CannotPerformImportException(DescribeSearchLimitStoppedImport(
+                connectedSystemContainer.Name, connectedSystemObjectType.Name, _bindIdentity, ex.Message));
         }
 
         // Only track pagination tokens if paging is supported
