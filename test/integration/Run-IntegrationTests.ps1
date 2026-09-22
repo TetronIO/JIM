@@ -516,82 +516,6 @@ function Test-SnapshotAvailable {
 $script:UsingSnapshots = $false
 $script:UsingRfcDirectorySnapshots = $false
 
-# ============================================================================
-# OpenLDAP snapshot detection utilities
-# ============================================================================
-
-function Get-OpenLDAPPopulateScriptHash {
-    param([string]$ScenarioName)
-    $filesToHash = @(
-        "$scriptRoot/utils/Test-Helpers.ps1",
-        "$scriptRoot/utils/Test-GroupHelpers.ps1",
-        "$scriptRoot/Build-OpenLDAPSnapshots.ps1",
-        "$scriptRoot/docker/openldap/Dockerfile",
-        "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
-        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif",
-        "$scriptRoot/docker/openldap/start-openldap.sh"
-    )
-    switch ($ScenarioName) {
-        "General" { $filesToHash += "$scriptRoot/Populate-OpenLDAP.ps1" }
-        "Scenario8" { $filesToHash += "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1" }
-    }
-    $combinedContent = ""
-    foreach ($file in $filesToHash) {
-        if (Test-Path $file) { $combinedContent += Get-Content -Path $file -Raw }
-    }
-    $hashBytes = [System.Security.Cryptography.SHA256]::HashData(
-        [System.Text.Encoding]::UTF8.GetBytes($combinedContent)
-    )
-    return [System.BitConverter]::ToString($hashBytes).Replace("-", "").Substring(0, 16).ToLower()
-}
-
-function Get-OpenLDAPSnapshotImageTag {
-    param([string]$Role, [string]$Size)
-    return "jim-openldap:${Role}-$($Size.ToLower())"
-}
-
-function Get-OpenLDAPBaseBuildHash {
-    # Compute expected build hash for the base OpenLDAP image from the files that affect it.
-    # Must match the hash computed by Build-OpenLdapImage.ps1 (same file list).
-    $filesToHash = @(
-        "$scriptRoot/docker/openldap/Dockerfile",
-        "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
-        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-service-account-access.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-service-account-limits.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-frontend-access.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-accesslog-access.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-password-policy.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-ppolicy-overlay.ldif"
-    )
-    $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
-    return [System.BitConverter]::ToString(
-        [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
-    ).Replace("-", "").Substring(0, 16).ToLower()
-}
-
-function Test-OpenLDAPSnapshotAvailable {
-    param([string]$ImageTag, [string]$ExpectedHash)
-    $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.snapshot-hash"}}' 2>&1
-    if ($LASTEXITCODE -ne 0) { return $false }
-    if ("$inspect" -ne $ExpectedHash) { return $false }
-
-    # Also verify the snapshot was baked from the current base image build. Snapshots
-    # capture the base's init state (schema, suffixes, accesslog config), so checking
-    # the base image on disk is not enough: a snapshot built from an older base stays
-    # stale even after the base itself is rebuilt. Snapshots without the base-hash label
-    # predate this check and are treated as stale.
-    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.base-hash"}}' 2>&1
-    if ($LASTEXITCODE -ne 0) { return $false }
-    $expectedBuildHash = Get-OpenLDAPBaseBuildHash
-    if ("$snapshotBaseHash" -ne $expectedBuildHash) {
-        Write-Host "  ${YELLOW}Snapshot '$ImageTag' was built from a stale base image (base hash '$snapshotBaseHash' != $expectedBuildHash) — snapshot needs rebuild${NC}"
-        return $false
-    }
-
-    return $true
-}
-
 # Discover scenario Invoke-*.ps1 scripts in numeric order. Sort by the numeric index embedded in
 # the filename (Scenario1, Scenario2, ..., Scenario10, ..., Scenario13) rather than lexically — a
 # plain Sort-Object Name puts Scenario10+ between Scenario1 and Scenario2. Single source of truth so
@@ -2578,7 +2502,10 @@ if ($DirectoryType -eq "OpenLDAP") {
     # rebuilds use a fresh base image. Docker compose starts a stale base image as-is (the
     # build: fallback only applies when the image is absent), so changes to the Dockerfile,
     # init script or bootstrap LDIF would otherwise be silently ignored.
-    $expectedOlBuildHash = Get-OpenLDAPBaseBuildHash
+    # The hash, tag and currency-check contract shared with Build-OpenLdapImage.ps1 and
+    # Build-OpenLDAPSnapshots.ps1, so the three cannot drift apart (#1757).
+    . (Join-Path $scriptRoot "docker" "openldap" "Get-OpenLDAPBuildHash.ps1")
+    $expectedOlBuildHash = Get-OpenLDAPBuildHash
     $olBaseImage = "ghcr.io/tetronio/jim-openldap:primary"
     $olBaseBuildHash = docker image inspect $olBaseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
     $olBaseImageMissing = $LASTEXITCODE -ne 0
@@ -2610,21 +2537,23 @@ if ($DirectoryType -eq "OpenLDAP") {
     if (-not $IgnoreSnapshots -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*") {
         $olSnapshotScenario = if ($Scenario -like "*Scenario8*") { "Scenario8" } else { "General" }
         $olSnapshotRole = if ($Scenario -like "*Scenario8*") { "s8" } else { "general" }
-        $olHash = Get-OpenLDAPPopulateScriptHash -ScenarioName $olSnapshotScenario
-        $olTag = Get-OpenLDAPSnapshotImageTag -Role $olSnapshotRole -Size $Template
-        if (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
+        $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
+        $olTag = Get-OpenLDAPSnapshotImageTag -Role $olSnapshotRole -Template $Template
+        if (Test-OpenLDAPSnapshotCurrent -ImageTag $olTag -ExpectedSnapshotHash $olHash -ExpectedBaseHash $expectedOlBuildHash) {
             $env:OPENLDAP_IMAGE_PRIMARY = $olTag
             $script:UsingRfcDirectorySnapshots = $true
             Write-Host "  ${GREEN}Using OpenLDAP snapshot: $olTag${NC}"
         } else {
-            Write-Host "  ${YELLOW}No OpenLDAP snapshot found for $olTag — building (first run only)...${NC}"
+            Write-Host "  ${YELLOW}No current OpenLDAP snapshot for $olTag - building...${NC}"
             & "$scriptRoot/Build-OpenLDAPSnapshots.ps1" -Scenario $olSnapshotScenario -Template $Template
             if ($LASTEXITCODE -ne 0) {
-                Write-Warning "OpenLDAP snapshot build failed — falling back to live population"
-            } elseif (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
+                Write-Warning "OpenLDAP snapshot build failed - falling back to live population"
+            } elseif (Test-OpenLDAPSnapshotCurrent -ImageTag $olTag -ExpectedSnapshotHash $olHash -ExpectedBaseHash $expectedOlBuildHash) {
                 $env:OPENLDAP_IMAGE_PRIMARY = $olTag
                 $script:UsingRfcDirectorySnapshots = $true
                 Write-Host "  ${GREEN}OpenLDAP snapshot built and ready: $olTag${NC}"
+            } else {
+                Write-Warning "OpenLDAP snapshot $olTag was built but is still not current (reason above) - falling back to live population"
             }
         }
     }
@@ -2706,7 +2635,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
             $script:UsingRfcDirectorySnapshots = $true
             Write-Host "  ${GREEN}Using 389 Directory Server snapshot: $dsTag${NC}"
         } else {
-            Write-Host "  ${YELLOW}No 389 Directory Server snapshot found for $dsTag - building (first run only)...${NC}"
+            Write-Host "  ${YELLOW}No current 389 Directory Server snapshot for $dsTag - building...${NC}"
             & "$scriptRoot/Build-DirsrvSnapshots.ps1" -Scenario $dsSnapshotScenario -Template $Template
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "389 Directory Server snapshot build failed - falling back to live population"
@@ -2714,6 +2643,8 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
                 $env:DIRSRV_IMAGE_PRIMARY = $dsTag
                 $script:UsingRfcDirectorySnapshots = $true
                 Write-Host "  ${GREEN}389 Directory Server snapshot built and ready: $dsTag${NC}"
+            } else {
+                Write-Warning "389 Directory Server snapshot $dsTag was built but is still not current (reason above) - falling back to live population"
             }
         }
     }

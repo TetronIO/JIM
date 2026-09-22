@@ -43,23 +43,10 @@ $ErrorActionPreference = "Stop"
 $scriptDir = $PSScriptRoot
 $fullTag = "$Registry/jim-openldap:primary"
 
-# Compute a content hash of files that affect the image contents.
-# This hash is stored as a Docker image label so the test runner can detect stale images.
-$filesToHash = @(
-    (Join-Path $scriptDir "Dockerfile"),
-    (Join-Path $scriptDir "scripts/01-add-second-suffix.sh"),
-    (Join-Path $scriptDir "bootstrap/01-base-ous-yellowstone.ldif"),
-    (Join-Path $scriptDir "acl/jim-service-account-access.ldif"),
-    (Join-Path $scriptDir "acl/jim-service-account-limits.ldif"),
-    (Join-Path $scriptDir "acl/jim-frontend-access.ldif"),
-    (Join-Path $scriptDir "acl/jim-accesslog-access.ldif"),
-    (Join-Path $scriptDir "acl/jim-password-policy.ldif"),
-    (Join-Path $scriptDir "acl/jim-ppolicy-overlay.ldif")
-)
-$combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
-$buildContentHash = [System.BitConverter]::ToString(
-    [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
-).Replace("-", "").Substring(0, 16).ToLower()
+# The content hash of the fixture, stamped on the image as a label so the test runner can
+# detect a stale image. Get-OpenLDAPBuildHash.ps1 is the one definition of it.
+. (Join-Path $scriptDir "Get-OpenLDAPBuildHash.ps1")
+$buildContentHash = Get-OpenLDAPBuildHash
 Write-Host "Build content hash: $buildContentHash" -ForegroundColor DarkGray
 
 Write-Host "=============================================" -ForegroundColor Cyan
