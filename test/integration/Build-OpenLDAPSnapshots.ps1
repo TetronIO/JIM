@@ -16,8 +16,9 @@
 
     Scenario 1 does not use OpenLDAP snapshots — the target directory starts empty.
 
-    A content hash label is stored on each image, computed from the populate scripts.
-    The test runner compares this hash to detect stale snapshots that need rebuilding.
+    Each image is labelled with its snapshot hash (the populate scripts) and the base image hash
+    it was baked from; the test runner compares both to detect stale snapshots that need
+    rebuilding. docker/openldap/Get-OpenLDAPBuildHash.ps1 defines both hashes and the check.
 
 .PARAMETER Scenario
     Which scenario to build snapshots for (General, Scenario8, All)
@@ -65,100 +66,8 @@ $scriptRoot = $PSScriptRoot
 # Import helpers
 . "$scriptRoot/utils/Test-Helpers.ps1"
 
-# ============================================================================
-# Content hash computation
-# ============================================================================
-
-function Get-OpenLDAPPopulateScriptHash {
-    <#
-    .SYNOPSIS
-        Compute a content hash of the populate scripts that affect snapshot contents.
-        Used to detect when snapshots are stale and need rebuilding.
-    #>
-    param([string]$ScenarioName)
-
-    $filesToHash = @(
-        "$scriptRoot/utils/Test-Helpers.ps1",
-        "$scriptRoot/utils/Test-GroupHelpers.ps1",
-        "$scriptRoot/Build-OpenLDAPSnapshots.ps1",
-        "$scriptRoot/docker/openldap/Dockerfile",
-        "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
-        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif",
-        "$scriptRoot/docker/openldap/start-openldap.sh",
-        "$scriptRoot/docker/openldap/acl/jim-service-account-access.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-service-account-limits.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-frontend-access.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-accesslog-access.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-password-policy.ldif",
-        "$scriptRoot/docker/openldap/acl/jim-ppolicy-overlay.ldif"
-    )
-
-    switch ($ScenarioName) {
-        "General" {
-            $filesToHash += "$scriptRoot/Populate-OpenLDAP.ps1"
-        }
-        "Scenario8" {
-            $filesToHash += "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1"
-        }
-    }
-
-    $combinedContent = ""
-    foreach ($file in $filesToHash) {
-        if (Test-Path $file) {
-            $combinedContent += Get-Content -Path $file -Raw
-        }
-    }
-
-    $hashBytes = [System.Security.Cryptography.SHA256]::HashData(
-        [System.Text.Encoding]::UTF8.GetBytes($combinedContent)
-    )
-    return [System.BitConverter]::ToString($hashBytes).Replace("-", "").Substring(0, 16).ToLower()
-}
-
-function Get-OpenLDAPSnapshotImageTag {
-    param(
-        [string]$Role,
-        [string]$Size
-    )
-    $sizeLower = $Size.ToLower()
-    $prefix = if ($Registry) { "${Registry}/" } else { "" }
-    return "${prefix}jim-openldap:${Role}-${sizeLower}"
-}
-
-function Test-OpenLDAPSnapshotCurrent {
-    <#
-    .SYNOPSIS
-        Check if a snapshot image exists, has a matching content hash, and was baked
-        from the same base image build we would use now.
-    #>
-    param(
-        [string]$ImageTag,
-        [string]$ExpectedHash,
-        [string]$BaseImage
-    )
-
-    $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.snapshot-hash"}}' 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        return $false
-    }
-    if ("$inspect" -ne $ExpectedHash) {
-        return $false
-    }
-
-    # Snapshots capture the base image's init state (schema, suffixes, accesslog config),
-    # so rebuilding the base does not refresh existing snapshots. Compare the base build
-    # the snapshot was baked from against the base we would build from now; snapshots
-    # without the base-hash label predate this check and are treated as stale.
-    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.base-hash"}}' 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        return $false
-    }
-    $baseBuildHash = docker image inspect $BaseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        return $false
-    }
-    return "$snapshotBaseHash" -eq "$baseBuildHash"
-}
+# The hash, tag and currency-check contract shared with Build-OpenLdapImage.ps1 and the runner
+. "$scriptRoot/docker/openldap/Get-OpenLDAPBuildHash.ps1"
 
 function Build-OpenLDAPSnapshot {
     <#
@@ -270,8 +179,9 @@ function Build-OpenLDAPSnapshot {
     # Record which base image build this snapshot was baked from. The snapshot captures
     # the base's init state (schema, suffixes, accesslog config), so a snapshot from a
     # stale base stays stale even after the base image on disk is rebuilt; consumers
-    # compare this label to detect that.
-    $baseBuildHash = docker image inspect $BaseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>$null
+    # compare this label to detect that. The main body has already made sure the base image
+    # on disk carries this hash.
+    $baseBuildHash = $expectedBuildHash
 
     Write-Host "  Committing as $SnapshotTag..." -ForegroundColor Gray
     docker commit `
@@ -307,17 +217,7 @@ Write-Host ""
 
 $baseImage = "ghcr.io/tetronio/jim-openldap:primary"
 
-# Compute expected build hash for the base image from the files that affect it.
-# This must match the hash computed by Build-OpenLdapImage.ps1 (same file list).
-$baseFilesToHash = @(
-    "$scriptRoot/docker/openldap/Dockerfile",
-    "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
-    "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif"
-)
-$baseCombinedContent = ($baseFilesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
-$expectedBuildHash = [System.BitConverter]::ToString(
-    [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($baseCombinedContent))
-).Replace("-", "").Substring(0, 16).ToLower()
+$expectedBuildHash = Get-OpenLDAPBuildHash
 
 # Check if base image exists and is current (build hash matches).
 # A stale base image contains outdated init scripts (e.g. wrong MDB map sizes)
@@ -360,7 +260,7 @@ $openLDAPEnv = @{
 }
 
 foreach ($scen in $scenariosToProcess) {
-    $contentHash = Get-OpenLDAPPopulateScriptHash -ScenarioName $scen
+    $contentHash = Get-OpenLDAPSnapshotHash -Scenario $scen
 
     Write-Host "---------------------------------------------" -ForegroundColor Yellow
     Write-Host " $scen (hash: $contentHash)" -ForegroundColor Yellow
@@ -368,9 +268,9 @@ foreach ($scen in $scenariosToProcess) {
 
     switch ($scen) {
         "General" {
-            $tag = Get-OpenLDAPSnapshotImageTag -Role "general" -Size $Template
+            $tag = Get-OpenLDAPSnapshotImageTag -Role "general" -Template $Template -Registry $Registry
 
-            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash -BaseImage $baseImage)) {
+            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedSnapshotHash $contentHash -ExpectedBaseHash $expectedBuildHash)) {
                 Write-Host "  Snapshot $tag is up to date — skipping" -ForegroundColor Green
                 continue
             }
@@ -390,9 +290,9 @@ foreach ($scen in $scenariosToProcess) {
         }
 
         "Scenario8" {
-            $tag = Get-OpenLDAPSnapshotImageTag -Role "s8" -Size $Template
+            $tag = Get-OpenLDAPSnapshotImageTag -Role "s8" -Template $Template -Registry $Registry
 
-            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash -BaseImage $baseImage)) {
+            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedSnapshotHash $contentHash -ExpectedBaseHash $expectedBuildHash)) {
                 Write-Host "  Snapshot $tag is up to date — skipping" -ForegroundColor Green
                 continue
             }
@@ -423,11 +323,11 @@ Write-Host "Available snapshots:" -ForegroundColor Gray
 foreach ($scen in $scenariosToProcess) {
     switch ($scen) {
         "General" {
-            $tag = Get-OpenLDAPSnapshotImageTag -Role "general" -Size $Template
+            $tag = Get-OpenLDAPSnapshotImageTag -Role "general" -Template $Template -Registry $Registry
             Write-Host "  $tag" -ForegroundColor Gray
         }
         "Scenario8" {
-            Write-Host "  $(Get-OpenLDAPSnapshotImageTag -Role 's8' -Size $Template)" -ForegroundColor Gray
+            Write-Host "  $(Get-OpenLDAPSnapshotImageTag -Role 's8' -Template $Template -Registry $Registry)" -ForegroundColor Gray
         }
     }
 }

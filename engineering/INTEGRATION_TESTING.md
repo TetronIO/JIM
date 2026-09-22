@@ -1267,7 +1267,7 @@ Samba AD and OpenLDAP.
 
 **Why no TLS is acceptable here.** `LdapConnector.OpenPasswordConnection` only *warns* on an unencrypted channel; it does not refuse, and Initial Password delivery proceeds. The Bitnami image runs with `LDAP_ENABLE_TLS=no`, and test 2 establishes that it takes an RFC 3062 operation in the clear (the plan's step 0 spike, confirmed on the first verification run: `ldappasswd` as the probe user over `ldap://` exits 0 and the entry gains `pwdChangedTime`). What the scenario proves is policy discovery and enforcement, neither of which depends on the transport. Scenario 20's write-up used to say the OpenLDAP container's RFC 3062 path "cannot be exercised at all"; it can, and that sentence now says why Scenario 20 still declines it. If the container ever refuses a cleartext extended operation ("Confidentiality required (13)" or "unwilling to perform (53)"), the fallback described at the top of the Invoke script applies: `LDAP_ENABLE_TLS=yes` with a generated certificate trusted through `Add-JIMCertificate` (Scenario 15's pattern), and a directory configuration switched to `ldaps://`.
 
-**Why the base image change invalidates snapshots.** `01-add-second-suffix.sh` is hashed into the base image label and into every OpenLDAP snapshot's hash, so loading the `ppolicy` overlay there rebuilds the base image on its next use and every OpenLDAP snapshot after it (`Build-OpenLDAPSnapshots.ps1`), a one-off cost. With no default policy in the image, Scenarios 1, 8, 14 and 19 see no behavioural change; the overlay only stamps `pwdChangedTime` on password writes, which none of them reads.
+**Why the base image change invalidates snapshots.** `01-add-second-suffix.sh` is hashed into the base image label, which every OpenLDAP snapshot records as the base it was baked from, so loading the `ppolicy` overlay there rebuilds the base image on its next use and every OpenLDAP snapshot after it (`Build-OpenLDAPSnapshots.ps1`), a one-off cost. With no default policy in the image, Scenarios 1, 8, 14 and 19 see no behavioural change; the overlay only stamps `pwdChangedTime` on password writes, which none of them reads.
 
 **`-Template` is ignored.** The scenario asserts against one Micro export; a larger template only lengthens it.
 
@@ -1878,7 +1878,7 @@ pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
 
 For larger templates (Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups), populating Samba AD with test data (users, groups, memberships) can take **many hours**. To avoid repeating this on every test run, the framework supports **snapshot images**: pre-populated Docker images that start in seconds.
 
-> Note: the long-tail templates (`Scale100k5kGroups`, `Scale200k10kGroups`, `Scale500k25kGroups`, `Scale750k40kGroups`, `Scale1m60kGroups`) are OpenLDAP-only (they hard-fail on Samba AD), so Samba snapshots don't apply. OpenLDAP snapshots are built via [`Build-OpenLDAPSnapshots.ps1`](../test/integration/Build-OpenLDAPSnapshots.ps1), and 389 Directory Server snapshots via [`Build-DirsrvSnapshots.ps1`](../test/integration/Build-DirsrvSnapshots.ps1) (labels `jim.dirsrv.snapshot-hash` and `jim.dirsrv.base-hash`; a snapshot baked from a stale base image counts as stale).
+> Note: the long-tail templates (`Scale100k5kGroups`, `Scale200k10kGroups`, `Scale500k25kGroups`, `Scale750k40kGroups`, `Scale1m60kGroups`) are OpenLDAP-only (they hard-fail on Samba AD), so Samba snapshots don't apply. OpenLDAP snapshots are built via [`Build-OpenLDAPSnapshots.ps1`](../test/integration/Build-OpenLDAPSnapshots.ps1) (labels `jim.openldap.snapshot-hash` and `jim.openldap.base-hash`), and 389 Directory Server snapshots via [`Build-DirsrvSnapshots.ps1`](../test/integration/Build-DirsrvSnapshots.ps1) (labels `jim.dirsrv.snapshot-hash` and `jim.dirsrv.base-hash`). For both, a snapshot baked from a stale base image counts as stale, and one file per fixture ([`Get-OpenLDAPBuildHash.ps1`](../test/integration/docker/openldap/Get-OpenLDAPBuildHash.ps1), [`Get-DirsrvBuildHash.ps1`](../test/integration/docker/dirsrv/Get-DirsrvBuildHash.ps1)) defines the image hash, the snapshot hash and the currency check that the image builder, the snapshot builder and the runner all dot-source, so they cannot drift apart. The image hash covers every file in the fixture directory, so there is no file list to maintain. When the runner rejects a snapshot it prints why.
 
 > 389 Directory Server snapshots differ from the other two in how they restore. Docker seeds a fresh named volume from the image layer's `/data`, which for a snapshot image is the base's unpopulated instance, so an "empty volume" rule would start the wrong data. `start-dirsrv.sh` therefore restores by provenance id: it keeps the existing instance only when `/data/.jim-provisioned-id` equals `/data.provisioned/.jim-provisioned-id`, and otherwise replaces `/data` with the populated copy. The snapshot is also committed with the Retro Changelog empty (the plug-in is disabled during population and re-enabled before the commit), which keeps the image small and changes nothing for the scenarios, because JIM takes its watermark at Full Import.
 
@@ -2189,13 +2189,15 @@ JIM/
         │   ├── openldap/                                          # Custom OpenLDAP image with multi-suffix bootstrap
         │   │   ├── Dockerfile
         │   │   ├── Build-OpenLdapImage.ps1                       # Image build script
+        │   │   ├── Get-OpenLDAPBuildHash.ps1                     # Image and snapshot hashes, snapshot tag and currency check
+        │   │   ├── acl/                                          # Service account ACLs, limits and password policy
         │   │   ├── bootstrap/                                    # LDIF bootstrap data
         │   │   ├── scripts/                                      # Suffix/accesslog setup scripts
         │   │   └── start-openldap.sh                             # Container startup
         │   └── dirsrv/                                            # Custom 389 Directory Server image, same two suffixes
         │       ├── Dockerfile
         │       ├── Build-DirsrvImage.ps1                         # Image build script
-        │       ├── Get-DirsrvBuildHash.ps1                       # Content hash for the jim.dirsrv.build-hash label
+        │       ├── Get-DirsrvBuildHash.ps1                       # Image and snapshot hashes, snapshot tag and currency check
         │       ├── aci/                                          # ACI recipe (published verbatim in the connector docs)
         │       ├── bootstrap/                                    # LDIF bootstrap data
         │       ├── build/configure.sh                            # Build-time configuration and checks
