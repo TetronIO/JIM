@@ -318,9 +318,11 @@ See [Stating Container Scope as text](../configuration/connected-systems.md#stat
 
 A directory publishes its own machinery in the same schema as the classes you manage. A stock OpenLDAP returns 67 structural classes, of which 27 belong to the server rather than to your directory: the `cn=config` backend's `olc*` classes, the accesslog overlay's `audit*` classes, and the root DSE class.
 
+On 389 Directory Server 3.1, 78 of the 184 structural classes it publishes belong to the server: its `cn=config` and plug-in configuration, replication and changelog classes, Class of Service and role definitions, tombstone and glue entries, and the Netscape console classes. Those are marked internal. `inetOrgPerson` and the classes 389 recommends for users (`nsPerson`, `nsAccount`, `nsOrgPerson`, `nsMemberOf`) are never marked internal.
+
 The Connector marks those Object Types **internal**, and the Schema tab hides them, telling you how many it is holding back and offering **Show internal object types** to see them. Nothing is discarded: every class is still discovered, still stored, and still selectable. An Object Type you have already selected is never hidden, whatever its classification.
 
-The judgement is made from the class's OID rather than its name, because an OID arc is assigned to its vendor and does not change. Classes carrying the RFC 4512 `OBSOLETE` flag are treated the same way, since that is the directory itself declaring them superseded. Classes from the X.500, COSINE and Internet standards arcs, and any schema extensions published under your own organisation's arc, are never marked internal.
+The judgement is made from the class's OID rather than its name, because an OID arc is assigned to its vendor and does not change. For 389 Directory Server the vendor arc also carries `inetOrgPerson` and the recommended user classes, so JIM matches an exact list of the classes 389 ships for itself instead of the arc; still an OID, never a name. Classes carrying the RFC 4512 `OBSOLETE` flag are treated the same way, since that is the directory itself declaring them superseded. Classes from the X.500, COSINE and Internet standards arcs, and any schema extensions published under your own organisation's arc, are never marked internal.
 
 Active Directory needs none of this: the Connector already asks the directory to exclude its own hidden and defunct classes when it enumerates them, so what you see is already the classes an administrator manages.
 
