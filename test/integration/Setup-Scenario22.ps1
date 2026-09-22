@@ -98,7 +98,9 @@ if (-not $DirectoryConfig) {
 # The fixture is an OpenLDAP ppolicy overlay; there is nothing here for Active Directory to enforce or
 # for the scenario to assert. Failing here is better than running a scenario whose evidence is
 # inapplicable, which is the same reasoning as Setup-Scenario17.ps1's refusal of OpenLDAP.
-if ($DirectoryConfig.UserObjectClass -ne "inetOrgPerson") {
+# Keyed on the directory type, not the object class: 389 Directory Server also uses inetOrgPerson
+# and must still be refused here (the ppolicy overlay fixture is OpenLDAP-specific).
+if ($DirectoryConfig.DirectoryType -ne "OpenLDAP") {
     throw "This setup requires OpenLDAP: it binds JIM as a non-root account under a ppolicy overlay whose " +
           "default policy Populate-OpenLDAP-Scenario22.ps1 creates, and there is no equivalent to configure on " +
           "$($DirectoryConfig.ConnectedSystemName). Active Directory's password policy discovery has its own coverage."

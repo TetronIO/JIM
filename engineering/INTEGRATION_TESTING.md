@@ -170,24 +170,28 @@ See [Data Scale Templates](#data-scale-templates) for the full list: sizes, grou
 |----------------|-------------|---------|
 | `SambaAD` (default) | Samba Active Directory | LDAPS on port 636, `objectGUID`, AD schema discovery |
 | `OpenLDAP` | OpenLDAP with multi-suffix partitions | LDAP on port 1389, `entryUUID`, RFC 4512 schema, accesslog delta import |
-| `All` | Both directory types (full regression) | Runs all scenarios against SambaAD first, then OpenLDAP |
+| `DirectoryServer389` | 389 Directory Server with the same two suffixes | LDAPS on port 3636 (JIM's Connected Systems; the harness's own `ldapsearch` checks use LDAP on 3389 inside the container), `entryUUID`, RFC 4512 schema, Retro Changelog delta import; every OpenLDAP scenario except 14, 19 and 22 |
+| `All` | Every directory type (full regression) | Runs all scenarios against SambaAD first, then OpenLDAP, then DirectoryServer389 |
 
 ```powershell
 # Run against OpenLDAP
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType OpenLDAP
 
-# Run against both directory types (full cross-directory regression)
+# Run against 389 Directory Server
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType DirectoryServer389
+
+# Run against every directory type (full cross-directory regression)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
 
-# Run against both directory types with different template sizes
+# Run against every directory type with different template sizes
 # (useful when Samba AD population is too slow for large templates)
-./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100k50Groups
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100k50Groups -TemplateDirectoryServer389 Large
 
-# Run a specific scenario against both directory types
+# Run a specific scenario against every directory type
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -DirectoryType All
 ```
 
-> **Note:** OpenLDAP uses a single container (`openldap-primary`) with two naming contexts (suffixes) for multi-partition scenarios, while Samba AD uses separate containers (`samba-ad-source`, `samba-ad-target`). The test framework abstracts these differences via `Get-DirectoryConfig`.
+> **Note:** OpenLDAP and 389 Directory Server each use a single container (`openldap-primary`, `dirsrv-primary`) with two naming contexts (suffixes) for multi-partition scenarios, while Samba AD uses separate containers (`samba-ad-source`, `samba-ad-target`). The test framework abstracts these differences via `Get-DirectoryConfig`; scenarios ask `Test-IsRfcDirectory` rather than inferring the directory from an object class, since 389 Directory Server uses `inetOrgPerson` too.
 
 **Alternative: Manual step-by-step (for debugging or more control)**
 
@@ -212,7 +216,7 @@ See [Data Scale Templates](#data-scale-templates) for the full list: sizes, grou
 
 ## Test Lifecycle Quick Reference
 
-Integration tests require a complete environment reset between runs to ensure repeatable, idempotent results. This includes resetting **both** external systems (Samba AD, OpenLDAP, databases) **and** JIM itself (metaverse, configuration).
+Integration tests require a complete environment reset between runs to ensure repeatable, idempotent results. This includes resetting **both** external systems (Samba AD, OpenLDAP, 389 Directory Server, databases) **and** JIM itself (metaverse, configuration).
 
 > **Directory reset between scenarios (full-regression runs):** an `-Scenario All` sweep re-invokes `Run-IntegrationTests.ps1` once per scenario with `-SkipBuild` and never `-SkipReset`, so every scenario runs Step 1 in full: the integration compose project comes down with `-v`, the directory containers are force-removed by name, and every `jim-integration*` volume is removed. Both directory servers, OpenLDAP included, are therefore recreated from their base (or per-scenario snapshot) image at the start of every scenario; no directory data survives between scenarios. The runner's `Reset-JIMForNextScenario` in between is a lighter step on top of that (JIM database volume, API key, JIM stack restart). It once also purged OpenLDAP's `ou=People` and `ou=Groups` subtrees with `ldapdelete -r`, which was removed as redundant and O(entries) (~15 minutes at `Scale100k50Groups`); see #961. Fixed-size scenarios should still assert their expected object count (see `Assert-ImportedObjectCount`) so any future isolation gap fails loudly rather than silently synchronising stale data. If a scenario ever does inherit an earlier scenario's directory objects, suspect a leaked snapshot image environment variable (`SAMBA_IMAGE_*` / `OPENLDAP_IMAGE_PRIMARY`), not a missing purge.
 
@@ -332,6 +336,7 @@ flowchart TB
             P1B["samba-ad-source<br/>(cross-domain source)<br/>389/636"]
             P1C["samba-ad-target<br/>(cross-domain target)<br/>389/636"]
             P1D["openldap-primary<br/>(two suffixes)<br/>1389/1636"]
+            P1E["dirsrv-primary<br/>(two suffixes)<br/>3389/3636"]
             CSV["CSV Files (mounted volume at /connector-files)"]
         end
         subgraph P2["Phase 2 (profile: phase2)"]
@@ -351,7 +356,7 @@ The end-to-end run lifecycle (stand up, populate, configure, execute, validate, 
 
 ### Two Bind Identities
 
-Both directory labs are bound as two different identities depending on who is asking, and the distinction matters: it is what makes the lab prove JIM works under the permissions a customer would actually grant it, rather than as an unrestricted administrator.
+Every directory lab is bound as two different identities depending on who is asking, and the distinction matters: it is what makes the lab prove JIM works under the permissions a customer would actually grant it, rather than as an unrestricted administrator.
 
 #### OpenLDAP
 
@@ -360,6 +365,17 @@ Both directory labs are bound as two different identities depending on who is as
 - **A third account, `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local`, is for a Connected System that imports more than one partition** from the same server: Scenario 9 (partition-scoped imports) runs one Connected System scoped across both Yellowstone and Glitterband, which a single-suffix `svc-jim` account cannot serve. It is a member of *both* suffixes' `cn=jim` groups, while each suffix's own `svc-jim` stays a member of its own group only, so isolation between suffixes is unaffected for every single-partition Connected System. `Get-DirectoryConfig` exposes it as `MultiPartitionJimBindDN`/`MultiPartitionJimBindPassword`; `Setup-Scenario9.ps1` uses it when present, falling back to `JimBindDN`/`JimBindPassword` otherwise.
 - **A `pwdMinLength 7` password policy (ppolicy)** applies on both suffix databases, matching the Samba AD domain's minimum. This is what lets Scenario 20's parked-change retry test exercise a genuine refusal on OpenLDAP, not just Samba AD.
 - **The access-control and password-policy LDIFs are the single source for both the lab and the customer-facing documentation**: they live in `test/integration/docker/openldap/acl/` as six files (`jim-service-account-access.ldif` for the suffix databases, `jim-service-account-limits.ldif` exempting the JIM group from each suffix's search size and time limits (a non-rootDN client is otherwise capped at `olcSizeLimit`, 500 by default, across a whole paged import), `jim-accesslog-access.ldif` for `cn=accesslog`, `jim-frontend-access.ldif` for the frontend database, and `jim-password-policy.ldif` plus `jim-ppolicy-overlay.ldif` for the ppolicy default policy and its attachment) and are published verbatim, via MkDocs snippet includes, in `docs/connectors/jim-ldap-connector.md`'s OpenLDAP Service Account Permissions section. Changing the lab's permissions changes what customers are told to grant, and vice versa.
+
+#### 389 Directory Server
+
+389 Directory Server ([#1479](https://github.com/TetronIO/JIM/issues/1479); plan: `engineering/plans/doing/DIRECTORY_SERVER_389_LAB.md`) is the RFC 4512 sibling of the OpenLDAP lab: one container, `dirsrv-primary` (compose profile `dirsrv`, image `ghcr.io/tetronio/jim-dirsrv:primary`, built from `389ds/dirsrv:3.1` by `test/integration/docker/dirsrv/Build-DirsrvImage.ps1`), hosting the same two suffixes (`dc=yellowstone,dc=local`, `dc=glitterband,dc=local`) with the same tree, the same `jim-extensions` schema and the same service accounts, so the OpenLDAP populate scripts and every directory-agnostic scenario run against it unchanged (`-DirectoryType DirectoryServer389`). Scenarios 14, 19 and 22 stay OpenLDAP only: their fixtures and assertions are written against `cn=config`, the ppolicy overlay and DIT content rules, which 389 refuses over LDAP. There are no snapshot images; population at the templates the lab runs takes seconds.
+
+- **Everything is baked into the image at build time** by `test/integration/docker/dirsrv/build/configure.sh`, which starts the server inside `docker build`, configures it over LDAP as `cn=Directory Manager`, checks every step as the service account (a failed check fails the build), and stops it: the two backends, the tree, the schema, the ACIs, equality indexes on `uid`, `cn` and `entryUUID`, the Retro Changelog plug-in (`--max-age 7d --exclude-attrs userPassword`, and `nsslapd-log-deleted: on` set by `ldapmodify` on `cn=Retro Changelog Plugin,cn=plugins,cn=config`, since `dsconf` does not expose it, followed by a restart), and a global password policy (`passwordCheckSyntax on`, `passwordMinLength 7`, `passwordMinCategories 3`) mirroring the OpenLDAP lab's `pwdMinLength 7`, so the password scenarios have something to refuse and JIM's 389 policy discovery reads a real policy.
+- **The directory administrator** is `cn=Directory Manager` (server-wide, so it is the administrator of both suffixes; password `Test@123!`). It populates test data and runs out-of-band assertions inside the container over plain LDAP on 3389, and it bypasses every ACI and the password policy, which is why JIM never binds as it.
+- **JIM's Connected Systems bind as `cn=svc-jim,ou=Services,<suffix>`** (password `Svc-Jim@123!`), a member of that suffix's `cn=jim,ou=Services,<suffix>` group, and `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local` is a member of both suffixes' groups for Scenario 9, exactly as on OpenLDAP. Every ACI names a group, never an account. The service accounts carry `nsSizeLimit`, `nsLookThroughLimit` and `nsPagedSizeLimit` of `-1`, because 389's default search limits (`nsslapd-sizelimit` 2000, `nsslapd-lookthroughlimit` 5000) apply across a paged search.
+- **JIM connects over LDAPS on 3636, not plain LDAP.** 389 refuses the RFC 3062 Password Modify operation over an unencrypted connection ("Confidentiality required") and offers no switch to allow it. The image bakes a lab CA and a server certificate naming `dirsrv-primary` under `/data/tls`, and the runner's Step 4a adds that CA to JIM's certificate store (`Add-DirsrvCertificateToJimStore` in `test/integration/utils/Test-Helpers.ps1`) before any scenario connects, as the Samba AD lab does. `Get-DirectoryConfig -DirectoryType DirectoryServer389` therefore returns `Port 3636` and `UseSSL`, while `LdapSearchPort` stays 3389 for the harness's own in-container `ldapsearch` checks.
+- **The ACI files are the single source for both the lab and the customer-facing documentation**: `test/integration/docker/dirsrv/aci/` holds three (`jim-suffix-access.ldif` per suffix, `jim-changelog-access.ldif` for `cn=changelog`, and `jim-config-access.ldif` for the global password policy on `cn=config` and the Retro Changelog plug-in's settings), published verbatim via MkDocs snippet includes in `docs/connectors/jim-ldap-connector.md`'s 389 Directory Server Service Account Permissions section. Two 389-specific forms in them are deliberate: `targetattr != "aci"` rather than `"*"` (which excludes operational attributes such as `entryUUID`), and the plug-in rule granting every attribute but `aci` because `nsslapd-log-deleted` has no schema definition and cannot be named in an ACI attribute list.
+- **Changing any file under `docker/dirsrv/` changes the image hash** (`Get-DirsrvBuildHash.ps1`, stamped into the `jim.dirsrv.build-hash` label), which is how the runner knows to rebuild.
 
 #### Samba AD
 
@@ -2168,12 +2184,21 @@ JIM/
         │   │   ├── post-provision.sh                             # Post-provisioning setup
         │   │   ├── start-samba.sh                                # Container startup
         │   │   └── README.md
-        │   └── openldap/                                          # Custom OpenLDAP image with multi-suffix bootstrap
+        │   ├── openldap/                                          # Custom OpenLDAP image with multi-suffix bootstrap
+        │   │   ├── Dockerfile
+        │   │   ├── Build-OpenLdapImage.ps1                       # Image build script
+        │   │   ├── bootstrap/                                    # LDIF bootstrap data
+        │   │   ├── scripts/                                      # Suffix/accesslog setup scripts
+        │   │   └── start-openldap.sh                             # Container startup
+        │   └── dirsrv/                                            # Custom 389 Directory Server image, same two suffixes
         │       ├── Dockerfile
-        │       ├── Build-OpenLdapImage.ps1                       # Image build script
+        │       ├── Build-DirsrvImage.ps1                         # Image build script
+        │       ├── Get-DirsrvBuildHash.ps1                       # Content hash for the jim.dirsrv.build-hash label
+        │       ├── aci/                                          # ACI recipe (published verbatim in the connector docs)
         │       ├── bootstrap/                                    # LDIF bootstrap data
-        │       ├── scripts/                                      # Suffix/accesslog setup scripts
-        │       └── start-openldap.sh                             # Container startup
+        │       ├── build/configure.sh                            # Build-time configuration and checks
+        │       ├── schema/                                       # jim-extensions schema
+        │       └── start-dirsrv.sh                               # Container startup
         ├── utils/
         │   ├── Test-Helpers.ps1                                  # Common test utilities
         │   ├── LDAP-Helpers.ps1                                  # LDAP query functions
@@ -2192,7 +2217,8 @@ All integration-test containers are internal to the `jim-network` Docker network
 | `samba-ad-primary` | Primary directory (single-directory scenarios) | 389 / 636 | LDAP / LDAPS |
 | `samba-ad-source` | Cross-domain source (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
 | `samba-ad-target` | Cross-domain target (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
-| `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenario 14 only) | 1389 / 1636 | LDAP / LDAPS |
+| `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenarios 14, 19 and 22 only run here) | 1389 / 1636 | LDAP / LDAPS |
+| `dirsrv-primary` | 389 Directory Server, two suffixes (every OpenLDAP scenario except 14, 19 and 22; profile `dirsrv`); JIM connects over LDAPS, the harness's own checks over LDAP inside the container | 3389 / 3636 | LDAP / LDAPS |
 | `sqlserver-hris-a` | Phase 2 source: Microsoft SQL Server 2022 (Scenario 16) | 1433 | TCP |
 | `oracle-hris-b` | Phase 2 source: Oracle Database Free 23ai, CDB service `FREE`, pluggable database `FREEPDB1` (Scenario 16) | 1521 | TCP |
 | `postgres-target` | Phase 2, PostgreSQL 16: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 16 | 5432 | TCP |

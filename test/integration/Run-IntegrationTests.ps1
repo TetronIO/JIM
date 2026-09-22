@@ -8,7 +8,8 @@
 .DESCRIPTION
     Single entry point for running integration tests. This script:
     1. Resets the JIM environment (stops containers, removes volumes)
-    2. Rebuilds and starts the JIM stack and Samba AD
+    2. Rebuilds and starts the JIM stack and the selected directory (Samba AD, OpenLDAP or
+       389 Directory Server)
     3. Waits for all services to be ready
     4. Creates an infrastructure API key
     5. Configures JIM with connected systems and sync rules (via scenario setup)
@@ -85,6 +86,25 @@
     summary of what ran and exits non-zero. Use -ContinueOnFailure when you are
     diagnosing whether a regression is localised to one scenario or widespread.
 
+.PARAMETER DirectoryType
+    The directory the scenario runs against. Default: "SambaAD".
+    Options: SambaAD, OpenLDAP, DirectoryServer389, All.
+    OpenLDAP and DirectoryServer389 share the same lab shape (two suffixes, dc=yellowstone,dc=local
+    and dc=glitterband,dc=local, on one container, populated live on every run). Scenarios 14, 19
+    and 22 are OpenLDAP only and are coerced to OpenLDAP when asked for on another directory;
+    Scenario 17 is Samba AD only. "All" runs the suite against SambaAD, then OpenLDAP, then
+    DirectoryServer389, with a full environment teardown between them.
+
+.PARAMETER TemplateSambaAD
+    Template for the Samba AD leg of a -DirectoryType All run. Falls back to -Template.
+
+.PARAMETER TemplateOpenLDAP
+    Template for the OpenLDAP leg of a -DirectoryType All run. Falls back to -Template.
+
+.PARAMETER TemplateDirectoryServer389
+    Template for the 389 Directory Server leg of a -DirectoryType All run. Falls back to -Template.
+    The long-tail templates are OpenLDAP only and are rejected here.
+
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
@@ -135,18 +155,23 @@
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType All
 
-    Runs all scenarios against Samba AD first, then all scenarios against OpenLDAP.
-    Full environment teardown and rebuild between directory types.
+    Runs all scenarios against Samba AD first, then against OpenLDAP, then against
+    389 Directory Server. Full environment teardown and rebuild between directory types.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -DirectoryType All
 
-    Runs Scenario 1 against Samba AD, then against OpenLDAP.
+    Runs Scenario 1 against Samba AD, then OpenLDAP, then 389 Directory Server.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType OpenLDAP -Template Small
 
     Runs all scenarios against OpenLDAP only with the Small template.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario Scenario9-PartitionScopedImports -DirectoryType DirectoryServer389 -Template Small
+
+    Runs Scenario 9 against 389 Directory Server (both suffixes on the dirsrv-primary container).
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Template Large -LogLevel Warning -DisableChangeTracking
@@ -157,15 +182,17 @@
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100k50Groups
 
-    Runs all scenarios against both directory types with different template sizes.
-    Samba AD uses Medium (faster population), OpenLDAP uses Scale100k50Groups.
+    Runs all scenarios against every directory type with different template sizes.
+    Samba AD uses Medium (faster population), OpenLDAP uses Scale100k50Groups, and
+    389 Directory Server falls back to -Template (add -TemplateDirectoryServer389 to change it).
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -PreRelease
 
-    Runs the full pre-release regression: every implemented scenario against both
-    directory types, with Samba AD at the Medium template and OpenLDAP at Large.
-    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large.
+    Runs the full pre-release regression: every implemented scenario against every
+    directory type, with Samba AD at the Medium template and OpenLDAP and 389 Directory
+    Server at Large. Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Medium
+    -TemplateOpenLDAP Large -TemplateDirectoryServer389 Large.
 #>
 
 param(
@@ -204,7 +231,7 @@ param(
     [switch]$IgnoreSnapshots,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("SambaAD", "OpenLDAP", "All")]
+    [ValidateSet("SambaAD", "OpenLDAP", "DirectoryServer389", "All")]
     [string]$DirectoryType = "SambaAD",
 
     [Parameter(Mandatory=$false)]
@@ -230,6 +257,10 @@ param(
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$TemplateOpenLDAP,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
+    [string]$TemplateDirectoryServer389,
 
     [Parameter(Mandatory=$false)]
     [switch]$PreRelease,
@@ -332,21 +363,24 @@ if (Test-Path $envFilePath) {
 # scripts have matching guards (defence in depth).
 $script:LongTailTemplates = @("Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")
 function Test-LongTailTemplateCompatibility {
-    param([string]$Template, [string]$DirectoryType, [string]$TemplateSambaAD, [string]$TemplateOpenLDAP)
+    param([string]$Template, [string]$DirectoryType, [string]$TemplateSambaAD, [string]$TemplateOpenLDAP, [string]$TemplateDirectoryServer389)
     $offendingValues = @()
-    if ($Template -in $script:LongTailTemplates -and $DirectoryType -in @("SambaAD", "All")) {
+    if ($Template -in $script:LongTailTemplates -and $DirectoryType -in @("SambaAD", "DirectoryServer389", "All")) {
         $offendingValues += "-Template $Template -DirectoryType $DirectoryType"
     }
     if ($TemplateSambaAD -in $script:LongTailTemplates) {
         $offendingValues += "-TemplateSambaAD $TemplateSambaAD"
     }
+    if ($TemplateDirectoryServer389 -in $script:LongTailTemplates) {
+        $offendingValues += "-TemplateDirectoryServer389 $TemplateDirectoryServer389"
+    }
     if ($offendingValues.Count -gt 0) {
-        $msg = "The long-tail templates ($($script:LongTailTemplates -join ', ')) are OpenLDAP only (Scenario 8 long-tail group shape). Samba AD cannot populate thousands of groups within the time budget. Rejected: $($offendingValues -join ', '). Use -Template Scale100k50Groups or another capped-groups template for Samba scale testing, or pin to -DirectoryType OpenLDAP."
+        $msg = "The long-tail templates ($($script:LongTailTemplates -join ', ')) are OpenLDAP only (Scenario 8 long-tail group shape). Samba AD cannot populate thousands of groups within the time budget, and the 389 Directory Server lab has not been sized for that shape. Rejected: $($offendingValues -join ', '). Use -Template Scale100k50Groups or another capped-groups template for Samba AD or 389 Directory Server scale testing, or pin to -DirectoryType OpenLDAP."
         throw $msg
     }
 }
 Test-LongTailTemplateCompatibility -Template $Template -DirectoryType $DirectoryType `
-    -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP
+    -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP -TemplateDirectoryServer389 $TemplateDirectoryServer389
 
 # NOTE: Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology). Its
 # directory-type handling runs *after* scenario/directory resolution (see "Scenario 14
@@ -367,7 +401,7 @@ if ($DirectoryType -ne "All") {
 # it deletes labelled images despite the exclusion. Work around this by collecting
 # the IDs of images to preserve, pruning everything else, then cleaning up dangling.
 function Invoke-ImagePrunePreservingSnapshots {
-    $labels = @("jim.samba.snapshot-hash", "jim.samba.build-hash", "jim.openldap.snapshot-hash", "jim.openldap.build-hash")
+    $labels = @("jim.samba.snapshot-hash", "jim.samba.build-hash", "jim.openldap.snapshot-hash", "jim.openldap.build-hash", "jim.dirsrv.build-hash")
     $preserveIds = @()
     foreach ($label in $labels) {
         $ids = docker images --filter "label=$label" -q 2>$null
@@ -588,7 +622,7 @@ function Show-ScenarioMenu {
         }
         @{
             Name = "Pre-Release"
-            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at Medium and Large templates, respectively"
+            Description = "Runs every implemented scenario sequentially for Samba AD (Medium), OpenLDAP (Large) and 389 Directory Server (Large)"
             Disabled = $false
             SeparatorAfter = $true
         }
@@ -955,9 +989,14 @@ function Show-DirectoryTypeMenu {
             Details = "LDAP on port 1389, entryUUID, RFC 4512 schema"
         }
         @{
+            Name = "DirectoryServer389"
+            Description = "389 Directory Server with multi-suffix partitions"
+            Details = "LDAP on port 3389, RFC 4512 schema; every OpenLDAP scenario except 14, 19 and 22 (OpenLDAP only) and 17 (Samba AD only)"
+        }
+        @{
             Name = "All"
-            Description = "Both directory types (full regression)"
-            Details = "Runs all scenarios against SambaAD first, then OpenLDAP"
+            Description = "Every directory type (full regression)"
+            Details = "Runs all scenarios against SambaAD first, then OpenLDAP, then DirectoryServer389"
         }
     )
 
@@ -1283,12 +1322,13 @@ function Test-TemplateRelevant {
     return $true
 }
 
-# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large -TemplateDirectoryServer389 Large
 if ($PreRelease) {
     $Scenario               = "All"
     $DirectoryType          = "All"
     $TemplateSambaAD        = "Medium"
     $TemplateOpenLDAP       = "Large"
+    $TemplateDirectoryServer389 = "Large"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
 }
@@ -1297,14 +1337,15 @@ if ($PreRelease) {
 if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
-    # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
-    # types, with Samba AD at Medium and OpenLDAP at Large. It bypasses the Template
-    # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
+    # "Pre-Release" is a special menu entry that expands to all-scenarios, every directory
+    # type, with Samba AD at Medium and OpenLDAP and 389 Directory Server at Large. It bypasses
+    # the Template and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
     if ($Scenario -eq "Pre-Release") {
         $Scenario                      = "All"
         $DirectoryType                 = "All"
         $TemplateSambaAD               = "Medium"
         $TemplateOpenLDAP              = "Large"
+        $TemplateDirectoryServer389    = "Large"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
     }
@@ -1365,12 +1406,14 @@ if (-not $Scenario) {
 # multi-suffix mechanism. Scenario 22 depends on the ppolicy overlay that same script
 # loads, which is OpenLDAP's password policy mechanism. This runs after scenario/directory
 # resolution (whether the values came from parameters or the interactive menu) and before
-# the build, so the constraint is enforced whichever way they were chosen. If
-# -DirectoryType SambaAD was explicitly passed, respect the explicit intent and reject;
-# otherwise coerce to OpenLDAP. -DirectoryType All is handled by its own block below.
-if (($Scenario -like "*Scenario14*" -or $Scenario -like "*Scenario19*" -or $Scenario -like "*Scenario22*") -and $DirectoryType -eq "SambaAD") {
+# the build, so the constraint is enforced whichever way they were chosen. The 389 Directory
+# Server lab has two suffixes too, but these scenarios' fixtures and assertions are written
+# against OpenLDAP (cn=config, the ppolicy overlay, olc* attributes), so it is treated like
+# Samba AD here. If -DirectoryType was explicitly passed, respect the explicit intent and
+# reject; otherwise coerce to OpenLDAP. -DirectoryType All is handled by its own block below.
+if (($Scenario -like "*Scenario14*" -or $Scenario -like "*Scenario19*" -or $Scenario -like "*Scenario22*") -and $DirectoryType -in @("SambaAD", "DirectoryServer389")) {
     if ($DirectoryTypeWasExplicitlySet) {
-        throw "Scenarios 14 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy) depend on the single OpenLDAP container's two suffixes and ppolicy overlay and are OpenLDAP only. Rejected -DirectoryType SambaAD. Use -DirectoryType OpenLDAP."
+        throw "Scenarios 14 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy) depend on the single OpenLDAP container's two suffixes and ppolicy overlay and are OpenLDAP only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType OpenLDAP."
     }
     Write-Host "${YELLOW}This scenario is OpenLDAP only; using -DirectoryType OpenLDAP.${NC}"
     $DirectoryType = "OpenLDAP"
@@ -1383,13 +1426,18 @@ if (($Scenario -like "*Scenario14*" -or $Scenario -like "*Scenario19*" -or $Scen
 
 if ($DirectoryType -eq "All") {
     $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
-    $directoryTypesToRun = @("SambaAD", "OpenLDAP")
+    $directoryTypesToRun = @("SambaAD", "OpenLDAP", "DirectoryServer389")
 
     # Scenarios 14 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy)
-    # are OpenLDAP only; run just the OpenLDAP leg rather than failing the Samba AD leg.
+    # are OpenLDAP only; run just the OpenLDAP leg rather than failing the other legs. Scenario 17
+    # (Initial Password) is Samba AD only for the mirror-image reason (see the -Scenario All sweep).
     if ($Scenario -like "*Scenario14*" -or $Scenario -like "*Scenario19*" -or $Scenario -like "*Scenario22*") {
-        Write-Host "${YELLOW}This scenario is OpenLDAP only; skipping the Samba AD leg.${NC}"
+        Write-Host "${YELLOW}This scenario is OpenLDAP only; skipping the Samba AD and 389 Directory Server legs.${NC}"
         $directoryTypesToRun = @("OpenLDAP")
+    }
+    elseif ($Scenario -like "*Scenario17*") {
+        Write-Host "${YELLOW}This scenario is Samba AD only; skipping the OpenLDAP and 389 Directory Server legs.${NC}"
+        $directoryTypesToRun = @("SambaAD")
     }
 
     # Build common parameters to pass through (excluding DirectoryType and Template)
@@ -1405,10 +1453,16 @@ if ($DirectoryType -eq "All") {
     if ($DisableChangeTracking)                                 { $passThruParams.DisableChangeTracking = $true }
     if ($ContinueOnFailure)                                     { $passThruParams.ContinueOnFailure = $true }
 
-    # Resolve per-directory-type templates. -TemplateSambaAD/-TemplateOpenLDAP
-    # override the base -Template for the respective directory type.
+    # Resolve per-directory-type templates. -TemplateSambaAD/-TemplateOpenLDAP/
+    # -TemplateDirectoryServer389 override the base -Template for the respective directory type.
     $templateForSambaAD  = if ($TemplateSambaAD)  { $TemplateSambaAD }  else { $Template }
     $templateForOpenLDAP = if ($TemplateOpenLDAP) { $TemplateOpenLDAP } else { $Template }
+    $templateForDirectoryServer389 = if ($TemplateDirectoryServer389) { $TemplateDirectoryServer389 } else { $Template }
+    $templateForDirectoryType = @{
+        SambaAD            = $templateForSambaAD
+        OpenLDAP           = $templateForOpenLDAP
+        DirectoryServer389 = $templateForDirectoryServer389
+    }
 
     $allStart = Get-Date
     $allResults = @()
@@ -1420,19 +1474,21 @@ if ($DirectoryType -eq "All") {
     Write-Host "${CYAN}$("=" * 65)${NC}"
     Write-Host ""
     Write-Host "${GRAY}Scenario:  ${CYAN}$($Scenario ?? 'All')${NC}"
-    if ($templateForSambaAD -eq $templateForOpenLDAP) {
-        Write-Host "${GRAY}Template:  ${CYAN}$templateForSambaAD${NC}"
+    $distinctTemplates = @($directoryTypesToRun | ForEach-Object { $templateForDirectoryType[$_] } | Sort-Object -Unique)
+    if ($distinctTemplates.Count -eq 1) {
+        Write-Host "${GRAY}Template:  ${CYAN}$($distinctTemplates[0])${NC}"
     } else {
-        Write-Host "${GRAY}Template:  ${CYAN}SambaAD=$templateForSambaAD, OpenLDAP=$templateForOpenLDAP${NC}"
+        $templateSummary = ($directoryTypesToRun | ForEach-Object { "$_=$($templateForDirectoryType[$_])" }) -join ', '
+        Write-Host "${GRAY}Template:  ${CYAN}$templateSummary${NC}"
     }
-    Write-Host "${GRAY}Directory: ${CYAN}SambaAD → OpenLDAP${NC}"
+    Write-Host "${GRAY}Directory: ${CYAN}$($directoryTypesToRun -join ' → ')${NC}"
     Write-Host ""
 
     foreach ($dt in $directoryTypesToRun) {
         $dtStart = Get-Date
 
         # Select the template for this directory type
-        $dtTemplate = if ($dt -eq "SambaAD") { $templateForSambaAD } else { $templateForOpenLDAP }
+        $dtTemplate = $templateForDirectoryType[$dt]
 
         Write-Host ""
         Write-Host "${CYAN}$("=" * 65)${NC}"
@@ -1589,7 +1645,9 @@ function Reset-JIMForNextScenario {
         }
     }
 
-    # 3b. No OpenLDAP cleanup is needed here, and none belongs here.
+    # 3b. No OpenLDAP cleanup is needed here, and none belongs here. The same holds for 389 Directory
+    # Server: Step 1 force-removes dirsrv-primary and its jim-integration-dirsrv-primary-data volume,
+    # so the directory is recreated from the base image and populated afresh at every scenario.
     #
     # An earlier version of this reset purged ou=People / ou=Groups in both OpenLDAP suffixes with
     # `ldapdelete -r`, on the belief that the openldap-primary data volume survives between scenarios
@@ -1692,12 +1750,12 @@ if ($Scenario -eq "All") {
     }
 
     # Scenarios 14 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy)
-    # are OpenLDAP only (two-suffix topology; ppolicy overlay); skip them on a Samba AD sweep
-    # rather than recording a guaranteed failure.
-    if ($DirectoryType -eq "SambaAD") {
+    # are OpenLDAP only (two-suffix topology; ppolicy overlay; cn=config fixtures); skip them on a
+    # Samba AD or 389 Directory Server sweep rather than recording a guaranteed failure.
+    if ($DirectoryType -in @("SambaAD", "DirectoryServer389")) {
         $openLdapOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario14*" -or $_ -like "*Scenario19*" -or $_ -like "*Scenario22*" })
         if ($openLdapOnly.Count -gt 0) {
-            Write-Host "${YELLOW}Skipping OpenLDAP-only scenario(s) on Samba AD: $($openLdapOnly -join ', ')${NC}"
+            Write-Host "${YELLOW}Skipping OpenLDAP-only scenario(s) on ${DirectoryType}: $($openLdapOnly -join ', ')${NC}"
             $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario14*" -and $_ -notlike "*Scenario19*" -and $_ -notlike "*Scenario22*" })
         }
     }
@@ -1709,10 +1767,11 @@ if ($Scenario -eq "All") {
     # either directory: OpenLDAP's RFC 3062 Password Modify path works over plain LDAP against the test
     # container (no TLS required there), verified end to end (#1697); its parked-change retry test also runs
     # on OpenLDAP now that the lab's ppolicy overlay genuinely refuses an under-length password there.
-    if ($DirectoryType -eq "OpenLDAP") {
+    # 389 Directory Server is the same family as OpenLDAP for this purpose.
+    if ($DirectoryType -in @("OpenLDAP", "DirectoryServer389")) {
         $sambaOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario17*" })
         if ($sambaOnly.Count -gt 0) {
-            Write-Host "${YELLOW}Skipping Samba AD-only scenario(s) on OpenLDAP: $($sambaOnly -join ', ')${NC}"
+            Write-Host "${YELLOW}Skipping Samba AD-only scenario(s) on ${DirectoryType}: $($sambaOnly -join ', ')${NC}"
             $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario17*" })
         }
     }
@@ -2010,6 +2069,11 @@ Write-Banner "JIM Integration Test Runner"
 
 $templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
 
+# Directory family for this run. OpenLDAP and 389 Directory Server share the RFC 4512 lab shape
+# (two suffixes on one container, plain LDAP, no Samba AD containers); everything below that
+# branches on "Samba AD or not" keys on this rather than on the directory type's name.
+$isRfcDirectoryRun = Test-IsRfcDirectory $script:DirectoryConfig
+
 # Auto-set higher export concurrency for OpenLDAP (can handle 50+ concurrent writes)
 # unless the user explicitly specified a value. Samba AD keeps the JIM default of 4.
 if ($DirectoryType -eq "OpenLDAP" -and -not $PSBoundParameters.ContainsKey('ExportConcurrency')) {
@@ -2117,11 +2181,11 @@ Clear-StaleIntegrationMonitors -ResultsPath (Join-Path $scriptRoot 'results')
 $step0Start = Get-Date
 Write-Section "Step 0: Checking Samba AD Images"
 
-# OpenLDAP scenarios never use Samba AD containers — skip the image build entirely.
-# Building Samba AD images takes 30-600+ seconds and can time out under disk pressure,
-# causing false failures for OpenLDAP runs.
-if ($DirectoryType -eq "OpenLDAP") {
-    Write-Step "Skipping Samba AD image check (DirectoryType=OpenLDAP)"
+# OpenLDAP and 389 Directory Server scenarios never use Samba AD containers, so skip the image
+# build entirely. Building Samba AD images takes 30-600+ seconds and can time out under disk
+# pressure, causing false failures for those runs.
+if ($isRfcDirectoryRun) {
+    Write-Step "Skipping Samba AD image check (DirectoryType=$DirectoryType)"
 }
 else {
 
@@ -2182,7 +2246,7 @@ else {
 }
 
 # For Scenario 2 and Scenario 8 with Samba AD, also check for Source and Target images
-if (($Scenario -match 'Scenario2(\D|$)' -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
+if (($Scenario -match 'Scenario2(\D|$)' -or $Scenario -like "*Scenario8*") -and -not $isRfcDirectoryRun) {
     # Check Source image
     $sourceImageTag = "ghcr.io/tetronio/jim-samba-ad:source"
     $sourceCheck = Test-SambaImageNeedsRebuild -ImageTag $sourceImageTag
@@ -2248,7 +2312,7 @@ if (($Scenario -match 'Scenario2(\D|$)' -or $Scenario -like "*Scenario8*") -and 
     }
 }
 
-} # end: DirectoryType -ne OpenLDAP (Samba AD image check)
+} # end: not an RFC directory run (Samba AD image check)
 
 $timings["0. Check Samba Image"] = (Get-Date) - $step0Start
 
@@ -2268,14 +2332,14 @@ if (-not $SkipReset) {
     # New-Scenario16TestDatabase.ps1 rather than by their being new: it drops and recreates its whole
     # schema, and a content hash of the generated script decides whether it needs to. A stale Scenario 16
     # database is therefore not reachable. Everything else here stays ephemeral.
-    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap --profile scim down -v --remove-orphans 2>&1 | Out-Null
+    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
     # (e.g., 'jim' instead of 'jim-integration') and are therefore not cleaned up by 'down -v'.
     # The phase2 databases are excluded for the reason above.
     Write-Step "Removing any leftover integration test containers..."
-    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "postgres-target", "mysql-test")
+    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "dirsrv-primary", "postgres-target", "mysql-test")
     foreach ($container in $integrationContainers) {
         docker rm -f $container 2>&1 | Out-Null
     }
@@ -2485,7 +2549,7 @@ $env:OPENLDAP_IMAGE_PRIMARY = $null
 # where the base image is available and fails the run outright where it is not (the prebuilt
 # ghcr.io image is private, so the snapshot build waits 120s for a domain controller that never
 # starts, and the scenario never runs).
-if (-not $IgnoreSnapshots -and $DirectoryType -ne "OpenLDAP" -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario15*" -and $Scenario -notlike "*Scenario16*" -and $Scenario -notlike "*Scenario19*") {
+if (-not $IgnoreSnapshots -and -not $isRfcDirectoryRun -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario15*" -and $Scenario -notlike "*Scenario16*" -and $Scenario -notlike "*Scenario19*") {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -2592,6 +2656,58 @@ if ($DirectoryType -eq "OpenLDAP") {
     }
     Write-Success "OpenLDAP Primary started"
 }
+elseif ($DirectoryType -eq "DirectoryServer389") {
+    # Ensure the 389 Directory Server image is current. Docker compose starts a stale image as-is
+    # (the build: fallback only applies when the image is absent), so fixture changes would otherwise
+    # be silently ignored. The expected hash comes from the fixture's own script, the same one
+    # Build-DirsrvImage.ps1 stamps into the jim.dirsrv.build-hash label, so the file list that
+    # defines "stale" lives in exactly one place.
+    . (Join-Path $scriptRoot "docker" "dirsrv" "Get-DirsrvBuildHash.ps1")
+    $expectedDsBuildHash = Get-DirsrvBuildHash
+    $dsBaseImage = "ghcr.io/tetronio/jim-dirsrv:primary"
+    $dsBaseBuildHash = docker image inspect $dsBaseImage --format '{{index .Config.Labels "jim.dirsrv.build-hash"}}' 2>&1
+    $dsBaseImageMissing = $LASTEXITCODE -ne 0
+    if ($dsBaseImageMissing -or "$dsBaseBuildHash" -ne $expectedDsBuildHash) {
+        $dsRebuildReason = if ($dsBaseImageMissing) { "not found" } else { "stale (hash $dsBaseBuildHash != $expectedDsBuildHash)" }
+        Write-Warning "389 Directory Server image needs rebuilding: $dsRebuildReason"
+        Write-Step "Building 389 Directory Server image..."
+        & "$scriptRoot/docker/dirsrv/Build-DirsrvImage.ps1"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to build 389 Directory Server image"
+            exit 1
+        }
+        Write-Success "389 Directory Server image built successfully"
+    }
+    else {
+        Write-Success "389 Directory Server image is current (hash $expectedDsBuildHash)"
+    }
+
+    # No snapshot images exist for 389 Directory Server: the directory is populated live on every
+    # run (Step 4c for the shared dataset; Scenario 8 populates itself from its Invoke script).
+
+    # Scale the container's memory limit with template size, on the same mapping as OpenLDAP's
+    # above; the pressure comes at run time (import and export), not during population.
+    $env:DIRSRV_PRIMARY_MEMORY = switch -Wildcard ($Template) {
+        "Scale1m*"   { "12G"; break }
+        "Scale750k*" { "10G"; break }
+        "Scale500k*" { "8G"; break }
+        "Scale200k*" { "4G"; break }
+        "Scale100k*" { "3G"; break }
+        default      { "2G" }
+    }
+    if ($env:DIRSRV_PRIMARY_MEMORY -ne "2G") {
+        Write-Host "  389 Directory Server memory limit scaled to $($env:DIRSRV_PRIMARY_MEMORY) for $Template template" -ForegroundColor Gray
+    }
+
+    Write-Step "Starting 389 Directory Server (Primary)..."
+    $dirsrvResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile dirsrv up -d dirsrv-primary 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start 389 Directory Server"
+        Write-Host "${GRAY}$dirsrvResult${NC}"
+        exit 1
+    }
+    Write-Success "389 Directory Server Primary started"
+}
 else {
     Write-Step "Starting Samba AD (Primary)..."
     $sambaResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d 2>&1
@@ -2632,8 +2748,9 @@ if ($Scenario -like "*Scenario15*") {
     Write-Success "SCIM test service provider started"
 }
 
-# Start Scenario 2 containers if running Scenario 2
-if ($Scenario -match 'Scenario2(\D|$)') {
+# Start Scenario 2 containers if running Scenario 2 with Samba AD
+# For OpenLDAP and 389 Directory Server, S2 uses the two suffixes of the single container (already started above)
+if ($Scenario -match 'Scenario2(\D|$)' -and -not $isRfcDirectoryRun) {
     Write-Step "Starting Samba AD (Source and Target for Scenario 2)..."
     $scenario2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -2645,8 +2762,8 @@ if ($Scenario -match 'Scenario2(\D|$)') {
 }
 
 # Start Scenario 8 containers if running Scenario 8 with Samba AD
-# For OpenLDAP, S8 uses the same openldap-primary container (already started above)
-if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
+# For OpenLDAP and 389 Directory Server, S8 uses the same single container (already started above)
+if ($Scenario -like "*Scenario8*" -and -not $isRfcDirectoryRun) {
     # Check for pre-populated snapshot images
     if (-not $IgnoreSnapshots) {
         $s8Hash = Get-PopulateScriptHash -ScenarioName "Scenario8"
@@ -2765,6 +2882,28 @@ if ($DirectoryType -eq "OpenLDAP") {
         exit 1
     }
 }
+elseif ($DirectoryType -eq "DirectoryServer389") {
+    # Wait for 389 Directory Server (its Docker healthcheck reports healthy once the server answers)
+    Write-Step "Waiting for 389 Directory Server to be ready..."
+    $dirsrvReady = $false
+    $elapsed = 0
+    while (-not $dirsrvReady -and $elapsed -lt $TimeoutSeconds) {
+        $status = docker inspect --format='{{.State.Health.Status}}' dirsrv-primary 2>&1
+        if ($status -eq "healthy") {
+            $dirsrvReady = $true
+            Write-Success "389 Directory Server is healthy"
+        }
+        else {
+            Start-Sleep -Seconds 3
+            $elapsed += 3
+        }
+    }
+    if (-not $dirsrvReady) {
+        Write-Failure "389 Directory Server did not become ready in time"
+        Write-Host "${YELLOW}  Check logs: docker logs dirsrv-primary${NC}"
+        exit 1
+    }
+}
 else {
     # Wait for Samba AD Primary
     Write-Step "Waiting for Samba AD Primary to be ready..."
@@ -2784,8 +2923,8 @@ else {
 }
 
 # Wait for Scenario 2 or Scenario 8 Samba AD containers if applicable
-# For OpenLDAP, the openldap-primary container wait is handled above
-if (($Scenario -match 'Scenario2(\D|$)' -or $Scenario -like "*Scenario8*") -and $DirectoryType -ne "OpenLDAP") {
+# For OpenLDAP and 389 Directory Server, the single container's wait is handled above
+if (($Scenario -match 'Scenario2(\D|$)' -or $Scenario -like "*Scenario8*") -and -not $isRfcDirectoryRun) {
     Write-Step "Waiting for Samba AD Source to be ready..."
     $sourceReady = $false
     $elapsed = 0
@@ -2866,8 +3005,11 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 # every Samba AD scenario connection from here on is validated for real. Trust each running instance's
 # self-signed CA (it doubles as its own CA) before any scenario setup script connects to it, so the
 # very first LDAPS connection succeeds instead of failing with a validation error that reads exactly
-# like "server unavailable". Skipped entirely for OpenLDAP-only runs, which connect unencrypted and
-# have no certificate to trust.
+# like "server unavailable". 389 Directory Server connects over LDAPS too (Password Modify needs a
+# secure connection there), so its lab CA is trusted the same way. Skipped entirely for OpenLDAP-only
+# runs, which connect unencrypted and have no certificate to trust. Both branches sit here, after the
+# JIM Web API readiness wait above and the directory readiness waits before it, because the upload
+# needs JIM up and docker cp needs the directory container running.
 if ($DirectoryType -eq "SambaAD") {
     Write-Section "Step 4a: Trusting Samba AD Certificates"
 
@@ -2884,6 +3026,12 @@ if ($DirectoryType -eq "SambaAD") {
             Add-SambaCertificateToJimStore -ContainerName $otherSambaContainer -JIMUrl "http://localhost:5200" -ApiKey $apiKey
         }
     }
+}
+elseif ($DirectoryType -eq "DirectoryServer389") {
+    Write-Section "Step 4a: Trusting the 389 Directory Server Lab CA"
+
+    # One container hosts both suffixes, so one CA covers Primary, Source and Target alike.
+    Add-DirsrvCertificateToJimStore -ContainerName "dirsrv-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
 }
 
 # Step 4b: Prepare Samba AD for testing
@@ -2953,9 +3101,11 @@ if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and $S
     Write-Success "Delegated JIM's access over OU: Corp"
 }
 
-# Step 4c: Populate OpenLDAP with test data
-# OpenLDAP starts empty (only base OUs from bootstrap). Unlike Samba AD which uses snapshot
-# images with pre-populated data, OpenLDAP needs live population via Populate-OpenLDAP.ps1.
+# Step 4c: Populate OpenLDAP or 389 Directory Server with test data
+# Both start empty (only base OUs from bootstrap). Unlike Samba AD which uses snapshot images
+# with pre-populated data, they need live population via Populate-OpenLDAP.ps1 (shared by both;
+# -DirectoryType selects the container, port and administrator binds). 389 has no snapshots at
+# all, so it populates on every run; OpenLDAP populates only when no snapshot was selected above.
 # Skip for S1 — the target directory starts empty (HR-driven provisioning into clean directory).
 # Skip for S8 — it has its own population script (Populate-OpenLDAP-Scenario8.ps1) that only
 # populates Source. The base script populates both suffixes, which would create pre-existing
@@ -2968,17 +3118,17 @@ if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and $S
 # Skip for S22: self-populating (Populate-OpenLDAP-Scenario22.ps1, called by
 # Invoke-Scenario22-OpenLdapPasswordPolicy.ps1), and its Scenario 1 substrate provisions into an
 # ou=People that must start empty; the general population would fill it.
-if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario8*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*" -and -not $script:UsingOpenLDAPSnapshots) {
-    Write-Section "Step 4c: Populating OpenLDAP with Test Data"
-    Write-Step "Running Populate-OpenLDAP.ps1 -Template $Template..."
+if ($isRfcDirectoryRun -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario8*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*" -and -not $script:UsingOpenLDAPSnapshots) {
+    Write-Section "Step 4c: Populating $DirectoryType with Test Data"
+    Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
     if (Test-Path $populateScript) {
-        & $populateScript -Template $Template
+        & $populateScript -Template $Template -DirectoryType $DirectoryType
         if ($LASTEXITCODE -ne 0) {
-            Write-Failure "OpenLDAP population failed"
+            Write-Failure "$DirectoryType population failed"
             exit 1
         }
-        Write-Success "OpenLDAP populated with $Template template data"
+        Write-Success "$DirectoryType populated with $Template template data"
     }
     else {
         Write-Failure "Populate-OpenLDAP.ps1 not found at $populateScript"

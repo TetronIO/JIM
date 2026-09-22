@@ -371,7 +371,9 @@ $ErrorActionPreference = "Stop"
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 }
-if ($DirectoryConfig.UserObjectClass -ne "inetOrgPerson") {
+# Keyed on the directory type, not the object class: 389 Directory Server also uses inetOrgPerson
+# and must still be refused here (the fixture and its assertions are OpenLDAP-specific).
+if ($DirectoryConfig.DirectoryType -ne "OpenLDAP") {
     throw "Scenario 14 (Attribute Priority) is OpenLDAP only. Run-IntegrationTests.ps1 should have rejected this combination before this script was invoked."
 }
 
@@ -385,8 +387,8 @@ $secondarySystemName = "Scenario 14 Secondary"
 # suffixes' bind credentials are needed regardless of which one -DirectoryConfig pointed at.
 $primaryLdapConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 $secondaryLdapConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
-$primaryLdapUri = "ldap://localhost:$($primaryLdapConfig.Port)"
-$secondaryLdapUri = "ldap://localhost:$($secondaryLdapConfig.Port)"
+$primaryLdapUri = "$($primaryLdapConfig.LdapSearchScheme)://localhost:$($primaryLdapConfig.LdapSearchPort)"
+$secondaryLdapUri = "$($secondaryLdapConfig.LdapSearchScheme)://localhost:$($secondaryLdapConfig.LdapSearchPort)"
 
 function Invoke-Scenario14LdapModify {
     <#
@@ -441,7 +443,7 @@ function Get-Scenario14LdapAttribute {
         [Parameter(Mandatory=$true)] [string]$AttributeName
     )
 
-    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.Port `
+    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.LdapSearchPort -Scheme $LdapConfig.LdapSearchScheme `
         -BaseDN $LdapConfig.UserContainer -BindDN $LdapConfig.BindDN -BindPassword $LdapConfig.BindPassword `
         -Filter "(uid=$Uid)" -Attributes @($AttributeName)
     if ($null -eq $raw) {
@@ -488,7 +490,7 @@ function Get-Scenario14LdapAttributeValues {
         [Parameter(Mandatory=$true)] [string]$AttributeName
     )
 
-    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.Port `
+    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.LdapSearchPort -Scheme $LdapConfig.LdapSearchScheme `
         -BaseDN $LdapConfig.UserContainer -BindDN $LdapConfig.BindDN -BindPassword $LdapConfig.BindPassword `
         -Filter "(uid=$Uid)" -Attributes @($AttributeName)
     if ($null -eq $raw) {

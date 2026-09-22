@@ -294,8 +294,10 @@ function Get-DirectoryConfig {
     .DESCRIPTION
         Returns a hashtable with all directory-specific values needed by setup scripts,
         scenario scripts, and LDAP helper functions. This abstraction allows the same
-        test scenarios to run against Samba AD or OpenLDAP by varying only the
-        directory-specific details.
+        test scenarios to run against Samba AD, OpenLDAP or 389 Directory Server by varying only
+        the directory-specific details. Every config carries a DirectoryType key naming the family
+        it describes (the same value as the parameter), so a caller holding only the config can
+        branch on it; Test-IsRfcDirectory is the usual question asked of it.
 
         Every returned config carries two identities: BindDN/BindPassword is the directory
         administrator (used to populate data and assert against the directory directly, e.g.
@@ -319,15 +321,16 @@ function Get-DirectoryConfig {
         branching on directory type.
 
     .PARAMETER DirectoryType
-        Which directory type to configure for (SambaAD or OpenLDAP)
+        Which directory type to configure for (SambaAD, OpenLDAP or DirectoryServer389)
 
     .PARAMETER Instance
-        Which instance to use. For SambaAD: Primary, Source, Target.
-        For OpenLDAP: Primary (the only instance, but with two suffixes).
+        Which instance to use: Primary, Source or Target. Samba AD runs one container per
+        instance; OpenLDAP and 389 Directory Server run one container hosting two suffixes,
+        with Source and Target naming the Yellowstone and Glitterband suffixes of it.
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("SambaAD", "OpenLDAP")]
+        [ValidateSet("SambaAD", "OpenLDAP", "DirectoryServer389")]
         [string]$DirectoryType,
 
         [Parameter(Mandatory=$false)]
@@ -450,11 +453,6 @@ function Get-DirectoryConfig {
                 }
             }
 
-            if (-not $instanceConfigs.ContainsKey($Instance)) {
-                throw "Unknown SambaAD instance: $Instance. Valid values: Primary, Source, Target"
-            }
-
-            return $instanceConfigs[$Instance]
         }
         "OpenLDAP" {
             $instanceConfigs = @{
@@ -573,11 +571,178 @@ function Get-DirectoryConfig {
                 }
             }
 
-            if (-not $instanceConfigs.ContainsKey($Instance)) {
-                throw "Unknown OpenLDAP instance: $Instance. Valid values: Primary, Source, Target"
+        }
+        "DirectoryServer389" {
+            # One container (dirsrv-primary) hosting the same two suffixes as the OpenLDAP lab, with
+            # the same tree, service accounts and schema extensions (test/integration/docker/dirsrv/),
+            # so the OpenLDAP populate scripts serve both. Key for key the same shape as the OpenLDAP
+            # instances above; only the container, the ports, the administrator identity and the
+            # compose profile differ. The administrator is cn=Directory Manager for every suffix
+            # (389 has one, server-wide), so BindDN and SecondBindDN are the same value.
+            #
+            # The Connected System connects over LDAPS (port 3636, UseSSL): 389 accepts the RFC 3062
+            # Password Modify operation only over a secure connection, and JIM validates the
+            # directory's certificate for real, so the runner's Step 4a adds the image's lab CA
+            # (/data/tls/ca/jim-dirsrv-lab-ca.crt in the container; the certificate names
+            # dirsrv-primary) to JIM's certificate store before any scenario connects
+            # (Add-DirsrvCertificateToJimStore below). LdapSearchPort stays 3389: the harness's
+            # own docker exec ldapsearch checks run inside the container over plain LDAP.
+            $instanceConfigs = @{
+                Primary = @{
+                    ContainerName    = "dirsrv-primary"
+                    Host             = "dirsrv-primary"
+                    Port             = 3636
+                    UseSSL           = $true
+                    BindDN           = "cn=Directory Manager"
+                    BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, never the Directory Manager: the
+                    # ACIs in test/integration/docker/dirsrv/aci/ grant its cn=jim group exactly
+                    # what the LDAP Connector needs. The Directory Manager keeps populating data
+                    # and asserting against the directory directly.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    # Member of both suffixes' cn=jim groups, for a Connected System scoped across
+                    # both partitions (Scenario 9); see the OpenLDAP Primary comment above.
+                    MultiPartitionJimBindDN       = "cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim-Partitions@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 3389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("dirsrv")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone Directory Server"
+                    # Second suffix for multi-partition testing
+                    SecondSuffix     = "dc=glitterband,dc=local"
+                    SecondBindDN     = "cn=Directory Manager"
+                    SecondJimBindDN  = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
+                }
+                # Source and Target use the same container but different suffixes, exactly as the
+                # OpenLDAP instances do; the Connected System names match OpenLDAP's so scenario
+                # assertions on those names keep working.
+                Source = @{
+                    ContainerName    = "dirsrv-primary"
+                    Host             = "dirsrv-primary"
+                    Port             = 3636
+                    UseSSL           = $true
+                    BindDN           = "cn=Directory Manager"
+                    BindPassword     = "Test@123!"
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 3389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("dirsrv")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone APAC"
+                }
+                Target = @{
+                    ContainerName    = "dirsrv-primary"
+                    Host             = "dirsrv-primary"
+                    Port             = 3636
+                    UseSSL           = $true
+                    BindDN           = "cn=Directory Manager"
+                    BindPassword     = "Test@123!"
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=glitterband,dc=local"
+                    UserContainer    = "ou=People,dc=glitterband,dc=local"
+                    GroupContainer   = "ou=Groups,dc=glitterband,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=glitterband,dc=local'
+                    Domain           = "glitterband.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 3389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("dirsrv")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Glitterband EMEA"
+                }
             }
+        }
+    }
 
-            return $instanceConfigs[$Instance]
+    if (-not $instanceConfigs.ContainsKey($Instance)) {
+        throw "Unknown $DirectoryType instance: $Instance. Valid values: Primary, Source, Target"
+    }
+
+    $config = $instanceConfigs[$Instance]
+    # Every config names the directory family it describes, so a caller holding only the
+    # config (Test-IsRfcDirectory, a scenario's directory-specific branch) never needs the
+    # parameter passed alongside it.
+    $config.DirectoryType = $DirectoryType
+    return $config
+}
+
+function Test-IsRfcDirectory {
+    <#
+    .SYNOPSIS
+        Whether a directory config describes an RFC 4512 directory (OpenLDAP, 389 Directory Server)
+        rather than an Active Directory-family one (Samba AD).
+
+    .DESCRIPTION
+        The question scenarios actually ask when they branch on directory type: RFC directories share
+        entryUUID identity, inetOrgPerson/groupOfNames classes, a flat ou=People and the two-suffix
+        container model, while Samba AD has objectGUID, userAccountControl and one domain per
+        container. Branching on this rather than on the type name keeps a scenario correct when a
+        further RFC directory is added. Throws on a config with an unknown or missing DirectoryType,
+        so a hand-built config that forgot the key fails loudly instead of being treated as AD.
+
+    .PARAMETER DirectoryConfig
+        A config returned by Get-DirectoryConfig (or shaped like one, with a DirectoryType key).
+
+    .EXAMPLE
+        if (Test-IsRfcDirectory $DirectoryConfig) { ... entryUUID path ... } else { ... objectGUID path ... }
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [hashtable]$DirectoryConfig
+    )
+
+    $directoryType = if ($DirectoryConfig.ContainsKey('DirectoryType')) { $DirectoryConfig['DirectoryType'] } else { $null }
+    switch ($directoryType) {
+        "OpenLDAP"           { return $true }
+        "DirectoryServer389" { return $true }
+        "SambaAD"            { return $false }
+        default {
+            throw "Test-IsRfcDirectory: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP or DirectoryServer389). Build configs with Get-DirectoryConfig."
         }
     }
 }
@@ -714,6 +879,172 @@ function Add-SambaCertificateToJimStore {
     finally {
         Disconnect-JIM -ErrorAction SilentlyContinue
         Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Add-DirsrvCertificateToJimStore {
+    <#
+    .SYNOPSIS
+        Trust the 389 Directory Server lab CA in JIM's certificate store.
+
+    .DESCRIPTION
+        The 389 Directory Server Connected Systems connect over LDAPS (Get-DirectoryConfig
+        -DirectoryType DirectoryServer389 sets Port 3636 and UseSSL), because 389 accepts the RFC 3062
+        Password Modify operation only over a secure connection. JIM validates the directory's
+        certificate against the operating system's trust anchors plus its own certificate store, so
+        the lab CA that signed the image's server certificate (create_lab_tls in
+        test/integration/docker/dirsrv/build/configure.sh) has to be in that store before the first
+        scenario connects, or every connection fails with a validation error that reads exactly like
+        "server unavailable".
+
+        The same shape as Add-SambaCertificateToJimStore: copy the CA off the container, remove any
+        certificate of the same name left by a previous run, then upload the fresh bytes. The lab CA
+        is baked into the image and only changes on a rebuild, so re-uploading costs nothing and never
+        leaves a CA for a key the image no longer holds. No SAN check is needed here: the build fails
+        unless the server certificate names dirsrv-primary (run_checks in configure.sh).
+
+    .PARAMETER ContainerName
+        The Docker container name of the 389 Directory Server instance to trust (dirsrv-primary).
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .EXAMPLE
+        Add-DirsrvCertificateToJimStore -ContainerName "dirsrv-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey
+    )
+
+    Write-Host "  Trusting the 389 Directory Server lab CA from ${ContainerName} in the JIM certificate store..." -ForegroundColor Gray
+
+    # Guard: a clear message here beats a confusing docker cp failure a few lines down.
+    $running = docker ps --filter "name=^/${ContainerName}$" --format '{{.Names}}' 2>$null
+    if (-not $running) {
+        throw "Add-DirsrvCertificateToJimStore: container '$ContainerName' is not running. Cannot trust its CA certificate."
+    }
+
+    # Copy the lab CA off the container. configure.sh leaves it at this path for exactly this purpose;
+    # the CA's private key was discarded at build time, so the file is safe to hand around.
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "jim-dirsrv-ca"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    $localCaPath = Join-Path $tempDir "$ContainerName-lab-ca.crt"
+    if (Test-Path $localCaPath) { Remove-Item $localCaPath -Force }
+
+    docker cp "${ContainerName}:/data/tls/ca/jim-dirsrv-lab-ca.crt" $localCaPath 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $localCaPath)) {
+        throw "Add-DirsrvCertificateToJimStore: 'docker cp' failed to copy the lab CA from '$ContainerName'. Is the container built from the current image (pwsh ./test/integration/docker/dirsrv/Build-DirsrvImage.ps1)?"
+    }
+
+    # Import the JIM PowerShell module and connect. Self-contained per call, as
+    # Add-SambaCertificateToJimStore is, so this function has no dependency on caller connection state.
+    $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
+    if (-not (Test-Path $modulePath)) {
+        throw "Add-DirsrvCertificateToJimStore: JIM PowerShell module not found at: $modulePath"
+    }
+
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Import-Module $modulePath -Force -ErrorAction Stop
+    try {
+        Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+        $certificateName = "$ContainerName lab CA"
+        $existingCertificates = @(Get-JIMCertificate -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $certificateName }
+        foreach ($certificate in $existingCertificates) {
+            # An image rebuild mints a new lab CA (create_lab_tls discards the key), so a certificate
+            # left from a previous run may be for a CA the image no longer uses.
+            Remove-JIMCertificate -Id $certificate.id -Force | Out-Null
+            Write-Host "    Removed stale trusted certificate from a previous run" -ForegroundColor Gray
+        }
+
+        $certificateBytes = [System.IO.File]::ReadAllBytes($localCaPath)
+        $trusted = Add-JIMCertificate `
+            -Name $certificateName `
+            -CertificateData $certificateBytes `
+            -Notes "389 Directory Server lab CA for $ContainerName, trusted automatically by the integration test runner." `
+            -PassThru
+
+        if (-not $trusted) {
+            throw "Add-DirsrvCertificateToJimStore: Add-JIMCertificate returned nothing for '$certificateName'; upload failed."
+        }
+
+        Write-Host "  OK Trusted the 389 Directory Server lab CA (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
+    }
+    finally {
+        Disconnect-JIM -ErrorAction SilentlyContinue
+        Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Add-DirectoryCertificateToJimStore {
+    <#
+    .SYNOPSIS
+        Trust a directory lab's CA in JIM's certificate store, whichever directory the config describes.
+
+    .DESCRIPTION
+        The function a scenario calls when it must re-trust its directory after a factory reset
+        (Reset-JIMSystem truncates Trusted Certificates, and the runner only trusts the directory's CA
+        once, in Step 4a). A scenario never has to know which directory it is on: this dispatches on
+        DirectoryConfig.DirectoryType to Add-SambaCertificateToJimStore or
+        Add-DirsrvCertificateToJimStore, each with the config's ContainerName, and does nothing for
+        OpenLDAP, whose lab connects over plain LDAP and has no certificate to trust. Scenario 10 on
+        the 389 lab failed exactly because it called the Samba function against dirsrv-primary.
+
+        Callers still guard on DirectoryConfig.UseSSL, so a directory that connects unencrypted never
+        reaches this function; the OpenLDAP branch is belt and braces for a caller that does not.
+
+    .PARAMETER DirectoryConfig
+        A directory config from Get-DirectoryConfig. DirectoryType chooses the function to call and
+        ContainerName names the container whose CA is trusted.
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .EXAMPLE
+        if ($DirectoryConfig.UseSSL) {
+            Add-DirectoryCertificateToJimStore -DirectoryConfig $DirectoryConfig -JIMUrl $JIMUrl -ApiKey $ApiKey
+        }
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey
+    )
+
+    $directoryType = if ($DirectoryConfig.ContainsKey('DirectoryType')) { [string]$DirectoryConfig.DirectoryType } else { '' }
+
+    switch ($directoryType) {
+        "SambaAD" {
+            Add-SambaCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
+        }
+        "DirectoryServer389" {
+            Add-DirsrvCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
+        }
+        "OpenLDAP" {
+            Write-Host "  The OpenLDAP lab connects over plain LDAP; no certificate to trust." -ForegroundColor Gray
+            return
+        }
+        default {
+            throw "Add-DirectoryCertificateToJimStore: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP or DirectoryServer389). Build configs with Get-DirectoryConfig."
+        }
     }
 }
 

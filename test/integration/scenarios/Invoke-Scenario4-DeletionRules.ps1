@@ -227,7 +227,7 @@ $ErrorActionPreference = "Stop"
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
 }
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 
 Write-TestSection "Scenario 4: MVO Deletion Rules - Comprehensive Coverage"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -990,9 +990,9 @@ try {
     )
     $deletedCount = 0
     foreach ($user in $testUsers) {
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
@@ -1020,7 +1020,7 @@ try {
     Write-Host "JIM configured for Scenario 4" -ForegroundColor Green
 
     # Create department OUs needed for test users (Samba AD only — OpenLDAP uses flat OU)
-    if (-not $isOpenLDAP) {
+    if (-not $isRfcDirectory) {
         Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
         $testDepartments = @("Information Technology", "Operations")
         foreach ($dept in $testDepartments) {

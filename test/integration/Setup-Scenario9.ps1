@@ -67,8 +67,8 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
 }
 
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
-$systemName = if ($isOpenLDAP) { "Partition Test OpenLDAP" } else { "Partition Test AD" }
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
+$systemName = if ($isRfcDirectory) { "Partition Test OpenLDAP" } else { "Partition Test AD" }
 
 Write-TestSection "Scenario 9 Setup: Partition-Scoped Imports ($systemName)"
 
@@ -199,7 +199,7 @@ try {
         Write-Host "  OK Selected '$userObjectClassName' object type" -ForegroundColor Green
 
         # Select key attributes — varies by directory type
-        $requiredAttributes = if ($isOpenLDAP) {
+        $requiredAttributes = if ($isRfcDirectory) {
             @("uid", "givenName", "sn", "displayName", "mail", "departmentNumber", "employeeNumber", "distinguishedName", "cn")
         } else {
             @("sAMAccountName", "givenName", "sn", "displayName", "mail", "department", "employeeID", "distinguishedName", "userAccountControl")
@@ -261,7 +261,7 @@ try {
 
     # For OpenLDAP: also select the second partition (Glitterband) — essential for multi-partition testing
     $secondPartition = $null
-    if ($isOpenLDAP -and $DirectoryConfig.SecondSuffix) {
+    if ($isRfcDirectory -and $DirectoryConfig.SecondSuffix) {
         $secondSuffix = $DirectoryConfig.SecondSuffix
         $secondPartition = $partitions | Where-Object {
             $_.name -eq $secondSuffix -or $_.externalId -eq $secondSuffix
@@ -290,7 +290,7 @@ try {
         return $null
     }
 
-    if ($isOpenLDAP) {
+    if ($isRfcDirectory) {
         # For OpenLDAP: select People container in each partition
         $userContainerDN = $DirectoryConfig.UserContainer
         $targetContainerName = if ($userContainerDN -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "People" }
@@ -360,7 +360,7 @@ catch {
 Write-TestStep "Step 8" "Creating sync rule"
 
 try {
-    $syncRuleName = if ($isOpenLDAP) { "Partition Test - OpenLDAP Import Users" } else { "Partition Test - AD Import Users" }
+    $syncRuleName = if ($isRfcDirectory) { "Partition Test - OpenLDAP Import Users" } else { "Partition Test - AD Import Users" }
     $existingRules = @(Get-JIMSyncRule)
     $importRule = $existingRules | Where-Object { $_.name -eq $syncRuleName }
 
@@ -383,7 +383,7 @@ try {
 
         # Add attribute mappings — varies by directory type
         # With #435, MVA→SVA import is allowed (first-value selection with RPEI warning)
-        $mappings = if ($isOpenLDAP) {
+        $mappings = if ($isRfcDirectory) {
             @(
                 @{ CSAttr = "uid"; MVAttr = "Account Name" },
                 @{ CSAttr = "givenName"; MVAttr = "First Name" },
@@ -480,7 +480,7 @@ try {
     }
 
     # 4. For OpenLDAP: also create a scoped import for the second partition
-    if ($isOpenLDAP -and $script:SecondPartitionId) {
+    if ($isRfcDirectory -and $script:SecondPartitionId) {
         $scopedImport2Profile = $existingProfiles | Where-Object { $_.name -eq "Full Import (Scoped - Second)" }
         if (-not $scopedImport2Profile) {
             $scopedImport2Profile = New-JIMRunProfile `
@@ -511,6 +511,6 @@ Write-Host "  Run Profiles:" -ForegroundColor Cyan
 Write-Host "    - Full Import (Scoped)   - targets primary partition $($script:DomainPartitionId)" -ForegroundColor Cyan
 Write-Host "    - Full Import (Unscoped) - all selected partitions" -ForegroundColor Cyan
 Write-Host "    - Full Synchronisation   - partition-agnostic" -ForegroundColor Cyan
-if ($isOpenLDAP -and $script:SecondPartitionId) {
+if ($isRfcDirectory -and $script:SecondPartitionId) {
     Write-Host "    - Full Import (Scoped - Second) - targets second partition $($script:SecondPartitionId)" -ForegroundColor Cyan
 }

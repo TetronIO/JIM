@@ -97,12 +97,12 @@ if (-not $DirectoryConfig) {
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
-$systemName = if ($isOpenLDAP) { "Partition Test OpenLDAP" } else { "Partition Test AD" }
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
+$systemName = if ($isRfcDirectory) { "Partition Test OpenLDAP" } else { "Partition Test AD" }
 
 Write-TestSection "Scenario 9: Partition-Scoped Imports ($systemName)"
 Write-Host "Step:          $Step" -ForegroundColor Gray
-Write-Host "Directory:     $(if ($isOpenLDAP) { 'OpenLDAP' } else { 'Samba AD' })" -ForegroundColor Gray
+Write-Host "Directory:     $($DirectoryConfig.DirectoryType)" -ForegroundColor Gray
 Write-Host "Template:      $Template" -ForegroundColor Gray
 Write-Host ""
 
@@ -127,7 +127,7 @@ $expectedYellowstoneUsers = $null
 $expectedGlitterbandUsers = $null
 $expectedTotalUsers = $null
 
-if ($isOpenLDAP) {
+if ($isRfcDirectory) {
     $scale = Get-TemplateScale -Template $Template
     $expectedYellowstoneUsers = [Math]::Ceiling($scale.Users / 2)
     $expectedGlitterbandUsers = [Math]::Floor($scale.Users / 2)
@@ -144,7 +144,7 @@ try {
         throw "API key required for authentication"
     }
 
-    if ($isOpenLDAP) {
+    if ($isRfcDirectory) {
         # OpenLDAP: wait for container to be healthy (users already populated by runner)
         Write-Host "Waiting for OpenLDAP to be healthy..." -ForegroundColor Gray
         $maxWaitSeconds = 120
@@ -247,7 +247,7 @@ try {
     $scopedImportProfile = $profiles | Where-Object { $_.name -eq "Full Import (Scoped)" }
     $unscopedImportProfile = $profiles | Where-Object { $_.name -eq "Full Import (Unscoped)" }
     $syncProfile = $profiles | Where-Object { $_.name -eq "Full Synchronisation" }
-    $scopedImport2Profile = if ($isOpenLDAP) {
+    $scopedImport2Profile = if ($isRfcDirectory) {
         $profiles | Where-Object { $_.name -eq "Full Import (Scoped - Second)" }
     } else { $null }
 
@@ -255,7 +255,7 @@ try {
         throw "Required run profiles not found. Ensure Setup-Scenario9.ps1 completed successfully."
     }
 
-    if ($isOpenLDAP -and -not $scopedImport2Profile) {
+    if ($isRfcDirectory -and -not $scopedImport2Profile) {
         throw "OpenLDAP second scoped import profile not found. Ensure Setup-Scenario9.ps1 completed successfully."
     }
 
@@ -279,7 +279,7 @@ try {
         Write-Host "  CSO updates: $($stats.totalCsoUpdates)" -ForegroundColor Gray
         $scopedPrimaryCsoAdds = $stats.totalCsoAdds
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # OpenLDAP: scoped import should only get Yellowstone users
             if ($stats.totalCsoAdds -ge $expectedYellowstoneUsers) {
                 Write-Host "  OK Scoped import created $($stats.totalCsoAdds) CSOs (expected >= $expectedYellowstoneUsers from Yellowstone)" -ForegroundColor Green
@@ -303,7 +303,7 @@ try {
             }
         }
 
-        if (-not $isOpenLDAP) {
+        if (-not $isRfcDirectory) {
             # Samba AD: run sync immediately after single scoped import (only one partition)
             Write-Host "Running Full Synchronisation after scoped import..." -ForegroundColor Gray
             $syncResult = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
@@ -323,7 +323,7 @@ try {
     }
 
     # Test 1b: Scoped Import - second partition (OpenLDAP only)
-    if ($isOpenLDAP -and ($Step -eq "ScopedImport" -or $Step -eq "All")) {
+    if ($isRfcDirectory -and ($Step -eq "ScopedImport" -or $Step -eq "All")) {
         Write-TestSection "Test 1b: Scoped Import (second partition — Glitterband)"
 
         Write-Host "Running Full Import (Scoped - Second) - second partition only..." -ForegroundColor Gray
@@ -379,7 +379,7 @@ try {
         Write-Host "  CSO adds: $($stats.totalCsoAdds)" -ForegroundColor Gray
         Write-Host "  CSO updates: $($stats.totalCsoUpdates)" -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # OpenLDAP: after running both scoped imports, CSOs already exist for all users.
             # The unscoped import should report 0 new adds (data unchanged).
             # This proves the unscoped path covers both partitions — if it didn't cover
@@ -398,7 +398,7 @@ try {
     if ($Step -eq "Comparison" -or $Step -eq "All") {
         Write-TestSection "Test 3: Verification (metaverse consistency and partition isolation)"
 
-        if (-not $isOpenLDAP) {
+        if (-not $isRfcDirectory) {
             # Samba AD: run a final sync to verify consistency after unscoped import
             Write-Host "Running Full Synchronisation after unscoped import..." -ForegroundColor Gray
             $syncResult = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $syncProfile.id -Wait -PassThru
@@ -460,7 +460,7 @@ catch {
     $testResults.Steps += @{ Name = "Setup"; Success = $false; Error = $_.ToString() }
 }
 finally {
-    if (-not $isOpenLDAP) {
+    if (-not $isRfcDirectory) {
         # Clean up test users from Samba AD (OpenLDAP uses pre-populated data — no cleanup needed)
         Write-Host ""
         Write-Host "Cleaning up test users..." -ForegroundColor Gray
@@ -479,7 +479,7 @@ $failedCount = @($testResults.Steps | Where-Object { $_.Success -eq $false }).Co
 $totalCount = @($testResults.Steps).Count
 
 Write-Host "Scenario: $($testResults.Scenario)" -ForegroundColor Cyan
-Write-Host "Directory: $(if ($isOpenLDAP) { 'OpenLDAP (multi-partition)' } else { 'Samba AD (single partition)' })" -ForegroundColor Cyan
+Write-Host "Directory: $($DirectoryConfig.DirectoryType) $(if ($isRfcDirectory) { '(multi-partition)' } else { '(single partition)' })" -ForegroundColor Cyan
 Write-Host ""
 
 foreach ($testStep in $testResults.Steps) {

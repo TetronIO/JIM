@@ -143,7 +143,9 @@ if (-not $ApiKey) {
     throw "API key required for authentication. Create one via the JIM portal: Admin > API Keys."
 }
 
-if ($DirectoryConfig.UserObjectClass -ne "inetOrgPerson") {
+# Keyed on the directory type, not the object class: 389 Directory Server also uses inetOrgPerson
+# and must still be refused here (the ppolicy overlay fixture is OpenLDAP-specific).
+if ($DirectoryConfig.DirectoryType -ne "OpenLDAP") {
     throw "Scenario 22 requires OpenLDAP. The fixture is a ppolicy overlay on the Yellowstone suffix, and " +
           "$($DirectoryConfig.ConnectedSystemName) has no equivalent for it to assert against. " +
           "Run-IntegrationTests.ps1 should have rejected this combination before this script was invoked."

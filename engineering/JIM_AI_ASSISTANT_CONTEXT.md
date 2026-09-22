@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.8
+> **Document Version**: 1.9
 >
-> **Last Updated**: 2026-08-17
+> **Last Updated**: 2026-09-22
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -187,7 +187,7 @@ Grace periods allow time before actual deletion (e.g., 30 days).
 | Connector | Import | Export | Notes |
 |-----------|--------|--------|-------|
 | **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation |
-| **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, accesslog delta import, partition-scoped imports |
+| **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, delta import from OpenLDAP's accesslog or a changelog (389 Directory Server's Retro Changelog, deletions and renames included), partition-scoped imports |
 | **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, auto-confirm export |
 | **SCIM 2.0 Client** | ✓ | ✓ | Any RFC 7643/7644 service provider; last-modified delta import, optional bulk operations, rate-limit aware |
 | **SQL** | ✓ | ✓ | Microsoft SQL Server and Oracle Database through managed ADO.NET drivers; one Connected System per database with an Object Types document naming tables/views, anchors, references and related tables; keyset-paged full import; delta import from a change-log table or a watermark column; transactional export with generated-key capture; auto-confirm export |
@@ -369,7 +369,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Recent Enhancements (v0.8.0)
 
-- ✅ **OpenLDAP Connector Support** (#72) - Full OpenLDAP/RFC 4512 LDAP directory support with parallel imports, accesslog delta import, and partition-scoped imports; also supports 389 Directory Server and other RFC 4512-compliant directories
+- ✅ **OpenLDAP Connector Support** (#72) - Full OpenLDAP/RFC 4512 LDAP directory support with parallel imports, accesslog delta import, and partition-scoped imports; also supports 389 Directory Server (changelog delta import via the Retro Changelog plug-in) and other RFC 4512-compliant directories
 - ✅ **Worker Redesign** (#394) - ISyncEngine (pure domain engine) and ISyncRepository (data access boundary) with full DI throughout Worker/Scheduler, ParallelBatchWriter, and COPY binary protocol for bulk persistence
 - ✅ **Bundled Keycloak IdP** (#197) - Zero-config SSO for development environments with pre-configured identity provider
 - ✅ **O(1) Import Matching** (#440) - Constant-time import matching eliminates linear scans for large connector spaces

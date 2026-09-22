@@ -286,14 +286,14 @@ function Set-DirectoryUserAttributes {
     }
     $ldif = $ldifLines -join "`n"
 
-    if ($isOpenLDAP) {
-        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
+    if ($isRfcDirectory) {
+        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
     }
     else {
         $result = docker exec $DirectoryConfig.ContainerName bash -c "cat > /tmp/scenario1-ieo-modify.ldif << 'LDIFEOF'
 $ldif
 LDIFEOF
-ldapmodify -x -H ldap://localhost -D '$($DirectoryConfig.BindDN)' -w '$($DirectoryConfig.BindPassword)' -f /tmp/scenario1-ieo-modify.ldif" 2>&1
+ldapmodify -x -H '$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)' -D '$($DirectoryConfig.BindDN)' -w '$($DirectoryConfig.BindPassword)' -f /tmp/scenario1-ieo-modify.ldif" 2>&1
     }
     if ($LASTEXITCODE -ne 0) {
         throw "$Label failed to modify directory user ${UserDn}: $result"
@@ -362,12 +362,12 @@ try {
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
     $testUsers = @("test.reconnect")
     $deletedCount = 0
-    $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+    $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
     foreach ($user in $testUsers) {
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # For OpenLDAP, delete by DN using ldapdelete
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = & docker exec $($DirectoryConfig.ContainerName) ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            $output = & docker exec $($DirectoryConfig.ContainerName) ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
@@ -859,10 +859,10 @@ try {
 
         # Validate rename
         $directoryName = $DirectoryConfig.ConnectedSystemName
-        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+        $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
         Write-Host "Validating rename in $directoryName..." -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # For OpenLDAP, the DN doesn't change when displayName changes (RDN is uid, not CN).
             # Verify the attributes (cn, displayName, givenName) were updated instead.
             $updatedUser = Get-LDAPUser -UserIdentifier $moverSamAccountName -DirectoryConfig $DirectoryConfig
@@ -941,10 +941,10 @@ try {
 
         # Validate move/department change
         $directoryName = $DirectoryConfig.ConnectedSystemName
-        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+        $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
         Write-Host "Validating OU move in $directoryName..." -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # For OpenLDAP, DN doesn't change with department (flat ou=People structure).
             # Verify the department attribute was updated instead.
             $deptAttr = $DirectoryConfig.DepartmentAttr  # "departmentNumber" for OpenLDAP
@@ -994,8 +994,8 @@ try {
     # This test is AD-specific: userAccountControl doesn't exist on OpenLDAP
     if ($Step -eq "Disable" -or $Step -eq "All") {
         $step2dStart = Get-Date
-        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
-        if ($isOpenLDAP) {
+        $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
+        if ($isRfcDirectory) {
             Write-TestSection "Test 2d: Disable (Skipped — not applicable to OpenLDAP)"
             Write-Host "  OpenLDAP has no userAccountControl equivalent. Skipping." -ForegroundColor Yellow
             $testResults.Steps += @{ Name = "Disable"; Success = $true }
@@ -1069,8 +1069,8 @@ try {
     # This test is AD-specific: userAccountControl doesn't exist on OpenLDAP
     if ($Step -eq "Enable" -or $Step -eq "All") {
         $step2eStart = Get-Date
-        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
-        if ($isOpenLDAP) {
+        $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
+        if ($isRfcDirectory) {
             Write-TestSection "Test 2e: Enable (Skipped — not applicable to OpenLDAP)"
             Write-Host "  OpenLDAP has no userAccountControl equivalent. Skipping." -ForegroundColor Yellow
             $testResults.Steps += @{ Name = "Enable"; Success = $true }
@@ -1252,7 +1252,7 @@ try {
             $leaverDirectoryUser = Get-LDAPUser -UserIdentifier $userToRemove -DirectoryConfig $DirectoryConfig
             if (-not $leaverDirectoryUser) { throw "User '$userToRemove' was removed from $directoryName; HR disconnection during the grace period must not deprovision the directory account" }
 
-            $accountNameAttr = if ($isOpenLDAP) { "uid" } else { "sAMAccountName" }
+            $accountNameAttr = if ($isRfcDirectory) { "uid" } else { "sAMAccountName" }
             Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName $accountNameAttr -ExpectedValue $expectedAccountName -Label "Leaver"
             Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName "sn" -ExpectedValue $expectedLastName -Label "Leaver"
             Assert-DirectoryAttribute -DirectoryUser $leaverDirectoryUser -AttributeName "cn" -ExpectedValue $expectedDisplayName -Label "Leaver"
@@ -1412,7 +1412,7 @@ try {
             Write-Host "  OK Scheduled deletion cancelled - Metaverse Object no longer pending deletion" -ForegroundColor Green
 
             # Assert: the directory account remains correct (identity attributes intact).
-            $accountNameAttr = if ($isOpenLDAP) { "uid" } else { "sAMAccountName" }
+            $accountNameAttr = if ($isRfcDirectory) { "uid" } else { "sAMAccountName" }
             $reconnectDirectoryUser = Get-LDAPUser -UserIdentifier "test.reconnect" -DirectoryConfig $DirectoryConfig
             if (-not $reconnectDirectoryUser) { throw "Could not read test.reconnect back from the directory to verify its identity attributes" }
             Assert-DirectoryAttribute -DirectoryUser $reconnectDirectoryUser -AttributeName $accountNameAttr -ExpectedValue $reconnectUser.SamAccountName -Label "Reconnection"
