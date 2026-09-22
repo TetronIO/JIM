@@ -147,6 +147,34 @@ Whether JIM gives a newly provisioned account its first password, and what that 
 | `connectedSystemAttributeId` | B | Changes the source attribute. |
 | `expression` | B | Changes the computed value. |
 
+### Unique Value Generation (`generation`, `exclusions`)
+
+A generated mapping's base expression is an ordinary mapping source, so it is already covered by the rows above
+(`expression`, `order`, the attribute-reference keys). The rows below are the uniqueness token and its settings.
+**A generated value change affects only objects that have not yet been given a value**: a committed generated value
+is sticky and is never recomputed (FR 10, 29), so every key here is Class B, never A. The exclusion's
+`connectedSystemId` reference reuses the `connectedSystemId` key already classified B in the Synchronisation Rule
+table above rather than being listed again here; the two are the same node key at the same class.
+
+| Key | Class | Reason |
+|---|---|---|
+| `generation` | B | Presence marks the mapping as generated; the toggle changes whether JIM generates a value at all. |
+| `tokenKind` | B | Changes the shape of the token a future value carries. |
+| `suffixStyle` | B | Changes whether a future collision suffix is a number or a letter. |
+| `suffixStart` | B | Changes the first suffix a future value tries. |
+| `sequenceStart` | B | Moves the counter, changing the next number a future value draws. |
+| `sequenceIncrement` | B | Changes the gap between numbers future values draw. |
+| `fixedWidth` | B | Changes the padding, and so the shape, of future sequence values. |
+| `onWidthExceeded` | B | Changes whether a future overflowing number stops the object or is allowed to grow. |
+| `randomFormat` | B | Changes the shape of a future random token. |
+| `randomLength` | B | Changes the length of a future random token. |
+| `separator` | B | Changes how a future value joins its base and token. |
+| `attemptLimit` | B | Changes how many candidates JIM tries before failing a future generation. |
+| `neverReuse` | B | Changes whether a retired value can be reissued to a future object. |
+| `collisionRemediation` | B | Changes whether a future export rejection is revised automatically or left as an ordinary export error. |
+| `exclusions` | B | Changes which Connected Systems future values are checked and reserved against. |
+| `exclusion` | B | As above, for one excluded system. |
+
 ### Object Matching Rules (`objectMatchingRules`, `sources`)
 
 | Key | Class | Reason |

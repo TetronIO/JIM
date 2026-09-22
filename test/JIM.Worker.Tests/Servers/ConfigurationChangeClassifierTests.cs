@@ -100,6 +100,17 @@ public class ConfigurationChangeClassifierTests
         Assert.That(ClassifyChange(before, after), Is.EqualTo(ConfigurationChangeClass.NotClassified));
     }
 
+    [Test]
+    public void Classify_GeneratedMappingTokenKindChange_IsSyncAffecting()
+    {
+        // A token change alters what a future object receives; it never touches a value already assigned
+        // (plan decision 10), so this is Class B, never A.
+        var before = SyncRuleWithGeneratedMapping(GeneratedValueTokenKind.OnlyIfTaken);
+        var after = SyncRuleWithGeneratedMapping(GeneratedValueTokenKind.Sequence);
+
+        Assert.That(ClassifyChange(before, after), Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+    }
+
     #endregion
 
     #region Object types and settings
@@ -160,6 +171,30 @@ public class ConfigurationChangeClassifierTests
 
     #endregion
 
+    #region Unique Value Generation (#242)
+
+    [Test]
+    public void ClassifyKey_UniqueValueGenerationKeys_AreSyncAffecting()
+    {
+        string[] keys =
+        [
+            "generation", "tokenKind", "suffixStyle", "suffixStart", "sequenceStart", "sequenceIncrement",
+            "fixedWidth", "onWidthExceeded", "randomFormat", "randomLength", "separator", "attemptLimit",
+            "neverReuse", "collisionRemediation", "exclusions", "exclusion"
+        ];
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var key in keys)
+            {
+                Assert.That(ConfigurationChangeClassifier.ClassifyKey(ConfigurationSnapshotService.SyncRuleObjectType, key),
+                    Is.EqualTo(ConfigurationChangeClass.SyncAffecting), $"'{key}' must classify as sync-affecting");
+            }
+        }
+    }
+
+    #endregion
+
     #region Helpers
 
     private ConfigurationChangeClass ClassifyChange(SyncRule before, SyncRule after)
@@ -178,6 +213,18 @@ public class ConfigurationChangeClassifierTests
         ConnectedSystemObjectTypeId = 7,
         MetaverseObjectTypeId = 1
     };
+
+    private static SyncRule SyncRuleWithGeneratedMapping(GeneratedValueTokenKind tokenKind)
+    {
+        var rule = SyncRule("HR Inbound");
+        rule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Generation = new SyncRuleMappingGeneration { Id = 900, TokenKind = tokenKind }
+        });
+        return rule;
+    }
 
     #endregion
 }
