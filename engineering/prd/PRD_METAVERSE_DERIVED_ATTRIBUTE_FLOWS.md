@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Created:** 2026-09-19
 - **Author:** JayVDZ (PRD drafted via Claude Code)
-- **Issue:** to be created
+- **Issue:** [#1750](https://github.com/TetronIO/JIM/issues/1750)
 - **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (depends on this PRD), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler (the review-flag mechanism reused here)
 
 ## Problem Statement
