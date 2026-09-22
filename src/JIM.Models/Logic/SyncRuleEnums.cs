@@ -59,7 +59,12 @@ public enum SyncRuleMappingSourcesType
     NotSet = 0,
     AttributeMapping = 1,
     ExpressionMapping = 2,
-    AdvancedMapping = 3
+    AdvancedMapping = 3,
+    /// <summary>
+    /// Unique Value Generation (#242): the mapping is a base expression plus a uniqueness token, resolved
+    /// and made sticky by the unique value service rather than recomputed on every synchronisation.
+    /// </summary>
+    GeneratedMapping = 4
 }
 
 /// <summary>

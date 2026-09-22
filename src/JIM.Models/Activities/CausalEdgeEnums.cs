@@ -56,7 +56,15 @@ public enum CausalEdgeType
     /// An edge is also the only durable answer. The Pending Export row is deleted the moment the export
     /// succeeds, so a link derived from it after the fact could never be resolved.
     /// </remarks>
-    PendingExportQueueingCausedExportExecution = 3
+    PendingExportQueueingCausedExportExecution = 3,
+
+    /// <summary>
+    /// Unique Value Generation (#242): an export run's rejection of a generated value caused the next
+    /// synchronisation to revise the value on the Metaverse Object (import mode) and re-stage the export.
+    /// The two sit in different Activities, so the re-staged export cannot otherwise say why its value
+    /// changed from the one first exported.
+    /// </summary>
+    ExportRejectionCausedGeneratedValueRevision = 4
 }
 
 /// <summary>
@@ -138,5 +146,26 @@ public enum CausalReasonCode
     /// triggering system to attribute the decision to: the object may have reached zero joins long before
     /// this pass found it (a clear that predates the feature, or several disconnections over time).
     /// </summary>
-    NoConnectorRemainsStateConvergence = 8
+    NoConnectorRemainsStateConvergence = 8,
+
+    /// <summary>
+    /// On an <see cref="CausalEdgeType.ExportRejectionCausedGeneratedValueRevision"/> edge: the rejected
+    /// value was simply already in use, so Collision Remediation drew the next candidate and revised the
+    /// assignment while it stayed unanchored.
+    /// </summary>
+    GeneratedValueAlreadyInUse = 9,
+
+    /// <summary>
+    /// On an <see cref="CausalEdgeType.ExportRejectionCausedGeneratedValueRevision"/> edge: the rejected
+    /// value was anchored by another Connected System that had already accepted it, so the assignment
+    /// entered NeedsDecision instead of being revised, and the object needs an administrator's decision.
+    /// </summary>
+    GeneratedValueAnchoredElsewhere = 10,
+
+    /// <summary>
+    /// On an <see cref="CausalEdgeType.ExportRejectionCausedGeneratedValueRevision"/> edge: an
+    /// administrator had authorised the rename on a NeedsDecision assignment, so the next rejection
+    /// remediated it instead of stopping.
+    /// </summary>
+    GeneratedValueRenameAuthorised = 11
 }

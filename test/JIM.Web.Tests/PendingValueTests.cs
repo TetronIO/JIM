@@ -68,6 +68,21 @@ public class PendingValueTests : JimComponentTestContext
         Assert.That(cut.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo(PendingValue.UnknownStateTooltip));
     }
 
+    /// <summary>
+    /// Unique Value Generation (#242, release 4): a Parked export is waiting on an administrator's
+    /// decision about its generated value, not on a confirming import, so it needs its own tooltip
+    /// rather than falling into the "awaiting confirmation" wording other held-back statuses share.
+    /// </summary>
+    [Test]
+    public void PendingValue_ExportParked_SaysItIsWaitingForADecision()
+    {
+        var cut = Render<PendingValue>(p => p
+            .Add(c => c.Value, "oscar.harper18")
+            .Add(c => c.Status, PendingExportStatus.Parked));
+
+        Assert.That(cut.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo(PendingValue.ParkedTooltip));
+    }
+
     [Test]
     public void Tooltips_NameTheDomainConcept()
     {
@@ -76,6 +91,7 @@ public class PendingValueTests : JimComponentTestContext
             Assert.That(PendingValue.NotYetSentTooltip, Is.EqualTo("Staged for export, not yet sent"));
             Assert.That(PendingValue.AwaitingConfirmationTooltip, Is.EqualTo("Exported, awaiting confirmation by import"));
             Assert.That(PendingValue.FailedTooltip, Is.EqualTo("Export failed, value not written"));
+            Assert.That(PendingValue.ParkedTooltip, Is.EqualTo("Parked: waiting for an administrator's decision on its generated value"));
             Assert.That(PendingValue.UnknownStateTooltip, Is.EqualTo("Value from a Pending Export"));
         }
     }

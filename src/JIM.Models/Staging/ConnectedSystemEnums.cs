@@ -307,7 +307,15 @@ public enum ConnectedSystemExportErrorType
     /// would have the Connected System reject the change in its own terms; refusing it names the attributes
     /// an administrator has to flow, or the auxiliary class selection to withdraw.
     /// </summary>
-    ClassMembershipRequirementsNotMet
+    ClassMembershipRequirementsNotMet,
+
+    /// <summary>
+    /// The Connected System rejected a generated value because another object there already holds it
+    /// (Unique Value Generation, release 3/4). Connectors that can distinguish this from other rejections
+    /// classify it from their own server-specific result codes; where a connector cannot classify, the
+    /// rejection is reported as <see cref="General"/> instead.
+    /// </summary>
+    UniqueValueAlreadyInUse
 }
 
 /// <summary>
