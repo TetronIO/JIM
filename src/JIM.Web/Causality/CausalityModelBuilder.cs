@@ -586,9 +586,14 @@ public static class CausalityModelBuilder
                 // sits here rather than beside the import-side pair in the Identity lane.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope
+                // Unique Value Generation (#242): Collision Remediation is recorded on the export item, like
+                // Exported, not on the Metaverse Object's attributes.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated
                 => CausalityLane.Downstream,
 
-            // Metaverse-side events: what JIM did
+            // Metaverse-side events: what JIM did. Unique Value Generation's Assigned, Adopted and Retired
+            // (#242) land here via this default arm, like AttributeFlow: they happen on the Metaverse
+            // Object's attributes.
             _ => CausalityLane.Identity
         };
     }

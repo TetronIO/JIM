@@ -30,7 +30,8 @@ public class CausalEdgeOrdinalTests
         [CausalEdgeType.MetaverseObjectDeletionCausedDeprovision] = 0,
         [CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval] = 1,
         [CausalEdgeType.ExportCausedImportConfirmation] = 2,
-        [CausalEdgeType.PendingExportQueueingCausedExportExecution] = 3
+        [CausalEdgeType.PendingExportQueueingCausedExportExecution] = 3,
+        [CausalEdgeType.ExportRejectionCausedGeneratedValueRevision] = 4
     };
 
     /// <summary>
@@ -46,7 +47,10 @@ public class CausalEdgeOrdinalTests
         [CausalReasonCode.ExportCreateStaged] = 5,
         [CausalReasonCode.ExportUpdateStaged] = 6,
         [CausalReasonCode.ExportDeleteStaged] = 7,
-        [CausalReasonCode.NoConnectorRemainsStateConvergence] = 8
+        [CausalReasonCode.NoConnectorRemainsStateConvergence] = 8,
+        [CausalReasonCode.GeneratedValueAlreadyInUse] = 9,
+        [CausalReasonCode.GeneratedValueAnchoredElsewhere] = 10,
+        [CausalReasonCode.GeneratedValueRenameAuthorised] = 11
     };
 
     [Test]

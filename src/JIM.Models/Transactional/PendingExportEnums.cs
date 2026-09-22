@@ -88,7 +88,14 @@ public enum PendingExportStatus
     /// <summary>
     /// The Pending Export was successfully applied to the Connected System.
     /// </summary>
-    Exported = 4
+    Exported = 4,
+    /// <summary>
+    /// The Pending Export is held back because its generated value needs an administrator's decision:
+    /// the target rejected the value and another Connected System already holds it (Unique Value
+    /// Generation release 4). The Connected System's "Retry failed exports" skips a Parked export, and
+    /// it is not counted as a failure; it clears once the decision is made.
+    /// </summary>
+    Parked = 5
 }
 
 /// <summary>

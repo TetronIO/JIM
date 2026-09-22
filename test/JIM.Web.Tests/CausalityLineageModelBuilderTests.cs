@@ -726,6 +726,39 @@ public class CausalityLineageModelBuilderTests
         }
     }
 
+    /// <summary>
+    /// Unique Value Generation (#242): a re-staged export's queueing was caused by an earlier export run's
+    /// rejection of the generated value. The rejecting system is the sentence's own subject (see
+    /// CausalityCauseWordingTests), so the cause lands on that system's record column, exactly as a
+    /// provisioning decision does, and carries "Export run".
+    /// </summary>
+    [Test]
+    public void Build_GeneratedValueRevision_CauseLandsOnThePageRecordColumnAndCarriesExportRun()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = ExportItemId };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0);
+        var chain = CausalityTestData.Chain(ExportItemId, truncatedByDepth: false,
+            CausalityTestData.Cohort(
+                CausalEdgeType.ExportRejectionCausedGeneratedValueRevision,
+                reasonCode: CausalReasonCode.GeneratedValueAlreadyInUse,
+                connectedSystemId: 2, connectedSystemName: "Glitterband EMEA",
+                members: CausalityTestData.Member("Liam Allen", SyncItemId,
+                    CausalChainResolution.NoFurtherCauses)));
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.ExportContext(), chain: chain);
+
+        var lineage = CausalityLineageModelBuilder.Build(model, chain, ObjectChangeType.Exported);
+
+        Assert.That(lineage.Columns, Has.Count.EqualTo(1));
+        var record = Sole(lineage.Columns[0]);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lineage.Columns[0].Kind, Is.EqualTo(CausalityLineageColumnKind.Record));
+            Assert.That(record.Cards[0].Hop!.RunKind, Is.EqualTo("Export run"));
+            Assert.That(record.Cards[0].Hop!.ShowConnectedSystemChip, Is.False);
+        }
+    }
+
     [Test]
     public void Build_CauseRecordedOnTheItemBeingViewed_GetsNoSelfLink()
     {

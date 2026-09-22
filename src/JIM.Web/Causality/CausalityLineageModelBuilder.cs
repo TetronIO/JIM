@@ -151,6 +151,14 @@ public static class CausalityLineageModelBuilder
                         cohort.ConnectedSystemName ?? context.CsoConnectedSystemName,
                         isSourceSide: false);
 
+                // Unique Value Generation (#242): the rejection happened on the target Connected System an
+                // export tried to write to, so the cause lands on that record's column, the same side a
+                // provisioning decision above does.
+                case CausalEdgeType.ExportRejectionCausedGeneratedValueRevision:
+                    return GetRecordColumn(cohort.ConnectedSystemId ?? context.CsoConnectedSystemId,
+                        cohort.ConnectedSystemName ?? context.CsoConnectedSystemName,
+                        isSourceSide: false);
+
                 // A seam this builder does not know lands on the neutral trailing column rather than
                 // being dropped: nothing in the chain is ever silently omitted.
                 default:
@@ -284,6 +292,9 @@ public static class CausalityLineageModelBuilder
         {
             CausalEdgeType.ExportCausedImportConfirmation => "Export run",
             CausalEdgeType.PendingExportQueueingCausedExportExecution => "Synchronisation run",
+            // Unique Value Generation (#242): the cause is the export run whose rejection triggered the
+            // revision, exactly as ExportCausedImportConfirmation's cause is the export it confirms.
+            CausalEdgeType.ExportRejectionCausedGeneratedValueRevision => "Export run",
             _ => null
         };
     }

@@ -342,6 +342,13 @@ public static class Helpers
             // fix, which is a different message from an export the Connected System rejected (#492).
             [ActivityRunProfileExecutionItemErrorType.ClassMembershipRequirementsNotMet] = "Export Refused",
 
+            // Unique Value Generation (#242): generation and Collision Remediation failures, raised during
+            // synchronisation (generation) or export (Collision Remediation), but named for what happened
+            // rather than the phase, since neither "Synchronisation Failed" nor "Export Failed" is true here.
+            [ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted] = "No Free Value Found",
+            [ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded] = "Sequence Width Exceeded",
+            [ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved] = "Needs a Decision",
+
             // Generic.
             [ActivityRunProfileExecutionItemErrorType.UnhandledError] = "Operation Failed"
         };
@@ -614,6 +621,7 @@ public static class Helpers
             PendingExportStatus.ExportNotConfirmed => Color.Warning,
             PendingExportStatus.Failed => Color.Error,
             PendingExportStatus.Exported => Color.Success,
+            PendingExportStatus.Parked => Color.Warning,
             _ => Color.Default,
         };
     }
@@ -736,6 +744,7 @@ public static class Helpers
             SyncRuleMappingSourcesType.AttributeMapping => Color.Info,
             SyncRuleMappingSourcesType.ExpressionMapping => Color.Tertiary,
             SyncRuleMappingSourcesType.AdvancedMapping => Color.Warning,
+            SyncRuleMappingSourcesType.GeneratedMapping => Color.Primary,
             _ => Color.Default
         };
     }
