@@ -192,7 +192,7 @@ cd /workspaces/JIM
 # Run ALL scenarios sequentially (full regression)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small
 
-# Run a specific scenario directly
+# Run a specific scenario directly (the number, ScenarioN or descriptive name also resolve: -Scenario 1)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
 
 # Run with a specific template size (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups; or long-tail / OpenLDAP-only Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
