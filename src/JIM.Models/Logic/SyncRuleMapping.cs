@@ -79,6 +79,14 @@ public class SyncRuleMapping : IAuditable
     public List<SyncRuleMappingSource> Sources { get; } = new();
 
     /// <summary>
+    /// The discriminator that makes this a generated mapping (Unique Value Generation, #242): when set, JIM
+    /// generates the target attribute's value from <see cref="Sources"/>' base expression plus a uniqueness
+    /// token, rather than the mapping being a plain attribute or expression mapping. Null for every other
+    /// mapping. One-to-one; cascade delete removes it, and through it every value it generated, with the mapping.
+    /// </summary>
+    public SyncRuleMappingGeneration? Generation { get; set; }
+
+    /// <summary>
     /// For an import rule, this is where the imported attribute value ends up being assigned to in the Metaverse.
     /// </summary>
     public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
@@ -185,6 +193,11 @@ public class SyncRuleMapping : IAuditable
     /// </summary>
     public SyncRuleMappingSourcesType GetSourceType()
     {
+        // Checked before every other case, including an empty Sources list: a Sequence or Random token needs no
+        // base expression at all, so a generated mapping can legitimately have zero sources.
+        if (Generation != null)
+            return SyncRuleMappingSourcesType.GeneratedMapping;
+
         if (Sources.Count == 0)
             return SyncRuleMappingSourcesType.NotSet;
 

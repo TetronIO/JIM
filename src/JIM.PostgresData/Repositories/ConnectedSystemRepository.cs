@@ -7051,6 +7051,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectorSpaceClearJoinRecords"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
+        // 15c. Delete Sync Rule Mapping Generation Exclusions naming this system as excluded (Unique Value
+        // Generation, #242). This covers exclusions on OTHER Connected Systems' generated mappings that name
+        // this system; exclusions on this system's own generated mappings are already gone by step 7, cascading
+        // through the mapping's SyncRuleMappingGeneration row. The foreign key to ConnectedSystems would cascade
+        // this anyway, but the sequence removes it explicitly like everything else, ahead of the system row.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""SyncRuleMappingGenerationExclusions"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
         // 16. Finally, delete the Connected System itself
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystems"" WHERE ""Id"" = {0}",

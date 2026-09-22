@@ -93,6 +93,10 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleInitialPassword> SyncRuleInitialPasswords { get; set; } = null!;
     public virtual DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
+    public virtual DbSet<SyncRuleMappingGeneration> SyncRuleMappingGenerations { get; set; } = null!;
+    public virtual DbSet<SyncRuleMappingGenerationExclusion> SyncRuleMappingGenerationExclusions { get; set; } = null!;
+    public virtual DbSet<GeneratedValueSequence> GeneratedValueSequences { get; set; } = null!;
+    public virtual DbSet<GeneratedValueAssignment> GeneratedValueAssignments { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
     public virtual DbSet<DeleteSyncRuleWorkerTask> DeleteSyncRuleWorkerTasks { get; set; } = null!;
@@ -1251,5 +1255,186 @@ public class JimDbContext : DbContext
             .HasMany(ta => ta.WeightedStringValues)
             .WithOne()
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Unique Value Generation (#242, Phase 1).
+
+        // SyncRuleMappingGeneration is a 1:0..1 extension of SyncRuleMapping; its presence is the discriminator
+        // that makes a mapping a generated mapping (SyncRuleMapping.GetSourceType()). The unique index on the FK
+        // is what makes it genuinely one-to-one rather than one-to-many; cascade delete removes the settings row
+        // (and, through it, every value it generated) the moment the mapping goes, or the moment the mapping's
+        // source type is changed away from generated and the row is removed by the application.
+        modelBuilder.Entity<SyncRuleMappingGeneration>()
+            .HasOne(g => g.SyncRuleMapping)
+            .WithOne(m => m.Generation)
+            .HasForeignKey<SyncRuleMappingGeneration>(g => g.SyncRuleMappingId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleMappingGeneration>()
+            .HasIndex(g => g.SyncRuleMappingId)
+            .IsUnique()
+            .HasDatabaseName("IX_SyncRuleMappingGenerations_SyncRuleMappingId_Unique");
+
+        // Store-level defaults so a raw insert (a future migration backfill, a manual data fix) still gets JIM's
+        // opinionated settings rather than the CLR zero-values; mirrors the convention already used for
+        // SyncRuleMapping's own settings above.
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.TokenKind).HasDefaultValue(GeneratedValueTokenKind.OnlyIfTaken);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SuffixStyle).HasDefaultValue(GeneratedValueSuffixStyle.Number);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SuffixStart).HasDefaultValue(1);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SequenceStart).HasDefaultValue(1L);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.SequenceIncrement).HasDefaultValue(1);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.OnWidthExceeded).HasDefaultValue(GeneratedValueWidthOverflowBehaviour.StopAndReport);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.RandomFormat).HasDefaultValue(GeneratedValueRandomFormat.Guid);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.AttemptLimit).HasDefaultValue(1000);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.NeverReuse).HasDefaultValue(true);
+        modelBuilder.Entity<SyncRuleMappingGeneration>().Property(g => g.CollisionRemediation).HasDefaultValue(true);
+
+        // SyncRuleMappingGenerationExclusion: composite key on (generation, excluded system), so a system can be
+        // excluded at most once per flow (also enforced by SyncRuleMappingGenerationValidator). Both foreign keys
+        // cascade: the exclusion means nothing once either side is gone, and a Connected System hangs off nothing
+        // else that would block its own deletion here (ConnectedSystemRepository.DeleteConnectedSystemAsync
+        // still deletes this table's rows by a statement of its own, ahead of the system row, in the style of
+        // every other table that "hangs off a Connected System").
+        modelBuilder.Entity<SyncRuleMappingGenerationExclusion>()
+            .HasKey(e => new { e.SyncRuleMappingGenerationId, e.ConnectedSystemId });
+
+        modelBuilder.Entity<SyncRuleMappingGenerationExclusion>()
+            .HasOne(e => e.Generation)
+            .WithMany(g => g.Exclusions)
+            .HasForeignKey(e => e.SyncRuleMappingGenerationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleMappingGenerationExclusion>()
+            .HasOne(e => e.ConnectedSystem)
+            .WithMany()
+            .HasForeignKey(e => e.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // GeneratedValueSequence: exactly one of the two attribute FKs is populated (CK_GeneratedValueSequences_OneAttribute
+        // below), so each gets its own filtered unique index rather than one composite index across both nullable
+        // columns. Both FKs cascade: the counter belongs to the attribute and has no meaning once it is gone
+        // (plan decision 3: "deleted only with the attribute", never with a mapping or rule). LastMovedBySyncRuleMappingId
+        // is SetNull: it is advisory provenance ("which flow's start value last moved this counter"), and the
+        // counter must survive the mapping being deleted just as it survives every other configuration change.
+        modelBuilder.Entity<GeneratedValueSequence>()
+            .HasOne(s => s.MetaverseAttribute)
+            .WithMany()
+            .HasForeignKey(s => s.MetaverseAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueSequence>()
+            .HasOne(s => s.ConnectedSystemObjectTypeAttribute)
+            .WithMany()
+            .HasForeignKey(s => s.ConnectedSystemObjectTypeAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueSequence>()
+            .HasOne(s => s.LastMovedBySyncRuleMapping)
+            .WithMany()
+            .HasForeignKey(s => s.LastMovedBySyncRuleMappingId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<GeneratedValueSequence>()
+            .HasIndex(s => s.MetaverseAttributeId)
+            .IsUnique()
+            .HasFilter("\"MetaverseAttributeId\" IS NOT NULL")
+            .HasDatabaseName("IX_GeneratedValueSequences_MetaverseAttributeId_Unique");
+
+        modelBuilder.Entity<GeneratedValueSequence>()
+            .HasIndex(s => s.ConnectedSystemObjectTypeAttributeId)
+            .IsUnique()
+            .HasFilter("\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL")
+            .HasDatabaseName("IX_GeneratedValueSequences_ConnectedSystemObjectTypeAttributeId_Unique");
+
+        // Exactly one of the two attribute references must be populated: a counter with neither means nothing,
+        // and one with both would be ambiguous about which attribute it counts for.
+        modelBuilder.Entity<GeneratedValueSequence>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_GeneratedValueSequences_OneAttribute",
+                "(\"MetaverseAttributeId\" IS NOT NULL)::int + (\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL)::int = 1"));
+
+        // GeneratedValueAssignment: exactly one of the two (object, attribute) pairs must be populated, matching
+        // whether the owning flow is an import or export mapping. All four owning-side FKs cascade: the
+        // assignment is state, not history (plan decision 17), so it is removed the instant the object or the
+        // generation row that produced it is removed.
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasOne(a => a.MetaverseObject)
+            .WithMany()
+            .HasForeignKey(a => a.MetaverseObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasOne(a => a.MetaverseAttribute)
+            .WithMany()
+            .HasForeignKey(a => a.MetaverseAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasOne(a => a.ConnectedSystemObject)
+            .WithMany()
+            .HasForeignKey(a => a.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasOne(a => a.ConnectedSystemObjectTypeAttribute)
+            .WithMany()
+            .HasForeignKey(a => a.ConnectedSystemObjectTypeAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasOne(a => a.SyncRuleMappingGeneration)
+            .WithMany()
+            .HasForeignKey(a => a.SyncRuleMappingGenerationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // At most one live assignment per (object, attribute): the object either has JIM's current generated
+        // value for that attribute, or it does not.
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => new { a.MetaverseObjectId, a.MetaverseAttributeId })
+            .IsUnique()
+            .HasFilter("\"MetaverseObjectId\" IS NOT NULL")
+            .HasDatabaseName("IX_GeneratedValueAssignments_MvoId_AttributeId_Unique");
+
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => new { a.ConnectedSystemObjectId, a.ConnectedSystemObjectTypeAttributeId })
+            .IsUnique()
+            .HasFilter("\"ConnectedSystemObjectId\" IS NOT NULL")
+            .HasDatabaseName("IX_GeneratedValueAssignments_CsoId_AttributeId_Unique");
+
+        // Uniqueness across every live assignment for the attribute (plan decision 13): the losing side of a
+        // concurrent run's INSERT draws the next candidate instead. Case-insensitive because generated values are
+        // compared the way the directories JIM writes to compare them (FR 31); NormalisedValue is what carries
+        // the lower-cased form. Two filtered indexes, mirroring the filtered pair above, because exactly one
+        // attribute FK is ever populated per row.
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => new { a.MetaverseAttributeId, a.NormalisedValue })
+            .IsUnique()
+            .HasFilter("\"MetaverseAttributeId\" IS NOT NULL")
+            .HasDatabaseName("IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique");
+
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => new { a.ConnectedSystemObjectTypeAttributeId, a.NormalisedValue })
+            .IsUnique()
+            .HasFilter("\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL")
+            .HasDatabaseName("IX_GeneratedValueAssignments_CsAttributeId_NormalisedValue_Unique");
+
+        // What the worker's per-page resolution and the NeedsDecision list (release 4) ask for.
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => a.State)
+            .HasDatabaseName("IX_GeneratedValueAssignments_State");
+
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .HasIndex(a => a.SyncRuleMappingGenerationId)
+            .HasDatabaseName("IX_GeneratedValueAssignments_SyncRuleMappingGenerationId");
+
+        // Exactly one mode: the import pair (MetaverseObjectId, MetaverseAttributeId) or the export pair
+        // (ConnectedSystemObjectId, ConnectedSystemObjectTypeAttributeId), never a mix of the two and never
+        // neither.
+        modelBuilder.Entity<GeneratedValueAssignment>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_GeneratedValueAssignments_OneMode",
+                "(\"MetaverseObjectId\" IS NOT NULL AND \"MetaverseAttributeId\" IS NOT NULL AND " +
+                "\"ConnectedSystemObjectId\" IS NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NULL) OR " +
+                "(\"ConnectedSystemObjectId\" IS NOT NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL AND " +
+                "\"MetaverseObjectId\" IS NULL AND \"MetaverseAttributeId\" IS NULL)"));
     }
 }
