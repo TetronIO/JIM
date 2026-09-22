@@ -533,6 +533,12 @@ Apply the access-control files bound as the configuration administrator (`cn=adm
 
 Rule `{3}` is what lets JIM create organisational units when "Create Containers as Needed" is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
 
+A service account is also subject to the database's search limits, which the rootDN it replaces was not. OpenLDAP applies `olcSizeLimit` (default 500 entries) across a paged search as a whole, so an import of a container holding more than 500 objects stops at the limit with "The size limit was exceeded", whatever page size the Run Profile uses. Exempt the group from the size and time limits on each suffix; every other client keeps the limits you have set:
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-service-account-limits.ldif"
+```
+
 Delta import reads `cn=accesslog` one level deep. Grant that database's own access-control rule too, naming the group(s):
 
 ```ldif
@@ -589,6 +595,10 @@ If authentication fails with "invalid credentials":
 - Verify the username format matches the authentication type. For Simple bind, use a full DN (e.g. `CN=svc-jim,OU=Service Accounts,DC=corp,DC=local`) or UPN (e.g. `svc-jim@corp.local`). For NTLM, use `DOMAIN\username` format.
 - Check that the service account password is correct and has not expired.
 - Ensure the service account is not locked out or disabled.
+
+### Import fails with "The size limit was exceeded"
+
+The account JIM binds as is subject to the directory's search size limit, and the container being imported holds more objects than it allows. On OpenLDAP the limit is `olcSizeLimit` (default 500) and it is enforced across a paged search as a whole for every client except the rootDN, so moving JIM from the rootDN to a delegated service account brings the failure with it. Exempt the JIM group on each suffix with the limits file under [Service Account Permissions](#openldap); do not raise the database-wide limit for every client.
 
 ### Delta import not detecting changes
 

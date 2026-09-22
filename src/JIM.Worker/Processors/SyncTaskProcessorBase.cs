@@ -2727,39 +2727,13 @@ public abstract class SyncTaskProcessorBase
                 }
             }
 
-            // Batch-delete existing Pending Exports from DB before export evaluation.
-            // During cross-page resolution, PEs from earlier pages have been flushed to DB.
-            // Without this, each MVO's export evaluation hits GetPendingExportByConnectedSystemObjectIdAsync
-            // individually (N+1 problem, ~1.9s per group PE due to heavy Include chains).
-            // By deleting them in one batch query, the DB fallback finds nothing and evaluation
-            // creates fresh PEs with the fully-resolved reference attributes.
-            if (_pendingExportEvaluations.Count > 0 && _exportEvaluationCache != null)
-            {
-                // Refresh per-page cache for this batch's MVOs so CsoLookup has the target CSOs
-                var mvoIds = _pendingExportEvaluations.Select(e => e.Mvo.Id).ToHashSet();
-                await _syncServer.RefreshExportEvaluationCacheForPageAsync(
-                    _exportEvaluationCache, mvoIds);
-
-                var targetCsoIds = _exportEvaluationCache.CsoLookup
-                    .Where(kvp => mvoIds.Contains(kvp.Key.MvoId))
-                    .Select(kvp => kvp.Value.Id)
-                    .Distinct()
-                    .ToList();
-
-                if (targetCsoIds.Count > 0)
-                {
-                    // Use raw SQL delete by CSO IDs instead of loading PE entities into the change
-                    // tracker. After ClearChangeTracker(), loading PEs with Include chains would create
-                    // MetaverseAttribute instances that conflict with instances already tracked by the
-                    // cross-page CSO query, causing identity resolution failures.
-                    var deletedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
-                    if (deletedCount > 0)
-                    {
-                        Log.Information("ResolveCrossPageReferences: Batch-deleted {Count} existing Pending Exports " +
-                            "from earlier pages before re-evaluation with resolved references", deletedCount);
-                    }
-                }
-            }
+            // The target objects' existing Pending Exports are deliberately left in place for the
+            // re-evaluation below. The per-object staging path finds each one itself (a lean lookup
+            // since #986) and decides what it means: an unsent Create is rebuilt as a Create carrying
+            // the resolved references, an exported one has the changes appended, a pending Update is
+            // merged. This pass once batch-deleted them first, to dodge that lookup, which made every
+            // Pending Provisioning object look like one whose Create had already been sent: the
+            // re-evaluation then staged an Update for an object that did not exist yet (Scenario 8).
 
             resolvedCount += batch.Count;
 
