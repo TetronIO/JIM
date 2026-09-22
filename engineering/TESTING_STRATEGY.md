@@ -178,7 +178,7 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 
 **Characteristics**:
 - Real directory servers over real TLS, but no Docker Compose stack and not driven by the PowerShell integration runner: the fixtures connect directly from the .NET test host
-- Covers three OpenLDAP variants (a system-trusted CA, a CA that is only trusted via the JIM certificate store, and an expired certificate) plus a Samba AD Domain Controller
+- Covers three OpenLDAP variants (a system-trusted CA, a CA that is only trusted via the JIM certificate store, and an expired certificate), a Samba AD Domain Controller, and a 389 Directory Server pair presenting the same JIM-store-only and expired certificates
 - Exercises both directions: connections must be refused for untrusted issuers, name mismatches and expired certificates (with the reason reported), and must succeed once the CA is added to the JIM certificate store
 
 **Gating**: Every fixture carries `[Category("RequiresLdaps")]` and, in `[OneTimeSetUp]`, calls `Assert.Ignore` unless `JIM_TEST_LDAPS_HOST` is set. So a normal `dotnet test` / `jim-test` run skips them, and they run only once pointed at real servers.
@@ -195,13 +195,15 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 | `JIM_TEST_LDAPS_EXPIRED_HOST` / `_EXPIRED_PORT` | Server presenting an expired certificate |
 | `JIM_TEST_LDAPS_SYSTEM_TRUSTED_HOST` / `_SYSTEM_TRUSTED_PORT` | Server whose CA is already trusted by the OS, proving JIM's additions are additive rather than a replacement |
 
-**Running locally**: stand up the fixture servers with the standalone script (see `test/scripts/Start-LdapsCertificateTestServers.ps1`; the `-IncludeSambaAd` switch also provisions the Samba AD Domain Controller), which prints the environment variables above, then:
+The Samba AD and 389 Directory Server rows read the `JIM_TEST_LDAPS_SAMBA_*` and `JIM_TEST_LDAPS_389_*` variables the script prints, each test ignoring itself when its own are unset.
+
+**Running locally**: stand up the fixture servers with the standalone script (see `test/scripts/Start-LdapsCertificateTestServers.ps1`; the `-IncludeSambaAd` switch also provisions the Samba AD Domain Controller, and `-Include389` the 389 Directory Server pair), which prints the environment variables above, then:
 
 ```bash
 dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 ```
 
-**Running in CI**: the `ldaps-tests` job in `.github/workflows/ci.yml` runs `Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd` to stand the servers up, exports their connection details, then runs `dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"`. It runs on every PR, alongside `build-and-test` and `database-tests`, and asserts `LDAPTLS_REQCERT` is not set in its own environment first: that variable would silently disable the very validation this job exists to prove, turning every refusal case into a false pass.
+**Running in CI**: the `ldaps-tests` job in `.github/workflows/ci.yml` runs `Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd -Include389` to stand the servers up, exports their connection details, then runs `dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"`. It runs on every PR, alongside `build-and-test` and `database-tests`, and asserts `LDAPTLS_REQCERT` is not set in its own environment first: that variable would silently disable the very validation this job exists to prove, turning every refusal case into a false pass.
 
 **What LDAPS Certificate Validation Tests Are Good At**:
 - ✅ Proving certificate validation genuinely refuses untrusted issuers, name mismatches and expired certificates

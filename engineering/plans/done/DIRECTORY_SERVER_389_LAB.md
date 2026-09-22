@@ -1,10 +1,10 @@
 # A 389 Directory Server Lab, and a Changelog Delta Import That Applies Deletions
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1479](https://github.com/TetronIO/JIM/issues/1479)
 - **Related:** [#1725](https://github.com/TetronIO/JIM/issues/1725) (the change source abstraction and the changelog fixes this lab proves at runtime), [#1715](https://github.com/TetronIO/JIM/issues/1715) and [#1716](https://github.com/TetronIO/JIM/issues/1716) (the OpenLDAP and Samba AD delegated service account labs this one mirrors)
 - **Created:** 2026-09-22
-- **Note:** The PRD was waived by the product owner; #1479 and this document are the requirements source. The encrypted-connection rows for 389 Directory Server in the `RequiresLdaps` tier are a separate piece of work under #1479, so this plan stays `Doing` when its pull request merges and #1479 stays open until that sub-issue closes.
+- **Note:** The PRD was waived by the product owner; #1479 and this document are the requirements source. The lab and the changelog Delta Import fixes landed in [#1754](https://github.com/TetronIO/JIM/pull/1754); the encrypted-connection rows for 389 Directory Server in the `RequiresLdaps` tier followed as [#1744](https://github.com/TetronIO/JIM/issues/1744) (`DirectoryServer389LdapTests`, stood up by `Start-LdapsCertificateTestServers.ps1 -Include389` and run by the `ldaps-tests` CI job), which closes #1479. The remaining sub-issues, [#1745](https://github.com/TetronIO/JIM/issues/1745) (internal `ns*` object classes on the schema screen) and [#1746](https://github.com/TetronIO/JIM/issues/1746) (snapshot images), are improvements outside the support claim.
 
 ## Overview
 
