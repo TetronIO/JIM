@@ -294,8 +294,10 @@ function Get-DirectoryConfig {
     .DESCRIPTION
         Returns a hashtable with all directory-specific values needed by setup scripts,
         scenario scripts, and LDAP helper functions. This abstraction allows the same
-        test scenarios to run against Samba AD or OpenLDAP by varying only the
-        directory-specific details.
+        test scenarios to run against Samba AD, OpenLDAP or 389 Directory Server by varying only
+        the directory-specific details. Every config carries a DirectoryType key naming the family
+        it describes (the same value as the parameter), so a caller holding only the config can
+        branch on it; Test-IsRfcDirectory is the usual question asked of it.
 
         Every returned config carries two identities: BindDN/BindPassword is the directory
         administrator (used to populate data and assert against the directory directly, e.g.
@@ -319,15 +321,16 @@ function Get-DirectoryConfig {
         branching on directory type.
 
     .PARAMETER DirectoryType
-        Which directory type to configure for (SambaAD or OpenLDAP)
+        Which directory type to configure for (SambaAD, OpenLDAP or DirectoryServer389)
 
     .PARAMETER Instance
-        Which instance to use. For SambaAD: Primary, Source, Target.
-        For OpenLDAP: Primary (the only instance, but with two suffixes).
+        Which instance to use: Primary, Source or Target. Samba AD runs one container per
+        instance; OpenLDAP and 389 Directory Server run one container hosting two suffixes,
+        with Source and Target naming the Yellowstone and Glitterband suffixes of it.
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("SambaAD", "OpenLDAP")]
+        [ValidateSet("SambaAD", "OpenLDAP", "DirectoryServer389")]
         [string]$DirectoryType,
 
         [Parameter(Mandatory=$false)]
@@ -450,11 +453,6 @@ function Get-DirectoryConfig {
                 }
             }
 
-            if (-not $instanceConfigs.ContainsKey($Instance)) {
-                throw "Unknown SambaAD instance: $Instance. Valid values: Primary, Source, Target"
-            }
-
-            return $instanceConfigs[$Instance]
         }
         "OpenLDAP" {
             $instanceConfigs = @{
@@ -573,11 +571,176 @@ function Get-DirectoryConfig {
                 }
             }
 
-            if (-not $instanceConfigs.ContainsKey($Instance)) {
-                throw "Unknown OpenLDAP instance: $Instance. Valid values: Primary, Source, Target"
+        }
+        "DirectoryServer389" {
+            # One container (dirsrv-primary) hosting the same two suffixes as the OpenLDAP lab, with
+            # the same tree, service accounts and schema extensions (test/integration/docker/dirsrv/),
+            # so the OpenLDAP populate scripts serve both. Key for key the same shape as the OpenLDAP
+            # instances above; only the container, the ports, the administrator identity and the
+            # compose profile differ. The administrator is cn=Directory Manager for every suffix
+            # (389 has one, server-wide), so BindDN and SecondBindDN are the same value.
+            #
+            # Port 3389 is plain LDAP. 389 accepts the RFC 3062 Password Modify operation only over
+            # a secure connection, so a scenario that sets passwords must connect the Connected
+            # System over LDAPS (port 3636, UseSSL) and trust the image's lab CA
+            # (/data/tls/ca/jim-dirsrv-lab-ca.crt in the container; the certificate names
+            # dirsrv-primary). The lab's imports and exports otherwise work over 3389.
+            $instanceConfigs = @{
+                Primary = @{
+                    ContainerName    = "dirsrv-primary"
+                    Host             = "dirsrv-primary"
+                    Port             = 3389
+                    UseSSL           = $false
+                    BindDN           = "cn=Directory Manager"
+                    BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, never the Directory Manager: the
+                    # ACIs in test/integration/docker/dirsrv/aci/ grant its cn=jim group exactly
+                    # what the LDAP Connector needs. The Directory Manager keeps populating data
+                    # and asserting against the directory directly.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    # Member of both suffixes' cn=jim groups, for a Connected System scoped across
+                    # both partitions (Scenario 9); see the OpenLDAP Primary comment above.
+                    MultiPartitionJimBindDN       = "cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim-Partitions@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 3389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("dirsrv")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone Directory Server"
+                    # Second suffix for multi-partition testing
+                    SecondSuffix     = "dc=glitterband,dc=local"
+                    SecondBindDN     = "cn=Directory Manager"
+                    SecondJimBindDN  = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
+                }
+                # Source and Target use the same container but different suffixes, exactly as the
+                # OpenLDAP instances do; the Connected System names match OpenLDAP's so scenario
+                # assertions on those names keep working.
+                Source = @{
+                    ContainerName    = "dirsrv-primary"
+                    Host             = "dirsrv-primary"
+                    Port             = 3389
+                    UseSSL           = $false
+                    BindDN           = "cn=Directory Manager"
+                    BindPassword     = "Test@123!"
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=yellowstone,dc=local"
+                    UserContainer    = "ou=People,dc=yellowstone,dc=local"
+                    GroupContainer   = "ou=Groups,dc=yellowstone,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
+                    Domain           = "yellowstone.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 3389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("dirsrv")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Yellowstone APAC"
+                }
+                Target = @{
+                    ContainerName    = "dirsrv-primary"
+                    Host             = "dirsrv-primary"
+                    Port             = 3389
+                    UseSSL           = $false
+                    BindDN           = "cn=Directory Manager"
+                    BindPassword     = "Test@123!"
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    AuthType         = "Simple"
+                    BaseDN           = "dc=glitterband,dc=local"
+                    UserContainer    = "ou=People,dc=glitterband,dc=local"
+                    GroupContainer   = "ou=Groups,dc=glitterband,dc=local"
+                    UserObjectClass  = "inetOrgPerson"
+                    GroupObjectClass = "groupOfNames"
+                    UserRdnAttr      = "uid"
+                    UserNameAttr     = "uid"
+                    ExternalIdAttr   = "entryUUID"
+                    DepartmentAttr   = "departmentNumber"
+                    DeleteBehaviour  = "Delete"
+                    DisableAttribute = $null
+                    DnTemplate       = 'uid={uid},ou=People,dc=glitterband,dc=local'
+                    Domain           = "glitterband.local"
+                    ShortDomain      = $null
+                    LdapSearchPort   = 3389
+                    LdapSearchScheme = "ldap"
+                    ComposeProfiles  = @("dirsrv")
+                    PopulateScript   = "Populate-OpenLDAP.ps1"
+                    ConnectedSystemName = "Glitterband EMEA"
+                }
             }
+        }
+    }
 
-            return $instanceConfigs[$Instance]
+    if (-not $instanceConfigs.ContainsKey($Instance)) {
+        throw "Unknown $DirectoryType instance: $Instance. Valid values: Primary, Source, Target"
+    }
+
+    $config = $instanceConfigs[$Instance]
+    # Every config names the directory family it describes, so a caller holding only the
+    # config (Test-IsRfcDirectory, a scenario's directory-specific branch) never needs the
+    # parameter passed alongside it.
+    $config.DirectoryType = $DirectoryType
+    return $config
+}
+
+function Test-IsRfcDirectory {
+    <#
+    .SYNOPSIS
+        Whether a directory config describes an RFC 4512 directory (OpenLDAP, 389 Directory Server)
+        rather than an Active Directory-family one (Samba AD).
+
+    .DESCRIPTION
+        The question scenarios actually ask when they branch on directory type: RFC directories share
+        entryUUID identity, inetOrgPerson/groupOfNames classes, a flat ou=People and the two-suffix
+        container model, while Samba AD has objectGUID, userAccountControl and one domain per
+        container. Branching on this rather than on the type name keeps a scenario correct when a
+        further RFC directory is added. Throws on a config with an unknown or missing DirectoryType,
+        so a hand-built config that forgot the key fails loudly instead of being treated as AD.
+
+    .PARAMETER DirectoryConfig
+        A config returned by Get-DirectoryConfig (or shaped like one, with a DirectoryType key).
+
+    .EXAMPLE
+        if (Test-IsRfcDirectory $DirectoryConfig) { ... entryUUID path ... } else { ... objectGUID path ... }
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [hashtable]$DirectoryConfig
+    )
+
+    $directoryType = if ($DirectoryConfig.ContainsKey('DirectoryType')) { $DirectoryConfig['DirectoryType'] } else { $null }
+    switch ($directoryType) {
+        "OpenLDAP"           { return $true }
+        "DirectoryServer389" { return $true }
+        "SambaAD"            { return $false }
+        default {
+            throw "Test-IsRfcDirectory: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP or DirectoryServer389). Build configs with Get-DirectoryConfig."
         }
     }
 }

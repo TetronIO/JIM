@@ -1,0 +1,39 @@
+# Multi-partition JIM service account (389 Directory Server lab)
+#
+# Applied once by build/configure.sh, bound as cn=Directory Manager, after
+# 01-suffix-tree.ldif has been applied to BOTH suffixes. Not templated: it is
+# Yellowstone's account by home, and a member of both suffixes' groups by design.
+#
+# A Connected System that imports MORE THAN ONE partition from this server (a
+# single import scoped across both the Yellowstone and Glitterband suffixes;
+# Scenario 9 is the current example) needs one identity that can bind against
+# both, which a single-suffix service account cannot do: each suffix's cn=jim
+# group grants only its own suffix. This account is a member of every suffix's
+# cn=jim group. A single-partition Connected System keeps using its own
+# suffix's cn=svc-jim and is unaffected: isolation between suffixes still holds
+# for it. Same shape as the OpenLDAP lab's account of the same name.
+#
+# Password is "Svc-Jim-Partitions@123!" (lab-only; published in
+# test/integration/utils/Test-Helpers.ps1); the server hashes it on add. The
+# ns*Limit attributes lift the per-client search limits exactly as for svc-jim.
+dn: cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local
+changetype: add
+objectClass: top
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: svc-jim-partitions
+description: Delegated account for a JIM Connected System that imports more than one partition from this server; a member of every suffix's cn=jim group it manages. Not for interactive or administrative use.
+userPassword: Svc-Jim-Partitions@123!
+nsSizeLimit: -1
+nsLookThroughLimit: -1
+nsPagedSizeLimit: -1
+
+dn: cn=jim,ou=Services,dc=yellowstone,dc=local
+changetype: modify
+add: member
+member: cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local
+
+dn: cn=jim,ou=Services,dc=glitterband,dc=local
+changetype: modify
+add: member
+member: cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local

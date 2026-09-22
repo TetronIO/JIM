@@ -1,0 +1,66 @@
+# Base tree and delegated JIM service account for one suffix (389 Directory Server lab)
+#
+# Applied once per suffix by build/configure.sh, bound as cn=Directory Manager,
+# after `dsconf backend create --create-suffix` has created the suffix root
+# entry itself. Mirrors the OpenLDAP lab's bootstrap
+# (../../openldap/bootstrap/01-base-ous-yellowstone.ldif) so both directory
+# families present the same tree to the shared populate scripts and scenarios.
+#
+# Placeholders (substituted by configure.sh before this file is applied):
+#   __SUFFIX__ - the suffix DN, e.g. dc=yellowstone,dc=local
+dn: ou=People,__SUFFIX__
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Groups,__SUFFIX__
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: Groups
+
+dn: ou=Services,__SUFFIX__
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: Services
+
+# Delegated JIM service account. JIM's Connected Systems bind as this identity
+# instead of cn=Directory Manager, so the lab exercises the access-control set
+# a customer would actually grant. The password ("Svc-Jim@123!", lab-only and
+# published in test/integration/utils/Test-Helpers.ps1) is deliberately
+# different from the Directory Manager's, so an accidental administrator bind
+# by a Connected System does not pass unnoticed; the server hashes it on add.
+#
+# The three ns*Limit values are per-bind-entry operational attributes that lift
+# the server-wide defaults (nsslapd-sizelimit 2000, nsslapd-lookthroughlimit
+# 5000, nsslapd-pagedsizelimit 0) for this account only: a full import of a
+# large lab template must not be truncated by a limit meant for interactive
+# clients, and raising it globally would hide that from every other client.
+dn: cn=svc-jim,ou=Services,__SUFFIX__
+changetype: add
+objectClass: top
+objectClass: organizationalRole
+objectClass: simpleSecurityObject
+cn: svc-jim
+description: Delegated account JIM's Connected Systems bind as. Not for interactive or administrative use.
+userPassword: Svc-Jim@123!
+nsSizeLimit: -1
+nsLookThroughLimit: -1
+nsPagedSizeLimit: -1
+
+# Members of this group may act as JIM's Connected System service account for
+# THIS suffix: every ACI in ../aci/ grants to "groupdn" this DN, never to an
+# individual account's DN. To delegate a new Connected System (or a second one
+# against the same suffix), add its service account as a further "member"
+# here; no ACI change is needed. A Connected System that imports more than one
+# partition from this server is a member of each partition's cn=jim group (see
+# 02-multi-partition-account.ldif).
+dn: cn=jim,ou=Services,__SUFFIX__
+changetype: add
+objectClass: top
+objectClass: groupOfNames
+cn: jim
+description: JIM service accounts permitted to manage __SUFFIX__. Membership, not the ACIs, controls which accounts this grants.
+member: cn=svc-jim,ou=Services,__SUFFIX__

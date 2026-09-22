@@ -400,6 +400,47 @@ services:
           cpus: ${OPENLDAP_PRIMARY_CPUS_RESERVED:-0.5}
           memory: ${OPENLDAP_PRIMARY_MEMORY_RESERVED:-512M}
 
+  # 389 Directory Server: the RFC 4512 sibling of openldap-primary, hosting the same two suffixes
+  # (dc=yellowstone,dc=local and dc=glitterband,dc=local) with the same tree, service accounts and
+  # schema extensions, so the OpenLDAP populate scripts and scenarios run against it unchanged.
+  # Everything is baked into the image at build time (docker/dirsrv/build/configure.sh): backends,
+  # tree, jim-extensions schema, ACIs and the Retro Changelog plug-in. dscontainer only needs the
+  # Directory Manager password, which it re-applies on every start.
+  dirsrv-primary:
+    image: ${DIRSRV_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-dirsrv:primary}
+    build:
+      context: ./dirsrv
+      dockerfile: Dockerfile
+    container_name: dirsrv-primary
+    environment:
+      - DS_DM_PASSWORD=Test@123!
+    # No ports exposed - internal to Docker network only for testing (3389 LDAP, 3636 LDAPS).
+    # 389 accepts the RFC 3062 Password Modify operation only over LDAPS; the image's certificate
+    # names dirsrv-primary and its CA is at /data/tls/ca/jim-dirsrv-lab-ca.crt in the container.
+    volumes:
+      # Docker seeds a fresh named volume from the image's baked /data; start-dirsrv.sh restores it
+      # from /data.provisioned if the volume is ever empty. A restart keeps state either way.
+      - dirsrv-primary-data:/data
+      - jim-connector-files-volume:/connector-files
+    networks:
+      - jim-network
+    profiles:
+      - dirsrv
+    healthcheck:
+      test: ["CMD", "/usr/lib/dirsrv/dscontainer", "-H"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: ${DIRSRV_PRIMARY_CPUS:-2.0}
+          memory: ${DIRSRV_PRIMARY_MEMORY:-2G}
+        reservations:
+          cpus: ${DIRSRV_PRIMARY_CPUS_RESERVED:-0.5}
+          memory: ${DIRSRV_PRIMARY_MEMORY_RESERVED:-512M}
+
   # Phase 2 - MySQL, staged for the JIM SQL Connector's priority 2 providers. Not used by Scenario 16,
   # which covers the priority 1 providers (Microsoft SQL Server and Oracle Database).
   mysql-test:
@@ -454,6 +495,8 @@ volumes:
     name: jim-integration-scim-provider-certificates
   openldap-primary-data:
     name: jim-integration-openldap-primary-data
+  dirsrv-primary-data:
+    name: jim-integration-dirsrv-primary-data
   sqlserver-data:
     name: jim-integration-sqlserver-data
   postgres-test-data:
