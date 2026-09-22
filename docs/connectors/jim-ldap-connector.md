@@ -596,9 +596,13 @@ If authentication fails with "invalid credentials":
 - Check that the service account password is correct and has not expired.
 - Ensure the service account is not locked out or disabled.
 
-### Import fails with "The size limit was exceeded"
+### Import fails with "The directory stopped the import ... at its search limit"
 
-The account JIM binds as is subject to the directory's search size limit, and the container being imported holds more objects than it allows. On OpenLDAP the limit is `olcSizeLimit` (default 500) and it is enforced across a paged search as a whole for every client except the rootDN, so moving JIM from the rootDN to a delegated service account brings the failure with it. Exempt the JIM group on each suffix with the limits file under [Service Account Permissions](#openldap); do not raise the database-wide limit for every client.
+The account JIM binds as is subject to the directory's search limits, and the container being imported holds more objects than they allow. The run ends as **Failed with error** before importing anything from that container, because continuing would import a truncated container and a Full Import would then treat every object past the limit as gone. The message names the container, the object type and the account, for example:
+
+> The directory stopped the import of jimPerson objects from People at its search limit (The size limit was exceeded), so nothing from People was imported. The account JIM connects as, cn=svc-jim,ou=Services,dc=example,dc=com, is subject to the directory's search limits, which its rootDN is not, and a smaller page size does not help: OpenLDAP applies the limit across a paged search as a whole. Ask the directory administrator to exempt the account (on OpenLDAP, an olcLimits entry for the JIM group on each suffix; see Service Account Permissions in the JIM LDAP Connector documentation) rather than raising the limit for every client.
+
+On OpenLDAP the limit is `olcSizeLimit` (default 500) and it is enforced across a paged search as a whole for every client except the rootDN, so moving JIM from the rootDN to a delegated service account brings the failure with it. Exempt the JIM group on each suffix with the limits file under [Service Account Permissions](#openldap); do not raise the database-wide limit for every client.
 
 ### Delta import not detecting changes
 

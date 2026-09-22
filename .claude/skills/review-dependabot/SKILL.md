@@ -1,13 +1,15 @@
 ---
 name: review-dependabot
-description: Review, assess, and merge open Dependabot PRs using JIM's supply chain security and dependency pinning requirements
+description: Review, assess, and merge open Dependabot and jim-automation dependency-bump PRs using JIM's supply chain security and dependency pinning requirements
 argument-hint: "[merge|review-only]"
 allowed-tools: Bash, Read, Glob, Grep, WebSearch, WebFetch
 ---
 
-# Review and Merge Dependabot PRs
+# Review and Merge Dependency-Bump PRs
 
-Review all open Dependabot PRs against JIM's supply chain security and dependency governance policies, then merge those that pass assessment.
+Review all open Dependabot **and jim-automation** PRs against JIM's supply chain security and dependency governance policies, then merge those that pass assessment.
+
+`jim-automation[bot]` is JIM's own service principal, used by `apt-pin-check` and `tooling-pin-check` to raise PRs for pins Dependabot's ecosystems can't see (production apt packages; `@playwright/mcp` and `dotnet-ef`, pinned outside any Dependabot-readable manifest). These PRs carry the `dependencies` label and land on `automation/*` branches. Treat them as in-scope by default, folded into the same batch and merge train as Dependabot's PRs, not a separate pass; see `engineering/DEPENDENCY_PINNING.md` for what each bot covers.
 
 If `$ARGUMENTS` is "review-only", produce the assessment but do NOT merge. Otherwise, present findings and merge approved PRs.
 
@@ -15,9 +17,12 @@ If `$ARGUMENTS` is "review-only", produce the assessment but do NOT merge. Other
 
 ```
 gh pr list --author "app/dependabot" --state open --json number,title,url,createdAt,labels
+gh pr list --author "app/jim-automation" --state open --json number,title,url,createdAt,labels
 ```
 
-If there are no open Dependabot PRs, report that and stop.
+If neither `gh` nor its author filter is available (e.g. GitHub access is via MCP tools only), list all open PRs and filter by `user.login` being `dependabot[bot]` or `jim-automation[bot]` instead - a bare author-string search against the GraphQL API can silently return zero results for a bot login, so verify against a full open-PR listing if a search comes back empty and PRs are expected.
+
+If there are no open PRs from either bot, report that and stop.
 
 ## Step 2: Gather PR Details
 
@@ -28,7 +33,7 @@ For each PR, collect:
 
 ## Step 3: Identify the Update Type
 
-Categorise each PR into one of three ecosystems:
+Categorise each PR into one of four ecosystems:
 
 ### Docker Base Images
 - Check: Does the update stay within the same major.minor version (e.g., 9.0)?
@@ -88,6 +93,14 @@ Categorise each PR into one of three ecosystems:
 - Check: Review the action's changelog for changes to inputs, outputs, or behaviour
 - Check: Is the action from a trusted publisher (GitHub, Microsoft, well-known org)?
 
+### Dev Tooling / Apt Pins (jim-automation)
+PRs from `apt-pin-check` (production apt packages in Dockerfiles) and `tooling-pin-check` (`@playwright/mcp`, `dotnet-ef`, pinned in `.devcontainer/setup.sh` / `.mcp.json`).
+- Check: The PR body's table lists old and new versions per tool/package and file - confirm every location of a given pin moved to the *same* version (a pin duplicated across files, e.g. `@playwright/mcp` in both `.devcontainer/setup.sh` and `.mcp.json`, must not drift apart).
+- Check: The raising workflow already validated installability/publication before opening the PR (see `.github/scripts/check-apt-pins.ps1` / `check-tooling-pins.ps1`); this is a lighter review than a Dependabot NuGet bump, not a rubber stamp - still read the diff.
+- Check: Does CI pass? These are script/config-only changes (no `.cs`), so per root `CLAUDE.md`'s build/test exceptions no local `dotnet build`/`test` is required either by you or by CI to approve; rely on whatever CI does run (e.g. `changelog-lint`, the workflow's own dry-run step).
+- No `packages.lock.json` involved - these pins live outside any NuGet/npm manifest Dependabot or a lock file would cover.
+- If a pin's new version is flagged by the workflow as no-longer-published (exit code 3 in `check-tooling-pins.ps1`/`check-apt-pins.ps1`, surfaced as a failing step rather than folded into the PR silently): **Hold**, same as a Dependabot pinning failure.
+
 ## Step 4: Security Advisory Check
 
 Search for any security advisories related to the updates:
@@ -117,8 +130,9 @@ Unless running in review-only mode. Assessment (Steps 1 to 5) is batched because
 
 1. **Pick the next PR only.** Order: security fixes first, then any ordering constraint from the assessment (PRs sharing files), then oldest first. Do not comment on, update, or otherwise trigger CI on any other PR in the batch.
 2. **Bring it up to date and fix lock files in ONE push** (each push costs a full CI run, so never push a lock-file fix and a branch update separately):
-   - If the branch carries only Dependabot's own commits, comment `@dependabot rebase` and wait up to ~5 minutes (it normally responds in under a minute). If it responds, lock files may still need regenerating (see below) - do that on the rebased head in the same pass as any further update.
-   - If the branch has external commits (lock-file regeneration, an earlier update), or Dependabot does not respond within the timeout: update locally instead. `git fetch origin`, `git checkout <branch>`, `git pull --no-rebase` (absorbs any remote drift, e.g. a stray "Update branch" click), `git merge origin/main --no-edit`. **Merge, don't rebase**: `main` squash-merges so branch history is discarded anyway, and a merge needs only a plain push (root `CLAUDE.md`). Dependabot stops maintaining a branch once it has external commits; that is expected - the train owns the branch from that point.
+   - **Dependabot PRs only**: if the branch carries only Dependabot's own commits, comment `@dependabot rebase` and wait up to ~5 minutes (it normally responds in under a minute). If it responds, lock files may still need regenerating (see below) - do that on the rebased head in the same pass as any further update.
+   - **jim-automation PRs**: there is no bot listening for a rebase comment (`open-pin-pr.ps1` opens the PR and stops), so skip straight to updating locally - do not comment `@dependabot rebase` on a jim-automation branch, it will not act.
+   - Otherwise (the branch has external commits - lock-file regeneration, an earlier update - or Dependabot does not respond within the timeout): update locally. `git fetch origin`, `git checkout <branch>`, `git pull --no-rebase` (absorbs any remote drift, e.g. a stray "Update branch" click), `git merge origin/main --no-edit`. **Merge, don't rebase**: `main` squash-merges so branch history is discarded anyway, and a merge needs only a plain push (root `CLAUDE.md`). Dependabot stops maintaining a branch once it has external commits; that is expected - the train owns the branch from that point.
    - **Conflicts**: resolve conflicted `.csproj` files manually, keeping BOTH sides' version bumps (`git diff HEAD origin/main -- <file>` shows what each side changed). Never hand-merge a `packages.lock.json` conflict - lock content derives from the csproj set, so regenerate instead.
    - **Regenerate and verify before committing**: run `dotnet restore JIM.sln --force-evaluate` as its own command and check its exit status directly - do not bury it in a `&&`/pipe chain where a piped `tail` masks the exit code. Then `grep -rln '<<<<<<<' src/ test/` must return nothing (a marker-laden csproj otherwise gets committed silently; this happened). Then `git add -A`, commit, plain push.
 3. **Arm auto-merge**: `gh pr merge <number> --squash --auto`. Include a merge comment noting what was verified (pinning, security advisory) where the assessment found anything noteworthy.
