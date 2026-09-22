@@ -487,7 +487,9 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
 
     /// <summary>
     /// Reads every changelog entry numbered after the watermark and turns each into an import object: a deletion
-    /// directly, anything else by fetching the target's current state. The changelog is read in one search, and
+    /// directly, anything else by fetching the target's current state. An object the changelog names more than
+    /// once is fetched once, on its first record, since the fetch reads its current state either way; deletions are
+    /// never skipped for that reason. The changelog is read in one search, and
     /// when the directory stops that at its size limit the search resumes from the highest change number seen plus
     /// one; the change number is an exact cursor, so nothing is missed or read twice. A changelog that cannot be
     /// read fails the run: a Delta Import that quietly imported nothing would leave JIM believing nothing changed.
@@ -503,7 +505,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
         _logger.Debug("LdapChangelogDeltaSource: Querying {ChangelogDn} for changes since changeNumber {PreviousChange}", LogSanitiser.Sanitise(changelogDn), previousChangeNumber);
 
         var readBefore = result.ImportObjects.Count;
-        var skippedOutOfScope = 0;
+        var progress = new ReadProgress();
         var cursor = previousChangeNumber + 1;
 
         while (!cancellationToken.IsCancellationRequested)
@@ -511,7 +513,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             var (entries, limited) = SearchChangelog(changelogDn, cursor, context.SearchTimeout);
             _logger.Debug("LdapChangelogDeltaSource: Found {Count} changelog entries from change number {Cursor}", entries.Count, cursor);
 
-            var highestSeen = ProcessEntries(entries, context, result, ref skippedOutOfScope, cancellationToken);
+            var highestSeen = ProcessEntries(entries, context, result, progress, cancellationToken);
             if (!limited)
                 break;
 
@@ -530,10 +532,31 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
         if (cancellationToken.IsCancellationRequested)
             _logger.Debug("LdapChangelogDeltaSource: Cancellation requested. Stopping");
 
-        if (skippedOutOfScope > 0)
-            _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects outside the selected Container scope", skippedOutOfScope);
+        if (progress.SkippedOutOfScope > 0)
+            _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects outside the selected Container scope", progress.SkippedOutOfScope);
+        if (progress.SkippedAlreadyFetched > 0)
+            _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects already fetched in this read", progress.SkippedAlreadyFetched);
 
         await context.Host.ReportObjectsReadAsync(result.ImportObjects.Count - readBefore);
+    }
+
+    /// <summary>
+    /// What one <see cref="ReadChangesAsync"/> call carries from page to page: the objects fetched so far, so a
+    /// second record for one of them is not fetched again, and the counts of what was skipped and why.
+    /// </summary>
+    private sealed class ReadProgress
+    {
+        /// <summary>
+        /// The DNs already fetched in this read, compared as LDAP compares DNs (case-insensitively). A changelog
+        /// records every write, so an object changed several times between two imports appears several times;
+        /// the fetch reads its current state, so the first record says everything the later ones would, and
+        /// importing it again would have the import report a duplicate external id.
+        /// </summary>
+        public HashSet<string> FetchedDns { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public int SkippedOutOfScope { get; set; }
+
+        public int SkippedAlreadyFetched { get; set; }
     }
 
     /// <summary>
@@ -581,7 +604,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// Turns changelog entries into import objects, and returns the highest change number among them (null when
     /// none carried one), which is where a size-limited search resumes from.
     /// </summary>
-    private long? ProcessEntries(IReadOnlyList<SearchResultEntry> entries, LdapDeltaReadContext context, ConnectedSystemImportResult result, ref int skippedOutOfScope, CancellationToken cancellationToken)
+    private long? ProcessEntries(IReadOnlyList<SearchResultEntry> entries, LdapDeltaReadContext context, ConnectedSystemImportResult result, ReadProgress progress, CancellationToken cancellationToken)
     {
         long? highestSeen = null;
 
@@ -620,15 +643,23 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             // scope; without this, a delta import would bring in objects a full import never would.
             if (!LdapConnectorUtilities.IsDnInScope(subjectDn, context.ScopeDecidingContainers))
             {
-                skippedOutOfScope++;
+                progress.SkippedOutOfScope++;
                 continue;
             }
 
             if (objectChangeType == ObjectChangeType.Deleted)
             {
+                // A deletion is never skipped for a DN already fetched: an object added then deleted in the same
+                // window must still be deleted, since that is its final state.
                 var deleted = IdentifyDeletion(changeEntry, targetDn, context);
                 if (deleted != null)
                     result.ImportObjects.Add(deleted);
+            }
+            else if (!progress.FetchedDns.Add(subjectDn))
+            {
+                // Already fetched on an earlier record in this read (this page or a previous one), and that fetch
+                // read the current state; a second copy would only be reported as a duplicate by the import.
+                progress.SkippedAlreadyFetched++;
             }
             else
             {

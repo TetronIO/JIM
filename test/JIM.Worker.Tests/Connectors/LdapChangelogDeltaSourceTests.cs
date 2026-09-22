@@ -913,19 +913,125 @@ public class LdapChangelogDeltaSourceTests
 
     #endregion
 
+    #region ReadChangesAsync: repeated changes to one object
+
+    [Test]
+    public async Task ReadChangesAsync_TwoModifiesOfOneDnInOnePage_FetchesAndImportsTheObjectOnceAsync()
+    {
+        // The fetch reads the object's current state, so the second record has nothing more to say; importing it
+        // again would have the import report a duplicate external id across pages.
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("modify", InScopeDn, 1201), ChangeEntry("modify", InScopeDn, 1202));
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
+        var log = new CapturingSink();
+        var result = new ConnectedSystemImportResult();
+
+        await Source(log).ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated), Times.Once);
+            Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
+            host.Verify(h => h.ReportObjectsReadAsync(1), Times.Once);
+            Assert.That(log.Events.Any(e => e.RenderMessage().Contains("Skipped 1 changelog entries for objects already fetched")), Is.True, "the skipped records are counted, as out-of-scope skips are");
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_TwoModifiesOfOneDnAcrossTwoPages_FetchesAndImportsTheObjectOnceAsync()
+    {
+        _searchAnswer = request => request.Filter switch
+        {
+            "(changeNumber>=1201)" => throw SizeLimitExceeded(ChangeEntry("modify", InScopeDn, 1201)),
+            "(changeNumber>=1202)" => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("modify", InScopeDn, 1202)),
+            _ => throw new InvalidOperationException($"Unexpected filter {request.Filter}")
+        };
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_sent.Select(s => s.Request.Filter), Is.EqualTo(new[] { "(changeNumber>=1201)", "(changeNumber>=1202)" }), "both pages were read");
+            host.Verify(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated), Times.Once, "the DNs already fetched are remembered across the whole read, not per page");
+            Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_AddThenDeleteOfOneDn_YieldsTheFetchedObjectAndTheDeletionAsync()
+    {
+        // A deletion is never skipped for a DN already seen: an object added then deleted in the same window must
+        // still be deleted.
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("add", InScopeDn, 1201), DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid), 1202));
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Added)).Returns(new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Added });
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Added), Times.Once);
+            Assert.That(result.ImportObjects.Select(o => o.ChangeType), Is.EqualTo(new[] { ObjectChangeType.Added, ObjectChangeType.Deleted }));
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_TwoModifiesOfOneDnDifferingOnlyInCase_FetchesTheObjectOnceAsync()
+    {
+        const string upperCasedDn = "UID=JSMITH,OU=People,DC=example,DC=com";
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("modify", InScopeDn, 1201), ChangeEntry("modify", upperCasedDn, 1202));
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(It.IsAny<string>(), ObjectChangeType.Updated)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn(It.IsAny<string>(), It.IsAny<ObjectChangeType>()), Times.Once, "a DN is case-insensitive, so the two records name one object");
+            Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_ModifyThenRenameOfOneDn_FetchesTheOldDnOnceAndTheNewDnOnceAsync()
+    {
+        const string newDn = "uid=jsmith2," + ContainerDn;
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("modify", InScopeDn, 1201), RenameEntry("modrdn", InScopeDn, "uid=jsmith2", newSuperior: null, 1202));
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(It.IsAny<string>(), ObjectChangeType.Updated)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated), Times.Once);
+            host.Verify(h => h.GetObjectByDn(newDn, ObjectChangeType.Updated), Times.Once, "a rename's subject is the new DN, which no earlier record named");
+            Assert.That(result.ImportObjects, Has.Count.EqualTo(2));
+        }
+    }
+
+    #endregion
+
     #region ReadChangesAsync: size limit and failures
 
     [Test]
     public async Task ReadChangesAsync_SizeLimitExceeded_ContinuesFromTheHighestChangeNumberSeenPlusOneAsync()
     {
+        // Four distinct objects: a repeated DN is fetched once per read, which is the previous region's concern.
         _searchAnswer = request => request.Filter switch
         {
-            "(changeNumber>=1201)" => throw SizeLimitExceeded(ChangeEntry("add", InScopeDn, 1201), ChangeEntry("add", InScopeDn, 1203), ChangeEntry("add", InScopeDn, 1202)),
-            "(changeNumber>=1204)" => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("add", InScopeDn, 1204)),
+            "(changeNumber>=1201)" => throw SizeLimitExceeded(ChangeEntry("add", PersonDn("a1"), 1201), ChangeEntry("add", PersonDn("a3"), 1203), ChangeEntry("add", PersonDn("a2"), 1202)),
+            "(changeNumber>=1204)" => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("add", PersonDn("a4"), 1204)),
             _ => throw new InvalidOperationException($"Unexpected filter {request.Filter}")
         };
         var host = new Mock<ILdapDeltaImportHost>();
-        host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Added)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Added });
+        host.Setup(h => h.GetObjectByDn(It.IsAny<string>(), ObjectChangeType.Added)).Returns(() => new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Added });
         var result = new ConnectedSystemImportResult();
 
         await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
@@ -1018,6 +1124,8 @@ public class LdapChangelogDeltaSourceTests
         typeof(SearchResponse).GetMethod("set_Entries", nonPublicInstance)!.Invoke(response, [entryCollection]);
         return new DirectoryOperationException(response, "The size limit was exceeded");
     }
+
+    private static string PersonDn(string uid) => $"uid={uid},{ContainerDn}";
 
     private static SearchResultEntry ChangelogEntry(long changeNumber) =>
         LdapTestResponses.Entry($"changeNumber={changeNumber},cn=changelog", ("changeNumber", changeNumber.ToString()));
