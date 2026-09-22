@@ -55,6 +55,7 @@
 - Unit tests MUST cover: null values, type mismatches, corrupt data states
 - Integration tests MUST verify error reporting when edge cases occur
 - Never assume data will always be in expected state
+- Changes to Pending Export staging or lifecycle (`ExportEvaluationServer`, `SyncEngine.ExportStaging`, `SyncEngine.Reconciliation`, the sync processors' export flush and cross-page pass) MUST also run Scenario 8 (`Scenario8-CrossDomainEntitlementSync`, Medium) before the PR: it is the only end-to-end exercise of the cross-page reference pass against a real directory, and unit coverage of that pass is limited to `CrossPageReferenceProvisioningTests`
 
 ### 7. Code Review Focus for Sync Code
 

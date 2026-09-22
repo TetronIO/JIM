@@ -201,6 +201,19 @@ Status `Normal` are unaffected; a failed Delete export never reaches this rule.
 4. Updates `UnresolvedReferenceValue` with resolved external ID
 5. PE re-exported in second pass
 
+### Cross-page re-evaluation keeps the unsent Create
+
+A Full or Delta Sync pages its Connected System Objects, so a group processed on an earlier page than its
+members cannot flow those member references on its own page (their Metaverse Objects do not exist yet). The
+group is parked and re-processed once every page is done (`SyncTaskProcessorBase.ResolveCrossPageReferencesAsync`),
+which re-evaluates its exports with the references resolved. That re-evaluation goes through the ordinary
+staging path, which finds the group's existing Pending Export (Scenario B above) and decides what it means: an
+unsent Create is rebuilt as a Create carrying the resolved references, an exported-but-unconfirmed Create has
+the changes appended, a pending Update is merged. The pass must never delete those rows first: a Pending
+Provisioning CSO with no Pending Export reads as "Create already sent" (see the section above), so a
+pre-deleted unsent Create came back as an Update for an object that did not exist yet (Scenario 8, fixed after
+#1687 exposed it). `CrossPageReferenceProvisioningTests` pins the contract.
+
 ## Status Transitions
 
 ```
