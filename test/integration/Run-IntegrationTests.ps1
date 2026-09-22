@@ -401,7 +401,7 @@ if ($DirectoryType -ne "All") {
 # it deletes labelled images despite the exclusion. Work around this by collecting
 # the IDs of images to preserve, pruning everything else, then cleaning up dangling.
 function Invoke-ImagePrunePreservingSnapshots {
-    $labels = @("jim.samba.snapshot-hash", "jim.samba.build-hash", "jim.openldap.snapshot-hash", "jim.openldap.build-hash", "jim.dirsrv.build-hash")
+    $labels = @("jim.samba.snapshot-hash", "jim.samba.build-hash", "jim.openldap.snapshot-hash", "jim.openldap.build-hash", "jim.dirsrv.snapshot-hash", "jim.dirsrv.build-hash")
     $preserveIds = @()
     foreach ($label in $labels) {
         $ids = docker images --filter "label=$label" -q 2>$null
@@ -510,9 +510,11 @@ function Test-SnapshotAvailable {
     return $true
 }
 
-# Track whether snapshots are being used (set during container startup)
+# Track whether snapshots are being used (set during container startup). UsingSnapshots is Samba AD;
+# UsingRfcDirectorySnapshots is one fact for both RFC directories: an OpenLDAP or a 389 Directory
+# Server snapshot is in use, so the shared population step and the scenario's SkipPopulate are skipped.
 $script:UsingSnapshots = $false
-$script:UsingOpenLDAPSnapshots = $false
+$script:UsingRfcDirectorySnapshots = $false
 
 # ============================================================================
 # OpenLDAP snapshot detection utilities
@@ -2528,15 +2530,17 @@ if (Get-Command socat -ErrorAction SilentlyContinue) {
 Start-Sleep -Seconds 2
 
 # Snapshot image selection communicates with docker compose via process-level environment
-# variables, and an all-scenarios sweep invokes each scenario in this same process. Clear them
-# all up front so a scenario that skips snapshot selection (Scenario 1's empty target,
-# Scenario 14's bespoke six-user dataset) or whose snapshot check fails gets the compose
-# defaults, not the previous scenario's snapshot. Leaked state here put Scenario 14 on the
-# previous scenario's general-small image (50 baked-in users), tripping its isolation check.
+# variables (Samba AD, OpenLDAP and 389 Directory Server each have their own), and an
+# all-scenarios sweep invokes each scenario in this same process. Clear them all up front so a
+# scenario that skips snapshot selection (Scenario 1's empty target, Scenario 14's bespoke
+# six-user dataset) or whose snapshot check fails gets the compose defaults, not the previous
+# scenario's snapshot. Leaked state here put Scenario 14 on the previous scenario's
+# general-small image (50 baked-in users), tripping its isolation check.
 $env:SAMBA_IMAGE_PRIMARY = $null
 $env:SAMBA_IMAGE_SOURCE = $null
 $env:SAMBA_IMAGE_TARGET = $null
 $env:OPENLDAP_IMAGE_PRIMARY = $null
+$env:DIRSRV_IMAGE_PRIMARY = $null
 
 # Check for pre-populated snapshot images (Scenario 1 / primary)
 # Note: "*Scenario1*" also substring-matches "Scenario14-...", "Scenario15-...", "Scenario16-..."
@@ -2610,7 +2614,7 @@ if ($DirectoryType -eq "OpenLDAP") {
         $olTag = Get-OpenLDAPSnapshotImageTag -Role $olSnapshotRole -Size $Template
         if (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
             $env:OPENLDAP_IMAGE_PRIMARY = $olTag
-            $script:UsingOpenLDAPSnapshots = $true
+            $script:UsingRfcDirectorySnapshots = $true
             Write-Host "  ${GREEN}Using OpenLDAP snapshot: $olTag${NC}"
         } else {
             Write-Host "  ${YELLOW}No OpenLDAP snapshot found for $olTag — building (first run only)...${NC}"
@@ -2619,7 +2623,7 @@ if ($DirectoryType -eq "OpenLDAP") {
                 Write-Warning "OpenLDAP snapshot build failed — falling back to live population"
             } elseif (Test-OpenLDAPSnapshotAvailable -ImageTag $olTag -ExpectedHash $olHash) {
                 $env:OPENLDAP_IMAGE_PRIMARY = $olTag
-                $script:UsingOpenLDAPSnapshots = $true
+                $script:UsingRfcDirectorySnapshots = $true
                 Write-Host "  ${GREEN}OpenLDAP snapshot built and ready: $olTag${NC}"
             }
         }
@@ -2682,8 +2686,37 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
         Write-Success "389 Directory Server image is current (hash $expectedDsBuildHash)"
     }
 
-    # No snapshot images exist for 389 Directory Server: the directory is populated live on every
-    # run (Step 4c for the shared dataset; Scenario 8 populates itself from its Invoke script).
+    # Check for pre-populated 389 Directory Server snapshot images, in the same shape as the OpenLDAP
+    # block above and with the same exclusions. S1 does not need pre-populated data: the target
+    # directory starts empty. S14, S19 and S22 never run on 389 at all (their fixtures are written
+    # against cn=config, the ppolicy overlay and DIT content rules, so the runner coerces them to
+    # OpenLDAP), but they are excluded here too for symmetry with the OpenLDAP block, and because
+    # "*Scenario1*" substring-matches "Scenario14" and "Scenario19"; the explicit exclusions document
+    # the intent rather than rely on that. The helpers come from the fixture's Get-DirsrvBuildHash.ps1
+    # (dot-sourced above), so the snapshot hash, the tag shape and the currency test live in one place.
+    # A snapshot is only current when its base-hash label matches the base image that was just
+    # verified: a snapshot baked from a stale base is stale.
+    if (-not $IgnoreSnapshots -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*") {
+        $dsSnapshotScenario = if ($Scenario -like "*Scenario8*") { "Scenario8" } else { "General" }
+        $dsSnapshotRole = if ($Scenario -like "*Scenario8*") { "s8" } else { "general" }
+        $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
+        $dsTag = Get-DirsrvSnapshotImageTag -Role $dsSnapshotRole -Template $Template
+        if (Test-DirsrvSnapshotCurrent -ImageTag $dsTag -ExpectedSnapshotHash $dsSnapshotHash -ExpectedBaseHash $expectedDsBuildHash) {
+            $env:DIRSRV_IMAGE_PRIMARY = $dsTag
+            $script:UsingRfcDirectorySnapshots = $true
+            Write-Host "  ${GREEN}Using 389 Directory Server snapshot: $dsTag${NC}"
+        } else {
+            Write-Host "  ${YELLOW}No 389 Directory Server snapshot found for $dsTag - building (first run only)...${NC}"
+            & "$scriptRoot/Build-DirsrvSnapshots.ps1" -Scenario $dsSnapshotScenario -Template $Template
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "389 Directory Server snapshot build failed - falling back to live population"
+            } elseif (Test-DirsrvSnapshotCurrent -ImageTag $dsTag -ExpectedSnapshotHash $dsSnapshotHash -ExpectedBaseHash $expectedDsBuildHash) {
+                $env:DIRSRV_IMAGE_PRIMARY = $dsTag
+                $script:UsingRfcDirectorySnapshots = $true
+                Write-Host "  ${GREEN}389 Directory Server snapshot built and ready: $dsTag${NC}"
+            }
+        }
+    }
 
     # Scale the container's memory limit with template size, on the same mapping as OpenLDAP's
     # above; the pressure comes at run time (import and export), not during population.
@@ -3102,10 +3135,10 @@ if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and $S
 }
 
 # Step 4c: Populate OpenLDAP or 389 Directory Server with test data
-# Both start empty (only base OUs from bootstrap). Unlike Samba AD which uses snapshot images
-# with pre-populated data, they need live population via Populate-OpenLDAP.ps1 (shared by both;
-# -DirectoryType selects the container, port and administrator binds). 389 has no snapshots at
-# all, so it populates on every run; OpenLDAP populates only when no snapshot was selected above.
+# Both start empty from their base image (only base OUs from bootstrap), and both have snapshot
+# images with pre-populated data, like Samba AD. This step populates live via Populate-OpenLDAP.ps1
+# (shared by both; -DirectoryType selects the container, port and administrator binds) only when
+# no snapshot was selected above ($script:UsingRfcDirectorySnapshots), for either directory.
 # Skip for S1 — the target directory starts empty (HR-driven provisioning into clean directory).
 # Skip for S8 — it has its own population script (Populate-OpenLDAP-Scenario8.ps1) that only
 # populates Source. The base script populates both suffixes, which would create pre-existing
@@ -3118,7 +3151,7 @@ if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and $S
 # Skip for S22: self-populating (Populate-OpenLDAP-Scenario22.ps1, called by
 # Invoke-Scenario22-OpenLdapPasswordPolicy.ps1), and its Scenario 1 substrate provisions into an
 # ou=People that must start empty; the general population would fill it.
-if ($isRfcDirectoryRun -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario8*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*" -and -not $script:UsingOpenLDAPSnapshots) {
+if ($isRfcDirectoryRun -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario8*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*" -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
@@ -3403,7 +3436,8 @@ $scenarioParams = @{
     DirectoryConfig = $script:DirectoryConfig
 }
 
-# Skip population if using snapshot images (Samba AD or OpenLDAP).
+# Skip population if using snapshot images (Samba AD, or an RFC directory snapshot: OpenLDAP or
+# 389 Directory Server).
 # Scenarios 14, 19 and 22 are excluded: each self-populates its own bespoke OpenLDAP dataset
 # (Populate-OpenLDAP-Scenario14.ps1 / -Scenario19.ps1 / -Scenario22.ps1) and has no snapshot of
 # its own, so it must ALWAYS populate. Without this guard, an "All" regression that snapshots an
@@ -3412,7 +3446,7 @@ $scenarioParams = @{
 # which would wrongly pass SkipPopulate to the scenario and leave its directory empty, so the
 # Employee ID join finds nothing (14, 19) or the policy fixture is missing (22). Mirrors the
 # exclusions already on the snapshot-detection and general-population guards above.
-if (($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*") {
+if (($script:UsingSnapshots -or $script:UsingRfcDirectorySnapshots) -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario19*" -and $Scenario -notlike "*Scenario22*") {
     $scenarioParams.SkipPopulate = $true
 }
 
