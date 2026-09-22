@@ -655,6 +655,8 @@ The account JIM binds as is subject to the directory's search limits, and the co
 
 On OpenLDAP the limit is `olcSizeLimit` (default 500) and it is enforced across a paged search as a whole for every client except the rootDN, so moving JIM from the rootDN to a delegated service account brings the failure with it. Exempt the JIM group on each suffix with the limits file under [Service Account Permissions](#openldap); do not raise the database-wide limit for every client.
 
+On 389 Directory Server the limits are `nsslapd-sizelimit` (default 2000) and `nsslapd-lookthroughlimit` (default 5000), applied across a paged search in the same way for every account but the Directory Manager. Set `nsSizeLimit`, `nsLookThroughLimit` and `nsPagedSizeLimit` to `-1` on the service account's own entry, as the recipe under [389 Directory Server](#389-directory-server) does, rather than raising the server-wide limits.
+
 ### Delta import not detecting changes
 
 If delta imports return no changes when changes are expected:
