@@ -63,8 +63,7 @@ public static class RunProfilePhaseCatalogue
         // Both of these follow writing the objects and were previously invisible: the run went on
         // working against the Connected System, and narrating what it was doing, while the rail
         // still showed the export as the last thing that had happened.
-        new(RunPhaseKeys.ExportSelectNewContainers, "Selecting new containers"),
-        new(RunPhaseKeys.ExportDeliverInitialPasswords, "Delivering initial passwords")
+        new(RunPhaseKeys.ExportSelectNewContainers, "Selecting new containers")
     ];
 
     private static readonly IReadOnlyList<RunProfilePhase> NoPhases = [];

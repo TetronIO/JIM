@@ -14,7 +14,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
-    <div class="d-flex align-center justify-space-between">
+    <div class="d-flex align-center">
+        <MudText Typo="Typo.h6">Attribute Flow</MudText>
+        <TermHint Term="Term.AttributeFlow" />
+    </div>
+    <div class="d-flex align-center justify-space-between mt-3">
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
             OnClick="HandleOpenAddAttributeFlowRuleDialogAsync" Color="Color.Default"
             Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
@@ -491,7 +495,7 @@
                         </MudRadioGroup>
                         @if (_attributeFlowMappingSource.MissingInputBehaviour == MissingInputBehaviour.FailObject)
                         {
-                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                            <MudAlert Severity="Severity.Warning" Class="mt-3">
                                 While this is set, an object missing any attribute this Expression reads will not synchronise at
                                 all: none of its attributes flow, and it is reported as an error on every run until the missing
                                 value is supplied.
@@ -513,7 +517,7 @@
                     var selectable = suggestions.Where(s => s.Status == StandardMappingSuggestionStatus.Available).ToList();
                     var unavailable = suggestions.Where(s => s.Status != StandardMappingSuggestionStatus.Available).ToList();
 
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+                    <MudAlert Severity="Severity.Info" Class="mt-5">
                         @if (selectable.Count > 0)
                         {
                             @GetStandardMappingSuggestionText(selectable)
@@ -571,7 +575,7 @@
                     @if (ShowAttributePriorityContext() && _attributeFlowMapping.TargetMetaverseAttribute is { } targetAttribute)
                     {
                         var alreadyContributes = MappingAlreadyContributesToSelectedAttribute();
-                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+                        <MudAlert Severity="Severity.Info" Class="mt-5">
                             <MudText Typo="Typo.body1">
                                 @if (alreadyContributes)
                                 {
@@ -608,7 +612,7 @@
                     </MudText>
                     @if (_attributeFlowMapping.NullIsValue)
                     {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                        <MudAlert Severity="Severity.Warning" Class="mt-3">
                             Wherever this Synchronisation Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.
                         </MudAlert>
                     }
@@ -688,7 +692,7 @@
                 @if (!string.IsNullOrWhiteSpace(_attributeFlowMapping.DisabledReason))
                 {
                     var disabledReason = _attributeFlowMapping.DisabledReason;
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2">
+                    <MudAlert Severity="Severity.Warning" Class="mt-2">
                         @disabledReason
                     </MudAlert>
                 }
@@ -696,7 +700,7 @@
                 @* ─── Multi-Valued to Single-Valued warning (#435) ─── *@
                 @if (DialogMappingIsMvaToSva())
                 {
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">
+                    <MudAlert Severity="Severity.Warning" Class="mt-5">
                         @GetMvaToSvaWarningText()
                     </MudAlert>
                 }

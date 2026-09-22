@@ -56,50 +56,50 @@ public static class TestUtilities
         switch (schemaAttribute.Type)
         {
             case AttributeDataType.Boolean:
-                Assert.That(csoAttributeValues[0].BoolValue, Is.EqualTo(csioAttribute.BoolValue));
+                Assert.That(csoAttributeValues[0].BoolValue, Is.EqualTo(csioAttribute!.BoolValue));
                 break;
             case AttributeDataType.Guid:
                 // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same)
-                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.GuidValues.Count));
+                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute!.GuidValues.Count));
                 foreach (var csoGuidValue in csoAttributeValues)
-                    Assert.That(csioAttribute.GuidValues.Any(q => q == csoGuidValue.GuidValue));
-                foreach (var csioGuidValue in csioAttribute.GuidValues)
+                    Assert.That(csioAttribute!.GuidValues.Any(q => q == csoGuidValue.GuidValue));
+                foreach (var csioGuidValue in csioAttribute!.GuidValues)
                     Assert.That(csoAttributeValues.Any(q => q.GuidValue == csioGuidValue));
                 break;
             case AttributeDataType.Number:
                 // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
-                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.IntValues.Count));
+                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute!.IntValues.Count));
                 foreach (var csoIntValue in csoAttributeValues)
-                    Assert.That(csioAttribute.IntValues.Any(q => q == csoIntValue.IntValue));
-                foreach (var csioIntValue in csioAttribute.IntValues)
+                    Assert.That(csioAttribute!.IntValues.Any(q => q == csoIntValue.IntValue));
+                foreach (var csioIntValue in csioAttribute!.IntValues)
                     Assert.That(csoAttributeValues.Any(q => q.IntValue == csioIntValue));
                 break;
             case AttributeDataType.Decimal:
                 // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
-                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.DecimalValues.Count));
+                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute!.DecimalValues.Count));
                 foreach (var csoDecimalValue in csoAttributeValues)
-                    Assert.That(csioAttribute.DecimalValues.Any(q => q == csoDecimalValue.DecimalValue));
-                foreach (var csioDecimalValue in csioAttribute.DecimalValues)
+                    Assert.That(csioAttribute!.DecimalValues.Any(q => q == csoDecimalValue.DecimalValue));
+                foreach (var csioDecimalValue in csioAttribute!.DecimalValues)
                     Assert.That(csoAttributeValues.Any(q => q.DecimalValue == csioDecimalValue));
                 break;
             case AttributeDataType.Text:
                 // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same).
-                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.StringValues.Count));
+                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute!.StringValues.Count));
                 foreach (var csoStringValue in csoAttributeValues)
-                    Assert.That(csioAttribute.StringValues.Any(q => q == csoStringValue.StringValue));
-                foreach (var csioStringValue in csioAttribute.StringValues)
+                    Assert.That(csioAttribute!.StringValues.Any(q => q == csoStringValue.StringValue));
+                foreach (var csioStringValue in csioAttribute!.StringValues)
                     Assert.That(csoAttributeValues.Any(q => q.StringValue == csioStringValue));
                 break;
             case AttributeDataType.DateTime:
-                Assert.That(csoAttributeValues[0].DateTimeValue, Is.EqualTo(csioAttribute.DateTimeValue));
+                Assert.That(csoAttributeValues[0].DateTimeValue, Is.EqualTo(csioAttribute!.DateTimeValue));
                 break;
             case AttributeDataType.Binary:
                 // this is quite crude, and could be improved.
                 // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same).
-                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.ByteValues.Count));
+                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute!.ByteValues.Count));
                 foreach (var csoByteValue in csoAttributeValues)
-                    Assert.That(csioAttribute.ByteValues.Any(q => q == csoByteValue.ByteValue));
-                foreach (var csioByteValue in csioAttribute.ByteValues)
+                    Assert.That(csioAttribute!.ByteValues.Any(q => q == csoByteValue.ByteValue));
+                foreach (var csioByteValue in csioAttribute!.ByteValues)
                     Assert.That(csoAttributeValues.Any(q => q.ByteValue?.Length == csioByteValue.Length));
                 break;
             case AttributeDataType.Reference:

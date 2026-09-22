@@ -20,7 +20,7 @@
             <MudStack Spacing="4">
                 @if (_impact.BlockedByValues)
                 {
-                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                    <MudAlert Severity="Severity.Error">
                         <MudText Typo="Typo.subtitle2">@_impact.ObjectsWithValues.ToString("N0") @_impact.MetaverseObjectTypeName object(s) have a value</MudText>
                         @if (!string.IsNullOrEmpty(_impact.MetaverseObjectTypePluralName))
                         {
@@ -35,13 +35,13 @@
                 }
                 else
                 {
-                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                    <MudAlert Severity="Severity.Success" Dense="true">
                         No @_impact.MetaverseObjectTypeName has a value for this attribute. Safe to remove; no object data will be lost.
                     </MudAlert>
 
                     @if (_cascadeReferences.Count > 0)
                     {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        <MudAlert Severity="Severity.Warning">
                             <MudText Typo="Typo.subtitle2">These @_cascadeReferences.Count reference(s) will also be removed</MudText>
                             <MudList T="string" Dense="true" Class="mt-1">
                                 @foreach (var reference in _cascadeReferences)

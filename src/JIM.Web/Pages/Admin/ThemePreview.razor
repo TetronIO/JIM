@@ -8,6 +8,8 @@
 <PageTitle>Theme Preview</PageTitle>
 <MudText Typo="Typo.h3">Theme Preview</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+@* page-description: exempt - a design specimen page for developers, not a feature page an administrator
+   would consult the info button for. *@
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     A comprehensive preview of all MudBlazor components and JIM custom styles as they appear in the current theme.
     Toggle dark mode to verify visual consistency across both modes.
@@ -229,7 +231,12 @@
         <MudChip T="string" Variant="Variant.Outlined" Color="Color.Dark">Dark</MudChip>
     </MudStack>
 
-    <MudText Typo="Typo.h6" Class="mb-3">Text</MudText>
+    <MudText Typo="Typo.h6" Class="mb-1">Text</MudText>
+    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+        The portal's standard chip: a compact pill with a semibold label, for status, state and any value that
+        reads as a label rather than as a control. Shape comes from the chip tokens in site.css and label colour
+        from the chip blend beside them, so every Text chip in JIM matches without a call site styling one.
+    </MudText>
     <MudStack Row="true" Spacing="2" Class="mb-4" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
         <MudChip T="string" Variant="Variant.Text" Color="Color.Primary">Primary</MudChip>
         <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary">Secondary</MudChip>
@@ -253,20 +260,20 @@
         <MudChip T="string" Variant="Variant.Text" Color="Color.Error">Expired</MudChip>
     </MudStack>
 
-    <MudText Typo="Typo.h6" Class="mb-3">Chips with Avatars</MudText>
+    <MudText Typo="Typo.h6" Class="mb-3">Object Chips</MudText>
+    <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+        Every reference to a Connected System Object, a Metaverse Object, a Connected System, a Synchronisation
+        Rule, a Pending Export, a Deletion Record or a Run Profile renders through the one ObjectChip: a glyph
+        naming which of the seven it is, the object's type as a dimmed prefix, then its name.
+    </MudText>
     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-        <MudChip T="string">
-            <AvatarContent><MudAvatar Color="Color.Primary">MV</MudAvatar></AvatarContent>
-            <ChildContent>Person</ChildContent>
-        </MudChip>
-        <MudChip T="string">
-            <AvatarContent><MudAvatar Color="Color.Secondary">CS</MudAvatar></AvatarContent>
-            <ChildContent>User</ChildContent>
-        </MudChip>
-        <MudChip T="string">
-            <AvatarContent><MudAvatar Color="Color.Secondary">GR</MudAvatar></AvatarContent>
-            <ChildContent>Group</ChildContent>
-        </MudChip>
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="user" Name="Baseline User" />
+        <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="Person" Name="Baseline User" />
+        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="Panoply AD" />
+        <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="Panoply AD Users - Inbound" />
+        <ObjectChip Kind="ObjectChipKind.PendingExport" Name="Baseline User" />
+        <ObjectChip Kind="ObjectChipKind.DeletionRecord" Name="Baseline User" />
+        <ObjectChip Kind="ObjectChipKind.RunProfile" Name="Full Synchronisation" />
     </MudStack>
 </MudPaper>
 
@@ -774,9 +781,11 @@
 
     <MudText Typo="Typo.h6" Class="mb-3">Avatars</MudText>
     <MudStack Row="true" Spacing="2" Class="mb-5" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-        <MudAvatar Color="Color.Primary">MV</MudAvatar>
+        @* Generic initials, deliberately not any of ObjectChip's glyph abbreviations: this row is a colour
+           swatch for the raw MudAvatar component, not a specimen of the object chip vocabulary above. *@
+        <MudAvatar Color="Color.Primary">JD</MudAvatar>
         <MudAvatar Color="Color.Secondary">AB</MudAvatar>
-        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+        <MudAvatar Color="Color.Tertiary">XY</MudAvatar>
         <MudAvatar Color="Color.Success">OK</MudAvatar>
         <MudAvatar Color="Color.Warning">!</MudAvatar>
         <MudAvatar Color="Color.Info">i</MudAvatar>

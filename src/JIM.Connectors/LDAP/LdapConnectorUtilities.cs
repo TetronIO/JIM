@@ -416,8 +416,10 @@ internal static class LdapConnectorUtilities
     /// <param name="supportedCapabilities">OIDs from the rootDSE supportedCapabilities attribute.</param>
     /// <param name="vendorName">The vendorName attribute from rootDSE (may be null).</param>
     /// <param name="structuralObjectClass">The structuralObjectClass from rootDSE (may be null). OpenLDAP uses "OpenLDAProotDSE".</param>
-    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName, string? structuralObjectClass = null)
+    /// <param name="vendorVersion">The vendorVersion from rootDSE (may be null). 389 Directory Server publishes "389-Directory/x.y.z".</param>
+    internal static LdapDirectoryType DetectDirectoryType(IEnumerable<string>? supportedCapabilities, string? vendorName, string? structuralObjectClass = null, string? vendorVersion = null)
     {
+
         var hasAdCapability = supportedCapabilities != null &&
             (supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
              supportedCapabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
@@ -444,8 +446,47 @@ internal static class LdapConnectorUtilities
             return LdapDirectoryType.OpenLDAP;
         }
 
+        // 389 Directory Server publishes vendorName "389 Project"; Red Hat Directory Server builds brand the vendor
+        // differently but keep the 389-Directory version prefix, so either is enough.
+        if ((vendorName != null && vendorName.Contains("389", StringComparison.Ordinal)) ||
+            (vendorVersion != null && vendorVersion.StartsWith(DirectoryServer389VendorVersionPrefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            return LdapDirectoryType.DirectoryServer389;
+        }
+
         return LdapDirectoryType.Generic;
     }
+
+    /// <summary>
+    /// The prefix of the vendorVersion 389 Directory Server publishes on its rootDSE.
+    /// </summary>
+    internal const string DirectoryServer389VendorVersionPrefix = "389-Directory";
+
+    /// <summary>
+    /// The rootDSE attributes every directory-type read requests beyond the ones that identify the server:
+    /// the facts password policy discovery needs to know where a policy lives and whether one is advertised,
+    /// and the changelog a directory advertises (draft-good-ldap-changelog section 4) so the changelog change
+    /// source reads where the directory says rather than where convention guesses.
+    /// </summary>
+    internal static readonly string[] RootDseDiscoveryAttributes =
+        ["vendorVersion", "namingContexts", "configContext", "supportedControl", "defaultNamingContext", "changelog", "firstChangeNumber", "lastChangeNumber"];
+
+    /// <summary>
+    /// Reads the discovery facts listed in <see cref="RootDseDiscoveryAttributes"/> off a rootDSE entry onto a
+    /// root DSE record, so the two rootDSE reads populate them identically.
+    /// </summary>
+    internal static void ApplyRootDseDiscoveryAttributes(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse)
+    {
+        rootDse.VendorVersion = GetEntryAttributeStringValue(rootDseEntry, "vendorVersion");
+        rootDse.NamingContexts = GetEntryAttributeStringValues(rootDseEntry, "namingContexts");
+        rootDse.ConfigContext = GetEntryAttributeStringValue(rootDseEntry, "configContext");
+        rootDse.SupportedControls = GetEntryAttributeStringValues(rootDseEntry, "supportedControl");
+        rootDse.DefaultNamingContext = GetEntryAttributeStringValue(rootDseEntry, "defaultNamingContext");
+        rootDse.ChangelogDn = GetEntryAttributeStringValue(rootDseEntry, "changelog");
+        rootDse.FirstChangeNumber = GetEntryAttributeLongValue(rootDseEntry, "firstChangeNumber");
+        rootDse.AdvertisedLastChangeNumber = GetEntryAttributeLongValue(rootDseEntry, "lastChangeNumber");
+    }
+
 
     /// <summary>
     /// Queries the rootDSE to detect directory type and basic capabilities.
@@ -455,8 +496,10 @@ internal static class LdapConnectorUtilities
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
         request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass", "DNSHostName"]);
+        request.Attributes.AddRange(RootDseDiscoveryAttributes);
 
         var response = (SearchResponse)connection.SendRequest(request);
+
 
         if (response?.Entries.Count == 0 || response == null)
         {
@@ -470,8 +513,9 @@ internal static class LdapConnectorUtilities
         var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
         var structuralObjectClass = GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
         var dnsHostName = GetEntryAttributeStringValue(rootDseEntry, "DNSHostName");
+        var vendorVersion = GetEntryAttributeStringValue(rootDseEntry, "vendorVersion");
 
-        var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
+        var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass, vendorVersion);
 
         var rootDse = new LdapConnectorRootDse
         {
@@ -479,6 +523,7 @@ internal static class LdapConnectorUtilities
             VendorName = vendorName,
             DnsHostName = dnsHostName
         };
+        ApplyRootDseDiscoveryAttributes(rootDseEntry, rootDse);
 
         logger.Debug("GetBasicRootDseInformation: DirectoryType={DirectoryType}, VendorName={VendorName}",
             rootDse.DirectoryType, rootDse.VendorName ?? "(not set)");
@@ -496,6 +541,16 @@ internal static class LdapConnectorUtilities
     internal static string GetPaginationTokenName(ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType)
     {
         return $"{connectedSystemContainer.ExternalId}|{connectedSystemObjectType.Id}";
+    }
+
+    /// <summary>
+    /// The name of the pagination token a Delta Import's tombstone search keeps per partition. A partition head is
+    /// also a selectable container keyed by the same DN, so the suffix is what keeps the two apart: a container
+    /// token's suffix is an Object Type id, which can never read "deleted-objects".
+    /// </summary>
+    internal static string GetDeletedObjectsPaginationTokenName(ConnectedSystemPartition partition)
+    {
+        return $"{partition.ExternalId}|deleted-objects";
     }
 
     /// <summary>
@@ -840,7 +895,7 @@ internal static class LdapConnectorUtilities
     /// failure over silent corruption is required (see Synchronisation Integrity, root CLAUDE.md).
     /// </summary>
     /// <remarks>
-    /// Applies only to AD-family directories (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>); the
+    /// Applies only to AD-family directories (<see cref="LdapConnectorRootDse.IsActiveDirectoryFamily"/>); the
     /// standard RFC 4512 namingContexts partition discovery used for other directory types has no
     /// equivalent forest-wide-visibility problem. When <paramref name="currentRootDse"/>'s
     /// <see cref="LdapConnectorRootDse.NamingContexts"/> is null or empty (the rootDSE query did not
@@ -859,7 +914,7 @@ internal static class LdapConnectorUtilities
         IEnumerable<ConnectedSystemPartition> selectedPartitions,
         ILogger logger)
     {
-        if (!currentRootDse.UseUsnDeltaImport)
+        if (!currentRootDse.IsActiveDirectoryFamily)
             return;
 
         if (currentRootDse.NamingContexts == null || currentRootDse.NamingContexts.Count == 0)
@@ -1094,7 +1149,7 @@ internal static class LdapConnectorUtilities
     /// introduced) must not survive into the new baseline.
     /// </para>
     /// </remarks>
-    /// <param name="useUsnDeltaImport">Whether the connected directory is AD-family (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>).</param>
+    /// <param name="isActiveDirectoryFamily">Whether the connected directory is AD-family (<see cref="LdapConnectorRootDse.IsActiveDirectoryFamily"/>).</param>
     /// <param name="preferredDomainController">The "Preferred Domain Controller" setting value, or null/blank if not configured.</param>
     /// <param name="dnsHostName">The dnsHostName of the domain controller this connection reached.</param>
     /// <param name="connectedServer">The server this connection was actually opened against, so that a candidate
@@ -1105,14 +1160,14 @@ internal static class LdapConnectorUtilities
     /// <returns>The value to persist as <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/>, and a warning
     /// to surface on the Activity when a discovered domain controller had to be rejected.</returns>
     internal static PinnedDirectoryServerDecision ResolvePinnedDirectoryServerForImport(
-        bool useUsnDeltaImport,
+        bool isActiveDirectoryFamily,
         string? preferredDomainController,
         string? dnsHostName,
         string connectedServer,
         Func<string, bool> canConnectTo,
         ILogger logger)
     {
-        if (!useUsnDeltaImport || !string.IsNullOrWhiteSpace(preferredDomainController) || string.IsNullOrWhiteSpace(dnsHostName))
+        if (!isActiveDirectoryFamily || !string.IsNullOrWhiteSpace(preferredDomainController) || string.IsNullOrWhiteSpace(dnsHostName))
             return new PinnedDirectoryServerDecision(null, null);
 
         // The connection that answered this rootDSE query was opened against connectedServer, so a candidate

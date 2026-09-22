@@ -173,6 +173,127 @@ ${SAMBA_BIN}/samba-tool ou create "OU=TestGroups,${DOMAIN_DC}" 2>/dev/null || ec
 
 echo "  OU structure created"
 
+# ==============================================================================
+# JIM's service account and its delegation
+# ==============================================================================
+# Integration scenarios connect JIM's Connected Systems as this account, never as the domain
+# Administrator: every run then exercises the permissions a customer delegates rather than an
+# identity that bypasses access control entirely. The lab's own population and assertions keep
+# using the Administrator credential; see engineering/INTEGRATION_TESTING.md for the two-identity
+# model, and docs/connectors/jim-ldap-connector.md for the delegation as customers are told to
+# apply it (the same access control entries, from the same file).
+JIM_SERVICE_PASSWORD="${JIM_SERVICE_PASSWORD:-Svc-Jim@123!}"
+JIM_SERVICE_DN="CN=svc-jim,OU=Services,${DOMAIN_DC}"
+
+echo "Creating JIM's service account..."
+${SAMBA_BIN}/samba-tool ou create "OU=Services,${DOMAIN_DC}" 2>/dev/null || echo "  OU=Services already exists"
+${SAMBA_BIN}/samba-tool user create svc-jim "${JIM_SERVICE_PASSWORD}" --userou="OU=Services" \
+    --description="The account JIM's Connected Systems bind as" 2>/dev/null || echo "  svc-jim already exists"
+${SAMBA_BIN}/samba-tool group create "JIM Connectors" --groupou="OU=Services" 2>/dev/null || echo "  Group 'JIM Connectors' already exists"
+${SAMBA_BIN}/samba-tool group addmembers "JIM Connectors" svc-jim 2>/dev/null || true
+echo "  svc-jim created, in group 'JIM Connectors'"
+
+# The credential is baked into a long-lived image, so it must never expire, for the same reason
+# the Administrator credential above must not.
+cat > /tmp/svc-jim-uac.ldif << EOF
+dn: ${JIM_SERVICE_DN}
+changetype: modify
+replace: userAccountControl
+userAccountControl: 66048
+EOF
+${SAMBA_BIN}/ldbmodify -H ${SAMBA_PRIVATE}/sam.ldb /tmp/svc-jim-uac.ldif
+rm -f /tmp/svc-jim-uac.ldif
+
+echo "Delegating JIM's access over the managed containers..."
+for jim_container_dn in "OU=Corp,${DOMAIN_DC}" "OU=TestUsers,${DOMAIN_DC}" "OU=TestGroups,${DOMAIN_DC}"; do
+    /usr/local/sbin/jim-delegate.sh "${jim_container_dn}"
+done
+/usr/local/sbin/jim-delegate.sh --tombstones
+
+# Prove the delegation works before the image is committed: a lab whose service account cannot
+# do what JIM needs would fail every scenario with an access error, hours later and far from the
+# cause. Each probe is one of JIM's operations, performed over LDAP as svc-jim.
+echo "Verifying the delegation..."
+JIM_PROBE_DN="CN=Delegation Probe,OU=Users,OU=Corp,${DOMAIN_DC}"
+jim_as_service_account() {
+    ${SAMBA_BIN}/"$@" -H ldap://localhost --simple-bind-dn="${JIM_SERVICE_DN}" --password="${JIM_SERVICE_PASSWORD}"
+}
+
+cat > /tmp/jim-probe-add.ldif << EOF
+dn: ${JIM_PROBE_DN}
+changetype: add
+objectClass: user
+sAMAccountName: jim-probe
+userAccountControl: 514
+displayName: Delegation Probe
+EOF
+if ! jim_as_service_account ldbadd /tmp/jim-probe-add.ldif > /dev/null; then
+    echo "ERROR: svc-jim could not create a user in OU=Users,OU=Corp; the delegation did not apply" >&2
+    exit 1
+fi
+
+cat > /tmp/jim-probe-mod.ldif << EOF
+dn: ${JIM_PROBE_DN}
+changetype: modify
+replace: department
+department: Delegation
+EOF
+if ! jim_as_service_account ldbmodify /tmp/jim-probe-mod.ldif > /dev/null; then
+    echo "ERROR: svc-jim could not write an attribute on a user it created" >&2
+    exit 1
+fi
+
+# Setting a password is granted by the Reset Password control access right, which is separate
+# from attribute write access, so it is checked separately. samba-tool signs and seals this
+# connection, which is what Active Directory insists on for a password write.
+if ! ${SAMBA_BIN}/samba-tool user setpassword jim-probe --newpassword="Probe@12345!" \
+        -H ldap://localhost -U "svc-jim%${JIM_SERVICE_PASSWORD}" > /dev/null 2>&1; then
+    echo "ERROR: svc-jim could not set a password; the Reset Password right did not apply" >&2
+    exit 1
+fi
+
+# The reset-rights preflight reads the object's own permissions, with the security descriptor
+# flags control, and reports that it could not tell if they come back empty.
+probe_sd=$(jim_as_service_account ldbsearch --controls="sd_flags:1:7" -b "${JIM_PROBE_DN}" -s base nTSecurityDescriptor 2>/dev/null | grep -c "^nTSecurityDescriptor:")
+if [ "${probe_sd}" != "1" ]; then
+    echo "ERROR: svc-jim could not read nTSecurityDescriptor on a user; the reset-rights preflight would report an unknown" >&2
+    exit 1
+fi
+
+if ! jim_as_service_account ldbdel "${JIM_PROBE_DN}" > /dev/null; then
+    echo "ERROR: svc-jim could not delete the user it created" >&2
+    exit 1
+fi
+
+# The delete just made a tombstone. A Delta Import finds it in the Deleted Objects container,
+# and an account without rights there is told nothing rather than refused, so this check is the
+# only thing standing between a silent delegation gap and deletions never being imported.
+tombstones=$(jim_as_service_account ldbsearch --controls="show_deleted:1" -b "CN=Deleted Objects,${DOMAIN_DC}" -s one "(isDeleted=TRUE)" dn 2>/dev/null | grep -c "^dn:")
+if [ "${tombstones}" -lt 1 ]; then
+    echo "ERROR: svc-jim read no tombstones from the Deleted Objects container; Delta Import would silently miss every deletion" >&2
+    exit 1
+fi
+
+# And the other half of least privilege: the account must not be able to write where JIM is not
+# managing anything, nor hold administrative rights by the back door.
+cat > /tmp/jim-probe-outside.ldif << EOF
+dn: CN=Should Not Exist,CN=Users,${DOMAIN_DC}
+changetype: add
+objectClass: user
+sAMAccountName: jim-probe-outside
+userAccountControl: 514
+EOF
+if jim_as_service_account ldbadd /tmp/jim-probe-outside.ldif > /dev/null 2>&1; then
+    echo "ERROR: svc-jim created a user in CN=Users, outside the containers it was delegated; the delegation is too broad" >&2
+    exit 1
+fi
+if ${SAMBA_BIN}/samba-tool group listmembers "Domain Admins" 2>/dev/null | grep -q "^svc-jim$"; then
+    echo "ERROR: svc-jim is a member of Domain Admins; the lab would prove nothing about delegated access" >&2
+    exit 1
+fi
+rm -f /tmp/jim-probe-add.ldif /tmp/jim-probe-mod.ldif /tmp/jim-probe-outside.ldif
+echo "  Delegation verified (create, write, set password, read permissions, delete, read tombstones; no access outside)"
+
 # Install SSH public key schema (optional, may already exist)
 echo "Checking SSH public key schema..."
 sshkey_check=$(${SAMBA_BIN}/ldbsearch -H ${SAMBA_PRIVATE}/sam.ldb "cn=sshPublicKey" 2>/dev/null || true)

@@ -9,17 +9,28 @@ namespace JIM.Connectors.LDAP;
 
 internal class LdapConnectorPartitions
 {
-    private readonly LdapConnection _connection;
+    private readonly ILdapOperationExecutor _executor;
     private readonly ILogger _logger;
     private readonly LdapDirectoryType _directoryType;
     private string _partitionsDn = null!;
 
-    internal LdapConnectorPartitions(LdapConnection ldapConnection, ILogger logger, LdapDirectoryType directoryType)
+    internal LdapConnectorPartitions(ILdapOperationExecutor executor, ILogger logger, LdapDirectoryType directoryType)
     {
-        _connection = ldapConnection;
+        _executor = executor;
         _logger = logger;
         _directoryType = directoryType;
     }
+
+    /// <summary>
+    /// True where a partition search failed because the bind account cannot see the naming context at all: it is
+    /// missing (<see cref="ResultCode.NoSuchObject"/>, which some directories return instead of an access-rights
+    /// error to avoid confirming the object's existence to an unprivileged caller) or the account has no rights to
+    /// read it (<see cref="ResultCode.InsufficientAccessRights"/>). Both are an ordinary, expected shape for a
+    /// least-privilege service account bound against a directory that hosts several suffixes and grants it rights on
+    /// only one of them; every other result code is a genuine fault and must still propagate.
+    /// </summary>
+    private static bool IsUnreadablePartitionResult(DirectoryOperationException ex) =>
+        ex.Response?.ResultCode is ResultCode.NoSuchObject or ResultCode.InsufficientAccessRights;
 
     /// <summary>
     /// The attribute carrying the directory's own immutable identifier for an entry, which is what container
@@ -77,8 +88,10 @@ internal class LdapConnectorPartitions
             _partitionsDn = $"CN=Partitions,{configurationNamingContext}";
 
             var request = new SearchRequest(_partitionsDn, "(objectClass=crossRef)", SearchScope.OneLevel);
-            var response = (SearchResponse)_connection.SendRequest(request);
+            var response = (SearchResponse)_executor.SendRequest(request);
             var partitions = new List<ConnectorPartition>();
+            var attemptedPartitionCount = 0;
+            var unreadablePartitionCount = 0;
 
             _logger.Debug("GetActiveDirectoryPartitionsAsync: Found {Count} crossRef entries to process (skipHiddenPartitions={SkipHidden})",
                 response.Entries.Count, skipHiddenPartitions);
@@ -112,6 +125,8 @@ internal class LdapConnectorPartitions
                     continue;
                 }
 
+                attemptedPartitionCount++;
+
                 var partitionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 var partition = new ConnectorPartition
@@ -121,7 +136,23 @@ internal class LdapConnectorPartitions
                     Hidden = isHidden,
                 };
 
-                partition.Containers = GetPartitionContainers(partition);
+                try
+                {
+                    partition.Containers = GetPartitionContainers(partition);
+                }
+                catch (DirectoryOperationException ex) when (IsUnreadablePartitionResult(ex))
+                {
+                    // A least-privilege service account is commonly granted rights on its own domain partition only,
+                    // not on every crossRef partition a multi-domain forest advertises (Configuration, Schema, other
+                    // domains). Skipping this one partition is correct: the rest of the forest it can see must still
+                    // come back rather than failing the whole hierarchy import for a partition it was never meant to read.
+                    unreadablePartitionCount++;
+                    _logger.Warning(
+                        "GetActiveDirectoryPartitionsAsync: the bind account has no read access to crossRef partition '{Partition}' (LDAP result {ResultCode}); skipping it.",
+                        partition.Name, ex.Response?.ResultCode);
+                    continue;
+                }
+
                 partitionStopwatch.Stop();
 
                 _logger.Debug("GetActiveDirectoryPartitionsAsync: Partition '{Name}' (Hidden={Hidden}) - {ContainerCount} containers retrieved in {ElapsedMs}ms",
@@ -131,6 +162,12 @@ internal class LdapConnectorPartitions
                 if (partition.Containers.Count > 0)
                     partitions.Add(partition);
             }
+
+            // Every attempted partition being unreadable is a configuration fault, not an empty forest: reporting an
+            // empty hierarchy here would look like "this directory has no organisational units" rather than "this
+            // account cannot read anything", which sends an administrator looking in the wrong place entirely.
+            if (attemptedPartitionCount > 0 && unreadablePartitionCount == attemptedPartitionCount)
+                throw new Exception("The bind account can read none of the directory's crossRef partitions. Grant it read access to at least one domain partition, or verify its credentials.");
 
             totalStopwatch.Stop();
             _logger.Information("GetActiveDirectoryPartitionsAsync: Completed - {PartitionCount} partitions with containers in {ElapsedMs}ms total",
@@ -158,6 +195,7 @@ internal class LdapConnectorPartitions
             _logger.Debug("GetNamingContextPartitionsAsync: Found {Count} naming contexts", namingContexts.Count);
 
             var partitions = new List<ConnectorPartition>();
+            var unreadableNamingContextCount = 0;
 
             foreach (var namingContext in namingContexts)
             {
@@ -170,7 +208,24 @@ internal class LdapConnectorPartitions
                     Hidden = false,
                 };
 
-                partition.Containers = GetPartitionContainers(partition);
+                try
+                {
+                    partition.Containers = GetPartitionContainers(partition);
+                }
+                catch (DirectoryOperationException ex) when (IsUnreadablePartitionResult(ex))
+                {
+                    // A least-privilege service account bound against a directory that hosts several suffixes (an
+                    // OpenLDAP server serving more than one organisation, or exposing operational naming contexts such
+                    // as cn=config or cn=accesslog) commonly has rights on only one of them. That is not a fault in
+                    // the directory or in JIM; the naming context is simply not this account's to read, and the
+                    // hierarchy import must still bring back everything the account CAN see rather than failing outright.
+                    unreadableNamingContextCount++;
+                    _logger.Warning(
+                        "GetNamingContextPartitionsAsync: the bind account has no read access to naming context '{NamingContext}' (LDAP result {ResultCode}); skipping it.",
+                        partition.Name, ex.Response?.ResultCode);
+                    continue;
+                }
+
                 partitionStopwatch.Stop();
 
                 _logger.Debug("GetNamingContextPartitionsAsync: Partition '{Name}' - {ContainerCount} containers retrieved in {ElapsedMs}ms",
@@ -180,6 +235,12 @@ internal class LdapConnectorPartitions
                 if (partition.Containers.Count > 0)
                     partitions.Add(partition);
             }
+
+            // Every naming context being unreadable is a configuration fault (wrong credentials, or an account
+            // granted no rights anywhere), not a directory with nothing in it: reporting an empty hierarchy here
+            // would read as "this directory is empty" rather than "this account cannot read anything".
+            if (unreadableNamingContextCount == namingContexts.Count)
+                throw new Exception("The bind account can read none of the directory's naming contexts. Grant it read access to at least one, or verify its credentials.");
 
             totalStopwatch.Stop();
             _logger.Information("GetNamingContextPartitionsAsync: Completed - {PartitionCount} partitions with containers in {ElapsedMs}ms total",
@@ -203,7 +264,7 @@ internal class LdapConnectorPartitions
             SearchScope.Subtree,
             "name",
             stableIdAttribute);
-        var response = (SearchResponse)_connection.SendRequest(request);
+        var response = (SearchResponse)_executor.SendRequest(request);
         ldapStopwatch.Stop();
 
         var processingStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -342,11 +403,18 @@ internal class LdapConnectorPartitions
     /// Retrieves the namingContexts attribute from the rootDSE (RFC 4512).
     /// This is the standard mechanism for discovering partitions on non-AD directories.
     /// </summary>
+    /// <remarks>
+    /// Returns every naming context the rootDSE advertises, unfiltered: an operational-looking suffix such as
+    /// <c>cn=config</c> or <c>cn=accesslog</c> is an ordinary naming context as far as this method is concerned, and
+    /// filtering it out here would risk hiding a suffix the bind account genuinely can and should read. Whether the
+    /// account can actually see a given naming context is decided by attempting the read in
+    /// <see cref="GetNamingContextPartitionsAsync"/>, which skips whatever comes back unreadable.
+    /// </remarks>
     private List<string>? GetNamingContexts()
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
         request.Attributes.Add("namingContexts");
-        var response = (SearchResponse)_connection.SendRequest(request);
+        var response = (SearchResponse)_executor.SendRequest(request);
 
         if (response.ResultCode != ResultCode.Success)
         {
@@ -369,7 +437,7 @@ internal class LdapConnectorPartitions
         // get the configuration naming context from an attribute on the rootDSE
         var request = new SearchRequest() { Scope = SearchScope.Base };
         request.Attributes.Add("configurationNamingContext");
-        var response = (SearchResponse)_connection.SendRequest(request);
+        var response = (SearchResponse)_executor.SendRequest(request);
 
         if (response.ResultCode != ResultCode.Success)
         {

@@ -11,7 +11,7 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="4">
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="jim-recall-choice-impact">
+            <MudAlert Severity="Severity.Warning" data-testid="jim-recall-choice-impact">
                 @ImpactText
                 @* Plain lines, not a MudList: a list item inside an alert paints its own surface, which reads
                    as a rendering fault rather than as emphasis (see ConsequenceConfirmationDialog). *@
@@ -33,7 +33,7 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">@KeepHelperText</MudText>
                     @if (_keepValues)
                     {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 ms-12"
+                        <MudAlert Severity="Severity.Warning" Class="mt-2 ms-12"
                                   data-testid="jim-recall-choice-keep-warning">
                             @KeepWarningText
                         </MudAlert>
@@ -43,7 +43,7 @@
 
             @if (!string.IsNullOrEmpty(InfoText))
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" data-testid="jim-recall-choice-info">
+                <MudAlert Severity="Severity.Info" data-testid="jim-recall-choice-info">
                     @InfoText
                 </MudAlert>
             }

@@ -102,7 +102,7 @@
                    to the selected rule, so the advice appears while the administrator is still deciding. *@
                 @if (GetDeletionRuleAdvisory() is { } deletionRuleAdvisory)
                 {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">@deletionRuleAdvisory</MudAlert>
+                    <MudAlert Severity="Severity.Info" Class="mt-4">@deletionRuleAdvisory</MudAlert>
                 }
 
                 @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
@@ -146,7 +146,7 @@
                         }
                         else
                         {
-                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                            <MudAlert Severity="Severity.Warning" Dense="true">
                                 No contributing systems found. Create inbound Synchronisation Rules for this object type to enable authoritative source selection.
                             </MudAlert>
                         }
@@ -185,7 +185,7 @@
 
                     @if (DeletionSettingsPreviewIsStale)
                     {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                                   data-testid="jim-preview-stale">
                             The deletion settings have been edited since this preview ran, so it no longer describes
                             what saving would do. Preview again for an answer about the current settings.
@@ -528,6 +528,7 @@
         <TitleContent>
             <MudText Typo="Typo.h6">
                 <MudIcon Icon="@Icons.Material.Filled.LowPriority" Class="mr-3" />Attribute Priority: @_priorityAttribute?.Name
+                <TermHint Term="Term.AttributePriority" />
             </MudText>
         </TitleContent>
         <DialogContent>

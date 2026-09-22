@@ -17,7 +17,7 @@
         }
         else if (_candidates.Count == 0)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Info">
                 Every custom attribute is already bound to @MetaverseObjectTypeName. Create a new attribute to add one.
             </MudAlert>
         }
@@ -44,7 +44,7 @@
                     }
                 </MudList>
 
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                <MudAlert Severity="Severity.Info" Dense="true">
                     Need one that doesn't exist yet? Create a new attribute and bind it in one step from the Schema Attributes list.
                 </MudAlert>
             </MudStack>

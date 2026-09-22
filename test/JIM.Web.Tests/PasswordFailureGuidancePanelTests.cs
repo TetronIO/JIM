@@ -162,7 +162,7 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
         panel.Find($"[data-testid='{ToggleMarker}']").Click();
 
         Assert.That(panel.Find($"[data-testid='{RegenerateMarker}']").TextContent,
-            Does.Contain("New password for all 3 accounts"));
+            Does.Contain("New password for all 3 Connected System Objects"));
     }
 
     [Test]

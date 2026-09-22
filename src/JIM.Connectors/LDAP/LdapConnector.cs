@@ -346,7 +346,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // Detect directory type so partition discovery can use the appropriate mechanism
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
 
-            var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
+            var ldapConnectorPartitions = new LdapConnectorPartitions(new LdapOperationExecutor(_connection), logger, rootDse.DirectoryType);
             return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
         }
         finally
@@ -451,7 +451,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         LdapDirectoryType.SambaAD => "Samba AD",
         LdapDirectoryType.OpenLDAP => "OpenLDAP",
         LdapDirectoryType.Generic => "Generic",
+        LdapDirectoryType.DirectoryServer389 => "389 Directory Server",
         _ => "Generic"
+
     };
     #endregion
 
@@ -475,7 +477,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 throw new InvalidOperationException("No connection available to discover directory servers with");
 
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
-            if (!rootDse.UseUsnDeltaImport)
+            if (!rootDse.IsActiveDirectoryFamily)
                 throw new NotSupportedException(
                     $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
 
@@ -872,11 +874,15 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     /// <summary>
     /// Everything an import session has to say once its work is done, applied to the result it is about to hand
-    /// back: the entries excluded Containers caused it to discard, and any rejected-domain-controller warning.
+    /// back: the entries excluded Containers caused it to discard, any deletion detection it could not vouch for,
+    /// and any rejected-domain-controller warning.
     /// </summary>
     /// <remarks>
-    /// A warning the import raised about itself always wins over the domain controller pinning note (issue #230
-    /// Phase 2): it describes how the import was performed, which matters more than a note about plumbing.
+    /// The result carries one warning, so the first of these to speak wins, in this order: a warning the import
+    /// raised about itself, which describes how the import was performed; then the deletion detection warning
+    /// (#1723), which describes what the import may have missed and so what may now be wrong in JIM; then the
+    /// domain controller pinning note (issue #230 Phase 2), which is about plumbing and changes nothing the
+    /// administrator holds. Each is logged in full where it arises, so nothing is lost by the ranking.
     /// </remarks>
     private static async Task<ConnectedSystemImportResult> FinaliseImportResultAsync(
         LdapConnectorImport import,
@@ -886,8 +892,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
         import.ReportEntriesDiscardedByExclusion(result);
 
-        if (result.WarningMessage == null && import.PinValidationWarning != null)
-            result.WarningMessage = import.PinValidationWarning;
+        result.WarningMessage ??= import.DeltaSourceWarning ?? import.PinValidationWarning;
 
         return result;
     }
@@ -941,7 +946,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             var preferredDomainController = settings
                 .FirstOrDefault(s => s.Setting.Name == _settingPreferredDomainController)?.StringValue;
 
-            if (rootDse.UseUsnDeltaImport &&
+            if (rootDse.IsActiveDirectoryFamily &&
                 string.IsNullOrWhiteSpace(preferredDomainController) &&
                 _lastResolutionSource != LdapServerResolutionSource.Pinned &&
                 !string.IsNullOrEmpty(rootDse.DnsHostName))
@@ -951,7 +956,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 // has no Activity-level warning channel (its results are per object), so the administrator's
                 // warning comes from the next import, which rediscovers, re-validates and reports.
                 var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-                    rootDse.UseUsnDeltaImport, preferredDomainController, rootDse.DnsHostName,
+                    rootDse.IsActiveDirectoryFamily, preferredDomainController, rootDse.DnsHostName,
                     _openConnectionPlan?.EffectiveServer ?? string.Empty,
                     server => CanConnectTo(server, Log.Logger), Log.Logger);
 
@@ -1036,35 +1041,17 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         try
         {
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
-            var domainRootDn = GetDefaultNamingContext(_connection);
 
             var policyReader = new LdapConnectorPasswordPolicy(new LdapOperationExecutor(_connection), logger, rootDse.DirectoryType);
-            return await policyReader.GetPasswordPolicyAsync(domainRootDn ?? string.Empty);
+            return await policyReader.GetPasswordPolicyAsync(LdapPasswordPolicyScope.From(rootDse));
         }
         finally
         {
             CloseImportConnection();
         }
     }
-
-    /// <summary>
-    /// Reads defaultNamingContext from the rootDSE, which is where Active Directory holds its domain-wide
-    /// password policy. Directories that are not Active Directory do not publish this, and do not need to: their
-    /// policy is not discoverable anyway.
-    /// </summary>
-    private static string? GetDefaultNamingContext(LdapConnection connection)
-    {
-        var request = new SearchRequest { Scope = SearchScope.Base };
-        request.Attributes.Add("defaultNamingContext");
-
-        var response = (SearchResponse)connection.SendRequest(request);
-        if (response.Entries.Count == 0)
-            return null;
-
-        var attribute = response.Entries[0].Attributes["defaultNamingContext"];
-        return attribute == null || attribute.Count == 0 ? null : attribute[0]?.ToString();
-    }
     #endregion
+
 
     #region IConnectorPasswordManagement members
     private LdapConnectorPassword? _passwordChannel;
@@ -1208,13 +1195,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // this method is called by an administrator asking what is wrong.
             LdapConnectorRootDse rootDse;
             bool supportsPasswordModifyExtension;
-            string? domainRootDn;
             try
             {
                 rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(connection, logger);
                 supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
-                domainRootDn = GetDefaultNamingContext(connection);
             }
+
             catch (DirectoryOperationException ex)
             {
                 logger.Warning("RunPasswordPreflightAsync: The directory refused to describe itself: {Message}", LogSanitiser.Sanitise(ex.Message));
@@ -1234,7 +1220,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
                     "JIM connected to this Connected System and authenticated successfully.")
             };
-            checks.AddRange(await preflight.RunAsync(containerExternalIds, domainRootDn, cancellationToken));
+            checks.AddRange(await preflight.RunAsync(containerExternalIds, LdapPasswordPolicyScope.From(rootDse), cancellationToken));
+
 
             return new PasswordPreflightResult
             {
@@ -1280,7 +1267,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         LdapDirectoryType.ActiveDirectory => "Active Directory",
         LdapDirectoryType.SambaAD => "Samba Active Directory",
         LdapDirectoryType.OpenLDAP => "OpenLDAP",
+        LdapDirectoryType.DirectoryServer389 => "389 Directory Server",
         _ => "an LDAP directory"
+
     };
 
     /// <summary>

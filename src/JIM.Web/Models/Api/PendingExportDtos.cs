@@ -192,6 +192,17 @@ public class PendingExportAttributeValueChangeDto
     public string? UnresolvedReferenceValue { get; set; }
     public int ExportAttemptCount { get; set; }
 
+    /// <summary>
+    /// The export Synchronisation Rule whose mapping produced this value. Null when the contributing rule
+    /// has since been deleted; <see cref="SyncRuleName"/> is the denormalised record that survives it.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the contributing Synchronisation Rule's name at staging time.
+    /// </summary>
+    public string? SyncRuleName { get; set; }
+
     public static PendingExportAttributeValueChangeDto FromEntity(PendingExportAttributeValueChange entity)
     {
         return new PendingExportAttributeValueChangeDto
@@ -210,7 +221,9 @@ public class PendingExportAttributeValueChangeDto
             GuidValue = entity.GuidValue,
             BoolValue = entity.BoolValue,
             UnresolvedReferenceValue = entity.UnresolvedReferenceValue,
-            ExportAttemptCount = entity.ExportAttemptCount
+            ExportAttemptCount = entity.ExportAttemptCount,
+            SyncRuleId = entity.SyncRuleId,
+            SyncRuleName = entity.SyncRuleName
         };
     }
 }

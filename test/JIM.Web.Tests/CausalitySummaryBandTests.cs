@@ -42,8 +42,8 @@ public class CausalitySummaryBandTests
 
         var sentence = cut.Find(".summary-sentence").TextContent;
         Assert.That(sentence, Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: " +
-            "a new Identity was created, 11 attributes flowed to it, and an export of 11 changes is now queued for Glitterband EMEA."));
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+            "a new Metaverse Object was projected, 11 attributes flowed to it, and an export of 11 changes is now queued for Glitterband EMEA."));
     }
 
     [Test]
@@ -98,12 +98,14 @@ public class CausalitySummaryBandTests
 
         var cut = RenderBand(context, CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        var pills = cut.FindAll(".oc-pill");
+        // The pills are ordinary Text-variant MudChips carrying a Color, so the tone shows as MudBlazor's own
+        // colour class; the panel's .oc-pill restyle was retired when the portal's chip took its shape.
+        var pills = cut.FindAll(".outcome-strip .mud-chip");
         Assert.That(pills, Has.Count.EqualTo(4));
-        Assert.That(pills[0].ClassList, Does.Contain("primary"));
-        Assert.That(pills[0].TextContent.Trim(), Is.EqualTo("Identity created"));
-        Assert.That(pills[1].ClassList, Does.Contain("secondary"));
-        Assert.That(pills[3].ClassList, Does.Contain("info"));
+        Assert.That(pills[0].ClassList, Does.Contain("mud-chip-color-primary"));
+        Assert.That(pills[0].TextContent.Trim(), Is.EqualTo("Projected to the Metaverse"));
+        Assert.That(pills[1].ClassList, Does.Contain("mud-chip-color-secondary"));
+        Assert.That(pills[3].ClassList, Does.Contain("mud-chip-color-info"));
         Assert.That(pills[3].TextContent.Trim(), Is.EqualTo("Export queued · 11 changes"));
     }
 
@@ -122,40 +124,32 @@ public class CausalitySummaryBandTests
     }
 
     [Test]
-    public async Task Render_TechnicalNamesOn_SwapsThePlainLanguageVocabularyInTheSentenceAsync()
-    {
-        await using var context = CausalityBunitContext.Create();
-
-        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        var cut = context.Render<CausalitySummaryBand>(ps => ps
-            .Add(c => c.Summary, CausalitySummaryBuilder.Build(model))
-            .Add(c => c.Context, CausalityTestData.NewJoinerContext())
-            .Add(c => c.TechnicalNames, true));
-
-        // "record" and "Identity" are plain-language stand-ins for Connected System Object and Metaverse
-        // Object; leaving them unchanged made the toggle look broken on the one sentence read first.
-        var sentence = cut.Find(".summary-sentence").TextContent;
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(sentence, Does.Contain("processed the Connected System Object"));
-            Assert.That(sentence, Does.Contain("a new Metaverse Object was projected"));
-            Assert.That(sentence, Does.Not.Contain("the record"));
-            Assert.That(sentence, Does.Not.Contain("Identity"));
-        }
-    }
-
-    [Test]
-    public async Task Render_TechnicalNamesOff_KeepsThePlainLanguageWordingAsync()
+    public async Task Render_SummarySentence_NeverSaysRecordOrIdentityAsync()
     {
         await using var context = CausalityBunitContext.Create();
 
         var cut = RenderBand(context, CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
+        // "record" and "Identity" are not JIM's product vocabulary; every mention names the Metaverse
+        // Object or the Connected System Object instead, and there is no toggle to swap wordings.
         var sentence = cut.Find(".summary-sentence").TextContent;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(sentence, Does.Contain("processed the record for"));
-            Assert.That(sentence, Does.Contain("a new Identity was created"));
+            Assert.That(sentence, Does.Contain("processed person Liam Allen"));
+            Assert.That(sentence, Does.Contain("a new Metaverse Object was projected"));
+            Assert.That(sentence, Does.Not.Contain("record"));
+            Assert.That(sentence, Does.Not.Contain("Identity"));
         }
+    }
+
+    [Test]
+    public async Task Render_NoRecordLabelKnown_NamesTheConnectedSystemObjectAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var noNameContext = CausalityTestData.NewJoinerContext() with { CsoDisplayName = null, CsoExternalId = null };
+
+        var cut = RenderBand(context, CausalityTestData.NewJoinerItem(), noNameContext);
+
+        Assert.That(cut.Find(".summary-sentence").TextContent, Does.Contain("processed the Connected System Object"));
     }
 }

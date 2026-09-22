@@ -215,8 +215,7 @@ public class Worker : BackgroundService
                 {
                     Log.Debug("ExecuteAsync: No tasks on queue. Sleeping...");
 
-                    // During idle time, perform housekeeping tasks like orphan MVO cleanup
-                    await PerformHousekeepingAsync(mainLoopJim);
+                    await PerformIdleTickAsync(mainLoopJim);
 
                     await Task.Delay(2000, stoppingToken);
                 }
@@ -949,17 +948,41 @@ public class Worker : BackgroundService
     private DateTime _lastHousekeepingRun = DateTime.MinValue;
 
     /// <summary>
+    /// One idle tick of the main loop: housekeeping, then the release of everything the main loop's context has
+    /// tracked. That context lives for the Worker's lifetime, and every Worker Task and Activity it dequeues or
+    /// checks for cancellation stays tracked in it; nothing in the loop needs those copies past the iteration that
+    /// loaded them (dispatch re-reads the task on its own context, heartbeats are direct updates, cancellation
+    /// re-loads by id), so without this a busy Worker's memory grows with every task it has ever run. Decisions are
+    /// never made from those tracked copies either: a long-lived context serves an entity back as it first stood,
+    /// which is what moved housekeeping onto a context of its own. Internal for testability.
+    /// </summary>
+    internal async Task PerformIdleTickAsync(JimApplication mainLoopJim)
+    {
+        await PerformHousekeepingAsync();
+        mainLoopJim.SyncRepo.ClearChangeTracker();
+    }
+
+    /// <summary>
     /// Performs housekeeping tasks during worker idle time.
     /// Currently includes: orphaned MVO cleanup based on deletion rules.
     /// Internal for testability (JIM.Worker.Tests exercises the housekeeping path directly).
     /// </summary>
-    internal async Task PerformHousekeepingAsync(JimApplication jim)
+    internal async Task PerformHousekeepingAsync()
     {
         // Only run housekeeping every 60 seconds to avoid unnecessary database queries
         if ((DateTime.UtcNow - _lastHousekeepingRun).TotalSeconds < 60)
             return;
 
         _lastHousekeepingRun = DateTime.UtcNow;
+
+        // Each tick runs on a JimApplication (and so a DbContext) of its own, never the main loop's. That instance
+        // lives for the worker's lifetime on a change-tracking context, and EF Core serves a tracked entity back
+        // from its identity map rather than refreshing it from a later query, so a Synchronisation Rule or
+        // Metaverse Object Type loaded for one batch was being reused, as it then stood, by every batch after it:
+        // an export rule switched to Disconnect after the first batch still had its directory objects deleted
+        // (found by Scenario 4, Test 9). A fresh instance reads the configuration as it stands now, and releases
+        // everything the batch tracked when it is done.
+        using var jim = _jimFactory.Create();
 
         try
         {
@@ -998,7 +1021,7 @@ public class Worker : BackgroundService
 
         var activity = new Activity
         {
-            TargetName = "Scheduled Identity Deletion",
+            TargetName = Constants.ActivityTargetNames.ScheduledMetaverseObjectDeletion,
             TargetType = ActivityTargetType.MetaverseObjectHousekeeping,
             TargetOperationType = ActivityTargetOperationType.Execute,
             ObjectsToProcess = mvosToDelete.Count
@@ -1040,6 +1063,14 @@ public class Worker : BackgroundService
                 .GroupBy(sr => sr.ConnectedSystemId)
                 .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name);
 
+            // Connected System id to CSO type name, so the causality panel can name a staged export's target
+            // "type: name" instead of the bare name or id, matching the sync engine's own lookup.
+            var csoTypeNameLookup = exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                .SelectMany(rules => rules)
+                .Where(sr => sr.ConnectedSystemObjectType != null)
+                .GroupBy(sr => sr.ConnectedSystemId)
+                .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+
             foreach (var mvo in mvosToDelete)
             {
                 try
@@ -1050,7 +1081,11 @@ public class Worker : BackgroundService
                     // Evaluate export rules for the MVO deletion: delete Pending Exports are created for
                     // CSOs whose export Synchronisation Rule's OutboundDeprovisionAction is Delete (issue #655).
                     // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports.
-                    var deletePendingExports = await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
+                    // The per-MVO working set also records any provisioning cancelled outright (a
+                    // target CSO still Pending Provisioning with no export ever sent), reported
+                    // below alongside the delete exports.
+                    var mvoWorkingSet = new ExportEvaluationWorkingSet();
+                    var deletePendingExports = await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache, mvoWorkingSet);
 
                     // Delete the MVO using the initiator info captured when it was marked for deletion
                     // This preserves the audit trail - the original initiator is recorded, not housekeeping
@@ -1095,9 +1130,22 @@ public class Worker : BackgroundService
                         {
                             AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
                                 csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
-                                activity, csoChangeTrackingEnabled);
+                                activity, csoChangeTrackingEnabled,
+                                csoTypeNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId));
                             deletePendingExport.QueuedByRunProfileExecutionItemId = deletionItem.Id;
                             queueingStamps.Add((deletePendingExport.Id, deletionItem.Id));
+                        }
+
+                        // Provisioning cancellations: a target CSO cancelled outright rather
+                        // than deprovisioned, because nothing was ever exported for it. Reported the same way
+                        // as a genuinely staged delete export, nested beneath the deletion that caused it.
+                        foreach (var cancellation in mvoWorkingSet.CancelledProvisionings)
+                        {
+                            SyncOutcomeBuilder.AddChildOutcome(deletionItem, mvoDeletedOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                                targetEntityDescription: csNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId),
+                                detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
+                                    cancellation.ConnectedSystemId, csoTypeNameLookup.GetValueOrDefault(cancellation.ConnectedSystemId)));
                         }
                     }
                     else
@@ -1112,7 +1160,8 @@ public class Worker : BackgroundService
                         {
                             var deprovisionItem = BuildPendingExportExecutionItem(pendingExport, mvo.NameOrId, mvo.Type?.Name,
                                 csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
-                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
+                                csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
                             deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
                                 CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
                                 deprovisionItem.SyncOutcomes.FirstOrDefault()));
@@ -1180,7 +1229,8 @@ public class Worker : BackgroundService
                         ResolveReferencingObjectDisplayName(pendingExport, recallResult),
                         objectTypeSnapshot: null,
                         csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
-                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled,
+                        csoTypeNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId));
 
                     if (pendingExport.SourceMetaverseObjectId.HasValue
                         && causesByReferencingMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out var causes))
@@ -1285,6 +1335,8 @@ public class Worker : BackgroundService
     /// <param name="activity">The housekeeping Activity, for initiator attribution on the change snapshot.</param>
     /// <param name="outcomeTrackingLevel">The configured sync outcome tracking level.</param>
     /// <param name="csoChangeTrackingEnabled">Whether Connected System Object change tracking is enabled.</param>
+    /// <param name="csoTypeName">The target Connected System Object's own type, where known, so the outcome's
+    /// "csId|csoTypeName" link channel can name it.</param>
     private static ActivityRunProfileExecutionItem BuildPendingExportExecutionItem(
         PendingExport pendingExport,
         string? displayNameSnapshot,
@@ -1292,7 +1344,8 @@ public class Worker : BackgroundService
         string? targetConnectedSystemName,
         Activity activity,
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel outcomeTrackingLevel,
-        bool csoChangeTrackingEnabled)
+        bool csoChangeTrackingEnabled,
+        string? csoTypeName = null)
     {
         var executionItem = new ActivityRunProfileExecutionItem
         {
@@ -1305,7 +1358,7 @@ public class Worker : BackgroundService
         };
 
         if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-            AddPendingExportOutcome(executionItem, parent: null, pendingExport, targetConnectedSystemName, activity, csoChangeTrackingEnabled);
+            AddPendingExportOutcome(executionItem, parent: null, pendingExport, targetConnectedSystemName, activity, csoChangeTrackingEnabled, csoTypeName);
 
         return executionItem;
     }
@@ -1323,22 +1376,24 @@ public class Worker : BackgroundService
         PendingExport pendingExport,
         string? displayNameSnapshot,
         Activity activity,
-        bool csoChangeTrackingEnabled)
+        bool csoChangeTrackingEnabled,
+        string? csoTypeName = null)
     {
+        var detailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, csoTypeName);
         var outcome = parent == null
             ? SyncOutcomeBuilder.AddRootOutcome(executionItem,
                 SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
-                detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                detailMessage: detailMessage,
                 stagedChangeType: pendingExport.ChangeType)
             : SyncOutcomeBuilder.AddChildOutcome(executionItem, parent,
                 SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
-                detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                detailMessage: detailMessage,
                 stagedChangeType: pendingExport.ChangeType);
 
         if (csoChangeTrackingEnabled && pendingExport.AttributeValueChanges.Count > 0)
@@ -1382,7 +1437,6 @@ public class Worker : BackgroundService
         Add(result.ActivitiesDeleted, "Activity", "Activities");
         Add(result.ConfigurationChangeActivitiesDeleted, "configuration change Activity", "configuration change Activities");
         Add(result.SecurityEventActivitiesDeleted, "security event Activity", "security event Activities");
-        Add(result.InitialPasswordWorkRecordsDeleted, "initial password record", "initial password records");
         Add(result.PasswordEventActivitiesDeleted, "Password Synchronisation Activity", "Password Synchronisation Activities");
         Add(result.PasswordQueueRecordsDeleted, "queued password change", "queued password changes");
 

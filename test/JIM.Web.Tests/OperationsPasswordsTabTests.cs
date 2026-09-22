@@ -87,7 +87,8 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
         string who,
         string system,
         PendingPasswordChangeStatus status = PendingPasswordChangeStatus.Pending,
-        string? targetMessage = null) => new()
+        string? targetMessage = null,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Propagated) => new()
     {
         Id = Guid.NewGuid(),
         MetaverseObjectId = Guid.NewGuid(),
@@ -100,7 +101,8 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
         TargetMessage = targetMessage,
         AttemptCount = status == PendingPasswordChangeStatus.Parked ? 3 : 0,
         CreatedAt = DateTime.UtcNow,
-        ExpiresAt = DateTime.UtcNow.AddDays(7)
+        ExpiresAt = DateTime.UtcNow.AddDays(7),
+        Origin = origin
     };
 
     [Test]
@@ -162,6 +164,28 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
         });
     }
 
+    /// <summary>
+    /// A row for the first password an export just provisioned reads with an "Initial" chip beside the identity,
+    /// and its Detail wording says what it is waiting on rather than reading as a bare "Waiting" (#1697).
+    /// </summary>
+    [Test]
+    public void OperationsPasswordsTab_ProvisionedRow_ShowsTheInitialChipAndItsWording()
+    {
+        _navigation.NavigateTo("/admin/operations?t=passwords");
+        ArrangeWindow([Change("Grace Hopper", "Corporate Directory", origin: PendingPasswordChangeOrigin.Provisioned)]);
+
+        var cut = Render<OperationsPasswordsTab>();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.FindAll("[data-testid='jim-queue-origin']").Single().TextContent.Trim(), Is.EqualTo("Initial"));
+                Assert.That(cut.Markup, Does.Contain("Initial password for a newly provisioned Connected System Object"));
+            }
+        });
+    }
+
     [Test]
     public void OperationsPasswordsTab_NothingQueued_SaysSoAsTheHealthyState()
     {
@@ -188,7 +212,7 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
                     It.Is<PendingPasswordChangeFilter>(f => f.MetaverseObjectId == id),
                     It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()),
                     Times.AtLeastOnce);
-                Assert.That(cut.Markup, Does.Contain("Showing one identity's queued password changes"),
+                Assert.That(cut.Markup, Does.Contain("Showing one Metaverse Object's queued password changes"),
                     "the cards count the whole queue while the list is one person's; the notice is what reconciles them");
             }
         });

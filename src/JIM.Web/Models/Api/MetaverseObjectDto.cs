@@ -3,6 +3,8 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
 
 namespace JIM.Web.Models.Api;
@@ -31,13 +33,31 @@ public class MetaverseObjectDto
 
     public MetaverseObjectTypeDto Type { get; set; } = null!;
     public List<MetaverseObjectAttributeValueDto> AttributeValues { get; set; } = new();
-    public List<ConnectedSystemObjectReferenceDto> ConnectedSystemObjects { get; set; } = new();
+    /// <summary>
+    /// Every Connected System Object joined to this Metaverse Object, with the same derived join data the
+    /// portal's Connections tab shows (#1519).
+    /// </summary>
+    public List<MetaverseObjectConnectionDto> ConnectedSystemObjects { get; set; } = new();
 
     /// <summary>
     /// Creates a DTO from a MetaverseObject entity.
     /// </summary>
-    public static MetaverseObjectDto FromEntity(MetaverseObject entity)
+    /// <param name="entity">The Metaverse Object, loaded with provenance.</param>
+    /// <param name="connections">
+    /// The object's joined Connected System Objects, from
+    /// <c>MetaverseServer.GetMetaverseObjectConnectionsAsync</c>: the one derivation of role and State, shared
+    /// with the portal's Connections tab so the two surfaces cannot drift apart. It is also the fresher read of
+    /// what is joined (it runs after the object itself is loaded), so the rows come from it rather than from the
+    /// entity's own navigation; the entity supplies only each row's best-ranked name, which it alone carries.
+    /// </param>
+    public static MetaverseObjectDto FromEntity(MetaverseObject entity, IReadOnlyCollection<MetaverseObjectConnection> connections)
     {
+        var namesByConnectedSystemObjectId = entity.ConnectedSystemObjects
+            .Where(cso => !string.IsNullOrEmpty(cso.NameOrId))
+            .ToDictionary(cso => cso.Id, cso => cso.NameOrId);
+        var statusesByConnectedSystemObjectId = entity.ConnectedSystemObjects
+            .ToDictionary(cso => cso.Id, cso => (cso.Status, cso.DateJoined));
+
         return new MetaverseObjectDto
         {
             Id = entity.Id,
@@ -54,8 +74,11 @@ public class MetaverseObjectDto
             AttributeValues = entity.AttributeValues
                 .Select(MetaverseObjectAttributeValueDto.FromEntity)
                 .ToList(),
-            ConnectedSystemObjects = entity.ConnectedSystemObjects
-                .Select(ConnectedSystemObjectReferenceDto.FromEntity)
+            ConnectedSystemObjects = connections
+                .Select(connection => MetaverseObjectConnectionDto.FromConnection(
+                    connection,
+                    namesByConnectedSystemObjectId.GetValueOrDefault(connection.ConnectedSystemObjectId),
+                    statusesByConnectedSystemObjectId.TryGetValue(connection.ConnectedSystemObjectId, out var csoState) ? csoState : default))
                 .ToList()
         };
     }
@@ -153,23 +176,89 @@ public class MetaverseObjectAttributeValueDto
 }
 
 /// <summary>
-/// Lightweight reference to a ConnectedSystemObject from a MetaverseObject.
+/// One Connected System Object joined to a Metaverse Object, with the join data the portal's Connections
+/// tab shows: the owning Connected System, the object's role in synchronisation, how it was joined, and its
+/// derived connection State (#1519).
 /// </summary>
-public class ConnectedSystemObjectReferenceDto
+public class MetaverseObjectConnectionDto
 {
+    /// <summary>The Connected System Object's unique identifier.</summary>
     public Guid Id { get; set; }
+
+    /// <summary>The unique identifier of the Connected System that holds the object.</summary>
     public int ConnectedSystemId { get; set; }
+
+    /// <summary>The name of the Connected System that holds the object.</summary>
     public string ConnectedSystemName { get; set; } = null!;
+
+    /// <summary>The object's best-ranked name, falling back to its external id.</summary>
     public string? DisplayName { get; set; }
 
-    public static ConnectedSystemObjectReferenceDto FromEntity(JIM.Models.Staging.ConnectedSystemObject entity)
+    /// <summary>The Connected System Object Type's name (for example "user").</summary>
+    public string ObjectTypeName { get; set; } = null!;
+
+    /// <summary>How the object was joined to the Metaverse Object.</summary>
+    public ConnectedSystemObjectJoinType JoinType { get; set; }
+
+    /// <summary>When the object was joined to the Metaverse Object, where that is recorded.</summary>
+    public DateTime? DateJoined { get; set; }
+
+    /// <summary>The object's own status in the Connector Space.</summary>
+    public ConnectedSystemObjectStatus Status { get; set; }
+
+    /// <summary>
+    /// The derived connection state: the object's status combined with any Pending Export's change type and
+    /// status (in sync, an update or provisioning pending, an export failed, obsolete, and so on).
+    /// </summary>
+    public ConnectedSystemObjectConnectionState State { get; set; }
+
+    /// <summary>
+    /// True when at least one enabled Import Synchronisation Rule exists for this object's Connected System
+    /// and Connected System Object Type: values can flow inbound from it.
+    /// </summary>
+    public bool IsSource { get; set; }
+
+    /// <summary>
+    /// True when at least one enabled Export Synchronisation Rule exists for this object's Connected System
+    /// and Connected System Object Type: values can flow outbound to it.
+    /// </summary>
+    public bool IsTarget { get; set; }
+
+    /// <summary>
+    /// The number of attribute changes on the object's Pending Export when one is queued and carries attribute
+    /// changes (an update in progress); null otherwise, so a caller never reads "0 attributes" for a state that
+    /// is not about attribute changes at all.
+    /// </summary>
+    public int? PendingAttributeChangeCount { get; set; }
+
+    /// <summary>When the object was last synchronised.</summary>
+    public DateTime? LastSynchronised { get; set; }
+
+    /// <summary>
+    /// Maps one derived connection, preferring the name the Metaverse Object's own graph carries: the
+    /// connections derivation loads only identifying values (a group can hold thousands), so it names a row by
+    /// its external id, where the detail response has always used the object's best-ranked name.
+    /// </summary>
+    public static MetaverseObjectConnectionDto FromConnection(
+        MetaverseObjectConnection connection,
+        string? bestRankedName,
+        (ConnectedSystemObjectStatus Status, DateTime? DateJoined) connectedSystemObject)
     {
-        return new ConnectedSystemObjectReferenceDto
+        return new MetaverseObjectConnectionDto
         {
-            Id = entity.Id,
-            ConnectedSystemId = entity.ConnectedSystem?.Id ?? 0,
-            ConnectedSystemName = entity.ConnectedSystem?.Name ?? string.Empty,
-            DisplayName = entity.NameOrId
+            Id = connection.ConnectedSystemObjectId,
+            ConnectedSystemId = connection.ConnectedSystemId,
+            ConnectedSystemName = connection.ConnectedSystemName,
+            DisplayName = bestRankedName ?? connection.DisplayName,
+            ObjectTypeName = connection.ObjectTypeName,
+            JoinType = connection.JoinType,
+            DateJoined = connectedSystemObject.DateJoined,
+            Status = connectedSystemObject.Status,
+            State = connection.State,
+            IsSource = connection.IsSource,
+            IsTarget = connection.IsTarget,
+            PendingAttributeChangeCount = connection.PendingAttributeChangeCount,
+            LastSynchronised = connection.LastSynchronised
         };
     }
 }

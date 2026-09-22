@@ -4,8 +4,10 @@
 using JIM.Connectors.LDAP;
 using JIM.Models.Core;
 using NUnit.Framework;
+using System.Text.Json;
 
-namespace JIM.Worker.Tests.Connectors;
+namespace
+ JIM.Worker.Tests.Connectors;
 
 [TestFixture]
 public class LdapDirectoryTypeTests
@@ -60,28 +62,55 @@ public class LdapDirectoryTypeTests
 
     #endregion
 
-    #region RootDse computed properties — UseUsnDeltaImport
+    #region RootDse computed properties — IsActiveDirectoryFamily and DeltaSourceKind
 
     [Test]
-    public void UseUsnDeltaImport_ActiveDirectory_ReturnsTrue()
+    public void IsActiveDirectoryFamily_ActiveDirectory_ReturnsTrue()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.True);
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.True);
     }
 
     [Test]
-    public void UseUsnDeltaImport_OpenLDAP_ReturnsFalse()
+    public void IsActiveDirectoryFamily_SambaAD_ReturnsTrue()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.True);
+    }
+
+    [Test]
+    public void IsActiveDirectoryFamily_OpenLDAP_ReturnsFalse()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.False);
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.False);
     }
 
     [Test]
-    public void UseUsnDeltaImport_Generic_ReturnsFalse()
+    public void IsActiveDirectoryFamily_Generic_ReturnsFalse()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.Generic };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.False);
+        Assert.That(rootDse.IsActiveDirectoryFamily, Is.False);
     }
+
+    [Test]
+    public void DeltaSourceKind_ActiveDirectory_IsUsn() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Usn));
+
+    [Test]
+    public void DeltaSourceKind_SambaAD_IsUsn() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Usn));
+
+    [Test]
+    public void DeltaSourceKind_OpenLDAP_IsAccesslog() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
+
+    [Test]
+    public void DeltaSourceKind_Generic_IsChangelog() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.Generic }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Changelog));
+
+    [Test]
+    public void DeltaSourceKind_DirectoryServer389_IsChangelog() =>
+        Assert.That(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389 }.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Changelog));
 
     #endregion
 
@@ -199,9 +228,39 @@ public class LdapDirectoryTypeTests
     [Test]
     public void DetectDirectoryType_UnknownVendor_ReturnsGeneric()
     {
-        var result = LdapConnectorUtilities.DetectDirectoryType(Array.Empty<string>(), "389 Directory Server");
+        var result = LdapConnectorUtilities.DetectDirectoryType(Array.Empty<string>(), "Acme Directory Services", null, "Acme/1.0");
         Assert.That(result, Is.EqualTo(LdapDirectoryType.Generic));
     }
+
+    [Test]
+    public void DetectDirectoryType_389ProjectVendorName_ReturnsDirectoryServer389()
+    {
+        var result = LdapConnectorUtilities.DetectDirectoryType(Array.Empty<string>(), "389 Project");
+        Assert.That(result, Is.EqualTo(LdapDirectoryType.DirectoryServer389));
+    }
+
+    /// <summary>
+    /// Red Hat Directory Server builds brand the vendor name differently but keep the 389-Directory version
+    /// prefix, so the version alone must be enough.
+    /// </summary>
+    [Test]
+    public void DetectDirectoryType_389DirectoryVendorVersionPrefixAlone_ReturnsDirectoryServer389()
+    {
+        var result = LdapConnectorUtilities.DetectDirectoryType(Array.Empty<string>(), "Red Hat, Inc.", null, "389-Directory/2.4.5 B2024.100.0000");
+        Assert.That(result, Is.EqualTo(LdapDirectoryType.DirectoryServer389));
+    }
+
+    /// <summary>
+    /// The AD capability OIDs win over everything else, as they do for Samba.
+    /// </summary>
+    [Test]
+    public void DetectDirectoryType_AdCapabilityOidWith389VendorVersion_ReturnsActiveDirectory()
+    {
+        var capabilities = new[] { "1.2.840.113556.1.4.800" };
+        var result = LdapConnectorUtilities.DetectDirectoryType(capabilities, null, null, "389-Directory/2.4.5");
+        Assert.That(result, Is.EqualTo(LdapDirectoryType.ActiveDirectory));
+    }
+
 
     [Test]
     public void DetectDirectoryType_SambaAdWithAdOid_ReturnsSambaAD()
@@ -230,6 +289,105 @@ public class LdapDirectoryTypeTests
 
     #endregion
 
+    #region DirectoryServer389
+
+    /// <summary>
+    /// The enum is persisted as an integer inside PersistedConnectorData, so the position of every existing member
+    /// is load-bearing: reordering would silently retype every Connected System's stored directory type.
+    /// </summary>
+    [Test]
+    public void LdapDirectoryType_ExistingOrdinals_AreUnchangedAndDirectoryServer389IsAppended()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((int)LdapDirectoryType.ActiveDirectory, Is.EqualTo(0));
+            Assert.That((int)LdapDirectoryType.SambaAD, Is.EqualTo(1));
+            Assert.That((int)LdapDirectoryType.OpenLDAP, Is.EqualTo(2));
+            Assert.That((int)LdapDirectoryType.Generic, Is.EqualTo(3));
+            Assert.That((int)LdapDirectoryType.DirectoryServer389, Is.EqualTo(4));
+        }
+    }
+
+    /// <summary>
+    /// For everything except password policy discovery, 389 Directory Server behaves as Generic did before it was
+    /// recognised, so an existing deployment changes nothing except its label.
+    /// </summary>
+    [Test]
+    public void ComputedProperties_DirectoryServer389_MatchGeneric()
+    {
+        var directoryServer = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389 };
+        var generic = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.Generic };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(directoryServer.ExternalIdAttributeName, Is.EqualTo(generic.ExternalIdAttributeName));
+            Assert.That(directoryServer.ExternalIdDataType, Is.EqualTo(generic.ExternalIdDataType));
+            Assert.That(directoryServer.IsActiveDirectoryFamily, Is.EqualTo(generic.IsActiveDirectoryFamily));
+            Assert.That(directoryServer.DeltaSourceKind, Is.EqualTo(generic.DeltaSourceKind));
+            Assert.That(directoryServer.EnforcesSamSingleValuedRules, Is.EqualTo(generic.EnforcesSamSingleValuedRules));
+            Assert.That(directoryServer.RecommendedExportConcurrency, Is.EqualTo(generic.RecommendedExportConcurrency));
+            Assert.That(directoryServer.SupportsPaging, Is.EqualTo(generic.SupportsPaging));
+            Assert.That(directoryServer.SupportsPaging, Is.True);
+        }
+    }
+
+    [Test]
+    public void ShouldOverridePlurality_DirectoryServer389_DescriptionOnUser_ReturnsFalse()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued(
+            "description", "user", LdapDirectoryType.DirectoryServer389);
+        Assert.That(result, Is.False);
+    }
+
+    /// <summary>
+    /// Persisted connector data written before the root DSE facts were extended carries none of the new
+    /// properties, and must keep deserialising with those facts simply unknown.
+    /// </summary>
+    [Test]
+    public void LdapConnectorRootDse_OldPersistedJsonWithoutTheNewFacts_DeserialisesWithThemNull()
+    {
+        const string oldJson = """{"DnsHostName":"ldap.example.local","DirectoryType":3,"VendorName":"Acme","NamingContexts":["dc=example,dc=local"]}""";
+
+        var rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(oldJson);
+
+        Assert.That(rootDse, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rootDse!.DirectoryType, Is.EqualTo(LdapDirectoryType.Generic));
+            Assert.That(rootDse.NamingContexts, Is.EqualTo(new[] { "dc=example,dc=local" }));
+            Assert.That(rootDse.VendorVersion, Is.Null);
+            Assert.That(rootDse.ConfigContext, Is.Null);
+            Assert.That(rootDse.SupportedControls, Is.Null);
+            Assert.That(rootDse.DefaultNamingContext, Is.Null);
+        }
+    }
+
+    [Test]
+    public void LdapConnectorRootDse_NewFacts_RoundTripThroughJson()
+    {
+        var rootDse = new LdapConnectorRootDse
+        {
+            DirectoryType = LdapDirectoryType.DirectoryServer389,
+            VendorVersion = "389-Directory/2.4.5",
+            ConfigContext = "cn=config",
+            SupportedControls = ["1.3.6.1.4.1.42.2.27.8.5.1"],
+            DefaultNamingContext = "dc=example,dc=local"
+        };
+
+        var roundTripped = JsonSerializer.Deserialize<LdapConnectorRootDse>(JsonSerializer.Serialize(rootDse));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(roundTripped!.DirectoryType, Is.EqualTo(LdapDirectoryType.DirectoryServer389));
+            Assert.That(roundTripped.VendorVersion, Is.EqualTo("389-Directory/2.4.5"));
+            Assert.That(roundTripped.ConfigContext, Is.EqualTo("cn=config"));
+            Assert.That(roundTripped.SupportedControls, Is.EqualTo(new[] { "1.3.6.1.4.1.42.2.27.8.5.1" }));
+            Assert.That(roundTripped.DefaultNamingContext, Is.EqualTo("dc=example,dc=local"));
+        }
+    }
+
+    #endregion
+
     #region SambaAD computed properties
 
     [Test]
@@ -244,13 +402,6 @@ public class LdapDirectoryTypeTests
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
         Assert.That(rootDse.ExternalIdDataType, Is.EqualTo(AttributeDataType.Guid));
-    }
-
-    [Test]
-    public void UseUsnDeltaImport_SambaAD_ReturnsTrue()
-    {
-        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
-        Assert.That(rootDse.UseUsnDeltaImport, Is.True);
     }
 
     [Test]
@@ -287,6 +438,21 @@ public class LdapDirectoryTypeTests
         var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued(
             "description", "user", LdapDirectoryType.SambaAD);
         Assert.That(result, Is.True);
+    }
+
+    #endregion
+    #region persisted record compatibility
+
+    /// <summary>
+    /// The change number used to be persisted as a 32-bit value; a record written then must still read.
+    /// </summary>
+    [Test]
+    public void LdapConnectorRootDse_PersistedIntLastChangeNumber_ReadsAsLong()
+    {
+        var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>("{\"DirectoryType\":3,\"LastChangeNumber\":42}");
+
+        Assert.That(deserialised!.LastChangeNumber, Is.EqualTo(42L));
+        Assert.That(deserialised.ChangelogDn, Is.Null);
     }
 
     #endregion

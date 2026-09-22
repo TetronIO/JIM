@@ -52,11 +52,17 @@ public class PendingPasswordChangeHeader
     public bool ConnectedSystemTakingPasswords { get; set; } = true;
 
     /// <summary>
-    /// Where the change came from (#1635): an administrator's explicit set of a named account, or a password
-    /// propagated to every configured system. Shown as a kind chip, and what decides whether a switched-off
-    /// system holds the row: a propagated change waits on the system; an explicit one does not (decision D1).
+    /// Where the change came from (#1635): an administrator's explicit set of a named account, an account an
+    /// export has just provisioned, or a password propagated to every configured system. Shown as a kind chip,
+    /// and what decides whether a switched-off system holds the row: a propagated change waits on the system;
+    /// the other two origins do not, because the account they target is already decided (decision D1).
     /// </summary>
     public PendingPasswordChangeOrigin Origin { get; set; } = PendingPasswordChangeOrigin.Propagated;
+
+    /// <summary>
+    /// The Synchronisation Rule generating the password for a Provisioned row, or null for any other origin.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
 
     public PendingPasswordChangeStatus Status { get; set; }
 
@@ -99,20 +105,22 @@ public class PendingPasswordChangeHeader
     /// <para>
     /// A propagated change held for a switched-off system is never due, whatever its retry time says: a lane
     /// claims nothing propagated on that system. Answering otherwise would put "Due now" against a row nothing
-    /// will attempt, beside a queue summary correctly counting it as waiting and not due. An explicit set is due
-    /// on a switched-off system exactly as on a live one, because a lane claims it there (decision D1).
+    /// will attempt, beside a queue summary correctly counting it as waiting and not due. An explicit set or a
+    /// provisioned row is due on a switched-off system exactly as on a live one, because a lane claims either
+    /// there: the account is already decided, so there is no configuration decision left to defer to (decision
+    /// D1).
     /// </para>
     /// </summary>
     public bool IsDue(DateTime asOf) =>
         Status == PendingPasswordChangeStatus.Pending
-        && (ConnectedSystemTakingPasswords || Origin == PendingPasswordChangeOrigin.Explicit)
+        && (ConnectedSystemTakingPasswords || Origin != PendingPasswordChangeOrigin.Propagated)
         && (NextRetryAt == null || NextRetryAt <= asOf);
 
     /// <summary>
     /// Whether the change is waiting on somebody switching its Connected System back on rather than on JIM.
     /// Distinguished from an ordinary wait because the remedy is a person's, not a retry's. Only a propagated
-    /// change is ever held; an explicit set is delivered whether or not the system is taking propagated
-    /// passwords.
+    /// change is ever held; an explicit set or a provisioned row is delivered whether or not the system is
+    /// taking propagated passwords.
     /// </summary>
     public bool IsHeld =>
         Status == PendingPasswordChangeStatus.Pending

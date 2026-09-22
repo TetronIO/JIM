@@ -34,8 +34,22 @@ internal enum LdapDirectoryType
     /// Unrecognised directory server. Uses RFC-standard LDAP behaviour.
     /// Falls back to OpenLDAP-compatible defaults (entryUUID, changelog delta, RFC 4512 schema).
     /// </summary>
-    Generic
+    Generic,
+
+    /// <summary>
+    /// 389 Directory Server, including the Red Hat Directory Server builds of it.
+    /// Detected via a vendorName containing "389" or a vendorVersion starting "389-Directory".
+    /// <para>
+    /// Deliberately appended after <see cref="Generic"/> even though it is a recognised server: this enum is
+    /// persisted as an integer inside every Connected System's PersistedConnectorData, so inserting a member
+    /// anywhere but the end would silently retype existing deployments. For everything except password policy
+    /// discovery it behaves as <see cref="Generic"/> (entryUUID, changelog delta, paging), which is what these
+    /// servers were treated as before they were recognised.
+    /// </para>
+    /// </summary>
+    DirectoryServer389
 }
+
 
 /// <summary>
 /// Where the domain controller/directory server used for a connection came from, per
@@ -61,4 +75,21 @@ internal enum LdapServerResolutionSource
     /// setting was used, as it always was before pinning existed.
     /// </summary>
     Host
+}
+
+/// <summary>
+/// How a directory tells JIM what changed since the last import, and so which <see cref="ILdapDeltaSource"/> a
+/// Delta Import reads through. Derived from <see cref="LdapDirectoryType"/> by
+/// <see cref="LdapConnectorRootDse.DeltaSourceKind"/>, the one place that mapping lives.
+/// </summary>
+internal enum LdapDeltaSourceKind
+{
+    /// <summary>Active Directory and Samba AD: uSNChanged watermarks and the Deleted Objects container.</summary>
+    Usn,
+
+    /// <summary>OpenLDAP: the accesslog overlay's cn=accesslog database.</summary>
+    Accesslog,
+
+    /// <summary>389 Directory Server and generic directories: a draft-good-ldap-changelog cn=changelog.</summary>
+    Changelog
 }

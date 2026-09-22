@@ -5,14 +5,13 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality Timeline view: a vertical narrative of tone-coloured dots on indented rails.
-   The source row (the processed record and its Connected System) comes first, then each causality
-   event as a plain-language verb with the technical label demoted alongside (swapped when the
-   technical-names toggle is on), an optional contextual detail message, entity chips (each entity
-   named once), badges, action links and an inline attribute detail expander. Child events nest
-   through indented rail containers. *@
+   The source row (the processed Connected System Object) comes first, then each causality event as
+   its one verb, an optional contextual detail message, entity chips (each entity named once),
+   badges, action links and an inline attribute detail expander. Child events nest through indented
+   rail containers. *@
 
 <div class="tl">
-    @* ─── Source row: the record that was processed ─── *@
+    @* ─── Source row: the Connected System Object that was processed ─── *@
     <div class="tl-row">
         <div class="tl-rail">
             <span class="tl-dot" style="--tone: var(--cz-secondary)">
@@ -20,7 +19,7 @@
             </span>
         </div>
         <div class="tl-body">
-            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb(TechnicalNames)</span></div>
+            <div class="tl-line"><span class="verb">@CausalitySourceLabels.Verb(Model.IsSpeculative)</span></div>
             <div class="tl-detail-line">
                 @if (!string.IsNullOrWhiteSpace(Model.Context.RunProfileName))
                 {
@@ -29,25 +28,26 @@
                 @GetSourceDetailSuffix()
             </div>
             @{
-                var recordLabel = GetRecordLabel();
+                var recordName = GetRecordName();
                 // The record's own Connected System (paired with the record chip below), not the
                 // run's system named in the sentence above them; the two diverge for cross-system
                 // cascades.
                 var systemName = Model.Context.CsoConnectedSystemName;
             }
-            @if (recordLabel != null || !string.IsNullOrWhiteSpace(systemName))
+            @if (recordName != null || !string.IsNullOrWhiteSpace(systemName))
             {
                 <div class="evt-entities">
-                    @if (recordLabel != null)
+                    @if (recordName != null)
                     {
-                        <CausalityEntityChip Label="@recordLabel" Href="@GetRecordHref()"
-                                             Kind="CausalityEntityKind.Record"
-                                             SubLabel="@Model.Context.CsoObjectTypeName" />
+                        <ObjectChip Name="@recordName" Href="@GetRecordHref()"
+                                    Kind="ObjectChipKind.ConnectedSystemObject"
+                                    TypeName="@Model.Context.CsoObjectTypeName"
+                                    Tooltip="@GetRecordTooltip()" />
                     }
                     @if (!string.IsNullOrWhiteSpace(systemName))
                     {
-                        <CausalityEntityChip Label="@systemName" Href="@GetSystemHref()"
-                                             Kind="CausalityEntityKind.ConnectedSystem" />
+                        <ObjectChip Name="@systemName" Href="@GetSystemHref()"
+                                    Kind="ObjectChipKind.ConnectedSystem" />
                     }
                 </div>
             }
@@ -80,12 +80,6 @@
     public CausalityModel Model { get; set; } = null!;
 
     /// <summary>
-    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted.
-    /// </summary>
-    [Parameter]
-    public bool TechnicalNames { get; set; }
-
-    /// <summary>
     /// The event whose attribute detail is expanded inline; null when none. Two-way bindable so the
     /// panel owns the state.
     /// </summary>
@@ -104,19 +98,22 @@
             .Where(l => !ChipKinds.Contains(l.Kind) && !string.IsNullOrEmpty(l.Href))
             .ToList();
 
-        <div class="tl-row @(siblingCount == 1 ? "only-child" : null)">
+        @* only-child: a lone row in its block draws no rail of its own; has-children: the row's
+           children render as its third grid child, beside the body rather than inside it, so the
+           rail's cell covers only this row's own content and its line runs straight into the
+           connector the nested block draws from it (see .tl-children in causality.css). The body
+           also drops its bottom padding, since the last child already carries the trailing gap. *@
+        <div class="tl-row @(siblingCount == 1 ? "only-child" : null) @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
             <div class="tl-rail">
                 <span class="tl-dot" style="--tone: @toneVar">
                     <MudIcon Icon="@causalityEvent.Icon" aria-hidden="true" />
                 </span>
             </div>
-            @* has-children suppresses this row's own bottom padding: its children render inside this
-               body and the last of them already provides the trailing gap. *@
-            <div class="tl-body @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
+            <div class="tl-body">
                 <div class="tl-line">
-                    @* One vocabulary, the one the reader asked for: with the technical-names toggle off,
-                       no CSO or MVO wording appears at all. See CausalityEventCard.Title. *@
-                    <span class="verb">@(TechnicalNames ? causalityEvent.TechnicalLabel : causalityEvent.PlainLabel)</span>
+                    @* One vocabulary, and only one: no CSO or MVO wording appears anywhere on the panel.
+                       See CausalityEventCard.Title. *@
+                    <span class="verb">@causalityEvent.Label</span>
                     @if (causalityEvent.Badge != null)
                     {
                         <span class="evt-badge" style="--tone: @toneVar">@causalityEvent.Badge</span>
@@ -131,7 +128,7 @@
                     <div class="evt-entities">
                         @foreach (var link in chipLinks)
                         {
-                            <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" />
+                            <ObjectChip Name="@link.Label" Href="@link.Href" Kind="@link.Kind.ToObjectChipKind()" TypeName="@link.ObjectTypeName" />
                         }
                     </div>
                 }
@@ -165,16 +162,16 @@
                         </div>
                     }
                 }
-                @if (causalityEvent.Children.Count > 0)
-                {
-                    <div class="tl-children">
-                        @foreach (var child in causalityEvent.Children)
-                        {
-                            @RenderEvent(child, causalityEvent.Children.Count)
-                        }
-                    </div>
-                }
             </div>
+            @if (causalityEvent.Children.Count > 0)
+            {
+                <div class="tl-children">
+                    @foreach (var child in causalityEvent.Children)
+                    {
+                        @RenderEvent(child, causalityEvent.Children.Count)
+                    }
+                </div>
+            }
         </div>
     };
 
@@ -185,13 +182,25 @@
         var hasProfile = !string.IsNullOrWhiteSpace(profile);
         var hasSystem = !string.IsNullOrWhiteSpace(system);
 
+        if (Model.IsSpeculative)
+        {
+            // A Sync Preview (#1519): conditional mood, and "object" rather than "record" (D-S9).
+            if (hasProfile && hasSystem)
+                return $" on {system} would pick up this object.";
+            if (hasProfile)
+                return " would pick up this object.";
+            if (hasSystem)
+                return $"A run on {system} would pick up this object.";
+            return "This object would be picked up for processing.";
+        }
+
         if (hasProfile && hasSystem)
-            return $" on {system} picked up this record.";
+            return $" on {system} picked up this Connected System Object.";
         if (hasProfile)
-            return " picked up this record.";
+            return " picked up this Connected System Object.";
         if (hasSystem)
-            return $"A run on {system} picked up this record.";
-        return "This record was picked up for processing.";
+            return $"A run on {system} picked up this Connected System Object.";
+        return "This Connected System Object was picked up for processing.";
     }
 
     private Task ToggleExpandedAsync(CausalityEvent causalityEvent)
@@ -200,7 +209,15 @@
         return ExpandedEventChanged.InvokeAsync(newValue);
     }
 
-    private string? GetRecordLabel() => Model.Context.RecordLabel;
+    private string? GetRecordName() => ObjectDescription.ChipName(Model.Context.CsoDisplayName, Model.Context.CsoExternalId);
+
+    /// <summary>
+    /// The source row's chip tooltip: the external id and the record's own Connected System, which the
+    /// chip text itself no longer carries now that the record is named by <see cref="GetRecordName"/> alone.
+    /// </summary>
+    private string GetRecordTooltip() => ObjectDescription.ForConnectedSystemObjectChipTooltip(
+        Model.Context.CsoObjectTypeName, Model.Context.CsoDisplayName, Model.Context.CsoExternalId,
+        Model.Context.CsoConnectedSystemName);
 
     private string? GetRecordHref()
     {

@@ -82,7 +82,7 @@
         : $"{exportActivity.TargetName}'s limit has since been changed, so the next run will decide again";
     var quantityText = totalWithheld == 1 ? "the 1 pending" : $"all {totalWithheld:N0} pending";
 
-    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-6">
+    <MudAlert Severity="Severity.Warning" Class="mt-2 mb-6">
         <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
             <span>
                 The last export withheld @quantityText @changeNoun: <strong>@reasonText</strong>.
@@ -111,7 +111,7 @@
     @if (_deletionTask != null)
     {
         var deletionActivity = _deletionTask.Activity;
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+        <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
             <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
                 <span>
                     @if (_deletionTask.SynchronisedDeprovisioning)
@@ -148,7 +148,7 @@
     }
     else
     {
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-6">
+        <MudAlert Severity="Severity.Warning" Class="mt-2 mb-6">
             <strong>Deprovisioning stopped before completing.</strong> A Synchronised Deprovisioning run did not finish,
             so this system remains fenced and excluded from scheduled runs; the work already done stands. Deleting the
             system again with Deprovision through synchronisation resumes from where the run stopped; Delete immediately
@@ -170,7 +170,7 @@
         : $"{_obsoleteConnectedSystemObjectCount:N0} Connected System Objects are obsolete.";
     var obsoleteSubject = _obsoleteConnectedSystemObjectCount == 1 ? "It was" : "They were";
     var obsoletePronoun = _obsoleteConnectedSystemObjectCount == 1 ? "it" : "them";
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+    <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
         <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
             <span>
                 @obsoleteLead @obsoleteSubject not returned by the last Full Import, so the next Synchronisation
@@ -195,7 +195,7 @@
 {
     var lastImport = _connectedSystem.LastSuccessfulFullImportCompletedAt;
     var sweepReady = lastImport.HasValue && lastImport.Value > armedAt;
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+    <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
         @if (sweepReady)
         {
             var lastImportAt = lastImport!.Value;
@@ -237,20 +237,20 @@
             ? "Run a Full Synchronisation for it to take effect."
             : "Run a Full Synchronisation for them to take effect.";
     <MudAlert Severity="@(driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning)"
-              Variant="Variant.Outlined" Class="mt-2 mb-6">
+              Class="mt-2 mb-6">
         @driftLead @driftGuidance
     </MudAlert>
 }
 else if (_drift is { NeverFullySynchronised: true })
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+    <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
         This Connected System has never completed a Full Synchronisation, so its configuration has never been applied
         in full.
     </MudAlert>
 }
 else if (_drift is { TrackingDisabled: true })
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
+    <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
         Configuration change tracking is switched off, so JIM cannot tell whether this Connected System has
         configuration changes waiting for a Full Synchronisation.
     </MudAlert>

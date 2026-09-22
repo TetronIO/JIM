@@ -86,13 +86,13 @@ PRDs follow the same three-state lifecycle as plan documents, filed by their cur
 |----------|--------|-------------|
 | `engineering/prd/` | `Planned` | Written and reviewed, but implementation has not started |
 | `engineering/prd/doing/` | `Doing` | Implementation is underway |
-| `engineering/prd/done/` | `Done` | Implemented and the GitHub issue is closed (or remaining items explicitly deferred) |
+| `engineering/prd/done/` | `Done` | Implemented; the PR that closes the GitHub issue carries the move (or remaining items explicitly deferred) |
 
 The lifecycle:
 
 1. **Created** by `jim-prd` at the top level of `engineering/prd/` with `- **Status:** Planned`.
-2. **When work starts:** change the status to `- **Status:** Doing` and `git mv` the PRD into `engineering/prd/doing/`.
-3. **When implemented and the issue is closed:** change the status to `- **Status:** Done` and `git mv` the PRD into `engineering/prd/done/`.
+2. **When work starts:** change the status to `- **Status:** Doing` and `git mv` the PRD into `engineering/prd/doing/`, in the first implementation commit on the feature branch, never as a PR of its own.
+3. **When implemented:** change the status to `- **Status:** Done` and `git mv` the PRD into `engineering/prd/done/` **in the PR that closes the issue** (the one whose description says `Closes #n`). A squash-merge lands the code and the lifecycle change together, and the issue closes at the same moment, so folder, status and issue never disagree. Do not wait for the merge and then open a second PR for the move: the issue only closes when that PR merges, so a rule that waits for closure can never be satisfied inside the PR, and every feature ends up costing two merges. (Rule sharpened after #1714 was a docs-only PR whose sole content was the move #1711 should have carried.)
 
 **The Status field and the folder must always agree.** The folder gives the at-a-glance view; the Status field is what a reader sees when they open the document. Update both in the same commit.
 
@@ -125,7 +125,7 @@ Plan documents are filed in one of three locations based on their current state:
 |----------|--------|-------------|
 | `engineering/plans/` | `Planned` | Not yet started: design and future work |
 | `engineering/plans/doing/` | `Doing` | Partially implemented or actively being worked on |
-| `engineering/plans/done/` | `Done` | Fully implemented (or remaining items explicitly deferred/dropped) |
+| `engineering/plans/done/` | `Done` | Fully implemented (or remaining items explicitly deferred/dropped); moved here by the PR that closes the issue, not after it merges |
 
 **Move plans between folders** as their status changes. Use `git mv` to preserve history.
 

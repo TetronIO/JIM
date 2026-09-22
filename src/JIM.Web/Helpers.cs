@@ -494,9 +494,9 @@ public static class Helpers
         {
             // Import operations
             ObjectChangeType.Added =>
-                "A new Connected System Object (CSO) was discovered in the source system and added to the connector space.",
+                "A new Connected System Object was discovered in the source system and added to the connector space.",
             ObjectChangeType.Updated =>
-                "An existing Connected System Object (CSO) was updated with changed attribute values from the source system.",
+                "An existing Connected System Object was updated with changed attribute values from the source system.",
             ObjectChangeType.Deleted when !isSyncContext =>
                 "The object was detected as deleted from the source system. It is now pending removal during the next synchronisation.",
             ObjectChangeType.Deleted when isSyncContext =>
@@ -504,13 +504,13 @@ public static class Helpers
 
             // Sync operations
             ObjectChangeType.Projected =>
-                "A new Metaverse Object (MVO) was created because no existing match was found. The CSO's attributes were projected into the metaverse.",
+                "A new Metaverse Object was created because no existing match was found. The Connected System Object's attributes were projected into the metaverse.",
             ObjectChangeType.Joined =>
-                "The Connected System Object (CSO) was matched to an existing Metaverse Object (MVO) using the configured join rules.",
+                "The Connected System Object was matched to an existing Metaverse Object using the configured join rules.",
             ObjectChangeType.AttributeFlow =>
                 "Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Synchronisation Rule mappings.",
             ObjectChangeType.Disconnected =>
-                "The Connected System Object (CSO) was disconnected from its Metaverse Object (MVO). Attribute Flow has stopped.",
+                "The Connected System Object was disconnected from its Metaverse Object. Attribute Flow has stopped.",
             ObjectChangeType.DisconnectedOutOfScope =>
                 "The object fell out of scope of the import Synchronisation Rule scoping criteria and was disconnected from the metaverse.",
             ObjectChangeType.OutOfScopeRetainJoin =>
@@ -625,6 +625,22 @@ public static class Helpers
             PendingExportChangeType.Create => Color.Primary,
             PendingExportChangeType.Update => Color.Info,
             PendingExportChangeType.Delete => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for a Join Type chip. One mapping for every surface that chips the
+    /// value (the Connector Space list, a Metaverse Object's Connections tab), so a join type is the
+    /// same colour wherever it appears; Not Joined takes the default tone, a fact rather than a state.
+    /// </summary>
+    public static Color GetJoinTypeColor(ConnectedSystemObjectJoinType joinType)
+    {
+        return joinType switch
+        {
+            ConnectedSystemObjectJoinType.Projected => Color.Primary,
+            ConnectedSystemObjectJoinType.Provisioned => Color.Secondary,
+            ConnectedSystemObjectJoinType.Joined => Color.Info,
             _ => Color.Default,
         };
     }
@@ -1249,27 +1265,29 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets the technical display name for a sync outcome type (e.g. "MVO Projected"). Delegates to
+    /// Gets the display name for a sync outcome type (e.g. "Projected to the Metaverse"). Delegates to
     /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static string GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return OutcomeDisplayMap.Get(outcomeType).TechnicalLabel;
+        return OutcomeDisplayMap.Get(outcomeType).Label;
     }
 
     /// <summary>
-    /// Gets the plain-language display name for a sync outcome type (e.g. "Identity created"). Delegates to
+    /// Gets the display name for a sync outcome type (e.g. "Projected to the Metaverse"). Delegates to
     /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     /// <remarks>
-    /// The sibling of <see cref="GetOutcomeTypeDisplayName"/>, and the right one for a Configuration Change
-    /// Preview (#827): an operator reading a completed run's outcomes wants the exact outcome name, whereas an
-    /// administrator deciding whether to save a configuration change wants written English. Having both named
-    /// makes a surface state which audience it is writing for, rather than picking a label by accident.
+    /// Identical to <see cref="GetOutcomeTypeDisplayName"/>: the causality panel and the Activity views
+    /// used to carry a plain-language label alongside a more technical one, and a Configuration Change
+    /// Preview (#827) read the plain one. That split is gone: every outcome now has exactly one label, so
+    /// both methods delegate to the same <see cref="OutcomeDisplay.Label"/>. Kept as a separate method
+    /// rather than removed so existing callers (the Configuration Change Preview panel and its counts)
+    /// need no change.
     /// </remarks>
     public static string GetOutcomeTypePlainName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return OutcomeDisplayMap.Get(outcomeType).PlainLabel;
+        return OutcomeDisplayMap.Get(outcomeType).Label;
     }
 
     /// <summary>

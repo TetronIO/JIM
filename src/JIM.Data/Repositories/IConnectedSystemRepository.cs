@@ -273,18 +273,6 @@ public interface IConnectedSystemRepository
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
-    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
-    /// Returns only scalar fields via projection query — no Include chains, no entity tracking.
-    /// </summary>
-    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId);
-
-    /// <summary>
-    /// Deletes Pending Exports by their IDs using raw SQL.
-    /// Used by reconciliation which operates on lightweight summaries, not full entities.
-    /// </summary>
-    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds);
-
-    /// <summary>
     /// Retrieves Pending Exports by their IDs with all necessary includes for export processing.
     /// Used by parallel batch processing where each batch re-loads its entities from its own DbContext.
     /// </summary>
@@ -359,6 +347,21 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExport">The Pending Export to create.</param>
     public Task CreatePendingExportAsync(PendingExport pendingExport);
+
+    /// <summary>
+    /// Appends newly evaluated attribute changes onto an existing Pending Export without touching its
+    /// ChangeType or Status. Used for a PendingProvisioning Connected System Object whose Create has
+    /// already been sent (or auto-confirmed away) and is awaiting confirmation by import: never delete
+    /// and replace such a row (that would send a second Create), so the caller's already-computed merge
+    /// (additions and supersessions) is persisted onto the same row instead.
+    /// </summary>
+    /// <param name="pendingExportId">The Pending Export to append to.</param>
+    /// <param name="changesToAdd">The newly evaluated attribute changes to add.</param>
+    /// <param name="changeIdsToRemove">The ids of existing attribute changes the new ones supersede, removed first.</param>
+    public Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove);
 
     /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
@@ -576,6 +579,17 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="metaverseObjectId">The MVO ID to find joined CSOs for.</param>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
+    /// Gets every Connected System Object joined to a Metaverse Object, with its Connected System Object
+    /// Type and Connected System navigations loaded, for the Metaverse Object's Connections tab (#1519).
+    /// Core-weight (see the entity retrieval taxonomy): the number of joined objects for one Metaverse Object is always small,
+    /// so materialising the full entity plus its first-level Type/ConnectedSystem navigations (needed for
+    /// the tab's Connected System name and object type name columns) costs nothing at this scale, unlike
+    /// <see cref="GetConnectedSystemObjectsByMetaverseObjectIdAsync"/>'s callers, which do not need either.
+    /// </summary>
+    /// <param name="metaverseObjectId">The MVO ID to find joined CSOs for.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
@@ -1006,6 +1020,15 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets just the <c>Name</c> of every requested Synchronisation Rule, keyed by id (#1519 follow-up). An id
+    /// with no corresponding row (the rule has been deleted) is simply absent from the result; callers resolve
+    /// that as "name unknown" rather than treating it as an error. Used to back a change-history attribution
+    /// name lookup that must resolve many ids in one round trip rather than one query per id.
+    /// </summary>
+    /// <param name="syncRuleIds">The Synchronisation Rule ids to resolve. Deduplicated internally.</param>
+    public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
     /// Gets just a Synchronisation Rule's initial-password configuration, or null where it sets no initial
     /// passwords.
     /// <para>
@@ -1299,6 +1322,13 @@ public interface IConnectedSystemRepository
     public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
     public Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
+    /// <summary>
+    /// Returns every Pending Export for the given Connected System Object Type (and optionally
+    /// partition) that is a Create, Status Exported, targeting a Connected System Object still Status
+    /// PendingProvisioning. See <see cref="ISyncRepository.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>
+    /// for the full rationale.
+    /// </summary>
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     public Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     public Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);

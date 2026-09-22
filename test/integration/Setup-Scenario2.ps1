@@ -168,8 +168,10 @@ try {
     $sourceSettings = @{}
     if ($hostSetting) { $sourceSettings[$hostSetting.id] = @{ stringValue = $SourceConfig.Host } }
     if ($portSetting) { $sourceSettings[$portSetting.id] = @{ intValue = $SourceConfig.Port } }
-    if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $SourceConfig.BindDN } }
-    if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $SourceConfig.BindPassword } }
+    # JIM's Connected System binds as the delegated service account, not the directory
+    # administrator; see Get-DirectoryConfig's comment help for the two-identity model.
+    if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $SourceConfig.JimBindDN } }
+    if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $SourceConfig.JimBindPassword } }
     if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $SourceConfig.UseSSL } }
     if ($connectionTimeoutSetting) { $sourceSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
     if ($authTypeSetting) { $sourceSettings[$authTypeSetting.id] = @{ stringValue = $SourceConfig.AuthType } }
@@ -208,8 +210,10 @@ try {
     $targetSettings = @{}
     if ($hostSetting) { $targetSettings[$hostSetting.id] = @{ stringValue = $TargetConfig.Host } }
     if ($portSetting) { $targetSettings[$portSetting.id] = @{ intValue = $TargetConfig.Port } }
-    if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $TargetConfig.BindDN } }
-    if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $TargetConfig.BindPassword } }
+    # JIM's Connected System binds as the delegated service account, not the directory
+    # administrator; see Get-DirectoryConfig's comment help for the two-identity model.
+    if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $TargetConfig.JimBindDN } }
+    if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $TargetConfig.JimBindPassword } }
     if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $TargetConfig.UseSSL } }
     if ($connectionTimeoutSetting) { $targetSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
     if ($authTypeSetting) { $targetSettings[$authTypeSetting.id] = @{ stringValue = $TargetConfig.AuthType } }
@@ -342,6 +346,10 @@ try {
             Write-Host "    ⚠ Failed to create OU=TestUsers in Source AD: $result" -ForegroundColor Yellow
         }
 
+        # JIM provisions into this OU, so its service account needs the delegation over it.
+        Grant-JimAdDelegation -ContainerName $SourceConfig.ContainerName -ContainerDn "OU=TestUsers,$($SourceConfig.BaseDN)"
+        Write-Host "    ✓ JIM delegation granted over OU=TestUsers in Source AD" -ForegroundColor Green
+
         Write-Host "  Creating TestUsers OU in Target AD..." -ForegroundColor Gray
         $result = docker exec $TargetConfig.ContainerName samba-tool ou create "OU=TestUsers,$($TargetConfig.BaseDN)" 2>&1
         if ($LASTEXITCODE -eq 0) {
@@ -353,6 +361,10 @@ try {
         else {
             Write-Host "    ⚠ Failed to create OU=TestUsers in Target AD: $result" -ForegroundColor Yellow
         }
+
+        # JIM provisions into this OU, so its service account needs the delegation over it.
+        Grant-JimAdDelegation -ContainerName $TargetConfig.ContainerName -ContainerDn "OU=TestUsers,$($TargetConfig.BaseDN)"
+        Write-Host "    ✓ JIM delegation granted over OU=TestUsers in Target AD" -ForegroundColor Green
     }
 
     # Re-import hierarchy to pick up the new OUs

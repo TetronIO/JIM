@@ -144,15 +144,18 @@ public partial class SyncEngine
             pendingExport.AttributeValueChanges.RemoveAll(ac => confirmedChangeIds.Contains(ac));
         }
 
-        // If this was a Create and the Secondary External ID was confirmed, transition to Update
-        TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
-
         // Determine if the Pending Export should be deleted or updated
         var hasRemainingChanges = pendingExport.AttributeValueChanges.Any(ac =>
             ac.Status == PendingExportAttributeChangeStatus.Pending ||
             ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
             ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed ||
             ac.Status == PendingExportAttributeChangeStatus.Failed);
+
+        // Reconciliation only ever runs for a Connected System Object an import actually returned and
+        // matched, so a Create Pending Export reaching this point already proves the object exists on
+        // the target. Any changes still outstanding once confirmation has been processed must therefore
+        // travel as an Update, never (re-)sent shaped as a Create the connector would reject.
+        TransitionCreateToUpdateOnceObjectConfirmed(pendingExport, hasRemainingChanges);
 
         if (!hasRemainingChanges)
         {
@@ -548,34 +551,42 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// If the Pending Export was a Create and the Secondary External ID attribute has been confirmed,
-    /// transition it to an Update. Once an object is created, remaining unconfirmed attribute changes
-    /// should be applied as updates. Connectors require the Secondary External ID (e.g., distinguishedName
-    /// for LDAP) in the attribute changes for Create operations, but once confirmed, it is removed.
-    /// Without this transition, retry attempts would fail because the connector cannot determine
-    /// where to create the object.
+    /// Transitions a Create Pending Export to an Update once reconciliation proves the object it targets
+    /// already exists on the target. <see cref="ReconcileCsoAgainstPendingExport"/> is only ever invoked
+    /// for a Connected System Object an import actually returned and matched, so reaching this method
+    /// with a Create Pending Export already proves the object is there, regardless of which attribute(s)
+    /// confirmed: any changes still outstanding once confirmation has been processed must therefore
+    /// travel as a single Update, never (re-)sent shaped as a Create the connector would reject as
+    /// creating an object that already exists.
+    /// <para>
+    /// This generalises, and subsumes, the two narrower triggers this method used to require
+    /// individually: a confirmed Secondary External ID (connectors require it among a Create's own
+    /// attribute changes to know where to create the object, but not for a subsequent Update), and every
+    /// originally-exported change confirmed together with further changes queued
+    /// <see cref="PendingExportAttributeChangeStatus.Pending"/> (appended while the Create awaited
+    /// confirmation - see <c>ExportEvaluationServer</c>'s append-not-replace staging, which never deletes
+    /// and replaces a Create that has already been sent). Both are now just examples of "changes remain
+    /// after the object was confirmed to exist"; a single still-unconfirmed attribute change no longer
+    /// blocks the transition the way it used to, because leaving it Create-shaped would re-send a Create
+    /// for an object reconciliation has already proven exists.
+    /// </para>
     /// </summary>
-    public static void TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(PendingExport pendingExport, PendingExportReconciliationResult result)
+    /// <param name="hasRemainingChanges">Whether the Pending Export still has attribute changes after
+    /// confirmed ones were removed (computed identically to, and immediately before, the delete/keep
+    /// decision in <see cref="ReconcileCsoAgainstPendingExport"/>). When false the Pending Export is
+    /// about to be deleted outright, so no transition is needed.</param>
+    public static void TransitionCreateToUpdateOnceObjectConfirmed(PendingExport pendingExport, bool hasRemainingChanges)
     {
         if (pendingExport.ChangeType != PendingExportChangeType.Create)
             return;
 
-        var secondaryExternalIdWasConfirmed = result.ConfirmedChanges.Any(ac =>
-            ac.Attribute?.IsSecondaryExternalId == true);
-
-        if (!secondaryExternalIdWasConfirmed)
+        if (!hasRemainingChanges)
             return;
 
-        if (pendingExport.AttributeValueChanges.Count > 0)
-        {
-            var confirmedAttrName = result.ConfirmedChanges
-                .FirstOrDefault(ac => ac.Attribute?.IsSecondaryExternalId == true)?.Attribute?.Name ?? "unknown";
-
-            pendingExport.ChangeType = PendingExportChangeType.Update;
-            Log.Debug("ReconcileCsoAgainstPendingExport: Transitioned Pending Export {ExportId} from Create to Update. " +
-                "Secondary External ID attribute '{AttributeName}' was confirmed but {RemainingCount} attribute changes remain.",
-                pendingExport.Id, confirmedAttrName, pendingExport.AttributeValueChanges.Count);
-        }
+        pendingExport.ChangeType = PendingExportChangeType.Update;
+        Log.Debug("ReconcileCsoAgainstPendingExport: Transitioned Pending Export {ExportId} from Create to Update: " +
+            "the object was confirmed to exist on the target and {RemainingCount} attribute change(s) remain outstanding.",
+            pendingExport.Id, pendingExport.AttributeValueChanges.Count);
     }
 
     /// <summary>

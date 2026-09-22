@@ -1,0 +1,32 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What a page is for, said once, from an info button at the end of the page's title. This is the design
+   system's one way of describing a page: not a dismissible alert under the breadcrumbs (which costs a band
+   of every visit's first screen until someone closes it, and is then gone for good), and not a second
+   paragraph restating the title. Place it as the last child of the title's MudText. Pass Term where the
+   page is about a glossary term, and the popover links to that entry. *@
+<InfoPopover Title="@Title" GlossaryAnchor="@(Term is { } term ? TermDefinitions.For(term).GlossaryAnchor : null)">
+    @ChildContent
+</InfoPopover>
+
+@code {
+    /// <summary>
+    /// The page's name as the popover heads it, normally the fixed part of the page title
+    /// ("Connector Space", not "Connector Space: HR CSV Source").
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The description: what the page holds and what it is for, in one to three plain sentences.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// The glossary term this page is about, if any; adds a Glossary link to that entry.
+    /// </summary>
+    [Parameter]
+    public Term? Term { get; set; }
+}

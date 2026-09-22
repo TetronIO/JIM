@@ -903,7 +903,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// string (UnresolvedReferenceValue, for example the DN) is preserved on CSO rows, so the next
     /// confirming import still reconciles the value normally.
     /// </summary>
-    private async Task ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
+    /// <remarks>
+    /// Internal rather than private so <see cref="SyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/>
+    /// (JIM.PostgresData/Repositories/SyncRepository.CsOperations.cs) can reuse it ahead of its own raw-SQL
+    /// delete-by-id, instead of duplicating the restrict-FK nulling logic. Both repositories share the same
+    /// <see cref="JimDbContext"/> instance via <see cref="PostgresDataRepository"/>, so the tracked-instance
+    /// fix-up below is visible to either caller.
+    /// </remarks>
+    internal async Task ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
     {
         if (csoIds.Count == 0)
             return;
@@ -1293,6 +1300,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 PendingExportId = Repository.Database.PendingExports
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .Select(pe => (Guid?)pe.Id)
+                    .FirstOrDefault(),
+                PendingExportStatus = Repository.Database.PendingExports
+                    .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                    .Select(pe => (PendingExportStatus?)pe.Status)
+                    .FirstOrDefault(),
+                PendingExportChangeType = Repository.Database.PendingExports
+                    .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
+                    .Select(pe => (PendingExportChangeType?)pe.ChangeType)
                     .FirstOrDefault(),
                 // Only surfaced when the object has no name yet; the naming tiers already cover cn, so
                 // no ad-hoc attribute-name match is needed here.
@@ -3521,6 +3536,42 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.GuidValue.HasValue)
                     .Select(av => av.GuidValue!.Value)).ToListAsync();
     }
+
+    /// <summary>
+    /// Returns every Pending Export for the given Connected System Object Type (and optionally
+    /// partition) that is a Create, Status Exported, targeting a Connected System Object still Status
+    /// PendingProvisioning. Deliberately the inverse scope of <see cref="BuildDeletionDetectionQuery"/>
+    /// (which excludes PendingProvisioning outright, since those CSOs have no External ID yet to
+    /// compare): a Full Import cannot prove absence for an object deletion detection never looks at, so
+    /// this is a second, narrow query used only to find exported Creates a Full Import never confirmed.
+    /// Loads what the caller needs to both compare the External Id (<c>ConnectedSystemObject.Type</c>
+    /// and <c>AttributeValues</c>) and mutate the retry statuses (<c>AttributeValueChanges</c>).
+    /// </summary>
+    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var query = Repository.Database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Where(pe =>
+                pe.ConnectedSystemId == connectedSystemId &&
+                pe.ChangeType == PendingExportChangeType.Create &&
+                pe.Status == PendingExportStatus.Exported &&
+                pe.ConnectedSystemObject != null &&
+                pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning &&
+                pe.ConnectedSystemObject.Type.Id == objectTypeId);
+
+        if (partitionId != null)
+            query = query.Where(pe => pe.ConnectedSystemObject!.PartitionId == partitionId);
+
+        return await query.ToListAsync();
+    }
     #endregion
 
     #region Connected System Object Types
@@ -4249,47 +4300,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Gets lightweight summaries of executable exports for pre-export reconciliation.
-    /// Uses a .Select() projection — no Include chains, no entity tracking, ~3 MB at 100K
-    /// instead of ~150 MB for full entity graphs.
-    /// </summary>
-    public async Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
-    {
-        return await ExecutableExportsQuery(connectedSystemId)
-            .Select(pe => new PendingExportSummary
-            {
-                Id = pe.Id,
-                ChangeType = pe.ChangeType,
-                Status = pe.Status,
-                ConnectedSystemObjectId = pe.ConnectedSystemObjectId,
-                SourceMetaverseObjectId = pe.SourceMetaverseObjectId
-            })
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Deletes Pending Exports by their IDs using raw SQL.
-    /// Used by reconciliation which operates on lightweight summaries, not full entities.
-    /// </summary>
-    public async Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-    {
-        if (pendingExportIds.Count == 0)
-            return;
-
-        var ids = pendingExportIds.ToArray();
-
-        // Delete child records first (FK constraint)
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""PendingExportId"" = ANY({0})",
-            ids);
-
-        // Delete parent records
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
-            ids);
-    }
-
-    /// <summary>
     /// Returns which of the supplied Pending Export ids still exist. Summary-tier: an id projection,
     /// with no entity materialised, because the caller only needs to know whether a row is still there.
     /// </summary>
@@ -4480,6 +4490,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         await Repository.Database.PendingExports.AddAsync(pendingExport);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove)
+    {
+        // A plain EF query for the rows to remove finds them via the identity map when a tracked instance
+        // already exists on this context - typically the very Pending Export this call is appending to,
+        // loaded moments earlier by GetPendingExportLightweightByConnectedSystemObjectIdAsync - so RemoveRange
+        // marks them through the ordinary change tracker rather than raw SQL, avoiding the "fix up or detach
+        // tracked instances" hazard documented in src/CLAUDE.md entirely (there is nothing to fix up: the same
+        // SaveChangesAsync below both deletes and inserts).
+        if (changeIdsToRemove.Count > 0)
+        {
+            var toRemove = await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => changeIdsToRemove.Contains(avc.Id))
+                .ToListAsync();
+            Repository.Database.PendingExportAttributeValueChanges.RemoveRange(toRemove);
+        }
+
+        if (changesToAdd.Count > 0)
+        {
+            foreach (var change in changesToAdd)
+                change.PendingExportId = pendingExportId;
+
+            await Repository.Database.PendingExportAttributeValueChanges.AddRangeAsync(changesToAdd);
+        }
+
+        if (changeIdsToRemove.Count > 0 || changesToAdd.Count > 0)
+            await Repository.Database.SaveChangesAsync();
     }
 
 
@@ -5251,6 +5293,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.ConnectedSystem)
+            // Only the identifying values: a group object can carry thousands of member values, and the
+            // Connections tab shows the external id and nothing else from the attribute graph. Filtering on
+            // the value's own Attribute navigation translates; filtering on the parent CSO's columns does
+            // not (see GetConnectedSystemObjectsForMvoDeletionAsync), which is why the flags are used.
+            .Include(cso => cso.AttributeValues.Where(av => av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId))
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.MetaverseObjectId == metaverseObjectId)
+            .ToListAsync();
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects
@@ -5892,7 +5951,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                                 .Select(av => av.StringValue)
                                                 .FirstOrDefault()
                                             : null
-                                    }
+                                    },
+                                SyncRuleId = vc.SyncRuleId,
+                                SyncRuleName = vc.SyncRuleName
                             })
                             .ToList()
                     })
@@ -6209,6 +6270,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting)
             .SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
+    }
+
+    public async Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return new Dictionary<int, string>();
+
+        var distinctIds = syncRuleIds.Distinct().ToList();
+
+        // Name-only projection, no tracking, no Includes: this backs a change-history attribution lookup
+        // for ids that were not already known in memory, and must stay cheap however many distinct rules
+        // a batch touches.
+        var rows = await Repository.Database.SyncRules
+            .AsNoTracking()
+            .Where(sr => distinctIds.Contains(sr.Id))
+            .Select(sr => new { sr.Id, sr.Name })
+            .ToListAsync();
+
+        return rows.ToDictionary(row => row.Id, row => row.Name);
     }
 
     public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)

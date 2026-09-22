@@ -1,0 +1,64 @@
+@using JIM.Models.Staging
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The derived connection State, as one chip (#1519, D-S7). Its own component so the label and the colour
+   have exactly one definition wherever the state is shown: the Metaverse Object's Connections tab and the
+   Connector Space list describe the same object, so they must not describe it differently. *@
+
+<MudChip T="string" Variant="Variant.Text" Color="GetConnectionStateColor(State)"
+         Class="@($"jim-connection-state-chip ma-0 {Class}".TrimEnd())" data-state="@State">
+    @GetConnectionStateLabel(State)
+</MudChip>
+
+@code {
+    /// <summary>
+    /// The state to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ConnectedSystemObjectConnectionState State { get; set; }
+
+    /// <summary>
+    /// Optional extra CSS classes, appended to the chip's own.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// The State chip's colour (D-S7): success for in sync, info for an update in flight, warning for
+    /// the provisioning states and an unconfirmed export (retryable, not yet a failure), error for a
+    /// failed export or a pending delete, and the default tone for Obsolete (a fact, not itself a
+    /// problem to fix).
+    /// </summary>
+    public static MudBlazor.Color GetConnectionStateColor(ConnectedSystemObjectConnectionState state)
+    {
+        return state switch
+        {
+            ConnectedSystemObjectConnectionState.InSync => MudBlazor.Color.Success,
+            ConnectedSystemObjectConnectionState.UpdatePending => MudBlazor.Color.Info,
+            ConnectedSystemObjectConnectionState.ProvisioningExportPending
+                or ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation
+                or ConnectedSystemObjectConnectionState.ExportNotConfirmed => MudBlazor.Color.Warning,
+            ConnectedSystemObjectConnectionState.ExportFailed
+                or ConnectedSystemObjectConnectionState.DeletePending => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default
+        };
+    }
+
+    public static string GetConnectionStateLabel(ConnectedSystemObjectConnectionState state)
+    {
+        return state switch
+        {
+            ConnectedSystemObjectConnectionState.InSync => "In sync",
+            ConnectedSystemObjectConnectionState.UpdatePending => "Update pending",
+            ConnectedSystemObjectConnectionState.ProvisioningExportPending => "Pending export",
+            ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation => "Awaiting confirmation",
+            ConnectedSystemObjectConnectionState.ExportNotConfirmed => "Export not confirmed",
+            ConnectedSystemObjectConnectionState.ExportFailed => "Export failed",
+            ConnectedSystemObjectConnectionState.DeletePending => "Delete pending",
+            ConnectedSystemObjectConnectionState.Obsolete => "Obsolete",
+            _ => state.ToString()
+        };
+    }
+}

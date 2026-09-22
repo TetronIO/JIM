@@ -23,10 +23,31 @@ internal class LdapConnectorRootDse
     public long? HighestCommittedUsn { get; set; }
 
     /// <summary>
-    /// For changelog-based directories (e.g., Oracle Directory): The last change number processed.
-    /// Used for delta imports — we query cn=changelog for entries with changeNumber > this value.
+    /// For changelog-based directories (389 Directory Server, generic directories publishing a
+    /// draft-good-ldap-changelog): the highest change number the last import saw. A Delta Import reads the
+    /// changelog for entries numbered above it. Null when no readable changelog existed at the time, which is
+    /// what makes the next Delta Import fall back to a Full Import rather than read nothing.
     /// </summary>
-    public int? LastChangeNumber { get; set; }
+    public long? LastChangeNumber { get; set; }
+
+    /// <summary>
+    /// Where the directory says its changelog is (the rootDSE's <c>changelog</c> attribute), or null when it
+    /// advertises none, in which case the conventional <c>cn=changelog</c> is tried. Recorded so that a later
+    /// import and Schema Discovery read the same place.
+    /// </summary>
+    public string? ChangelogDn { get; set; }
+
+    /// <summary>
+    /// The oldest change number the changelog still holds, when the rootDSE advertises it. A baseline older than
+    /// this has had changes trimmed from under it, which a Delta Import must refuse rather than silently skip.
+    /// </summary>
+    public long? FirstChangeNumber { get; set; }
+
+    /// <summary>
+    /// The newest change number, when the rootDSE advertises it. Taken as the watermark in preference to
+    /// enumerating the changelog to find it.
+    /// </summary>
+    public long? AdvertisedLastChangeNumber { get; set; }
 
     /// <summary>
     /// For OpenLDAP with accesslog overlay: The reqStart timestamp of the last processed entry.
@@ -87,6 +108,35 @@ internal class LdapConnectorRootDse
     /// </summary>
     public List<string>? NamingContexts { get; set; }
 
+    /// <summary>
+    /// The vendorVersion attribute from rootDSE, where the directory publishes one (for example
+    /// "389-Directory/2.4.5"). Used alongside <see cref="VendorName"/> for directory type detection and retained
+    /// for diagnostics. Null when not published, and null in persisted JSON written before it was captured.
+    /// </summary>
+    public string? VendorVersion { get; set; }
+
+    /// <summary>
+    /// The DN of the directory's configuration naming context, from rootDSE's configContext ("cn=config" on
+    /// OpenLDAP and 389 Directory Server). This is where those directories hold their password policy
+    /// configuration, so password policy discovery reads it from here rather than assuming a location. Null
+    /// when the directory does not publish one; Active Directory does not.
+    /// </summary>
+    public string? ConfigContext { get; set; }
+
+    /// <summary>
+    /// The control OIDs the directory advertises in rootDSE's supportedControl. Password policy discovery uses it
+    /// to tell whether OpenLDAP has the ppolicy overlay loaded at all. Null when the rootDSE query did not return
+    /// the attribute, which is "unknown" rather than "none".
+    /// </summary>
+    public List<string>? SupportedControls { get; set; }
+
+    /// <summary>
+    /// The directory's defaultNamingContext, which Active Directory publishes as the domain root and which
+    /// other directories may or may not publish. Null when absent; password policy discovery then falls back to
+    /// <see cref="NamingContexts"/>.
+    /// </summary>
+    public string? DefaultNamingContext { get; set; }
+
     // -----------------------------------------------------------------------
     // Computed properties — centralised directory-type-specific behaviour
     // -----------------------------------------------------------------------
@@ -101,7 +151,9 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.SambaAD => "objectGUID",
         LdapDirectoryType.OpenLDAP => "entryUUID",
         LdapDirectoryType.Generic => "entryUUID",
+        LdapDirectoryType.DirectoryServer389 => "entryUUID",
         _ => "entryUUID"
+
     };
 
     /// <summary>
@@ -114,19 +166,29 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.SambaAD => AttributeDataType.Guid,
         LdapDirectoryType.OpenLDAP => AttributeDataType.Text,
         LdapDirectoryType.Generic => AttributeDataType.Text,
+        LdapDirectoryType.DirectoryServer389 => AttributeDataType.Text,
         _ => AttributeDataType.Text
+
     };
 
     /// <summary>
-    /// Whether delta imports should use USN-based change tracking (AD/Samba AD).
+    /// Whether the directory is Active Directory or Samba AD, the family whose domain controllers JIM discovers,
+    /// pins and verifies the identity of, and whose partitions it checks are hosted by the server it reached.
     /// </summary>
-    public bool UseUsnDeltaImport => DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD;
+    public bool IsActiveDirectoryFamily => DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD;
 
     /// <summary>
-    /// Whether delta imports should use the OpenLDAP accesslog overlay (cn=accesslog with reqStart timestamps).
-    /// Falls back to standard changelog (cn=changelog with changeNumber) for Generic directories.
+    /// Where this directory keeps its record of what changed, and so which <see cref="ILdapDeltaSource"/> a Delta
+    /// Import reads through. The one place the directory type is mapped to a change source: Active Directory and
+    /// Samba AD track uSNChanged and keep tombstones in the Deleted Objects container; OpenLDAP logs writes in the
+    /// accesslog overlay; 389 Directory Server and generic directories publish a draft-good-ldap-changelog.
     /// </summary>
-    public bool UseAccesslogDeltaImport => DirectoryType is LdapDirectoryType.OpenLDAP;
+    public LdapDeltaSourceKind DeltaSourceKind => DirectoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD => LdapDeltaSourceKind.Usn,
+        LdapDirectoryType.OpenLDAP => LdapDeltaSourceKind.Accesslog,
+        _ => LdapDeltaSourceKind.Changelog
+    };
 
     /// <summary>
     /// Whether the directory's SAM layer enforces single-valued semantics on certain multi-valued schema attributes
@@ -145,7 +207,9 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.OpenLDAP => 16,
         LdapDirectoryType.SambaAD => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         LdapDirectoryType.Generic => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
+        LdapDirectoryType.DirectoryServer389 => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         _ => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY
+
     };
 
     /// <summary>
@@ -159,6 +223,8 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.SambaAD => false,
         LdapDirectoryType.OpenLDAP => true,
         LdapDirectoryType.Generic => true,
+        LdapDirectoryType.DirectoryServer389 => true,
         _ => true
+
     };
 }

@@ -45,6 +45,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private const string UnsupportedMarker = "jim-set-password-unsupported";
     private const string SharedPermanentMarker = "jim-set-password-shared-permanent";
     private const string ConstraintsMarker = "jim-set-password-constraints";
+    private const string FurtherChecksMarker = "jim-set-password-further-checks";
     private const string IrreconcilableMarker = "jim-set-password-irreconcilable";
     private const string ResultMarker = "jim-set-password-result";
     private const string StopTryingMarker = "jim-set-password-stop-trying";
@@ -193,15 +194,24 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
     private static PasswordPolicyReconciliation Reconciliation(
         IReadOnlyList<string>? constraints = null,
-        IReadOnlyList<string>? conflicts = null) =>
+        IReadOnlyList<string>? conflicts = null,
+        IReadOnlyList<string>? furtherChecks = null) =>
         new()
         {
             Policy = new PasswordGenerationPolicy(),
             Constraints = constraints ?? [],
             SystemsWithNoDiscoveredPolicy = [],
+            SystemsApplyingFurtherChecks = furtherChecks ?? [],
             Conflicts = conflicts ?? [],
             MayBeStricterThanDiscovered = false
         };
+
+    /// <summary>
+    /// Razor markup breaks a sentence across lines, and each break reaches the DOM as a run of whitespace. This
+    /// folds every run to one space so a test can assert on the sentence an administrator reads.
+    /// </summary>
+    private static string Flattened(string text) =>
+        string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static IElement Button(IRenderedComponent<MudDialogProvider> provider, string marker) =>
         provider.Find($"[data-testid='{marker}']");
@@ -595,7 +605,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
         Click(provider, SelectAllMarker);
 
-        Assert.That(Button(provider, SubmitMarker).TextContent, Does.Contain("Set on 2 accounts"));
+        Assert.That(Button(provider, SubmitMarker).TextContent, Does.Contain("Set on 2 Connected System Objects"));
     }
 
     [Test]
@@ -645,6 +655,50 @@ public class SetPasswordDialogTests : JimComponentTestContext
         Click(provider, SelectAllMarker);
 
         Assert.That(provider.Find($"[data-testid='{ConstraintsMarker}']").TextContent, Does.Contain("15 characters or more"));
+    }
+
+    /// <summary>
+    /// A directory running a password-quality module can refuse a password that satisfies every rule JIM read
+    /// (#1702). Said beside the constraints, so a refusal from that system is expected rather than read as JIM
+    /// having got the rules wrong.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemAppliesFurtherChecks_SaysAPasswordCanStillBeRefused()
+    {
+        var provider = ShowDialog(allowSelection: true,
+            reconciliation: Reconciliation(constraints: ["12 characters or more"], furtherChecks: ["Fabrikam HR"]));
+
+        Click(provider, SelectAllMarker);
+
+        var line = provider.Find($"[data-testid='{FurtherChecksMarker}']").TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(line, Does.Contain("Fabrikam HR applies further checks JIM cannot see"));
+            Assert.That(line, Does.Contain("can still be refused"));
+        }
+    }
+
+    [Test]
+    public void SetPasswordDialog_WhenSeveralSystemsApplyFurtherChecks_NamesThemAll()
+    {
+        var provider = ShowDialog(allowSelection: true,
+            reconciliation: Reconciliation(constraints: ["12 characters or more"], furtherChecks: ["Contoso AD", "Fabrikam HR"]));
+
+        Click(provider, SelectAllMarker);
+
+        Assert.That(provider.Find($"[data-testid='{FurtherChecksMarker}']").TextContent,
+            Does.Contain("Contoso AD, Fabrikam HR apply further checks JIM cannot see"));
+    }
+
+    [Test]
+    public void SetPasswordDialog_WhenNoSystemAppliesFurtherChecks_SaysNothingAboutThem()
+    {
+        var provider = ShowDialog(allowSelection: true,
+            reconciliation: Reconciliation(constraints: ["12 characters or more"]));
+
+        Click(provider, SelectAllMarker);
+
+        Assert.That(provider.FindAll($"[data-testid='{FurtherChecksMarker}']"), Is.Empty);
     }
 
     /// <summary>
@@ -749,6 +803,31 @@ public class SetPasswordDialogTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// PRD Scenario 5 (#1702). A directory JIM recognises nothing about has been schema-refreshed and answered
+    /// that it publishes no policy; the row records that outcome and the flag derived from it is false. The
+    /// dialog must treat that as "publishes no rules", not as a schema refresh that has yet to happen, or the
+    /// administrator is sent to refresh a schema that will never bring a policy back.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemsRowSaysNoPolicyIsPublished_SaysItPublishesNoRulesRatherThanToRefresh()
+    {
+        var provider = ShowDialog(allowSelection: true, accounts:
+        [
+            Account("Research LDAP", canSetPasswords: true, canDiscoverPolicy: false,
+                discoveredPolicy: new ConnectedSystemPasswordPolicy { DiscoveryOutcome = PasswordPolicyDiscoveryOutcome.NotPublished })
+        ]);
+        TickAccount(provider, 0);
+
+        var notice = provider.Find("[data-testid='jim-set-password-no-published-policy']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Flattened(notice.TextContent), Does.Contain("Research LDAP does not publish password rules"));
+            Assert.That(provider.FindAll("[data-testid='jim-set-password-unknown-policy']"), Is.Empty,
+                "a refresh would only read the same answer again");
+        }
+    }
+
     [Test]
     public void SetPasswordDialog_WhenASystemsPolicyIsKnown_SaysNothingAboutIt()
     {
@@ -788,7 +867,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Success));
-            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Password set on all 2 accounts."));
+            Assert.That(Button(provider, SummaryMarker).TextContent, Does.Contain("Password set on all 2 Connected System Objects."));
             Assert.That(rows, Has.Count.EqualTo(2), "one row per account, including the ones that worked");
             Assert.That(rows.Select(r => r.GetAttribute("data-state")), Is.All.EqualTo("Set"));
             Assert.That(rows[0].TextContent, Does.Contain("must be changed at next sign-in"));
@@ -853,7 +932,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Warning));
-            Assert.That(summary, Does.Contain("Set on 1 of 2 accounts."));
+            Assert.That(summary, Does.Contain("Set on 1 of 2 Connected System Objects."));
             Assert.That(summary, Does.Contain("Fabrikam HR could not be reached, so JIM has kept the password and will try again in 5 minutes"));
             Assert.That(summary, Does.Contain("then with a longer wait each time"));
             Assert.That(retryingRow.GetAttribute("data-state"), Is.EqualTo("Retrying"));
@@ -896,7 +975,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SummarySeverity(provider), Is.EqualTo(Severity.Error));
-            Assert.That(summary, Does.Contain("Set on 1 of 2 accounts."));
+            Assert.That(summary, Does.Contain("Set on 1 of 2 Connected System Objects."));
             Assert.That(summary, Does.Contain("The password in Fabrikam HR is unchanged"));
             Assert.That(rows[1].GetAttribute("data-state"), Is.EqualTo("Parked"));
             Assert.That(rows[1].ClassName, Does.Contain("jim-password-result--failed"), "the row carries the failure, not the sentence");
@@ -1049,7 +1128,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']")[0].GetAttribute("data-state"), Is.EqualTo("Set"));
-            Assert.That(Button(provider, PausedMarker).TextContent, Does.Contain("Contoso AD is not taking propagated passwords; this one is delivered there because you named the account."));
+            Assert.That(Button(provider, PausedMarker).TextContent, Does.Contain("Contoso AD is not taking propagated passwords; this one is delivered there because you named the Connected System Object."));
         }
     }
 

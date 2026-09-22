@@ -7,10 +7,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Connectors.Mock;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Interfaces;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Worker.Tests.Services;
@@ -88,7 +90,9 @@ public class PasswordDeliveryPassTests
                 return Task.CompletedTask;
             },
             _ => Task.CompletedTask,
-            (_, _) => Task.CompletedTask);
+            (_, _) => Task.CompletedTask,
+            new PasswordGeneratorService(),
+            () => _protection);
     }
 
     /// <summary>
@@ -298,6 +302,60 @@ public class PasswordDeliveryPassTests
             Assert.That(result.DeliveredCount, Is.EqualTo(1));
             Assert.That(_connectors[FirstSystemId].PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(explicitSet.ConnectedSystemObjectId));
             Assert.That(_syncRepository.PendingPasswordChanges.Keys, Is.EqualTo(new[] { propagated.Id }), "The propagated change stays held.");
+        }
+    }
+
+    /// <summary>
+    /// Decision D1, widened by #1697: a Provisioned row is as much a decided target as an Explicit one, so
+    /// it is delivered on a paused system exactly like an administrator's own set.
+    /// </summary>
+    [Test]
+    public async Task DeliverDueAsync_DisabledSystemWithAProvisionedRow_IsVisitedAndDeliversIt()
+    {
+        ArrangeSystem(FirstSystemId, "Corporate AD", enabled: false);
+        const int syncRuleId = 900;
+        _syncRepository.SeedSyncRule(new SyncRule
+        {
+            Id = syncRuleId,
+            Name = "Provisioning rule",
+            InitialPassword = new SyncRuleInitialPassword
+            {
+                SyncRuleId = syncRuleId,
+                Enabled = true,
+                Source = InitialPasswordSource.Discovered,
+                ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+                EnableAccount = true
+            }
+        });
+
+        var now = DateTime.UtcNow;
+        var accountId = Guid.NewGuid();
+        var mvoId = Guid.NewGuid();
+        var provisioned = new PendingPasswordChange
+        {
+            MetaverseObjectId = mvoId,
+            ConnectedSystemId = FirstSystemId,
+            ConnectedSystemObjectId = accountId,
+            EncryptedPassword = null,
+            Origin = PendingPasswordChangeOrigin.Provisioned,
+            SyncRuleId = syncRuleId,
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7),
+            ActivityId = Guid.NewGuid()
+        };
+        await _syncRepository.QueuePasswordChangesAsync([provisioned]);
+        _connectedSystemRepository
+            .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvoId))
+            .ReturnsAsync([new ConnectedSystemObject { Id = accountId, ConnectedSystemId = FirstSystemId, TypeId = UserObjectTypeId }]);
+
+        var result = await _server.DeliverDueAsync(null, ClaimedBy, DateTime.UtcNow, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ConnectedSystemsVisited, Is.EqualTo(1));
+            Assert.That(result.DeliveredCount, Is.EqualTo(1));
+            Assert.That(_connectors[FirstSystemId].PasswordSetAttempts.Single().ConnectedSystemObjectId, Is.EqualTo(accountId));
+            Assert.That(_syncRepository.PendingPasswordChanges, Is.Empty);
         }
     }
 

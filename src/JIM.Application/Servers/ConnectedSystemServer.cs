@@ -2898,7 +2898,9 @@ public partial class ConnectedSystemServer
             return;
         }
 
-        result.PasswordPolicyDiscovered = true;
+        // A row with no constraints is kept for its outcome (why nothing was read), but is not a discovery: the
+        // refresh result tells the administrator whether JIM now knows the target's rules, and it does not.
+        result.PasswordPolicyDiscovered = discovered.HasAnyDiscoveredConstraint;
 
         // Update the existing row in place where there is one. Replacing the navigation with a fresh object would
         // leave it with no id, which the persistence path reads as an insert, and the one-to-one unique index then
@@ -2918,7 +2920,10 @@ public partial class ConnectedSystemServer
         existing.PasswordHistoryLength = discovered.PasswordHistoryLength;
         existing.MaximumPasswordAge = discovered.MaximumPasswordAge;
         existing.MinimumPasswordAge = discovered.MinimumPasswordAge;
-        existing.FineGrainedPolicySignal = discovered.FineGrainedPolicySignal;
+        existing.PolicyOverrideSignal = discovered.PolicyOverrideSignal;
+        existing.FurtherChecksApply = discovered.FurtherChecksApply;
+        existing.DiscoveryOutcome = discovered.DiscoveryOutcome;
+        // ConnectedSystemPasswordPolicyDiscoveryTests holds this block to every settable property of the model.
     }
     #endregion
 
@@ -3047,11 +3052,18 @@ public partial class ConnectedSystemServer
                 ? passwordConnector.SupportedExpiryBehaviours
                 : [];
 
+            var policy = expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null;
+
+            // The Connector's flag says it can read a policy where the directory publishes one; the row's outcome
+            // says whether this directory does. A directory that publishes nothing has no policy to refresh, so
+            // the dialog must not send the administrator to refresh the schema for it. No row yet means the
+            // schema has not been read with this Connector, which is exactly the "refresh" case.
             systems[connectedSystemId] = (
                 connectedSystem.Name,
                 expiryBehaviours,
-                expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null,
-                connectedSystem.ConnectorDefinition.SupportsPasswordPolicyDiscovery);
+                policy,
+                connectedSystem.ConnectorDefinition.SupportsPasswordPolicyDiscovery
+                    && policy?.DiscoveryOutcome != PasswordPolicyDiscoveryOutcome.NotPublished);
         }
 
         return connectedSystemObjects
@@ -5081,9 +5093,11 @@ public partial class ConnectedSystemServer
             .SetTag("hasStatusFilter", statusFilter != null)
             .SetTag("hasObjectTypeFilter", objectTypeFilter != null)
             .SetTag("hasJoinTypeFilter", joinTypeFilter != null);
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+        var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter);
+        ResolveConnectionStates(result.Results);
+        return result;
     }
 
     /// <summary>
@@ -5112,9 +5126,34 @@ public partial class ConnectedSystemServer
             .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
             .SetTag("sortBy", sortBy ?? "default")
             .SetTag("includeTotalCount", includeTotalCount);
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
+        var result = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
             connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter, includeTotalCount);
+        ResolveConnectionStates(result.Results);
+        return result;
+    }
+
+    /// <summary>
+    /// Resolves each row's connection state from the scalars the projection carries. In memory rather than in
+    /// the query because <see cref="ConnectedSystemObjectConnectionStateResolver"/> cannot be translated into
+    /// SQL, and it lives in this layer, which JIM.PostgresData sits below. The resolver reads only a Pending
+    /// Export's change type and status, so a lightweight instance built from the projected scalars is exactly
+    /// what it expects; no Pending Export is loaded per row.
+    /// </summary>
+    private static void ResolveConnectionStates(List<ConnectedSystemObjectHeader> headers)
+    {
+        foreach (var header in headers)
+        {
+            var pendingExport = header.HasPendingExport
+                ? new PendingExport
+                {
+                    Status = header.PendingExportStatus ?? PendingExportStatus.Pending,
+                    ChangeType = header.PendingExportChangeType ?? PendingExportChangeType.Update
+                }
+                : null;
+
+            header.State = ConnectedSystemObjectConnectionStateResolver.Resolve(header.Status, pendingExport);
+        }
     }
 
     /// <summary>
@@ -8478,6 +8517,15 @@ public partial class ConnectedSystemServer
             // existing Synchronisation Rule - update
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedBy);
+
+            // Read before anything below flushes (#1697). A caller that loaded this rule tracked on this same
+            // unit of work (the REST controller pattern: load, mutate the tracked InitialPassword in place,
+            // then call this method) has already applied the new settings to the in-memory graph by this
+            // point; CreateActivityAsync's own SaveChangesAsync a few lines down would otherwise persist them
+            // before there is anything left to compare the new configuration against, so the comparison would
+            // always see "no change" and never release the parked accounts.
+            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
             // this must run while every named row is still readable; the keep choices are recorded on the
@@ -8488,11 +8536,7 @@ public partial class ConnectedSystemServer
             if (keepMessages.Count > 0)
                 activity.Message = string.Join(" ", keepMessages);
 
-            // Read before the write, or there is nothing left to compare the new configuration against.
-            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
-
-            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
-            await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
+            await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
@@ -8526,6 +8570,22 @@ public partial class ConnectedSystemServer
             return;
 
         await Application.InitialPasswords.ReleaseParkedForSyncRuleAsync(syncRule.Id);
+    }
+
+    /// <summary>
+    /// Updates an existing Synchronisation Rule and releases its parked initial passwords if the save changed
+    /// what would be delivered (#1697). Shared by both <c>CreateOrUpdateSyncRuleAsync</c> overloads so a
+    /// correction made via the REST API or PowerShell releases parked accounts exactly as a portal save does;
+    /// previously only the Metaverse-Object-initiated overload performed the read-before-write and release.
+    /// </summary>
+    /// <param name="previousInitialPassword">
+    /// The configuration as it stood before this save, read by the caller before anything in this save could
+    /// have flushed the tracked entity's new values to the database ahead of the comparison.
+    /// </param>
+    private async Task UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(SyncRule syncRule, SyncRuleInitialPassword? previousInitialPassword)
+    {
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+        await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
     }
 
     /// <summary>
@@ -8629,6 +8689,13 @@ public partial class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedByApiKey);
 
+            // Read before anything below flushes (#1697). The REST controller behind this overload loads the
+            // rule tracked on this same unit of work and mutates its InitialPassword in place before calling
+            // this method, so CreateActivityAsync's own SaveChangesAsync a few lines down would otherwise
+            // persist the new settings before there is anything left to compare them against, and the
+            // comparison would always see "no change" and never release the parked accounts.
+            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+
             // Staged mapping removals (#1537): sever kept values' provenance BEFORE anything flushes. The
             // required owner foreign key (#1550) deletes a severed mapping's row at the first SaveChanges, so
             // this must run while every named row is still readable; the keep choices are recorded on the
@@ -8639,7 +8706,7 @@ public partial class ConnectedSystemServer
             if (keepMessages.Count > 0)
                 activity.Message = string.Join(" ", keepMessages);
 
-            await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+            await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense

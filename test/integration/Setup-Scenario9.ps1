@@ -150,8 +150,24 @@ try {
     $ldapSettings = @{}
     if ($hostSetting) { $ldapSettings[$hostSetting.id] = @{ stringValue = $DirectoryConfig.Host } }
     if ($portSetting) { $ldapSettings[$portSetting.id] = @{ intValue = $DirectoryConfig.Port } }
-    if ($usernameSetting) { $ldapSettings[$usernameSetting.id] = @{ stringValue = $DirectoryConfig.BindDN } }
-    if ($passwordSetting) { $ldapSettings[$passwordSetting.id] = @{ stringValue = $DirectoryConfig.BindPassword } }
+    # JIM's Connected System binds as the delegated service account, not the directory
+    # administrator; see Get-DirectoryConfig's comment help for the identity model. This
+    # scenario deliberately runs ONE Connected System importing BOTH suffixes (Yellowstone
+    # and Glitterband), so it binds as the multi-partition identity when the directory config
+    # carries one (a member of every suffix's cn=jim group), falling back to the ordinary
+    # single-suffix JimBindDN/Password for directory types with no such identity yet.
+    $jimBindDN = if ($DirectoryConfig.ContainsKey('MultiPartitionJimBindDN') -and $DirectoryConfig.MultiPartitionJimBindDN) {
+        $DirectoryConfig.MultiPartitionJimBindDN
+    } else {
+        $DirectoryConfig.JimBindDN
+    }
+    $jimBindPassword = if ($DirectoryConfig.ContainsKey('MultiPartitionJimBindPassword') -and $DirectoryConfig.MultiPartitionJimBindPassword) {
+        $DirectoryConfig.MultiPartitionJimBindPassword
+    } else {
+        $DirectoryConfig.JimBindPassword
+    }
+    if ($usernameSetting) { $ldapSettings[$usernameSetting.id] = @{ stringValue = $jimBindDN } }
+    if ($passwordSetting) { $ldapSettings[$passwordSetting.id] = @{ stringValue = $jimBindPassword } }
     if ($useSSLSetting) { $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $DirectoryConfig.UseSSL } }
     if ($connectionTimeoutSetting) { $ldapSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
     if ($authTypeSetting) { $ldapSettings[$authTypeSetting.id] = @{ stringValue = $DirectoryConfig.AuthType } }

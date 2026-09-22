@@ -1,0 +1,28 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* An inline explanation for a JIM term, placed beside its label at the first point an administrator meets
+   it (#1670): "Projection" on the switch that triggers it, "Connector Space" on the list page's own
+   heading, and so on. The button and its popover are <InfoPopover />, shared with <PageInfo />, so this
+   component owns only which words appear. The wording is not
+   authored here: TermDefinitions is the single source, kept in step with docs/reference/glossary.md by
+   GlossaryTermConsistencyTests. *@
+<InfoPopover Title="@_entry.DisplayName" GlossaryAnchor="@_entry.GlossaryAnchor">
+    @_entry.Text
+</InfoPopover>
+
+@code {
+    /// <summary>
+    /// Which term to explain. Drives the wording via <see cref="TermDefinitions"/>; there is no separate
+    /// text parameter, so a call site cannot author its own copy of a definition that already lives there.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Term Term { get; set; }
+
+    private TermDefinitions.Entry _entry = null!;
+
+    protected override void OnParametersSet()
+    {
+        _entry = TermDefinitions.For(Term);
+    }
+}

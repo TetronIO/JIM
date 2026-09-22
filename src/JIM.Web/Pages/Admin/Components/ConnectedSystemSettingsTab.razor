@@ -185,7 +185,7 @@
                        configuration, and why this panel is not named after one of them. *@
                     <MudText Class="mud-text-secondary mb-5">
                         These apply to every password JIM sends to this Connected System, whether it is the first
-                        password on an account JIM creates, one you set by hand, or a password change synchronised
+                        password on a Connected System Object JIM creates, one you set by hand, or a password change synchronised
                         from elsewhere.
                     </MudText>
 
@@ -197,7 +197,7 @@
                         bind is encrypted but does not look it from this system's settings, which is why JIM warns
                         rather than refusing by default. Turn this on, once you know this system's connection is
                         encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued
-                        password changes wait, and accounts stay owed their first password.
+                        password changes wait, and Connected System Objects stay owed their first password.
                     </MudText>
 
                     <MudNumericField T="int?"
@@ -209,7 +209,7 @@
                                      Max="365"
                                      Adornment="Adornment.End"
                                      AdornmentText="days"
-                                     HelperText="How long JIM keeps trying to deliver a password to this system before it gives up on it: the first password owed to an account it provisions, and a queued password change alike. Leave empty to use JIM's default of 7 days. Raise it before taking this system out of service for longer than the current window, or work waiting meanwhile expires undelivered."
+                                     HelperText="How long JIM keeps trying to deliver a password to this system before it gives up on it: the first password owed to a Connected System Object it provisions, and a queued password change alike. Leave empty to use JIM's default of 7 days. Raise it before taking this system out of service for longer than the current window, or work waiting meanwhile expires undelivered."
                                      Variant="Variant.Outlined" />
                 </ChildContent>
             </MudExpansionPanel>
@@ -218,7 +218,7 @@
 
     @if (SettingsFormCustomErrors.Count > 0)
     {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">
+        <MudAlert Severity="Severity.Error" Class="mt-5">
             <MudText>There are issues with the settings:</MudText>
             <ul class="mt-5">
                 @foreach (var error in SettingsFormCustomErrors)
@@ -249,7 +249,7 @@
        nothing is stored until the trust action on the card below is confirmed. *@
     @if (_fetchedCertificate != null)
     {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+        <MudAlert Severity="Severity.Info" Class="mt-5">
             @if (_fetchedCertificate.FailureReason == ServerCertificateFailureReason.None)
             {
                 <text>JIM already trusts this certificate. Nothing needs adding.</text>

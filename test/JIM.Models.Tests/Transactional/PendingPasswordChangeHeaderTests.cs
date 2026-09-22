@@ -75,4 +75,24 @@ public class PendingPasswordChangeHeaderTests
     {
         Assert.That(Header(PendingPasswordChangeOrigin.Explicit, takingPasswords: false, PendingPasswordChangeStatus.Parked).IsDue(Now), Is.False);
     }
+
+    /// <summary>
+    /// A provisioned row's account is already decided by the export that created it, exactly as an explicit
+    /// set's is by the administrator who named it: neither waits on a paused system (decision D1).
+    /// </summary>
+    [Test]
+    public void IsDue_ProvisionedRowOnAPausedSystem_IsDue()
+    {
+        Assert.That(Header(PendingPasswordChangeOrigin.Provisioned, takingPasswords: false).IsDue(Now), Is.True);
+    }
+
+    /// <summary>
+    /// Only a propagated change is ever held; a provisioned row is delivered whether or not the system is
+    /// taking propagated passwords, exactly as an explicit set is.
+    /// </summary>
+    [Test]
+    public void IsHeld_ProvisionedRow_IsNeverHeld()
+    {
+        Assert.That(Header(PendingPasswordChangeOrigin.Provisioned, takingPasswords: false).IsHeld, Is.False);
+    }
 }

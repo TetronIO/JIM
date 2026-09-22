@@ -17,7 +17,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<MudAlert Severity="ConnectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info" Variant="Variant.Outlined">
+<MudAlert Severity="ConnectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info">
     @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
     {
         <MudText>Retrieve the schema from the Connected System, to be able to select which object types and attributes you want to manage with JIM.</MudText>
@@ -69,7 +69,6 @@
 {
     var result = _schemaRefreshResult;
     <MudAlert Severity="@(result.Success ? (result.HasChanges ? Severity.Info : Severity.Success) : Severity.Error)"
-              Variant="Variant.Outlined"
               Icon="@(result.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
               Class="mt-5 jim-alert-schema-refresh"
               ShowCloseIcon="true"
@@ -86,7 +85,7 @@
 
             @if (result.BlockedCredentialAttributeCount > 0)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
                     <strong>@result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
                     @(string.Join(", ", result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
                     These hold credential material and are never managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.
@@ -95,7 +94,7 @@
 
             @if (result.DiscoveryWarnings.Count > 0)
             {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                <MudAlert Severity="Severity.Warning" Class="mt-2 mb-2">
                     <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. Review them so a missing attribute can be traced to the Connected System rather than JIM.
                     <ul class="mt-1 mb-0">
                         @foreach (var warning in result.DiscoveryWarnings)
@@ -116,7 +115,7 @@
 
                 @if (result.ActionRequired)
                 {
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                    <MudAlert Severity="Severity.Warning" Class="mt-3">
                         <strong>Action Required:</strong> Some attributes that were removed are still referenced by Synchronisation Rules.
                         Please update your Synchronisation Rules to remove references to these attributes.
                     </MudAlert>
@@ -158,13 +157,13 @@
     <DialogContent>
         @if (!_objectTypeAttributeBeingEditedIsEditable)
         {
-            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Error">
                 This Connected System attribute cannot be edited as it is being referenced by either a Synchronisation Rule, or has values already populated.
             </MudAlert>
         }
         else
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Info">
                 This Connector supports changing the data type of a Connected System attribute. This might be because the data type
                 was detected automatically, and might need adjusting if not right.
             </MudAlert>
@@ -298,7 +297,7 @@
                    plainly. Nothing here changes what was discovered or what is stored. *@
                 @if (hiddenInternalCount > 0)
                 {
-                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+                    <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                         <div class="d-flex align-center flex-wrap" style="gap: 8px;">
                             <span class="flex-grow-1">
                                 @hiddenInternalCount internal object @(hiddenInternalCount == 1 ? "type is" : "types are") hidden.
@@ -315,7 +314,7 @@
                 }
                 else if (_showInternalObjectTypes && AnyInternalObjectTypes())
                 {
-                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+                    <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                         <div class="d-flex align-center flex-wrap" style="gap: 8px;">
                             <span class="flex-grow-1">Internal object types are shown.</span>
                             <MudButton Variant="Variant.Text"
@@ -564,7 +563,7 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Name" Sortable="false">
+                <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Name" Name="name" />
                     </HeaderTemplate>
@@ -577,7 +576,7 @@
                    whose condition only becomes true after the grid has rendered (each of these three is derived
                    from the selected Object Type's attributes, and the selection changes under the reader) would
                    register last and render at the far right, whatever the markup says. *@
-                <TemplateColumn Title="Class" Sortable="false" Hidden="@(!_selectedObjectTypeHasClasses)">
+                <TemplateColumn Title="Class" Sortable="false" Hidden="@(!_selectedObjectTypeHasClasses)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Class" Name="class" />
                     </HeaderTemplate>
@@ -585,7 +584,7 @@
                         @context.Item.ClassName
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Type" Sortable="false">
+                <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Type" Name="type" />
                     </HeaderTemplate>
@@ -613,7 +612,7 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Plurality" Sortable="false">
+                <TemplateColumn Title="Plurality" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Plurality" Name="plurality" />
                     </HeaderTemplate>
@@ -623,7 +622,7 @@
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)">
+                <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Writability" Name="writability" />
                     </HeaderTemplate>
@@ -637,7 +636,7 @@
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Description" Sortable="false" Hidden="@(!_selectedObjectTypeHasDescriptions)">
+                <TemplateColumn Title="Description" Sortable="false" Hidden="@(!_selectedObjectTypeHasDescriptions)" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Description" Name="description" />
                     </HeaderTemplate>
@@ -660,7 +659,7 @@
                 </TemplateColumn>
                 @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                 {
-                    <TemplateColumn Title="Action" Sortable="false">
+                    <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                         <HeaderTemplate>
                             <MudText Typo="Typo.button">Action</MudText>
                         </HeaderTemplate>
@@ -740,7 +739,7 @@
 
         @if (SchemaPreviewIsStale)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                       data-testid="jim-schema-preview-stale">
                 The schema selection has been edited since this preview ran, so it no longer describes what saving
                 would do. Preview again for an answer about the current selection.

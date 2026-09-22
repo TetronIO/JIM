@@ -19,7 +19,7 @@
 @* ─── Nothing retrieved yet: the only thing to say is how to start ─── *@
 @if (ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0)
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+    <MudAlert Severity="Severity.Info">
         <MudText>Retrieve the @PartitionAndHierarchyText hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</MudText>
         <MudButton Disabled="@_hierarchyBeingRetrieved" Color="Color.Primary" OnClick="HandleImportHierarchyAsync"
                    Variant="Variant.Filled" Class="mt-5" DropShadow="false">
@@ -94,7 +94,7 @@ else
 
     @if (_refreshCaveatShown)
     {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-2"
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2"
                   data-testid="jim-scope-hint-caveat">
             <MudText Typo="Typo.body2">
                 <strong>Refreshing preserves your selections</strong> where possible. Existing partitions and Containers are matched
@@ -305,7 +305,7 @@ else
 
 @if (ConnectedSystem.Partitions is { Count: > 0 } && !ConnectedSystem.HasPartitionsOrContainersSelected())
 {
-    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">
+    <MudAlert Severity="Severity.Warning" Class="mt-5">
         <MudText>
             <strong>No partitions or containers have been selected.</strong> You must select at least one partition
             @if (ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
@@ -327,6 +327,7 @@ else
             <MudToggleItem Value="false" Text="Simple" />
             <MudToggleItem Value="true" Text="Advanced" />
         </MudToggleGroup>
+        <TermHint Term="Term.ContainerScope" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
             @(_advancedMode
                 ? "One statement per line, in hierarchy order. This states the whole of Container Scope: a Container it does not name is not managed."
@@ -347,7 +348,7 @@ else
         {
             @* Every problem at once, each tied to its line: an administrator correcting a scope of any size one
                round trip at a time is how a half-corrected text gets saved. *@
-            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4" data-testid="jim-scope-text-errors">
+            <MudAlert Severity="Severity.Error" Class="mt-4" data-testid="jim-scope-text-errors">
                 <MudText Class="mb-2"><strong>This Container Scope was not applied.</strong> Nothing has been changed.</MudText>
                 <ul class="jim-scope-text-error-list">
                     @foreach (var error in _advancedErrors)
@@ -429,7 +430,7 @@ else
 
         @if (ScopeSelectionPreviewIsStale)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                       data-testid="jim-preview-stale">
                 The selection has been edited since this preview ran, so it no longer describes what saving would do.
                 Preview again for an answer about the current selection.

@@ -64,6 +64,22 @@ public class PendingExportAttributeValueChange
 
     public PendingExportAttributeChangeType ChangeType { get; set; }
 
+    /// <summary>
+    /// The export Synchronisation Rule whose mapping produced this value (stamped at staging time by
+    /// SyncEngine.ComputeAttributeValueChanges and the deletion/class-membership staging paths in
+    /// ExportEvaluationServer). Deliberately a soft pointer: no foreign key and no index, for the same reason
+    /// as <see cref="ResolvedReferenceCsoId"/>: this table is written at bulk-export scale, and the id is never
+    /// queried by value, only displayed alongside <see cref="SyncRuleName"/>. A dangling id (the rule deleted
+    /// after staging) is expected and is not a data error; the name is what survives.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the contributing Synchronisation Rule's name at staging time. Denormalised so it survives
+    /// deletion of the rule.
+    /// </summary>
+    public string? SyncRuleName { get; set; }
+
     #region Confirmation Tracking
 
     /// <summary>

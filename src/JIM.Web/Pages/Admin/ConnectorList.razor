@@ -8,12 +8,12 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Connectors</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connectors</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    JIM uses Connectors to connect to external systems and import/export data. A number are pre-supplied as built-in connectors for common system types, but you can also install third-party connectors.
-    From here you can see which are installed and if any have updates that can be applied.
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connectors
+    <PageInfo Title="Connectors">
+        JIM uses Connectors to connect to external systems and import or export data. A number are pre-supplied as built-in Connectors for common system types, but you can also install third-party Connectors. From here you can see which are installed and if any have updates that can be applied.
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <MudButtonGroup Class="mt-3" OverrideStyles="false">
     <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/connected-systems">Connected Systems</MudButton>
@@ -37,7 +37,7 @@
                 <span class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Item.Id)">@context.Item.Name</MudLink></span>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Description" Sortable="false">
+        <TemplateColumn Title="Description" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Description" Name="description" />
             </HeaderTemplate>
@@ -63,9 +63,9 @@
                 @(context.Item.InUse ? "Yes" : "No")
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Version(s)" Sortable="false" HeaderStyle="width: 110px;">
+        <TemplateColumn Title="Version" Sortable="false" HeaderClass="jim-nowrap" HeaderStyle="width: 110px;">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Version(s)" Name="versions" />
+                <VirtualisedSortHeader Title="Version" Name="versions" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (string.IsNullOrEmpty(context.Item.Versions))

@@ -37,13 +37,18 @@ public enum PasswordCharacterClasses
 /// <summary>
 /// Whether a Connected System has password policies that apply to some accounts in place of the system-wide one.
 /// <para>
+/// Every supported directory has such a mechanism: Active Directory's Fine-Grained Password Policies, OpenLDAP's
+/// per-entry <c>pwdPolicySubentry</c> under the ppolicy overlay, and 389 Directory Server's subtree and user
+/// policies. Whichever it is, the effect on JIM is the same: the discovered policy is a floor, not a guarantee.
+/// </para>
+/// <para>
 /// This is deliberately a three-state signal rather than a boolean. Reading the policies themselves usually
 /// requires privileges JIM's service account should not need, so "JIM was not allowed to look" is a genuinely
 /// different answer from "there are none", and conflating them would turn an unknown into a false reassurance.
 /// JIM detects their presence and does not enumerate them.
 /// </para>
 /// </summary>
-public enum FineGrainedPolicySignal
+public enum PolicyOverrideSignal
 {
     /// <summary>
     /// JIM established that none can exist, so the discovered policy applies to every account.
@@ -67,6 +72,40 @@ public enum FineGrainedPolicySignal
     /// held. Treat the discovered policy as a floor and expect rejections to be possible.
     /// </summary>
     CouldNotDetermine = 2
+}
+
+/// <summary>
+/// Why a discovered password policy says what it says, and in particular why it says nothing when it does.
+/// <para>
+/// A row with no constraints can mean four different things, and an administrator's next step differs for each:
+/// nothing to do, grant the service account a right, configure a policy on the directory, or refresh the schema.
+/// The outcome names which, so the portal and the API can say so rather than leaving the reader to guess.
+/// </para>
+/// </summary>
+public enum PasswordPolicyDiscoveryOutcome
+{
+    /// <summary>
+    /// The policy was read. This is the default so that rows discovered before the outcome existed, all of which
+    /// were read from Active Directory, keep their meaning.
+    /// </summary>
+    Read = 0,
+
+    /// <summary>
+    /// The directory publishes no password policy a client can read, so there is nothing for JIM to discover
+    /// and no configuration to correct.
+    /// </summary>
+    NotPublished = 1,
+
+    /// <summary>
+    /// The directory holds a password policy in its server configuration, and the account JIM connects as was
+    /// not permitted to read it. Granting that read is what changes the answer.
+    /// </summary>
+    ConfigurationNotReadable = 2,
+
+    /// <summary>
+    /// The directory's password policy mechanism is loaded but no policy is configured, so no rules apply.
+    /// </summary>
+    NoPolicyConfigured = 3
 }
 
 /// <summary>

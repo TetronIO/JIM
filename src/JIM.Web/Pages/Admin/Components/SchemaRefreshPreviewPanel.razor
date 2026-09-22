@@ -5,7 +5,6 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudAlert Severity="@PanelSeverity"
-          Variant="Variant.Outlined"
           Icon="@Icons.Material.Filled.Preview"
           Class="mt-5 jim-alert-schema-refresh-preview">
     <MudText Typo="Typo.subtitle1" Class="mb-2">
@@ -33,7 +32,7 @@
 
         @if (Result.DiscoveryWarnings.Count > 0)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-2">
+            <MudAlert Severity="Severity.Warning" Class="mt-2 mb-2">
                 <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. A partial read can make Object Types or Attributes appear removed when they are not; check these before applying.
                 <ul class="mt-1 mb-0">
                     @foreach (var warning in Result.DiscoveryWarnings)
@@ -46,7 +45,7 @@
 
         @if (Result.BlockedCredentialAttributeCount > 0)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-2">
+            <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
                 <strong>@Result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
                 @(string.Join(", ", Result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
                 These hold credential material and are never managed by JIM.
@@ -89,14 +88,14 @@
                 </ul>
             }
 
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+            <MudAlert Severity="Severity.Warning" Class="mt-3">
                 Object Types and Attributes the Connected System no longer reports are <strong>retained</strong> in JIM when you apply; nothing is deleted, but their values stop refreshing, and objects of a removed Object Type will be obsoleted by the next Full Import whether or not you apply. Attribute definition changes are applied, and a mapping validated against the old definition may no longer behave as intended.
             </MudAlert>
         }
 
         @if (Result.ActionRequired)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+            <MudAlert Severity="Severity.Warning" Class="mt-3">
                 <strong>Action Required:</strong> Some attributes that are no longer reported are still referenced by Synchronisation Rules.
                 Please update your Synchronisation Rules to remove references to these attributes.
             </MudAlert>
@@ -175,7 +174,7 @@
             </ul>
             @if (Dependents.ReferencedObjectMatchingRules.Count > 0)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                <MudAlert Severity="Severity.Info" Class="mt-2">
                     Object Matching has no disabled state, so these need your attention separately:
                     <ul class="mt-1 mb-0">
                         @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
@@ -207,7 +206,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3">
+        <MudAlert Severity="Severity.Error" Class="mb-3">
             <strong>This deletes configuration and identity data.</strong> The configuration below is deleted, and the data removal runs as a background task you can follow from the Operations queue.
         </MudAlert>
         @if (Dependents is { HasAny: true })
@@ -253,7 +252,7 @@
         }
         @if (Dependents is { ReferencedObjectMatchingRules.Count: > 0 })
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+            <MudAlert Severity="Severity.Info" Class="mt-2">
                 Object Matching Rules are not deleted by this option, so these need your attention separately:
                 <ul class="mt-1 mb-0">
                     @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)

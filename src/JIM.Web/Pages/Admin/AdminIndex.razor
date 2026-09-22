@@ -11,6 +11,8 @@
 
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Administration</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+@* page-description: exempt - the Administration landing page orients a first-time visitor to the sections
+   below; it is a directory of the admin area, not a page with a purpose of its own to explain. *@
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Manage system configuration, operations, and security.
 </MudText>
@@ -52,7 +54,7 @@
 </MudGrid>
 
 @* ─── Identity Configuration ─── *@
-<MudText Typo="Typo.h5" Class="mt-8">Identity Configuration</MudText>
+<MudText Typo="Typo.h5" Class="mt-8">Synchronisation Configuration</MudText>
 <MudGrid Class="mt-3" Spacing="4">
     <MudItem xs="12" sm="6" md="4">
         <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
@@ -69,7 +71,7 @@
                 <MudIcon Icon="@Icons.Material.Filled.Sync" Color="Color.Primary" />
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">Synchronisation Rules</MudText>
             </MudStack>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Define how identities flow between systems</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Define how attributes flow between systems</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="4">

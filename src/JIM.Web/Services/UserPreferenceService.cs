@@ -127,17 +127,16 @@ public interface IUserPreferenceService
     Task SetCausalityViewAsync(string view);
 
     /// <summary>
-    /// Gets the user's causality technical-names preference (emphasise MVO/CSO vocabulary over
-    /// plain language).
+    /// Gets whether the user has collapsed the Service Health panel on the Operations page.
     /// </summary>
-    /// <returns>True if technical names are emphasised, false if plain language, null if no preference (default to off).</returns>
-    Task<bool?> GetCausalityTechNamesAsync();
+    /// <returns>True if collapsed, false if expanded, null if no preference (default to expanded).</returns>
+    Task<bool?> GetServiceHealthCollapsedAsync();
 
     /// <summary>
-    /// Sets the user's causality technical-names preference.
+    /// Sets whether the Service Health panel on the Operations page is collapsed.
     /// </summary>
-    /// <param name="enabled">Whether technical names are emphasised.</param>
-    Task SetCausalityTechNamesAsync(bool enabled);
+    /// <param name="collapsed">Whether the panel is collapsed.</param>
+    Task SetServiceHealthCollapsedAsync(bool collapsed);
 }
 
 /// <summary>
@@ -152,7 +151,7 @@ public class UserPreferenceService : IUserPreferenceService
     private const string MvoDetailViewModeKey = "mvoDetailViewMode";
     private const string TableDenseKey = "tableDense";
     private const string CausalityViewKey = "causalityView";
-    private const string CausalityTechNamesKey = "causalityTechNames";
+    private const string ServiceHealthCollapsedKey = "serviceHealthCollapsed";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -580,16 +579,16 @@ public class UserPreferenceService : IUserPreferenceService
     }
 
     /// <inheritdoc />
-    public async Task<bool?> GetCausalityTechNamesAsync()
+    public async Task<bool?> GetServiceHealthCollapsedAsync()
     {
         try
         {
-            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", CausalityTechNamesKey);
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", ServiceHealthCollapsedKey);
             return value switch
             {
                 "true" => true,
                 "false" => false,
-                _ => null // No preference saved - default to plain language
+                _ => null // No preference saved - default to expanded
             };
         }
         catch (JSDisconnectedException)
@@ -605,11 +604,11 @@ public class UserPreferenceService : IUserPreferenceService
     }
 
     /// <inheritdoc />
-    public async Task SetCausalityTechNamesAsync(bool enabled)
+    public async Task SetServiceHealthCollapsedAsync(bool collapsed)
     {
         try
         {
-            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", CausalityTechNamesKey, enabled ? "true" : "false");
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", ServiceHealthCollapsedKey, collapsed ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {

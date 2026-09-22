@@ -158,6 +158,14 @@ ldap_bind: Invalid credentials (49)
         Get-LDAPBindOutcome -ExitCode 49 -BindOutput $output | Should -Be 'UserNotFound'
     }
 
+    It 'classifies OpenLDAP''s plain wrong-password message, which carries no AD-style sub-code' {
+        # Captured verbatim from a live OpenLDAP container (jim-openldap:primary): OpenLDAP has no
+        # equivalent of Active Directory's hexadecimal sub-code, so this is the only signal available to
+        # distinguish a wrong password from a directory the client simply could not reach.
+        Get-LDAPBindOutcome -ExitCode 49 -BindOutput 'ldap_bind: Invalid credentials (49)' |
+            Should -Be 'InvalidCredentials'
+    }
+
     It 'reports an unrecognised failure as Failed rather than guessing' {
         Get-LDAPBindOutcome -ExitCode 1 -BindOutput 'ldap_sasl_bind(SIMPLE): Cannot contact LDAP server (-1)' |
             Should -Be 'Failed'
@@ -165,5 +173,52 @@ ldap_bind: Invalid credentials (49)
 
     It 'does not report success on a non-zero exit code with empty output' {
         Get-LDAPBindOutcome -ExitCode 49 -BindOutput '' | Should -Be 'Failed'
+    }
+}
+
+Describe 'Get-LDAPPasswordModifyOutcome' {
+    <#
+        ldappasswd reports an RFC 3062 refusal as "Result: <text> (<code>)" followed by an
+        "Additional info:" line carrying the server's own message. The number is what is classified on,
+        because the text differs between servers. Scenario 22's negative control depends on telling a
+        constraint violation (the password policy refused the value) from an access or bind failure
+        (the fixture is wrong), both of which are a non-zero exit code.
+
+        The strings below follow ldappasswd's output format; unlike the bind strings above they were
+        composed from it rather than captured from a live server, which is why the classifier keys on
+        the parenthesised result code alone.
+    #>
+
+    It 'classifies a zero exit code as success whatever the output' {
+        Get-LDAPPasswordModifyOutcome -ExitCode 0 -Output '' | Should -Be 'Success'
+    }
+
+    It 'classifies result 19 as the password policy refusing the value' {
+        $output = "Result: Constraint violation (19)`nAdditional info: Password fails quality checking policy"
+        Get-LDAPPasswordModifyOutcome -ExitCode 1 -Output $output | Should -Be 'ConstraintViolation'
+    }
+
+    It 'classifies result 50 as an access problem rather than an enforced policy' {
+        Get-LDAPPasswordModifyOutcome -ExitCode 1 -Output 'Result: Insufficient access (50)' |
+            Should -Be 'InsufficientAccess'
+    }
+
+    It 'classifies a refused bind as invalid credentials' {
+        Get-LDAPPasswordModifyOutcome -ExitCode 49 -Output 'ldap_bind: Invalid credentials (49)' |
+            Should -Be 'InvalidCredentials'
+    }
+
+    It 'classifies result 53 as the directory declining the operation' {
+        Get-LDAPPasswordModifyOutcome -ExitCode 1 -Output 'Result: Server is unwilling to perform (53)' |
+            Should -Be 'UnwillingToPerform'
+    }
+
+    It 'reports an unrecognised failure as Failed rather than guessing' {
+        Get-LDAPPasswordModifyOutcome -ExitCode 1 -Output 'ldap_sasl_bind(SIMPLE): Cannot contact LDAP server (-1)' |
+            Should -Be 'Failed'
+    }
+
+    It 'does not report success on a non-zero exit code with empty output' {
+        Get-LDAPPasswordModifyOutcome -ExitCode 1 -Output '' | Should -Be 'Failed'
     }
 }

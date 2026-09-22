@@ -36,8 +36,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([ExecuteExportsAsync]) --> Reconcile[Pre-export CREATE to DELETE<br/>reconciliation: cancel contradictory<br/>pairs persisted across sync runs<br/>CREATE+DELETE cancels both<br/>UPDATE+DELETE cancels UPDATE]
-    Reconcile --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>The same filters drive the batch sweep below]
+    Start([ExecuteExportsAsync]) --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>The same filters drive the batch sweep below]
     GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
@@ -106,12 +105,15 @@ flowchart TD
 
     CheckResult -->|Yes, Create| HandleCreate[Record Exported<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported]
     CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported]
-    CheckResult -->|Yes, Delete| HandleDelete[Record Deprovisioned<br/>Delete Pending Export<br/>Delete CSO]
+    CheckResult -->|Yes, Delete| CsoStatus{CSO status =<br/>PendingProvisioning?}
+    CsoStatus -->|No, Normal| HandleDelete[Record Deprovisioned<br/>Set Status = Exported<br/>confirming import deletes PE and CSO]
+    CsoStatus -->|Yes: provisioning was<br/>never confirmed| HandleUnconfirmedDelete[Record Deprovisioned<br/>Remove Pending Export and CSO now:<br/>import deletion detection excludes<br/>PendingProvisioning objects, so a<br/>successful Delete is the only<br/>confirmation the object will ever get]
     CheckResult -->|Failed| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]
 
     HandleCreate --> Persist
     HandleUpdate --> Persist
     HandleDelete --> Persist
+    HandleUnconfirmedDelete --> Persist
     HandleFail --> CheckMaxRetries{ErrorCount >=<br/>MaxRetries?}
     CheckMaxRetries -->|Yes| MarkFailed[Set Status = Failed<br/>Permanent failure<br/>Requires manual intervention]
     CheckMaxRetries -->|No| SetRetry[Set Status = ExportNotConfirmed<br/>Set NextRetryAt = backoff time]
@@ -173,8 +175,6 @@ flowchart TD
 - **Connector instances** are created per-batch via factory to avoid shared connection state
 
 ## Key Design Decisions
-
-- **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Before fetching executable exports, `ReconcileCreateDeletePairsAsync` scans all Pending Exports for contradictory pairs targeting the same CSO. CREATE+DELETE pairs cancel both (object was never exported), UPDATE+DELETE cancels the UPDATE (deletion makes it redundant). This catches pairs persisted across different sync runs; the flush-time reconciliation in `SyncTaskProcessorBase` handles same-page pairs.
 
 - **Two-pass export**<br /> Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 

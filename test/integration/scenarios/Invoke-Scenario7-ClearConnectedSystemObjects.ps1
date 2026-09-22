@@ -36,9 +36,10 @@
         - Clear the connector space (queued, -Wait): arms the sweep
         - Run a Full Synchronisation BEFORE any re-import: assert the sweep stays armed and the
           Activity states it was skipped, because no Full Import has completed since the clear
-        - Remove one employee from the CSV (the Nano template's 3 users make this a 33% shortfall,
-          above the default 10% threshold), Full Import, then Full Synchronisation: the #1605
-          Functional Requirement 9 shortfall check refuses the reconciliation
+        - Remove one employee from the CSV, set Sync.PostClearReconciliation.MaxMissingPercent to 0
+          so that one missing employee is a shortfall at any template's population, Full Import,
+          then Full Synchronisation: the #1605 Functional Requirement 9 shortfall check refuses
+          the reconciliation
         - Assert: the Full Synchronisation Activity Message reports "Stranded-value sweep refused"
           and the arming is still set
         - Raise Sync.PostClearReconciliation.MaxMissingPercent to 50 and run another Full
@@ -440,7 +441,9 @@ try {
         Assert-NotNull -Value $csvSystemAfterGatedSync.strandedValueSweepArmedAt -Message "The sweep remains armed after a Full Synchronisation run before any re-import"
 
         # Step 4e: Remove the departing employee from the source CSV, so re-import returns everyone
-        # else. The Nano template's 3 users make this a 33% shortfall, above the default 10% threshold.
+        # else. One missing employee is a shortfall of 100/N percent, so whether it clears the default
+        # 10% threshold depends on the template's population (33% for Nano's 3 users, 1% for Small's
+        # 100); step 4f pins the threshold so the refusal never depends on the data size.
         Write-TestStep "4e" "Remove one employee from the source CSV"
         $partialCsv = @($baselineCsvRows | Where-Object { $_.employeeId -ne $departingEmployeeId })
         Assert-Equal -Expected ($baselineCsvRows.Count - 1) -Actual $partialCsv.Count -Message "Partial CSV has one fewer row than baseline"
@@ -450,8 +453,12 @@ try {
 
         # Step 4f: Full Import + Full Sync of the partial CSV - the #1605 Functional Requirement 9
         # gate is now open (a Full Import has completed successfully since the clear), so the
-        # re-join shortfall check runs and, at 33% missing against the default 10% threshold, refuses.
+        # re-join shortfall check runs. The threshold is set to 0% first: the check refuses when the
+        # missing share exceeds the threshold, so one missing employee then refuses at any population
+        # size (Scenario 7 runs at the sweep's chosen template; the All-scenarios run gives it Small).
         Write-TestStep "4f" "Full Import and Full Synchronisation of the partial CSV (shortfall refuses)"
+        Set-JIMServiceSetting -Key $maxMissingPercentKey -Value "0" | Out-Null
+        Write-Host "  Re-join shortfall threshold set to 0%, so any missing employee refuses" -ForegroundColor Gray
         $partialImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $partialImportResult.activityId -Name "CSV Full Import (Test 4 partial re-import)"
         $partialImportStats = Get-JIMActivityStats -ActivityId $partialImportResult.activityId
@@ -467,7 +474,8 @@ try {
         $csvSystemAfterRefusal = Get-JIMConnectedSystem -Id $config.CSVSystemId
         Assert-NotNull -Value $csvSystemAfterRefusal.strandedValueSweepArmedAt -Message "The sweep remains armed after a refused reconciliation"
 
-        # Step 4h: Raise the shortfall threshold so the same 33% missing no longer refuses.
+        # Step 4h: Raise the shortfall threshold so the same one-employee shortfall no longer refuses
+        # (at most 50% of any population of two or more, and the check is strictly "more than").
         Write-TestStep "4h" "Raise the re-join shortfall threshold to 50%"
         Set-JIMServiceSetting -Key $maxMissingPercentKey -Value "50" | Out-Null
 

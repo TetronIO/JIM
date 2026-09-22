@@ -26,11 +26,11 @@
         }
         else if (_errorMessage != null)
         {
-            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_errorMessage</MudAlert>
+            <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
         }
         else if (_directoryServers is { Count: 0 })
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            <MudAlert Severity="Severity.Info">
                 JIM did not find any domain controllers in this directory's CN=Sites configuration.
             </MudAlert>
         }

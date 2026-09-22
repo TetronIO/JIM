@@ -1487,6 +1487,118 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// A Create that has already been exported is awaiting confirmation by import: re-sending it would ask
+    /// the connector to create an object that already exists there. Any attribute changes appended while it
+    /// waits travel later as an Update, once the Create is confirmed (SyncEngine.Reconciliation.cs).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateWithExportedStatus_SkipsExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // A Create already sent, with a further change appended while it awaits confirmation.
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Exported,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Test",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(0),
+            "Create export with Exported status should not be re-executed, even with Pending changes queued");
+    }
+
+    /// <summary>
+    /// ExportNotConfirmed (a retry after a failed or ambiguous send) is the exception: unlike Exported, it
+    /// means the Create genuinely needs to go out again.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateWithExportNotConfirmedStatus_IncludesExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.ExportNotConfirmed,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(1),
+            "Create export with ExportNotConfirmed status is a retry and must still be executable");
+    }
+
+    /// <summary>
     /// Tests that Update exports with Pending attribute changes are eligible.
     /// </summary>
     [Test]
@@ -3665,6 +3777,357 @@ public class ExportExecutionTests
         // Assert
         Assert.That(result.SuccessCount, Is.EqualTo(1), "Narrating into a reporter nobody is listening to must not disturb the export");
         Assert.That(receivedProgress, Is.Not.Null, "Connectors are always handed a reporter, so they never have to null-check it");
+    }
+
+    #endregion
+
+    #region Unconfirmed Provisioning Delete Tests
+
+    /// <summary>
+    /// A Connected System Object is created PendingProvisioning alongside a Create Pending Export. If
+    /// the Create is exported but the Metaverse Object is withdrawn before any confirming import, JIM
+    /// stages a Delete Pending Export for the still-PendingProvisioning CSO. Once that Delete exports
+    /// successfully, the CSO must be removed immediately: import deletion detection deliberately
+    /// excludes PendingProvisioning CSOs, so nothing would otherwise ever obsolete or delete it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SuccessfulDeleteOfUnconfirmedProvisioningCso_RemovesCsoAndPendingExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(result.FailedCount, Is.EqualTo(0));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.False,
+                "A successful Delete of a PendingProvisioning CSO must remove the CSO immediately: it can never be obsoleted by an import otherwise");
+            Assert.That(SyncRepo.PendingExports.ContainsKey(pendingExport.Id), Is.False,
+                "The Pending Export must be removed alongside the CSO rather than left Exported");
+        }
+
+        var item = result.ProcessedExportItems.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item.Succeeded, Is.True);
+            Assert.That(item.ConnectedSystemObjectRemoved, Is.True,
+                "The processed item must flag the removal so RPEI persistence does not FK to a deleted row");
+        }
+    }
+
+    /// <summary>
+    /// Pins today's ordinary behaviour: a successful Delete of a Normal-status CSO (the common case,
+    /// e.g. an object leaving scope after it was fully provisioned and confirmed) is left Exported for
+    /// the confirming import to obsolete, exactly as before this change.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SuccessfulDeleteOfNormalCso_LeavesCsoAndMarksExportExportedAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Joined,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.True,
+                "A Normal CSO's existing lifecycle (import marks Obsolete, sync deletes) is unaffected by this change");
+            Assert.That(SyncRepo.PendingExports.TryGetValue(pendingExport.Id, out var storedExport), Is.True,
+                "The Pending Export is untouched by removal logic for a Normal CSO");
+            Assert.That(storedExport!.Status, Is.EqualTo(PendingExportStatus.Exported));
+        }
+
+        var item = result.ProcessedExportItems.Single();
+        Assert.That(item.ConnectedSystemObjectRemoved, Is.False);
+    }
+
+    /// <summary>
+    /// A failed Delete against a PendingProvisioning CSO must never reach the removal path: the CSO
+    /// and its Pending Export are kept exactly as the ordinary retry/backoff path leaves them.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FailedDeleteOfUnconfirmedProvisioningCso_KeepsCsoAndPendingExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Failed("Connection to target system failed") });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.EqualTo(1));
+            Assert.That(result.SuccessCount, Is.EqualTo(0));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.True,
+                "A failed Delete export must never remove the CSO");
+            Assert.That(SyncRepo.PendingExports.ContainsKey(pendingExport.Id), Is.True,
+                "A failed Delete export must never remove the Pending Export");
+            Assert.That(cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning));
+        }
+    }
+
+    /// <summary>
+    /// File-connector path, auto-confirm enabled: a successful Delete of a PendingProvisioning CSO
+    /// removes the CSO, not merely the Pending Export that auto-confirm would otherwise delete alone.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FileConnectorAutoConfirm_DeleteOfUnconfirmedProvisioningCso_RemovesCsoAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        var mockFileConnector = mockConnector.As<IConnectorExportUsingFiles>();
+        var mockCapabilities = mockConnector.As<IConnectorCapabilities>();
+        mockConnector.Setup(c => c.Name).Returns("Test Auto-Confirm File Connector");
+        mockCapabilities.Setup(c => c.SupportsAutoConfirmExport).Returns(true);
+        mockFileConnector.Setup(c => c.ExportAsync(
+                It.IsAny<IList<ConnectedSystemSettingValue>>(),
+                It.IsAny<IList<PendingExport>>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<ConnectedSystemSettingValue> _, IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.False,
+                "Auto-confirm must not stop at deleting the Pending Export; the unconfirmed-provisioning CSO must go too");
+            Assert.That(SyncRepo.PendingExports.ContainsKey(pendingExport.Id), Is.False);
+        }
+    }
+
+    /// <summary>
+    /// File-connector path, auto-confirm NOT enabled: a successful Delete of a PendingProvisioning CSO
+    /// still removes the CSO and its Pending Export, rather than leaving the export Exported to await
+    /// a confirming import that (per the whole point of this rule) will never come.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FileConnectorWithoutAutoConfirm_DeleteOfUnconfirmedProvisioningCso_RemovesCsoAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        // No IConnectorCapabilities implemented, so autoConfirm defaults false.
+        var mockConnector = new Mock<IConnector>();
+        var mockFileConnector = mockConnector.As<IConnectorExportUsingFiles>();
+        mockConnector.Setup(c => c.Name).Returns("Test Non-Auto-Confirm File Connector");
+        mockFileConnector.Setup(c => c.ExportAsync(
+                It.IsAny<IList<ConnectedSystemSettingValue>>(),
+                It.IsAny<IList<PendingExport>>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<ConnectedSystemSettingValue> _, IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(cso.Id), Is.False,
+                "Without auto-confirm the export would ordinarily be left Exported; an unconfirmed-provisioning Delete must remove the CSO instead");
+            Assert.That(SyncRepo.PendingExports.ContainsKey(pendingExport.Id), Is.False);
+        }
     }
 
     #endregion

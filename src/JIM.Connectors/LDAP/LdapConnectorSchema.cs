@@ -29,9 +29,40 @@ internal class LdapConnectorSchema
 
     internal async Task<ConnectorSchema> GetSchemaAsync()
     {
-        return _rootDse.DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD
-            ? await GetActiveDirectorySchemaAsync()
-            : await GetRfcSchemaAsync();
+        if (_rootDse.DirectoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD)
+            await GetActiveDirectorySchemaAsync();
+        else
+            await GetRfcSchemaAsync();
+
+        await WarnWhenChangesCannotBeReadAsync();
+        return _schema;
+    }
+
+    /// <summary>
+    /// Warns when the account JIM connects as may not be able to see what changes, by asking the directory's
+    /// change source whether it can read where the changes are kept: for Active Directory and Samba AD, whether
+    /// it may list the domain's Deleted Objects container (#1723); other sources answer for their own logs.
+    /// <para>
+    /// Schema Discovery is the right first moment: it is the first time a Connected System's credentials are proven
+    /// against the directory, and it runs again from the schema refresh preview, so a grant made in response to the
+    /// warning can be confirmed on the spot rather than by waiting for a Delta Import to find nothing. It never
+    /// fails discovery: change detection is a Delta Import concern, and the schema is no less correct for the
+    /// account lacking a right the schema read does not need. The Delta Import itself refuses to run on a proven
+    /// unavailability; here both that and an unknown are a warning.
+    /// </para>
+    /// </summary>
+    private async Task WarnWhenChangesCannotBeReadAsync()
+    {
+        var namingContext = LdapPasswordPolicyScope.From(_rootDse).PrimaryNamingContext;
+        var namingContexts = namingContext == null ? Array.Empty<string>() : new[] { namingContext };
+
+        var source = LdapDeltaSources.Create(_rootDse.DeltaSourceKind, new LdapOperationExecutor(_connection), _logger);
+        var findings = await source.VerifyReadinessAsync(_rootDse, namingContexts, CancellationToken.None);
+        foreach (var warning in LdapDeltaSourceFindings.SchemaDiscoveryWarnings(findings))
+        {
+            _schema.Warnings.Add(warning);
+            _logger.Warning("GetSchemaAsync: {Warning}", warning);
+        }
     }
 
     // -----------------------------------------------------------------------

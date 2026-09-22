@@ -70,7 +70,7 @@ internal static class PendingExportBulkColumns
         "Id", "PendingExportId", "AttributeId", "StringValue", "DateTimeValue",
         "IntValue", "LongValue", "DecimalValue", "ByteValue", "GuidValue", "BoolValue",
         "UnresolvedReferenceValue", "ChangeType", "Status", "ExportAttemptCount",
-        "LastExportedAt", "LastImportedValue", "ResolvedReferenceCsoId"
+        "LastExportedAt", "LastImportedValue", "ResolvedReferenceCsoId", "SyncRuleId", "SyncRuleName"
     ];
 
     /// <summary>
@@ -97,11 +97,14 @@ internal static class PendingExportBulkColumns
     /// <summary>
     /// Columns deliberately excluded from every Pending Export attribute value change update list:
     /// the identity, target attribute, change classification and the staged non-string value
-    /// carriers are immutable once staged.
+    /// carriers are immutable once staged. SyncRuleId/SyncRuleName join them: they record which rule's
+    /// mapping produced the value at staging time, a fact about how the change came to exist that no
+    /// later retry or reconciliation can change.
     /// </summary>
     internal static readonly string[] PendingExportAttributeValueChangesUpdateExclusions =
     [
         "Id", "PendingExportId", "AttributeId", "ChangeType", "DateTimeValue",
-        "IntValue", "LongValue", "DecimalValue", "ByteValue", "GuidValue", "BoolValue"
+        "IntValue", "LongValue", "DecimalValue", "ByteValue", "GuidValue", "BoolValue",
+        "SyncRuleId", "SyncRuleName"
     ];
 }

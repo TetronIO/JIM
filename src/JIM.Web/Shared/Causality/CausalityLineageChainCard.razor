@@ -18,7 +18,7 @@
     {
         <span class="ln-op">
             <MudIcon Icon="@chipOperation.Icon" />
-            @(TechnicalNames ? chipOperation.TechnicalLabel : chipOperation.PlainLabel)
+            @chipOperation.Label
         </span>
     }
     <div class="ln-sentence">
@@ -43,15 +43,15 @@
             @if (Hop.ShowConnectedSystemChip && Hop.Cohort.ConnectedSystemId is { } connectedSystemId
                  && Hop.Cohort.HasConnectedSystem)
             {
-                <CausalityEntityChip Label="@Hop.Cohort.ConnectedSystemName"
-                                     Href="@($"/admin/connected-systems/{connectedSystemId}")"
-                                     Kind="CausalityEntityKind.ConnectedSystem" />
+                <ObjectChip Name="@Hop.Cohort.ConnectedSystemName"
+                            Href="@($"/admin/connected-systems/{connectedSystemId}")"
+                            Kind="ObjectChipKind.ConnectedSystem" />
             }
             @if (Hop.Cohort.SyncRuleId is { } syncRuleId && !string.IsNullOrWhiteSpace(Hop.Cohort.SyncRuleName))
             {
-                <CausalityEntityChip Label="@Hop.Cohort.SyncRuleName"
-                                     Href="@($"/admin/sync-rules/{syncRuleId}")"
-                                     Kind="CausalityEntityKind.SynchronisationRule" />
+                <ObjectChip Name="@Hop.Cohort.SyncRuleName"
+                            Href="@($"/admin/sync-rules/{syncRuleId}")"
+                            Kind="ObjectChipKind.SynchronisationRule" />
             }
             @if (Hop.Reason != null)
             {
@@ -108,13 +108,6 @@
     /// </summary>
     [Parameter, EditorRequired]
     public CausalityLineageChainHop Hop { get; set; } = null!;
-
-    /// <summary>
-    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted, exactly
-    /// as the panel-wide toggle does for this-run event cards.
-    /// </summary>
-    [Parameter]
-    public bool TechnicalNames { get; set; }
 
     private bool _expanded;
 

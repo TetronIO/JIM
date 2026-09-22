@@ -8,30 +8,31 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// The synthetic source row opens the Timeline and is among the first things read on the panel, so
-/// it was the most visible row to keep saying "record" while the technical-names toggle was on.
+/// its wording is held to the same one-vocabulary rule as every other row.
 /// </summary>
 [TestFixture]
 public class CausalitySourceLabelsTests
 {
     [Test]
-    public void Verb_PlainLanguage_ReadsAsASentence()
+    public void Verb_ReadsAsASentenceInThePortalsVocabulary()
     {
-        Assert.That(CausalitySourceLabels.Verb(technicalNames: false), Is.EqualTo("Record processed"));
+        Assert.That(CausalitySourceLabels.Verb(), Is.EqualTo("Connected System Object processed"));
     }
 
     [Test]
-    public void Verb_TechnicalNames_ReadsAsASentenceToo()
+    public void Verb_NeverSaysRecord()
     {
-        Assert.That(CausalitySourceLabels.Verb(technicalNames: true),
-            Is.EqualTo("Connected System Object processed"));
+        Assert.That(CausalitySourceLabels.Verb(), Does.Not.Contain("record").IgnoreCase);
     }
 
-    [TestCase(true)]
-    [TestCase(false)]
-    public void Verb_UsesThePlainWordRecordOnlyWhenTechnicalNamesAreOff(bool technicalNames)
+    [Test]
+    public void Verb_Speculative_ReadsInTheConditionalMood()
     {
-        Assert.That(CausalitySourceLabels.Verb(technicalNames).Contains("Record"),
-            Is.EqualTo(!technicalNames),
-            "the toggle governs this row exactly as it governs every other one");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CausalitySourceLabels.Verb(isSpeculative: true), Is.EqualTo("Connected System Object would be processed"));
+            Assert.That(CausalitySourceLabels.Verb(isSpeculative: false), Is.EqualTo("Connected System Object processed"),
+                "A recorded run keeps its past-tense verb");
+        }
     }
 }

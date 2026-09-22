@@ -89,10 +89,10 @@ public static class ConfigurationChangePreviewVerdict
         // happened yet, but this IS that heading-level statement, and carrying the modal is what lets one bare
         // infinitive serve both "1 object would leave" and "40,000 objects would leave".
         //
-        // The sentence form where the outcome has one, otherwise the plain label, which reads as a fragment rather
+        // The sentence form where the outcome has one, otherwise the label, which reads as a fragment rather
         // than as a clause but says the right thing. Every transition a preview can produce carries one.
         return display.SentenceForm is { Length: > 0 } clause
             ? $"{subject} would {clause}."
-            : $"{subject}: {display.PlainLabel}.";
+            : $"{subject}: {display.Label}.";
     }
 }

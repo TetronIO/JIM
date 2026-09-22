@@ -35,8 +35,8 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: " +
-            "a new Identity was created, 11 attributes flowed to it, and an export of 11 changes is now queued for Glitterband EMEA."));
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+            "a new Metaverse Object was projected, 11 attributes flowed to it, and an export of 11 changes is now queued for Glitterband EMEA."));
     }
 
     [Test]
@@ -70,7 +70,7 @@ public class CausalitySummaryBuilderTests
 
         Assert.That(summary.Pills.Select(p => (p.Label, p.Tone)), Is.EqualTo(new[]
         {
-            ("Identity created", CausalityTone.Primary),
+            ("Projected to the Metaverse", CausalityTone.Primary),
             ("11 attributes flowed", CausalityTone.Secondary),
             ("Provisioned · 1 system", CausalityTone.Primary),
             ("Export queued · 11 changes", CausalityTone.Info)
@@ -78,7 +78,7 @@ public class CausalitySummaryBuilderTests
     }
 
     [Test]
-    public void Build_LeaverScenario_NamesTheRuleTheDeletedIdentityAndTheDeprovisionedSystems()
+    public void Build_LeaverScenario_NamesTheRuleTheDeletedMetaverseObjectAndTheDeprovisionedSystems()
     {
         var context = new CausalityPageContext(
             ConnectedSystemId: 1,
@@ -96,9 +96,47 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(CausalityTestData.LeaverItem(), context);
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Erin Byrne: " +
-            "it left the scope of Synchronisation Rule Yellowstone People - Inbound, the Identity Erin Byrne was deleted, " +
+            "A Full Synchronisation on Yellowstone APAC processed person Erin Byrne: " +
+            "it left the scope of Synchronisation Rule Yellowstone People - Inbound, the Metaverse Object Erin Byrne was deleted, " +
             "and deprovisioning is now queued for 2 systems."));
+    }
+
+    /// <summary>
+    /// A leaver whose downstream target was still Pending Provisioning with an unsent Create must be
+    /// summarised as a cancellation, distinct from the deprovisioning clause: nothing was ever exported to
+    /// that system, so nothing is being removed from it.
+    /// </summary>
+    [Test]
+    public void Build_LeaverScenarioWithNeverExportedTarget_NamesTheCancelledProvisioning()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var outOfScope = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Erin Byrne",
+            syncRuleId: 7, syncRuleName: "Yellowstone People - Inbound");
+        var mvoDeleted = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+            parent: outOfScope, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Erin Byrne");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+            parent: mvoDeleted, ordinal: 0, targetEntityDescription: "Glitterband EMEA", detailMessage: "2");
+
+        var context = new CausalityPageContext(
+            ConnectedSystemId: 1,
+            ConnectedSystemName: "Yellowstone APAC",
+            RunProfileName: "Full Synchronisation",
+            CsoId: CausalityTestData.CsoId,
+            CsoConnectedSystemId: 1,
+            CsoConnectedSystemName: "Yellowstone APAC",
+            CsoDisplayName: "Erin Byrne",
+            CsoExternalId: "S8-100",
+            CsoObjectTypeName: "person",
+            MvoTypeName: "Person",
+            MvoTypePluralName: "People");
+
+        var summary = BuildSummary(item, context);
+
+        Assert.That(RenderSentence(summary.Segments), Does.Contain(
+            "provisioning was cancelled for 1 system, since nothing had been exported yet"));
+        Assert.That(summary.Pills.Select(p => (p.Label, p.Tone)), Has.Some.EqualTo(
+            ("Provisioning cancelled · 1 system", CausalityTone.Warning)));
     }
 
     [Test]
@@ -116,19 +154,19 @@ public class CausalitySummaryBuilderTests
         Assert.That(deletedIdentity, Is.Not.Null);
         Assert.That(deletedIdentity!.Label, Is.EqualTo("Erin Byrne"));
         Assert.That(deletedIdentity.Href, Is.EqualTo("/admin/deleted-objects?t=deleted-mvos&mvo=11111111-1111-1111-1111-111111111111"),
-            "A deleted Identity links to the durable deletion record browser, not its (gone) detail page");
+            "A deleted Metaverse Object links to the durable deletion record browser, not its (gone) detail page");
     }
 
     [Test]
-    public void Build_LeaverScenario_ProducesOutOfScopeAndIdentityDeletedPills()
+    public void Build_LeaverScenario_ProducesOutOfScopeAndMetaverseObjectDeletedPills()
     {
         var summary = BuildSummary(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
         var labels = summary.Pills.Select(p => p.Label).ToList();
 
         Assert.That(labels, Does.Contain("Out of scope"));
-        Assert.That(labels, Does.Contain("Identity deleted"));
+        Assert.That(labels, Does.Contain("Metaverse Object deleted"));
 
-        var identityDeleted = summary.Pills.Single(p => p.Label == "Identity deleted");
+        var identityDeleted = summary.Pills.Single(p => p.Label == "Metaverse Object deleted");
         Assert.That(identityDeleted.Tone, Is.EqualTo(CausalityTone.Error));
     }
 
@@ -138,7 +176,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(CausalityTestData.ExportFailureItem(), CausalityTestData.ExportContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "An Export on Glitterband EMEA processed the record for Liam Allen: " +
+            "An Export on Glitterband EMEA processed person Liam Allen: " +
             "an export of 3 changes was attempted, but it failed and needs attention."));
     }
 
@@ -162,7 +200,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: no changes were needed."));
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: no changes were needed."));
         Assert.That(summary.Pills, Is.Empty);
     }
 
@@ -175,7 +213,7 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: Drift corrected."));
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: Drift corrected."));
         Assert.That(summary.Pills.Select(p => (p.Label, p.Tone)), Is.EqualTo(new[]
         {
             ("Drift corrected", CausalityTone.Warning)
@@ -183,7 +221,7 @@ public class CausalitySummaryBuilderTests
     }
 
     [Test]
-    public void Build_JoinShape_NamesAndLinksTheJoinedIdentity()
+    public void Build_JoinShape_NamesAndLinksTheJoinedMetaverseObject()
     {
         var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
         var joined = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
@@ -194,8 +232,8 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: " +
-            "it was joined to the Identity Liam Allen, and 5 attributes flowed to it."));
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+            "it was joined to the Metaverse Object Liam Allen, and 5 attributes flowed to it."));
 
         var identity = summary.Segments.OfType<SummarySegment.Entity>().Single(e => e.Kind == CausalityEntityKind.Identity);
         Assert.That(identity.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
@@ -221,7 +259,7 @@ public class CausalitySummaryBuilderTests
     }
 
     [Test]
-    public void Build_LegacyLeaverWithoutAttribution_FallsBackToUnnamedRuleAndIdentity()
+    public void Build_LegacyLeaverWithoutAttribution_FallsBackToUnnamedRuleAndMetaverseObject()
     {
         var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
         var outOfScope = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
@@ -233,7 +271,7 @@ public class CausalitySummaryBuilderTests
         var sentence = RenderSentence(summary.Segments);
 
         Assert.That(sentence, Does.Contain("it left the scope of its Synchronisation Rule"));
-        Assert.That(sentence, Does.Contain("the Identity was deleted"));
+        Assert.That(sentence, Does.Contain("the Metaverse Object was deleted"));
         Assert.That(sentence, Does.EndWith("."));
     }
 
@@ -286,5 +324,32 @@ public class CausalitySummaryBuilderTests
             foreach (var pill in summary.Pills)
                 Assert.That(pill.Label, Does.Not.Contain('—'));
         }
+    }
+
+    /// <summary>
+    /// Moved from the retired CausalityRecordLabelTests: the record's name in the summary
+    /// sentence now comes from <see cref="ObjectDescription.ChipName"/>, the one naming rule every object
+    /// chip and mention shares, but the "never show the same value twice" behaviour it pins is unchanged.
+    /// A record carrying none of the naming attributes resolves its name to its external id
+    /// (<c>ConnectedSystemObject.NameOrId</c> falls through to it), so the sentence must not go on to
+    /// mention the external id again as though it were a second fact.
+    /// </summary>
+    [Test]
+    public void Build_RecordNameEqualsExternalId_SentenceMentionsTheValueOnce()
+    {
+        const string entryUuid = "1f16ccb0-1f01-1041-8be1-eb9f4cb3f25e";
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            CsoDisplayName = entryUuid,
+            CsoExternalId = entryUuid
+        };
+
+        var summary = BuildSummary(CausalityTestData.NewJoinerItem(), context);
+        var sentence = RenderSentence(summary.Segments);
+
+        // NewJoinerContext's own object type ("person"), the two overridden fields (name, external id)
+        // aside.
+        Assert.That(sentence, Does.Contain($"processed person {entryUuid}:"));
+        Assert.That(sentence, Does.Not.Contain($"{entryUuid} ({entryUuid})"));
     }
 }

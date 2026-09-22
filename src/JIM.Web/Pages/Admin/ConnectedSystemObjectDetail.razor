@@ -10,10 +10,12 @@
 @using JIM.Models.Enums
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Causality
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -25,23 +27,21 @@
         <CsoDetailSkeleton />
     </Loading>
     <LongLoadMessage>
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        <MudAlert Severity="Severity.Info">
             Still loading. Large objects can take a few seconds to retrieve.
         </MudAlert>
     </LongLoadMessage>
     <Loaded>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Object:</span> <span class="mud-primary-text">@GetDisplayIdentifier()</span>
+    <PageInfo Title="Connected System Object">
+        A view of this object as staged within JIM. This includes any attribute values imported from the Connected System, as well as any Pending Export changes awaiting export.
+    </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    A view of this object as staged within JIM. This includes any attribute values imported from the Connected System,
-    as well as any Pending Export changes awaiting export.
-</MudText>
-
 @if (ConnectedSystemHeader != null && ConnectedSystemObject != null)
 {
-    <MudPaper Class="pa-4 mt-4" Outlined="true">
+    <MudPaper Class="pa-4 mt-2" Outlined="true">
         @* First row: Type, Status, Created, Updated, MVO Link *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
             @* Object Type *@
@@ -103,13 +103,19 @@
                 </MudStack>
             }
 
+            <MudSpacer />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
+                       Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
+                @(_previewLoading ? "Previewing…" : "Preview Sync")
+            </MudButton>
+
             @* Offered only where the Connector can actually set a password, so the action is never presented *@
             @* against a Connected System that could not carry it out (issue #1121), and only for an account   *@
             @* joined to a Metaverse Object: the password goes onto the queue against the person (#1635), and  *@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudSpacer />
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
@@ -117,6 +123,13 @@
         </MudStack>
 
     </MudPaper>
+
+    @if (_previewResult != null)
+    {
+        <div class="mt-6">
+            <SyncPreviewPanel PreviewResult="_previewResult" Context="BuildPreviewContext()" OnClose="ClosePreview" />
+        </div>
+    }
 
     @if (PendingExport != null && _pendingExportTotalCount > 0)
     {
@@ -126,7 +139,7 @@
                 The following attribute changes are pending for this Connected System. These may be awaiting export, or have
                 already been exported
                 and are awaiting confirmation via a subsequent import. Once confirmed, these changes will be reflected in the
-                CSO attribute values below.
+                Connected System Object attribute values below.
             </MudText>
             @* Queued changes are unbounded (one Pending Export can carry every value of a large group), so the
                grid streams windows from a range read rather than the page loading them all. No column offers a
@@ -354,7 +367,7 @@
             }
             else if (_changeCount == 0)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">No change history recorded for this object.</MudAlert>
+                <MudAlert Severity="Severity.Info">No change history recorded for this object.</MudAlert>
             }
             else
             {
@@ -569,6 +582,9 @@
         // and re-grouping every value on every scroll would do the same work again for no new information.
         _attributeGroups = GetGroupedAttributes();
 
+        ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
+        SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
+
         Breadcrumbs = new List<BreadcrumbItem>
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -578,9 +594,6 @@
             new("Connector Space", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
             new(GetDisplayIdentifier(), href: null, disabled: true)
         };
-
-        ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
-        SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
 
         _supportedExpiryBehaviours = await jim.ConnectedSystems.GetSupportedPasswordExpiryBehavioursAsync(CsId);
         if (_supportedExpiryBehaviours.Count > 0)
@@ -963,5 +976,65 @@
         return ExternalIdAttributeValue?.ToStringNoName()
         ?? ConnectedSystemObject?.Id.ToString()
         ?? CsoId;
+    }
+
+    private bool _previewLoading;
+    private SyncPreviewResult? _previewResult;
+
+    /// <summary>
+    /// Runs a Sync Preview for this Connected System Object and renders it inline below the header
+    /// (#1519, D-S5): synchronous, transient, in-process. Nothing is persisted; the preview is a read
+    /// over a rolled-back transaction.
+    /// </summary>
+    private async Task PreviewSyncAsync()
+    {
+        if (ConnectedSystemObject == null)
+            return;
+
+        _previewLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            _previewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(CsId, ConnectedSystemObject.Id);
+            if (_previewResult.HasBlockingErrors)
+                Snackbar.Add("The Sync Preview could not complete; see the details below.", Severity.Warning);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"The Sync Preview failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _previewLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClosePreview()
+    {
+        _previewResult = null;
+    }
+
+    /// <summary>
+    /// The page context the speculative causality panel renders through: the record's own identity
+    /// and Connected System (never the run's, since a preview has no run of its own), with the Run
+    /// Profile named for the run chip (#1519: "Would run: {system} · Full Synchronisation").
+    /// </summary>
+    private CausalityPageContext BuildPreviewContext()
+    {
+        return new CausalityPageContext(
+            ConnectedSystemId: CsId,
+            ConnectedSystemName: ConnectedSystemHeader?.Name,
+            RunProfileName: "Full Synchronisation",
+            CsoId: ConnectedSystemObject?.Id,
+            CsoConnectedSystemId: CsId,
+            CsoConnectedSystemName: ConnectedSystemHeader?.Name,
+            CsoDisplayName: GetDisplayIdentifier(),
+            CsoExternalId: ExternalIdAttributeValue?.ToStringNoName(),
+            CsoObjectTypeName: ConnectedSystemObject?.Type.Name,
+            MvoTypeName: null,
+            MvoTypePluralName: null);
     }
 }

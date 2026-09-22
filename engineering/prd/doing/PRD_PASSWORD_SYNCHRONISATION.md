@@ -280,6 +280,12 @@ Three decisions taken after Phase 1 shipped under Unreleased, recorded here beca
 
 Requirements 25 (the person's panel) and 31 (set on all three surfaces) are satisfied by the converged operation; requirement 21's page by the Operations tab. Acceptance criteria above that name the standalone page or the worker task should be read through this amendment.
 
+## Amendment (2026-09-19): initial passwords join the queue
+
+[Convergence decision D7](../../plans/done/PASSWORD_PIPELINE_CONVERGENCE.md#resolved-design-decisions) left initial passwords out of the amendment above, keeping their own store and the export run as their only retry vehicle. That decision is now superseded: an initial password is staged onto the same `PendingPasswordChange` queue as every other password change, with no value of its own on the row, resolved from the Synchronisation Rule's Initial Password settings at each delivery attempt by the Password Delivery Service. Implementation plan: [`engineering/plans/done/INITIAL_PASSWORDS_ON_THE_DELIVERY_SERVICE.md`](../../plans/done/INITIAL_PASSWORDS_ON_THE_DELIVERY_SERVICE.md), issue [#1697](https://github.com/TetronIO/JIM/issues/1697).
+
+The section [above](#the-initial-password-work-store-and-what-this-feature-should-take-from-it), "The initial-password work store, and what this feature should take from it", is now historical: the store it describes, `PendingInitialPassword`, no longer exists, and the operational lifecycle it argued this feature should adopt (delete on success, two live states, a configuration change releasing what it parked, expiry recorded rather than swept) is exactly what the queue above already provided, which is why adopting it rather than the queue's own shape was never necessary. Left as written rather than rewritten; this amendment records the supersession without rewriting the analysis it overtakes.
+
 ## Acceptance Criteria
 
 Every criterion below is met. Each carries where it lives and what proves it, so the claim can be checked without reading the whole diff. "Scenario 20" is `test/integration/scenarios/Invoke-Scenario20-PasswordSynchronisation.ps1`, run green against a live Samba AD domain controller (23 assertions).

@@ -12,15 +12,16 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Connected Systems</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connected Systems</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    JIM imports from and exports data to Connected Systems using Connectors.
-    @if (_connectedSystemHeaders == null || _connectedSystemHeaders.Count == 0)
-    {
-        <span>Configure at least one Connected System to get going.</span>
-    }
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connected Systems
+    <PageInfo Title="Connected Systems">
+        JIM imports from and exports data to Connected Systems using Connectors.
+        @if (_connectedSystemHeaders == null || _connectedSystemHeaders.Count == 0)
+        {
+            <span>Configure at least one Connected System to get going.</span>
+        }
+    </PageInfo>
 </MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <div class="d-flex align-center mt-3">
     <MudButtonGroup OverrideStyles="false">
@@ -34,7 +35,7 @@
 @* Tracking off is a global condition, so it is stated once here rather than repeated on every row. *@
 @if (_drift != null && _drift.Values.Any(d => d.TrackingDisabled))
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+    <MudAlert Severity="Severity.Info" Class="mt-5">
         Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration
         changes waiting for a Full Synchronisation.
     </MudAlert>
@@ -50,9 +51,10 @@
                      PluralName="Connected Systems">
     <ToolBarExtras>
         @* Beside the table rather than in a filter row of its own: it is the only page-owned filter here, and a
-           full row of chrome above the grid for one control would cost more than it explains. *@
+           full row of chrome above the grid for one control would cost more than it explains. Outlined at the dense
+           margin, like every other filter in the portal and the search box it shares this toolbar with. *@
         <MudSelect T="PasswordSynchronisationFilter" Label="Password Synchronisation" Value="_passwordSyncFilter"
-                   ValueChanged="OnPasswordSynchronisationFilterChangedAsync" Variant="Variant.Text" Dense="true"
+                   ValueChanged="OnPasswordSynchronisationFilterChangedAsync" Variant="Variant.Outlined" Dense="true"
                    Margin="Margin.Dense" Class="mt-0" Style="max-width: 260px;">
             <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Any">Any</MudSelectItem>
             <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NeedsAttention">Needs attention</MudSelectItem>
@@ -63,7 +65,7 @@
         </MudSelect>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Name" Sortable="false">
+        <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Name" Name="name" />
             </HeaderTemplate>
@@ -71,7 +73,7 @@
                 <MudLink Href="@(Utilities.GetConnectedSystemHref(context.Item))">@context.Item.Name</MudLink>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Description" Sortable="false">
+        <TemplateColumn Title="Description" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Description" Name="description" />
             </HeaderTemplate>
@@ -81,7 +83,7 @@
                 <OneLineText Text="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Stats" Sortable="false">
+        <TemplateColumn Title="Stats" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Stats</MudText>
             </HeaderTemplate>
@@ -112,14 +114,12 @@
                         </MudTooltip>
                     }
                     <ConfigurationDriftIndicator Status="@GetDrift(context.Item.Id)" ConnectedSystemName="@context.Item.Name" />
-                    <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Item.Id)"
-                                                       SubjectName="@context.Item.Name" IsConnectedSystem="true" />
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
         @* Its own column rather than another chip in Stats, because unlike the counts beside it this one has a
            state as well as a size, and the column is what the sort header can hang off (requirement 26). *@
-        <TemplateColumn Title="Password Sync" Sortable="false">
+        <TemplateColumn Title="Password Sync" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Password Sync" Name="passwordsync" />
             </HeaderTemplate>
@@ -131,7 +131,7 @@
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Connector" Sortable="false">
+        <TemplateColumn Title="Connector" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Connector" Name="connector" />
             </HeaderTemplate>
@@ -139,7 +139,7 @@
                 @context.Item.ConnectorName
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Created" Sortable="false">
+        <TemplateColumn Title="Created" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Created" Name="created" />
             </HeaderTemplate>
@@ -149,7 +149,7 @@
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Action" Sortable="false">
+        <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Action</MudText>
             </HeaderTemplate>
@@ -184,7 +184,6 @@
     private VirtualisedDataGrid<ConnectedSystemHeader>? _grid;
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
     private Dictionary<int, ConfigurationDriftStatus>? _drift;
-    private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
     private Dictionary<int, PasswordSynchronisationState>? _passwordSynchronisationStates;
     private Dictionary<int, PasswordQueueAttention>? _passwordQueueAttention;
     private PasswordSynchronisationFilter _passwordSyncFilter = PasswordSynchronisationFilter.Any;
@@ -237,9 +236,6 @@
         {
             var ids = _connectedSystemHeaders.Select(cs => cs.Id).ToList();
             _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(ids);
-
-            // One grouped count for the whole page, for the same reason: a per-row query here would be an N+1.
-            _initialPasswordAttention = await jim.InitialPasswords.GetAttentionByConnectedSystemAsync(ids);
 
             // Two more batched reads for the Password Synchronisation column: where each system stands, and how
             // much of its queued work is waiting on a person.
@@ -296,9 +292,6 @@
 
     private ConfigurationDriftStatus? GetDrift(int connectedSystemId) =>
         _drift != null && _drift.TryGetValue(connectedSystemId, out var status) ? status : null;
-
-    private InitialPasswordAttention? GetInitialPasswordAttention(int connectedSystemId) =>
-        _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;
 
     private PasswordSynchronisationState? GetPasswordSynchronisationState(int connectedSystemId) =>
         _passwordSynchronisationStates != null && _passwordSynchronisationStates.TryGetValue(connectedSystemId, out var state) ? state : null;

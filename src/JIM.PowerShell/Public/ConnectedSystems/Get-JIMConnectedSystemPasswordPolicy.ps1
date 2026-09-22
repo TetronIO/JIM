@@ -14,8 +14,16 @@ function Get-JIMConnectedSystemPasswordPolicy {
         exists: a directory withholds what a caller may not see by omitting it rather than refusing. Check
         HasAnyDiscoveredConstraint before treating the figures as a description of what the system will accept.
 
-        Where a domain has password policies that apply to only some accounts, the figures are a floor rather
-        than a guarantee; FineGrainedPolicySignal says which case this is.
+        Where a directory has password policies that apply to only some accounts (Active Directory's Fine-Grained
+        Password Policies, OpenLDAP's per-entry policy subentries, 389 Directory Server's subtree policies), the
+        figures are a floor rather than a guarantee; PolicyOverrideSignal says which case this is. Where the
+        directory applies further checks JIM cannot see, such as a dictionary check, FurtherChecksApply is true
+        and a password satisfying every figure can still be refused.
+
+        Where nothing was discovered, DiscoveryOutcome says why: NotPublished (the directory publishes no policy a
+        client can read), ConfigurationNotReadable (the account JIM connects as cannot read the server
+        configuration that holds it) or NoPolicyConfigured (the mechanism is loaded but no policy is configured).
+        It is null when the schema has not been read since JIM could discover policies.
 
     .PARAMETER Id
         The unique identifier of the Connected System.
@@ -34,7 +42,10 @@ function Get-JIMConnectedSystemPasswordPolicy {
         - passwordHistoryLength       [int?]      How many previous passwords it remembers and refuses
         - maximumPasswordAgeDays      [int?]      How long a password may live
         - minimumPasswordAgeDays      [int?]      How soon it may be changed again
-        - fineGrainedPolicySignal     [string]    Absent, Present or CouldNotDetermine
+        - policyOverrideSignal        [string]    Absent, Present or CouldNotDetermine
+        - furtherChecksApply          [bool]      Whether the directory applies checks JIM cannot see
+        - discoveryOutcome            [string?]   Read, NotPublished, ConfigurationNotReadable or NoPolicyConfigured;
+                                                  null when nothing has been read yet
         - hasAnyDiscoveredConstraint  [bool]      Whether JIM discovered anything at all
 
     .EXAMPLE

@@ -23,8 +23,8 @@ public static class CausalitySummaryBuilder
         var allEvents = model.AllEvents().ToList();
 
         var segments = new List<SummarySegment>();
-        segments.AddRange(BuildOpening(model.Context));
-        AppendClauses(segments, BuildClauses(allEvents));
+        segments.AddRange(BuildOpening(model.Context, model.IsSpeculative));
+        AppendClauses(segments, model.IsSpeculative ? BuildSpeculativeClauses(allEvents) : BuildClauses(allEvents));
         segments.Add(new SummarySegment.Text("."));
 
         return new CausalitySummary
@@ -34,7 +34,7 @@ public static class CausalitySummaryBuilder
         };
     }
 
-    private static List<SummarySegment> BuildOpening(CausalityPageContext context)
+    private static List<SummarySegment> BuildOpening(CausalityPageContext context, bool isSpeculative)
     {
         var segments = new List<SummarySegment>();
 
@@ -57,10 +57,18 @@ public static class CausalitySummaryBuilder
                 CausalityEntityKind.ConnectedSystem));
         }
 
-        var recordLabel = context.RecordName;
+        var recordLabel = ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId);
+        // Conditional mood throughout for a preview (#1519, D-S9): nothing here has happened yet.
+        var verb = isSpeculative ? "would process" : "processed";
+
         if (recordLabel != null)
         {
-            segments.Add(new SummarySegment.Text(" processed the record for ", " processed the Connected System Object "));
+            // Named by its object type where the builder knows it ("processed person Baseline User"), so
+            // the sentence states what kind of object this is without a second clause; otherwise the name
+            // alone carries it ("processed Baseline User").
+            segments.Add(new SummarySegment.Text(!string.IsNullOrWhiteSpace(context.CsoObjectTypeName)
+                ? $" {verb} {context.CsoObjectTypeName} "
+                : $" {verb} "));
             // The record's own Connected System, not the run's: they diverge for cross-system
             // cascades, and linking with the wrong system id 404s (ConnectedSystemObjectDetail looks
             // the record up by {connectedSystemId}+{id}).
@@ -71,7 +79,7 @@ public static class CausalitySummaryBuilder
         }
         else
         {
-            segments.Add(new SummarySegment.Text(" processed the record", " processed the Connected System Object"));
+            segments.Add(new SummarySegment.Text($" {verb} the Connected System Object"));
         }
 
         return segments;
@@ -124,13 +132,176 @@ public static class CausalitySummaryBuilder
         return BuildGenericFallbackClauses(allEvents);
     }
 
+    /// <summary>
+    /// The conditional-mood counterpart of <see cref="BuildClauses"/> for a speculative model (#1519,
+    /// D-S9): the two dominant shapes a Sync Preview's tree actually produces (joiner and the
+    /// destructive out-of-scope cascade) get hand-written "would" phrasing; every other shape falls back
+    /// to <see cref="BuildGenericFallbackClauses"/>, which already reads correctly for a speculative
+    /// model because each event's <see cref="CausalityEvent.Label"/> is already the conditional-mood
+    /// <see cref="OutcomeDisplay.SpeculativeLabel"/> (see <see cref="CausalityModelBuilder.BuildSpeculative"/>).
+    /// Export success/failure shapes have no speculative counterpart: <c>SyncPreviewServer</c> never emits
+    /// Exported, ExportConfirmed or ExportFailed, so those <see cref="BuildClauses"/> branches are not
+    /// mirrored here.
+    /// </summary>
+    private static List<List<SummarySegment>> BuildSpeculativeClauses(IReadOnlyList<CausalityEvent> allEvents)
+    {
+        if (allEvents.Count == 0)
+            return [[new SummarySegment.Text("no changes are needed")]];
+
+        if (allEvents.Any(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+                or ActivityRunProfileExecutionItemSyncOutcomeType.Joined))
+            return BuildSpeculativeJoinerClauses(allEvents);
+
+        if (allEvents.Any(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled))
+            return BuildSpeculativeLeaverClauses(allEvents);
+
+        return BuildGenericFallbackClauses(allEvents);
+    }
+
+    private static List<List<SummarySegment>> BuildSpeculativeJoinerClauses(IReadOnlyList<CausalityEvent> allEvents)
+    {
+        var clauses = new List<List<SummarySegment>>();
+
+        if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected))
+        {
+            clauses.Add([new SummarySegment.Text("a new Metaverse Object would be projected")]);
+        }
+        else
+        {
+            var joined = allEvents.First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+            var identity = joined.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
+            clauses.Add(identity != null
+                ? [
+                    new SummarySegment.Text("it would be joined to the Metaverse Object "),
+                    new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
+                ]
+                : [new SummarySegment.Text("it would be joined to an existing Metaverse Object")]);
+        }
+
+        var attributeFlows = allEvents.Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow).ToList();
+        if (attributeFlows.Count > 0)
+        {
+            var flowedCount = attributeFlows.Sum(e => e.DetailCount ?? 0);
+            clauses.Add([new SummarySegment.Text(flowedCount > 0
+                ? $"{flowedCount} attribute{(flowedCount == 1 ? string.Empty : "s")} would flow to it"
+                : "attributes would flow to it")]);
+        }
+
+        var queuedExports = allEvents.Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated).ToList();
+        if (queuedExports.Count > 0)
+        {
+            var changeCount = queuedExports.Sum(e => e.DetailCount ?? 0);
+            var systems = queuedExports.Select(e => (e.SystemId, e.SystemName)).Distinct().ToList();
+            if (systems.Count == 1)
+            {
+                var (systemId, systemName) = systems[0];
+                var countText = changeCount > 0
+                    ? $"an export of {changeCount} change{(changeCount == 1 ? string.Empty : "s")} would be queued for "
+                    : "an export would be queued for ";
+                var target = systemName != null
+                    ? new SummarySegment.Entity(systemName,
+                        systemId.HasValue ? JimUtilities.GetConnectedSystemHref(systemId.Value) : null,
+                        CausalityEntityKind.ConnectedSystem)
+                    : (SummarySegment)new SummarySegment.Text("a downstream system");
+                clauses.Add([new SummarySegment.Text(countText), target]);
+            }
+            else
+            {
+                clauses.Add([new SummarySegment.Text(
+                    $"exports of {changeCount} change{(changeCount == 1 ? string.Empty : "s")} would be queued for {systems.Count} systems")]);
+            }
+        }
+
+        return clauses;
+    }
+
+    private static List<List<SummarySegment>> BuildSpeculativeLeaverClauses(IReadOnlyList<CausalityEvent> allEvents)
+    {
+        var clauses = new List<List<SummarySegment>>();
+
+        var outOfScope = allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+        if (outOfScope != null)
+        {
+            var rule = outOfScope.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
+            clauses.Add(rule != null
+                ? [
+                    new SummarySegment.Text("it would leave the scope of Synchronisation Rule "),
+                    new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule)
+                ]
+                : [new SummarySegment.Text("it would leave the scope of its Synchronisation Rule")]);
+        }
+
+        var mvoDeleted = allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        if (mvoDeleted != null)
+        {
+            // Unlike the recorded leaver clause, the Identity still exists (nothing is actually
+            // deleted): its mention links the live object via the event's own link, never a
+            // deletion record.
+            var identity = mvoDeleted.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
+            clauses.Add(identity != null
+                ? [
+                    new SummarySegment.Text("the Metaverse Object "),
+                    new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity),
+                    new SummarySegment.Text(" would be deleted")
+                ]
+                : [new SummarySegment.Text("the Metaverse Object would be deleted")]);
+        }
+        else
+        {
+            var deletionScheduled = allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+            if (deletionScheduled != null)
+            {
+                var identity = deletionScheduled.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
+                clauses.Add(identity != null
+                    ? [
+                        new SummarySegment.Text("the Metaverse Object "),
+                        new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity),
+                        new SummarySegment.Text(" would be scheduled for deletion")
+                    ]
+                    : [new SummarySegment.Text("the Metaverse Object would be scheduled for deletion")]);
+            }
+        }
+
+        var deprovisionSystemCount = allEvents
+            .Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued)
+            .Select(e => (e.SystemId, e.SystemName))
+            .Distinct()
+            .Count();
+        if (deprovisionSystemCount > 0)
+        {
+            clauses.Add([new SummarySegment.Text(
+                $"deprovisioning would be queued for {deprovisionSystemCount} system{(deprovisionSystemCount == 1 ? string.Empty : "s")}")]);
+        }
+
+        // Provisioning cancellations are counted separately from deprovisioning: nothing
+        // would be staged for these systems at all, since nothing had ever been exported to them.
+        var provisioningCancelledSystemCount = allEvents
+            .Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled)
+            .Select(e => (e.SystemId, e.SystemName))
+            .Distinct()
+            .Count();
+        if (provisioningCancelledSystemCount > 0)
+        {
+            clauses.Add([new SummarySegment.Text(
+                $"provisioning would be cancelled for {provisioningCancelledSystemCount} " +
+                $"system{(provisioningCancelledSystemCount == 1 ? string.Empty : "s")}, since nothing had been exported yet")]);
+        }
+
+        if (clauses.Count == 0)
+            return BuildGenericFallbackClauses(allEvents);
+
+        return clauses;
+    }
+
     private static List<List<SummarySegment>> BuildJoinerClauses(IReadOnlyList<CausalityEvent> allEvents)
     {
         var clauses = new List<List<SummarySegment>>();
 
         if (allEvents.Any(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected))
         {
-            clauses.Add([new SummarySegment.Text("a new Identity was created", "a new Metaverse Object was projected")]);
+            clauses.Add([new SummarySegment.Text("a new Metaverse Object was projected")]);
         }
         else
         {
@@ -139,13 +310,13 @@ public static class CausalitySummaryBuilder
             if (identity != null)
             {
                 clauses.Add([
-                    new SummarySegment.Text("it was joined to the Identity ", "it was joined to the Metaverse Object "),
+                    new SummarySegment.Text("it was joined to the Metaverse Object "),
                     new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
                 ]);
             }
             else
             {
-                clauses.Add([new SummarySegment.Text("it was joined to an existing Identity", "it was joined to an existing Metaverse Object")]);
+                clauses.Add([new SummarySegment.Text("it was joined to an existing Metaverse Object")]);
             }
         }
 
@@ -251,13 +422,13 @@ public static class CausalitySummaryBuilder
                 if (identity != null)
                 {
                     clauses.Add([
-                        new SummarySegment.Text("it was disconnected from the Identity ", "it was disconnected from the Metaverse Object "),
+                        new SummarySegment.Text("it was disconnected from the Metaverse Object "),
                         new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity)
                     ]);
                 }
                 else
                 {
-                    clauses.Add([new SummarySegment.Text("it was disconnected from its Identity", "it was disconnected from its Metaverse Object")]);
+                    clauses.Add([new SummarySegment.Text("it was disconnected from its Metaverse Object")]);
                 }
             }
         }
@@ -277,14 +448,14 @@ public static class CausalitySummaryBuilder
                     ?? CausalityModelBuilder.GetDeletedMvoHref(null);
 
                 clauses.Add([
-                    new SummarySegment.Text("the Identity ", "the Metaverse Object "),
+                    new SummarySegment.Text("the Metaverse Object "),
                     new SummarySegment.Entity(identityName, deletionRecordHref, CausalityEntityKind.Identity),
                     new SummarySegment.Text(" was deleted")
                 ]);
             }
             else
             {
-                clauses.Add([new SummarySegment.Text("the Identity was deleted", "the Metaverse Object was deleted")]);
+                clauses.Add([new SummarySegment.Text("the Metaverse Object was deleted")]);
             }
         }
         else
@@ -296,14 +467,14 @@ public static class CausalitySummaryBuilder
                 if (identity != null)
                 {
                     clauses.Add([
-                        new SummarySegment.Text("the Identity ", "the Metaverse Object "),
+                        new SummarySegment.Text("the Metaverse Object "),
                         new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity),
                         new SummarySegment.Text(" was scheduled for deletion")
                     ]);
                 }
                 else
                 {
-                    clauses.Add([new SummarySegment.Text("the Identity was scheduled for deletion", "the Metaverse Object was scheduled for deletion")]);
+                    clauses.Add([new SummarySegment.Text("the Metaverse Object was scheduled for deletion")]);
                 }
             }
         }
@@ -321,6 +492,20 @@ public static class CausalitySummaryBuilder
         {
             clauses.Add([new SummarySegment.Text(
                 $"deprovisioning is now queued for {deprovisionSystemCount} system{(deprovisionSystemCount == 1 ? string.Empty : "s")}")]);
+        }
+
+        // Provisioning cancellations are counted separately from deprovisioning: nothing was
+        // staged for these systems at all, since nothing had ever been exported to them.
+        var provisioningCancelledSystemCount = allEvents
+            .Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled)
+            .Select(e => (e.SystemId, e.SystemName))
+            .Distinct()
+            .Count();
+        if (provisioningCancelledSystemCount > 0)
+        {
+            clauses.Add([new SummarySegment.Text(
+                $"provisioning was cancelled for {provisioningCancelledSystemCount} " +
+                $"system{(provisioningCancelledSystemCount == 1 ? string.Empty : "s")}, since nothing had been exported yet")]);
         }
 
         if (clauses.Count == 0)
@@ -381,12 +566,10 @@ public static class CausalitySummaryBuilder
     /// </summary>
     private static List<List<SummarySegment>> BuildGenericFallbackClauses(IReadOnlyList<CausalityEvent> allEvents)
     {
-        // Each event already carries both wordings, so the fallback honours the technical-names toggle
-        // exactly as the hand-written clauses above it do.
         return allEvents
-            .Select(e => (e.PlainLabel, e.TechnicalLabel))
+            .Select(e => e.Label)
             .Distinct()
-            .Select(labels => (List<SummarySegment>)[new SummarySegment.Text(labels.PlainLabel, labels.TechnicalLabel)])
+            .Select(label => (List<SummarySegment>)[new SummarySegment.Text(label)])
             .ToList();
     }
 
@@ -400,7 +583,7 @@ public static class CausalitySummaryBuilder
         var typeOrder = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
 
         // Synthetic events are excluded: the strip counts what the run recorded, and a synthetic event stands
-        // for something it decided not to do. A "1 Identity not deleted" pill would read as an outcome.
+        // for something it decided not to do. A "1 Metaverse Object not deleted" pill would read as an outcome.
         foreach (var causalityEvent in allEvents.Where(e => e.OutcomeType.HasValue))
         {
             var outcomeType = causalityEvent.OutcomeType!.Value;
@@ -440,9 +623,13 @@ public static class CausalitySummaryBuilder
                 $"Deprovision queued · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned =>
                 $"Deprovisioning · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
+            // Same reasoning as the deprovisioning pills above: counts systems, never changes, since a
+            // cancellation carries no attribute changes at all (nothing was ever exported).
+            ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled =>
+                $"Provisioning cancelled · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "Deletion scheduled",
-            _ => display.PlainLabel
+            _ => display.Label
         };
 
         return new CausalityPill(label, display.Tone);

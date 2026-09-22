@@ -73,7 +73,6 @@ public class JimDbContext : DbContext
     public virtual DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
     public virtual DbSet<DeferredReference> DeferredReferences { get; set; } = null!;
     public virtual DbSet<PendingExport> PendingExports { get; set; } = null!;
-    public virtual DbSet<PendingInitialPassword> PendingInitialPasswords { get; set; } = null!;
     public virtual DbSet<PendingPasswordChange> PendingPasswordChanges { get; set; } = null!;
     public virtual DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
     public virtual DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
@@ -544,6 +543,16 @@ public class JimDbContext : DbContext
             .HasForeignKey(moav => moav.ContributedBySyncRuleId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // Change-history mirror of the provenance FK above (#1519): the attribute value change history row
+        // is self-describing about which rule contributed the value, independent of the live attribute
+        // value's current provenance. SetNull on rule deletion so the denormalised ContributedBySyncRuleName
+        // record survives; ContributedBySyncRuleId then reads null.
+        modelBuilder.Entity<MetaverseObjectChangeAttributeValue>()
+            .HasOne(mocav => mocav.ContributedBySyncRule)
+            .WithMany()
+            .HasForeignKey(mocav => mocav.ContributedBySyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Asserted-null marker (#91): false by default. The store-level default backfills existing rows so they
         // remain ordinary value rows, never asserted nulls.
         modelBuilder.Entity<MetaverseObjectAttributeValue>()
@@ -766,38 +775,6 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.CreatedAt, pe.Id })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
-        // PendingExport: filtered unique index to prevent duplicate Pending Exports for the same CSO.
-        // PendingInitialPassword: the account it is owed to. Cascade, because an account that no longer exists
-        // cannot be owed a password.
-        modelBuilder.Entity<PendingInitialPassword>()
-            .HasOne(pip => pip.ConnectedSystemObject)
-            .WithMany()
-            .HasForeignKey(pip => pip.ConnectedSystemObjectId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        // The Synchronisation Rule whose configuration governs the delivery. SetNull rather than Cascade:
-        // deleting a rule must not erase the record that an account is still waiting, which is a fact about the
-        // account rather than about the rule. Without a rule there is no configuration to generate from, so the
-        // delivery cannot proceed, and that is a thing an administrator needs to be able to see.
-        modelBuilder.Entity<PendingInitialPassword>()
-            .HasOne(pip => pip.SyncRule)
-            .WithMany()
-            .HasForeignKey(pip => pip.SyncRuleId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        // One outstanding initial password per account. A second would mean two deliveries racing to set a
-        // password on the same object, with the later one silently winning.
-        modelBuilder.Entity<PendingInitialPassword>()
-            .HasIndex(pip => pip.ConnectedSystemObjectId)
-            .IsUnique()
-            .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemObjectId_Unique");
-
-        // What the worker asks for on every export run, and what the portal's needs-attention indicators ask
-        // for on every page load: what is outstanding on this Connected System, in this state.
-        modelBuilder.Entity<PendingInitialPassword>()
-            .HasIndex(pip => new { pip.ConnectedSystemId, pip.Status })
-            .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
-
         // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
         // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or
         // the system, and a navigation would close a schema cycle the OpenAPI document build cannot collapse.
@@ -821,6 +798,25 @@ public class JimDbContext : DbContext
             .WithMany()
             .HasForeignKey(ppc => ppc.ConnectedSystemObjectId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // The Synchronisation Rule whose initial-password settings a Provisioned row generates from (#1635). Set
+        // null rather than cascade: deleting a rule must not erase the record that an account is still owed a
+        // password, which is a fact about the account rather than about the rule. The lane withdraws the row
+        // itself once it finds there is nothing left to generate from; the database's job here is only to stop
+        // the delete failing on a dangling reference.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasOne<SyncRule>()
+            .WithMany()
+            .HasForeignKey(ppc => ppc.SyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // What a provisioned row's delivery attempt asks for: the rule whose settings it generates from. Filtered
+        // because most rows carry no rule at all, and an unfiltered index over a mostly-null column indexes
+        // nothing useful.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.SyncRuleId)
+            .HasFilter("\"SyncRuleId\" IS NOT NULL")
+            .HasDatabaseName("IX_PendingPasswordChanges_SyncRuleId");
 
         // Requirement 8's coalescing, enforced by the database rather than by the code that writes it. The
         // fan-out UPSERTs on this key, so two near-simultaneous password changes for one identity cannot both

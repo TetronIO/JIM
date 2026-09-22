@@ -123,7 +123,10 @@ public class CausalityModelBuilderTests
             // An export rule's scope decides what reaches the target system, so its transitions sit beside the
             // other export-side previews rather than with the import-side scope pair above.
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = CausalityLane.Downstream,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = CausalityLane.Downstream
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = CausalityLane.Downstream,
+            // The same export-side event as DeprovisionQueued, minus the export: nothing was ever created in
+            // the target system, so it shares DeprovisionQueued's Downstream lane rather than Identity's.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = CausalityLane.Downstream
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
@@ -150,6 +153,9 @@ public class CausalityModelBuilderTests
         Assert.That(identityLink, Is.Not.Null);
         Assert.That(identityLink!.Label, Is.EqualTo("Liam Allen"));
         Assert.That(identityLink.Href, Is.EqualTo($"/t/people/v/{CausalityTestData.MvoId}"));
+        // The one naming rule: a Metaverse Object chip reads "type: name" like a record's, and the page
+        // context knows the Metaverse Object Type, so every Identity link carries it.
+        Assert.That(identityLink.ObjectTypeName, Is.EqualTo("Person"));
 
         var ruleLink = projected.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
         Assert.That(ruleLink, Is.Not.Null);
@@ -178,6 +184,46 @@ public class CausalityModelBuilderTests
 
         // The Provisioned target entity is a CSO, never an Identity
         Assert.That(provisioned.Links.Any(l => l.Kind == CausalityEntityKind.Identity), Is.False);
+    }
+
+    [Test]
+    public void Build_ProvisionedOutcome_RecordLinkPrefersTheContextsCurrentNameOverTheRecordedTypeAndId()
+    {
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [CausalityTestData.ProvisionedCsoId] = "liam.allen" }
+        };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+        var provisioned = model.Roots[0].Children[0].Children[0];
+
+        var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink.Label, Is.EqualTo("liam.allen"));
+            // The label is bare once a current name is known, so the type now travels separately:
+            // every consumer (chips, the Lineage head) can render "person: liam.allen" in one form.
+            Assert.That(recordLink.ObjectTypeName, Is.EqualTo("person"));
+        }
+    }
+
+    [Test]
+    public void Build_ProvisionedOutcome_RecordLinkFallsBackToTypeAndIdWhenTheContextNamesNothing()
+    {
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string>()
+        };
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), context);
+        var provisioned = model.Roots[0].Children[0].Children[0];
+
+        var recordLink = provisioned.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink.Label, Is.EqualTo($"person: {CausalityTestData.ProvisionedCsoId}"));
+            // ObjectTypeName stays unset here: the fallback label already embeds the type, and setting it
+            // too would double the prefix once a consumer renders "type: " in front of the label.
+            Assert.That(recordLink.ObjectTypeName, Is.Null);
+        }
     }
 
     [Test]
@@ -510,6 +556,181 @@ public class CausalityModelBuilderTests
         Assert.That(model.Roots[0].Links.Any(l => l.Kind == CausalityEntityKind.SynchronisationRule), Is.False);
     }
 
+    // ─── Effective Synchronisation Rule threading (#1519 Table view fix 4) ───
+
+    /// <summary>
+    /// A queued export staged beneath a Provisioned parent carries no Synchronisation Rule of its own
+    /// (the engine attributes the provisioning decision to the parent alone), so it must inherit the
+    /// parent's effective rule. <see cref="CausalityEvent.SyncRuleId"/> itself is untouched: the child's
+    /// own recorded attribution stays null, exactly as it always has.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportChildOfProvisionedParent_InheritsTheParentsEffectiveSyncRule()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var provisionedEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+        var exportEvent = provisionedEvent.Children.Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provisionedEvent.EffectiveSyncRuleId, Is.EqualTo(9));
+            Assert.That(provisionedEvent.EffectiveSyncRuleName, Is.EqualTo("Glitterband People - Outbound"));
+            Assert.That(exportEvent.SyncRuleId, Is.Null, "the outcome itself was never attributed a rule");
+            Assert.That(exportEvent.SyncRuleName, Is.Null);
+            Assert.That(exportEvent.EffectiveSyncRuleId, Is.EqualTo(9));
+            Assert.That(exportEvent.EffectiveSyncRuleName, Is.EqualTo("Glitterband People - Outbound"));
+        }
+    }
+
+    /// <summary>
+    /// A rule is inherited within a lane only. A leaver's cascade runs Source (out of scope, attributed to
+    /// the import rule that scoped it) to Identity (deleted) to Downstream (deprovision queued per target);
+    /// the import rule that decided the scope exit did not decide the deprovisioning, so the Downstream
+    /// events must not inherit it across the lane boundary.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionQueuedBeneathADeletedIdentity_DoesNotInheritTheImportRuleAcrossLanes()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+
+        var scopeExit = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+        var deprovisions = model.AllEvents().Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scopeExit.EffectiveSyncRuleId, Is.EqualTo(7), "the scope exit's own import rule");
+            Assert.That(deprovisions, Has.Count.EqualTo(2));
+            foreach (var deprovision in deprovisions)
+            {
+                Assert.That(deprovision.EffectiveSyncRuleId, Is.Null, $"{deprovision.SystemName} must not be credited to the import rule");
+                Assert.That(deprovision.EffectiveSyncRuleName, Is.Null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// An export queued for an object that already exists names that object: the change record beneath
+    /// the outcome carries the Connected System Object's id, and the page supplies its current name.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_LinksThatObjectByItsCurrentName()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "liam.allen" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink, Is.Not.Null);
+            Assert.That(recordLink!.Label, Is.EqualTo("liam.allen"));
+            Assert.That(recordLink.Href, Is.EqualTo($"/admin/connected-systems/2/connector-space/{targetCsoId}"));
+        }
+    }
+
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_FallsBackToTheObjectsIdWithoutAContextName()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink?.Label, Is.EqualTo(targetCsoId.ToString()));
+    }
+
+    /// <summary>
+    /// A queued export against an existing object now carries the target's own type in the same
+    /// "csId|csoTypeName" DetailMessage channel a Provisioned outcome always has, so the Lineage head and
+    /// the Timeline/Table chips can name the target "type: name" rather than the bare name.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_WithTypeInDetailMessage_SetsObjectTypeNameOnTheRecordLink()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+        export.DetailMessage = "2|user";
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recordLink.Label, Is.EqualTo("EMP001746"));
+            Assert.That(recordLink.ObjectTypeName, Is.EqualTo("user"));
+        }
+    }
+
+    /// <summary>
+    /// The parser tolerates the earlier shape (bare "csId", no type segment): existing rows must not
+    /// regress to a wrong or throwing read.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnExistingObject_WithoutTypeInDetailMessage_LeavesObjectTypeNameNull()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var targetCsoId = Guid.NewGuid();
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = targetCsoId;
+        export.DetailMessage = "2";
+        var context = CausalityTestData.NewJoinerContext() with
+        {
+            ConnectedSystemObjectNames = new Dictionary<Guid, string> { [targetCsoId] = "EMP001746" }
+        };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        var recordLink = exportEvent.Links.Single(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink.ObjectTypeName, Is.Null);
+    }
+
+    [Test]
+    public void Build_QueuedExportWhoseChangeNamesNoObject_AddsNoRecordLink()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        Assert.That(exportEvent.Links.Any(l => l.Kind == CausalityEntityKind.Record), Is.False,
+            "the fixture's export change names no object, so the Provisioned parent alone names it");
+    }
+
+    /// <summary>
+    /// Regression guard: EffectiveSyncRuleId/Name must never leak into the Links the Timeline and
+    /// Lineage views consume via <see cref="CausalityEntityKind.SynchronisationRule"/>. Those views keep
+    /// reading the outcome's own <see cref="CausalityEvent.SyncRuleId"/> directly and must be unaffected
+    /// by the Table view's ancestor fallback.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportChildWithNoOwnRule_GainsNoInheritedSynchronisationRuleLink()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        Assert.That(exportEvent.Links.Any(l => l.Kind == CausalityEntityKind.SynchronisationRule), Is.False);
+    }
+
     [Test]
     public void Build_SyncRuleNameWithoutId_ProducesUnlinkedRuleLabel()
     {
@@ -604,6 +825,91 @@ public class CausalityModelBuilderTests
         Assert.That(rows.Count(r => r.Operation == CausalityAttributeOperation.Add), Is.EqualTo(1));
         Assert.That(rows.Count(r => r.Operation == CausalityAttributeOperation.Remove), Is.EqualTo(1));
         Assert.That(rows.All(r => r.TypeAndPlurality == "Text · Multi-valued"), Is.True);
+    }
+
+    /// <summary>
+    /// Attribute value change provenance (#1519): a collapsed single-valued Set row carries the
+    /// contributing Synchronisation Rule of the new (Add) value, not the value being replaced.
+    /// </summary>
+    [Test]
+    public void Build_AttributeFlowWithMvoChanges_SetRowCarriesAddValuesContributingSyncRule()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: null, ordinal: 0, detailCount: 1);
+
+        var mvoChange = new MetaverseObjectChange { Id = Guid.NewGuid() };
+        var attribute = new MetaverseObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = "Job Title",
+            AttributeType = AttributeDataType.Text,
+            Attribute = new MetaverseAttribute { Name = "Job Title", AttributePlurality = AttributePlurality.SingleValued }
+        };
+        attribute.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Add,
+            StringValue = "Senior Analyst",
+            ContributedBySyncRuleId = 12,
+            ContributedBySyncRuleName = "HR to Metaverse - Job Titles"
+        });
+        attribute.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Remove,
+            StringValue = "Analyst",
+            ContributedBySyncRuleId = 999,
+            ContributedBySyncRuleName = "A rule that no longer wins priority"
+        });
+        mvoChange.AttributeChanges.Add(attribute);
+        item.MetaverseObjectChange = mvoChange;
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var row = model.Roots[0].AttributeRows.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.SyncRuleId, Is.EqualTo(12));
+            Assert.That(row.SyncRuleName, Is.EqualTo("HR to Metaverse - Job Titles"));
+        }
+    }
+
+    /// <summary>
+    /// Export-side attribute value change provenance (#1519): each Connected System Object change row
+    /// carries the export Synchronisation Rule whose mapping produced that specific value.
+    /// </summary>
+    [Test]
+    public void Build_ExportedEventWithCsoChanges_RowCarriesContributingSyncRule()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0, detailCount: 1);
+
+        var csoChange = new ConnectedSystemObjectChange { Id = Guid.NewGuid() };
+        var attribute = new ConnectedSystemObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = "departmentNumber",
+            AttributeType = AttributeDataType.Text,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Name = "departmentNumber", AttributePlurality = AttributePlurality.SingleValued }
+        };
+        attribute.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Add,
+            StringValue = "Retail Ops",
+            SyncRuleId = 34,
+            SyncRuleName = "Metaverse to AD - Users"
+        });
+        csoChange.AttributeChanges.Add(attribute);
+        item.ConnectedSystemObjectChange = csoChange;
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var row = model.Roots[0].AttributeRows.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.SyncRuleId, Is.EqualTo(34));
+            Assert.That(row.SyncRuleName, Is.EqualTo("Metaverse to AD - Users"));
+        }
     }
 
     [Test]
@@ -756,8 +1062,7 @@ public class CausalityModelBuilderTests
         {
             Assert.That(synthetic!.Lane, Is.EqualTo(CausalityLane.Identity));
             Assert.That(synthetic!.OutcomeType, Is.Null, "nothing was recorded, so there is no outcome to name");
-            Assert.That(synthetic!.PlainLabel, Is.EqualTo("Identity not deleted"));
-            Assert.That(synthetic!.TechnicalLabel, Is.EqualTo("Metaverse Object not deleted"));
+            Assert.That(synthetic!.Label, Is.EqualTo("Metaverse Object not deleted"));
         }
     }
 
@@ -872,12 +1177,12 @@ public class CausalityModelBuilderTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(projected.Operation?.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(attributeFlow.Operation?.PlainLabel, Is.EqualTo("Updated"));
-            Assert.That(provisioned.Operation?.PlainLabel, Is.EqualTo("Created"));
+            Assert.That(projected.Operation?.Label, Is.EqualTo("Created"));
+            Assert.That(attributeFlow.Operation?.Label, Is.EqualTo("Updated"));
+            Assert.That(provisioned.Operation?.Label, Is.EqualTo("Created"));
             // The fixture's Pending Export was staged as a Create (#1561 follow-up); the outcome's
             // recorded StagedChangeType is what now tells Create and Update apart.
-            Assert.That(pendingExport.Operation?.PlainLabel, Is.EqualTo("Created"));
+            Assert.That(pendingExport.Operation?.Label, Is.EqualTo("Created"));
         }
     }
 
@@ -911,9 +1216,9 @@ public class CausalityModelBuilderTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(mvoDeleted.Operation?.PlainLabel, Is.EqualTo("Deleted"));
+            Assert.That(mvoDeleted.Operation?.Label, Is.EqualTo("Deleted"));
             Assert.That(deprovisions, Has.Count.EqualTo(2));
-            Assert.That(deprovisions.Select(d => d.Operation?.PlainLabel), Has.All.EqualTo("Deleted"));
+            Assert.That(deprovisions.Select(d => d.Operation?.Label), Has.All.EqualTo("Deleted"));
             Assert.That(outOfScope.Operation, Is.Null, "leaving scope is not itself an object operation");
         }
     }
@@ -935,8 +1240,7 @@ public class CausalityModelBuilderTests
         var exportedEvent = model.AllEvents().First(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(exportedEvent.Operation?.PlainLabel, Is.EqualTo("Created"));
-            Assert.That(exportedEvent.Operation?.TechnicalLabel, Is.EqualTo("Export Staged (Create)"));
+            Assert.That(exportedEvent.Operation?.Label, Is.EqualTo("Created"));
             Assert.That(exportedEvent.Operation?.Tone, Is.EqualTo(CausalityTone.Success));
         }
     }

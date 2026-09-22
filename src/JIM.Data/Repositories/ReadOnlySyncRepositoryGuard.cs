@@ -101,6 +101,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _inner.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(connectedSystemId, objectTypeId, partitionId);
 
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _inner.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(connectedSystemId, objectTypeId, partitionId);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
 
@@ -161,23 +164,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _inner.GetPendingExportsCountAsync(connectedSystemId);
 
-    public Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum)
-        => _inner.GetOutstandingInitialPasswordsAsync(connectedSystemId, maximum);
-
     public Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
         => _inner.GetInitialPasswordConfigurationsAsync(syncRuleIds);
 
     public Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
         => _inner.GetDiscoveredPasswordPolicyAsync(connectedSystemId);
-
-    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
-        => _inner.GetInitialPasswordAttentionBySyncRuleAsync(syncRuleIds);
-
-    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
-        => _inner.GetInitialPasswordAttentionByConnectedSystemAsync(connectedSystemIds);
-
-    public Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
-        => _inner.GetParkedInitialPasswordReasonsAsync(syncRuleId);
 
     public Task<List<PendingPasswordChange>> GetDuePasswordChangesAsync(int connectedSystemId, DateTime asOf, int maximum)
         => _inner.GetDuePasswordChangesAsync(connectedSystemId, asOf, maximum);
@@ -193,6 +184,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<Dictionary<int, PasswordQueueAttention>> GetPasswordQueueAttentionAsync(IReadOnlyCollection<int> connectedSystemIds)
         => _inner.GetPasswordQueueAttentionAsync(connectedSystemIds);
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetProvisionedPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+        => _inner.GetProvisionedPasswordAttentionBySyncRuleAsync(syncRuleIds);
+
+    public Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId)
+        => _inner.GetParkedProvisionedPasswordReasonsAsync(syncRuleId);
 
     public Task<RangeResultSet<PendingPasswordChangeHeader>> GetPendingPasswordChangeHeadersAsync(
         PendingPasswordChangeFilter filter,
@@ -235,6 +232,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
         => _inner.GetAllSyncRulesAsync(withChangeTracking);
+
+    public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
+        => _inner.GetSyncRuleNamesByIdsAsync(syncRuleIds);
 
     public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
         => _inner.GetLatestSyncRuleConfigurationChangeAsync();
@@ -305,9 +305,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
-
-    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
-        => _inner.GetExecutableExportSummariesAsync(connectedSystemId);
 
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
         => _inner.GetPendingExportsByIdsAsync(pendingExportIds);
@@ -382,28 +379,17 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(CreatePendingExportsAsync));
 
-    public Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
-        => throw new PreviewWriteAttemptedException(nameof(StageInitialPasswordsAsync));
-
-    public Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts)
-        => throw new PreviewWriteAttemptedException(nameof(RecordInitialPasswordAttemptsAsync));
-
-    public Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids)
-        => throw new PreviewWriteAttemptedException(nameof(DeleteInitialPasswordsAsync));
-
-    public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
-        => throw new PreviewWriteAttemptedException(nameof(ReleaseParkedInitialPasswordsAsync));
-
-    public Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
-        => throw new PreviewWriteAttemptedException(nameof(ExpireInitialPasswordsAsync));
-
-    public Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords)
-        => throw new PreviewWriteAttemptedException(nameof(DeleteTerminalInitialPasswordsAsync));
 
     public Task QueuePasswordChangesAsync(IEnumerable<PendingPasswordChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(QueuePasswordChangesAsync));
 
-    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool explicitOnly)
+    public Task<List<ProvisionedPasswordStagingOutcome>> StageProvisionedPasswordChangesAsync(IReadOnlyCollection<PendingPasswordChange> changes)
+        => throw new PreviewWriteAttemptedException(nameof(StageProvisionedPasswordChangesAsync));
+
+    public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
+        => throw new PreviewWriteAttemptedException(nameof(CreateActivitiesAsync));
+
+    public Task<List<PendingPasswordChange>> ClaimDuePasswordChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum, bool excludePropagated)
         => throw new PreviewWriteAttemptedException(nameof(ClaimDuePasswordChangesAsync));
 
     public Task<int> ReleasePasswordChangeClaimsAsync(IEnumerable<Guid> ids)
@@ -415,11 +401,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DeletePasswordChangesAsync(IEnumerable<Guid> ids)
         => throw new PreviewWriteAttemptedException(nameof(DeletePasswordChangesAsync));
 
-    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool explicitOnly)
+    public Task<int> ExpirePasswordChangesAsync(int connectedSystemId, DateTime asOf, bool excludePropagated)
         => throw new PreviewWriteAttemptedException(nameof(ExpirePasswordChangesAsync));
 
     public Task<int> ReleasePasswordChangesForDeliveryAsync(int connectedSystemId)
         => throw new PreviewWriteAttemptedException(nameof(ReleasePasswordChangesForDeliveryAsync));
+
+    public Task<int> ReleaseParkedProvisionedPasswordChangesAsync(int syncRuleId)
+        => throw new PreviewWriteAttemptedException(nameof(ReleaseParkedProvisionedPasswordChangesAsync));
 
     public Task<int> DeleteTerminalPasswordChangesAsync(DateTime olderThan, int maxRecords)
         => throw new PreviewWriteAttemptedException(nameof(DeleteTerminalPasswordChangesAsync));
@@ -442,6 +431,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportsByConnectedSystemObjectIdsAsync));
+
+    public Task<int> DeleteConnectedSystemObjectsByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteConnectedSystemObjectsByIdsAsync));
 
     public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
         => throw new PreviewWriteAttemptedException(nameof(DeleteUntrackedPendingExportsAsync));
@@ -506,11 +498,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportAsync));
 
+    public Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove)
+        => throw new PreviewWriteAttemptedException(nameof(AppendAttributeChangesToPendingExportAsync));
+
     public Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DisconnectConnectedSystemObjectsAsync));
-
-    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-        => throw new PreviewWriteAttemptedException(nameof(DeletePendingExportsByIdsAsync));
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));

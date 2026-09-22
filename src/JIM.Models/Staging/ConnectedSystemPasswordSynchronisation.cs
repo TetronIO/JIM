@@ -125,7 +125,7 @@ public class ConnectedSystemPasswordSynchronisation
     /// </param>
     public TimeSpan CalculateRetryDelay(int attemptCount, TimeSpan timeToLive)
     {
-        var cap = timeToLive > TimeSpan.Zero ? timeToLive : PendingInitialPassword.DefaultTimeToLive;
+        var cap = timeToLive > TimeSpan.Zero ? timeToLive : PendingPasswordChange.DefaultTimeToLive;
 
         // Computed in seconds rather than by doubling ticks, so that a large attempt count saturates to infinity
         // and clamps to the cap instead of overflowing.

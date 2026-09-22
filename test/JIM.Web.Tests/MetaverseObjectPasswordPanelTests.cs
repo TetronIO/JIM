@@ -28,6 +28,15 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 {
+    // Connected System ids for the fixtures, one per distinct name and stable within the run. These were
+    // derived from string.GetHashCode() % 1000, which .NET randomises per process, so two names could land on
+    // the same id and a test that expected two detail lines saw one (a flake on main, seen 2026-09-19).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> SystemIds = new();
+    private static int _nextSystemId;
+
+    private static int SystemId(string name) =>
+        SystemIds.GetOrAdd(name, _ => System.Threading.Interlocked.Increment(ref _nextSystemId));
+
     private const string AttentionMarker = "jim-password-attention";
     private const string AttentionRetryMarker = "jim-password-attention-retry";
     private const string CoverageMarker = "jim-password-coverage";
@@ -44,6 +53,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     private const string TargetDetailMarker = "jim-password-target-detail";
     private const string HistoryRetryMarker = "jim-password-history-retry";
     private const string HistoryStopMarker = "jim-password-history-stop";
+    private const string HistoryQueueMarker = "jim-password-history-queue";
 
     /// <summary>
     /// A change made a few minutes ago, so it sits under Today whatever the wall clock says.
@@ -68,7 +78,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     {
         ActivityId = Guid.NewGuid(),
         // A stable id per system name, so two outcomes on one system coalesce into one chip and two systems do not.
-        ConnectedSystemId = Math.Abs(system.GetHashCode() % 1000),
+        ConnectedSystemId = SystemId(system),
         ConnectedSystemName = system,
         Status = status,
         ErrorMessage = error,
@@ -102,7 +112,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     private static MetaverseObjectAccount Account(string system, bool canSetPasswords) => new()
     {
         ConnectedSystemObjectId = Guid.NewGuid(),
-        ConnectedSystemId = Math.Abs(system.GetHashCode() % 1000),
+        ConnectedSystemId = SystemId(system),
         ConnectedSystemName = system,
         AccountIdentifier = $"uid=alovelace,{system}",
         ConnectorCanSetPasswords = canSetPasswords,
@@ -114,11 +124,13 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         IReadOnlyList<PendingPasswordChangeHeader>? queued = null,
         IReadOnlyList<MetaverseObjectAccount>? accounts = null,
         Guid? metaverseObjectId = null,
+        string? metaverseObjectTypeName = null,
         Action<int>? onRetry = null,
         Action<int>? onStopTrying = null,
         Action? onSetPassword = null) =>
         Render<MetaverseObjectPasswordPanel>(p => p
             .Add(c => c.MetaverseObjectId, metaverseObjectId ?? Guid.NewGuid())
+            .Add(c => c.MetaverseObjectTypeName, metaverseObjectTypeName ?? "User")
             .Add(c => c.Events, events ?? [])
             .Add(c => c.QueuedChanges, queued ?? [])
             .Add(c => c.Accounts, accounts ?? [Account("Corporate Directory", true)])
@@ -158,6 +170,14 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     /// <summary>
     /// Nothing can deliver an expired change, so offering to retry it would be a button that does nothing.
     /// </summary>
+    [Test]
+    public void Panel_WithAChangeParkedForAMissingTarget_NamesTheConnectedSystemObjectNotAnAccount()
+    {
+        var cut = RenderPanel(queued: [Queued(4, "Corporate Directory", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.TargetObjectNotFound)]);
+
+        Assert.That(Find(cut, AttentionMarker).TextContent, Does.Contain("Corporate Directory has no Connected System Object to set it on"));
+    }
+
     [Test]
     public void Panel_WithAnExpiredChange_SaysSoAndOffersNoRetry()
     {
@@ -205,11 +225,28 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             accounts: [Account("Corporate Directory", true), Account("HR Portal", true), Account("Payroll (File)", false), Account("Badge System", true)],
             onSetPassword: () => raised++);
 
-        Assert.That(Find(cut, CoverageMarker).TextContent.Trim(), Is.EqualTo("3 of 4 accounts can take a password"));
+        Assert.That(Find(cut, CoverageMarker).TextContent.Trim(), Is.EqualTo("3 of 4 Connected System Objects can take a password"));
 
         Find(cut, SetMarker).Click();
 
         Assert.That(raised, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    /// A single one is counted in the singular. It is a Connected System Object, not an "account": the objects a
+    /// Metaverse Object is joined to are whatever object types the administrator configured, and the panel must not
+    /// presume they are accounts.
+    /// </summary>
+    [Test]
+    public void Panel_SetPasswordCard_CountsASingleConnectedSystemObjectInTheSingular()
+    {
+        var cut = RenderPanel(accounts: [Account("Corporate Directory", true)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Find(cut, CoverageMarker).TextContent.Trim(), Is.EqualTo("1 of 1 Connected System Object can take a password"));
+            Assert.That(cut.Markup, Does.Not.Contain("account"));
+        }
     }
 
     [Test]
@@ -222,6 +259,25 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             Assert.That(Find(cut, SetMarker).HasAttribute("disabled"), Is.True);
             Assert.That(Find(cut, SetUnavailableMarker).TextContent, Does.Contain("Connector can set passwords"));
             Assert.That(cut.Markup, Does.Not.Contain("Synchronise Password"), "one operation, one card (#1635)");
+        }
+    }
+
+    /// <summary>
+    /// The page is scoped to one Metaverse Object Type, so the panel writes that type's name (the vocabulary rule in
+    /// the developer guide) rather than "person", which is neither the type's name nor a product noun.
+    /// </summary>
+    [Test]
+    public void Panel_SetPasswordCard_UnavailableMessages_NameTheMetaverseObjectType()
+    {
+        var noAccounts = RenderPanel(accounts: [], metaverseObjectTypeName: "Contractor");
+        var noCapableAccount = RenderPanel(accounts: [Account("Payroll (File)", false)], metaverseObjectTypeName: "Contractor");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Find(noAccounts, SetUnavailableMarker).TextContent.Trim(), Is.EqualTo("Unavailable: this Contractor has no Connected System Objects."));
+            Assert.That(Find(noCapableAccount, SetUnavailableMarker).TextContent.Trim(), Is.EqualTo("Unavailable: none of this Contractor's Connected System Objects are in a Connected System whose Connector can set passwords."));
+            Assert.That(noAccounts.Markup, Does.Not.Contain("person").And.Not.Contain("account"));
+            Assert.That(noCapableAccount.Markup, Does.Not.Contain("person").And.Not.Contain("account"));
         }
     }
 
@@ -331,8 +387,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             events: [parked, retrying, allSet, nothingYet],
             queued:
             [
-                Queued(Math.Abs("HR SQL".GetHashCode() % 1000), "HR SQL", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: parked.Created),
-                Queued(Math.Abs("Badge System".GetHashCode() % 1000), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: retrying.Created)
+                Queued(SystemId("HR SQL"), "HR SQL", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: parked.Created),
+                Queued(SystemId("Badge System"), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: retrying.Created)
             ]);
 
         var dots = cut.FindComponents<MudTimelineItem>().Select(i => i.Instance.Color).ToList();
@@ -355,7 +411,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             Outcome("HR SQL", ActivityStatus.Complete));
         var cut = RenderPanel(
             events: [newer, older],
-            queued: [Queued(Math.Abs("Corporate AD".GetHashCode() % 1000), "Corporate AD", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: newer.Created)]);
+            queued: [Queued(SystemId("Corporate AD"), "Corporate AD", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: newer.Created)]);
 
         var entries = FindAll(cut, EntryMarker);
         var newerChips = entries[0].QuerySelectorAll($"[data-testid='{TargetMarker}']");
@@ -435,8 +491,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             events: [change],
             queued:
             [
-                Queued(Math.Abs("HR Portal".GetHashCode() % 1000), "HR Portal", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: change.Created),
-                Queued(Math.Abs("Badge System".GetHashCode() % 1000), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: change.Created)
+                Queued(SystemId("HR Portal"), "HR Portal", PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.PolicyRejection, "Too short.", attempts: 3, createdAt: change.Created),
+                Queued(SystemId("Badge System"), "Badge System", PendingPasswordChangeStatus.Pending, PasswordSetFailureReason.Transient, "Connection refused", attempts: 2, nextRetryAt: DateTime.UtcNow.AddMinutes(5), createdAt: change.Created)
             ],
             onRetry: retried.Add,
             onStopTrying: stopped.Add);
@@ -454,8 +510,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(retried, Is.EqualTo(new[] { Math.Abs("HR Portal".GetHashCode() % 1000) }));
-            Assert.That(stopped, Is.EqualTo(new[] { Math.Abs("Badge System".GetHashCode() % 1000) }));
+            Assert.That(retried, Is.EqualTo(new[] { SystemId("HR Portal") }));
+            Assert.That(stopped, Is.EqualTo(new[] { SystemId("Badge System") }));
         }
     }
 
@@ -507,14 +563,29 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// The first password an export just provisioned reads as its own kind, "Initial": neither an administrator's
+    /// explicit set nor a propagation of the person's own password change (#1697).
+    /// </summary>
+    [Test]
+    public void Panel_ProvisionedChange_CarriesAnInitialChip()
+    {
+        var cut = RenderPanel(events:
+        [
+            Change(Recently, PendingPasswordChangeOrigin.Provisioned, Outcome("Corporate AD", ActivityStatus.Complete))
+        ]);
+
+        Assert.That(FindAll(cut, KindMarker).Single().TextContent.Trim(), Is.EqualTo("Initial"));
+    }
+
     [Test]
     public void Panel_ChangeThatReachedNoSystem_SaysSoRatherThanLookingSuccessful()
     {
         // Requirement 14 read from the other end: a change with no outcomes must not render as a bare timestamp
         // that an administrator reads as "it went out fine".
-        var cut = RenderPanel(events: [Change(PendingPasswordChangeOrigin.Propagated)]);
+        var cut = RenderPanel(events: [Change(PendingPasswordChangeOrigin.Propagated)], metaverseObjectTypeName: "Contractor");
 
-        Assert.That(cut.Markup, Does.Contain("no Connected System"));
+        Assert.That(cut.Markup, Does.Contain("this Contractor has a Connected System Object in"));
     }
 
     [Test]
@@ -525,7 +596,39 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 
         // The queue is the Passwords tab of Operations (#1635), and the link must land on that tab with the
         // identity filter in the same query string, or the reader arrives on the Queue tab and has to go looking.
-        Assert.That(cut.Markup, Does.Contain($"/admin/operations?t=passwords&amp;metaverseObjectId={id}"));
+        Assert.That(Find(cut, HistoryQueueMarker).GetAttribute("href"), Is.EqualTo($"/admin/operations?t=passwords&metaverseObjectId={id}"));
+    }
+
+    /// <summary>
+    /// The queue link sits in the same column as the Set Password button on the card above, so it takes the same
+    /// button shape (outlined, being the secondary action) rather than reading as a stray text link.
+    /// </summary>
+    [Test]
+    public void Panel_HistoryCard_OffersTheQueueAsAnOutlinedButton()
+    {
+        var cut = RenderPanel();
+
+        var queue = Find(cut, HistoryQueueMarker);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(queue.ClassList, Does.Contain("mud-button-outlined"));
+            Assert.That(queue.TextContent.Trim(), Is.EqualTo("Password queue"));
+        }
+    }
+
+    /// <summary>
+    /// The empty state names the Metaverse Object Type the page is scoped to, per the vocabulary rule, not "person".
+    /// </summary>
+    [Test]
+    public void Panel_WithNoHistory_SaysSoNamingTheMetaverseObjectType()
+    {
+        var cut = RenderPanel(metaverseObjectTypeName: "Contractor");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("JIM has never set or synchronised a password for this Contractor."));
+            Assert.That(cut.Markup, Does.Not.Contain("person"));
+        }
     }
 
     #endregion

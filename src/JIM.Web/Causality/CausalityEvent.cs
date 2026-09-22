@@ -36,14 +36,9 @@ public sealed class CausalityEvent
     public bool IsSynthetic { get; init; }
 
     /// <summary>
-    /// Plain-language label (e.g. "Identity created").
+    /// The event's one label (e.g. "Projected to the Metaverse"), in the portal's own vocabulary.
     /// </summary>
-    public string PlainLabel { get; init; } = string.Empty;
-
-    /// <summary>
-    /// Technical label (e.g. "MVO Projected").
-    /// </summary>
-    public string TechnicalLabel { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
 
     /// <summary>
     /// Visual tone for colour coding.
@@ -98,6 +93,23 @@ public sealed class CausalityEvent
     /// Name snapshot of the attributed Synchronisation Rule, when recorded (#1085).
     /// </summary>
     public string? SyncRuleName { get; init; }
+
+    /// <summary>
+    /// The Synchronisation Rule that decided this event: <see cref="SyncRuleId"/> where this event
+    /// recorded one of its own, else the nearest ancestor event's (#1519 Table view). A queued export
+    /// staged beneath a Provisioned parent (and any attribute-change rows carried on it) has no rule of
+    /// its own, since the engine attributes the provisioning decision to the parent alone; without this
+    /// fallback the Table view's Synchronisation Rule column would read empty for exactly the rows that
+    /// most need it. Null when neither this event nor any ancestor recorded a rule. Populated by both
+    /// <see cref="CausalityModelBuilder.BuildEvent"/> and <see cref="CausalityModelBuilder.BuildSpeculativeEvent"/>;
+    /// the Timeline and Lineage views are unaffected, since they continue to read <see cref="SyncRuleId"/> directly.
+    /// </summary>
+    public int? EffectiveSyncRuleId { get; init; }
+
+    /// <summary>
+    /// Name snapshot of <see cref="EffectiveSyncRuleId"/>.
+    /// </summary>
+    public string? EffectiveSyncRuleName { get; init; }
 
     /// <summary>
     /// Entity links (and unlinked mentions) for this event.

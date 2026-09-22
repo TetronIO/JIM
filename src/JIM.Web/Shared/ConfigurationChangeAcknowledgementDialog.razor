@@ -61,7 +61,7 @@
 
     private RenderFragment? RenderVerdict => Verdict is not { } verdict
         ? null
-        : @<MudAlert Severity="@verdict.Severity" Variant="Variant.Outlined" data-testid="jim-acknowledgement-verdict">
+        : @<MudAlert Severity="@verdict.Severity" data-testid="jim-acknowledgement-verdict">
               <MudText Typo="Typo.body1"><b>@verdict.Lead</b></MudText>
               @if (!string.IsNullOrEmpty(verdict.Detail))
               {
@@ -125,7 +125,7 @@
             </MudText>
         }
         @* Guidance rather than a warning: nothing has gone wrong, but saving alone changes nothing that already exists. *@
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3">
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
             Saving does not apply this to existing objects. Run a Full Synchronisation for the Connected Systems
             concerned to put it into effect.
         </MudAlert>

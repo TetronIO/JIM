@@ -49,6 +49,23 @@ public class ConnectedSystemObjectChangeAttributeValue
     /// "Pending Export" visual indicator.
     /// </summary>
     public bool IsPendingExportStub { get; set; }
+
+    /// <summary>
+    /// The export Synchronisation Rule whose mapping produced this value, copied from
+    /// <see cref="JIM.Models.Transactional.PendingExportAttributeValueChange.SyncRuleId"/> by
+    /// <see cref="JIM.Application.Utilities.ExportChangeHistoryBuilder"/>. Deliberately a soft pointer: no
+    /// foreign key and no index, matching <see cref="JIM.Models.Transactional.PendingExportAttributeValueChange.ResolvedReferenceCsoId"/>'s
+    /// rationale, so a deleted rule leaves this dangling rather than requiring every export write path to fix
+    /// it up. <see cref="SyncRuleName"/> is the denormalised record that survives the rule's deletion; treat a
+    /// non-resolving id as "the rule that produced this value is gone" rather than a data error.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the contributing Synchronisation Rule's name at export time. Denormalised so it survives
+    /// deletion of the rule.
+    /// </summary>
+    public string? SyncRuleName { get; set; }
     #endregion
 
     public override string ToString()

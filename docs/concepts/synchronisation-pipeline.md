@@ -140,6 +140,8 @@ A typical synchronisation cycle follows this pattern:
 
 This cycle can be automated using the **Scheduler** service, which supports cron expressions and interval-based triggers with multi-step execution.
 
+Before running the real cycle for one object, [Sync Preview](../configuration/sync-preview.md) answers what steps 2 to 4 would do with it: whether it would join or project, what would flow, and what would export, without staging or changing anything.
+
 ## Run Profiles
 
 Each phase is executed through a **Run Profile** -- a configured operation on a Connected System. Common Run Profiles include:

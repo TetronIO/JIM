@@ -11,8 +11,13 @@ using SyncRepository = JIM.InMemoryData.SyncRepository;
 namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
-/// What the portal asks when it needs to say "this one needs you" (#1221 items 4 and 5): how many accounts are
-/// waiting on a person, and what the target actually said.
+/// What the Synchronisation Rule surfaces ask when they need to say "this one needs you" (#1221 items 4 and 5,
+/// re-pointed at the Password Delivery Service's queue by #1697): how many accounts are waiting on a person, and
+/// what the target actually said.
+/// <para>
+/// Initial passwords are staged onto the queue as <see cref="PendingPasswordChangeOrigin.Provisioned"/> rows
+/// (#1697), so what is under test here reads that queue rather than the old dedicated initial-password store.
+/// </para>
 /// <para>
 /// The two counts are deliberately never summed. Parked work is fixed where it is reported, by correcting the
 /// Synchronisation Rule's password settings; expired work cannot be fixed there at all. A single figure covering
@@ -24,18 +29,17 @@ namespace JIM.Worker.Tests.Servers;
 public class InitialPasswordAttentionTests
 {
     private const int ConnectedSystemId = 42;
-    private const int OtherConnectedSystemId = 99;
     private const int SyncRuleId = 7;
     private const int OtherSyncRuleId = 8;
 
     private SyncRepository _syncRepo = null!;
-    private InitialPasswordDeliveryServer _server = null!;
+    private InitialPasswordServer _server = null!;
 
     [SetUp]
     public void Setup()
     {
         _syncRepo = new SyncRepository();
-        _server = new InitialPasswordDeliveryServer(_syncRepo, new PasswordGeneratorService(), () => new TestCredentialProtection());
+        _server = new InitialPasswordServer(_syncRepo, new PasswordGeneratorService(), () => new TestCredentialProtection());
     }
 
     #region Attention counts
@@ -43,9 +47,9 @@ public class InitialPasswordAttentionTests
     [Test]
     public async Task GetAttentionBySyncRuleAsync_ParkedAndExpiredOnOneRule_CountsThemSeparatelyAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Parked);
-        await StageAsync(PendingInitialPasswordStatus.Parked);
-        await StageAsync(PendingInitialPasswordStatus.Expired);
+        await StageAsync(PendingPasswordChangeStatus.Parked);
+        await StageAsync(PendingPasswordChangeStatus.Parked);
+        await StageAsync(PendingPasswordChangeStatus.Expired);
 
         var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId]);
 
@@ -60,18 +64,18 @@ public class InitialPasswordAttentionTests
     [Test]
     public async Task GetAttentionBySyncRuleAsync_AccountsStillBeingRetried_AreNotAttentionAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Pending);
+        await StageAsync(PendingPasswordChangeStatus.Pending);
 
         var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId]);
 
         Assert.That(attention, Does.Not.ContainKey(SyncRuleId),
-            "an account JIM will try again on the next run is not waiting on a person");
+            "an account JIM will try again shortly is not waiting on a person");
     }
 
     [Test]
     public async Task GetAttentionBySyncRuleAsync_SettledRule_IsAbsentRatherThanZeroAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Parked, syncRuleId: OtherSyncRuleId);
+        await StageAsync(PendingPasswordChangeStatus.Parked, syncRuleId: OtherSyncRuleId);
 
         var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId, OtherSyncRuleId]);
 
@@ -86,7 +90,7 @@ public class InitialPasswordAttentionTests
     [Test]
     public async Task GetAttentionBySyncRuleAsync_RulesNotAskedFor_AreNotReturnedAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Parked, syncRuleId: OtherSyncRuleId);
+        await StageAsync(PendingPasswordChangeStatus.Parked, syncRuleId: OtherSyncRuleId);
 
         var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId]);
 
@@ -94,36 +98,44 @@ public class InitialPasswordAttentionTests
     }
 
     [Test]
-    public async Task GetAttentionByConnectedSystemAsync_RecordWhoseRuleHasGone_IsStillCountedAsync()
-    {
-        await StageAsync(PendingInitialPasswordStatus.Parked, syncRuleId: null);
-
-        var attention = await _server.GetAttentionByConnectedSystemAsync([ConnectedSystemId]);
-
-        Assert.That(attention[ConnectedSystemId].ParkedCount, Is.EqualTo(1),
-            "counted against the system it lives in, not through a Synchronisation Rule that was deleted");
-    }
-
-    [Test]
-    public async Task GetAttentionByConnectedSystemAsync_AnotherSystemsWork_IsNotCountedAsync()
-    {
-        await StageAsync(PendingInitialPasswordStatus.Parked, connectedSystemId: OtherConnectedSystemId);
-
-        var attention = await _server.GetAttentionByConnectedSystemAsync([ConnectedSystemId]);
-
-        Assert.That(attention, Is.Empty);
-    }
-
-    [Test]
     public async Task GetAttentionAsync_NothingAsked_QueriesNothingAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Parked);
+        await StageAsync(PendingPasswordChangeStatus.Parked);
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(await _server.GetAttentionBySyncRuleAsync([]), Is.Empty);
-            Assert.That(await _server.GetAttentionByConnectedSystemAsync([]), Is.Empty);
-        }
+        Assert.That(await _server.GetAttentionBySyncRuleAsync([]), Is.Empty);
+    }
+
+    /// <summary>
+    /// This queue also carries <see cref="PendingPasswordChangeOrigin.Explicit"/> and
+    /// <see cref="PendingPasswordChangeOrigin.Propagated"/> rows, which belong to Password Synchronisation's own
+    /// attention surface, not to a Synchronisation Rule's initial-password indicator. A rule reading its own
+    /// attention must not count another feature's rows just because they happen to share the queue.
+    /// </summary>
+    [Test]
+    public async Task GetAttentionBySyncRuleAsync_ExplicitAndPropagatedRows_AreNotCountedAsync()
+    {
+        await StageAsync(PendingPasswordChangeStatus.Parked, origin: PendingPasswordChangeOrigin.Explicit);
+        await StageAsync(PendingPasswordChangeStatus.Parked, origin: PendingPasswordChangeOrigin.Propagated);
+
+        var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId]);
+
+        Assert.That(attention, Does.Not.ContainKey(SyncRuleId),
+            "an Explicit or Propagated row is not initial-password work, whatever its Synchronisation Rule");
+    }
+
+    /// <summary>
+    /// A Provisioned row's Synchronisation Rule is null once the rule that provisioned it has been deleted. Unlike
+    /// the Connected System attention surface, which still has a system to count the row against, there is no
+    /// rule left to attribute it to here: it is counted nowhere rather than under a rule id that no longer exists.
+    /// </summary>
+    [Test]
+    public async Task GetAttentionBySyncRuleAsync_ProvisionedRowWithNoRule_IsCountedNowhereAsync()
+    {
+        await StageAsync(PendingPasswordChangeStatus.Parked, syncRuleId: null);
+
+        var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId]);
+
+        Assert.That(attention, Is.Empty);
     }
 
     #endregion
@@ -134,9 +146,9 @@ public class InitialPasswordAttentionTests
     public async Task GetParkedReasonsAsync_AccountsRefusedForTheSameReason_AreOneGroupAsync()
     {
         const string refusal = "0000052D: Password does not meet complexity requirements.";
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: refusal);
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: refusal);
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: refusal);
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: refusal);
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: refusal);
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: refusal);
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
@@ -152,9 +164,9 @@ public class InitialPasswordAttentionTests
     [Test]
     public async Task GetParkedReasonsAsync_SeveralReasons_PutsTheBiggestFirstAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: "Too short.");
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: "Not complex enough.");
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: "Not complex enough.");
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: "Too short.");
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: "Not complex enough.");
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: "Not complex enough.");
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
@@ -170,8 +182,8 @@ public class InitialPasswordAttentionTests
     public async Task GetParkedReasonsAsync_ReportsTheEarliestAttemptThatProducedItAsync()
     {
         var oldest = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: "Too short.", lastAttemptedAt: oldest.AddDays(4));
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: "Too short.", lastAttemptedAt: oldest);
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: "Too short.", lastAttemptedAt: oldest.AddDays(4));
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: "Too short.", lastAttemptedAt: oldest);
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
@@ -182,8 +194,8 @@ public class InitialPasswordAttentionTests
     [Test]
     public async Task GetParkedReasonsAsync_ExpiredAndRetryingRecords_AreNotReportedAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Expired, targetMessage: "Too short.");
-        await StageAsync(PendingInitialPasswordStatus.Pending, targetMessage: "The directory was unreachable.");
+        await StageAsync(PendingPasswordChangeStatus.Expired, targetMessage: "Too short.");
+        await StageAsync(PendingPasswordChangeStatus.Pending, targetMessage: "The directory was unreachable.");
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
@@ -194,7 +206,7 @@ public class InitialPasswordAttentionTests
     [Test]
     public async Task GetParkedReasonsAsync_AnotherRulesParkedWork_IsNotReportedAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: "Too short.", syncRuleId: OtherSyncRuleId);
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: "Too short.", syncRuleId: OtherSyncRuleId);
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
@@ -204,7 +216,7 @@ public class InitialPasswordAttentionTests
     [Test]
     public async Task GetParkedReasonsAsync_TargetSaidNothing_StillReportsTheGroupAsync()
     {
-        await StageAsync(PendingInitialPasswordStatus.Parked, targetMessage: null);
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: null);
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
@@ -216,39 +228,49 @@ public class InitialPasswordAttentionTests
         }
     }
 
+    /// <summary>
+    /// An Explicit row parked for its own reason must not be reported as though it were this rule's initial
+    /// password work; the two are different features that only happen to share a queue and a status.
+    /// </summary>
+    [Test]
+    public async Task GetParkedReasonsAsync_AnExplicitRowOnTheSameSystem_IsNotReportedAsync()
+    {
+        await StageAsync(PendingPasswordChangeStatus.Parked, targetMessage: "Too short.",
+            origin: PendingPasswordChangeOrigin.Explicit);
+
+        var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
+
+        Assert.That(reasons, Is.Empty);
+    }
+
     #endregion
 
     #region Helper Methods
 
     /// <summary>
-    /// Stages one account's outstanding record in the given state.
+    /// Stages one queued password change in the given state, as a Provisioned row unless overridden.
     /// </summary>
     private async Task StageAsync(
-        PendingInitialPasswordStatus status,
+        PendingPasswordChangeStatus status,
         int connectedSystemId = ConnectedSystemId,
         int? syncRuleId = SyncRuleId,
         string? targetMessage = null,
-        DateTime? lastAttemptedAt = null)
+        DateTime? lastAttemptedAt = null,
+        PendingPasswordChangeOrigin origin = PendingPasswordChangeOrigin.Provisioned)
     {
-        var cso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = connectedSystemId,
-            Status = ConnectedSystemObjectStatus.Normal
-        };
-        _syncRepo.SeedConnectedSystemObject(cso);
-
-        await _syncRepo.StageInitialPasswordsAsync([
-            new PendingInitialPassword
+        await _syncRepo.QueuePasswordChangesAsync([
+            new PendingPasswordChange
             {
-                ConnectedSystemObjectId = cso.Id,
+                MetaverseObjectId = Guid.NewGuid(),
                 ConnectedSystemId = connectedSystemId,
                 SyncRuleId = syncRuleId,
+                Origin = origin,
                 Status = status,
                 TargetMessage = targetMessage,
-                FailureReason = status == PendingInitialPasswordStatus.Parked ? PasswordSetFailureReason.PolicyRejection : null,
+                FailureReason = status == PendingPasswordChangeStatus.Parked ? PasswordSetFailureReason.PolicyRejection : null,
                 LastAttemptedAt = lastAttemptedAt,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(1)
             }
         ]);
     }

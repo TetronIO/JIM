@@ -94,6 +94,10 @@ foreach ($ou in $baseOus) {
     else {
         Write-Host "    ✓ OU created: $ou" -ForegroundColor Green
     }
+
+    # JIM manages objects in this container, so its service account needs the delegation over it.
+    Grant-JimAdDelegation -ContainerName $container -ContainerDn "OU=$ou,$domainDN"
+    Write-Host "    ✓ JIM delegation granted: $ou" -ForegroundColor Green
 }
 
 # Create the Corp base OU - this is the OU that will be selected in JIM for partition/container testing
@@ -108,6 +112,11 @@ if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
 else {
     Write-Host "    ✓ OU created: Corp" -ForegroundColor Green
 }
+
+# JIM provisions into OU=Corp, so its service account needs the delegation over it. The Users and
+# Groups OUs created below inherit it, and so do the department OUs the Connector creates as needed.
+Grant-JimAdDelegation -ContainerName $container -ContainerDn "OU=Corp,$domainDN"
+Write-Host "    ✓ JIM delegation granted: Corp (inherited by everything below it)" -ForegroundColor Green
 
 # Create the Users OU under Corp
 Write-Host "  Creating Users OU under Corp..." -ForegroundColor Gray
@@ -135,7 +144,8 @@ else {
 # where department OUs may not exist initially.
 
 # Legacy department OUs at root level (kept for backward compatibility with any existing tests)
-# These will be removed in a future cleanup once all tests use the /Corp/Users/{Department} structure
+# These will be removed in a future cleanup once all tests use the /Corp/Users/{Department} structure.
+# They hold no objects JIM manages, so they are deliberately left without a JIM delegation.
 $departmentOus = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
                    "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
 Write-Host "  Creating legacy department OUs at root level..." -ForegroundColor Gray

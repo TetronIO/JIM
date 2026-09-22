@@ -19,9 +19,9 @@ namespace JIM.Web.Tests;
 /// <summary>
 /// bUnit tests for <see cref="CausalityPanel"/>: rendering across the PRD scenarios, the view
 /// switcher (Lineage default; Timeline selectable; stored preferences honoured, with legacy Flow and
-/// Graph values falling back silently), the technical-names toggle persisting via a stubbed
-/// <see cref="JIM.Web.Services.IUserPreferenceService"/>, the shared attribute drawer, and the
-/// empty (not-tracked) state.
+/// Graph values falling back silently), the shared attribute drawer, and the empty (not-tracked)
+/// state. The panel names every outcome once, in the portal's own vocabulary, and carries no
+/// "Technical names" toggle.
 /// </summary>
 [TestFixture]
 public class CausalityPanelTests
@@ -68,7 +68,7 @@ public class CausalityPanelTests
         Assert.That(cut.FindAll(".summary-sentence"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".tl"), Is.Empty);
-        Assert.That(cut.FindAll(".oc-pill"), Is.Not.Empty);
+        Assert.That(cut.FindAll(".outcome-strip .mud-chip"), Is.Not.Empty);
     }
 
     [Test]
@@ -102,14 +102,27 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_ViewSwitcher_OffersLineageAndTimelineWithLineageOn()
+    public void Render_ViewSwitcher_OffersLineageTimelineAndTableWithLineageOn()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var buttons = cut.FindAll(".seg button");
-        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Lineage", "Timeline" }));
+        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Lineage", "Timeline", "Table" }));
         Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
+        Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Not.Contain("on"));
+    }
+
+    [Test]
+    public void ViewSwitcher_SelectingTable_SwitchesToTheTableViewAndPersistsThePreference()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        cut.FindAll(".seg button")[2].Click();
+
+        Assert.That(cut.FindAll(".tv"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
+        Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "table" }));
     }
 
     [Test]
@@ -167,38 +180,12 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_PersistedTechNamesPreference_StartsWithTechnicalEmphasis()
-    {
-        _preferences.StoredCausalityTechNames = true;
-
-        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-
-        Assert.That(cut.Find(".toggle-line").ClassList, Does.Contain("on"));
-        // Projected's own card head is suppressed on the Lineage (#1495 second follow-up: its title is
-        // subsumed by the PROJECTED join label and the operation chip), so its technical label now
-        // surfaces on the chip rather than on an .evt-title.
-        var chips = cut.FindAll(".ln-op").Select(t => t.TextContent.Trim()).ToList();
-        Assert.That(chips.Any(t => t.StartsWith("MVO Projected")), Is.True);
-    }
-
-    [Test]
-    public void TechToggle_Click_PersistsViaThePreferenceServiceAndSwapsEmphasis()
+    public void Render_NoTechnicalNamesToggle_RendersNoSuchElementOrText()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        cut.Find(".toggle-line").Click();
-
-        Assert.That(_preferences.CausalityTechNamesWrites, Is.EqualTo(new[] { true }));
-        Assert.That(cut.Find(".toggle-line").ClassList, Does.Contain("on"));
-        Assert.That(cut.Find(".toggle-line").GetAttribute("aria-pressed"), Is.EqualTo("true"));
-        // See the comment above: Projected's technical label now shows on its chip, not its (suppressed) title.
-        var chips = cut.FindAll(".ln-op").Select(t => t.TextContent.Trim()).ToList();
-        Assert.That(chips.Any(t => t.StartsWith("MVO Projected")), Is.True);
-
-        cut.Find(".toggle-line").Click();
-
-        Assert.That(_preferences.CausalityTechNamesWrites, Is.EqualTo(new[] { true, false }));
-        Assert.That(cut.Find(".toggle-line").ClassList, Does.Not.Contain("on"));
+        Assert.That(cut.FindAll(".toggle-line"), Is.Empty);
+        Assert.That(cut.Markup, Does.Not.Contain("Technical names"));
     }
 
     [Test]
@@ -243,20 +230,16 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void TechnicalNamesToggle_AlsoRewordsTheSummarySentence()
+    public void Render_SummarySentence_NamesTheObjectTypeAndNeverSaysRecordOrIdentity()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        Assert.That(cut.Find(".summary-sentence").TextContent, Does.Contain("processed the record for"));
 
-        cut.Find(".toggle-line").Click();
-
-        // The toggle governs the whole panel, not just the views: the summary is the first sentence
-        // read, and leaving "record" and "Identity" in it made the toggle look like it had not worked.
         var sentence = cut.Find(".summary-sentence").TextContent;
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(sentence, Does.Contain("processed the Connected System Object"));
-            Assert.That(sentence, Does.Not.Contain("the record"));
+            Assert.That(sentence, Does.Contain("processed person Liam Allen"));
+            Assert.That(sentence, Does.Not.Contain("record"));
+            Assert.That(sentence, Does.Not.Contain("Identity"));
         }
     }
 

@@ -34,7 +34,7 @@
 
     @if (SyncRuleScopingCriteriaGroup.ChildGroups.Count == 0 && SyncRuleScopingCriteriaGroup.Criteria.Count == 0)
     {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">Add your first criteria...</MudAlert>
+        <MudAlert Severity="Severity.Info" Class="mt-5">Add your first criteria...</MudAlert>
     }
 
     @foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
@@ -44,12 +44,14 @@
                 <AvatarContent>
                     @if (criteria.MetaverseAttribute != null)
                     {
+                        @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
                         <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                             <MudAvatar Color="Color.Primary">MV</MudAvatar>
                         </MudTooltip>
                     }
                     else
                     {
+                        @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
                         <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                             <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                         </MudTooltip>

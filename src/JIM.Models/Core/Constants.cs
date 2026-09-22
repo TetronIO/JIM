@@ -301,18 +301,6 @@ public static class Constants
         public const string SecurityEventRetentionPeriod = "History.SecurityEventRetentionPeriod";
 
         /// <summary>
-        /// How long an initial-password record that has reached a terminal state (parked for an administrator, or
-        /// expired) is kept before housekeeping removes it. Records still being worked are never removed, however
-        /// old. Default: 90 days.
-        /// <para>
-        /// Shorter than the general history retention period on purpose: this is a work list rather than an audit
-        /// trail, and the durable record of what happened to an account is its Activity, which is governed by the
-        /// retention periods above and outlives this.
-        /// </para>
-        /// </summary>
-        public const string InitialPasswordRetentionPeriod = "History.InitialPasswordRetentionPeriod";
-
-        /// <summary>
         /// How long Password Synchronisation history is kept: both the Activities recording what happened to each
         /// password change, and the queue rows that reached a terminal state (parked, expired, or cancelled).
         /// Changes still owed to a system are never removed, however old. Default: 365 days.
@@ -464,5 +452,19 @@ public static class Constants
         /// retry from the queue page or a released hold is delivered within a second rather than on a poll.
         /// </summary>
         public const string PasswordChange = "jim_password_change";
+    }
+
+    /// <summary>
+    /// Display names for Activities whose <c>TargetName</c> is a fixed, system-generated string rather than the
+    /// name of the configuration object involved. Shared between the writer (JIM.Worker) and the portal's
+    /// Activity category filter so the two cannot drift apart.
+    /// </summary>
+    public static class ActivityTargetNames
+    {
+        /// <summary>
+        /// The housekeeping batch that deletes Metaverse Objects once their deletion grace period expires
+        /// (<see cref="JIM.Models.Activities.ActivityTargetType.MetaverseObjectHousekeeping"/>).
+        /// </summary>
+        public const string ScheduledMetaverseObjectDeletion = "Scheduled Metaverse Object Deletion";
     }
 }

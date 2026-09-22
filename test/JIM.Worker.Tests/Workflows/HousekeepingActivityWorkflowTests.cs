@@ -45,6 +45,7 @@ public class HousekeepingActivityWorkflowTests
     private Worker WorkerInstance { get; set; } = null!;
 
     private Mock<IRepository> _mockRepository = null!;
+    private Mock<IJimApplicationFactory> _mockJimFactory = null!;
     private Mock<IMetaverseRepository> _mockMetaverseRepository = null!;
     private Mock<IActivityRepository> _mockActivityRepository = null!;
     private Mock<IServiceSettingsRepository> _mockServiceSettingsRepository = null!;
@@ -112,8 +113,13 @@ public class HousekeepingActivityWorkflowTests
         SyncRepo = new SyncRepository();
         Jim = new JimApplication(_mockRepository.Object, syncRepository: SyncRepo);
 
+        // Housekeeping runs each batch on a JimApplication it obtains from the factory (never the main loop's),
+        // so the factory hands out the fixture's instance unless a test says otherwise.
+        _mockJimFactory = new Mock<IJimApplicationFactory>();
+        _mockJimFactory.Setup(f => f.Create()).Returns(() => Jim);
+
         WorkerInstance = new Worker(
-            new Mock<IJimApplicationFactory>().Object,
+            _mockJimFactory.Object,
             new Mock<IConnectorFactory>().Object,
             new Mock<IDbContextFactory<JimDbContext>>().Object);
 
@@ -145,14 +151,14 @@ public class HousekeepingActivityWorkflowTests
             .ReturnsAsync([memberMvo]);
 
         // Act
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
-        // Assert: the batch is recorded as a system-initiated Scheduled Identity Deletion Activity. The enum
-        // member keeps its original name (persisted by ordinal, append-only); only the display name changed.
+        // Assert: the batch is recorded as a system-initiated Scheduled Metaverse Object Deletion Activity. The
+        // enum member keeps its original name (persisted by ordinal, append-only); only the display name changed.
         var activity = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         Assert.That(activity, Is.Not.Null,
-            "A housekeeping batch that deletes Metaverse Objects must record a Scheduled Identity Deletion Activity");
-        Assert.That(activity!.TargetName, Is.EqualTo("Scheduled Identity Deletion"));
+            "A housekeeping batch that deletes Metaverse Objects must record a Scheduled Metaverse Object Deletion Activity");
+        Assert.That(activity!.TargetName, Is.EqualTo(Constants.ActivityTargetNames.ScheduledMetaverseObjectDeletion));
         Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Execute));
         Assert.That(activity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
         Assert.That(activity.InitiatedByName, Is.EqualTo("System"));
@@ -215,7 +221,7 @@ public class HousekeepingActivityWorkflowTests
             .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
             .ReturnsAsync([memberMvo]);
 
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
         var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
@@ -255,7 +261,7 @@ public class HousekeepingActivityWorkflowTests
             .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
             .ReturnsAsync([memberMvo]);
 
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
         var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
@@ -282,7 +288,7 @@ public class HousekeepingActivityWorkflowTests
             .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
             .ReturnsAsync([memberMvo]);
 
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
         var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
@@ -312,7 +318,7 @@ public class HousekeepingActivityWorkflowTests
             .ReturnsAsync([personMvo]);
 
         // Act
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
         // Assert: the delete Pending Export was staged for the target Connected System Object.
         var deletePendingExport = SyncRepo.PendingExports.Values
@@ -340,6 +346,117 @@ public class HousekeepingActivityWorkflowTests
             "The outcome must name the Connected System the account is being deleted from; the identity is named by the item it hangs off");
         Assert.That(activity.TotalPendingExports, Is.EqualTo(1),
             "TotalPendingExports must count the staged deprovisioning export");
+    }
+
+    /// <summary>
+    /// Housekeeping must evaluate every batch against the configuration as it stands now, not as the worker first
+    /// saw it. The main loop's JimApplication lives for the worker's lifetime on a change-tracking DbContext, and
+    /// EF Core serves a tracked entity back from its identity map rather than refreshing it from a later query, so
+    /// a Synchronisation Rule loaded for one batch was being reused, as it then stood, by every batch after it: an
+    /// export rule switched to Disconnect after the first batch still had its directory objects deleted (found by
+    /// Scenario 4, Test 9). Modelled as two repositories: the main loop's still says Delete; the one the factory
+    /// hands out, standing in for the database as it now is, says Disconnect. The current action must win.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_RuleActionChangedSinceWorkerStarted_HonoursTheCurrentActionAsync()
+    {
+        // Arrange: the main loop's instance (the fixture's Jim) still holds the rule as Delete.
+        var (personMvo, personTargetCso) = SeedEligiblePersonWithDeprovisionableTargetCso("Dan Disconnected");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // The database as it now stands: the same object graph, the rule since switched to Disconnect.
+        var currentSyncRepo = new SyncRepository();
+        using var currentJim = new JimApplication(_mockRepository.Object, syncRepository: currentSyncRepo);
+        SeedTargetExportUsersRule(currentSyncRepo, OutboundDeprovisionAction.Disconnect);
+        currentSyncRepo.SeedMetaverseObject(personMvo);
+        var currentTargetCso = SeedProvisionedTargetCso(currentSyncRepo, personMvo, "uid=dan.disconnected,ou=People,dc=glitterband,dc=local", personTargetCso.Id);
+        _mockJimFactory.Setup(f => f.Create()).Returns(currentJim);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert: the Metaverse Object was deleted and its target object disconnected, and nothing was staged to
+        // delete it from the directory, on either view of the data.
+        Assert.That(_deletedMvoIds, Is.EqualTo(new[] { personMvo.Id }));
+        Assert.That(currentTargetCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined),
+            "A Disconnect action breaks the join and leaves the directory object in place");
+        Assert.That(currentSyncRepo.PendingExports.Values.Any(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.False,
+            "The rule now says Disconnect, so no delete Pending Export may be staged");
+        Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.False,
+            "The main loop's stale view of the rule must play no part in the batch");
+    }
+
+    /// <summary>
+    /// The mechanism behind the test above: a housekeeping tick obtains its JimApplication from the factory and
+    /// releases it when the batch is done, so no entity read for one batch can be served, stale, to the next.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_Batch_RunsOnAnInstanceFromTheFactoryAndReleasesItAsync()
+    {
+        // Arrange
+        var (personMvo, _) = SeedEligiblePersonWithDeprovisionableTargetCso("Dan Deprovisioned");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert
+        _mockJimFactory.Verify(f => f.Create(), Times.Once,
+            "Each housekeeping tick evaluates on a JimApplication of its own");
+        _mockRepository.Verify(r => r.Dispose(), Times.Once,
+            "The tick's JimApplication, and with it its DbContext, is released once the batch is done");
+    }
+
+    /// <summary>
+    /// Deletion cascade: a grace-period-expired Metaverse Object whose target Connected
+    /// System Object is still Pending Provisioning with no Pending Export at all (nothing was ever exported)
+    /// has its provisioning cancelled outright rather than deprovisioned. The cancellation is a consequence of
+    /// the deletion, so it must be recorded on the housekeeping Activity as a ProvisioningCancelled outcome
+    /// nested beneath the deleted object's MvoDeleted outcome, exactly as a genuinely staged delete export is.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithNeverExportedProvisioningTargetCso_NestsProvisioningCancelledUnderMvoDeletedAsync()
+    {
+        // Arrange
+        var (personMvo, targetCso) = SeedEligiblePersonWithNeverExportedProvisioningTargetCso("Nadia NeverExported");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync();
+
+        // Assert: nothing exists in the target system, so nothing was staged and the never-provisioned CSO
+        // (and its unsent Create) are both gone.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.PendingExports.Values, Is.Empty, "Nothing exists in the target system, so nothing may be exported");
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(targetCso.Id), Is.False,
+                "The never-provisioned CSO must be removed, not left stranded in the connector space");
+        }
+
+        // Assert: the cancellation is still recorded as a consequence of the deletion on the deleted object's item.
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var rpeis = _persistedRpeis.Where(r => r.ActivityId == activity.Id).ToList();
+        var deletionRpei = rpeis.Single(r => r.ObjectChangeType == ObjectChangeType.Deleted);
+        var mvoDeletedOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var cascadeOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cascadeOutcome, Is.Not.Null,
+                "The cancelled provisioning must be recorded as a consequence of the Metaverse Object deletion");
+            Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled),
+                "Nothing was ever exported, so this is a cancellation, not a queued deprovision");
+            Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
+                "The outcome must name the Connected System the cancelled provisioning targeted");
+            Assert.That(activity.TotalPendingExports, Is.EqualTo(0),
+                "A cancellation is not a Pending Export and must not count towards the total");
+        }
     }
 
     /// <summary>
@@ -371,7 +488,7 @@ public class HousekeepingActivityWorkflowTests
             .ReturnsAsync([scheduledMvo]);
 
         // Act
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
         // Assert: the deletion record carries the mark-time snapshot verbatim.
         var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
@@ -402,7 +519,7 @@ public class HousekeepingActivityWorkflowTests
             .ReturnsAsync([]);
 
         // Act
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
         // Assert
         Assert.That(_createdActivities, Is.Empty, "An idle housekeeping tick must not create an Activity");
@@ -428,7 +545,7 @@ public class HousekeepingActivityWorkflowTests
             .ThrowsAsync(new InvalidOperationException("Simulated deletion failure"));
 
         // Act
-        await WorkerInstance.PerformHousekeepingAsync(Jim);
+        await WorkerInstance.PerformHousekeepingAsync();
 
         // Assert: the batch Activity finishes with an error completion, not silent success.
         var activity = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
@@ -589,10 +706,74 @@ public class HousekeepingActivityWorkflowTests
     /// </summary>
     private (MetaverseObject Mvo, ConnectedSystemObject TargetCso) SeedEligiblePersonWithDeprovisionableTargetCso(string displayName)
     {
-        SyncRepo.SeedSyncRule(new SyncRule
+        SeedTargetExportUsersRule(SyncRepo, OutboundDeprovisionAction.Delete);
+
+        var personMvo = CreateEligiblePersonMvo(displayName);
+        SyncRepo.SeedMetaverseObject(personMvo);
+
+        var targetCso = SeedProvisionedTargetCso(SyncRepo, personMvo, "uid=dan.deprovisioned,ou=People,dc=glitterband,dc=local");
+        return (personMvo, targetCso);
+    }
+
+    /// <summary>
+    /// Seeds the export Synchronisation Rule matching Person Metaverse Objects to the target's user type, with
+    /// the given deprovisioning action, into the given repository.
+    /// </summary>
+    private static void SeedTargetExportUsersRule(SyncRepository into, OutboundDeprovisionAction deprovisionAction)
+    {
+        into.SeedSyncRule(new SyncRule
         {
             Id = 910,
             Name = "Target Export Users",
+            Enabled = true,
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = TargetSystemId,
+            ConnectedSystem = new ConnectedSystem { Id = TargetSystemId, Name = TargetSystemName },
+            ConnectedSystemObjectTypeId = CsUserTypeId,
+            MetaverseObjectTypeId = MvPersonTypeId,
+            OutboundDeprovisionAction = deprovisionAction
+        });
+    }
+
+    /// <summary>
+    /// Seeds a provisioned target Connected System Object joined to the given Metaverse Object, carrying the given
+    /// DN as its secondary external ID, into the given repository.
+    /// </summary>
+    private ConnectedSystemObject SeedProvisionedTargetCso(SyncRepository into, MetaverseObject mvo, string dn, Guid? csoId = null)
+    {
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = csoId ?? Guid.NewGuid(),
+            ConnectedSystemId = TargetSystemId,
+            TypeId = CsUserTypeId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObjectId = mvo.Id,
+            SecondaryExternalIdAttributeId = CsDnAttributeId
+        };
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = targetCso,
+            Attribute = CsDnAttribute,
+            AttributeId = CsDnAttributeId,
+            StringValue = dn
+        });
+        into.SeedConnectedSystemObject(targetCso);
+        return targetCso;
+    }
+
+    /// <summary>
+    /// Seeds an eligible Person Metaverse Object joined to a target Connected System Object that is still
+    /// Pending Provisioning and still carries its unsent Create Pending Export (the only proof that nothing was
+    /// ever exported), so the deletion cascades into a cancellation rather than a delete Pending Export.
+    /// </summary>
+    private (MetaverseObject Mvo, ConnectedSystemObject TargetCso) SeedEligiblePersonWithNeverExportedProvisioningTargetCso(string displayName)
+    {
+        SyncRepo.SeedSyncRule(new SyncRule
+        {
+            Id = 911,
+            Name = "Target Export Users (Never Exported)",
             Enabled = true,
             Direction = SyncRuleDirection.Export,
             ConnectedSystemId = TargetSystemId,
@@ -610,20 +791,21 @@ public class HousekeepingActivityWorkflowTests
             Id = Guid.NewGuid(),
             ConnectedSystemId = TargetSystemId,
             TypeId = CsUserTypeId,
-            Status = ConnectedSystemObjectStatus.Normal,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            MetaverseObjectId = personMvo.Id,
-            SecondaryExternalIdAttributeId = CsDnAttributeId
+            MetaverseObjectId = personMvo.Id
         };
-        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+        SyncRepo.SeedPendingExport(new PendingExport
         {
             Id = Guid.NewGuid(),
-            ConnectedSystemObject = targetCso,
-            Attribute = CsDnAttribute,
-            AttributeId = CsDnAttributeId,
-            StringValue = "uid=dan.deprovisioned,ou=People,dc=glitterband,dc=local"
+            ConnectedSystemId = TargetSystemId,
+            ConnectedSystemObjectId = targetCso.Id,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = personMvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
         });
-        SyncRepo.SeedConnectedSystemObject(targetCso);
 
         return (personMvo, targetCso);
     }

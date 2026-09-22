@@ -68,12 +68,9 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 ? await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs, apiKey)
                 : await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs);
 
-            // The three password figures are row counts returned by methods with "Password" in their
-            // names; CodeQL's name heuristic reads them as credential material stored in the log.
-            _logger.LogInformation(
-                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}, Security: {SecurityActivityCount}, Initial passwords: {InitialPasswordCount}, Password activities: {PasswordActivityCount}, Password queue: {PasswordQueueCount}",
-                // codeql[cs/cleartext-storage-of-sensitive-information] counts of deleted rows, not credentials
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted);
+            // The per-type breakdown is logged by ChangeHistoryServer on every cleanup, scheduled or manual,
+            // and returned in the response below; repeating it here only duplicated the line.
+            _logger.LogInformation("Manual history cleanup completed");
 
             var response = new HistoryCleanupResponse
             {
@@ -82,7 +79,6 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 ActivitiesDeleted = result.ActivitiesDeleted,
                 ConfigurationChangeActivitiesDeleted = result.ConfigurationChangeActivitiesDeleted,
                 SecurityEventActivitiesDeleted = result.SecurityEventActivitiesDeleted,
-                InitialPasswordWorkRecordsDeleted = result.InitialPasswordWorkRecordsDeleted,
                 PasswordEventActivitiesDeleted = result.PasswordEventActivitiesDeleted,
                 PasswordQueueRecordsDeleted = result.PasswordQueueRecordsDeleted,
                 OldestRecordDeleted = result.OldestRecordDeleted,
@@ -91,7 +87,6 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 RetentionPeriodDays = (int)(asOf - cutoffs.General).TotalDays,
                 ConfigurationChangeRetentionPeriodDays = (int)(asOf - cutoffs.ConfigurationChange).TotalDays,
                 SecurityEventRetentionPeriodDays = (int)(asOf - cutoffs.SecurityEvent).TotalDays,
-                InitialPasswordRetentionPeriodDays = (int)(asOf - cutoffs.InitialPassword).TotalDays,
                 PasswordEventRetentionPeriodDays = (int)(asOf - cutoffs.PasswordEvent).TotalDays,
                 BatchSize = cutoffs.MaxRecordsPerType
             };

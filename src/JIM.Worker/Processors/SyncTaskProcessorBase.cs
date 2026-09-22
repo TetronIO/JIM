@@ -1870,7 +1870,7 @@ public abstract class SyncTaskProcessorBase
                     // Format: "csId|csoTypeName" (e.g. "4|person")
                     csoTypeNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csoTypeName);
                     var detailMessage = provisioningCso.ConnectedSystemId > 0
-                        ? $"{provisioningCso.ConnectedSystemId}|{csoTypeName}"
+                        ? SyncOutcomeBuilder.FormatCsoLinkDetailMessage(provisioningCso.ConnectedSystemId, csoTypeName)
                         : null;
 
                     csNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csName);
@@ -1908,6 +1908,11 @@ public abstract class SyncTaskProcessorBase
                 {
                     // Use ConnectedSystemId directly (nav property may not be set for deferred provisioning CSOs)
                     var peCsId = pendingExport.ConnectedSystemId;
+                    // The target CSO's own type, where known, so the causality panel can name it "type: name"
+                    // exactly as a Provisioned outcome's target already does.
+                    var peCsoTypeName = pendingExport.ConnectedSystemObject?.Type?.Name
+                        ?? (csoTypeNameLookup.TryGetValue(peCsId, out var lookedUpCsoTypeName) ? lookedUpCsoTypeName : null);
+                    var peDetailMessage = SyncOutcomeBuilder.FormatCsoLinkDetailMessage(peCsId, peCsoTypeName);
 
                     ActivityRunProfileExecutionItemSyncOutcome peOutcome;
 
@@ -1919,7 +1924,7 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: provisionedParent.TargetEntityDescription,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString(),
+                            detailMessage: peDetailMessage,
                             stagedChangeType: pendingExport.ChangeType);
                     }
                     else if (exportParent != null)
@@ -1932,7 +1937,7 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString(),
+                            detailMessage: peDetailMessage,
                             stagedChangeType: pendingExport.ChangeType);
                     }
                     else
@@ -1944,7 +1949,7 @@ public abstract class SyncTaskProcessorBase
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
-                            detailMessage: peCsId.ToString(),
+                            detailMessage: peDetailMessage,
                             stagedChangeType: pendingExport.ChangeType);
                     }
 
@@ -1967,14 +1972,24 @@ public abstract class SyncTaskProcessorBase
                         syncRuleName: provisioningSyncRule?.Name);
                 }
 
+                // Standard mode builds no shared csoTypeNameLookup of its own (the Detailed-mode one above is
+                // scoped to that branch), so it is rebuilt here from the same export evaluation cache.
+                var standardCsoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystemObjectType != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+
                 foreach (var pe in result.PendingExports)
                 {
+                    var peCsoTypeName = pe.ConnectedSystemObject?.Type?.Name
+                        ?? standardCsoTypeNameLookup.GetValueOrDefault(pe.ConnectedSystemId);
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
                         SyncOutcomeTypes.ForPendingExport(pe),
                         targetEntityId: pe.Id,
                         targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
                         detailCount: pe.AttributeValueChanges.Count,
-                        detailMessage: pe.ConnectedSystemId.ToString(),
+                        detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pe.ConnectedSystemId, peCsoTypeName),
                         stagedChangeType: pe.ChangeType);
 
                     await SnapshotPendingExportChangesAsync(peOutcome, pe);
@@ -1989,9 +2004,11 @@ public abstract class SyncTaskProcessorBase
         // of a system whose Rules split their Object Types across disjoint scopes.
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
+            var outOfScopeWorkingSet = new ExportEvaluationWorkingSet();
             var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
-                _exportEvaluationCache!);
+                _exportEvaluationCache!,
+                outOfScopeWorkingSet);
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
             // always reference a CSO) so the stale Delete Pending Export cancellation at the page flush
@@ -1999,6 +2016,36 @@ public abstract class SyncTaskProcessorBase
             foreach (var deprovisionPendingExport in deprovisionPendingExports)
             {
                 _deprovisionedCsoIdsThisPage.Add(deprovisionPendingExport.ConnectedSystemObjectId!.Value);
+            }
+
+            // Provisioning cancellations: a never-exported Pending Provisioning CSO this
+            // object fell out of scope for. There is no deletion outcome to nest under here (the Metaverse
+            // Object itself is not being deleted), so each is a root outcome on the object's own item,
+            // alongside the Pending Export outcomes above.
+            if (outOfScopeWorkingSet.CancelledProvisionings.Count > 0
+                && _syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None
+                && _mvoIdToRpei.TryGetValue(mvo.Id, out var scopeOutRpei))
+            {
+                var csNameLookup = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystem != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name);
+                var csoTypeNameLookup = _exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystemObjectType != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name);
+
+                foreach (var cancellation in outOfScopeWorkingSet.CancelledProvisionings)
+                {
+                    csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
+                    csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
+                    SyncOutcomeBuilder.AddRootOutcome(scopeOutRpei,
+                        ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                        targetEntityDescription: targetSystemName,
+                        detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, cancelledCsoTypeName));
+                }
             }
         }
     }
@@ -2680,39 +2727,13 @@ public abstract class SyncTaskProcessorBase
                 }
             }
 
-            // Batch-delete existing Pending Exports from DB before export evaluation.
-            // During cross-page resolution, PEs from earlier pages have been flushed to DB.
-            // Without this, each MVO's export evaluation hits GetPendingExportByConnectedSystemObjectIdAsync
-            // individually (N+1 problem, ~1.9s per group PE due to heavy Include chains).
-            // By deleting them in one batch query, the DB fallback finds nothing and evaluation
-            // creates fresh PEs with the fully-resolved reference attributes.
-            if (_pendingExportEvaluations.Count > 0 && _exportEvaluationCache != null)
-            {
-                // Refresh per-page cache for this batch's MVOs so CsoLookup has the target CSOs
-                var mvoIds = _pendingExportEvaluations.Select(e => e.Mvo.Id).ToHashSet();
-                await _syncServer.RefreshExportEvaluationCacheForPageAsync(
-                    _exportEvaluationCache, mvoIds);
-
-                var targetCsoIds = _exportEvaluationCache.CsoLookup
-                    .Where(kvp => mvoIds.Contains(kvp.Key.MvoId))
-                    .Select(kvp => kvp.Value.Id)
-                    .Distinct()
-                    .ToList();
-
-                if (targetCsoIds.Count > 0)
-                {
-                    // Use raw SQL delete by CSO IDs instead of loading PE entities into the change
-                    // tracker. After ClearChangeTracker(), loading PEs with Include chains would create
-                    // MetaverseAttribute instances that conflict with instances already tracked by the
-                    // cross-page CSO query, causing identity resolution failures.
-                    var deletedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
-                    if (deletedCount > 0)
-                    {
-                        Log.Information("ResolveCrossPageReferences: Batch-deleted {Count} existing Pending Exports " +
-                            "from earlier pages before re-evaluation with resolved references", deletedCount);
-                    }
-                }
-            }
+            // The target objects' existing Pending Exports are deliberately left in place for the
+            // re-evaluation below. The per-object staging path finds each one itself (a lean lookup
+            // since #986) and decides what it means: an unsent Create is rebuilt as a Create carrying
+            // the resolved references, an exported one has the changes appended, a pending Update is
+            // merged. This pass once batch-deleted them first, to dodge that lookup, which made every
+            // Pending Provisioning object look like one whose Create had already been sent: the
+            // re-evaluation then staged an Update for an object that did not exist yet (Scenario 8).
 
             resolvedCount += batch.Count;
 
@@ -2777,7 +2798,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Flush this batch (same sequence as per-page processing)
                 await PersistPendingMetaverseObjectsAsync();
-                await CreatePendingMvoChangeObjectsAsync();
+                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
                 EvaluateQueuedDrift();
                 await EvaluatePendingExportsAsync();
                 await FlushPendingExportOperationsAsync();
@@ -3436,6 +3457,12 @@ public abstract class SyncTaskProcessorBase
         // the same Pending Export cannot be re-staged on a later page.
         await ReportDeletionCascadeExportsAsync(deletePendingExports, deletionCandidatesByCsoId, deletionCandidatesByMvoId);
 
+        // Provisioning cancellations: every never-exported Pending Provisioning CSO this
+        // flush's evaluation withdrew, reported as a child of the Metaverse Object deletion that caused it.
+        // Runs unconditionally, unlike the delete-export reporting above: a page can cancel provisioning for
+        // objects with zero delete exports staged.
+        ReportCancelledProvisionings(exportEvaluationWorkingSet);
+
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
         // change, the unchanged-skip means no sync re-evaluates them, and a target without
@@ -3564,6 +3591,16 @@ public abstract class SyncTaskProcessorBase
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
             ?? new Dictionary<int, string>();
 
+        // Connected System id to CSO type name, the approximate ("first exporting rule's type per system")
+        // fallback used everywhere else in this file; the standalone branch below prefers the exact type off
+        // the CSO's own display snapshot where it has already paid for one.
+        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystemObjectType != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
+            ?? new Dictionary<int, string>();
+
         // Only needed for the standalone fallback items, which must stay self-describing once the target
         // Connected System Object is obsoleted and cleaned up. One Summary-tier lookup covers them all.
         Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>? csoSnapshots = null;
@@ -3589,6 +3626,7 @@ public abstract class SyncTaskProcessorBase
             }
 
             csNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var targetCsName);
+            csoTypeNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var cascadeCsoTypeName);
 
             if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
             {
@@ -3597,7 +3635,7 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(pendingExport.ConnectedSystemId, cascadeCsoTypeName),
                     stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
                 // The deletion item's id is assigned here where missing, because the RPEI flush that would
@@ -3633,7 +3671,8 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
-                    detailMessage: pendingExport.ConnectedSystemId.ToString(),
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(
+                        pendingExport.ConnectedSystemId, snapshot?.TypeName ?? cascadeCsoTypeName),
                     stagedChangeType: pendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
                 cascadeEffectOutcome = cascadeOutcome;
@@ -3666,6 +3705,69 @@ public abstract class SyncTaskProcessorBase
             reportableExports.Count, reportableExports.Select(e => e.PendingExport.ConnectedSystemId).Distinct().Count(),
             nestedCount, standaloneCount);
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Reports the provisioning cancellations <see cref="FlushPendingMvoDeletionsAsync"/>'s evaluation made:
+    /// a Connected System Object still Pending Provisioning with an unsent Create had that
+    /// Create and the Connected System Object itself removed, because nothing was ever exported. Each is
+    /// reported as a ProvisioningCancelled child of the deleted Metaverse Object's MvoDeleted outcome, so the
+    /// Causality Tree shows the deletion and every consequence of it in one place, exactly as the delete
+    /// Pending Export cascade does.
+    /// </summary>
+    /// <param name="workingSet">The flush's working set, carrying every cancellation the bulk evaluation and
+    /// (where it ran) the per-MVO fallback made.</param>
+    private void ReportCancelledProvisionings(ExportEvaluationWorkingSet workingSet)
+    {
+        if (workingSet.CancelledProvisionings.Count == 0)
+            return;
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
+
+        // Connected System id to name, matching how ReportDeletionCascadeExportsAsync resolves the same thing.
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
+            ?? new Dictionary<int, string>();
+        var csoTypeNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystemObjectType != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemObjectType!.Name)
+            ?? new Dictionary<int, string>();
+
+        var reportedCount = 0;
+        foreach (var cancellation in workingSet.CancelledProvisionings)
+        {
+            if (!mvoDeletedNodes.TryGetValue(cancellation.MetaverseObjectId, out var mvoDeletedNode))
+            {
+                // No MvoDeleted node exists to hang this off (outcome tracking recorded none for this MVO, or
+                // the deletion path that made it recorded none). Unlike a genuinely staged delete Pending
+                // Export, there is nothing here that must be visible even standalone: nothing was exported and
+                // nothing is queued, so a standalone item would only announce that a removal is not the case.
+                Log.Warning(
+                    "ReportCancelledProvisionings: No MvoDeleted outcome node found for MVO {MvoId}; the cancelled " +
+                    "provisioning of CSO {CsoId} in system {SystemId} will not be reported on the Activity",
+                    cancellation.MetaverseObjectId, cancellation.ConnectedSystemObjectId, cancellation.ConnectedSystemId);
+                continue;
+            }
+
+            csNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var targetSystemName);
+            csoTypeNameLookup.TryGetValue(cancellation.ConnectedSystemId, out var cancelledCsoTypeName);
+            SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
+                ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
+                targetEntityDescription: targetSystemName,
+                detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(cancellation.ConnectedSystemId, cancelledCsoTypeName));
+            reportedCount++;
+        }
+
+        Log.Information(
+            "FlushPendingMvoDeletionsAsync: Reported {Count} provisioning cancellation(s) on the Activity, nested under their MVO deletion",
+            reportedCount);
     }
 
     /// <summary>
@@ -3836,7 +3938,10 @@ public abstract class SyncTaskProcessorBase
                     targetEntityId: stagedPendingExport.Id,
                     targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
-                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString(),
+                    // snapshot.TypeName is the recalled object's own type, already loaded above for
+                    // ObjectTypeSnapshot: an exact value rather than the approximate per-system lookup used
+                    // where no snapshot of the specific CSO is already in hand.
+                    detailMessage: SyncOutcomeBuilder.FormatCsoLinkDetailMessage(stagedPendingExport.ConnectedSystemId, snapshot?.TypeName),
                     stagedChangeType: stagedPendingExport.ChangeType);
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
                 effectOutcome = recallOutcome;
@@ -3941,7 +4046,11 @@ public abstract class SyncTaskProcessorBase
     /// Called at page boundary after MVOs are persisted (so IDs are available).
     /// Respects the MVO change tracking feature flag.
     /// </summary>
-    protected async Task CreatePendingMvoChangeObjectsAsync()
+    /// <param name="activeSyncRules">The active Synchronisation Rules for this Connected System (already
+    /// loaded by the caller). Seeds the contributor-name cache so resolving a value contributed by one of
+    /// them never reaches the database; a surviving contributor from another Connected System (after a
+    /// recall or re-election) falls back to one batched repository lookup instead (#1519 follow-up).</param>
+    protected async Task CreatePendingMvoChangeObjectsAsync(List<SyncRule> activeSyncRules)
     {
         if (_pendingMvoChanges.Count == 0)
             return;
@@ -3956,6 +4065,17 @@ public abstract class SyncTaskProcessorBase
 
         using var span = Diagnostics.Sync.StartSpan("CreatePendingMvoChangeObjects");
         span.SetTag("changeCount", _pendingMvoChanges.Count);
+
+        // Newly-created MetaverseObjectAttributeValue rows carry only ContributedBySyncRuleId (#1519 defect:
+        // the ContributedBySyncRule navigation is never populated for a value the engine just built), so
+        // AddAttributeValueChange cannot read a name from it. Seed the cache from the rules this run already
+        // holds in memory, then resolve whatever remains (typically nothing, occasionally a surviving
+        // contributor from another Connected System) with a single batched query for the whole page.
+        var syncRuleNameCache = new SyncRuleNameResolverCache(_syncRepo, activeSyncRules);
+        await syncRuleNameCache.WarmAsync(_pendingMvoChanges
+            .SelectMany(pending => pending.Additions.Concat(pending.Removals))
+            .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+            .Select(av => av.ContributedBySyncRuleId!.Value));
 
         foreach (var (mvo, additions, removals, changeType, rpei, existingMvoChangeId) in _pendingMvoChanges)
         {
@@ -3980,13 +4100,13 @@ public abstract class SyncTaskProcessorBase
             // Create attribute change records for additions
             foreach (var addition in additions)
             {
-                change.AddAttributeValueChange(addition, ValueChangeType.Add);
+                change.AddAttributeValueChange(addition, ValueChangeType.Add, syncRuleNameCache.Resolve);
             }
 
             // Create attribute change records for removals
             foreach (var removal in removals)
             {
-                change.AddAttributeValueChange(removal, ValueChangeType.Remove);
+                change.AddAttributeValueChange(removal, ValueChangeType.Remove, syncRuleNameCache.Resolve);
             }
 
             // Route to the appropriate persistence queue based on whether the parent

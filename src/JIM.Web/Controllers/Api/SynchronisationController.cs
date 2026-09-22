@@ -102,10 +102,8 @@ public class SynchronisationController(
         var pendingExportCount = await _application.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
         var objectCount = await _application.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
         var configurationDrift = await _application.ConfigurationDrift.GetConnectedSystemDriftAsync(connectedSystemId);
-        var initialPasswordAttention = await _application.InitialPasswords.GetAttentionByConnectedSystemAsync([connectedSystemId]);
 
-        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift,
-            initialPasswordAttention.GetValueOrDefault(connectedSystemId) ?? new InitialPasswordAttention()));
+        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift));
     }
 
     /// <summary>
@@ -784,6 +782,34 @@ public class SynchronisationController(
         return Ok(ConnectedSystemObjectDetailDto.FromDetailResult(result));
     }
 
+    /// <summary>
+    /// Preview what synchronising a Connected System Object would do
+    /// </summary>
+    /// <remarks>
+    /// Nothing is changed: the preview evaluates the inbound chain (scope, join or projection, Attribute
+    /// Flow) and the outbound decisions the resulting Metaverse Object state would produce, and returns
+    /// what a real synchronisation would do without staging or persisting anything. Where the object would
+    /// fall out of scope and disconnect, the preview also walks the destructive cascade: whether the
+    /// Metaverse Object would be deleted or scheduled for deletion, and which downstream Connected System
+    /// Objects would be deprovisioned.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="id">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <response code="200">The preview, including any blocking errors it surfaced.</response>
+    /// <response code="404">No such Connected System Object.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space/{id:guid}/sync-preview", Name = "GetConnectedSystemObjectSyncPreview")]
+    [ProducesResponseType(typeof(SyncPreviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectSyncPreviewAsync(int connectedSystemId, Guid id)
+    {
+        _logger.LogTrace("Requested Sync Preview for object {ObjectId} in Connected System: {SystemId}", id, connectedSystemId);
+        var result = await _application.SyncPreview.PreviewSyncForCsoAsync(connectedSystemId, id);
+        if (result.Errors.Any(e => e.Code == SyncPreviewMessageCode.ObjectNotFound))
+            return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in Connected System {connectedSystemId}."));
+
+        return Ok(SyncPreviewResponse.FromModel(result));
+    }
 
     /// <summary>
     /// Get the password policy JIM discovered on a Connected System
@@ -795,8 +821,9 @@ public class SynchronisationController(
     /// Every field is nullable, and a null means JIM could not read that rule rather than that no such rule
     /// exists: a directory withholds what a caller may not see by omitting it rather than refusing. Check
     /// `hasAnyDiscoveredConstraint` before treating the figures as a description of what the system will accept.
-    /// Where the domain has policies applying to only some accounts, the figures are a floor rather than a
-    /// guarantee; `fineGrainedPolicySignal` says which case this is.
+    /// Where the directory has policies applying to only some accounts, the figures are a floor rather than a
+    /// guarantee; `policyOverrideSignal` says which case this is. `discoveryOutcome` says why nothing was read
+    /// when nothing was, and `furtherChecksApply` whether the directory applies checks JIM cannot see.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <response code="200">The discovered policy, or an empty one where nothing has been discovered.</response>
@@ -1078,7 +1105,7 @@ public class SynchronisationController(
     /// <response code="202">A wait applied and ran out with the account still Queued or Delivering. The body carries what is known; delivery continues.</response>
     /// <response code="400">The password was empty, `wait` is outside 0 to 30, or the Connector cannot set passwords.</response>
     /// <response code="403">The transport is not one JIM will carry a password over.</response>
-    /// <response code="404">No such Connected System, no such object within it, or the object is not joined to a Metaverse Object, so there is no person whose password this would be.</response>
+    /// <response code="404">No such Connected System, no such object within it, or the object is not joined to a Metaverse Object, so there is no Metaverse Object whose password this would be.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/password", Name = "SetConnectedSystemObjectPassword")]
     [RequireSecureTransport]
@@ -1126,7 +1153,7 @@ public class SynchronisationController(
         if (connectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
         {
             return NotFound(ApiErrorResponse.NotFound(
-                $"Connected System Object {csoId} is not joined to a Metaverse Object, so there is no person whose password this would be. Join it to one first."));
+                $"Connected System Object {csoId} is not joined to a Metaverse Object, so there is no Metaverse Object whose password this would be. Join it to one first."));
         }
 
         var metaverseObject = await _application.Metaverse.GetMetaverseObjectAsync(metaverseObjectId);

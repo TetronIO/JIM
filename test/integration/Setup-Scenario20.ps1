@@ -6,8 +6,10 @@
     Setup for Scenario 20: Password Synchronisation
 
 .DESCRIPTION
-    Builds the substrate Scenario 20 asserts against: accounts provisioned into Samba AD, enabled, and holding a
-    password the scenario knows, with Password Synchronisation configured on the directory but switched OFF.
+    Builds the substrate Scenario 20 asserts against: accounts provisioned into the chosen directory, enabled, and
+    holding a password the scenario knows, with Password Synchronisation configured on the directory but switched
+    OFF. Works against Samba AD or OpenLDAP; see Setup-Scenario17.ps1 for which directory-specific behaviours are
+    gated and which are caveats.
 
     Two pieces, and the second is the whole point of this script:
 
@@ -18,17 +20,17 @@
          cleanly. Active Directory answers a correct password on a must-change account with the same result code
          as a wrong one (49), distinguished only by a sub-code, so leaving the accounts must-change would make
          "the old password no longer works" and "the old password works and needs changing" harder to tell apart
-         than they need to be. The synchronised password is the variable under test; nothing else should be.
+         than they need to be. The synchronised password is the variable under test; nothing else should be. This
+         is also why Setup-Scenario20 asks for NeverExpires rather than RequireChangeAtNextSignIn regardless of
+         directory: the latter is the one Active Directory-only behaviour Setup-Scenario17.ps1 actually gates on
+         Samba AD, so requesting it here would fail this setup on OpenLDAP for a reason unrelated to what this
+         scenario asserts.
 
       2. Password Synchronisation configured on the directory, and deliberately DISABLED. Configured-but-off is
          the state requirement 2 is about: the system accumulates queued password changes rather than discarding
          them, and switching it on delivers what accumulated (requirement 3). Starting the scenario there means
          its first assertions run against the harder half of the behaviour, and enabling the system mid-scenario
          is a real drain rather than a no-op.
-
-    Samba AD only, for the reason Setup-Scenario17.ps1 gives: provisioning enables the account as the Initial
-    Password lands, which is an Active Directory operation. An account left disabled cannot be signed in as, and
-    signing in is how this scenario proves a password arrived.
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -80,13 +82,6 @@ $ConfirmPreference = 'None'
 
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
-}
-
-if ($DirectoryConfig.UserObjectClass -ne "user") {
-    throw "Scenario 20 requires Samba AD. Provisioning enables each account as its Initial Password lands, which " +
-          "is an Active Directory operation with no equivalent on $($DirectoryConfig.ConnectedSystemName); an " +
-          "account left disabled cannot be signed in as, and signing in is how this scenario proves a " +
-          "synchronised password arrived."
 }
 
 Write-TestSection "Scenario 20 Setup: Password Synchronisation"

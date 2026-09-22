@@ -261,6 +261,16 @@ public partial class SyncRepository
                 await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
+            if (v.ContributedBySyncRule?.Id is { } contributedBySyncRuleId)
+                await writer.WriteAsync(contributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer);
+            else if (v.ContributedBySyncRuleId.HasValue)
+                await writer.WriteAsync(v.ContributedBySyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.ContributedBySyncRuleName is not null)
+                await writer.WriteAsync(v.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

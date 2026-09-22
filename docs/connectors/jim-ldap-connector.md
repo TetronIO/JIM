@@ -12,9 +12,10 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 |-----------|-------|
 | **Microsoft Active Directory (AD DS)** | Full support including USN-based delta import, userAccountControl, FILETIME dates, and binary attributes (objectGUID, objectSid) |
 | **Active Directory Lightweight Directory Services (AD LDS)** | Full support with AD-specific features |
-| **OpenLDAP** | Full support including parallel import, changelog-based delta import, and RFC 4512 schema discovery |
+| **OpenLDAP** | Full support including parallel import, accesslog-based delta import, and RFC 4512 schema discovery |
 | **Samba AD** | Full support with Active Directory compatibility |
-| **Other RFC 4512-compliant directories** (for example 389 Directory Server) | Supported via generic LDAP mode with automatic directory type detection |
+| **389 Directory Server** | Detected from the root DSE vendor name "389 Project", or a vendor version beginning "389-Directory". Behaves as a generic directory (`entryUUID` identity, `cn=changelog` delta import, paged results, parallel import) except that JIM reads its password policy; see [Password policy discovery](#password-policy-discovery) |
+| **Other RFC 4512-compliant directories** | Supported via generic LDAP mode with automatic directory type detection |
 
 JIM automatically detects the directory type during schema discovery by inspecting the Root DSE and adjusts its behaviour accordingly. No manual directory type configuration is required.
 
@@ -25,8 +26,9 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Full Import**<br /> Reads all objects from selected partitions and object types.
 - **Delta Import**<br /> Imports only changes since the last import run.
     - **Active Directory**<br /> Uses USN (Update Sequence Number) change tracking. USNs are only meaningful when read back against the same domain controller that issued them, so JIM also records the domain controller's identity (its invocationId, falling back to its hostname where an invocationId is not available for comparison) and verifies it on every Delta Import before querying for changes. If the pinned domain controller changed since the last run, or was restored from backup, the Delta Import fails fast with an error naming what changed rather than silently skipping or re-importing changes. See [Domain Controller Discovery and Pinning](#domain-controller-discovery-and-pinning) and [Delta import fails with a domain controller mismatch error](#delta-import-fails-with-a-domain-controller-mismatch-error) below.
-    - **OpenLDAP**<br /> Uses the accesslog overlay.
-    - **Generic directories**<br /> Uses a standard changelog (`cn=changelog`), where the directory provides one.
+    - **OpenLDAP**<br /> Uses the accesslog overlay (`cn=accesslog`).
+    - **389 Directory Server and generic directories**<br /> Uses the directory's changelog: the one its root DSE advertises (the `changelog` attribute, together with `firstChangeNumber` and `lastChangeNumber`), otherwise `cn=changelog`. Where the root DSE advertises the last change number, JIM takes its watermark from it rather than reading the changelog to find it. 389 Directory Server publishes a changelog only once its Retro Changelog plug-in is enabled, and grants read on it to nobody but the Directory Manager by default. If the changelog has been trimmed past the last import's watermark (the plug-in's maximum age), the Delta Import fails fast naming the gap rather than silently skipping the trimmed changes.
+    - **Every directory type**<br /> Before it queries a single change, a Delta Import confirms that the account JIM connects as can read where the directory keeps its changes: the domain's Deleted Objects container for Active Directory and Samba AD, `cn=accesslog` for OpenLDAP, the changelog for the rest. A proven inability ends the run as Failed with error, naming the cause and the remedy; the same check runs at Schema Discovery and on the schema refresh preview, where it is a warning. A directory whose change source could not be read at the time of the last import has no watermark; the next Delta Import then performs a Full Import instead, says so in its warning, and records the watermark. See [Delta Import change source checks](../configuration/activities.md#delta-import-change-source-checks).
 - **Parallel imports**<br /> Configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously.
 - **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
 - **Configurable search timeout**<br /> Control how long to wait for LDAP search results.
@@ -62,7 +64,7 @@ The Connected System's **Details** tab shows a **Directory Capabilities** card w
 
 | Fact | Shown when |
 |------|------------|
-| Directory Type | Always, once detected (Active Directory, Samba AD, OpenLDAP, or Generic) |
+| Directory Type | Always, once detected (Active Directory, Samba AD, OpenLDAP, 389 Directory Server, or Generic) |
 | Vendor | The directory reported one |
 | DNS Host Name | The directory reported one |
 | Paging | Always, once detected (Supported / Not Supported; Samba AD reports Not Supported, see [Supported Directories](#supported-directories)) |
@@ -180,7 +182,7 @@ Administrators often do not know which domain controller to enter in Preferred D
 
 Discovery only ever informs; it never writes to the setting on its own. Preferred Domain Controller remains ordinary free text throughout, and nothing changes until you click a discovered server (or type a value yourself) and save the Connected System's settings.
 
-The action is enabled once the connectivity settings above (Host, Port, Username, Password) are filled in; you do not need to have saved them first, so a system can be configured and its domain controllers discovered in one sitting. Discovery is only supported for Active Directory and Samba AD; for OpenLDAP or Generic directories, which have no concept of Sites, the dialog reports that discovery is not supported and you can simply type a hostname instead. Discovery works by querying the forest's `CN=Sites,CN=Configuration` hierarchy, so it uses the same credentials already configured for this Connected System and needs no extra directory permissions or DNS lookups. If the directory cannot be reached, or the credentials are refused, the dialog shows the failure with a Retry action rather than crashing the page.
+The action is enabled once the connectivity settings above (Host, Port, Username, Password) are filled in; you do not need to have saved them first, so a system can be configured and its domain controllers discovered in one sitting. Discovery is only supported for Active Directory and Samba AD; for OpenLDAP, 389 Directory Server or Generic directories, which have no concept of Sites, the dialog reports that discovery is not supported and you can simply type a hostname instead. Discovery works by querying the forest's `CN=Sites,CN=Configuration` hierarchy, so it uses the same credentials already configured for this Connected System and needs no extra directory permissions or DNS lookups. If the directory cannot be reached, or the credentials are refused, the dialog shows the failure with a Retry action rather than crashing the page.
 
 The same discovery is available beyond the portal:
 
@@ -207,7 +209,7 @@ For Active Directory and Samba AD, JIM connects to a single, consistent domain c
 
 **If the pinned domain controller becomes unavailable:** the Run Profile execution fails outright rather than silently failing over mid-run, and the pin is cleared. The next Run Profile execution resolves via Host again, discovers whichever domain controller answers, and re-pins to it. Because that may be a different domain controller than before, a Full Import is needed to re-establish the Delta Import baseline; see [Delta import fails with a domain controller mismatch error](#delta-import-fails-with-a-domain-controller-mismatch-error).
 
-Pinning only applies to Active Directory and Samba AD; OpenLDAP and other generic directories are unaffected.
+Pinning only applies to Active Directory and Samba AD; OpenLDAP, 389 Directory Server and generic directories are unaffected.
 
 ### Multi-domain forests
 
@@ -288,7 +290,7 @@ See [Stating Container Scope as text](../configuration/connected-systems.md#stat
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| Username | Service account username for connecting to the directory. | `corp\svc-jim-ldap` |
+| Username | Service account username for connecting to the directory. | `corp\svc-jim-ldap` (Active Directory), `cn=svc-jim,ou=Services,dc=example,dc=com` (OpenLDAP) |
 | Password | Service account password (stored encrypted). | *(encrypted)* |
 | Authentication Type | Type of authentication: Simple or NTLM. | `Simple` |
 
@@ -297,7 +299,7 @@ See [Stating Container Scope as text](../configuration/connected-systems.md#stat
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Search Timeout | Maximum time in seconds to wait for LDAP search results. | `300` (5 minutes) |
-| Import Concurrency | Number of parallel LDAP connections for OpenLDAP/generic directory imports. Each connection handles one container and object type combination independently. Not used for Active Directory. | `4` |
+| Import Concurrency | Number of parallel LDAP connections for OpenLDAP, 389 Directory Server and generic directory imports. Each connection handles one container and object type combination independently. Not used for Active Directory. | `4` |
 
 ### Retry Settings
 
@@ -330,6 +332,8 @@ Automation sees the same default. `Get-JIMConnectedSystemObjectType` omits inter
 |---------|-------------|---------|
 | Skip Hidden Partitions | Skip Configuration, Schema, and DNS zone partitions when refreshing the hierarchy. Improves performance significantly. | `true` |
 | Create Containers as Needed | Automatically create OUs when provisioning objects to locations that do not yet exist. | `false` |
+
+A naming context or crossRef partition the service account cannot read (a least-privilege account bound against an OpenLDAP server hosting several suffixes, say) is skipped rather than failing the whole hierarchy import, and named in the Worker log alongside the LDAP result code so you can tell which partition to grant access to. Only every naming context being unreadable fails the import outright.
 
 ### Export Settings
 
@@ -436,9 +440,20 @@ Active Directory decides for itself regardless. It refuses a password write unle
 
 Active Directory and Samba AD use `unicodePwd`, which the Connector encodes correctly on your behalf.
 
-**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the domain password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
+**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the directory's password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
 
 There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
+
+### Password policy discovery
+
+Whenever JIM retrieves or refreshes the schema, and again when the Password Channel preflight runs, the Connector reads the directory's password policy so a generated password satisfies it. [Passwords](../concepts/passwords.md#discovering-the-targets-rules) explains what the figures mean and how to read a blank one; this section says where each directory type keeps its policy, what JIM reads from it, and how it decides that some objects may be governed by a different policy. Discovery never fails a schema refresh: where a search is refused or returns nothing, the Connector records why and the panel says so.
+
+- **Active Directory and Samba AD**<br /> The domain policy is read from the domain root (the root DSE's `defaultNamingContext`): `minPwdLength`, `pwdHistoryLength`, `maxPwdAge`, `minPwdAge`, and the complexity flag in `pwdProperties`, which JIM reports as three of five character classes. Fine-Grained Password Policies are detected, not read, by searching the Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`): any result means some exist, an empty result means JIM could not tell, and only a domain whose functional level is below Windows Server 2008 (where they cannot exist) is reported as having none.
+- **OpenLDAP**<br /> The policy is the `ppolicy` overlay's, and JIM looks for it only when the root DSE advertises the password policy request control (`1.3.6.1.4.1.42.2.27.8.5.1`) in `supportedControl`; without it the directory is reported as publishing no policy. JIM reads the overlay's configuration under `cn=config` (the `olcOverlay=ppolicy` entries, whose `olcPPolicyDefault` names the default policy entry and whose `olcPPolicyCheckModule` names a check module), then the `pwdPolicy` entries under the first user naming context: `pwdMinLength`, `pwdInHistory`, `pwdMaxAge` and `pwdMinAge` (the ages in seconds, shown as days). A value of zero means the rule is off and shows as blank; required character classes are not published. When the overlay's configuration cannot be read and exactly one `pwdPolicy` entry exists, that entry is the policy; when several exist, JIM cannot know which is the default and reports the configuration as not readable. No `pwdPolicy` entry at all is reported as no policy configured. The directory applies further checks JIM cannot see when `pwdCheckQuality` is 1 or 2 and a check module is named (`pwdCheckModule` on the policy, or `olcPPolicyCheckModule` on the overlay); when the overlay configuration could not be read, `pwdCheckQuality` alone decides. Overrides: any entry carrying `pwdPolicySubentry`, more than one `pwdPolicy` entry, or two databases with different default policies means some exist; an empty probe or a refused search means JIM could not tell.
+- **389 Directory Server**<br /> The global policy is read from `cn=config`, honouring the switches that gate each rule: `passwordMinLength` and `passwordMinCategories` only when `passwordCheckSyntax` is on (more than one category is reported as complexity required, counted over 389's five classes: upper, lower, digit, special and 8-bit), `passwordInHistory` only when `passwordHistory` is on, `passwordMaxAge` only when `passwordExp` is on, and `passwordMinAge` when it is above zero; the ages are in seconds. The directory applies further checks JIM cannot see when syntax checking is on and any of `passwordDictCheck`, `passwordPalindrome`, `passwordMaxRepeats`, `passwordMaxSequence`, `passwordMaxSeqSets`, `passwordMaxClassChars`, `passwordMinDigits`, `passwordMinAlphas`, `passwordMinUppers`, `passwordMinLowers`, `passwordMinSpecials`, `passwordMin8Bit` or `passwordMinTokenLength` is set. Overrides are subtree and per-object policies, probed in each user naming context (up to five) for an `nsPwPolicyContainer` entry or an entry carrying `pwdpolicysubentry`: a result means some exist; an empty result, a refused search or an administrative limit on an unindexed search means JIM could not tell. 389 offers no way to prove that none exist. If `cn=config` cannot be read, the configuration is reported as not readable and the override answer is could not tell.
+- **Generic directories**<br /> No policy is read; the directory is reported as publishing none.
+
+Discovery costs at most three searches per directory type, so it adds nothing you will notice to a schema refresh.
 
 ### Service Account Permissions
 
@@ -447,13 +462,110 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For import only**<br /> Grant read access to the containers and attributes that JIM needs to import.
 - **For export (provisioning)**<br /> Grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
 - **For container provisioning**<br /> If "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
-- **For delta import**<br /> The service account needs read access to the directory's change tracking mechanism (USN attributes for AD, accesslog for OpenLDAP).
+- **For delta import**<br /> The service account needs read access to where the directory keeps its record of changes: the `uSNChanged` attribute for Active Directory and Samba AD (ordinary read access covers it), `cn=accesslog` for OpenLDAP (the access-control rule under [OpenLDAP](#openldap) below), and the changelog for 389 Directory Server and generic directories (`cn=changelog`, or the DN the root DSE's `changelog` attribute names; on 389 Directory Server an ACI on `cn=changelog` granting the account read, search and compare, since the Retro Changelog plug-in grants it to nobody but the Directory Manager). JIM checks this read at Schema Discovery, where a missing right is a warning, and before every Delta Import, where it is a refusal rather than a run that imports nothing.
+- **For importing deletions (Active Directory)**<br /> A Delta Import finds deletions by searching `CN=Deleted Objects,<domain DN>` with the Show Deleted Objects control, so the service account needs **List Contents**, **Read Property** and **Read Permissions** over that container. No delegation on an OU reaches it: its permissions are protected from inheritance and its owner is SYSTEM, so even a domain administrator has to take ownership before granting anything. Withholding this read is not refused by the directory: the search succeeds and returns nothing. JIM does not take that silence at face value: it reads the container's own permissions at Schema Discovery and before every Delta Import, and Read Permissions is what lets that check give a definite answer rather than could not tell. See [Active Directory](#active-directory) below for what JIM does with the answer and for the grant.
 - **For setting passwords**<br /> Grant the **Reset Password** permission on the containers JIM manages. In Active Directory this is a control access right, delegated on the OU (Delegate Control, "Reset user passwords and force password change at next logon"), and it is a separate thing from write access to attributes: an account with full write permission on an OU still cannot set a password without it. **The service account does not need to be a Domain Admin**, and should not be.
 - **For checking reset rights**<br /> To answer the reset-rights preflight rather than reporting that it could not tell, the service account also needs read access to the `nTSecurityDescriptor` attribute of accounts in those containers. Reading an object's permissions is normally covered by ordinary read access; where it is not, the check reports an unknown rather than a denial.
-- **For discovering Fine-Grained Password Policies**<br /> Detecting whether any exist requires read access to the domain's Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`), which by default is restricted to Domain Admins. Without it JIM reports that it could not tell, and treats the domain policy it read as a floor. Granting read on that container is optional; it buys a definite answer in the Password Channel panel and nothing else.
+- **For discovering Fine-Grained Password Policies (Active Directory)**<br /> Detecting whether any exist requires read access to the domain's Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`), which by default is restricted to Domain Admins. Without it JIM reports that it could not tell, and treats the domain policy it read as a floor. Granting read on that container is optional; it buys a definite answer in the Password Channel panel and nothing else.
+- **For reading the password policy (389 Directory Server)**<br /> Grant read on `cn=config`, whose `password*` attributes hold the global policy. This is optional, and it buys the policy itself: without it the panel reports the configuration as not readable, the override answer is could not tell, and generated passwords follow JIM's defaults rather than the directory's rules, so a stricter rule parks the Connected System Objects it refuses.
+- **For reading the password policy (OpenLDAP)**<br /> Two optional reads, each buying something different. Read on the policy entry named by `olcPPolicyDefault` (and its siblings) gives JIM the rules themselves. Read on the overlay's configuration under `cn=config` (the `olcOverlay=ppolicy` entries) tells JIM which policy is the default where more than one exists, and whether a check module is configured; without it, a directory with a single policy entry is still read in full, while one with several is reported as not readable.
+- **For a definite answer on policy overrides (OpenLDAP and 389 Directory Server)**<br /> Read access over the objects JIM manages that includes the operational `pwdPolicySubentry` attribute (OpenLDAP) or the policy containers (389) lets JIM report that overrides exist. Neither directory offers a way to prove that none do, so the best answer there is could not tell, and the figures shown remain a floor.
 
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.
+
+The bullets above say what access JIM needs; the two subsections below are the concrete recipes for granting it. Active Directory delegates on a container, through control access rights and inheritable access control entries. OpenLDAP has none of that machinery: permissions come from `olcAccess` rules on the directory's own configuration. The mechanics differ; the goal, least privilege, does not.
+
+#### Active Directory
+
+Bind JIM as a dedicated account, never a Domain Admin. An ordinary user object is enough; JIM needs no rights at all outside the branch it manages.
+
+Grant the access to a **group** and make the account a member of it, rather than granting anything to the account itself. `CN=JIM Connectors,OU=Services,<domain DN>` holding `CN=svc-jim,OU=Services,<domain DN>` is the shape. Replacing the service account, or adding a second one for another Connected System, is then a membership change and the delegation is left alone.
+
+Delegate on the **container at the top of the branch JIM manages**, normally the OU holding the accounts and groups it provisions. Every entry below is inheritable, so objects and containers created later are covered without a second delegation. That inheritance is also what covers moving an object between containers, which needs delete in the source and create in the target.
+
+These are the access control entries, as SDDL. JIM's integration lab runs against exactly these, which is what keeps them honest: they are the lab's own file, published here verbatim.
+
+```text
+--8<-- "test/integration/docker/samba-ad-prebuilt/delegation/jim-ad-delegation.acl"
+```
+
+On Windows, apply them with `dsacls` against the container's DN, naming the delegation group as the trustee. Substitute your own domain and container:
+
+```text
+dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;user"
+dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;group"
+dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;organizationalUnit"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;user"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;group"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;organizationalUnit"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:CA;Reset Password;user"
+```
+
+Leave the `organizationalUnit` lines out unless "Create Containers as Needed" is switched on.
+
+The Delegation of Control wizard is the other route to the same place: run it on the container and grant the group "Create, delete and manage user accounts", "Create, delete and manage groups", and "Reset user passwords and force password change at next logon".
+
+Then grant read over the Deleted Objects container, which is where a Delta Import finds deletions and which no delegation on an OU reaches. Its permissions are protected from inheritance and its owner is SYSTEM, so take ownership first:
+
+```text
+dsacls "CN=Deleted Objects,DC=corp,DC=local" /takeOwnership
+dsacls "CN=Deleted Objects,DC=corp,DC=local" /G "CORP\JIM Connectors:LCRPRC"
+```
+
+List Contents and Read Property are what the tombstone search needs, and JIM only ever reads tombstones. Read Permissions lets the account read the container's own permissions, which is how JIM confirms the grant is in place. Skip this and the directory refuses nothing: the search succeeds and returns nothing. JIM checks rather than trusts that: Schema Discovery, and the schema refresh preview, warn when the account is not allowed to list the container or JIM cannot confirm that it is, and a Delta Import refuses to run when the account is provably not allowed to list it (the Activity says so and names the container), or completes with a warning when JIM cannot confirm. Without Read Permissions the account cannot read the container's own permissions, so JIM can only report that it could not tell; with it, the answer is definite either way.
+
+Read over the Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`) stays optional and is deliberately not in the entries above. Without it JIM reports that it could not tell whether Fine-Grained Password Policies exist, and treats the domain policy as a floor; with it, the Password Channel panel gives a definite answer.
+
+#### OpenLDAP
+
+Bind JIM as a dedicated service account, never the directory's rootDN. Any entry with a `userPassword` attribute can bind; a typical shape is an `organizationalRole` plus `simpleSecurityObject` entry such as `cn=svc-jim,ou=Services,dc=example,dc=com`.
+
+Access is granted to a **group**, not to an individual service account's DN. Create `cn=jim,ou=Services,dc=example,dc=com` (a `groupOfNames`) on each suffix and add the service account(s) allowed to manage that suffix as a `member`. Delegating a new Connected System, or adding a second one against the same suffix, is then a membership change, never an ACL edit. A Connected System that imports more than one partition from the same server (one import scoped across two suffix databases) uses a single service account that is a member of each suffix's group, rather than needing a bespoke rule per suffix for that account; OpenLDAP resolves group membership server-wide, so the group and the ACL that names it can live in different databases.
+
+The access-control and password-policy rules below are exactly what JIM's own integration tests run under, so they are proven working, not illustrative. Two placeholders run through the access-control files: the suffix DN (`__SUFFIX__`, for example `dc=example,dc=com`) and the suffix database's configuration entry (`__DB_DN__`, its `olcDatabase={n}mdb,cn=config` DN, found with `ldapsearch -b cn=config "(olcSuffix=<suffix>)" dn`). The accesslog file's placeholders name the group(s) instead (`__JIM_GROUP_DN__`, `__JIM_GROUP_DN_2__`). The ppolicy overlay file's modify form takes the overlay's own DN (`__OVERLAY_DN__`) rather than `__DB_DN__`: slapd assigns the overlay an ordinal RDN when it is added (`olcOverlay={0}ppolicy,<database DN>`, not the unindexed name used to add it), so a later modify has to address the DN slapd actually assigned, found with `ldapsearch -b '<database DN>' "(objectClass=olcPPolicyConfig)" dn`.
+
+Apply the access-control files bound as the configuration administrator (`cn=admin,cn=config`), since `olcAccess` and `olcOverlay` entries live under `cn=config`; apply the password policy files bound as the suffix's own administrator, since those are ordinary directory entries. Substitute the placeholders in a copy of each file, then apply it with `ldapmodify`.
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-service-account-access.ldif"
+```
+
+Rule `{3}` is what lets JIM create organisational units when "Create Containers as Needed" is enabled; if you always create target OUs by hand, leave the rule out (or leave it unused) without affecting anything else JIM does.
+
+A service account is also subject to the database's search limits, which the rootDN it replaces was not. OpenLDAP applies `olcSizeLimit` (default 500 entries) across a paged search as a whole, so an import of a container holding more than 500 objects stops at the limit with "The size limit was exceeded", whatever page size the Run Profile uses. Exempt the group from the size and time limits on each suffix; every other client keeps the limits you have set:
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-service-account-limits.ldif"
+```
+
+Delta import reads `cn=accesslog` one level deep. Grant that database's own access-control rule too, naming the group(s):
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-accesslog-access.ldif"
+```
+
+OpenLDAP enforces `olcSizeLimit` against non-rootDN clients even with paging controls in play, so a large accesslog query can be truncated silently unless you raise the limit or, as the integration lab does, set it unlimited on the accesslog database. A server hosting only one suffix has only one group: delete the second `by group.exact=... read` clause and its placeholder. Under this rule a suffix administrator can no longer read `cn=accesslog` themselves; that is intended, since only the service accounts that run delta imports need to. An administrator who needs to inspect it can still bind as the accesslog database's own rootDN.
+
+A frontend rule covers what every client, including anonymous ones, needs for ordinary connection setup:
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-frontend-access.ldif"
+```
+
+This set withdraws anonymous read and grants nothing to authenticated users other than the service account: OpenLDAP's own default (`to * by * read`) lets anonymous binds read the whole tree, which these rules deliberately close. If you already have "by users read" style rules for other applications, append them after JIM's rather than replacing JIM's with them, so JIM's `by * none` fallback stays last.
+
+##### Password policy
+
+JIM discovers the `ppolicy` overlay's default policy (see [Password policy discovery](#password-policy-discovery) above) and checks a static Initial Password against it before sending. A password the server still refuses parks with the server's own words, exactly as a policy refusal from Active Directory does. The ppolicy overlay only applies to non-rootDN binders, which is another reason to keep JIM off the rootDN: binding it as the service account is what makes password quality checking, lockout, expiry and history apply to JIM's password writes at all.
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-password-policy.ldif"
+```
+
+```ldif
+--8<-- "test/integration/docker/openldap/acl/jim-ppolicy-overlay.ldif"
+```
 
 ### Network Considerations
 
@@ -484,12 +596,18 @@ If authentication fails with "invalid credentials":
 - Check that the service account password is correct and has not expired.
 - Ensure the service account is not locked out or disabled.
 
+### Import fails with "The size limit was exceeded"
+
+The account JIM binds as is subject to the directory's search size limit, and the container being imported holds more objects than it allows. On OpenLDAP the limit is `olcSizeLimit` (default 500) and it is enforced across a paged search as a whole for every client except the rootDN, so moving JIM from the rootDN to a delegated service account brings the failure with it. Exempt the JIM group on each suffix with the limits file under [Service Account Permissions](#openldap); do not raise the database-wide limit for every client.
+
 ### Delta import not detecting changes
 
 If delta imports return no changes when changes are expected:
 
-- **Active Directory**: verify that the service account has read access to the `uSNChanged` attribute.
-- **OpenLDAP**: verify that the accesslog overlay is configured and the changelog database is accessible.
+- JIM no longer completes a Delta Import that could not read the directory's change source: such a run ends as Failed with error naming the source (the Deleted Objects container, `cn=accesslog`, or the changelog DN) and the remedy, and the schema refresh preview warns of the same gap. Start there; a Delta Import that completes successfully with no changes has read the source and found none.
+- **Active Directory**: verify that the service account has read access to the `uSNChanged` attribute, and that the domain controller it reached is the one that issued the watermark (see the next section).
+- **OpenLDAP**: verify that the accesslog overlay is configured and that the service account may read `cn=accesslog` (the access-control rule under [OpenLDAP](#openldap)).
+- **389 Directory Server and generic directories**: verify that the changelog exists (389 Directory Server: `dsconf <instance> plugin retro-changelog enable`, then restart) and that the service account may read it. A Delta Import whose last import found no readable changelog performs a Full Import, says so, and records the watermark; the Delta Imports after it read the changelog.
 - Run a full import to re-baseline, then test delta import again.
 
 ### Delta import fails with a domain controller mismatch error

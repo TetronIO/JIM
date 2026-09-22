@@ -74,7 +74,12 @@ public enum OutboundStagingOutcome
     /// restaging would misattribute the existing Create export in the causality tree, so nothing is staged.</summary>
     PendingProvisioningChangesIrrelevant,
     /// <summary>The object exists in the target: an Update export carrying only the changed attributes.</summary>
-    UpdateExistingCso
+    UpdateExistingCso,
+    /// <summary>A pending provisioning CSO's Create has already been sent (exported, auto-confirmed away,
+    /// or attempted) and is awaiting confirmation by import: an Update, carrying only the changed
+    /// attributes, that the orchestrator must never send before the Create is confirmed. Never a second
+    /// Create - most connectors reject a Create for an object that already exists.</summary>
+    UpdateExportedProvisioningCso
 }
 
 /// <summary>
@@ -102,5 +107,11 @@ public enum OutboundPreviewEntryKind
     /// <summary>An in-scope staging decision: what export, if any, would be staged against the rule's target.</summary>
     Staging,
     /// <summary>An out-of-scope deprovisioning decision for a joined target object.</summary>
-    Deprovisioning
+    Deprovisioning,
+    /// <summary>
+    /// The target object's provisioning was never exported (still PendingProvisioning, unsent Create), so the
+    /// real run would cancel it outright rather than deprovisioning it: nothing would be staged and nothing
+    /// exists in the target system to remove.
+    /// </summary>
+    ProvisioningCancelled
 }

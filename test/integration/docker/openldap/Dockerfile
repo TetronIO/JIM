@@ -23,5 +23,10 @@ COPY bootstrap/ /ldifs/
 # Bitnami runs .sh scripts in this directory before starting slapd
 COPY scripts/01-add-second-suffix.sh /docker-entrypoint-initdb.d/
 
+# Single-source access-control and password-policy LDIF templates (issue
+# #1715). Also published verbatim in docs/connectors/jim-ldap-connector.md as
+# the customer recipe; 01-add-second-suffix.sh applies them at build time.
+COPY acl/ /acl/
+
 # Schema extensions (if needed in future)
 # COPY schema/ /schemas/

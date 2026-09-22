@@ -1474,6 +1474,16 @@ public class MetaverseRepository : IMetaverseRepository
             }
         }
 
+        // Joined Connected System Object count, for the Connections tab's badge (#1519): a count only,
+        // the tab loads the objects themselves when it is opened.
+        int connectorCount;
+        using (ActivitySource.StartActivity("Mvo.LoadConnectorCount"))
+        {
+            connectorCount = await Repository.Database.ConnectedSystemObjects
+                .AsNoTracking()
+                .CountAsync(cso => cso.MetaverseObjectId == id);
+        }
+
         // Step 2: Get per-attribute value counts for this MVO
         Dictionary<string, int> totalCounts;
         using (ActivitySource.StartActivity("Mvo.LoadAttributeCounts"))
@@ -1560,6 +1570,7 @@ public class MetaverseRepository : IMetaverseRepository
             MetaverseObject = entity,
             AttributeValueTotalCounts = totalCounts,
             ChangeCount = changeCount,
+            ConnectorCount = connectorCount,
             EarliestChangeInitiator = earliestInitiator,
             LatestChangeInitiator = latestInitiator
         };
@@ -1646,7 +1657,9 @@ public class MetaverseRepository : IMetaverseRepository
                                         DisplayName = vc.ReferenceValue.CachedDisplayName,
                                         TypeName = vc.ReferenceValue.Type.Name,
                                         TypePluralName = vc.ReferenceValue.Type.PluralName
-                                    }
+                                    },
+                                ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
+                                ContributedBySyncRuleName = vc.ContributedBySyncRuleName
                             })
                             .ToList()
                     })
@@ -3289,7 +3302,7 @@ public class MetaverseRepository : IMetaverseRepository
               VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
         var insertValueSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
-              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}})";
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
 
         // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -3341,7 +3354,9 @@ public class MetaverseRepository : IMetaverseRepository
                     BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
-                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRule?.Id ?? valueChange.ContributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
             }
         }
     }

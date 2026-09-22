@@ -115,11 +115,14 @@ html[lang] {
     --jim-nav-active-bg: #383860;
     --jim-nav-hover-bg: #4a4a78;
 
-    /* === JIM Custom: Drawer border === */
-    --jim-drawer-border-color: #353560;
-
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: rgba(0, 0, 0, 0.18);
+
+    /* === JIM Custom: Drawer border === */
+    /* This theme's sidebar is dark (--mud-palette-drawer-background: #252545) while its panels are white,
+       so the panel border token (translucent black) would disappear against it. The edge is carried by a
+       colour of its own instead. */
+    --jim-drawer-border-color: #353560;
 
     /* === JIM Custom: Dialog surfaces (stepped elevation from surface) === */
     --jim-dialog-surface: #f4f4fa;

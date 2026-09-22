@@ -90,9 +90,23 @@ public class ConnectedSystemPasswordPolicy
 
     /// <summary>
     /// Whether accounts on this Connected System may be governed by a policy other than the one recorded here.
-    /// See <see cref="FineGrainedPolicySignal"/> for why this is three states rather than a boolean.
+    /// See <see cref="Staging.PolicyOverrideSignal"/> for why this is three states rather than a boolean.
     /// </summary>
-    public FineGrainedPolicySignal FineGrainedPolicySignal { get; set; } = FineGrainedPolicySignal.CouldNotDetermine;
+    public PolicyOverrideSignal PolicyOverrideSignal { get; set; } = PolicyOverrideSignal.CouldNotDetermine;
+
+    /// <summary>
+    /// Whether the Connected System applies checks beyond the rules recorded here, such as a dictionary check or
+    /// a password-quality module, that JIM cannot read and so cannot generate against. When true, a password
+    /// satisfying every rule above can still be refused, and the administrator should expect that rather than
+    /// treat it as a fault.
+    /// </summary>
+    public bool FurtherChecksApply { get; set; }
+
+    /// <summary>
+    /// Why the policy says what it says. Defaults to <see cref="PasswordPolicyDiscoveryOutcome.Read"/>, which is
+    /// right for every row discovered before the outcome was recorded.
+    /// </summary>
+    public PasswordPolicyDiscoveryOutcome DiscoveryOutcome { get; set; } = PasswordPolicyDiscoveryOutcome.Read;
 
     /// <summary>
     /// Whether anything at all was discovered. A policy row where the Connected System reported nothing useful is

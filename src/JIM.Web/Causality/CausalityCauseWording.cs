@@ -45,9 +45,9 @@ public static class CausalityCauseWording
         {
             parts.Add(new CausalityCauseSentencePart(metaverseChangeType switch
             {
-                ObjectChangeType.Projected => $"{Subject(cohort)} was created as a new Identity",
-                ObjectChangeType.Joined => $"{Subject(cohort)} was joined to this existing Identity",
-                _ => "This Identity was created directly in JIM"
+                ObjectChangeType.Projected => $"{Subject(cohort)} was projected to the Metaverse",
+                ObjectChangeType.Joined => $"{Subject(cohort)} was joined to this existing Metaverse Object",
+                _ => "This Metaverse Object was created directly in JIM"
             }));
             return parts;
         }
@@ -65,8 +65,8 @@ public static class CausalityCauseWording
                 ObjectChangeType.Updated =>
                     $"{Subject(cohort)} was imported from {systemName} with changed attributes",
                 ObjectChangeType.Deleted =>
-                    $"{Subject(cohort)}'s record was deleted from {systemName}",
-                _ => $"{Subject(cohort)} was imported into {systemName} as a new record"
+                    $"{Subject(cohort)}'s Connected System Object was deleted from {systemName}",
+                _ => $"{Subject(cohort)} was imported into {systemName} as a new Connected System Object"
             }));
             return parts;
         }
@@ -86,13 +86,13 @@ public static class CausalityCauseWording
                 parts.Add(new CausalityCauseSentencePart(cohort.ReasonCode switch
                 {
                     CausalReasonCode.ExportCreateStaged when !string.IsNullOrWhiteSpace(cohort.ConnectedSystemName) =>
-                        $"{Subject(cohort)} was provisioned to {cohort.ConnectedSystemName}, so this run created the record",
+                        $"{Subject(cohort)} was provisioned to {cohort.ConnectedSystemName}, so this run created the Connected System Object",
                     CausalReasonCode.ExportCreateStaged =>
-                        $"{Subject(cohort)} was provisioned, so this run created the record",
+                        $"{Subject(cohort)} was provisioned, so this run created the Connected System Object",
                     CausalReasonCode.ExportUpdateStaged =>
-                        $"{Subject(cohort)}'s Identity changed, so this run applied the changes to the record",
+                        $"{Subject(cohort)}'s Metaverse Object changed, so this run applied the changes to the Connected System Object",
                     CausalReasonCode.ExportDeleteStaged =>
-                        $"The Identity {Subject(cohort)} was deleted, so this run deleted the record",
+                        $"The Metaverse Object {Subject(cohort)} was deleted, so this run deleted the Connected System Object",
                     _ => $"A synchronisation of {Subject(cohort)} staged this change, and this run exported it"
                 }));
                 break;

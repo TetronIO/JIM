@@ -12,6 +12,38 @@
        nothing tying them together. Deliberately not --mud-default-borderradius, which is smaller
        because it also drives buttons, inputs and other interactive controls. */
     --jim-container-radius: 10px;
+
+    /* The label colour of a Text or Outlined chip in each semantic colour, and of anything else that paints a
+       palette colour AS TEXT on a tint of itself (the causality panel's outcome pills, its Table view's change
+       chips, its lineage operation chips). The palette colour is a fill chosen to sit behind white text and
+       fails as text: used raw, the Text chip label measured below WCAG AA in seven of the twelve themes, the
+       default dark theme's primary at 2.80:1 against the 4.5:1 floor. Blending 60% of the colour toward the
+       theme's text colour keeps the hue while lifting it off the background, and adapts per mode because text
+       colour is near-white on dark themes and near-black on light ones; every theme now measures at or above
+       4.72:1. A theme may still override these for its own chips (the navy themes do, under html[lang] with
+       !important); ThemeContrastTests reads the rules below and any theme's override of them, and fails the
+       build if either drifts under. Use these for text only; fills, borders and accent bars keep the raw
+       palette colour. */
+    --jim-chip-text-primary: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-secondary: color-mix(in srgb, var(--mud-palette-secondary) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-tertiary: color-mix(in srgb, var(--mud-palette-tertiary) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-info: color-mix(in srgb, var(--mud-palette-info) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-success: color-mix(in srgb, var(--mud-palette-success) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-warning: color-mix(in srgb, var(--mud-palette-warning) 60%, var(--mud-palette-text-primary));
+    --jim-chip-text-error: color-mix(in srgb, var(--mud-palette-error) 60%, var(--mud-palette-text-primary));
+
+    /* The SHAPE of a Text-variant chip, as against the label colours above. A compact pill with a semibold
+       label, promoted into the design system from the causality panel, where the outcome pills and the
+       Table view's change chips had arrived at it independently of the portal and looked better than it.
+       MudBlazor's own chip is a fixed-height box (24/32/40px per size) carrying a normal-weight label,
+       which reads as a button rather than as a label and, in a table cell, outweighs the value beside it.
+       Font size is deliberately NOT set here: it stays MudBlazor's per-size figure, so a call site passing
+       Size.Small still gets a smaller chip and the Size parameter keeps its meaning. */
+    --jim-chip-padding-y: 3px;
+    --jim-chip-padding-x: 10px;
+    --jim-chip-padding: var(--jim-chip-padding-y) var(--jim-chip-padding-x);
+    --jim-chip-radius: 999px;
+    --jim-chip-font-weight: 600;
 }
 
 /* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
@@ -114,30 +146,86 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     transition: color 0.25s ease !important;
 }
 
+/* Every Text-variant chip takes that shape. The height MudBlazor pins per size gives way to the padding, so
+   the chip wraps its label rather than standing in a box two-thirds empty.
+
+   The html[lang] qualifier is load-bearing, not decoration: MudBlazor's own `.mud-chip.mud-chip-size-medium`
+   is (0,2,0), exactly what `.mud-chip.mud-chip-text` would be, and its stylesheet is loaded after this one,
+   so on a tie it wins and the height and radius below would silently do nothing. */
+html[lang] .mud-chip.mud-chip-text {
+    height: auto;
+    padding: var(--jim-chip-padding);
+    border-radius: var(--jim-chip-radius);
+    font-weight: var(--jim-chip-font-weight);
+}
+
 /* Text-variant chips: increase background opacity for better visibility on dark themes.
-   MudBlazor uses ~5% opacity by default which is too subtle on purple backgrounds. */
+   MudBlazor uses ~5% opacity by default which is too subtle on purple backgrounds. The label takes the
+   --jim-chip-text-* blend (see :root) rather than MudBlazor's raw palette colour, for the contrast reasons
+   given there; the selected-state rules further down override it with the solid fill. */
 .mud-chip.mud-chip-text.mud-chip-color-primary {
     background-color: color-mix(in srgb, var(--mud-palette-primary) 15%, transparent) !important;
+    color: var(--jim-chip-text-primary) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-secondary {
     background-color: color-mix(in srgb, var(--mud-palette-secondary) 15%, transparent) !important;
+    color: var(--jim-chip-text-secondary) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-color-tertiary {
+    background-color: color-mix(in srgb, var(--mud-palette-tertiary) 15%, transparent) !important;
+    color: var(--jim-chip-text-tertiary) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-info {
     background-color: color-mix(in srgb, var(--mud-palette-info) 15%, transparent) !important;
+    color: var(--jim-chip-text-info) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-success {
     background-color: color-mix(in srgb, var(--mud-palette-success) 15%, transparent) !important;
+    color: var(--jim-chip-text-success) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-warning {
     background-color: color-mix(in srgb, var(--mud-palette-warning) 15%, transparent) !important;
+    color: var(--jim-chip-text-warning) !important;
 }
 
 .mud-chip.mud-chip-text.mud-chip-color-error {
     background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
+    color: var(--jim-chip-text-error) !important;
+}
+
+/* Outlined chips: the same label blend, for the same reason. The border stays MudBlazor's raw palette
+   colour, where the contrast requirement is a line's 3:1 and the brand colour is right. */
+.mud-chip.mud-chip-outlined.mud-chip-color-primary {
+    color: var(--jim-chip-text-primary) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-secondary {
+    color: var(--jim-chip-text-secondary) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-tertiary {
+    color: var(--jim-chip-text-tertiary) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-info {
+    color: var(--jim-chip-text-info) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-success {
+    color: var(--jim-chip-text-success) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-warning {
+    color: var(--jim-chip-text-warning) !important;
+}
+
+.mud-chip.mud-chip-outlined.mud-chip-color-error {
+    color: var(--jim-chip-text-error) !important;
 }
 
 /* A selected chip is a solid fill in its own colour, not that colour as text on a tint of itself.
@@ -285,10 +373,106 @@ html[lang] .mud-alert-icon {
     padding-top: 8.5px;
 }
 
-/* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.
-   Overrides the global --jim-link-color so links don't appear as clashing blue/purple
-   inside coloured alert boxes (e.g., yellow warning, green success). */
-.mud-alert .mud-alert-message a.mud-link {
+/* Alert close button: MudBlazor centres it vertically in the alert (.mud-alert-close { align-items:
+   center }), so on a multi-line alert it floats mid-block while the icon on the left sits with the
+   first line, and the two ends of the alert read out of balance. Pin it to the top on the icon's own
+   centre line: the icon's centre is 8.5px + 12px = 20.5px down, the 26px button's is 7px + 13px = 20px,
+   so the two sit within half a pixel on every alert, whatever its height. A one-line alert is
+   unchanged to the eye, because centring in a one-line alert already landed the button there. */
+html[lang] .mud-alert-close {
+    align-items: flex-start;
+    padding-top: 7px;
+}
+
+/* Info popover (<InfoPopover />, behind <TermHint /> and <PageInfo />). MudMenu's list gives its content
+   vertical padding only, so unpadded text ran flush against the popover's left edge; the body carries the
+   horizontal padding itself, a measure that keeps an explanation to a readable width, and a title that
+   reads as a heading rather than as the first sentence. The Glossary link sits apart from the text it
+   follows, on its own line. */
+.jim-info-popover {
+    padding: 8px 16px;
+    max-width: 24rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-info-popover-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.jim-info-popover-body {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-info-popover-link {
+    display: inline-block;
+    margin-top: 10px;
+    font-weight: 600;
+}
+
+/* The info button inline in a heading (a page title). MudMenu renders an inline-flex box, which on the
+   baseline rode well above the title and on vertical-align: middle alone sat a little below it; the
+   bottom margin lifts it by half its value. The target is the centre of the GLYPHS, not of the line box:
+   a line box carries empty space above the capitals, so centring on it (tried first, at 6px) leaves the
+   icon visibly high. Measured on a 24px title: baseline 46.2, capitals centre at 37.7, lowercase at 39.7,
+   so mixed-case text reads as centred near 38.7; 2px lands the 20px icon's centre on 39. Scoped to a
+   direct child of a MudText because everywhere else the button sits in an align-center flex row, where it
+   is already within a pixel and a margin would push it off. */
+.jim-info-button {
+    vertical-align: middle;
+}
+
+.mud-typography > .jim-info-button {
+    margin-bottom: 2px;
+}
+
+/* Alert text. A Text or Outlined alert of a semantic severity is coloured on the alert itself with the chip label
+   blend (see :root), so the message, its links, any inheriting button and the close control read in one legible
+   severity colour; MudBlazor colours the icon with a rule of its own, which keeps it on the palette colour. MudBlazor
+   paints this text in --mud-palette-{severity}-darken, which no JIM theme defines: it is generated at runtime from
+   MudBlazor's default palette, so the text ignored each theme's accessible colours and Info, Success and Warning read
+   faint. One block per alert so ThemeContrastTests can read each rule. A theme must not recolour alert text: theme
+   stylesheets load after this one, so its rule would win. */
+html[lang] .mud-alert-text-info {
+    color: var(--jim-chip-text-info) !important;
+}
+
+html[lang] .mud-alert-outlined-info {
+    color: var(--jim-chip-text-info) !important;
+}
+
+html[lang] .mud-alert-text-success {
+    color: var(--jim-chip-text-success) !important;
+}
+
+html[lang] .mud-alert-outlined-success {
+    color: var(--jim-chip-text-success) !important;
+}
+
+html[lang] .mud-alert-text-warning {
+    color: var(--jim-chip-text-warning) !important;
+}
+
+html[lang] .mud-alert-outlined-warning {
+    color: var(--jim-chip-text-warning) !important;
+}
+
+html[lang] .mud-alert-text-error {
+    color: var(--jim-chip-text-error) !important;
+}
+
+html[lang] .mud-alert-outlined-error {
+    color: var(--jim-chip-text-error) !important;
+}
+
+/* Links inside alerts inherit the alert's text colour, bold and underlined, instead of the global --jim-link-color,
+   which clashes inside a coloured alert. The :visited states are listed explicitly because every theme paints a
+   visited link with html[lang] a.mud-link.mud-primary-text:visited, which outranks a stateless rule: a link to a page
+   already visited (the Operations queue's "Connected System" link) came out in the site link colour. */
+html[lang] .mud-alert .mud-alert-message a.mud-link,
+html[lang] .mud-alert .mud-alert-message a.mud-link.mud-primary-text:visited {
     color: inherit !important;
     font-weight: 600 !important;
     text-decoration: underline !important;
@@ -296,7 +480,8 @@ html[lang] .mud-alert-icon {
 }
 
 /* Hover: reduce opacity to provide visual feedback while keeping the inherited colour */
-.mud-alert .mud-alert-message a.mud-link:hover {
+html[lang] .mud-alert .mud-alert-message a.mud-link:hover,
+html[lang] .mud-alert .mud-alert-message a.mud-link.mud-primary-text:visited:hover {
     color: inherit !important;
     opacity: 0.7 !important;
     text-decoration: underline !important;
@@ -604,6 +789,22 @@ html[lang] .jim-expansion-panel .mud-table .mud-table-body .mud-table-cell.jim-a
     }
 }
 
+/* The same problem, one scope wider, for the one column that carries its own background everywhere it
+   appears. The rule above is scoped to a table nested INSIDE a paper or an expansion panel, because only
+   there do the other cells get an opaque surface of their own. A MudDataGrid, though, IS the paper: its
+   root carries both class sets, so a descendant selector never matches it and none of its cells were
+   covered. Its ordinary cells are transparent and MudBlazor's row-hover paints them, but .jim-attr-name is
+   opaque in every scope and so painted over that hover, leaving the Attribute column static while the rest
+   of the row lifted (the Connector Space attributes grid is the worked example). Layering the hover colour
+   over the cell's own background rather than replacing it keeps the column's row-header shade and lifts it
+   by the same amount as the rest of the row, so the row reads as one band. */
+@media (hover: hover) and (pointer: fine) {
+    html[lang] .mud-table.mud-table-hover .mud-table-body .mud-table-row:hover > .mud-table-cell.jim-attr-name,
+    html[lang] .mud-simple-table.mud-table-hover tbody tr:hover > td.jim-attr-name {
+        background-image: linear-gradient(var(--mud-palette-table-hover), var(--mud-palette-table-hover));
+    }
+}
+
 /* Footer / pagination row in nested tables matches the header background.
    Uses !important to override MudBlazor's inherited surface colour. */
 html[lang] .mud-paper .mud-table .mud-table-foot,
@@ -722,14 +923,109 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     color: var(--mud-palette-tertiary);
 }
 
-/* Chip-prefix accents for MV/CS object-type labels inside causality-tree chips.
-   Coloured to harmonise with each chip's avatar (primary for MV, secondary for CS). */
-.jim-mv-chip-prefix {
-    color: var(--mud-palette-primary-lighten);
+/* ─── Object chips (ObjectChip.razor) ─── */
+
+/* The site's one object chip: every reference to a Connected System Object, a Metaverse Object, a
+   Connected System, a Synchronisation Rule, a Pending Export, a Deletion Record or a Run Profile renders
+   through this markup, so it looks identical inside the causality panel and everywhere else. Ported from the
+   causality panel's own chip, which was scoped to .causality-panel and derived every token from the active
+   theme's MudBlazor palette; the derivation is unchanged here, just no longer re-declared per panel, so moving
+   it out of that scope changes nothing about how it looks, in any theme. */
+.jim-object-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
+    border-radius: 999px;
+    padding: 2px 10px 2px 3px;
+    /* Normal body size, per JIM's "default sizing unless asked otherwise" UI rule: the object's name in a
+       chip is the thing being linked to, so it reads at the same size as the text naming it. */
+    font-size: 1rem;
+    font-weight: 550;
+    color: var(--mud-palette-text-primary);
+    white-space: nowrap;
+    text-decoration: none;
+    transition: background 0.15s;
 }
 
-.jim-cs-chip-prefix {
-    color: var(--mud-palette-secondary-lighten);
+/* A chip with no leading glyph (a Lineage card's object chip, whose column head wears the glyph) pads both
+   ends alike, so the name sits centred in the pill rather than hugging the left edge. */
+.jim-object-chip.plain {
+    padding-left: 10px;
+}
+
+/* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip convention
+   (background/avatar colour change) rather than a border outline. jim-chip-link goes on the link wrapper
+   rather than the chip because the link is the hover target. */
+.jim-chip-link:hover .jim-object-chip {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 18%, transparent);
+}
+
+.jim-chip-link:hover .jim-object-chip-glyph {
+    filter: brightness(1.12);
+}
+
+/* Sized to the chip's own line box (1rem text at MudBlazor's line height), so the circle reads as part of the
+   chip rather than a smaller badge sunk into it. */
+.jim-object-chip-glyph {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: var(--mud-palette-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+    transition: filter 0.15s;
+}
+
+.jim-object-chip-glyph.sys {
+    background: var(--mud-palette-info);
+    color: var(--mud-palette-info-text, #fff);
+}
+
+.jim-object-chip-glyph.rule {
+    background: var(--mud-palette-warning);
+    color: var(--mud-palette-warning-text, #fff);
+}
+
+/* The two object glyphs (Connected System Object, Metaverse Object) carry three letters, so they widen into a
+   pill of the same height rather than squeezing the text into the circle; the letters drop a step to keep the
+   pill compact. The Connected System Object keeps the secondary colour and the Metaverse Object the primary,
+   JIM's own. */
+.jim-object-chip-glyph.cso,
+.jim-object-chip-glyph.mvo {
+    width: auto;
+    min-width: 24px;
+    padding: 0 6px;
+    border-radius: 12px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+}
+
+.jim-object-chip-glyph.cso {
+    background: var(--mud-palette-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+}
+
+.jim-object-chip-glyph.mvo {
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text, #fff);
+}
+
+.jim-object-chip-type {
+    color: color-mix(in srgb, var(--mud-palette-text-primary) 55%, transparent);
+    font-weight: 450;
+}
+
+.jim-object-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .jim-header-title {
@@ -742,6 +1038,21 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
 .jim-text-code {
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace !important;
     font-size: 0.9em !important;
+}
+
+/* A value a Pending Export will write, shown where no confirmed value exists yet (<PendingValue />). Muted and
+   italic in the surrounding cell's own font, so it reads as "not real yet" and never as a link. */
+.jim-pending-value {
+    font-style: italic;
+    color: var(--mud-palette-text-disabled);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.jim-pending-value .jim-pending-value-icon {
+    font-size: 0.95em;
+    flex: none;
 }
 
 /* Allow long unbroken strings (DNs, GUIDs, URLs) to wrap mid-word */
@@ -830,7 +1141,9 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
 }
 
 .jim-drawer {
-    border-right: 1px solid var(--jim-drawer-border-color);
+    /* Themes normally take the panel border colour; --jim-drawer-border-color is only ever set explicitly
+       where a theme deliberately wants a different (or no) separator, e.g. the "blended" nav themes. */
+    border-right: 1px solid var(--jim-drawer-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default)));
     position: fixed !important;
     top: 0;
     left: 0;
@@ -1771,12 +2084,19 @@ html[lang] .jim-schema-change-table td {
 }
 
 .jim-attribute-table.mud-table-dense .mud-chip {
-    height: 24px;
     font-size: 0.75rem;
     margin: 3px 4px 3px 0;
 }
 
-.jim-attribute-table.mud-table-dense .mud-chip .mud-chip-content {
+/* Filled and Outlined chips still need compacting by hand here, because MudBlazor sizes them from a fixed
+   height and a padding that does not follow it. A Text chip already sizes itself from the design system's
+   chip padding (see the chip tokens at the top of this file), so adding this on top would double its
+   horizontal padding, and pinning a height would undo the shape it gets everywhere else. */
+.jim-attribute-table.mud-table-dense .mud-chip:not(.mud-chip-text) {
+    height: 24px;
+}
+
+.jim-attribute-table.mud-table-dense .mud-chip:not(.mud-chip-text) .mud-chip-content {
     padding: 0 8px;
 }
 
@@ -1966,13 +2286,28 @@ html[lang] .jim-schema-change-table td {
     margin: 0;
 }
 
-/* A chip carries 12px of its own horizontal padding, so its label starts indented
-   relative to the plain-text values above and below it in the same column. Pull a
-   top-level chip back by that much so every value in the column shares one left edge.
-   Chips nested inside a link (the CSO/MVO chip links) are deliberately excluded: they
-   lead with an avatar that already carries its own negative margin. */
+/* A chip carries horizontal padding of its own, so its label starts indented relative to the plain-text
+   values above and below it in the same column. Pull a top-level chip back by exactly that much so every
+   value in the column shares one left edge. Chips nested inside a link (the CSO/MVO chip links) are
+   deliberately excluded: they lead with an avatar that already carries its own negative margin.
+
+   Two figures, because there are two paddings: a Text chip takes the design system's, so the pull reads
+   from the same token and cannot fall out of step with it, while Filled and Outlined chips still carry
+   MudBlazor's own 12px. */
 .jim-detail-table tbody tr td>.mud-chip {
     margin-left: -12px;
+}
+
+.jim-detail-table tbody tr td>.mud-chip.mud-chip-text {
+    margin-left: calc(-1 * var(--jim-chip-padding-x));
+}
+
+/* The sub-line beneath an object chip naming its type and where it lives (#1669), e.g.
+   "user in Panoply AD" under a Connected System Object's chip. A row carrying this grows past the
+   table's usual 44px row height deliberately: the sub-line is new information, not decoration. */
+.jim-object-place {
+    display: block;
+    font-size: 0.8rem;
 }
 
 /* Blazor Server Reconnection UI */
@@ -2079,56 +2414,6 @@ html[lang] .jim-schema-change-table td {
 
 .jim-audit-chip-label {
     flex-shrink: 0;
-}
-
-/* Clickable chip link - hover effect for chips wrapped in links */
-.jim-chip-link .mud-chip {
-    cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.jim-chip-link .mud-chip .jim-title-accent,
-.jim-chip-link .mud-chip .jim-mv-chip-prefix,
-.jim-chip-link .mud-chip .jim-cs-chip-prefix {
-    transition: color 0.2s ease;
-}
-
-.jim-chip-link:hover .mud-chip {
-    background-color: var(--mud-palette-primary);
-    color: var(--mud-palette-primary-text);
-}
-
-/* Ensure the accent-coloured prefix (e.g. object type) inside a hovered chip
-   switches to the chip's hover text colour so it remains legible against the
-   primary background. Uses the theme's primary-text variable so this works
-   uniformly across every theme. */
-.jim-chip-link:hover .mud-chip .jim-title-accent,
-.jim-chip-link:hover .mud-chip .jim-mv-chip-prefix,
-.jim-chip-link:hover .mud-chip .jim-cs-chip-prefix {
-    color: var(--mud-palette-primary-text);
-}
-
-/* On hover the chip fills with the primary colour, so both avatar badges have to respond or they
-   read as a leftover from the resting state: the MV badge is Color.Primary and the CS badge is
-   Color.Secondary, and only the first was ever handled.
-
-   Inverting the chip's own hover pairing is what makes one rule work across all twelve themes: the
-   badge takes the hover text colour as its fill and the hover fill as its letters, so its legibility
-   is exactly the pairing the theme already guarantees for the chip's own label, whether that text
-   colour is light or dark. The two obvious alternatives were measured against every theme's palette
-   and both fail. Darkening the badge (what the MV badge did) leaves it between 1.2:1 and 1.7:1
-   against the fill, so the circle all but disappears. Using --mud-palette-secondary-darken for the CS
-   badge is no better (1.0:1 to 3.7:1) and drops its letters below 4.5:1 in four themes. Anything
-   built on "darker" also breaks outright in the themes whose primary text is dark rather than white
-   (navy-o5-dark), where a darker badge and dark letters converge. */
-.jim-chip-link .mud-chip .mud-avatar {
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-primary,
-.jim-chip-link:hover .mud-chip .mud-avatar.mud-avatar-filled-secondary {
-    background-color: var(--mud-palette-primary-text);
-    color: var(--mud-palette-primary);
 }
 
 /* Schedule Step Drag and Drop Styles */
@@ -2567,9 +2852,9 @@ html[lang] .jim-schema-change-table td {
 
 /* A button offered inside an alert belongs to that alert's message. Left to itself it renders in the page's
    default text colour while its icon picks up MudBlazor's accent, so the label and the icon read as two unrelated
-   things sitting inside a third. Both now take the alert's severity colour from the palette, which is the
-   text-grade shade rather than the brighter one the alert's border and icon use, so the label keeps its contrast
-   against the alert's tinted background (measured 4.6:1 light, 7.5:1 dark: WCAG AA).
+   things sitting inside a third. Both now take the same --jim-chip-text-* label blend as the alert's own text (see
+   "Alert text" near the top of this file), so the button reads as part of the message it sits in and keeps the
+   contrast ThemeContrastTests measures for that text in every theme.
 
    Scoped to buttons that asked to inherit their colour. A button that names its own Color has made a deliberate
    choice and keeps it, which is what the filled Primary/Warning/Info buttons already sitting inside alerts rely
@@ -2579,26 +2864,26 @@ html[lang] .jim-schema-change-table td {
    Written against the alert rather than any one component, so every button placed in one from here on picks the
    behaviour up without anybody having to remember it. */
 :is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) {
-    color: var(--mud-palette-error) !important;
+    color: var(--jim-chip-text-error) !important;
 }
 
 :is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-error) !important;
+    color: var(--jim-chip-text-error) !important;
 }
 
 :is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
 :is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-warning) !important;
+    color: var(--jim-chip-text-warning) !important;
 }
 
 :is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
 :is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-info) !important;
+    color: var(--jim-chip-text-info) !important;
 }
 
 :is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
 :is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
-    color: var(--mud-palette-success) !important;
+    color: var(--jim-chip-text-success) !important;
 }
 
 /* The hover and focus wash, and the click ripple, follow the button's own colour rather than MudBlazor's
@@ -3899,19 +4184,30 @@ html[lang] .jim-scope-text .mud-input-slot {
     margin-top: 0.25rem;
 }
 
-/* Connectors list: auto table layout sizes a column to its widest content before .jim-one-line ever gets a
-   chance to clip it, so the SCIM Connector's long, unbroken Description grows its column past the grid's own
-   width and the whole table gains a horizontal scrollbar instead of the cell's ellipsis firing. Fixed layout
-   gives every column a bounded box up front instead: the three narrow columns keep their explicit
-   HeaderStyle width (the pattern already used in Logs.razor and OperationsQueueTab.razor) and Description
-   takes what is left. Scoped to this one grid rather than added to .jim-virtualised-list generally: several
-   other grids (the Activity list's Target column among them) rely on auto layout handing them more room than
-   their content needs and have no width hint or .jim-one-line of their own, so applying this portal-wide
-   turns their cells' overflow into a wrap instead, which breaks the virtualiser's fixed row height. Fixing
-   those is a separate, larger sweep (audit every virtualised grid's columns for a width hint or
-   OneLineText), not a side effect of this one page's fix. */
-#connector-list .mud-table-root {
-    table-layout: fixed;
+/* A fill column: the one column of an auto-layout table that takes every pixel the others do not need, and
+   clips its content (with .jim-one-line) rather than growing. Auto layout sizes a column to its widest
+   content, so a long, unbroken value (the SCIM Connector's Description) would otherwise push the table past
+   its own width and gain a horizontal scrollbar. width: 100% claims the remaining space; max-width: 0 stops
+   the cell's content counting towards the column's minimum, so the other columns (kept to one line with
+   .jim-nowrap) size to their content and this one absorbs the rest. Fixed layout is not the answer: it splits
+   the spare width evenly, so a short Name column is handed as much room as the Description beside it. No
+   minimum: on a row whose other columns are wide (the Connected Systems list's Stats chips at a laptop width)
+   the header clips before the table scrolls, and a clipped header beside a clipped value is the lesser fault
+   than an Action column pushed off the screen. */
+.mud-table-root .mud-table-cell.jim-fill-column {
+    width: 100%;
+    max-width: 0;
+}
+
+/* A capped column: the wrapper inside a cell whose content would otherwise set the column's width. Auto layout
+   sizes a column to its widest content, and some content is arbitrarily long without being the point of the
+   row (a password target's own message, a Service Setting's URL or identifier), so it would take the width
+   from the column that is the point of the row. The wrapper bounds the .jim-one-line or .jim-one-line-list
+   inside it, which clips the content with an ellipsis and keeps the whole of it on the element's title. The
+   cap is a variable so a call site can tighten it inline (a value beside a name needs less than a message
+   beside a status) without a class per width. */
+.jim-column-cap {
+    max-width: var(--jim-column-cap, 30rem);
 }
 
 /* ---------------------------------------------------------------------------
@@ -3924,28 +4220,58 @@ html[lang] .jim-scope-text .mud-input-slot {
    the only coloured element on a card, painted by the shared status-pill vocabulary below. Nothing else on the
    card carries colour, so a red pill reads as red from across the room without the whole strip turning red.
    --------------------------------------------------------------------------- */
+/* The header is the whole panel when it is collapsed, so it carries the verdict on the left (title and summary) and
+   the panel's own controls grouped on the right (the live indicator, then the collapse chevron). It has no gap
+   beneath it: the space between header and cards lives inside the collapsing body, so a collapsed panel ends at
+   its header instead of trailing an empty band. */
 .jim-service-health-header {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     column-gap: 0.75rem;
     row-gap: 0.25rem;
-    margin-bottom: 1rem;
 }
 
-/* The summary sits beside the title; the live indicator is pushed to the far right. */
 .jim-service-health-summary {
     color: var(--mud-palette-text-secondary);
+}
+
+/* The right-hand group is what takes margin-left: auto, and it has to be. The live indicator and the chevron are
+   each wrapped in a MudTooltip, whose root is the actual flex child, so an auto margin on the indicator's own span
+   had no free space to take and the indicator sat beside the summary rather than on the right as intended. */
+.jim-service-health-header-end {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    gap: 0.5rem;
+    margin-left: auto;
 }
 
 .jim-service-health-live {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    margin-left: auto;
     color: var(--mud-palette-text-secondary);
     font-size: 0.875rem;
     white-space: nowrap;
+}
+
+/* The same control as each card's details chevron: the same icon, turned to point up while what it controls is open. */
+.jim-service-health-collapse-toggle.mud-icon-button {
+    padding: 2px;
+    color: var(--mud-palette-text-secondary);
+    transition: transform 0.25s ease;
+}
+
+.jim-service-health-collapse-toggle--open.mud-icon-button {
+    transform: rotate(180deg);
+}
+
+/* The gap between the header and the cards is the grid's own top padding, which sits inside the collapse and so
+   disappears with the cards. Left as a bottom margin on the header, as it was, it would stay behind and leave a
+   collapsed panel 1rem taller than its header. */
+.jim-service-health-strip .jim-service-health-grid {
+    padding-top: 1rem;
 }
 
 /* Three across on a wide screen, two on a medium one, one on a narrow one; the breakpoints are MudBlazor's md and
@@ -4174,16 +4500,19 @@ html[lang] .jim-scope-text .mud-input-slot {
     font-size: 0.8125rem;
 }
 
-/* The version-skew chip is the one fact on the card an administrator must act on, said in words rather than in
+/* The version-skew note is the one fact on the card an administrator must act on, said in words rather than in
    colour: the pill already owns the card's colour, and amber text beside it would read as a second verdict. It
    sits on the card's face beside the pill so it is seen without opening the details, and again on the Version
-   row so the number and the warning sit together. Compact so it fits either line. */
-.jim-service-health-skew.mud-chip {
-    height: 1.25rem;
-    font-family: var(--mud-typography-default-family);
-    font-size: 0.75rem;
+   row so the number and the warning sit together.
+
+   It is a neutral .jim-status-pill rather than a MudChip so that it and the status pill beside it are one shape
+   by construction. As a Size.Small chip its height was pinned by MudBlazor at 24px whatever its text, with a
+   12px label, while the pill's height follows its content (26px at 13px), so the two sat visibly out of line;
+   matching the font size alone would still have left the chip short. Only the differences from the pill are
+   stated here: no dot, so the padding the dot's side needed evens out, and the secondary text colour. */
+.jim-service-health-skew.jim-status-pill {
+    padding-inline: 0.625rem;
     color: var(--mud-palette-text-secondary);
-    border-color: var(--mud-palette-lines-default);
 }
 
 /* The banner's links sit after the sentence and stay together when the alert wraps. */

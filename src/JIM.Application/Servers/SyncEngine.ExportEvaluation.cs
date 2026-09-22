@@ -115,6 +115,57 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Decides whether a CSO's provisioning was provably never exported, in which case deprovisioning it means
+    /// cancelling the provisioning (removing the Create and the CSO) rather than staging a Delete or leaving the
+    /// CSO behind disconnected. The object does not exist in the target system, so a Delete would ask a
+    /// Connector to remove something that was never there, with no identifier to remove it by; and the CSO,
+    /// holding no external ID, is invisible to import deletion detection, so nothing would ever confirm it away.
+    /// "Provably" is deliberately strict, because the cost of a wrong "never exported" is an object orphaned in
+    /// the target system with nothing left in JIM to delete it. The only proof is the unsent Create itself: still
+    /// attached, still Pending, never attempted. Anything else means the ordinary deprovisioning decision runs.
+    /// </summary>
+    /// <param name="cso">The CSO being deprovisioned.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any. None at all is
+    /// NOT never exported; it is the opposite. Provisioning always stages a Create alongside the CSO, and an
+    /// auto-confirming export (the file-based path) deletes that Create the moment it succeeds while the CSO
+    /// stays Pending Provisioning until an import sees the object, so a Pending Provisioning CSO with no Pending
+    /// Export is one whose Create has been exported.</param>
+    public bool IsProvisioningNeverExported(ConnectedSystemObject cso, PendingExport? existingPendingExport) =>
+        cso.Status == ConnectedSystemObjectStatus.PendingProvisioning &&
+        existingPendingExport is
+        {
+            ChangeType: PendingExportChangeType.Create,
+            Status: PendingExportStatus.Pending,
+            LastAttemptedAt: null,
+            ErrorCount: 0
+        };
+
+    /// <summary>
+    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from a
+    /// Full Import's payload, must be marked for retry. Reconciliation
+    /// (<see cref="ReconcileCsoAgainstPendingExport"/>) only ever runs for a CSO an import actually
+    /// returned and matched, so a CSO genuinely absent from every subsequent import never reaches it:
+    /// without this decision, its exported Create sits Status Exported forever
+    /// (<c>ExportExecutionServer.IsReadyForExecution</c> refuses to re-execute a Create with Status
+    /// Exported, since re-sending it would normally mean asking the connector to create a duplicate of
+    /// an object that already exists there), and the CSO never leaves Pending Provisioning.
+    /// </summary>
+    /// <param name="runType">The import run's type. Only a Full Import can prove absence; a Delta Import
+    /// reports only changes, so an object missing from its payload says nothing about whether it still
+    /// exists.</param>
+    /// <param name="totalObjectsImported">How many objects the run read from the Connected System in
+    /// total, across every object type. Mirrors the "no objects imported means do nothing" guard
+    /// deletion detection applies (<c>SyncImportTaskProcessor.PerformImportAsync</c>): a Full Import
+    /// that read literally nothing may itself be the symptom of a connector or configuration problem,
+    /// so it must not be read as proof that every outstanding Create is now absent.</param>
+    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the Full
+    /// Import's payload (or the object was otherwise processed this run).</param>
+    public bool IsExportedCreateUnseenByFullImport(ConnectedSystemRunType runType, int totalObjectsImported, bool wasSeen) =>
+        runType == ConnectedSystemRunType.FullImport &&
+        totalObjectsImported > 0 &&
+        !wasSeen;
+
+    /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
     /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
     /// CSO from the object's collection: no connectors remaining is the collection being empty. Only a Projected

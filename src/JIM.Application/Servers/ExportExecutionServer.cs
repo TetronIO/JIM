@@ -7,6 +7,7 @@ using JIM.Application.Services;
 using JIM.Application.Staging;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -123,25 +124,6 @@ public class ExportExecutionServer
 
         Log.Information("ExecuteExportsAsync: Found {Count} Pending Exports to execute for system {SystemName} (BatchSize: {BatchSize}, MaxParallelism: {MaxParallelism})",
             totalExportCount, connectedSystem.Name, options.BatchSize, options.MaxParallelism);
-
-        // Pre-export reconciliation: detect CREATE+DELETE and UPDATE+DELETE pairs that cancel
-        // each other out. This catches pairs persisted across different sync runs (the flush-time
-        // reconciliation in SyncTaskProcessorBase catches same-page pairs).
-        var reconciled = await ReconcileCreateDeletePairsAsync(connectedSystem.Id);
-        if (reconciled > 0)
-        {
-            totalExportCount -= reconciled;
-            result.TotalPendingExports = totalExportCount;
-            result.ReconciledCount = reconciled;
-
-            if (totalExportCount <= 0)
-            {
-                Log.Information("ExecuteExportsAsync: All exports reconciled for system {SystemName} — nothing to export",
-                    connectedSystem.Name);
-                result.CompletedAt = DateTime.UtcNow;
-                return result;
-            }
-        }
 
         // Report initial progress
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
@@ -288,44 +270,6 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Loads all executable exports for a Connected System, identifies CREATE+DELETE and
-    /// UPDATE+DELETE pairs targeting the same CSO, and deletes the reconciled exports from the DB.
-    /// Returns the total number of Pending Exports removed.
-    /// </summary>
-    private async Task<int> ReconcileCreateDeletePairsAsync(int connectedSystemId)
-    {
-        using var span = Diagnostics.Diagnostics.Sync.StartSpan("ReconcileCreateDeletePairs");
-
-        var exportSummaries = await SyncRepo.GetExecutableExportSummariesAsync(connectedSystemId);
-        if (exportSummaries.Count == 0)
-            return 0;
-
-        var syncEngine = new SyncEngine();
-        var result = syncEngine.ReconcileCreateDeletePairs(exportSummaries);
-
-        if (result.ReconciledPairs.Count == 0)
-            return 0;
-
-        // Collect all PE IDs to delete
-        var idsToDelete = result.ReconciledPairs
-            .SelectMany(p => p.CancelledExportIds)
-            .ToList();
-
-        // Delete reconciled PEs by ID using lightweight deletion
-        if (idsToDelete.Count > 0)
-            await SyncRepo.DeletePendingExportsByIdsAsync(idsToDelete);
-
-        Log.Information("ReconcileCreateDeletePairsAsync: Reconciled {PairCount} pairs, cancelled {CancelledCount} Pending Exports for system {SystemId}",
-            result.ReconciledPairs.Count, result.TotalCancelled, connectedSystemId);
-
-        span.SetTag("reconciledPairs", result.ReconciledPairs.Count);
-        span.SetTag("cancelledExports", result.TotalCancelled);
-        span.SetSuccess();
-
-        return result.TotalCancelled;
-    }
-
-    /// <summary>
     /// Gets Pending Exports that are ready to be executed.
     /// Uses database-level filtering for status, retry timing, and max retries (Q6 decision),
     /// then applies in-memory checks for attribute-level eligibility that can't be expressed in SQL.
@@ -371,6 +315,20 @@ public class ExportExecutionServer
         // delete was sent to the target system and should only be cleaned up during
         // import confirmation, not re-executed (which would fail if the object is already gone).
         if (pendingExport.ChangeType == PendingExportChangeType.Delete &&
+            pendingExport.Status == PendingExportStatus.Exported)
+        {
+            return false;
+        }
+
+        // A Create that has already been exported is awaiting confirmation by import: re-sending it
+        // would ask the connector to create an object that already exists there, which most connectors
+        // reject. Any attribute changes appended while it waits (see ExportEvaluationServer's
+        // append-not-replace staging for a PendingProvisioning CSO whose Create has already been sent)
+        // travel later as an Update, once SyncEngine.Reconciliation confirms the Create and flips the
+        // row's ChangeType (SyncEngine.Reconciliation.cs). ExportNotConfirmed (a retry after a failed or
+        // ambiguous send) stays exportable: unlike Exported, it means the Create genuinely needs to go
+        // out again.
+        if (pendingExport.ChangeType == PendingExportChangeType.Create &&
             pendingExport.Status == PendingExportStatus.Exported)
         {
             return false;
@@ -661,7 +619,7 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name);
                             }
                         }
                         catch (OperationCanceledException)
@@ -1241,7 +1199,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, unresolvedReferenceNotes);
+                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, unresolvedReferenceNotes);
             }
 
             processedCount += batch.Count;
@@ -1361,7 +1319,7 @@ public class ExportExecutionServer
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult { ClassMembershipRefusedCount = batchRefused };
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, unresolvedReferenceNotes);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1564,11 +1522,90 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Decides whether a Delete export that just succeeded is the terminal step for a Connected System
+    /// Object whose provisioning was never confirmed by an import.
+    /// <para>
+    /// A Connected System Object is created <c>PendingProvisioning</c> alongside a Create Pending Export.
+    /// If the Create is exported (the target object now exists) but the Metaverse Object is withdrawn
+    /// before any confirming import, JIM stages a Delete Pending Export for the still-<c>PendingProvisioning</c>
+    /// object; when that Delete exports successfully, the target object is gone, but the Connected System
+    /// Object itself would otherwise be stranded forever: import deletion detection deliberately excludes
+    /// <c>PendingProvisioning</c> objects (<c>ConnectedSystemRepository.BuildDeletionDetectionQuery</c>), so
+    /// nothing ever obsoletes or deletes it, and it never gets another Pending Export to retry.
+    /// </para>
+    /// <para>
+    /// A successful export of the Delete is the only confirmation such an object can ever get, so callers
+    /// that see this return true must remove the Connected System Object and its Pending Export immediately
+    /// rather than leaving the export <c>Exported</c> (see <see cref="RemoveUnconfirmedProvisioningCsosAsync"/>).
+    /// Connected System Objects with Status <c>Normal</c> are unaffected: their existing lifecycle (import
+    /// marks Obsolete, sync deletes) still applies. A failed Delete export never reaches this check; callers
+    /// must only call it once a Delete has already succeeded.
+    /// </para>
+    /// </summary>
+    private static bool IsUnconfirmedProvisioningDeleteSuccess(PendingExport export)
+    {
+        return export.ChangeType == PendingExportChangeType.Delete
+            && export.ConnectedSystemObject != null
+            && export.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning;
+    }
+
+    /// <summary>
+    /// Removes the Connected System Objects (and their now-superfluous Pending Exports) for Delete exports
+    /// that succeeded against a Connected System Object whose provisioning was never confirmed; see
+    /// <see cref="IsUnconfirmedProvisioningDeleteSuccess"/> for the rule. Deletes by id via
+    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/> rather than the tracked-graph
+    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsAsync"/>: export batches load Pending Exports
+    /// <c>AsNoTracking()</c> with the Connected System Object graph included, and attaching that untracked
+    /// graph to a tracked <c>RemoveRange</c> can throw on the duplicate-key attach.
+    /// </summary>
+    /// <param name="qualifyingExports">
+    /// Delete exports that satisfy <see cref="IsUnconfirmedProvisioningDeleteSuccess"/>. Each caller is
+    /// responsible for flagging its own <see cref="ProcessedExportItem.ConnectedSystemObjectRemoved"/> and
+    /// for excluding these exports from its own Pending Export update batch, since the row is being deleted
+    /// here, not updated.
+    /// </param>
+    private static async Task RemoveUnconfirmedProvisioningCsosAsync(List<PendingExport> qualifyingExports, ISyncRepository repository)
+    {
+        if (qualifyingExports.Count == 0)
+            return;
+
+        // The FK scalar, not the navigation: export batches load these AsNoTracking, and the scalar is
+        // always populated from the row data regardless of Include shape (src/CLAUDE.md > "Prefer FK
+        // Scalars Over Navigation Checks Under AsNoTracking").
+        var csoIds = qualifyingExports
+            .Select(export => export.ConnectedSystemObjectId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        if (csoIds.Count == 0)
+            return;
+
+        // Delete the Pending Export(s) first: once the CSO is gone there is nothing left for it to
+        // describe, and DeleteConnectedSystemObjectsByIdsAsync does not touch PendingExports itself
+        // (its own FK to this table is SetNull, which would otherwise just orphan the row).
+        await repository.DeletePendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+        var removedCount = await repository.DeleteConnectedSystemObjectsByIdsAsync(csoIds);
+
+        // Synchronisation Integrity: log summary statistics (count plus CSO ids) at the end of this batch
+        // operation, same as every other batch write in this server.
+        Log.Information("RemoveUnconfirmedProvisioningCsosAsync: {Count} Connected System Object(s) removed whose provisioning was " +
+            "never confirmed by an import (their Create was exported but the Metaverse Object was withdrawn before any confirming " +
+            "import); their Delete export has just succeeded, which is the only confirmation such an object can ever get: [{CsoIds}]",
+            removedCount, string.Join(", ", csoIds));
+    }
+
+    /// <summary>
     /// Processes a batch of exports with their corresponding ConnectedSystemExportResult data.
     /// Uses batch updates for efficiency - pre-fetches attribute definitions and performs
     /// a single SaveChanges for all CSO updates.
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
+    /// <param name="connectedSystemName">
+    /// The Connected System's name, carried onto the parent Activity a provisioned password change stages
+    /// (#1697), so the queue page and the Activity list can name the target without a join.
+    /// </param>
     /// <param name="unresolvedReferenceNotes">
     /// Per Pending Export id, the message describing the references it could not write this run because
     /// the referenced object has no Connected System Object in the target (issue #1398), built by
@@ -1582,12 +1619,14 @@ public class ExportExecutionServer
         ExportExecutionResult result,
         ISyncRepository repository,
         TimeSpan initialPasswordTimeToLive,
+        string connectedSystemName,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
     {
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
         var successfulNonDeleteExports = new List<PendingExport>();
         var provisionedAccounts = new List<PendingExport>();
+        var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
 
         for (var i = 0; i < batch.Count; i++)
         {
@@ -1623,6 +1662,11 @@ public class ExportExecutionServer
                 continue;
             }
 
+            // A Delete that just succeeded against a CSO whose provisioning was
+            // never confirmed by an import is the terminal step in that object's life; see
+            // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
+            var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+
             // Capture export data for activity tracking (before deletion)
             result.ProcessedExportItems.Add(new ProcessedExportItem
             {
@@ -1632,8 +1676,24 @@ public class ExportExecutionServer
                 AttributeChangeCount = writtenChanges.Count,
                 AttributeValueChanges = writtenChanges,
                 Succeeded = true,
-                UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null
+                UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null,
+                ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
             }.WithCauseFrom(export));
+
+            if (isUnconfirmedProvisioningDelete)
+            {
+                // Remove the CSO and this Pending Export now, rather than leaving the export Exported:
+                // not added to exportsToUpdate because the row is about to be deleted, not updated.
+                // Removal itself is batched after the loop via RemoveUnconfirmedProvisioningCsosAsync.
+                unconfirmedProvisioningCsoDeletes.Add(export);
+                result.SuccessCount++;
+                // Issue #1079: Delete exports are always skipped by optimistic apply (D6); this one
+                // never reaches the shared skip-counting below because it continues past it.
+                result.OptimisticApplySkippedCount++;
+                Log.Debug("ProcessBatchSuccessAsync: Export {ExportId} deleted CSO {CsoId} whose provisioning was never confirmed by an import; " +
+                    "the Connected System Object will be removed", export.Id, export.ConnectedSystemObjectId);
+                continue;
+            }
 
             if (stillUnresolvedCount > 0)
             {
@@ -1696,6 +1756,13 @@ public class ExportExecutionServer
             }
         }
 
+        // Remove CSOs (and their now-superfluous Pending Exports) whose Delete just
+        // confirmed provisioning that was never otherwise confirmed.
+        if (unconfirmedProvisioningCsoDeletes.Count > 0)
+        {
+            await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, repository);
+        }
+
         // Batch update CSOs that need external ID or status changes
         if (csosToUpdate.Count > 0)
         {
@@ -1707,7 +1774,7 @@ public class ExportExecutionServer
         // record work against an account JIM could not yet address.
         if (provisionedAccounts.Count > 0)
         {
-            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository, initialPasswordTimeToLive);
+            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository, initialPasswordTimeToLive, connectedSystemName);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
@@ -1720,7 +1787,9 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Records that this batch's newly provisioned accounts are owed an initial password (issue #1121).
+    /// Records that this batch's newly provisioned accounts are owed a first password (issue #1121, #1697): one
+    /// row on the queued password pipeline per account, delivered by the Password Delivery Service rather than
+    /// here.
     /// <para>
     /// Staged, not delivered. Setting a password is a round trip to the Connected System, and doing it here
     /// would put a second network call inside the loop that is persisting the results of one that has already
@@ -1730,7 +1799,8 @@ public class ExportExecutionServer
     /// <para>
     /// Which rules ask for a password is read now rather than stamped onto the export when it was staged, so
     /// that switching the feature on reaches work already queued, and so that a deployment not using it writes
-    /// no rows at all.
+    /// no rows at all. A live user-set or propagated password for the same person and system wins over a
+    /// provisioned row: the queue's own coalescing decides that, not this method.
     /// </para>
     /// <para>
     /// Failure is contained but not swallowed. The accounts exist in the Connected System and their exports are
@@ -1744,7 +1814,8 @@ public class ExportExecutionServer
         List<PendingExport> provisionedAccounts,
         ExportExecutionResult result,
         ISyncRepository repository,
-        TimeSpan initialPasswordTimeToLive)
+        TimeSpan initialPasswordTimeToLive,
+        string connectedSystemName)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("StageInitialPasswords")
             .SetTag("count", provisionedAccounts.Count);
@@ -1752,7 +1823,7 @@ public class ExportExecutionServer
         // Declared out here so the failure count below is the number of accounts genuinely owed a password,
         // once that is known. A failure in the lookup itself leaves it null, and every provisioned account in
         // the batch is reported as unrecorded because JIM cannot tell which of them needed recording.
-        List<PendingInitialPassword>? staging = null;
+        List<PendingPasswordChange>? staging = null;
         try
         {
             var provisioningRuleIds = provisionedAccounts
@@ -1764,26 +1835,102 @@ public class ExportExecutionServer
             if (rulesAskingForAPassword.Count == 0)
                 return;
 
-            staging = provisionedAccounts
+            var eligible = provisionedAccounts
                 .Where(pe => rulesAskingForAPassword.Contains(pe.ProvisioningSyncRuleId!.Value))
-                .Select(pe => new PendingInitialPassword
-                {
-                    ConnectedSystemObjectId = pe.ConnectedSystemObject!.Id,
-                    ConnectedSystemId = pe.ConnectedSystemId,
-                    SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
-                    Status = PendingInitialPasswordStatus.Pending,
-                    CreatedAt = DateTime.UtcNow,
-                    ExpiresAt = DateTime.UtcNow.Add(initialPasswordTimeToLive)
-                })
                 .ToList();
+
+            if (eligible.Count == 0)
+                return;
+
+            var now = DateTime.UtcNow;
+            staging = new List<PendingPasswordChange>(eligible.Count);
+            var unaddressableCount = 0;
+
+            foreach (var pe in eligible)
+            {
+                var metaverseObjectId = pe.ConnectedSystemObject!.MetaverseObjectId;
+                if (metaverseObjectId == null)
+                {
+                    // The queue's coalescing key is (Metaverse Object, Connected System); an account with no
+                    // Metaverse Object could never be found again to deliver, supersede or expire.
+                    unaddressableCount++;
+                    Log.Error("StageInitialPasswordsForBatchAsync: Connected System Object {CsoId} on Connected System {ConnectedSystemId} " +
+                        "was provisioned but has no Metaverse Object; its initial password cannot be queued",
+                        pe.ConnectedSystemObject!.Id, pe.ConnectedSystemId);
+                    continue;
+                }
+
+                staging.Add(new PendingPasswordChange
+                {
+                    Id = Guid.NewGuid(),
+                    MetaverseObjectId = metaverseObjectId.Value,
+                    ConnectedSystemId = pe.ConnectedSystemId,
+                    ConnectedSystemObjectId = pe.ConnectedSystemObject!.Id,
+                    SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
+                    Origin = PendingPasswordChangeOrigin.Provisioned,
+                    EncryptedPassword = null,
+                    // ExpiryBehaviour is left at its default: a placeholder, since a provisioned row generates
+                    // its password at delivery time from the rule's own settings, which are read fresh then.
+                    Status = PendingPasswordChangeStatus.Pending,
+                    CreatedAt = now,
+                    ExpiresAt = now.Add(initialPasswordTimeToLive),
+                    ActivityId = Guid.NewGuid()
+                });
+            }
+
+            result.InitialPasswordStagingFailedCount += unaddressableCount;
 
             if (staging.Count == 0)
                 return;
 
-            await repository.StageInitialPasswordsAsync(staging);
-            result.InitialPasswordsStagedCount += staging.Count;
+            // Looked up by the id each change was offered under: a Superseded outcome mutates the change's own
+            // Id to the row it took over (#1697), so RequestedId is the only key still pointing back here.
+            var byRequestedId = staging.ToDictionary(c => c.Id);
+
+            var outcomes = await repository.StageProvisionedPasswordChangesAsync(staging);
+
+            var activities = new List<Activity>(outcomes.Count);
+            var stagedCount = 0;
+            foreach (var outcome in outcomes)
+            {
+                // A row already there carries the person's real password and won (#1697): nothing was written,
+                // and that row already has its own Activity, so this attempt gets none.
+                if (outcome.Disposition == ProvisionedPasswordStagingDisposition.Coalesced)
+                    continue;
+
+                var change = byRequestedId[outcome.RequestedId];
+                stagedCount++;
+
+                // A parent Activity for the change, mirroring what PasswordSynchronisationServer.SetPasswordAsync
+                // writes for an administrator's own set, but system-initiated and already complete: nobody is
+                // waiting at a screen for this to finish, because delivery happens on a later, unrelated pass.
+                activities.Add(new Activity
+                {
+                    Id = change.ActivityId,
+                    TargetType = ActivityTargetType.PasswordSynchronisation,
+                    TargetOperationType = ActivityTargetOperationType.SetPassword,
+                    TargetContext = nameof(PendingPasswordChangeOrigin.Provisioned),
+                    TargetName = connectedSystemName,
+                    MetaverseObjectId = change.MetaverseObjectId,
+                    ConnectedSystemId = change.ConnectedSystemId,
+                    ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+                    InitiatedByType = ActivityInitiatorType.System,
+                    InitiatedByName = "System",
+                    Status = ActivityStatus.Complete,
+                    Created = now,
+                    Executed = now,
+                    ExecutionTime = TimeSpan.Zero,
+                    TotalActivityTime = TimeSpan.Zero,
+                    Message = $"Initial password queued for delivery to {connectedSystemName}."
+                });
+            }
+
+            if (activities.Count > 0)
+                await repository.CreateActivitiesAsync(activities);
+
+            result.InitialPasswordsStagedCount += stagedCount;
             Log.Debug("StageInitialPasswordsForBatchAsync: Staged initial passwords for {Count} newly provisioned accounts on Connected System {ConnectedSystemId}",
-                staging.Count, provisionedAccounts[0].ConnectedSystemId);
+                stagedCount, provisionedAccounts[0].ConnectedSystemId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -2280,6 +2427,7 @@ public class ExportExecutionServer
             var exportsToUpdate = new List<PendingExport>();
             var exportsToDelete = new List<PendingExport>();
             var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
+            var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
 
             for (var i = 0; i < pendingExports.Count; i++)
             {
@@ -2307,6 +2455,11 @@ public class ExportExecutionServer
                     continue;
                 }
 
+                // A Delete that just succeeded against a CSO whose provisioning was
+                // never confirmed by an import is the terminal step in that object's life; see
+                // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
+                var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+
                 // Capture export data for activity tracking (before deletion or status update)
                 result.ProcessedExportItems.Add(new ProcessedExportItem
                 {
@@ -2314,8 +2467,23 @@ public class ExportExecutionServer
                     ConnectedSystemObject = export.ConnectedSystemObject,
                     AttributeChangeCount = export.AttributeValueChanges.Count,
                     AttributeValueChanges = export.AttributeValueChanges.ToList(),
-                    Succeeded = true
+                    Succeeded = true,
+                    ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
                 }.WithCauseFrom(export));
+
+                if (isUnconfirmedProvisioningDelete)
+                {
+                    // Remove the CSO and this Pending Export now, rather than leaving the export Exported
+                    // (auto-confirm) or auto-confirmed-delete (standard). Neither exportsToUpdate nor
+                    // exportsToDelete gets this export: removal is batched after the loop via
+                    // RemoveUnconfirmedProvisioningCsosAsync, which deletes the Pending Export by CSO id
+                    // as part of removing the CSO itself.
+                    unconfirmedProvisioningCsoDeletes.Add(export);
+                    result.SuccessCount++;
+                    Log.Debug("ExecuteUsingFilesWithBatchingAsync: Export {ExportId} deleted CSO {CsoId} whose provisioning was never confirmed by an import; " +
+                        "the Connected System Object will be removed", export.Id, export.ConnectedSystemObjectId);
+                    continue;
+                }
 
                 // For Create exports, update the CSO status from PendingProvisioning to Normal
                 if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null)
@@ -2367,6 +2535,13 @@ public class ExportExecutionServer
                 {
                     await SyncRepo.DeletePendingExportsAsync(exportsToDelete);
                 }
+            }
+
+            // Remove CSOs (and their now-superfluous Pending Exports) whose Delete
+            // just confirmed provisioning that was never otherwise confirmed.
+            if (unconfirmedProvisioningCsoDeletes.Count > 0)
+            {
+                await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, SyncRepo);
             }
 
             // Batch update CSOs that need external ID or status changes
@@ -2703,6 +2878,11 @@ public class ExportExecutionServer
             return;
         }
 
+        // A Delete that just succeeded against a CSO whose provisioning was never
+        // confirmed by an import is the terminal step in that object's life; see
+        // IsUnconfirmedProvisioningDeleteSuccess for the full rationale.
+        var isUnconfirmedProvisioningDelete = IsUnconfirmedProvisioningDeleteSuccess(export);
+
         // Capture export data for activity tracking (before deletion)
         result.ProcessedExportItems.Add(new ProcessedExportItem
         {
@@ -2710,8 +2890,19 @@ public class ExportExecutionServer
             ConnectedSystemObject = export.ConnectedSystemObject,
             AttributeChangeCount = export.AttributeValueChanges.Count,
             AttributeValueChanges = export.AttributeValueChanges.ToList(),
-            Succeeded = true
+            Succeeded = true,
+            ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
         }.WithCauseFrom(export));
+
+        if (isUnconfirmedProvisioningDelete)
+        {
+            // Remove the CSO and this Pending Export now, rather than leaving the export Exported.
+            await RemoveUnconfirmedProvisioningCsosAsync([export], SyncRepo);
+            result.SuccessCount++;
+            Log.Debug("ProcessExportSuccessAsync: Export {ExportId} deleted CSO {CsoId} whose provisioning was never confirmed by an import; " +
+                "the Connected System Object was removed", export.Id, export.ConnectedSystemObjectId);
+            return;
+        }
 
         export.Status = PendingExportStatus.Exported;
 

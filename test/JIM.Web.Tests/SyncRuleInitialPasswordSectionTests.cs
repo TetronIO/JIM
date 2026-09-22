@@ -69,7 +69,7 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
         var cut = Render(OneReason(accounts: 14));
 
         // The tab's own badge carries the count outside the tab; in here the notice states it in words.
-        Assert.That(cut.Markup, Does.Contain("14 accounts are waiting on a change to these settings"));
+        Assert.That(cut.Markup, Does.Contain("14 Connected System Objects are waiting on a change to these settings"));
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
         {
             Assert.That(cut.Markup, Does.Contain("Not complex enough."));
             Assert.That(cut.Markup, Does.Contain("Too short."));
-            Assert.That(cut.Markup, Does.Contain("14 accounts are waiting"), "the notice totals every reason");
+            Assert.That(cut.Markup, Does.Contain("14 Connected System Objects are waiting"), "the notice totals every reason");
         }
     }
 
@@ -111,7 +111,7 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Markup, Does.Contain("2 accounts are waiting"));
+            Assert.That(cut.Markup, Does.Contain("2 Connected System Objects are waiting"));
             Assert.That(cut.Markup, Does.Contain("refused the password without saying why"));
         }
     }
@@ -130,7 +130,7 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
     {
         var cut = Render(OneReason(accounts: 14), willRelease: true);
 
-        Assert.That(cut.Markup, Does.Contain("Saving will release 14 parked accounts"));
+        Assert.That(cut.Markup, Does.Contain("Saving will release 14 parked Connected System Objects"));
     }
 
     [Test]
@@ -140,9 +140,9 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Markup, Does.Contain("Saving will release 1 parked account"));
-            Assert.That(cut.Markup, Does.Not.Contain("1 parked accounts"));
-            Assert.That(cut.Markup, Does.Contain("1 account is waiting"));
+            Assert.That(cut.Markup, Does.Contain("Saving will release 1 parked Connected System Object"));
+            Assert.That(cut.Markup, Does.Not.Contain("1 parked Connected System Objects"));
+            Assert.That(cut.Markup, Does.Contain("1 Connected System Object is waiting"));
         }
     }
 

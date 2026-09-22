@@ -110,6 +110,19 @@ public class MvoValueChangeDto
     public MvoChangeReferenceDto? ReferenceValue { get; set; }
 
     /// <summary>
+    /// The Synchronisation Rule that contributed this value, distinct from the parent
+    /// <see cref="MvoChangeHistoryDto.SyncRuleId"/> (the rule that caused the overall change): a single sync
+    /// run can flow attributes from several rules onto one Metaverse Object. Null when the value was not
+    /// contributed by a Synchronisation Rule, or the contributing rule has since been deleted.
+    /// </summary>
+    public int? ContributedBySyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the contributing Synchronisation Rule's name, surviving deletion of the rule.
+    /// </summary>
+    public string? ContributedBySyncRuleName { get; set; }
+
+    /// <summary>
     /// Returns the human-readable representation of the value, mirroring the
     /// behaviour of <c>MetaverseObjectChangeAttributeValue.ToString()</c> so
     /// the UI does not need access to the original entity.

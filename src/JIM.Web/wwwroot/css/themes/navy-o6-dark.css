@@ -85,10 +85,18 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: #243a52;
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
-    --mud-palette-table-hover: rgba(97, 75, 158, 0.06);
+    /* A light tint, not a dark one. On a #0d1e30 surface the 6% purple this replaces moved the row by
+       about five levels, which is below what the eye picks up as a highlight at all; darkening or tinting
+       a dark surface has far less room than the equivalent move on white, so the lift has to come from a
+       light colour to be seen. Kept in the theme's blue family rather than plain white so it reads as a
+       highlight rather than as a wash. */
+    --mud-palette-table-hover: rgba(150, 190, 240, 0.10);
 
     /* === JIM Custom: Attribute table name column === */
-    --jim-attr-name-bg: #0e1d30;
+    /* The inner-surface value, which is what this column is: a surface nested inside another surface. It
+       was #0e1d30, one level off the #0d1e30 table surface behind it, so the column that reads clearly as
+       a row header in light mode was invisible here. */
+    --jim-attr-name-bg: #15293c;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #67b9ff;
@@ -113,10 +121,7 @@ html[lang] {
     --jim-nav-active-bg: #15273c;
     --jim-nav-hover-bg: #243a52;
 
-    /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
-    --jim-drawer-border-color: #243a52;
-
-    /* === JIM Custom: Paper border === */
+    /* === JIM Custom: Paper border (also used for the drawer's right-hand edge) === */
     --jim-paper-border-color: #243a52;
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
@@ -226,6 +231,37 @@ a.mud-link.mud-primary-text:visited {
     color: #6dbcff !important;
 }
 
+/* Neutral status pills and dots: site.css colours them from --mud-palette-lines-default, which on this theme is a
+   navy barely lighter than the card, so the pill's 45% border and the dot all but disappear. The secondary text
+   colour keeps them neutral (grey, no verdict) while giving the border a visible edge. */
+html[lang] .jim-status-pill--neutral,
+html[lang] .jim-status-dot--neutral {
+    --jim-status-colour: var(--mud-palette-text-secondary);
+}
+
+/* Text alerts: MudBlazor's default wash (the severity colour at 6%, and site.css's 8% neutral) all but vanishes
+   against the navy surface. A 14% wash makes the alert read as a block of its own while staying far below a
+   filled alert. Background only: alert text colour is site.css's (see ThemeContrastTests). */
+html[lang] .mud-alert-text-normal {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 12%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-info {
+    background-color: color-mix(in srgb, var(--mud-palette-info) 14%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-success {
+    background-color: color-mix(in srgb, var(--mud-palette-success) 14%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-warning {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 14%, transparent) !important;
+}
+
+html[lang] .mud-alert-text-error {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 14%, transparent) !important;
+}
+
 /* Boost alert background contrast — MudBlazor outlined alerts default to
    transparent on dark themes. Add a subtle semantic-colour fill. */
 html[lang] .mud-alert-outlined-normal {
@@ -234,15 +270,6 @@ html[lang] .mud-alert-outlined-normal {
 
 html[lang] .mud-alert-outlined-info {
     background-color: color-mix(in srgb, var(--mud-palette-info) 6%, transparent) !important;
-    color: var(--mud-palette-info) !important;
-}
-
-/* Info alert text colour — match border/icon for outlined and text variants
-   only. The filled variant uses a bright info background, so its text must
-   stay on the dark text colour from --mud-palette-info-text instead. */
-html[lang] .mud-alert-outlined-info .mud-alert-message,
-html[lang] .mud-alert-text-info .mud-alert-message {
-    color: var(--mud-palette-info) !important;
 }
 
 /* Filled alerts use bright semantic colours as backgrounds, so links inside
@@ -314,9 +341,10 @@ html[lang] .mud-chip-outlined.mud-chip-color-primary {
     border-color: var(--mud-palette-primary-lighten) !important;
 }
 
-/* Text primary chips — brighten text with subtle primary background */
+/* Text primary chips — the theme's bright primary (the same one the outlined chip, active tab and
+   tab indicator use) on a stronger primary tint. #a583ff measured 4.28:1 on this tint, under AA. */
 html[lang] .mud-chip-text.mud-chip-color-primary {
-    color: #a583ff !important;
+    color: var(--mud-palette-primary-lighten) !important;
     background-color: color-mix(in srgb, var(--mud-palette-primary) 32%, transparent) !important;
 }
 
@@ -326,10 +354,11 @@ html[lang] .mud-chip-outlined.mud-chip-color-secondary {
     border-color: var(--mud-palette-secondary-lighten) !important;
 }
 
-/* Text secondary chips — brighten text with subtle secondary background */
+/* Text secondary chips — brighter text on a stronger secondary tint. The tint used to name no colour
+   (an invalid color-mix the browser dropped), so it fell back to the portal's 15% rule. */
 html[lang] .mud-chip-text.mud-chip-color-secondary {
-    color: #9fb8d5 !important;
-    background-color: color-mix(in srgb, 32%, transparent) !important;
+    color: #b4c9e0 !important;
+    background-color: color-mix(in srgb, var(--mud-palette-secondary) 32%, transparent) !important;
 }
 
 /* Text tertiary chips — brighten text with subtle tertiary background */

@@ -42,11 +42,16 @@ public static class ExportChangeHistoryBuilder
         // directly and does not trigger EF's automatic FK fix-up from the navigation. Without the
         // explicit assignment the column is inserted as NULL, breaking Causality Tree rendering for
         // export change history (#683).
+        //
+        // ConnectedSystemObjectRemoved (an unconfirmed-provisioning Delete): the export server has
+        // already removed the CSO row, so the navigation and FK must stay null or the insert fails
+        // against a row that no longer exists. DeletedObjectExternalId still reads from the in-memory
+        // CSO graph the item carries, which is unaffected by the row's removal.
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemId,
-            ConnectedSystemObject = exportItem.ConnectedSystemObject,
-            ConnectedSystemObjectId = exportItem.ConnectedSystemObject?.Id,
+            ConnectedSystemObject = exportItem.ConnectedSystemObjectRemoved ? null : exportItem.ConnectedSystemObject,
+            ConnectedSystemObjectId = exportItem.ConnectedSystemObjectRemoved ? null : exportItem.ConnectedSystemObject?.Id,
             ChangeType = changeType,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = executionItem,
@@ -150,39 +155,76 @@ public static class ExportChangeHistoryBuilder
     {
         var attrType = peChange.Attribute.Type;
 
+        // Export rule provenance (#1519): copied onto every value change this method records, so export
+        // change history is self-describing about which rule's mapping produced the value.
+        var syncRuleId = peChange.SyncRuleId;
+        var syncRuleName = peChange.SyncRuleName;
+
         switch (attrType)
         {
             case AttributeDataType.Text when peChange.StringValue != null:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.Number when peChange.IntValue != null:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.IntValue.Value));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.IntValue.Value)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.LongNumber when peChange.LongValue != null:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.LongValue.Value));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.LongValue.Value)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.Decimal when peChange.DecimalValue != null:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.DecimalValue.Value));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.DecimalValue.Value)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.Guid when peChange.GuidValue != null:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.GuidValue.Value));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.GuidValue.Value)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.Boolean when peChange.BoolValue != null:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.BoolValue.Value));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.BoolValue.Value)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.DateTime when peChange.DateTimeValue.HasValue:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.DateTimeValue.Value));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.DateTimeValue.Value)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.Binary when peChange.ByteValue != null:
                 attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, peChange.ByteValue.Length));
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, peChange.ByteValue.Length)
+                    {
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
+                    });
                 break;
             case AttributeDataType.Reference when peChange.UnresolvedReferenceValue != null:
                 // Try to resolve the MVO GUID to a stub CSO in the target Connected System.
@@ -198,7 +240,9 @@ public static class ExportChangeHistoryBuilder
                     var displayName = GetCsoDisplayIdentifier(stubCso);
                     var valueChange = new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, displayName)
                     {
-                        IsPendingExportStub = true
+                        IsPendingExportStub = true,
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
                     };
                     attributeChange.ValueChanges.Add(valueChange);
                 }
@@ -206,7 +250,11 @@ public static class ExportChangeHistoryBuilder
                 {
                     // Fall back to storing as a raw string value for the change history
                     attributeChange.ValueChanges.Add(
-                        new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.UnresolvedReferenceValue));
+                        new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.UnresolvedReferenceValue)
+                        {
+                            SyncRuleId = syncRuleId,
+                            SyncRuleName = syncRuleName
+                        });
                 }
                 break;
             case AttributeDataType.Reference when peChange.StringValue != null:
@@ -217,7 +265,9 @@ public static class ExportChangeHistoryBuilder
                 attributeChange.ValueChanges.Add(
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue)
                     {
-                        IsPendingExportStub = true
+                        IsPendingExportStub = true,
+                        SyncRuleId = syncRuleId,
+                        SyncRuleName = syncRuleName
                     });
                 break;
             case AttributeDataType.Text when peChange.StringValue == null:

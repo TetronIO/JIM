@@ -297,6 +297,27 @@ function Get-DirectoryConfig {
         test scenarios to run against Samba AD or OpenLDAP by varying only the
         directory-specific details.
 
+        Every returned config carries two identities: BindDN/BindPassword is the directory
+        administrator (used to populate data and assert against the directory directly, e.g.
+        ldapmodify/ldapsearch, snapshot verification, the compose healthcheck), and
+        JimBindDN/JimBindPassword is the identity JIM's Connected System binds as. They differ on
+        both directory types: JIM binds as a delegated service account, never the administrator.
+        On OpenLDAP that is cn=svc-jim, granted access through membership of that suffix's
+        cn=jim,ou=Services,<suffix> group (see test/integration/docker/openldap/acl/). On Samba AD
+        it is CN=svc-jim,OU=Services,<domain DN>, granted access through membership of the
+        CN=JIM Connectors,OU=Services,<domain DN> group; the access control entries live in
+        test/integration/docker/samba-ad-prebuilt/delegation/jim-ad-delegation.acl.
+
+        A third identity, MultiPartitionJimBindDN/MultiPartitionJimBindPassword, is what a
+        Connected System that imports MORE THAN ONE partition from the same server binds as
+        (Scenario 9 is the only current example: one Connected System scoped across both the
+        Yellowstone and Glitterband suffixes). On OpenLDAP this is cn=svc-jim-partitions, a member
+        of every suffix's cn=jim group rather than just one, so a single bind can read/write both
+        partitions; a single-partition Connected System keeps using JimBindDN and is unaffected.
+        On Samba AD these two fields equal JimBindDN/JimBindPassword (single partition per
+        instance today), so callers can always read MultiPartitionJimBindDN/Password without
+        branching on directory type.
+
     .PARAMETER DirectoryType
         Which directory type to configure for (SambaAD or OpenLDAP)
 
@@ -323,6 +344,15 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=panoply,DC=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as the delegated service account, not the domain Administrator:
+                    # everything the LDAP Connector needs is granted to the CN=JIM Connectors
+                    # group it belongs to (delegation/jim-ad-delegation.acl in the image sources).
+                    JimBindDN        = "CN=svc-jim,OU=Services,DC=panoply,DC=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    # Single partition per instance today, so the multi-partition identity is
+                    # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
+                    MultiPartitionJimBindDN       = "CN=svc-jim,OU=Services,DC=panoply,DC=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=panoply,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=panoply,DC=local"
@@ -351,6 +381,15 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as the delegated service account, not the domain Administrator:
+                    # everything the LDAP Connector needs is granted to the CN=JIM Connectors
+                    # group it belongs to (delegation/jim-ad-delegation.acl in the image sources).
+                    JimBindDN        = "CN=svc-jim,OU=Services,DC=resurgam,DC=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    # Single partition per instance today, so the multi-partition identity is
+                    # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
+                    MultiPartitionJimBindDN       = "CN=svc-jim,OU=Services,DC=resurgam,DC=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=resurgam,DC=local"
                     UserContainer    = "OU=Users,OU=Corp,DC=resurgam,DC=local"
@@ -379,6 +418,15 @@ function Get-DirectoryConfig {
                     UseSSL           = $true
                     BindDN           = "CN=Administrator,CN=Users,DC=gentian,DC=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as the delegated service account, not the domain Administrator:
+                    # everything the LDAP Connector needs is granted to the CN=JIM Connectors
+                    # group it belongs to (delegation/jim-ad-delegation.acl in the image sources).
+                    JimBindDN        = "CN=svc-jim,OU=Services,DC=gentian,DC=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    # Single partition per instance today, so the multi-partition identity is
+                    # just JimBindDN/Password; see Get-DirectoryConfig's comment help.
+                    MultiPartitionJimBindDN       = "CN=svc-jim,OU=Services,DC=gentian,DC=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "DC=gentian,DC=local"
                     UserContainer    = "OU=Users,OU=CorpManaged,DC=gentian,DC=local"
@@ -417,6 +465,21 @@ function Get-DirectoryConfig {
                     UseSSL           = $false
                     BindDN           = "cn=admin,dc=yellowstone,dc=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, not the rootDN: an explicit,
+                    # versioned access-control set (test/integration/docker/openldap/acl/) grants
+                    # it exactly what the LDAP Connector needs. The administrator keeps
+                    # populating data and asserting against the directory directly.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
+                    # Identity for a Connected System that imports MORE THAN ONE partition from
+                    # this server (Scenario 9: one Connected System scoped across both
+                    # Yellowstone and Glitterband). cn=svc-jim-partitions is a member of every
+                    # suffix's cn=jim group (see bootstrap/01-base-ous-yellowstone.ldif and
+                    # scripts/01-add-second-suffix.sh), not just its own suffix's, so a single
+                    # bind can read/write both partitions; a single-partition Connected System
+                    # keeps using JimBindDN/Password above and is unaffected.
+                    MultiPartitionJimBindDN       = "cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local"
+                    MultiPartitionJimBindPassword = "Svc-Jim-Partitions@123!"
                     AuthType         = "Simple"
                     BaseDN           = "dc=yellowstone,dc=local"
                     UserContainer    = "ou=People,dc=yellowstone,dc=local"
@@ -440,6 +503,7 @@ function Get-DirectoryConfig {
                     # Second suffix for multi-partition testing
                     SecondSuffix     = "dc=glitterband,dc=local"
                     SecondBindDN     = "cn=admin,dc=glitterband,dc=local"
+                    SecondJimBindDN  = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
                 }
                 # Source and Target use the same OpenLDAP container but different suffixes
                 # for cross-domain sync testing (Scenario 2)
@@ -450,6 +514,10 @@ function Get-DirectoryConfig {
                     UseSSL           = $false
                     BindDN           = "cn=admin,dc=yellowstone,dc=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, not the rootDN; see the Primary
+                    # instance's comment above.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "dc=yellowstone,dc=local"
                     UserContainer    = "ou=People,dc=yellowstone,dc=local"
@@ -478,6 +546,10 @@ function Get-DirectoryConfig {
                     UseSSL           = $false
                     BindDN           = "cn=admin,dc=glitterband,dc=local"
                     BindPassword     = "Test@123!"
+                    # JIM binds as a delegated service account, not the rootDN; see the Primary
+                    # instance's comment above.
+                    JimBindDN        = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
+                    JimBindPassword  = "Svc-Jim@123!"
                     AuthType         = "Simple"
                     BaseDN           = "dc=glitterband,dc=local"
                     UserContainer    = "ou=People,dc=glitterband,dc=local"
@@ -642,6 +714,56 @@ function Add-SambaCertificateToJimStore {
     finally {
         Disconnect-JIM -ErrorAction SilentlyContinue
         Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Grant-JimAdDelegation {
+    <#
+    .SYNOPSIS
+        Delegate JIM's access over a container (an OU) on a Samba AD domain controller.
+
+    .DESCRIPTION
+        JIM's Connected Systems bind to the Samba AD lab as a delegated service account
+        (CN=svc-jim,OU=Services,<domain DN>), never the domain Administrator, and the access
+        that account has is granted per container through the CN=JIM Connectors,OU=Services
+        group it belongs to. The images bake the delegation over the containers they create at
+        build time (OU=Corp, OU=TestUsers, OU=TestGroups and the Deleted Objects container), so
+        anything below one of those inherits it and needs nothing here.
+
+        A container the lab creates at RUN time, directly under a domain root, carries no
+        delegation at all. JIM then imports from it happily and fails at export with an access
+        error, which reads like a JIM bug rather than a missing access control entry in the
+        test lab; the diagnosis costs far more than the one call this function makes. So every
+        run-time-created container JIM manages gets delegated the moment it is created.
+
+        This runs the image's own /usr/local/sbin/jim-delegate.sh, the same idempotent script
+        the image build uses, so calling it for a container that already carries the delegation
+        is harmless. The access control entries it writes live in
+        test/integration/docker/samba-ad-prebuilt/delegation/jim-ad-delegation.acl.
+
+    .PARAMETER ContainerName
+        The Docker container name of the Samba AD instance, e.g. samba-ad-primary,
+        samba-ad-source, samba-ad-target.
+
+    .PARAMETER ContainerDn
+        The Distinguished Name of the container (OU) to delegate over. The delegation applies to
+        that container and everything below it.
+
+    .EXAMPLE
+        Grant-JimAdDelegation -ContainerName "samba-ad-primary" -ContainerDn "OU=Corp,DC=panoply,DC=local"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerDn
+    )
+
+    $output = docker exec $ContainerName /usr/local/sbin/jim-delegate.sh "$ContainerDn" 2>&1
+    $outputText = ($output -join [Environment]::NewLine).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Grant-JimAdDelegation: could not delegate JIM's access over '$ContainerDn' on '$ContainerName'. JIM's Connected System will fail at export with an access error until this is granted. jim-delegate.sh output: $outputText"
     }
 }
 
@@ -3793,6 +3915,99 @@ function Stop-DockerEventsCapture {
         return @(Get-Content -Path $LogPath -ErrorAction SilentlyContinue).Count
     }
     return 0
+}
+
+function Assert-SyncStateInvariants {
+    <#
+    .SYNOPSIS
+        Asserts that a finished scenario left no Connected System in a state JIM can never recover from.
+
+    .DESCRIPTION
+        Scenario assertions cover the Connected Systems a scenario cares about. This sweep covers ALL of
+        them, because a defect is happiest in the system nobody is looking at: Scenario 4 left nine
+        unremovable Connected System Objects in "Cross-Domain Export" on every run for months, a target it
+        provisions to and never asserts on. The runner calls this after every scenario, whatever the
+        scenario's own outcome.
+
+        Each invariant is a state that is wrong whatever the scenario was testing, read directly from the
+        database (same pattern as Get-MvoDeletionMarkers) so it needs no API surface and sees every system:
+
+        1. No stranded Pending Provisioning object. A Connected System Object that is Pending Provisioning and
+           not joined, with either no Pending Export at all or only an unsent Create, has nothing left that
+           would ever resolve it: import deletion detection excludes Pending Provisioning objects, so it stays
+           for ever. (An unsent Create on a disconnected object would also provision something nobody asked
+           for.) A Delete still waiting to be exported for such an object is NOT a violation: that is
+           deprovisioning in flight, for an object whose Create was exported.
+        2. No unexecutable Delete. A Pending-status Delete Pending Export that carries no attribute changes,
+           for a Connected System Object holding no attribute values, gives a Connector nothing to identify
+           the object by; the export fails with "Delete export has no External ID value".
+
+        Pending Exports that are merely waiting (a scenario that provisions to a target and never exports
+        to it) are deliberately NOT a violation: that is a legitimate resting state, and a useful one for
+        anyone wanting Pending Exports to look at.
+
+    .OUTPUTS
+        Nothing on success. Throws, naming every violation, when an invariant is broken.
+
+    .EXAMPLE
+        Assert-SyncStateInvariants
+    #>
+    [CmdletBinding()]
+    param()
+
+    # ConnectedSystemObjectStatus.PendingProvisioning = 2; ConnectedSystemObjectJoinType.NotJoined = 0;
+    # PendingExportChangeType.Create = 0, Delete = 2; PendingExportStatus.Pending = 0.
+    $invariants = @(
+        @{
+            Name  = "Stranded Pending Provisioning Connected System Object (not joined, no Create in flight)"
+            Query = @"
+SELECT cs."Name", cso."Id"::text
+FROM "ConnectedSystemObjects" cso
+JOIN "ConnectedSystems" cs ON cs."Id" = cso."ConnectedSystemId"
+LEFT JOIN "PendingExports" pe ON pe."ConnectedSystemObjectId" = cso."Id"
+WHERE cso."Status" = 2
+  AND cso."JoinType" = 0
+  AND (pe."Id" IS NULL
+       OR (pe."ChangeType" = 0 AND pe."Status" = 0 AND pe."LastAttemptedAt" IS NULL))
+ORDER BY cs."Name", cso."Id";
+"@
+        },
+        @{
+            Name  = "Unexecutable Delete Pending Export (no attribute changes, and its Connected System Object holds no values to identify it by)"
+            Query = @"
+SELECT cs."Name", pe."Id"::text
+FROM "PendingExports" pe
+JOIN "ConnectedSystems" cs ON cs."Id" = pe."ConnectedSystemId"
+JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+WHERE pe."ChangeType" = 2
+  AND pe."Status" = 0
+  AND NOT EXISTS (SELECT 1 FROM "PendingExportAttributeValueChanges" c WHERE c."PendingExportId" = pe."Id")
+  AND NOT EXISTS (SELECT 1 FROM "ConnectedSystemObjectAttributeValues" v WHERE v."ConnectedSystemObjectId" = cso."Id")
+ORDER BY cs."Name", pe."Id";
+"@
+        }
+    )
+
+    $violations = @()
+    foreach ($invariant in $invariants) {
+        $rows = docker compose exec -T jim.database psql -t -A -F '|' -U jim -d jim -c $invariant.Query 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Assert-SyncStateInvariants: psql query failed for invariant '$($invariant.Name)'. Output: $rows"
+        }
+
+        $offenders = @($rows | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        if ($offenders.Count -eq 0) {
+            continue
+        }
+
+        $bySystem = $offenders | Group-Object { $_.Split('|')[0] } | ForEach-Object { "$($_.Name): $($_.Count)" }
+        $sample = ($offenders | Select-Object -First 5 | ForEach-Object { $_.Split('|')[1] }) -join ', '
+        $violations += "$($invariant.Name). $($offenders.Count) found ($($bySystem -join '; ')). First ids: $sample"
+    }
+
+    if ($violations.Count -gt 0) {
+        throw "Synchronisation state invariant(s) broken:`n  - $($violations -join "`n  - ")"
+    }
 }
 
 function Assert-NoWorkerErrors {

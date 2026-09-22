@@ -18,18 +18,21 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
+| `<PendingValue Value="@x" Status="@s" />` | A value a Pending Export will write, shown where no confirmed value exists yet. Never colour one Info blue: it reads as a link | `Shared/PendingValue.razor` |
 | `<BooleanValue Value="@x" />` | Any Boolean attribute value: the tick or cross, and the word beside it | "Boolean values" below |
 | `<PrefilledFormValidator />` | Inside any `MudForm` prefilled with an existing entity, so validity-gated buttons enable on load | "Form action gating" below |
 | `<CollapsibleStackTrace StackTrace="@x" />` | Any place an error's stack trace is offered alongside its message | "Errors and stack traces" below |
 | `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
 | `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
+| `<PageInfo Title="Connector Space" Term="Term.ConnectorSpace">...</PageInfo>` | Saying what a page is for: the info button at the end of the page title | "Page descriptions" below |
+| `<TermHint Term="Term.Projection" />` | Explaining a JIM term beside the label where an administrator first meets it | "Page descriptions" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 | `<NavigableMudTabs>` | Top-level page tabs (syncs the active tab to `?t=slug`) | "Tabs" below |
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
 | `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
-| `<ObjectChip Kind="@k" TypeName="@t" Name="@n" Href="@url" />` | Any **object** shown as belonging to a side of the Metaverse: the `CS` / `MV` avatar chip naming a Connected System Object or a Metaverse Object | "Object chips" below |
+| `<ObjectChip Kind="@k" TypeName="@t" Name="@n" Href="@url" />` | Any reference to a Connected System Object, Metaverse Object, Connected System, Synchronisation Rule, Pending Export, Deletion Record or Run Profile: the site's one object chip | "Object chips" below |
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
@@ -68,22 +71,26 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 
 **Known duplicate:** `SyncRuleAttributeFlowTab.razor` still hand-rolls this markup in eleven places, in two clusters that disagree with each other (one wraps the whole chip in a rich type/plurality tooltip, the other tooltips only the avatar with generic text). Migrating it to this component is worth doing, and needs the tooltip inconsistency resolved deliberately rather than folded into an unrelated change. Do not add a twelfth copy.
 
-## Object chips (which side of the Metaverse an object is on)
+## Object chips (naming any object on the site)
 
-**A reference to a Connected System Object or a Metaverse Object is an `<ObjectChip />`.** It is the object sibling of `<AttributeChip />` above: the `CS` / `MV` avatar, the object's type as an accented prefix, and its name or identifier.
+**A reference to a Connected System Object, a Metaverse Object, a Connected System, a Synchronisation Rule, a Pending Export, a Deletion Record or a Run Profile is an `<ObjectChip />`.** It is the site's one object chip: every such reference, inside the causality panel or anywhere else, renders through this one component, so it looks and behaves identically wherever it appears. It replaced two earlier, disagreeing components: the portal's own `ObjectChip` (CS/MV only, a MudChip/MudAvatar pair) and the causality panel's `CausalityEntityChip` (all seven kinds, its own glyph markup); this component took over `CausalityEntityChip`'s look (the glyph, type prefix and ellipsis-clipped name) and the full kind set, and `CausalityEntityChip` no longer exists.
 
 ```razor
-<ObjectChip Kind="ObjectChipKind.ConnectedSystem" TypeName="@cso.Type.Name" Name="@externalId" Href="@url" />
-<ObjectChip Kind="ObjectChipKind.Metaverse" TypeName="@mvo.Type.Name" Name="@displayName" Href="@url" Class="ma-0" />
+<ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@cso.Type.Name" Name="@ObjectDescription.ChipName(cso.Name, externalId)" Href="@url" />
+<ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@mvo.Type.Name" Name="@displayName" Href="@url" Class="ma-0" />
+<ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@syncRule.Name" Href="@url" />
 ```
 
+- **A glyph names which of the seven kinds it is.** `ConnectedSystemObject` and `MetaverseObject` wear a three-letter pill (`CSO`/`MVO`), so neither is mistaken for the two-letter `Connected System` glyph (`CS`); `SynchronisationRule`/`PendingExport`/`DeletionRecord`/`RunProfile` wear two-letter circles (`SR`/`PE`/`DR`/`RP`). The glyph's own `title` spells out the full name and it is `aria-hidden`, since nothing else on the chip explains the abbreviation. `ShowGlyph="false"` drops it where something beside the chip already says what kind of object it names (a Lineage card sitting in a column whose head already carries the glyph).
+- **The one naming rule: `Name` is the display name, or the external id where there is no name, never both.** Build it from `ObjectDescription.ChipName(displayName, externalId)` for a Connected System Object or Metaverse Object. The external id, where distinct from the name, belongs in the tooltip instead: `ObjectDescription.ForConnectedSystemObjectChipTooltip(typeName, displayName, externalId, connectedSystemName)` and `ForMetaverseObjectChipTooltip(typeName, displayName)` build it. When there is no display name and no external id (a provisioned object before its first export), pass no `Name`; the chip shows the type alone and the call site links the object beside it, as `ActivityRunProfileExecutionItemDetail.razor`'s Execution Summary panel does.
 - **`Href` makes it a link, and only a linked chip gets the hover treatment.** `jim-chip-link` goes on the link wrapper rather than the chip because the link is the hover target; the component owns that, so no call site places the class.
 - **A chip with no `Name` renders the type without a trailing colon.** The colon joins the type to the identifier, so a record with no external ID yet (nothing exported) would otherwise trail punctuation pointing at nothing.
 - **A chip with no `TypeName` renders the name alone.** The inverse: where the surrounding table already carries a Type column (a Configuration Change Preview's drill-down), the chip is the side marker and the link, and repeating the type on it would spend the row's one line saying it twice.
 - **`Class` is the call site's, for the surrounding geometry only:** `ma-0` inside a detail table's cell, nothing in a stack of its own. Do not restyle the chip itself per call site.
-- The avatar colours (`Color.Secondary` for CS, `Color.Primary` for MV) are load-bearing: the hover rule in `site.css` recolours `mud-avatar-filled-secondary` and `mud-avatar-filled-primary` by name, and both must stay in step or a badge stops responding to its own chip's hover.
+- The glyph colours (`.cso`/secondary, `.mvo`/primary, `.sys`/info, `.rule`/warning, everything else the base secondary tone) are load-bearing: the hover rule in `site.css` (`.jim-chip-link:hover .jim-object-chip`/`.jim-object-chip-glyph`) recolours by the same tokens, so a glyph class and its fill must stay in step or a badge stops responding to its own chip's hover.
+- **The chip's CSS is global (`.jim-object-chip*` in `site.css`), not scoped to the causality panel.** It used to be two competing stylesheets (a `.causality-panel`-scoped `.chip`/`.glyph` set, and per-call-site `jim-mv-chip-prefix`/`jim-cs-chip-prefix` accents); both are gone. Every token is derived from the active theme's MudBlazor palette (`--mud-palette-*`, `--jim-chip-text-*`), so the chip looks identical inside and outside the panel, in every theme.
 
-**Why this is a component.** The markup was duplicated by hand across `ActivityRunProfileExecutionItemDetail` and `PendingExportDetail`, and that duplication is exactly what let a defect live: the avatar hover rule was written for the MV badge only, so every CS badge kept its resting colour when its chip filled. `PendingExportDetail` rendered both badges side by side and still nothing tied them together. It was also measurably wrong for the MV badge it did cover (1.2:1 to 1.7:1 against the fill); see the rule's comment in `site.css` for the palette measurements behind the treatment that replaced it.
+**Why this is a component.** The markup was duplicated by hand across `ActivityRunProfileExecutionItemDetail`, `PendingExportDetail` and the causality panel's own event cards, and that duplication is exactly what let defects live: the hover rule was written for the MV badge only, so every CS badge kept its resting colour when its chip filled, and the causality panel's own chip arrived at a better look than the rest of the portal and kept it to itself. See the rule's comment in `site.css` for the palette measurements behind the hover treatment.
 
 ## Synchronisation Rule identity strip
 
@@ -192,6 +199,7 @@ Three shapes break it, and each has one answer:
 | Two stacked block elements (`MudText` renders a `<p>`) | `<OneLineText Text Secondary>`: the secondary text reads inline after the value, low-lighted |
 | Unbounded free text | `<OneLineText Text>`, or the `.jim-one-line` class where the content is markup |
 
+- **A clamp only clips inside a bounded box, so every grid with an unbounded free-text column names that column its fill column** (`HeaderClass="jim-fill-column" CellClass="jim-fill-column"`) and keeps the others to one line (`jim-nowrap` on both classes). In an auto-layout table a column is sized to its widest content, so a `.jim-one-line` cell with no bound never clips: the column grows to its longest description and the table runs past the page (Service Settings, once its descriptions moved inline). Where a second column's content is long without being the point of the row (a Service Setting's value, a password target's message), wrap that cell's content in `.jim-column-cap` instead, tightening the cap inline with `--jim-column-cap` where the default `30rem` is too generous.
 - **Nothing may become unreachable.** What is clipped stays available on the element's `title`, in the `<OverflowList>` dialog, or on the detail page/panel the row already opens (the service log's Message column relies on all three: clipped, hoverable, and complete and copyable in the entry panel behind a row click).
 - **`.jim-one-line` and `.jim-one-line-list` are the primitives** (`site.css`), and are used directly where a cell's content is markup rather than a string: a linkified description, an icon beside a name, a target chip followed by modifier chips. On `.jim-one-line-list`, only the child carrying `.jim-one-line-list-value` gives way; everything else on the row holds its size, so an affordance or a modifier chip can never be what a long value pushes out.
 - **`<OneLineText>` uses the element's `title`, not a `MudTooltip`, and that is deliberate** rather than an oversight of the Tooltips rule below: a `MudTooltip` wraps its child in an inline-flex box of its own, which is exactly the box the ellipsis needs to be the block container, so the wrapper silently defeats the clipping it was added to explain. Do not "fix" it by migrating it.
@@ -275,10 +283,29 @@ A single-sentence description needs none of this and renders unchanged. The site
 
 **Every editing surface that opens a `<ConfigurationChangePreviewPanel />` passes `OnClose`.** Point it at the surface's existing `Discard...Preview()` method (the one that forgets the Activity id, the previewed proposal and the last read), so closing removes the panel and the save confirmation stops citing the preview. The panel renders the close control only when the callback is set, so the one surface that shows a preview as a record rather than as a question, the Activity page, leaves it unset. A running preview closed this way is not cancelled; it finishes as an Activity. The affordance itself is covered by `ConfigurationChangePreviewPanelTests`; the wiring is a convention, so check it by reading the panel's call sites (`grep -n "<ConfigurationChangePreviewPanel" -A4`).
 
+## Page descriptions
+
+**What a page is for is said once, from a `<PageInfo />` info button at the end of the page title.** It is the last child of the title's `MudText`, it opens a popover on click, and it carries one to three plain sentences plus, where the page is about a glossary term (`Term="..."`), a link to that entry.
+
+```razor
+<MudText Typo="Typo.h3"><span>Connector Space:</span> <span class="mud-primary-text">@name</span>
+    <PageInfo Title="Connector Space" Term="Term.ConnectorSpace">
+        The Connector Space holds this Connected System's Connected System Objects. ...
+    </PageInfo>
+</MudText>
+```
+
+- **Never describe a page with a dismissible alert under the breadcrumbs.** The Connector Space list did: it cost a band of every visit's first screen until someone closed it, reappeared on the next visit because nothing remembered the dismissal, and said much the same as the info button already in the title above it. An alert is for something the reader needs to notice now; a description is for a reader who goes looking.
+- `<TermHint />` is the same affordance for a **term** rather than a page: it sits beside a label (the "Project Users to the Metaverse?" switch, a tab's heading) and its wording comes from `TermDefinitions`, held verbatim in step with `docs/reference/glossary.md` by `GlossaryTermConsistencyTests`. A page title takes a `<PageInfo />`, whose words are the page's own.
+- Both are `<InfoPopover />` underneath, so the popover's padding, measure, title and link treatment, and the button's alignment with the text beside it, are fixed once in `site.css` (`jim-info-popover`, `jim-info-button`). Do not restyle either at a call site, and do not hand-roll a third info button from a `MudMenu` or `MudTooltip`.
+- The button's alignment inside a heading is measured against the **glyphs**, not the line box (a line box carries empty space above the capitals, so centring on it leaves the icon visibly high; see the rule's comment in `site.css`). Placed in an `align-center` flex row it needs nothing.
+- **A grey `Typo.subtitle1` intro paragraph sitting under the title is the same anti-pattern as the dismissible alert above, not a milder version of it.** Both say what the page is for somewhere other than the title's own info button, and both were replaced wholesale rather than left as a second option: a page has one way of describing itself. `PageDescriptionConventionTests` (`test/JIM.Web.Tests/`) sweeps every `.razor` file under `src/JIM.Web/Pages` carrying an `@page` directive and fails the build on a `Typo.subtitle1` found between the page's `Typo.h3` title and the first `MudPaper`/`NavigableMudTabs`/`VirtualisedDataGrid`/`MudTable`/`MudGrid` that follows. A paragraph that is a deliberate exception opts out with a `@* page-description: exempt - <why> *@` comment directly above it, so the reason travels with the markup rather than living in an allowlist inside the test. Exempt today: `Pages/Index.razor` (Home) and `Pages/Admin/AdminIndex.razor` (both orient a first-time visitor to what follows, rather than describing a page with a purpose of its own), and `Pages/Admin/ThemePreview.razor` (a design specimen page for developers, not a feature page). A paragraph found deeper in a page, describing one section rather than the page as a whole (a tab's own intro, a panel's own caption), is outside the convention and is left alone; the scan stops at the first content block for exactly this reason.
+
 ## Alerts
-- ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
-- This ensures a consistent outlined style across the entire UI
+- **A `<MudAlert>` takes MudBlazor's default variant (Text): never pass `Variant` to one.** The rule used to be the opposite, every alert `Variant.Outlined`, spelt out by hand on 158 alerts across 61 files. A default that needs no attribute cannot drift; one that must be remembered at every call site does. `AlertVariantConventionTests` sweeps every `.razor` file and fails the build for a `MudAlert` that names a `Variant`; the theme specimen page is its one exemption, because showing the variants side by side is that page's job.
+- **Change alerts with a tag-aware edit, never a search-and-replace for the attribute.** `Variant="Variant.Outlined"` is also the correct, intended variant on hundreds of buttons, chips, selects and text fields. Removing it by hand from one page stripped it from two buttons as well, which silently turned them into text buttons.
 - **A button placed inside an alert should carry `Color="Color.Inherit"`** unless it genuinely needs a colour of its own. `site.css` then paints it, and its icon, in the alert's severity colour, so the action reads as part of the message rather than as something dropped into it. This works for every severity and both themes; do not hand-pick a colour per call site. A button that names its own `Color` (the filled Primary/Warning/Info actions in the Schema, Partitions and Example Data alerts) is left exactly as specified.
+- **Alert text and links take their colour from `site.css`, never from a call site or a theme.** A Text or Outlined alert of Info, Success, Warning or Error severity is coloured on the alert itself with the `--jim-chip-text-*` label blend, so the message, its links (visited or not), inheriting buttons and the close control share one legible severity colour; the icon keeps the raw palette colour. Put a link in an alert as a plain `<MudLink>`: no class is needed. MudBlazor's own text colour, `--mud-palette-{severity}-darken`, is generated from MudBlazor's default palette rather than the theme's, which is why Info, Success and Warning alerts read faint until this rule existed. `ThemeContrastTests.EveryTheme_EveryAlertMessage_MeetsWcagAa` measures every theme; do not add a per-theme alert text colour, because theme stylesheets load after `site.css` and would silently win.
 
 ## Custom CSS in `site.css` (look at the rendered page)
 
@@ -320,7 +347,8 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 - Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections
 - Exception: the **first** panel on a page should omit `mt-6` (use just `Class="pa-4"`) so there is no unnecessary top margin
 - **After breadcrumbs, no intro text**: `MudBreadcrumbs` carries its own 16px bottom padding. If the first panel directly follows it with nothing in between, a bare `Class="pa-4"` (no margin) under-shoots the uniform gap (16px only); use `Class="pa-4 mt-2"` so the combined gap lands on the ~24px target, same reasoning as the "Tabs margin" rule below
-- **After intro text**: `MudText` with `Typo.subtitle1` renders as a `<p>` with its own bottom margin (~16px). The first panel after intro text should use `mt-4` (not `mt-6`) so the combined gap matches `mt-6` visually
+- **After intro text**: intro text is now the exception rather than the norm; see "Page descriptions" above (a page states its purpose from its title's `<PageInfo />`, not from a paragraph under it). It survives only on the handful of exempted landing/specimen pages (`Pages/Index.razor`, `Pages/Admin/AdminIndex.razor`, `Pages/Admin/ThemePreview.razor`). Where it is present, `MudText` with `Typo.subtitle1` renders as a `<p>` with its own bottom margin (~16px), and the first panel after it should use `mt-4` (not `mt-6`) so the combined gap matches `mt-6` visually
+- **A `VirtualisedDataGrid` directly after breadcrumbs takes `GridClass="mt-2"`.** The grid's default top margin (`mt-5`) suits a grid that follows a block of its own page content (filter chips, a button row); straight under `MudBreadcrumbs`, whose 16px bottom padding already supplies most of the gap, the default overshoots the uniform ~24px target by half again. Same reasoning as the two rules either side of this one.
 - **Tabs margin (breadcrumb-adjacent)**: `Class` on `NavigableMudTabs`/`MudTabs` **does** reach the root element (`MudTabs.TabsClassnames` includes `.AddClass(Class)`); pass it directly, never wrap in an extra `<div>`. `MudBreadcrumbs` carries its own 16px bottom padding, so when `NavigableMudTabs` directly follows a `MudBreadcrumbs` with nothing in between, use `Class="mt-2"` (not `mt-6`) so the combined gap lands on the uniform ~24px target, mirroring the "after intro text" `mt-4` rule above. Only reach for a full `mt-6` on `NavigableMudTabs` when it follows a plain block (e.g. a `MudPaper`) with no built-in padding of its own. See `ConnectedSystemDetail.razor`.
 - **A notice sitting between the breadcrumbs and the tabs** (a page-level `MudAlert`, e.g. the configuration changed-since notice on `ConnectedSystemDetail.razor`) needs `Class="mt-2 mb-6"`. `mt-2` combines with the breadcrumbs' own 16px bottom padding for the 24px target above it; `mb-6` is needed below because adjacent block margins collapse to the larger of the two, and the tabs' `mt-2` alone leaves an 8px gap that reads as cramped next to every other section break on the page.
 - **Tab content spacing**: Whether `TabPanelsClass` needs its own top spacing depends on the first tab's content. If the tab's content starts flush (e.g. a bare `MudPaper`/`MudText` with no top margin), use `TabPanelsClass="pt-5"`. If the content already supplies its own top margin (e.g. a table with `Class="mt-3"`), use `TabPanelsClass="pa-0"` and let the content's own margin stand; do not stack both, it double-counts.
@@ -328,12 +356,33 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 ## UI element sizing
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components
 - Text: Use `Typo.body1` (default readable size)
-- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium). The Size parameter still means what it says, but a Text-variant chip is a compact pill whatever its size; see "Chips" below
 - Buttons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
 - Icons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
 - Other MudBlazor components: Omit Size parameter to use default sizing
 - Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
 - Users prefer readable, appropriately-sized UI elements by default
+
+## Chips
+
+**A `Variant.Text` MudChip is the portal's standard chip, and it is styled from one place.** `site.css`
+carries both halves: `--jim-chip-padding` / `--jim-chip-radius` / `--jim-chip-font-weight` give it the shape
+(a compact pill with a semibold label), and the `--jim-chip-text-*` blend beside them gives the label a
+colour that clears WCAG AA in every theme. A call site passes `Variant` and `Color` and nothing else.
+
+- **Never restyle a chip at the call site**, and never hand-roll a pill from a `span` to get this look. Two
+  places in the causality panel did exactly that, arriving at a better chip than the portal's and keeping it
+  to themselves; promoting it here is what retired them. If a chip needs to look different, the question is
+  whether the design system should change, not whether this page should opt out.
+- **The shape is deliberately independent of `Size`.** `Size.Small` still yields a smaller chip, because only
+  MudBlazor's per-size font size is left alone; the padding, radius and weight are the same at every size. So
+  the sizing rule above is unaffected: omit `Size` and you get the standard chip.
+- The one span that legitimately remains is the Table view's change chip (`.tv-kind`), whose tone arrives as
+  an inline `--tone` custom property rather than a MudBlazor `Color`. It consumes the same tokens, so it
+  cannot drift from the chips around it.
+- **The `html[lang]` qualifier on the shape rule is load-bearing.** MudBlazor's `.mud-chip.mud-chip-size-medium`
+  has the same specificity a bare `.mud-chip.mud-chip-text` would, and its stylesheet loads after `site.css`,
+  so without the qualifier the height and radius silently do nothing. See "Custom CSS in `site.css`" above.
 
 ## Tabs
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation

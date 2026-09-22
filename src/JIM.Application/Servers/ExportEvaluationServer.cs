@@ -242,6 +242,12 @@ public class ExportEvaluationServer
             Log.Information("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}. Handling deprovisioning for CSO {CsoId}",
                 mvo.Id, exportRule.Name, existingCso.Id);
 
+            // Provisioning that was never exported is cancelled outright, whichever recognised action the rule
+            // carries: the object does not exist in the target system, so there is nothing there to delete and
+            // nothing to leave behind disconnected.
+            if (await TryCancelNeverExportedProvisioningOnScopeOutAsync(mvo, existingCso, exportRule, workingSet))
+                continue;
+
             // Handle based on OutboundDeprovisionAction
             var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule, workingSet);
             if (pendingExport != null)
@@ -503,6 +509,16 @@ public class ExportEvaluationServer
             Log.Information("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}. Handling deprovisioning for CSO {CsoId}",
                 mvo.Id, exportRule.Name, existingCso.Id);
 
+            // Provisioning that was never exported is cancelled outright, whichever recognised action the rule
+            // carries: the object does not exist in the target system, so there is nothing there to delete and
+            // nothing to leave behind disconnected. The cache entry goes with the CSO, so nothing later in the
+            // page can reuse an object that no longer exists.
+            if (await TryCancelNeverExportedProvisioningOnScopeOutAsync(mvo, existingCso, exportRule, workingSet))
+            {
+                cache.CsoLookup.Remove(lookupKey);
+                continue;
+            }
+
             // Handle based on OutboundDeprovisionAction
             var pendingExport = await HandleOutboundDeprovisioningAsync(mvo, existingCso, exportRule, workingSet);
             if (pendingExport != null)
@@ -571,6 +587,124 @@ public class ExportEvaluationServer
                     exportRule.OutboundDeprovisionAction, exportRule.Name);
                 return null;
         }
+    }
+
+    /// <summary>
+    /// Scope-out form of the never-exported cancellation. The CSO here comes from the per-page cache, which also
+    /// holds Pending Provisioning CSOs created earlier in the same page and not yet persisted (their Create is
+    /// deferred to the page flush alongside them). Those have no persisted Pending Export, so the engine's verdict
+    /// leaves them alone, and the flush's own reconciliation of deferred Creates against persisted Deletes unwinds
+    /// them as it always has. A persisted, unsent Create is the proof both that nothing was exported and that the
+    /// CSO itself is persisted and safe to remove here.
+    /// </summary>
+    /// <param name="workingSet">Records the cancellation once its deletes succeed, so the caller can report it
+    /// as a <see cref="JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled"/>
+    /// outcome once the run finishes.</param>
+    /// <returns>True when the provisioning was cancelled and no further deprovisioning applies.</returns>
+    private async Task<bool> TryCancelNeverExportedProvisioningOnScopeOutAsync(
+        MetaverseObject mvo,
+        ConnectedSystemObject cso,
+        SyncRule exportRule,
+        ExportEvaluationWorkingSet workingSet)
+    {
+        if (cso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            return false;
+
+        var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
+        if (existingPe == null || !ScopeOutCancelsNeverExportedProvisioning(cso, exportRule, existingPe))
+            return false;
+
+        await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync([cso.Id]);
+        mvo.ConnectedSystemObjects.Remove(cso);
+        cso.MetaverseObject = null;
+        await SyncRepo.DeleteConnectedSystemObjectsAsync([cso]);
+
+        // Recorded only after both deletes succeed, so a failed batch write cannot leave the working set
+        // claiming a cancellation that never happened.
+        workingSet.RecordCancelledProvisioning(new CancelledProvisioning(cso.Id, cso.ConnectedSystemId, mvo.Id));
+
+        Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: Cancelled never-exported provisioning of CSO {CsoId} in system {SystemId} for MVO {MvoId}: removed unsent Create Pending Export {PendingExportId} and the CSO; nothing was exported",
+            cso.Id, cso.ConnectedSystemId, mvo.Id, existingPe.Id);
+
+        // Was that the last connector? (Asked after the removal above, per the engine's contract.)
+        if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
+        {
+            mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+            Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
+                mvo.Id, mvo.LastConnectorDisconnectedDate);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The scope-out cancellation verdict, shared by the real run and the outbound preview so the two cannot
+    /// drift: the engine's never-exported verdict, and never under an unrecognised deprovisioning action, which
+    /// does nothing at all (deprovisioning semantics are never guessed at;
+    /// <see cref="HandleOutboundDeprovisioningAsync"/> surfaces the warning).
+    /// </summary>
+    private bool ScopeOutCancelsNeverExportedProvisioning(ConnectedSystemObject cso, SyncRule exportRule, PendingExport? existingPendingExport) =>
+        _syncEngine.IsProvisioningNeverExported(cso, existingPendingExport) &&
+        _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPendingExport: null).Action != OutOfScopeDeprovisioningAction.UnknownAction;
+
+    /// <summary>
+    /// Cancels the provisioning of every given CSO whose provisioning was provably never exported (per
+    /// <see cref="ISyncEngine.IsProvisioningNeverExported"/>): removes its unsent Create Pending Export and the
+    /// CSO itself, set-based. Callers must pass persisted CSOs only. The common case (no Pending Provisioning
+    /// CSO among them) costs no query.
+    /// </summary>
+    /// <param name="csosByMvo">The candidate CSOs, keyed by the Metaverse Object each is joined to, so a
+    /// cancellation can be recorded against the right Metaverse Object without a second lookup.</param>
+    /// <param name="workingSet">Records each cancellation once its deletes succeed, so the caller can report it
+    /// as a <see cref="JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled"/>
+    /// outcome once the run finishes.</param>
+    /// <param name="callerName">The calling method's name, for the summary log line.</param>
+    /// <returns>The ids of the CSOs cancelled, for the caller to exclude from any further deprovisioning.</returns>
+    private async Task<HashSet<Guid>> CancelNeverExportedProvisioningAsync(
+        IReadOnlyDictionary<Guid, List<ConnectedSystemObject>> csosByMvo,
+        ExportEvaluationWorkingSet workingSet,
+        string callerName)
+    {
+        var cancelledCsoIds = new HashSet<Guid>();
+        var mvoIdByCsoId = new Dictionary<Guid, Guid>();
+        var allCsos = new List<ConnectedSystemObject>();
+        foreach (var (mvoId, csos) in csosByMvo)
+        {
+            foreach (var cso in csos)
+            {
+                mvoIdByCsoId[cso.Id] = mvoId;
+                allCsos.Add(cso);
+            }
+        }
+
+        var pendingProvisioningCsos = allCsos
+            .Where(cso => cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+            .ToList();
+        if (pendingProvisioningCsos.Count == 0)
+            return cancelledCsoIds;
+
+        var existingPesByCsoId = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
+            pendingProvisioningCsos.Select(cso => cso.Id).ToList());
+        var csosToCancel = pendingProvisioningCsos
+            .Where(cso => _syncEngine.IsProvisioningNeverExported(cso, existingPesByCsoId.GetValueOrDefault(cso.Id)))
+            .ToList();
+        if (csosToCancel.Count == 0)
+            return cancelledCsoIds;
+
+        cancelledCsoIds.UnionWith(csosToCancel.Select(cso => cso.Id));
+        var cancelledPeCount = await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(cancelledCsoIds);
+        await SyncRepo.DeleteConnectedSystemObjectsAsync(csosToCancel);
+
+        // Recorded only after both deletes succeed, so a failed batch write cannot leave the working set
+        // claiming a cancellation that never happened.
+        foreach (var cso in csosToCancel)
+            workingSet.RecordCancelledProvisioning(new CancelledProvisioning(cso.Id, cso.ConnectedSystemId, mvoIdByCsoId[cso.Id]));
+
+        Log.Information("{Caller}: Cancelled never-exported provisioning of {CsoCount} CSO(s): removed {PeCount} unsent Create Pending Export(s) and the CSO(s); nothing was exported",
+            callerName, csosToCancel.Count, cancelledPeCount);
+        Log.Debug("{Caller}: Cancelled never-exported provisioning for CSO ids {CsoIds}", callerName, cancelledCsoIds);
+
+        return cancelledCsoIds;
     }
 
     /// <summary>
@@ -645,8 +779,17 @@ public class ExportEvaluationServer
         var csosToDelete = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
         var disconnectedByRuleCount = 0;
         var noMatchingRuleCount = 0;
-        foreach (var (mvoId, joinedCsos) in csosByMvo)
+
+        // Provisioning that was never exported is cancelled outright, ahead of and regardless of the rules
+        // below: the object does not exist in the target system, so neither a Delete nor a Disconnect means
+        // anything about it.
+        var cancelledCsoIds = await CancelNeverExportedProvisioningAsync(
+            csosByMvo, workingSet, nameof(EvaluateMvoDeletionsAsync));
+
+        foreach (var (mvoId, allJoinedCsos) in csosByMvo)
         {
+            var joinedCsos = allJoinedCsos.Where(cso => !cancelledCsoIds.Contains(cso.Id)).ToList();
+
             if (!mvoTypeIdsByMvoId.TryGetValue(mvoId, out var mvoTypeId) || mvoTypeId == null)
             {
                 mvoTypeId = null;
@@ -740,7 +883,9 @@ public class ExportEvaluationServer
                         Attribute = decision.SecondaryExternalIdAttribute,
                         AttributeId = decision.SecondaryExternalIdAttribute.Id,
                         StringValue = decision.SecondaryExternalIdValue,
-                        ChangeType = PendingExportAttributeChangeType.Update
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        SyncRuleId = decision.WinningRule?.Id,
+                        SyncRuleName = decision.WinningRule?.Name
                     });
 
                     Log.Debug("EvaluateMvoDeletionsAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
@@ -1430,7 +1575,12 @@ public class ExportEvaluationServer
 
                 // Add rather than Update: class membership is multi-valued, and an update that restated the classes
                 // an object already carries is a change the Connected System has no reason to accept.
-                ChangeType = PendingExportAttributeChangeType.Add
+                ChangeType = PendingExportAttributeChangeType.Add,
+
+                // Class membership is JIM-computed rather than sourced from an explicit mapping, but it is
+                // this export rule's evaluation that decided to write it, so attribute it the same way.
+                SyncRuleId = exportRule.Id,
+                SyncRuleName = exportRule.Name
             });
         }
 
@@ -1727,6 +1877,29 @@ public class ExportEvaluationServer
         changeType == PendingExportChangeType.Create ? exportRule.Id : null;
 
     /// <summary>
+    /// Resolves the Pending Export already attached to a PendingProvisioning CSO, ahead of an outbound
+    /// staging decision: <see cref="SyncEngine.DecideOutboundStaging"/> needs it to tell a Create that has
+    /// never been sent apart from one already sent (or auto-confirmed away) and awaiting confirmation.
+    /// Checked only for a PendingProvisioning CSO - a Normal CSO's decision does not depend on it, and the
+    /// lookup would be wasted work on the hot path otherwise. Consults the run's in-memory batch of Pending
+    /// Exports staged so far this page first, where supplied (a CSO provisioned earlier in this same run
+    /// has its Create only there, not yet in the database), then falls back to a lightweight database read.
+    /// </summary>
+    private async Task<PendingExport?> ResolveExistingPendingExportForStagingDecisionAsync(
+        ConnectedSystemObject? existingCso,
+        List<PendingExport>? existingPendingExports)
+    {
+        if (existingCso is not { Status: ConnectedSystemObjectStatus.PendingProvisioning })
+            return null;
+
+        var inMemory = existingPendingExports?.FirstOrDefault(pe => pe.ConnectedSystemObjectId == existingCso.Id);
+        if (inMemory != null)
+            return inMemory;
+
+        return await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(existingCso.Id);
+    }
+
+    /// <summary>
     /// Creates or updates a PendingExport for an MVO change to a target system.
     /// For provisioning (Create) scenarios, also creates a CSO with Status=PendingProvisioning
     /// to establish the CSO↔MVO relationship before the object exists in the target system.
@@ -1743,10 +1916,11 @@ public class ExportEvaluationServer
     {
         // Find existing CSO for this MVO in the target system
         var existingCso = await SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
+        var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
 
         // The verdict comes from the pure engine (#288 extraction); this method is orchestration: resolve
         // the CSO, act on the verdict, compute the delta and persist.
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false, existingPendingExport);
 
         ConnectedSystemObject? csoForExport = existingCso;
         var createdNewCso = false;
@@ -1845,10 +2019,11 @@ public class ExportEvaluationServer
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
         cache.CsoLookup.TryGetValue(lookupKey, out var existingCso);
+        var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
 
         // The verdict comes from the pure engine (#288 extraction); this method is orchestration: resolve
         // the CSO from the cache, act on the verdict, compute the delta and persist.
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false, existingPendingExport);
 
         ConnectedSystemObject? csoForExport = existingCso;
         var createdNewCso = false;
@@ -2014,12 +2189,18 @@ public class ExportEvaluationServer
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
         cache.CsoLookup.TryGetValue(lookupKey, out var existingCso);
 
+        // Resolved once, ahead of the decision, and reused below in the merge-fallback block instead of a
+        // second database round trip for the same row (only ever relevant for a PendingProvisioning CSO).
+        // Named distinctly from the in-memory-batch "existingPendingExport" local further down (a
+        // different, narrower lookup scoped to Update merges only) to avoid shadowing it.
+        var existingPendingExportForDecision = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports);
+
         // The verdict comes from the pure engine (#288 extraction); this method is orchestration: resolve
         // the CSO, attempt export matching where the verdict provisions, compute the delta and persist. The
         // lookup is keyed by (Metaverse Object, Connected System) with no Object Type in it, so a Rule
         // targeting a different Object Type resolves to whichever Object holds that slot; the engine reports
         // that conflict (#1331) and the Metaverse Object's other export Rules are unaffected.
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics, existingPendingExportForDecision);
 
         if (decision.Outcome == OutboundStagingOutcome.ObjectTypeConflict)
         {
@@ -2231,13 +2412,25 @@ public class ExportEvaluationServer
         // Fallback: check if a Pending Export exists in the database from a previous activity
         // (e.g., drift detection ran in a previous sync step and its PE hasn't been exported yet,
         // or a previous sync created a pending Create export that hasn't been exported yet).
-        // If found, delete the old PE and return a new merged PE for batch creation.
+        // If found, delete the old PE and return a new merged PE for batch creation - UNLESS it is a
+        // Create that has already been sent and is awaiting confirmation (see the append branch below),
+        // which must never be deleted and replaced.
         if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
-            using (var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge")
-                .SetTag("leanFetch", true))
+
+            // Reuse the Pending Export already resolved ahead of the staging decision above when it is the
+            // same row (only ever true for a PendingProvisioning CSO): avoids a second database round trip
+            // for the same lookup.
+            if (existingPendingExportForDecision != null && existingCso != null && csoId.Value == existingCso.Id)
             {
+                dbPendingExport = existingPendingExportForDecision;
+            }
+            else
+            {
+                using var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge")
+                    .SetTag("leanFetch", true);
+
                 // Lean fetch (issue #986): the merge logic below only ever reads Id and
                 // AttributeValueChanges off dbPendingExport, never ConnectedSystemObject,
                 // SourceMetaverseObject or ConnectedSystem. The heavy GetPendingExportByConnectedSystemObjectIdAsync
@@ -2263,6 +2456,45 @@ public class ExportEvaluationServer
                     return (null, provisioningCso, csoAlreadyCurrentCount);
                 }
 
+                // A Create that has already been sent (or auto-confirmed away) and is awaiting confirmation
+                // by import must never be deleted and replaced: that would mean sending a second Create,
+                // which most connectors reject for an object that already exists. Append the newly
+                // evaluated changes onto the SAME row instead, keeping its ChangeType (Create) and Status
+                // untouched; only once SyncEngine.Reconciliation confirms the Create does the row flip to
+                // Update and the appended changes go out (SyncEngine.Reconciliation.cs). Guarded on the
+                // actual fetched row's shape (Create, not provably never-exported) rather than solely on
+                // the staging outcome, so a Create that was attempted-but-failed-and-is-retrying (still
+                // Status Pending, but not provably unsent either) is appended too rather than risking a
+                // replacement that silently drops its Create semantics.
+                if (csoForExport is { Status: ConnectedSystemObjectStatus.PendingProvisioning } &&
+                    dbPendingExport.ChangeType == PendingExportChangeType.Create &&
+                    !_syncEngine.IsProvisioningNeverExported(csoForExport, dbPendingExport))
+                {
+                    // Compute the merge against a throwaway shell sharing the same AttributeValueChanges
+                    // list contents, never the tracked entity's own list: SyncEngine.MergeAttributeChangesIntoPendingExport
+                    // mutates in place, and this method must not touch a database-loaded PendingExport's
+                    // real navigation before the repository call below has had a chance to persist the
+                    // change (and, on the EF-backed repository, fix up its own tracked graph safely).
+                    var mergeShell = new PendingExport
+                    {
+                        Id = dbPendingExport.Id,
+                        AttributeValueChanges = new List<PendingExportAttributeValueChange>(dbPendingExport.AttributeValueChanges)
+                    };
+                    var beforeIds = mergeShell.AttributeValueChanges.Select(avc => avc.Id).ToHashSet();
+                    var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(mergeShell, attributeChanges);
+                    var changesToAdd = mergeShell.AttributeValueChanges.Where(avc => !beforeIds.Contains(avc.Id)).ToList();
+                    var changeIdsToRemove = beforeIds.Except(mergeShell.AttributeValueChanges.Select(avc => avc.Id)).ToList();
+
+                    await SyncRepo.AppendAttributeChangesToPendingExportAsync(dbPendingExport.Id, changesToAdd, changeIdsToRemove);
+
+                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Appended {AddedCount} attribute change(s) onto " +
+                        "exported-but-unconfirmed Create PendingExport {ExistingPeId} for CSO {CsoId} ({ReplacedCount} superseded a prior " +
+                        "staged change); the Create is never re-sent, and the change travels as an Update once the Create is confirmed. Source: MVO {MvoId}",
+                        changesToAdd.Count, dbPendingExport.Id, csoId.Value, mergeResult.ReplacedCount, mvo.Id);
+
+                    return (null, provisioningCso, csoAlreadyCurrentCount);
+                }
+
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not superseded by export eval (see
                 // SelectSurvivingDriftChanges).
@@ -2284,7 +2516,9 @@ public class ExportEvaluationServer
                         BoolValue = avc.BoolValue,
                         UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
                         ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
-                        ChangeType = avc.ChangeType
+                        ChangeType = avc.ChangeType,
+                        SyncRuleId = avc.SyncRuleId,
+                        SyncRuleName = avc.SyncRuleName
                     })
                     .ToList();
 
@@ -2686,6 +2920,24 @@ public class ExportEvaluationServer
                     continue;
 
                 var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(existingCso.Id);
+
+                // Provisioning that was never exported is cancelled outright by the real run: nothing is
+                // staged, so the preview proposes nothing either, but the cancellation itself is still a
+                // reportable outcome, so it gets its own entry rather than disappearing.
+                if (ScopeOutCancelsNeverExportedProvisioning(existingCso, exportRule, existingPe))
+                {
+                    result.Entries.Add(new OutboundPreviewEntry
+                    {
+                        Kind = OutboundPreviewEntryKind.ProvisioningCancelled,
+                        MetaverseObjectId = mvo.Id,
+                        SyncRuleId = exportRule.Id,
+                        SyncRuleName = exportRule.Name,
+                        ConnectedSystemId = exportRule.ConnectedSystemId,
+                        ExistingTargetCsoId = existingCso.Id
+                    });
+                    continue;
+                }
+
                 result.Entries.Add(new OutboundPreviewEntry
                 {
                     Kind = OutboundPreviewEntryKind.Deprovisioning,
@@ -2716,7 +2968,10 @@ public class ExportEvaluationServer
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes)
     {
-        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false);
+        // Read-only lookup (the preview never writes): needed for the same reason as the real staging
+        // path - telling a never-sent Create apart from one already sent and awaiting confirmation.
+        var existingPendingExport = await ResolveExistingPendingExportForStagingDecisionAsync(existingCso, existingPendingExports: null);
+        var decision = _syncEngine.DecideOutboundStaging(mvo, exportRule, existingCso, changedAttributes, recallSemantics: false, existingPendingExport);
 
         Guid? wouldJoinCsoId = null;
         var effectiveChangeType = decision.ChangeType;

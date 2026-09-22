@@ -90,6 +90,32 @@ internal static class LdapTestResponses
     internal static SearchResponse EmptySearchResponse() => SearchResponseWithEntries();
 
     /// <summary>
+    /// Creates a successful SearchResponse containing the given entries and carrying a paged-results response
+    /// control (RFC 2696) with the given cookie, as a directory answers one page of a paged search. An empty cookie
+    /// is the directory's way of saying this page was the last.
+    /// <para>
+    /// The response's Controls property rebuilds every control from its raw OID and BER value on each read, so the
+    /// control has to be supplied in raw form: a PageResultResponseControl created directly would be flattened to
+    /// its bytes and parsed again anyway.
+    /// </para>
+    /// </summary>
+    internal static SearchResponse SearchResponseWithPagingCookie(byte[] cookie, params SearchResultEntry[] entries)
+    {
+        var entryCollection = (SearchResultEntryCollection)Activator.CreateInstance(typeof(SearchResultEntryCollection), nonPublic: true)!;
+        var add = typeof(SearchResultEntryCollection).GetMethod("Add", NonPublicInstance, [typeof(SearchResultEntry)])!;
+
+        foreach (var entry in entries)
+            add.Invoke(entryCollection, [entry]);
+
+        // The control value is SEQUENCE { size INTEGER, cookie OCTET STRING }; the size is advisory and unused.
+        var pagingControl = new DirectoryControl("1.2.840.113556.1.4.319", BerConverter.Encode("{io}", 0, cookie), true, true);
+        var response = (SearchResponse)Activator.CreateInstance(typeof(SearchResponse), NonPublicInstance, binder: null,
+            args: ["", new[] { pagingControl }, ResultCode.Success, "", Array.Empty<Uri>()], culture: null)!;
+        typeof(SearchResponse).GetMethod("set_Entries", NonPublicInstance)!.Invoke(response, [entryCollection]);
+        return response;
+    }
+
+    /// <summary>
     /// Creates an entry with the given attributes, for building multi-entry responses.
     /// </summary>
     internal static SearchResultEntry Entry(string distinguishedName, params (string Name, string Value)[] attributes)
@@ -102,5 +128,22 @@ internal static class LdapTestResponses
 
         return (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
             args: [distinguishedName, attributeCollection], culture: null)!;
+    }
+
+    /// <summary>
+    /// Creates a successful SearchResponse holding one entry with a single multi-valued attribute, as the
+    /// rootDSE's namingContexts attribute is (RFC 4512).
+    /// </summary>
+    internal static SearchResponse SearchResponseWithMultiValuedAttribute(string distinguishedName, string attributeName, params string[] values)
+    {
+        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
+        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", NonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
+
+        add.Invoke(attributeCollection, [attributeName, new DirectoryAttribute(attributeName, values.Cast<object>().ToArray())]);
+
+        var entry = (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
+            args: [distinguishedName, attributeCollection], culture: null)!;
+
+        return SearchResponseWithEntries(entry);
     }
 }

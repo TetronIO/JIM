@@ -175,16 +175,6 @@ public interface ISyncEngine
         PendingExportAttributeValueChange attrChange);
 
     /// <summary>
-    /// Identifies Pending Export pairs (CREATE+DELETE or UPDATE+DELETE) targeting the same CSO
-    /// that cancel each other out and should not be exported.
-    /// Only reconciles pairs where both exports have Pending status — already-exported
-    /// operations are left untouched since the object may exist in the target system.
-    /// </summary>
-    /// <param name="pendingExports">All Pending Exports to scan for reconcilable pairs.</param>
-    /// <returns>Result describing which exports should be cancelled.</returns>
-    PreExportReconciliationResult ReconcileCreateDeletePairs(IReadOnlyList<PendingExportSummary> pendingExports);
-
-    /// <summary>
     /// Decides whether deleting a Metaverse Object stages a Delete export for one of its joined CSOs (#655:
     /// the matching export Synchronisation Rules' OutboundDeprovisionAction drives the verdict, Delete wins a
     /// conflict, and the one-Pending-Export-per-CSO collision policy chooses reuse, replace or create). The
@@ -213,6 +203,33 @@ public interface ISyncEngine
         PendingExport? existingPendingExport);
 
     /// <summary>
+    /// Decides whether a CSO's provisioning was provably never exported: it is Pending Provisioning, and it still
+    /// carries its Create Pending Export, unsent (no Pending Export at all means the Create WAS exported and
+    /// auto-confirmed, so the object exists in the target system). Such an object does not
+    /// exist in the target system, so deprovisioning it means cancelling the provisioning (removing the Create
+    /// and the CSO), never staging a Delete or leaving the CSO behind disconnected. Asked ahead of both
+    /// deprovisioning decisions above, and independent of any rule's OutboundDeprovisionAction: there is
+    /// nothing in the target system for a Delete or a Disconnect to mean anything about.
+    /// </summary>
+    /// <param name="cso">The CSO being deprovisioned.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to the CSO, if any, from the caller's pre-read.</param>
+    bool IsProvisioningNeverExported(ConnectedSystemObject cso, PendingExport? existingPendingExport);
+
+    /// <summary>
+    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from a
+    /// Full Import's payload, must be marked for retry: a CSO genuinely absent from every subsequent
+    /// import never reaches <see cref="ReconcileCsoAgainstPendingExport"/> (which only ever runs for a
+    /// CSO an import actually returned and matched), so without this decision its exported Create sits
+    /// Status Exported forever and the CSO never leaves Pending Provisioning. Only a Full Import can
+    /// prove absence, and only when the run genuinely read something (mirrors deletion detection's own
+    /// "no objects imported means do nothing" guard).
+    /// </summary>
+    /// <param name="runType">The import run's type.</param>
+    /// <param name="totalObjectsImported">How many objects the run read from the Connected System in total.</param>
+    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the Full Import's payload.</param>
+    bool IsExportedCreateUnseenByFullImport(ConnectedSystemRunType runType, int totalObjectsImported, bool wasSeen);
+
+    /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
     /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
     /// CSO from the object's collection. Only a Projected object whose Type's Deletion Rule is
@@ -225,20 +242,26 @@ public interface ISyncEngine
     /// Decides what kind of export, if any, a Metaverse Object change stages against one export
     /// Synchronisation Rule's target: nothing (a reported Object Type conflict, provisioning declined, a
     /// reference recall against no exportable presence, or changes irrelevant to a pending provisioning), a
-    /// Create (provision new, or restage the pending provisioning CSO's Create), or an Update. The
-    /// orchestrator interposes export matching before acting on a ProvisionNewCso verdict.
+    /// Create (provision new, or restage a still-unsent pending provisioning CSO's Create), or an Update (the
+    /// object already exists in the target, or its Create has already been sent and is awaiting confirmation -
+    /// never a second Create). The orchestrator interposes export matching before acting on a ProvisionNewCso
+    /// verdict.
     /// </summary>
     /// <param name="mvo">The Metaverse Object whose change is being evaluated.</param>
     /// <param name="exportRule">The export Synchronisation Rule under evaluation.</param>
     /// <param name="existingCso">The Metaverse Object's CSO in the rule's Connected System, if any.</param>
     /// <param name="changedAttributes">The changed attributes, for the pending provisioning relevance check.</param>
     /// <param name="recallSemantics">True when evaluating a reference recall (#1003), which must never provision.</param>
+    /// <param name="existingPendingExport">The Pending Export already attached to <paramref name="existingCso"/>,
+    /// if any, resolved by the caller only for a PendingProvisioning CSO (from the run's in-memory batch first,
+    /// the database second). Tells a never-sent Create apart from one already sent and awaiting confirmation.</param>
     OutboundStagingDecision DecideOutboundStaging(
         MetaverseObject mvo,
         SyncRule exportRule,
         ConnectedSystemObject? existingCso,
         List<MetaverseObjectAttributeValue> changedAttributes,
-        bool recallSemantics);
+        bool recallSemantics,
+        PendingExport? existingPendingExport);
 
     /// <summary>
     /// Merges newly evaluated attribute changes into a Pending Export this run has already staged for the

@@ -1763,6 +1763,29 @@ try {
         Write-Host "  PASSED: MvoDeletionScheduled recorded as the sole explaining outcome (ValuesPreserved correctly absent)" -ForegroundColor Green
 
         $testResults.Steps += @{ Name = "PendingDeletionPreserves"; Success = $true }
+
+        # Teardown: the pending deletion must not outlive this test. Later tests zero the grace period on the same
+        # Metaverse Object Type, which makes this Metaverse Object eligible at once, and housekeeping (a 60-second
+        # idle tick) then deletes it at an arbitrary point in their windows; it once landed inside Test 9's, where
+        # the delete Pending Export it staged failed that test's "nothing staged" assertion. Zero the grace period
+        # here and wait for housekeeping to delete the object, then drain the delete export it stages (the export
+        # Synchronisation Rule's deprovisioning action is Delete at this point), so the directory is clean too.
+        Write-Host "  Teardown: zeroing the grace period so housekeeping deletes the pending MVO now..." -ForegroundColor Gray
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+            -GracePeriod ([TimeSpan]::Zero) `
+            -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
+            -RemoveContributedAttributesOnObsoletion $true `
+            -RecallConnectedSystemId $config.CSVSystemId
+        $teardownDeadline = (Get-Date).AddSeconds(150)   # one 60-second housekeeping tick, with margin
+        while (Test-MvoExistsById -MvoId $test4bMvoId) {
+            if ((Get-Date) -gt $teardownDeadline) {
+                throw "Test 4b teardown failed: housekeeping did not delete MVO $test4bMvoId within 150 seconds of the grace period being zeroed"
+            }
+            Start-Sleep -Seconds 5
+        }
+        Write-Host "  Teardown: pending MVO deleted by housekeeping; draining its delete export" -ForegroundColor Gray
+        Invoke-DrainPendingExports -Config $config
     }
 
     # =============================================================================================================
@@ -2349,6 +2372,38 @@ try {
         Write-Host "  PASSED: Triggering system rejoin cancelled the deletion and cleared all markers" -ForegroundColor Green
 
         $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $true }
+    }
+
+    # =============================================================================================================
+    # Never-exported provisioning is cancelled, not deprovisioned
+    # =============================================================================================================
+    # Setup-Scenario1 creates a second target, "Cross-Domain Export", that this scenario deliberately never runs
+    # a Run Profile against: every user above is provisioned to it (a Pending Provisioning CSO with an unsent
+    # Create Pending Export) and none of that is ever exported. The leftover Creates are intentional and useful
+    # (they are how a developer gets Pending Exports to look at), so they are not asserted away here.
+    #
+    # What must NOT be left behind is anything for the users this scenario deleted. Deleting a Metaverse Object
+    # whose provisioning was never exported cancels the provisioning (the unsent Create and the CSO are removed).
+    # It used to replace the Create with a Delete that carried no identifier: the export failed with "Delete
+    # export has no External ID value", and the CSO, holding no external ID, was invisible to import deletion
+    # detection, so nothing could ever remove it. Only when every test ran, so the count covers them all.
+    if ($Step -eq "All") {
+        Write-TestSection "Never-Exported Provisioning Is Cancelled (Cross-Domain Export)"
+
+        $crossDomainSystem = @(Get-JIMConnectedSystem) | Where-Object { $_.name -eq "Cross-Domain Export" } | Select-Object -First 1
+        if (-not $crossDomainSystem) {
+            $testResults.Steps += @{ Name = "NeverExportedProvisioningCancelled"; Success = $false; Error = "Connected System 'Cross-Domain Export' not found" }
+            throw "Never-exported provisioning check failed: Connected System 'Cross-Domain Export' not found"
+        }
+
+        $strandedDeleteCount = [int](Get-JIMPendingExport -ConnectedSystemId $crossDomainSystem.id -Count -ChangeType Delete)
+        if ($strandedDeleteCount -ne 0) {
+            $testResults.Steps += @{ Name = "NeverExportedProvisioningCancelled"; Success = $false; Error = "$strandedDeleteCount Delete Pending Export(s) staged for objects that were never exported" }
+            throw "Never-exported provisioning check failed: $strandedDeleteCount Delete Pending Export(s) exist on 'Cross-Domain Export', a system nothing was ever exported to. Deleting a Metaverse Object must cancel never-exported provisioning, not stage a Delete for it."
+        }
+        Write-Host "  PASSED: No Delete Pending Exports staged for never-exported objects" -ForegroundColor Green
+
+        $testResults.Steps += @{ Name = "NeverExportedProvisioningCancelled"; Success = $true }
     }
 
     # =============================================================================================================

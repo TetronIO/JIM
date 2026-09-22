@@ -17,7 +17,7 @@
 
 @if (_content != null && !_onOperationsPage)
 {
-    <MudAlert Severity="@_content.Severity" Variant="Variant.Outlined" Dense="true" Class="jim-service-health-banner mb-5">
+    <MudAlert Severity="@_content.Severity" Dense="true" Class="jim-service-health-banner mb-5">
         <span>@_content.Sentence</span>
         <span class="jim-service-health-banner-links">
             <MudLink Href="/admin/operations" Color="Color.Inherit" Underline="Underline.Always">Operations</MudLink>

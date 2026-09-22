@@ -24,14 +24,16 @@
     --cz-error-soft: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
     --cz-secondary-soft: color-mix(in srgb, var(--mud-palette-secondary) 13%, transparent);
 
-    /* The palette primary is a saturated fill colour (intended behind white button text), so using it
-       raw as text on a *-soft pill fails WCAG AA: 2.88:1 in the default dark theme, below even the 3.0
-       large-text floor, and four of the six light themes fail too. Blending it toward the theme's text
-       colour keeps the hue but lifts it off the background, and adapts automatically per mode because
-       text-primary is near-white in dark themes and near-black in light ones. Every theme now passes AA
-       (dark >= 5.26, light >= 5.00). Use this for primary-toned TEXT; keep --cz-primary for fills,
-       borders and accent bars, where the contrast requirement is lower and the raw brand colour is right. */
-    --cz-primary-text: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
+    /* A tone used AS TEXT on a tint of itself takes the portal's chip label blend (--jim-chip-text-*,
+       defined and explained in site.css), so an outcome pill here, a Text-variant MudChip anywhere else and
+       the Table view's change chip are one colour per tone rather than three readings of it. Keep --cz-<tone>
+       for fills, borders and accent bars, where the raw palette colour is right. */
+    --cz-primary-text: var(--jim-chip-text-primary);
+    --cz-secondary-text: var(--jim-chip-text-secondary);
+    --cz-info-text: var(--jim-chip-text-info);
+    --cz-success-text: var(--jim-chip-text-success);
+    --cz-warning-text: var(--jim-chip-text-warning);
+    --cz-error-text: var(--jim-chip-text-error);
 
     /* Text, lines and surfaces */
     --cz-text: var(--mud-palette-text-primary);
@@ -53,7 +55,69 @@
     color: var(--cz-text);
 }
 
-/* ─── Head-row controls: view switcher + technical-names toggle ─── */
+/* ─── Speculative (Sync Preview) framing (#1519) ─── */
+
+/* A dashed, warning-toned frame distinguishes a preview from a recorded execution's panel at a
+   glance, whichever view is showing beneath it; the rails reuse the same tone so the frame reads as
+   one shape rather than a border plus a separately-coloured accent. */
+.causality-panel.speculative {
+    border: 1px dashed var(--cz-warning);
+    border-radius: var(--jim-container-radius);
+}
+
+.causality-panel.speculative .preview-band {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 24px;
+    background: var(--cz-warning-soft);
+    border-bottom: 1px dashed var(--cz-warning);
+}
+
+.causality-panel.speculative .preview-pill {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 3px 11px;
+    border-radius: 999px;
+    background: var(--cz-warning);
+    color: var(--mud-palette-warning-text, #fff);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+/* Full text colour, not the dimmed one: the band's warning tint already lowers contrast, and the
+   sentence is the one thing on the panel that says nothing happened. The leading statement is bold. */
+.causality-panel.speculative .preview-text {
+    font-size: 0.875rem;
+    color: var(--cz-text);
+    flex: 1 1 auto;
+}
+
+.causality-panel.speculative .preview-text strong {
+    font-weight: 650;
+}
+
+.causality-panel.speculative .preview-close {
+    flex: none;
+    background: none;
+    border: none;
+    color: var(--cz-text-dim);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 4px;
+    border-radius: 6px;
+}
+
+.causality-panel.speculative .preview-close:hover {
+    background: color-mix(in srgb, var(--cz-text) 8%, transparent);
+    color: var(--cz-text);
+}
+
+/* ─── Head-row controls: view switcher ─── */
 
 /* Right-aligned on the summary head row so the controls share the row with the run chip and
    timestamp rather than sitting in a separate band above them. */
@@ -98,7 +162,6 @@
 }
 
 .causality-panel .seg button:focus-visible,
-.causality-panel .toggle-line:focus-visible,
 .causality-panel .tl-expander:focus-visible,
 .causality-panel .filter-chips button:focus-visible,
 .causality-panel .evt-card:focus-visible,
@@ -106,51 +169,6 @@
 .causality-panel a:focus-visible {
     outline: 2px solid var(--cz-primary);
     outline-offset: 2px;
-}
-
-.causality-panel .toggle-line {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    border: none;
-    background: none;
-    color: var(--cz-text-dim);
-    font-size: 0.875rem;
-    font-family: inherit;
-    padding: 4px 2px;
-    border-radius: 6px;
-}
-
-.causality-panel .toggle-line .track {
-    width: 32px;
-    height: 18px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--mud-palette-text-primary) 16%, transparent);
-    position: relative;
-    transition: background 0.18s;
-    flex: none;
-}
-
-.causality-panel .toggle-line .track::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--cz-surface);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    transition: left 0.18s;
-}
-
-.causality-panel .toggle-line.on .track {
-    background: var(--cz-primary);
-}
-
-.causality-panel .toggle-line.on .track::after {
-    left: 16px;
 }
 
 /* ─── Summary band ─── */
@@ -225,50 +243,12 @@
     margin-top: 12px;
 }
 
-/* Outcome pills are MudChips; restyle them to the mock-up's soft tone pills */
-.causality-panel .mud-chip.oc-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: auto;
+/* The outcome pills were this panel's own restyle of a MudChip, and are now simply Text-variant MudChips
+   carrying a Color: site.css gives every one of those the pill shape this panel arrived at first, and the
+   --jim-chip-text-* label blend these already used. All that is left is the spacing, because the strip
+   above lays them out on a flex gap and MudBlazor's own 4px chip margin would be added on top of it. */
+.causality-panel .outcome-strip .mud-chip {
     margin: 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background: var(--cz-secondary-soft);
-    color: var(--cz-secondary);
-}
-
-.causality-panel .mud-chip.oc-pill.primary {
-    color: var(--cz-primary-text);
-    background: var(--cz-primary-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.success {
-    color: var(--cz-success);
-    background: var(--cz-success-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.info {
-    color: var(--cz-info);
-    background: var(--cz-info-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.warning {
-    color: var(--cz-warning);
-    background: var(--cz-warning-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.error {
-    color: var(--cz-error);
-    background: var(--cz-error-soft);
-}
-
-.causality-panel .mud-chip.oc-pill.secondary {
-    color: var(--cz-secondary);
-    background: var(--cz-secondary-soft);
 }
 
 /* ─── View canvas ─── */
@@ -277,84 +257,15 @@
     padding: 24px;
 }
 
-/* ─── Entity chips ─── */
+/* ─── Entity chips ───
 
-.causality-panel .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 100%;
-    background: var(--cz-chip-bg);
-    border-radius: 999px;
-    padding: 2px 10px 2px 3px;
-    /* Normal body size, per JIM's "default sizing unless asked otherwise" UI rule: the entity name in
-       a chip is the thing being linked to, so it reads at the same size as the sentence naming it. */
-    font-size: 1rem;
-    font-weight: 550;
-    color: var(--cz-text);
-    white-space: nowrap;
-    text-decoration: none;
-    transition: background 0.15s;
-}
-
-/* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip
-   convention (background/avatar colour change) rather than a border outline. */
-.causality-panel a.chip:hover {
-    text-decoration: none;
-    background: color-mix(in srgb, var(--mud-palette-text-primary) 18%, transparent);
-}
-
-.causality-panel a.chip:hover .glyph {
-    filter: brightness(1.12);
-}
-
-/* Sized to the chip's own line box (1rem text at MudBlazor's line height), so the circle reads as
-   part of the chip rather than a smaller badge sunk into it. */
-.causality-panel .chip .glyph {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    background: var(--cz-secondary);
-    color: var(--mud-palette-secondary-text, #fff);
-    transition: filter 0.15s;
-}
-
-.causality-panel .chip .glyph.sys {
-    background: var(--cz-info);
-    color: var(--mud-palette-info-text, #fff);
-}
-
-.causality-panel .chip .glyph.rec {
-    background: var(--cz-secondary);
-    color: var(--mud-palette-secondary-text, #fff);
-}
-
-.causality-panel .chip .glyph.idn {
-    background: var(--cz-primary);
-    color: var(--mud-palette-primary-text, #fff);
-}
-
-.causality-panel .chip .glyph.rule {
-    background: var(--cz-warning);
-    color: var(--mud-palette-warning-text, #fff);
-}
-
-.causality-panel .chip .sub {
-    color: var(--cz-text-faint);
-    font-weight: 450;
-}
-
-.causality-panel .chip .name-ellip {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+   The chip itself (a glyph, dimmed type prefix and name in an ellipsis-clipped pill) moved out of this
+   panel-scoped stylesheet into site.css's .jim-object-chip rules: it is ObjectChip.razor's own
+   markup now, rendered by every event card, chain card and the Timeline's source row alike, so it must
+   look identical inside this panel and everywhere else the same component names an object. Nothing here
+   derives from a token this panel declares only for itself; site.css's rules use the same MudBlazor
+   palette derivations --cz-secondary/--cz-primary/--cz-info/--cz-warning did, so moving them changed
+   nothing about how a chip looks in this panel, in any theme. */
 
 /* ─── Event badges and entity rows (shared by views) ─── */
 
@@ -365,8 +276,8 @@
     text-transform: uppercase;
     padding: 2px 7px;
     border-radius: 5px;
-    color: var(--tone, var(--cz-secondary));
-    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 13%, transparent);
+    color: var(--tone-text, var(--cz-secondary-text));
+    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 12%, transparent);
 }
 
 .causality-panel .evt-entities {
@@ -539,12 +450,18 @@
     top: 14px;
 }
 
-.causality-panel .tl-row:last-child > .tl-rail::before {
+/* The last row of a block ends its rail at its own dot, unless it has children: then the rail runs
+   on to the bottom of the row's own content, where the nested block's connector takes over. */
+.causality-panel .tl-row:last-child:not(.has-children) > .tl-rail::before {
     bottom: calc(100% - 14px);
 }
 
-.causality-panel .tl-row.only-child > .tl-rail::before {
+.causality-panel .tl-row.only-child:not(.has-children) > .tl-rail::before {
     display: none;
+}
+
+.causality-panel .tl-row.only-child.has-children > .tl-rail::before {
+    top: 14px;
 }
 
 .causality-panel .tl-dot {
@@ -574,11 +491,11 @@
     min-width: 0;
 }
 
-/* A row's children render at the end of its own body, and each child body already carries the
-   trailing gap, so a parent keeping its bottom padding as well counts the gap twice: the space after
-   a nested branch came out at double the space between plain siblings, and compounded once more per
-   level of nesting. */
-.causality-panel .tl-body.has-children {
+/* A row's children render beneath its own body (see .tl-children), and each child body already
+   carries the trailing gap, so a parent keeping its bottom padding as well counts the gap twice: the
+   space after a nested branch came out at double the space between plain siblings, and compounded
+   once more per level of nesting. */
+.causality-panel .tl-row.has-children > .tl-body {
     padding-bottom: 0;
 }
 
@@ -673,8 +590,47 @@
 
 /* The parent's own bottom padding is suppressed (see .tl-body.has-children), so descending into a
    branch has to supply the same gap here that a sibling would have got from that padding. */
+/* A nested block sits in the parent row's second column, beneath the parent's body, so its rows are
+   indented by the rail column and its gap (42px). Every nested row draws two connectors back to its
+   parent's rail, which lies 30px left of the row's own rail line: a vertical run down that rail's
+   line (::before) and an elbow across to the row's own dot (::after). The first row's run reaches up
+   through the block's top margin to meet the parent's rail where it ended; the last row's run stops
+   at its own elbow when the parent is the last of its block, and carries on to the row's bottom edge
+   (the parent's next sibling) when it is not. A nested row's run spans the row's full height, its own
+   children included, so a deeper block's continuation past an ancestor is drawn by that ancestor's
+   row without any extra rule per level. */
 .causality-panel .tl-children {
+    grid-column: 2;
     margin-top: var(--cz-tl-gap);
+}
+
+.causality-panel .tl-children > .tl-row::before,
+.causality-panel .tl-children > .tl-row::after {
+    content: "";
+    position: absolute;
+    background: var(--cz-line-soft);
+}
+
+.causality-panel .tl-children > .tl-row::before {
+    left: -30px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+}
+
+.causality-panel .tl-children > .tl-row:first-child::before {
+    top: calc(-1 * var(--cz-tl-gap));
+}
+
+.causality-panel .tl-row:last-child > .tl-children > .tl-row:last-child::before {
+    bottom: calc(100% - 17px);
+}
+
+.causality-panel .tl-children > .tl-row::after {
+    left: -30px;
+    top: 16px;
+    width: 34px;
+    height: 2px;
 }
 
 .causality-panel .tl-inline-detail {
@@ -850,11 +806,11 @@
     flex-wrap: wrap;
 }
 
-/* The head's R/ID chip: square-cornered so heads read as objects rather than as the round entity
-   chips on cards, but coloured identically so the vocabulary stays one vocabulary. */
+/* The head's CSO/MVO glyph: square-cornered so heads read as objects rather than as the round
+   entity chips on cards, but coloured identically so the vocabulary stays one vocabulary. */
 .causality-panel .ln-obj .glyph {
-    width: 22px;
     height: 22px;
+    padding: 0 6px;
     border-radius: 6px;
     flex: none;
     display: inline-flex;
@@ -862,17 +818,15 @@
     justify-content: center;
     font-size: 0.66rem;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
+}
+
+.causality-panel .ln-obj .glyph.cso {
     background: var(--cz-secondary);
     color: var(--mud-palette-secondary-text, #fff);
 }
 
-.causality-panel .ln-obj .glyph.rec {
-    background: var(--cz-secondary);
-    color: var(--mud-palette-secondary-text, #fff);
-}
-
-.causality-panel .ln-obj .glyph.idn {
+.causality-panel .ln-obj .glyph.mvo {
     background: var(--cz-primary);
     color: var(--mud-palette-primary-text, #fff);
 }
@@ -880,6 +834,13 @@
 .causality-panel .ln-obj-title {
     color: var(--cz-text);
     overflow-wrap: anywhere;
+}
+
+/* The head's type prefix, lowlighted exactly as a chip's (.chip .sub), so "type: name" reads the same
+   way wherever an object is named. */
+.causality-panel .ln-obj-title .type {
+    color: var(--cz-text-faint);
+    font-weight: 450;
 }
 
 .causality-panel a.ln-obj-title {
@@ -1141,7 +1102,363 @@
     border-radius: 4px;
 }
 
+/* ─── Table view (#1519 Phase 3) ─── */
+
+/* The navigation and the grid are one bordered object (the approved design): the navigation column sits
+   on the inner surface behind a dividing line, the grid on the panel surface, so the two read as a
+   list-and-detail rather than as two loose blocks. Inside the canvas's own 24px padding, like the other views. */
+.causality-panel .tv {
+    display: grid;
+    /* --tv-nav-width is set (and cleared, on double-click) by jimTableViewResizer directly on this
+       element; the 240px fallback is the only place the default width is stated. The handle's own
+       track is a fixed 6px, never resized itself. */
+    grid-template-columns: var(--tv-nav-width, 240px) 6px minmax(0, 1fr);
+    align-items: stretch;
+    border: 1px solid var(--cz-line-soft);
+    border-radius: var(--jim-container-radius);
+    overflow: hidden;
+    min-height: 320px;
+}
+
+.causality-panel .tv-resize-handle {
+    /* Placed by column, never by row: an item locked to a row is auto-placed before its siblings and
+       would take the first column, pushing the nav into the handle's 6px track. */
+    grid-column: 2;
+    align-self: stretch;
+    position: relative;
+    cursor: col-resize;
+    background: none;
+    border: none;
+    padding: 0;
+    touch-action: none;
+}
+
+.causality-panel .tv-resize-handle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--cz-line-soft);
+    transform: translateX(-50%);
+}
+
+.causality-panel .tv-resize-handle:hover::before,
+.causality-panel .tv-resize-handle:focus-visible::before {
+    background: var(--cz-primary);
+}
+
+.causality-panel .tv-resize-handle:focus-visible {
+    outline: none;
+}
+
+.causality-panel .tv-nav {
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-content: start;
+    padding: 12px 10px;
+    background: var(--cz-inner);
+    border-right: 1px solid var(--cz-line-soft);
+}
+
+.causality-panel .tv-group-caption {
+    font-size: 0.75rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--cz-text-faint);
+    padding: 12px 8px 4px;
+}
+
+.causality-panel .tv-group-caption:first-of-type {
+    padding-top: 4px;
+}
+
+.causality-panel .tv-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    border: none;
+    background: none;
+    border-radius: 8px;
+    padding: 7px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    color: var(--cz-text);
+}
+
+.causality-panel .tv-nav-btn:hover {
+    background: var(--cz-inner);
+}
+
+.causality-panel .tv-nav-btn.on {
+    background: var(--cz-primary-soft);
+}
+
+.causality-panel .tv-nav-btn.on .tv-nav-name {
+    color: var(--cz-primary-text);
+}
+
+.causality-panel .tv-nav-btn:focus-visible {
+    outline: 2px solid var(--cz-primary);
+    outline-offset: 2px;
+}
+
+.causality-panel .tv-dot {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--tone);
+}
+
+.causality-panel .tv-nav-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.causality-panel .tv-nav-name {
+    font-size: 0.875rem;
+    font-weight: 550;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.causality-panel .tv-nav-sub {
+    font-size: 0.75rem;
+    color: var(--cz-text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.causality-panel .tv-count-pill {
+    flex: none;
+    min-width: 20px;
+    text-align: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--cz-chip-bg);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .tv-main {
+    grid-column: 3;
+    min-width: 0;
+    padding: 14px 18px 18px;
+}
+
+.causality-panel .tv-title-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.causality-panel .tv-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.causality-panel .tv-title-name {
+    font-size: 1.0625rem;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.causality-panel .tv-type-chip {
+    flex: none;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--cz-chip-bg);
+    font-size: 0.75rem;
+    color: var(--cz-text-dim);
+}
+
+/* The grid scrolls horizontally in its own container; the page body never scrolls sideways. */
+.causality-panel .tv-scroller {
+    overflow-x: auto;
+}
+
+.causality-panel .tg {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.causality-panel .tg th,
+.causality-panel .tg td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--cz-line-soft);
+    white-space: nowrap;
+}
+
+.causality-panel .tg thead th {
+    position: relative;
+    color: var(--cz-text-dim);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid var(--cz-line);
+}
+
+/* One per header cell, at its right edge (jimTableViewColumnResizer, #1519 Table view fix 10): a
+   sibling of .tv-sort rather than nested inside it, so the grip's own hit target does not compete with
+   the sort button's. Styling mirrors .tv-resize-handle above: no visible line at rest, a thin one on
+   hover/focus. It sits wholly inside its own cell (right: 0, not straddling the border) and above the
+   next cell: every th is position: relative, so a later sibling would otherwise paint over, and hence
+   intercept, the half of a straddling grip that lies in it; inside the cell it also survives the
+   overflow: hidden that tv-cols-fixed applies to th. */
+.causality-panel .tv-col-grip {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 8px;
+    z-index: 1;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.causality-panel .tv-col-grip::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: transparent;
+    transform: translateX(-50%);
+}
+
+.causality-panel .tv-col-grip:hover::before,
+.causality-panel .tv-col-grip:focus-visible::before {
+    background: var(--cz-primary);
+}
+
+.causality-panel .tv-col-grip:focus-visible {
+    outline: none;
+}
+
+/* table-layout: fixed only honours <col> widths once the table itself has an explicit width, which is
+   why jimTableViewColumnResizer writes both together on the first drag/nudge, and clears both together
+   on reset/double-click. Until then the table stays in ordinary auto layout, sized by its content. */
+.causality-panel .tg.tv-cols-fixed {
+    table-layout: fixed;
+}
+
+.causality-panel .tg.tv-cols-fixed th,
+.causality-panel .tg.tv-cols-fixed td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.causality-panel .tv-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    padding: 0;
+    cursor: pointer;
+}
+
+.causality-panel .tv-sort:hover,
+.causality-panel .tv-sort.on {
+    color: var(--cz-text);
+}
+
+.causality-panel .tv-sort:focus-visible {
+    outline: 2px solid var(--cz-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* The same pill as a Text-variant MudChip, taking its shape from the design system's chip tokens so the
+   two cannot drift. It stays a <span> rather than becoming a MudChip because its tone arrives as an inline
+   --tone custom property (one of six, set per row from the change kind) rather than as one of MudBlazor's
+   Color values, and a chip per row in a virtualised table is markup this column does not need. */
+.causality-panel .tv-kind {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--jim-chip-padding);
+    border-radius: var(--jim-chip-radius);
+    background: color-mix(in srgb, var(--tone) 12%, transparent);
+    color: var(--tone-text, var(--tone));
+    font-size: 0.8125rem;
+    font-weight: var(--jim-chip-font-weight);
+    white-space: nowrap;
+}
+
+/* A removed value has nothing to replace it, so the current reading is struck through rather than
+   paired with an empty would-be cell. */
+.causality-panel .tv-removed {
+    text-decoration: line-through;
+    color: var(--cz-text-faint);
+}
+
+/* A scheduled deletion's grace reasoning, the one non-attribute row whose Outcome cell needs more than
+   its label (#1519 Table view fix 7): a muted line beneath it rather than restating it in Before/After. */
+.causality-panel .tv-outcome-detail {
+    margin-top: 2px;
+    font-size: 0.75rem;
+    color: var(--cz-text-dim);
+}
+
 @media (max-width: 820px) {
+    /* The Table view stacks its navigation above the grid, matching the Lineage's own breakpoint. The
+       resize handle has nothing to do in a single-column stack, so it is hidden rather than laid out. */
+    .causality-panel .tv {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .causality-panel .tv-nav,
+    .causality-panel .tv-main {
+        grid-column: auto;
+    }
+
+    .causality-panel .tv-resize-handle {
+        display: none;
+    }
+
+    .causality-panel .tv-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        border-right: none;
+        border-bottom: 1px solid var(--cz-line-soft);
+    }
+
+    .causality-panel .tv-nav-btn {
+        width: auto;
+    }
+
+    .causality-panel .tv-group-caption {
+        width: 100%;
+    }
+
     /* Narrow viewports stack the lineage's columns; !important because the
        grid template arrives as an inline style (the column count is data). */
     .causality-panel .ln-canvas {

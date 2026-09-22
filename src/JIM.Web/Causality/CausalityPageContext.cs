@@ -48,6 +48,17 @@ namespace JIM.Web.Causality;
 /// gone and offer its deletion record; null where the Identity is alive, or where nothing was looked up.
 /// Distinct from an unbuildable link: this is evidence of deletion, not an inability to address something.
 /// </param>
+/// <param name="ConnectedSystemObjectNames">
+/// The current display label (see <c>ConnectedSystemObject.NameOrId</c>-style resolution: display name,
+/// else external id) of every Connected System Object a Provisioned outcome in this item's tree created,
+/// keyed by the object's id. A recorded run's Provisioned/PendingExportCreated links are built from what
+/// the run captured at the time, which for a newly-created object is only its internal id (it had no
+/// external id yet); resolving the current label at view time keeps the Timeline and Table view from
+/// permanently showing "person: &lt;guid&gt;" once the object has since been exported and named. Optional
+/// and defaults to null so every existing caller compiles unchanged; a key missing from the map (the
+/// object has since been deleted) simply falls back to the recorded label. Never populated for a
+/// speculative Sync Preview, which creates nothing.
+/// </param>
 public sealed record CausalityPageContext(
     int? ConnectedSystemId,
     string? ConnectedSystemName,
@@ -60,54 +71,5 @@ public sealed record CausalityPageContext(
     string? CsoObjectTypeName,
     string? MvoTypeName,
     string? MvoTypePluralName,
-    Guid? DeletedMetaverseObjectId = null)
-{
-    /// <summary>
-    /// The record's label for display: its name qualified by its external id, or whichever of the two
-    /// is present. Null when neither is.
-    /// <para>
-    /// The two are collapsed to a single mention when they are equal, which happens whenever the record
-    /// carries none of the naming attributes and <c>ConnectedSystemObject.NameOrId</c> falls
-    /// through to the external id: rendering "1f16ccb0-... (1f16ccb0-...)" reads as two separate facts
-    /// about the object when it is really one value shown twice.
-    /// </para>
-    /// </summary>
-    public string? RecordLabel
-    {
-        get
-        {
-            var name = Present(CsoDisplayName);
-            var externalId = Present(CsoExternalId);
-
-            if (name != null && externalId != null)
-            {
-                return string.Equals(name, externalId, StringComparison.Ordinal)
-                    ? name
-                    : $"{name} ({externalId})";
-            }
-
-            return name ?? externalId;
-        }
-    }
-
-    /// <summary>
-    /// The record's name alone, falling back to its external id where it has no name, and null when it has
-    /// neither. The short form for places where the external id is more than the reader asked for.
-    /// </summary>
-    /// <remarks>
-    /// The summary sentence, the Flow view's source card and the Graph's source node all name the record in
-    /// running prose or inside a fixed-width chip, where a trailing "(8586e100-235d-1041-89b0-4b2f2bd7a787)"
-    /// is noise at best and pushes the name out of the chip at worst. The Timeline has room to be precise and
-    /// keeps <see cref="RecordLabel"/>; the external id is one click away on the record itself everywhere else.
-    /// </remarks>
-    public string? RecordName => Present(CsoDisplayName) ?? Present(CsoExternalId);
-
-    /// <summary>
-    /// Treats a whitespace-only value as absent: a connected system that supplies "   " has supplied nothing,
-    /// and rendering it produces a label that looks empty but is not.
-    /// </summary>
-    private static string? Present(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? null : value;
-    }
-}
+    Guid? DeletedMetaverseObjectId = null,
+    IReadOnlyDictionary<Guid, string>? ConnectedSystemObjectNames = null);

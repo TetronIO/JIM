@@ -54,20 +54,6 @@ public class ConnectedSystemDetailDto
     public ConfigurationDriftDto? ConfigurationDrift { get; set; }
 
     /// <summary>
-    /// How many accounts in this Connected System are waiting on a person over their initial password: refused by
-    /// the target and parked, or never given one before its time to live passed. Null on the create and update
-    /// responses, which describe the write that just happened rather than the system's readiness.
-    /// <para>
-    /// The two counts are never summed. Parked work is fixed on the Synchronisation Rules that provisioned those
-    /// accounts, by correcting their initial password settings; expired work cannot be fixed there at all.
-    /// </para>
-    /// </summary>
-    public int? ParkedInitialPasswordCount { get; set; }
-
-    /// <inheritdoc cref="ParkedInitialPasswordCount"/>
-    public int? ExpiredInitialPasswordCount { get; set; }
-
-    /// <summary>
     /// When a stranded-value sweep was armed by a Connector Space clear, or null when no sweep is armed.
     /// The sweep runs at the first Full Synchronisation of this Connected System after
     /// <see cref="LastSuccessfulFullImportCompletedAt"/> is later than this timestamp; until then it stays
@@ -96,17 +82,12 @@ public class ConnectedSystemDetailDto
     /// <param name="configurationDrift">
     /// Pre-computed configuration drift status, or null to omit it (create and update responses do not carry it).
     /// </param>
-    /// <param name="initialPasswordAttention">
-    /// Pre-computed initial-password counts, or null to omit them (create and update responses do not carry them).
-    /// </param>
     public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0,
-        ConfigurationDriftStatus? configurationDrift = null, InitialPasswordAttention? initialPasswordAttention = null)
+        ConfigurationDriftStatus? configurationDrift = null)
     {
         return new ConnectedSystemDetailDto
         {
             ConfigurationDrift = configurationDrift == null ? null : ConfigurationDriftDto.FromStatus(configurationDrift),
-            ParkedInitialPasswordCount = initialPasswordAttention?.ParkedCount,
-            ExpiredInitialPasswordCount = initialPasswordAttention?.ExpiredCount,
             StrandedValueSweepArmedAt = entity.StrandedValueSweepArmedAt,
             LastSuccessfulFullImportCompletedAt = entity.LastSuccessfulFullImportCompletedAt,
             Id = entity.Id,

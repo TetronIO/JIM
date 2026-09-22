@@ -165,18 +165,19 @@
                     @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
-                            @if (_externalIdAttributeValue != null)
+                            @if (GetCsoChipName() != null)
                             {
-                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
                                             TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name"
-                                            Name="@_externalIdAttributeValue.ToStringNoName()"
+                                            Name="@GetCsoChipName()"
+                                            Tooltip="@GetCsoChipTooltip()"
                                             Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))" />
                             }
                             else
                             {
-                                @* No external ID to identify the record by yet, so the chip carries the type alone
-                                   and the link stands beside it rather than wrapping it. *@
-                                <ObjectChip Kind="ObjectChipKind.ConnectedSystem"
+                                @* No display name or external ID to identify the record by yet, so the chip carries
+                                   the type alone and the link stands beside it rather than wrapping it. *@
+                                <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
                                             TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name" />
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
@@ -254,7 +255,7 @@
         @if (!IsSyncContext() && !IsHousekeepingContext()
              && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+            <MudAlert Severity="Severity.Info" Class="mb-5">
                 <MudText Typo="Typo.body1">
                     The Connected System Object has been detected as deleted from the source system and marked for
                     removal. When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will
@@ -385,7 +386,7 @@
                         }
 else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
                         {
-                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                            <MudAlert Severity="Severity.Info" Class="mb-5">
                                 <MudText Typo="Typo.body1">No Changes Required</MudText>
                                 <MudText Typo="Typo.body1">
                                     @if (_activityRunProfileExecutionItem.NoChangeReason != null)
@@ -409,7 +410,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                 Error Details
                             </MudText>
 
-                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
+                            <MudAlert Severity="Severity.Error" Class="mb-3 jim-alert-error">
                                 <MudText Typo="Typo.body1" Style="font-weight: 500;">
                                     @errorType.ToString().SplitOnCapitalLetters()
                                 </MudText>
@@ -462,6 +463,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private IReadOnlySet<Guid>? _livePendingExportIds;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
 
+    // The current display label of every Connected System Object this item's tree Provisioned, keyed by
+    // id (#1519 Table view fix 5). A recorded Provisioned outcome's own link is built from what the run
+    // captured at the time (only the object's internal id, since it had no external id yet); this is
+    // resolved once here so the causality panel can show the object's CURRENT name instead.
+    private IReadOnlyDictionary<Guid, string>? _provisionedConnectedSystemObjectNames;
+
     // The upward causal chain (#1223): why the changes on this item happened. Loaded here rather than in
     // the panel so the panel stays a rendering component with no data access of its own.
     private CausalChain? _causalChain;
@@ -496,7 +503,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                            ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot,
         MvoTypeName: _metaverseObjectType?.Name ?? _identityHeader?.TypeName,
         MvoTypePluralName: _metaverseObjectType?.PluralName ?? _identityHeader?.TypePluralName,
-        DeletedMetaverseObjectId: _deletedIdentityId);
+        DeletedMetaverseObjectId: _deletedIdentityId,
+        ConnectedSystemObjectNames: _provisionedConnectedSystemObjectNames);
 
     /// <summary>
     /// The outcome types whose <c>TargetEntityId</c> is the Metaverse Object's own id. Only these are used to
@@ -653,6 +661,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         }
 
         await LoadLivePendingExportIdsAsync(jim);
+        await LoadProvisionedConnectedSystemObjectNamesAsync(jim);
 
         // Only items with outcomes render the causality panel, and the chain renders inside it, so an item
         // without outcomes has nowhere to show a chain and the walk is not worth paying for.
@@ -748,6 +757,55 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _livePendingExportIds = live.ToHashSet();
     }
 
+    /// <summary>
+    /// Resolves the current display label of every Connected System Object this item's tree Provisioned
+    /// (#1519 Table view fix 5), so the causality panel can show the object's name as it stands now
+    /// rather than the "type: id" label a recorded run captured at creation time, before the object had
+    /// an external id. A Provisioned outcome's own <c>DetailMessage</c> carries its target Connected
+    /// System's id (see <see cref="OutcomeDetailMessageParser"/>); PendingExportCreated children under a
+    /// Provisioned parent target the same object, so only the Provisioned outcomes themselves need
+    /// collecting. Bounded by the number of Provisioned outcomes on this one item, and grouped by
+    /// Connected System since a single item can provision to several targets.
+    /// </summary>
+    private async Task LoadProvisionedConnectedSystemObjectNamesAsync(JimApplication jim)
+    {
+        // A Provisioned outcome's target is the object it created; a queued export's or deprovision's target
+        // is the Pending Export, so the object comes from the change record beneath it (an update to an
+        // existing object names it there; a provisioning export's change may name the new object too).
+        var provisionedByConnectedSystem = _activityRunProfileExecutionItem?.SyncOutcomes
+            .Select(o => (
+                ConnectedSystemId: OutcomeDetailMessageParser.Parse(o.DetailMessage).ConnectedSystemId,
+                CsoId: o.OutcomeType switch
+                {
+                    ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => o.TargetEntityId,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+                        or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued => o.ConnectedSystemObjectChange?.ConnectedSystemObjectId,
+                    _ => null
+                }))
+            .Where(t => t.ConnectedSystemId.HasValue && t.CsoId is { } id && id != Guid.Empty)
+            .GroupBy(t => t.ConnectedSystemId!.Value, t => t.CsoId!.Value)
+            .ToList() ?? [];
+
+        if (provisionedByConnectedSystem.Count == 0)
+        {
+            _provisionedConnectedSystemObjectNames = null;
+            return;
+        }
+
+        var names = new Dictionary<Guid, string>();
+        foreach (var group in provisionedByConnectedSystem)
+        {
+            var csos = await jim.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(group.Key, group.Distinct());
+            foreach (var cso in csos)
+            {
+                // A deleted-since object simply has no entry: the recorded "type: id" label stands.
+                if (cso.NameOrId is { } nameOrId)
+                    names[cso.Id] = nameOrId;
+            }
+        }
+
+        _provisionedConnectedSystemObjectNames = names;
+    }
 
     /// <summary>
     /// Returns true if the parent activity is a sync Run Profile, indicating that
@@ -840,6 +898,24 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     }
 
     /// <summary>
+    /// The Execution Summary's Connected System Object chip name: the display name, or
+    /// the external id where it has none, never both. Null when the record carries neither yet (a provisioned
+    /// object before its first export), in which case the call site shows the type alone.
+    /// </summary>
+    private string? GetCsoChipName() => ObjectDescription.ChipName(
+        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Name, _externalIdAttributeValue?.ToStringNoName());
+
+    /// <summary>
+    /// The chip's tooltip: the external id, where distinct from the name the chip shows, and the record's own
+    /// Connected System, which the chip text leaves out.
+    /// </summary>
+    private string GetCsoChipTooltip() => ObjectDescription.ForConnectedSystemObjectChipTooltip(
+        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type.Name,
+        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Name,
+        _externalIdAttributeValue?.ToStringNoName(),
+        _connectedSystemHeader?.Name);
+
+    /// <summary>
     /// Returns the appropriate label for the object field based on context.
     /// </summary>
     private string GetObjectFieldLabel()
@@ -907,8 +983,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations - affect Connected System Objects
-            ObjectChangeType.Added => "CSO Added",
-            ObjectChangeType.Updated => "CSO Updated",
+            ObjectChangeType.Added => "Connected System Object Added",
+            ObjectChangeType.Updated => "Connected System Object Updated",
             ObjectChangeType.Deleted => IsHousekeepingContext()
                 ? "Metaverse Object Deleted"
                 : IsSyncContext() ? "Deletion Processed" : "Deletion Detected",

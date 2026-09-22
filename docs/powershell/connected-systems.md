@@ -106,15 +106,20 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
 | `passwordHistoryLength` | `int?` | How many previous passwords it remembers and refuses |
 | `maximumPasswordAgeDays` | `int?` | How long a password may live |
 | `minimumPasswordAgeDays` | `int?` | How soon it may be changed again |
-| `fineGrainedPolicySignal` | `string` | `Absent`, `Present` or `CouldNotDetermine` |
+| `policyOverrideSignal` | `string` | `Absent`, `Present` or `CouldNotDetermine`: whether some accounts may be governed by a policy other than this one |
+| `furtherChecksApply` | `bool` | Whether the directory applies checks JIM cannot see, such as a dictionary check, so a password satisfying every figure can still be refused |
+| `discoveryOutcome` | `string?` | `Read`, `NotPublished`, `ConfigurationNotReadable` or `NoPolicyConfigured`; `$null` when nothing has been read yet |
 | `hasAnyDiscoveredConstraint` | `bool` | Whether JIM discovered anything at all |
 
 !!! warning "A null means JIM could not read that rule, not that no such rule exists"
     A directory withholds what a caller may not see by omitting it rather than refusing, so a null minimum
     length does not mean any length is acceptable. Check `hasAnyDiscoveredConstraint` before treating the
-    figures as a description of what the system will accept. Where `fineGrainedPolicySignal` is `Present` or
+    figures as a description of what the system will accept. Where `policyOverrideSignal` is `Present` or
     `CouldNotDetermine`, the figures are a floor rather than a guarantee, because some accounts may be governed
-    by a stricter policy.
+    by a stricter policy (Active Directory's Fine-Grained Password Policies, OpenLDAP's per-entry policy
+    subentries, 389 Directory Server's subtree policies). Where nothing was discovered, `discoveryOutcome` says
+    why, and whether there is anything to do about it: `NotPublished` means the directory has nothing to read,
+    `ConfigurationNotReadable` means the account JIM connects as needs read access to the server configuration.
 
 ### Get-JIMConnectedSystemPasswordSynchronisation
 
@@ -171,7 +176,7 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 |-----------|------|-------------|
 | `-Id` | `int` | The Connected System (required; also accepts a Connected System from the pipeline as `-InputObject`) |
 | `-Enabled` | `bool` | Whether to deliver queued password changes. Enabling delivers what accumulated while it was off |
-| `-TargetObjectType` | `int` | The Object Type holding user accounts; must be selected for synchronisation. Alias: `-TargetObjectTypeId` |
+| `-TargetObjectType` | `int` | The Object Type that receives passwords; must be selected for synchronisation. Alias: `-TargetObjectTypeId` |
 | `-MaxRetries` | `int` | Attempts before parking a change; `0` uses JIM's default |
 | `-RetryBackoffBase` | `timespan` | The first retry interval; `0` uses JIM's default |
 | `-ChangeReason` | `string` | Recorded against the Connected System's configuration change history |
@@ -185,27 +190,6 @@ Set-JIMConnectedSystemPasswordSynchronisation -Id 3 -MaxRetries 10 -PassThru
 !!! note "There is no Remove cmdlet, and that is deliberate"
     Removing a configuration would discard every password change queued against it. Disabling it keeps them,
     and is reversible, so `-Enabled $false` is the supported way to stop delivery.
-
-#### Initial password attention (ById only)
-
-How many accounts in the Connected System are waiting on a person over their initial password.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `ParkedInitialPasswordCount` | `int?` | Accounts whose target refused the password and which JIM has stopped retrying |
-| `ExpiredInitialPasswordCount` | `int?` | Accounts never given an initial password within its time to live |
-
-The two are never summed, because they ask for different things. Parked accounts are released by correcting the
-initial password settings on the [Synchronisation Rule](synchronisation-rules.md) that provisioned them and saving;
-`Get-JIMSyncRuleInitialPassword` reports what the target actually said. Expired accounts cannot be helped that way at
-all and need a password set by other means.
-
-```powershell title="Find the systems with initial password work waiting"
-Get-JIMConnectedSystem -All |
-    ForEach-Object { Get-JIMConnectedSystem -Id $_.Id } |
-    Where-Object { $_.ParkedInitialPasswordCount -or $_.ExpiredInitialPasswordCount } |
-    Select-Object Name, ParkedInitialPasswordCount, ExpiredInitialPasswordCount
-```
 
 #### Stranded-value sweep (ById only)
 
@@ -314,8 +298,8 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
-| `RequireSecureTransport` | `switch` | No | `$false` | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on an account it provisions, one set by hand, and a synchronised password change. Nothing is discarded when JIM refuses; queued changes wait and accounts stay owed their first password. Turn it off with `-RequireSecureTransport:$false`. See [Passwords](../concepts/passwords.md#password-synchronisation). |
-| `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; accounts provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
+| `RequireSecureTransport` | `switch` | No | `$false` | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on a Connected System Object it provisions, one set by hand, and a synchronised password change. Nothing is discarded when JIM refuses; queued changes wait and Connected System Objects stay owed their first password. Turn it off with `-RequireSecureTransport:$false`. See [Passwords](../concepts/passwords.md#password-synchronisation). |
+| `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long a Connected System Object provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; Connected System Objects provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
 | `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
@@ -1190,7 +1174,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 ### Output
 
-- **List / ListAll**: Lightweight headers for each Connected System Object matching the filters.
+- **List / ListAll**: Lightweight headers for each Connected System Object matching the filters. Each row carries `State`, the derived connection state the portal's Connector Space list and a Metaverse Object's Connections tab both show: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `ExportNotConfirmed`, `ExportFailed`, `DeletePending` or `Obsolete`. It combines the object's own `Status` with any queued Pending Export, so `Where-Object { $_.State -eq "ExportFailed" }` finds the accounts a run could not write without reading the Pending Exports separately.
 - **ById**: A connector space object with its attributes and current values.
 - **AttributeValues / AttributeValuesAll**: Paged or complete list of values for the specified multi-valued attribute.
 
@@ -1198,6 +1182,11 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 ```powershell title="List objects in a Connected System"
 Get-JIMConnectedSystemObject -ConnectedSystemId 3
+```
+
+```powershell title="Find the objects whose export failed"
+Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All |
+    Where-Object { $_.State -eq "ExportFailed" }
 ```
 
 ```powershell title="Find Obsolete objects matching a search term"
@@ -1260,7 +1249,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 
 ### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, Run Profile context, and per-attribute value changes.
+Returns one `PSCustomObject` per change record, including the initiator, Run Profile context, and per-attribute value changes. Each value change produced by an export carries `SyncRuleId` and `SyncRuleName`, naming the export Synchronisation Rule whose mapping produced that value; both are `$null` for import-side changes, or when the contributing rule has since been deleted.
 
 ### Examples
 
@@ -1515,7 +1504,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 ### Output
 
 - **List / ListAll**: Pending Export operations with export type (Add, Update, Delete) and summary of changes.
-- **ById**: Detailed view of a single Pending Export, including all attribute changes. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export).
+- **ById**: Detailed view of a single Pending Export, including all attribute changes. Each attribute change carries `SyncRuleId` and `SyncRuleName`, naming the export Synchronisation Rule whose mapping produced it; both are `$null` if the contributing rule has since been deleted. `UnresolvedReferences` lists each reference change not yet written (`AttributeName`, `ReferencedMetaverseObjectId`, `ReferencedMetaverseObjectDisplayName`) with its `Reason`: `Resolvable` (written on the next export run), `AwaitingAnchor` (the referenced object exists in this Connected System but has no anchor yet) or `NotInTargetSystem` (the referenced object has no Connected System Object in this Connected System). See [Unresolved reference handling on export](../configuration/connected-systems.md#on-export).
 - **AttributeChanges / AttributeChangesAll**: Paged or complete list of changes for a specific multi-valued attribute.
 
 ### Examples
@@ -1593,9 +1582,9 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 Sets the password on one Connected System Object.
 
-The account-scoped form of Set Password: the same operation as [`Set-JIMMetaverseObjectPassword`](metaverse.md#set-jimmetaverseobjectpassword) with this one account named, for scripts that hold the account rather than the person. The change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing; by default the command waits up to ten seconds and tells you what the account did with the password. JIM holds the password only until the account has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. Every attempt is recorded as an Activity, carrying the outcome and, where the system refused, its verbatim reason.
+The Connected System Object-scoped form of Set Password: the same operation as [`Set-JIMMetaverseObjectPassword`](metaverse.md#set-jimmetaverseobjectpassword) with this one Connected System Object named, for scripts that hold the Connected System Object rather than the Metaverse Object. The change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing; by default the command waits up to ten seconds and tells you what the Connected System Object did with the password. JIM holds the password only until the object has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. Every attempt is recorded as an Activity, carrying the outcome and, where the system refused, its verbatim reason.
 
-This is the automation counterpart of the **Set Password** action on a Connected System Object in the administration portal. The object must be joined to a Metaverse Object: a password belongs to a person, and that is where its history is kept. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`.
+This is the automation counterpart of the **Set Password** action on a Connected System Object in the administration portal. The object must be joined to a Metaverse Object: a password belongs to a Metaverse Object, and that is where its history is kept. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, on `GeneratedPassword`.
 
 ### Syntax
 

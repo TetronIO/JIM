@@ -37,12 +37,6 @@ public sealed class ChangeHistoryRetentionCutoffs
     public required DateTime SecurityEvent { get; init; }
 
     /// <summary>
-    /// Governs initial-password work records that reached a terminal state (#1121). Not an audit trail; the
-    /// account's Activity is, and outlives it.
-    /// </summary>
-    public required DateTime InitialPassword { get; init; }
-
-    /// <summary>
     /// Governs Password Synchronisation Activities and terminal Pending Password Changes (#1119).
     /// </summary>
     public required DateTime PasswordEvent { get; init; }

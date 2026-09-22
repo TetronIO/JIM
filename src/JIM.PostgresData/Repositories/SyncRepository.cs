@@ -136,6 +136,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(connectedSystemId, objectTypeId, partitionId);
 
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(connectedSystemId, objectTypeId, partitionId);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
 
@@ -388,6 +391,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
         => _repo.ConnectedSystems.GetSyncRulesAsync(withChangeTracking);
 
+    public Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
+        => _repo.ConnectedSystems.GetSyncRuleNamesByIdsAsync(syncRuleIds);
+
     public async Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
     {
         var latestRuleChange = await _context.SyncRules
@@ -538,6 +544,12 @@ public partial class SyncRepository : ISyncRepository
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => _repo.ConnectedSystems.UpdatePendingExportAsync(pendingExport);
 
+    public Task AppendAttributeChangesToPendingExportAsync(
+        Guid pendingExportId,
+        IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
+        IReadOnlyList<Guid> changeIdsToRemove)
+        => _repo.ConnectedSystems.AppendAttributeChangesToPendingExportAsync(pendingExportId, changesToAdd, changeIdsToRemove);
+
     #endregion
 
     #region Export Evaluation Support
@@ -591,12 +603,6 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
-
-    public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetExecutableExportSummariesAsync(connectedSystemId);
-
-    public Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds)
-        => _repo.ConnectedSystems.DeletePendingExportsByIdsAsync(pendingExportIds);
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);

@@ -60,7 +60,7 @@
         <MudCheckBox @bind-Value="Criterion.BoolValue" @bind-Value:after="OnChangedAsync" TriState="true" Class="mt-5" Label="Boolean Value">: @(!Criterion.BoolValue.HasValue ? "Null" : Criterion.BoolValue.ToString())</MudCheckBox>
         break;
     default:
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">This attribute type is not supported in search criteria.</MudAlert>
+        <MudAlert Severity="Severity.Warning" Class="mt-5">This attribute type is not supported in search criteria.</MudAlert>
         break;
 }
 

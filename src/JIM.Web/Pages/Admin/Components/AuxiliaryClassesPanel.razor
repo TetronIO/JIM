@@ -21,7 +21,7 @@
 
         @if (_offers.Count == 0)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            <MudAlert Severity="Severity.Info" Class="mt-4">
                 @ConnectedSystem.Name defines no auxiliary classes, so there is nothing to merge into this Object Type.
             </MudAlert>
         }
@@ -163,7 +163,7 @@
                 }
                 @if (latestRun.Status == AuxiliaryClassDiscoveryStatus.Failed && !string.IsNullOrEmpty(latestRun.ErrorMessage))
                 {
-                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-2">@latestRun.ErrorMessage</MudAlert>
+                    <MudAlert Severity="Severity.Error" Class="mt-2">@latestRun.ErrorMessage</MudAlert>
                 }
             }
         </MudPaper>
@@ -197,7 +197,7 @@
         </MudSelect>
         @if (ObjectType.StructuralCarrierObjectTypeId == null)
         {
-            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+            <MudAlert Severity="Severity.Warning" Class="mt-4">
                 Until a carrier is chosen, JIM can import @ObjectType.Name objects but cannot create them.
             </MudAlert>
         }

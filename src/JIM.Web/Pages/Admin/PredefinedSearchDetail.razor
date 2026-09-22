@@ -84,7 +84,7 @@
 
         @if (_predefinedSearch.CriteriaGroups.Count == 0)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">This search has no criteria; it returns all @_predefinedSearch.MetaverseObjectType.Name objects. Add a Criteria Group to start filtering.</MudAlert>
+            <MudAlert Severity="Severity.Info">This search has no criteria; it returns all @_predefinedSearch.MetaverseObjectType.Name objects. Add a Criteria Group to start filtering.</MudAlert>
         }
         else
         {
@@ -249,13 +249,14 @@
     private RenderFragment RenderCriteria(PredefinedSearchCriteriaGroup group, bool builtIn) =>@<text>
         @if (group.Criteria.Count == 0)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">No criteria in this group yet.</MudAlert>
+            <MudAlert Severity="Severity.Info" Class="mt-3">No criteria in this group yet.</MudAlert>
         }
         @foreach (var criteria in group.Criteria)
         {
             <div class="mt-3 d-flex align-center">
                 <MudChip T="string">
                     <AvatarContent>
+                        @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
                         <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                             <MudAvatar Color="Color.Primary">MV</MudAvatar>
                         </MudTooltip>

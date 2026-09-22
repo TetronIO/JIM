@@ -7,13 +7,17 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
+using JIM.Application.Services;
 using JIM.Application.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
@@ -1310,15 +1314,23 @@ public class MetaverseServer
             ChangeInitiatorType = effectiveChangeInitiatorType
         };
 
+        // Contributor provenance (#1519 follow-up): a value being added here may be a value whose
+        // ContributedBySyncRule navigation was never loaded (e.g. a value handed in fresh from a portal
+        // edit that only set the FK), so resolve any unloaded names via a single batched lookup.
+        var syncRuleNameCache = new SyncRuleNameResolverCache(Application.SyncRepo);
+        await syncRuleNameCache.WarmAsync(additions.Concat(removals)
+            .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+            .Select(av => av.ContributedBySyncRuleId!.Value));
+
         // Create attribute change records
         foreach (var addition in additions)
         {
-            change.AddAttributeValueChange(addition, ValueChangeType.Add);
+            change.AddAttributeValueChange(addition, ValueChangeType.Add, syncRuleNameCache.Resolve);
         }
 
         foreach (var removal in removals)
         {
-            change.AddAttributeValueChange(removal, ValueChangeType.Remove);
+            change.AddAttributeValueChange(removal, ValueChangeType.Remove, syncRuleNameCache.Resolve);
         }
 
         // Add to MVO's Changes collection
@@ -1328,6 +1340,76 @@ public class MetaverseServer
     public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(metaverseObjectType, metaverseAttribute, attributeValue);
+    }
+
+    /// <summary>
+    /// Gets one row per Connected System Object joined to a Metaverse Object, for the Metaverse Object's
+    /// Connections tab (#1519): the object's identity, its Connected System, its role (source/target, derived from
+    /// enabled Synchronisation Rules for its Connected System Object Type), its join type, its derived
+    /// connection state (D-S7) and when it was last synchronised. Returns an empty list for an unknown
+    /// Metaverse Object rather than throwing; callers distinguish "no connections" from "no such object"
+    /// via <see cref="GetMetaverseObjectHeaderAsync"/> where that distinction matters.
+    /// </summary>
+    /// <remarks>
+    /// Reads: one query for the joined Connected System Objects (with Type and Connected System),
+    /// one for the Metaverse Object's own type (to scope the Synchronisation Rule lookup), one for every
+    /// Synchronisation Rule of that Metaverse Object Type (used to derive <c>IsSource</c>/<c>IsTarget</c>
+    /// per row without a query per object), and one batched Pending Export lookup
+    /// (<see cref="IConnectedSystemRepository.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync"/>)
+    /// keyed by every joined object's id. Never a query per object.
+    /// </remarks>
+    public async Task<List<MetaverseObjectConnection>> GetMetaverseObjectConnectionsAsync(Guid metaverseObjectId)
+    {
+        var joinedCsos = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsCoreByMetaverseObjectIdAsync(metaverseObjectId);
+        if (joinedCsos.Count == 0)
+            return [];
+
+        var mvoHeader = await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(metaverseObjectId);
+        IList<SyncRuleHeader> syncRuleHeaders = mvoHeader != null
+            ? await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(mvoHeader.TypeId)
+            : new List<SyncRuleHeader>();
+
+        var pendingExportsByCsoId = await Application.Repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
+            joinedCsos.Select(cso => cso.Id));
+
+        var connections = new List<MetaverseObjectConnection>(joinedCsos.Count);
+        foreach (var cso in joinedCsos)
+        {
+            var rulesForThisConnection = syncRuleHeaders.Where(sr =>
+                sr.ConnectedSystemId == cso.ConnectedSystemId && sr.ConnectedSystemObjectTypeId == cso.TypeId);
+
+            var isSource = false;
+            var isTarget = false;
+            foreach (var rule in rulesForThisConnection.Where(sr => sr.Enabled))
+            {
+                if (rule.Direction == SyncRuleDirection.Import)
+                    isSource = true;
+                else if (rule.Direction == SyncRuleDirection.Export)
+                    isTarget = true;
+            }
+
+            pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
+            var state = ConnectedSystemObjectConnectionStateResolver.Resolve(cso.Status, pendingExport);
+
+            connections.Add(new MetaverseObjectConnection
+            {
+                ConnectedSystemObjectId = cso.Id,
+                DisplayName = cso.ExternalIdAttributeValue?.ToStringNoName() ?? cso.Id.ToString(),
+                ConnectedSystemId = cso.ConnectedSystemId,
+                ConnectedSystemName = cso.ConnectedSystem.Name,
+                ObjectTypeName = cso.Type.Name,
+                JoinType = cso.JoinType,
+                IsSource = isSource,
+                IsTarget = isTarget,
+                State = state,
+                PendingAttributeChangeCount = state == ConnectedSystemObjectConnectionState.UpdatePending
+                    ? pendingExport?.AttributeValueChanges.Count
+                    : null,
+                LastSynchronised = cso.LastUpdated
+            });
+        }
+
+        return connections;
     }
 
     /// <summary>
@@ -1453,11 +1535,19 @@ public class MetaverseServer
                 DeletedObjectDisplayName = displayName
             };
 
+            // Contributor provenance (#1519 follow-up): the sync processor path passes a snapshot taken
+            // before attribute recall, whose values may not have their ContributedBySyncRule navigation
+            // loaded; resolve any such ids via a single batched lookup rather than leaving the name null.
+            var syncRuleNameCache = new SyncRuleNameResolverCache(Application.SyncRepo);
+            await syncRuleNameCache.WarmAsync(attributesToCapture
+                .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+                .Select(av => av.ContributedBySyncRuleId!.Value));
+
             // Capture final attribute values as removals so the deletion change
             // record preserves the final state of the object for audit purposes.
             foreach (var attributeValue in attributesToCapture)
             {
-                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove);
+                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
             }
 
             // Delete the MVO first, then save the change record afterwards.
@@ -2090,7 +2180,7 @@ public class MetaverseServer
     /// <summary>
     /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.
     /// Backs the Deleted Objects page's deep link, which is reached from a causality view holding the
-    /// deleted Identity's id rather than its change record's.
+    /// deleted Metaverse Object's id rather than its change record's.
     /// </summary>
     /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
     /// <returns>The Deleted change record, or null when there is none for that id.</returns>
