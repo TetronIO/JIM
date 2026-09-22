@@ -423,6 +423,20 @@ if [ -n "$YELLOWSTONE_DB_DN" ] && [ -n "$GLITTERBAND_DB_DN" ] && [ -n "$ACCESSLO
         "s#__DB_DN__#$GLITTERBAND_DB_DN#g" \
         "s#__SUFFIX__#dc=glitterband,dc=local#g"
 
+    # The service accounts are not rootDNs, so each suffix's default size limit
+    # (500) would stop a paged import at the 500th object. Exempt the JIM group
+    # on each suffix (acl/jim-service-account-limits.ldif); the accesslog
+    # database is handled above by its unlimited olcSizeLimit.
+    echo "[openldap-init] Applying JIM service account search limits (Yellowstone)..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-service-account-limits.ldif" \
+        "s#__DB_DN__#$YELLOWSTONE_DB_DN#g" \
+        "s#__SUFFIX__#dc=yellowstone,dc=local#g"
+
+    echo "[openldap-init] Applying JIM service account search limits (Glitterband)..."
+    apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-service-account-limits.ldif" \
+        "s#__DB_DN__#$GLITTERBAND_DB_DN#g" \
+        "s#__SUFFIX__#dc=glitterband,dc=local#g"
+
     echo "[openldap-init] Applying JIM frontend (rootDSE/subschema) access control..."
     apply_ldif_template "$CONFIG_ADMIN_DN" "$CONFIG_ADMIN_PW" "jim-frontend-access.ldif"
 

@@ -554,7 +554,13 @@ function Get-OpenLDAPBaseBuildHash {
     $filesToHash = @(
         "$scriptRoot/docker/openldap/Dockerfile",
         "$scriptRoot/docker/openldap/scripts/01-add-second-suffix.sh",
-        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif"
+        "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif",
+        "$scriptRoot/docker/openldap/acl/jim-service-account-access.ldif",
+        "$scriptRoot/docker/openldap/acl/jim-service-account-limits.ldif",
+        "$scriptRoot/docker/openldap/acl/jim-frontend-access.ldif",
+        "$scriptRoot/docker/openldap/acl/jim-accesslog-access.ldif",
+        "$scriptRoot/docker/openldap/acl/jim-password-policy.ldif",
+        "$scriptRoot/docker/openldap/acl/jim-ppolicy-overlay.ldif"
     )
     $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
     return [System.BitConverter]::ToString(
