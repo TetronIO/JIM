@@ -119,6 +119,7 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | `Populate-SambaAD.ps1` | test/integration/ | Create users/groups in Samba AD |
 | `Populate-OpenLDAP.ps1` | test/integration/ | Create users/groups in OpenLDAP or, with `-DirectoryType DirectoryServer389`, 389 Directory Server (both labs share one tree) |
 | `Build-DirsrvImage.ps1` | test/integration/docker/dirsrv/ | Build the 389 Directory Server lab image (`ghcr.io/tetronio/jim-dirsrv:primary`), with suffixes, schema, ACIs, Retro Changelog and LDAPS certificate baked in |
+| `Build-DirsrvSnapshots.ps1` | test/integration/ | Build pre-populated 389 Directory Server snapshot images (`jim-dirsrv:general-<size>` for the shared dataset, `jim-dirsrv:s8-<size>` for Scenario 8), the counterpart of `Build-OpenLDAPSnapshots.ps1` |
 | `Generate-TestCSV.ps1` | test/integration/ | Generate HR CSV files |
 | `Setup-Scenario1.ps1` | test/integration/ | Configure JIM for Scenario 1 |
 | `Invoke-Scenario1-HRToIdentityDirectory.ps1` | test/integration/scenarios/ | Run Scenario 1 tests (Joiner, Mover, Leaver, Reconnection) |
@@ -244,7 +245,7 @@ Names are distributed using a prime-based algorithm to ensure realistic diversit
 
 - **Yellowstone / Glitterband** - the same two suffixes on the single `dirsrv-primary` container (profile `dirsrv`, image `ghcr.io/tetronio/jim-dirsrv:primary`), port 3389 (LDAP) for the harness's own checks and 3636 (LDAPS) for JIM's Connected Systems: 389 accepts the Password Modify operation only over a secure connection, so the runner adds the image's lab CA to JIM's certificate store before a scenario connects. Select it with `-DirectoryType DirectoryServer389`; every OpenLDAP scenario runs against it except 14, 19 and 22.
 - The same two identities: `cn=Directory Manager` (server-wide) populates test data and runs assertions directly against the directory, while JIM's Connected Systems bind as `cn=svc-jim,ou=Services,<suffix>` through membership of that suffix's `cn=jim,ou=Services,<suffix>` group, and `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local` serves Scenario 9. The Retro Changelog plug-in is on with deleted entries recorded (`nsslapd-log-deleted: on`), which is what JIM's Delta Import reads; a global password policy (`passwordCheckSyntax on`, `passwordMinLength 7`) mirrors the OpenLDAP lab's.
-- The ACI LDIFs under `test/integration/docker/dirsrv/aci/` are the single source for both the lab and the customer-facing recipe, published verbatim in `docs/connectors/jim-ldap-connector.md`. No snapshot images: the image is built by `test/integration/docker/dirsrv/Build-DirsrvImage.ps1` with everything baked in, and population takes seconds.
+- The ACI LDIFs under `test/integration/docker/dirsrv/aci/` are the single source for both the lab and the customer-facing recipe, published verbatim in `docs/connectors/jim-ldap-connector.md`. The lab image is built by `test/integration/docker/dirsrv/Build-DirsrvImage.ps1` with everything baked in; snapshot images (`jim-dirsrv:general-<size>`, `jim-dirsrv:s8-<size>`) are built on first use by `Build-DirsrvSnapshots.ps1` (or on demand), exactly as for OpenLDAP, and the runner selects them automatically (`-IgnoreSnapshots` forces live population).
 
 ### Phase 2 (profile: phase2)
 

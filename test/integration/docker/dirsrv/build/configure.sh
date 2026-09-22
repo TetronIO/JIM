@@ -8,10 +8,14 @@
 # ds-container sample: start dscontainer in the background, wait for it,
 # configure over LDAP as cn=Directory Manager (dsconf uses LDAPI as root), stop
 # it cleanly. What it leaves under /data is the image's state; the Dockerfile
-# header lists it. Every step that matters is then checked, as the JIM service
-# account where that is the point, and a failed check fails the build: a lab
-# image that looks fine but silently lacks its changelog or its ACIs is worse
-# than no image.
+# header lists it. The instance is also stamped with the image's build hash
+# (/data/.jim-provisioned-id, from the JIM_DIRSRV_BUILD_HASH build argument)
+# before it is copied to /data.provisioned, so both copies carry the same id
+# and start-dirsrv.sh can tell a volume holding this build's instance from one
+# holding an older build's or a snapshot's. Every step that matters is then
+# checked, as the JIM service account where that is the point, and a failed
+# check fails the build: a lab image that looks fine but silently lacks its
+# changelog or its ACIs is worse than no image.
 #
 # Three things here contradict what the 389 documentation might lead you to
 # expect, all verified against 389-Directory/3.1.2 (the 389ds/dirsrv:3.1 image):
@@ -36,12 +40,16 @@ LDAP_URI="ldap://localhost:3389"
 LDAPS_URI="ldaps://localhost:3636"
 DM_DN="cn=Directory Manager"
 DM_PW="${DS_DM_PASSWORD:?DS_DM_PASSWORD must be set for the build}"
+# Checked up front so a missing hash fails the build in its first second, not
+# after the whole configuration has run; finalise writes it.
+BUILD_HASH="${JIM_DIRSRV_BUILD_HASH:?JIM_DIRSRV_BUILD_HASH must be set for the build (Build-DirsrvImage.ps1 passes it as a build argument)}"
 
 BOOTSTRAP_DIR="/bootstrap"
 SCHEMA_DIR="/schema"
 ACI_DIR="/aci"
 DATA_DIR="/data"
 PROVISIONED_DIR="/data.provisioned"
+PROVISIONED_ID_FILE=".jim-provisioned-id"
 TLS_DIR="$DATA_DIR/tls"
 LAB_CA_CERT="$TLS_DIR/ca/jim-dirsrv-lab-ca.crt"
 SLAPD_PID_FILE="$DATA_DIR/run/slapd-localhost.pid"
@@ -407,11 +415,18 @@ LDIF
 finalise() {
     # Runtime files are recreated on start (and a stale socket breaks cp -a);
     # the build's logs are noise. The provisioned copy is what start-dirsrv.sh
-    # restores when a container's /data holds no instance.
+    # restores when a container's /data does not hold this build's instance.
     rm -rf "${DATA_DIR:?}/run/"* "${DATA_DIR:?}/logs/"*
+    # The provenance stamp, written BEFORE the copy so /data (which seeds a fresh
+    # named volume from the image layer) and /data.provisioned carry the same id:
+    # start-dirsrv.sh starts the volume's instance only when the two ids agree.
+    # A snapshot built on this image overwrites the provisioned copy's id with
+    # its own, which is what makes a volume seeded from the base layer restore.
+    printf '%s' "$BUILD_HASH" > "$DATA_DIR/$PROVISIONED_ID_FILE"
     rm -rf "$PROVISIONED_DIR"
     cp -a "$DATA_DIR" "$PROVISIONED_DIR"
-    log "Provisioned copy written to $PROVISIONED_DIR ($(du -sh "$PROVISIONED_DIR" | cut -f1))"
+    [ "$(cat "$PROVISIONED_DIR/$PROVISIONED_ID_FILE")" = "$BUILD_HASH" ] || fail "the provisioned copy does not carry the build hash"
+    log "Provisioned copy written to $PROVISIONED_DIR ($(du -sh "$PROVISIONED_DIR" | cut -f1)), stamped $BUILD_HASH"
 }
 
 main() {

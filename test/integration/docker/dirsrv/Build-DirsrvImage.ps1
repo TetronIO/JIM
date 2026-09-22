@@ -20,7 +20,11 @@
 
     The image is labelled jim.dirsrv.build-hash with the content hash from
     Get-DirsrvBuildHash.ps1 (every fixture file except the two scripts), which the
-    integration test runner recomputes to detect a stale image.
+    integration test runner recomputes to detect a stale image. The same hash is
+    passed to the build as JIM_DIRSRV_BUILD_HASH, which build/configure.sh writes
+    into the instance as /data/.jim-provisioned-id: the provenance stamp that
+    start-dirsrv.sh compares to decide whether a mounted volume holds this build's
+    instance or must be replaced from the provisioned copy.
 
 .PARAMETER Push
     Push the image to GitHub Container Registry after building
@@ -65,6 +69,7 @@ $startTime = Get-Date
 
 docker build `
     --label "jim.dirsrv.build-hash=$buildContentHash" `
+    --build-arg "JIM_DIRSRV_BUILD_HASH=$buildContentHash" `
     -t $fullTag `
     $scriptDir
 
