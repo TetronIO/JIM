@@ -50,6 +50,7 @@ $filesToHash = @(
     (Join-Path $scriptDir "scripts/01-add-second-suffix.sh"),
     (Join-Path $scriptDir "bootstrap/01-base-ous-yellowstone.ldif"),
     (Join-Path $scriptDir "acl/jim-service-account-access.ldif"),
+    (Join-Path $scriptDir "acl/jim-service-account-limits.ldif"),
     (Join-Path $scriptDir "acl/jim-frontend-access.ldif"),
     (Join-Path $scriptDir "acl/jim-accesslog-access.ldif"),
     (Join-Path $scriptDir "acl/jim-password-policy.ldif"),
