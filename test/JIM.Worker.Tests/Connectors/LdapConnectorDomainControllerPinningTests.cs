@@ -139,7 +139,7 @@ public class LdapConnectorDomainControllerPinningTests
         var probed = new List<string>();
 
         var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
+            isActiveDirectoryFamily: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
             connectedServer: "host.jim.test", canConnectTo: server => { probed.Add(server); return true; },
             logger: Logger);
 
@@ -152,7 +152,7 @@ public class LdapConnectorDomainControllerPinningTests
     public void ResolvePinnedDirectoryServerForImport_DiscoveredServerIsUnreachable_DoesNotPinAndWarns()
     {
         var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
+            isActiveDirectoryFamily: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
             connectedServer: "host.jim.test", canConnectTo: _ => false, logger: Logger);
 
         Assert.That(decision.PinnedServer, Is.Null,
@@ -174,7 +174,7 @@ public class LdapConnectorDomainControllerPinningTests
         var probed = new List<string>();
 
         var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
+            isActiveDirectoryFamily: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
             connectedServer: "DC1.JIM.TEST", canConnectTo: server => { probed.Add(server); return true; },
             logger: Logger);
 
@@ -187,7 +187,7 @@ public class LdapConnectorDomainControllerPinningTests
     public void ResolvePinnedDirectoryServerForImport_AdFamilyBlankPreferredSetting_PinsToDnsHostName(string blankPreferredSetting)
     {
         var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: blankPreferredSetting, dnsHostName: "dc1.jim.test",
+            isActiveDirectoryFamily: true, preferredDomainController: blankPreferredSetting, dnsHostName: "dc1.jim.test",
             connectedServer: "host.jim.test", canConnectTo: _ => true, logger: Logger);
 
         Assert.That(decision.PinnedServer, Is.EqualTo("dc1.jim.test"));
@@ -200,7 +200,7 @@ public class LdapConnectorDomainControllerPinningTests
         var probed = new List<string>();
 
         var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: "preferred-dc.jim.test", dnsHostName: "dc1.jim.test",
+            isActiveDirectoryFamily: true, preferredDomainController: "preferred-dc.jim.test", dnsHostName: "dc1.jim.test",
             connectedServer: "preferred-dc.jim.test", canConnectTo: server => { probed.Add(server); return true; },
             logger: Logger);
 
@@ -216,7 +216,7 @@ public class LdapConnectorDomainControllerPinningTests
         var probed = new List<string>();
 
         var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: false, preferredDomainController: null, dnsHostName: "ldap1.jim.test",
+            isActiveDirectoryFamily: false, preferredDomainController: null, dnsHostName: "ldap1.jim.test",
             connectedServer: "host.jim.test", canConnectTo: server => { probed.Add(server); return true; },
             logger: Logger);
 
@@ -231,7 +231,7 @@ public class LdapConnectorDomainControllerPinningTests
         var probed = new List<string>();
 
         var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: null,
+            isActiveDirectoryFamily: true, preferredDomainController: null, dnsHostName: null,
             connectedServer: "host.jim.test", canConnectTo: server => { probed.Add(server); return true; },
             logger: Logger);
 

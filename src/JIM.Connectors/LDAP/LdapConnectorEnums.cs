@@ -76,3 +76,20 @@ internal enum LdapServerResolutionSource
     /// </summary>
     Host
 }
+
+/// <summary>
+/// How a directory tells JIM what changed since the last import, and so which <see cref="ILdapDeltaSource"/> a
+/// Delta Import reads through. Derived from <see cref="LdapDirectoryType"/> by
+/// <see cref="LdapConnectorRootDse.DeltaSourceKind"/>, the one place that mapping lives.
+/// </summary>
+internal enum LdapDeltaSourceKind
+{
+    /// <summary>Active Directory and Samba AD: uSNChanged watermarks and the Deleted Objects container.</summary>
+    Usn,
+
+    /// <summary>OpenLDAP: the accesslog overlay's cn=accesslog database.</summary>
+    Accesslog,
+
+    /// <summary>389 Directory Server and generic directories: a draft-good-ldap-changelog cn=changelog.</summary>
+    Changelog
+}

@@ -8,7 +8,7 @@ namespace JIM.Connectors.LDAP;
 
 /// <summary>
 /// Discovers the domain controllers in an AD-family forest, with the Active Directory Site each belongs to
-/// (issue #1167). Only called for directories where <see cref="LdapConnectorRootDse.UseUsnDeltaImport"/> is true
+/// (issue #1167). Only called for directories where <see cref="LdapConnectorRootDse.IsActiveDirectoryFamily"/> is true
 /// (Active Directory, Samba AD); callers are responsible for that check, since discovery relies on the
 /// CN=Sites,CN=Configuration hierarchy other LDAP directories do not have.
 /// </summary>

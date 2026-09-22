@@ -86,6 +86,7 @@ function Get-OpenLDAPPopulateScriptHash {
         "$scriptRoot/docker/openldap/bootstrap/01-base-ous-yellowstone.ldif",
         "$scriptRoot/docker/openldap/start-openldap.sh",
         "$scriptRoot/docker/openldap/acl/jim-service-account-access.ldif",
+        "$scriptRoot/docker/openldap/acl/jim-service-account-limits.ldif",
         "$scriptRoot/docker/openldap/acl/jim-frontend-access.ldif",
         "$scriptRoot/docker/openldap/acl/jim-accesslog-access.ldif",
         "$scriptRoot/docker/openldap/acl/jim-password-policy.ldif",

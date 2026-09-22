@@ -146,6 +146,12 @@ internal static class LdapConnectorConstants
     // When a group has no real members, a placeholder DN is used to satisfy this constraint.
     // This applies to OpenLDAP and Generic directories — AD/Samba AD use the 'group' class which has no such constraint.
     internal const string DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN = "cn=placeholder";
+
+    /// <summary>
+    /// Where a draft-good-ldap-changelog conventionally lives when the rootDSE does not say (389 Directory
+    /// Server's Retro Changelog plug-in, and most others, put it here).
+    /// </summary>
+    internal const string DEFAULT_CHANGELOG_DN = "cn=changelog";
     internal const string SETTING_GROUP_PLACEHOLDER_MEMBER_DN = "Group Placeholder Member DN";
 
     /// <summary>

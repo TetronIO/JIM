@@ -819,6 +819,8 @@ Metaverse Objects including their ID, object type, and requested attributes.
 
 The object type is returned as a nested `Type` object with `Id` and `Name` properties (for example `$obj.Type.Name`), identical in both the list and single-object responses. (Prior to this release the list response exposed flat `TypeId` and `TypeName` properties instead; this is a breaking change to the output shape.)
 
+When retrieved by ID, `ConnectedSystemObjects` lists every Connected System Object joined to the Metaverse Object, carrying the same data the portal's Connections tab shows: `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. `IsSource` and `IsTarget` say whether an enabled Import or Export Synchronisation Rule exists for that object's Connected System and Object Type, so an object can be both, or neither. `State` is derived from the object's status and any queued Pending Export: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`. `PendingAttributeChangeCount` is populated only for `UpdatePending`; it is `$null` for every other state, including a pending Create or Delete. The list form does not carry these rows; only the `-Id` form does.
+
 When retrieved by ID, each attribute value also carries its provenance: `ContributedBySystemId`/`ContributedBySystemName` identify the Connected System, and `ContributedBySyncRuleId`/`ContributedBySyncRuleName` identify the exact Synchronisation Rule that won [attribute priority resolution](../concepts/attribute-priority.md) and contributed the value. A value row with `NullValue` set to `true` is an asserted null: a deliberate, authoritative "no value" assertion carrying provenance only; treat it as no value present, distinct from the attribute having no row at all.
 
 #### Examples
@@ -843,6 +845,16 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -All -Attributes @("Display Name"
 # -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
 # API's maximum retrieval depth of 1,000,000 rows.
 Get-JIMMetaverseObject -ObjectTypeName "Person" -All -Force
+```
+
+```powershell title="See which systems an Identity is joined to, and how"
+(Get-JIMMetaverseObject -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890").ConnectedSystemObjects |
+    Format-Table ConnectedSystemName, ObjectTypeName, JoinType, State, IsSource, IsTarget
+```
+
+```powershell title="Find an Identity's accounts whose export has failed"
+(Get-JIMMetaverseObject -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890").ConnectedSystemObjects |
+    Where-Object { $_.State -eq "ExportFailed" }
 ```
 
 ```powershell title="Page through results manually"
