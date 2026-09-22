@@ -182,7 +182,8 @@ jobs:
   ldaps-tests:
     # Runs the RequiresLdaps NUnit tier against real directory servers over TLS:
     # three OpenLDAP variants (system-trusted CA, JIM-store-only CA, expired
-    # certificate) and a Samba AD Domain Controller. These fixtures self-skip in
+    # certificate), a Samba AD Domain Controller and a 389 Directory Server pair
+    # (JIM-store-only CA, expired certificate). These fixtures self-skip in
     # build-and-test (JIM_TEST_LDAPS_HOST unset); here the fixture script stands
     # the servers up and exports the environment variables that flip them from
     # Assert.Ignore to run. This is the regression net for LDAPS certificate
@@ -217,7 +218,7 @@ jobs:
     # docker run fail on a transient refusal.
     - name: Pull directory server images
       run: |
-        for image in bitnamilegacy/openldap:latest diegogslomp/samba-ad-dc:latest; do
+        for image in bitnamilegacy/openldap:latest diegogslomp/samba-ad-dc:latest 389ds/dirsrv:3.1; do
           for attempt in 1 2 3; do
             docker pull "$image" && break
             if [ "$attempt" = "3" ]; then
@@ -231,7 +232,7 @@ jobs:
     # and installs one test CA into the machine trust store. sudo -E preserves
     # GITHUB_ENV so the script can export the connection details to later steps.
     - name: Start LDAPS certificate test servers
-      run: sudo -E pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd
+      run: sudo -E pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd -Include389
     - name: Run LDAPS certificate validation tests (RequiresLdaps)
       run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresLdaps" --verbosity normal
     # On push events this job runs on the self-hosted runner, which is NOT ephemeral:
