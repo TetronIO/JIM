@@ -124,7 +124,7 @@ if (-not $ApiKey) {
 
 # Runs against Samba AD or OpenLDAP; both directories enforce a password policy (Samba AD's domain minimum,
 # OpenLDAP's ppolicy overlay), so Test 8's deliberately-too-short password is refused on either one.
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 
 <#
     The passwords this scenario sends.
@@ -366,7 +366,7 @@ try {
     # The HR template marks some people Archived, and Setup-Scenario1's userAccountControl expression disables
     # exactly those. OpenLDAP has no userAccountControl equivalent (Setup-Scenario1 does not map one), so every
     # provisioned account there is already usable and none are filtered out.
-    if (-not $isOpenLDAP) {
+    if (-not $isRfcDirectory) {
         $accounts = @($accounts | Where-Object { $_.ContainsKey('userAccountControl') -and (([int]$_.userAccountControl) -band 0x2) -eq 0 })
     }
 

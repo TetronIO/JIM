@@ -509,7 +509,8 @@ _jim_prune_images_preserving_snapshots() {
   preserve_ids=$(docker images --filter "label=jim.samba.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.samba.build-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.openldap.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
-                 docker images --filter "label=jim.openldap.build-hash" --filter "dangling=false" -q 2>/dev/null)
+                 docker images --filter "label=jim.openldap.build-hash" --filter "dangling=false" -q 2>/dev/null; \
+                 docker images --filter "label=jim.dirsrv.build-hash" --filter "dangling=false" -q 2>/dev/null)
   preserve_ids=$(echo "$preserve_ids" | sort -u | grep -v '^$')
 
   if [ -z "$preserve_ids" ]; then
@@ -545,12 +546,12 @@ jim-reset() {
   fi
 
   docker compose $(_jim_compose) down --volumes
-  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --volumes --remove-orphans 2>/dev/null || true
-  docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true
+  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile dirsrv down --volumes --remove-orphans 2>/dev/null || true
+  docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
   _jim_prune_images_preserving_snapshots
   docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true
   docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true
-  echo "JIM reset complete. Containers, images, and volumes removed (Samba AD & OpenLDAP snapshots preserved). Run jim-build to rebuild."
+  echo "JIM reset complete. Containers, images, and volumes removed (Samba AD & OpenLDAP snapshots and the 389 Directory Server image preserved). Run jim-build to rebuild."
 }
 
 # Documentation preview (MkDocs Material)

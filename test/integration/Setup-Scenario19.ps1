@@ -80,7 +80,9 @@ $null = $Template
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 }
-if ($DirectoryConfig.UserObjectClass -ne "inetOrgPerson") {
+# Keyed on the directory type, not the object class: 389 Directory Server also uses inetOrgPerson
+# and must still be refused here (the fixture and its assertions are OpenLDAP-specific).
+if ($DirectoryConfig.DirectoryType -ne "OpenLDAP") {
     throw "Scenario 19 (Auxiliary Classes) is OpenLDAP only. Run-IntegrationTests.ps1 should have rejected this combination before Setup-Scenario19.ps1 was invoked."
 }
 

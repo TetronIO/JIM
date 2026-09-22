@@ -33,8 +33,20 @@
     - Source: Populates users and groups in Yellowstone
     - Target: Creates OU structure only in Glitterband (JIM provisions the rest)
 
+.PARAMETER DirectoryType
+    Which RFC 4512 lab to populate: OpenLDAP (default) or DirectoryServer389. Both host the same
+    two suffixes and load the same jimPerson/jimGroup schema; the container, port and
+    administrator bind come from Get-DirectoryConfig.
+
+.PARAMETER Container
+    Container to populate. Defaults to the directory type's container from Get-DirectoryConfig;
+    the snapshot builder overrides it.
+
 .EXAMPLE
     ./Populate-OpenLDAP-Scenario8.ps1 -Template Nano -Instance Source
+
+.EXAMPLE
+    ./Populate-OpenLDAP-Scenario8.ps1 -Template Nano -Instance Source -DirectoryType DirectoryServer389
 
 .EXAMPLE
     ./Populate-OpenLDAP-Scenario8.ps1 -Template Small -Instance Source
@@ -49,8 +61,16 @@ param(
     [ValidateSet("Source", "Target")]
     [string]$Instance = "Source",
 
+    # Which RFC 4512 lab to populate. Both host the same two suffixes; the container name, LDAP
+    # port and the administrator bind for the instance's suffix come from Get-DirectoryConfig.
     [Parameter(Mandatory=$false)]
-    [string]$Container = "openldap-primary"
+    [ValidateSet("OpenLDAP", "DirectoryServer389")]
+    [string]$DirectoryType = "OpenLDAP",
+
+    # Overrides the container from Get-DirectoryConfig (the snapshot builder populates a
+    # differently named container from the same image).
+    [Parameter(Mandatory=$false)]
+    [string]$Container
 )
 
 Set-StrictMode -Version Latest
@@ -60,28 +80,27 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
 . "$PSScriptRoot/utils/Test-GroupHelpers.ps1"
 
-Write-TestSection "Scenario 8: Populating OpenLDAP ($Instance) with $Template template"
+Write-TestSection "Scenario 8: Populating $DirectoryType ($Instance) with $Template template"
 
 # Get scales
 $groupScale = Get-Scenario8GroupScale -Template $Template
 
-# Directory configuration
-$containerName = $Container
-$ldapUri = "ldap://localhost:1389"
+# Directory configuration. Source is the Yellowstone suffix and Target the Glitterband suffix of
+# the same container; each instance's BindDN is that suffix's administrator (on 389 Directory
+# Server both are the suffix-less Directory Manager, which is why it is never built from the suffix).
+$directoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType -Instance $Instance
+$containerName = if ($Container) { $Container } else { $directoryConfig.ContainerName }
+$ldapUri = "ldap://localhost:$($directoryConfig.Port)"
 
 $configMap = @{
     Source = @{
         Suffix       = "dc=yellowstone,dc=local"
-        AdminDN      = "cn=admin,dc=yellowstone,dc=local"
-        Password     = "Test@123!"
         PeopleOU     = "ou=People,dc=yellowstone,dc=local"
         GroupsOU     = "ou=Groups,dc=yellowstone,dc=local"
         Domain       = "yellowstone.local"
     }
     Target = @{
         Suffix       = "dc=glitterband,dc=local"
-        AdminDN      = "cn=admin,dc=glitterband,dc=local"
-        Password     = "Test@123!"
         PeopleOU     = "ou=People,dc=glitterband,dc=local"
         GroupsOU     = "ou=Groups,dc=glitterband,dc=local"
         Domain       = "glitterband.local"
@@ -89,6 +108,8 @@ $configMap = @{
 }
 
 $config = $configMap[$Instance]
+$config.AdminDN  = $directoryConfig.BindDN
+$config.Password = $directoryConfig.BindPassword
 
 Write-Host "Container:       $containerName" -ForegroundColor Gray
 Write-Host "Suffix:          $($config.Suffix)" -ForegroundColor Gray

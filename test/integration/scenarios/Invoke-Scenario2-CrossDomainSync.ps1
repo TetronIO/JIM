@@ -71,16 +71,10 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 
 # Derive Source and Target configs
-if ($DirectoryConfig -and $DirectoryConfig.UserObjectClass -eq "inetOrgPerson") {
-    $directoryType = "OpenLDAP"
-} elseif ($DirectoryConfig) {
-    $directoryType = "SambaAD"
-} else {
-    $directoryType = "SambaAD"
-}
+$directoryType = if ($DirectoryConfig) { $DirectoryConfig.DirectoryType } else { "SambaAD" }
 $SourceConfig = Get-DirectoryConfig -DirectoryType $directoryType -Instance Source
 $TargetConfig = Get-DirectoryConfig -DirectoryType $directoryType -Instance Target
-$isOpenLDAP = $directoryType -eq "OpenLDAP"
+$isRfcDirectory = Test-IsRfcDirectory $SourceConfig
 
 Write-TestSection "Scenario 2: Directory to Directory Synchronisation ($directoryType)"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -99,7 +93,7 @@ $testUserSam = "crossdomain.test1"
 $testUserFirstName = "CrossDomain"
 $testUserLastName = "TestUser"
 $testUserDisplayName = "CrossDomain TestUser"
-$testUserDepartment = if ($isOpenLDAP) { "Engineering-Dept" } else { "Engineering" }
+$testUserDepartment = if ($isRfcDirectory) { "Engineering-Dept" } else { "Engineering" }
 $testUserEmail = "crossdomain.test1@$($SourceConfig.Domain)"
 $testUserEmployeeNumber = "CD001"
 
@@ -116,7 +110,7 @@ try {
     # Verify directory containers are running
     Write-Host "Verifying Scenario 2 infrastructure..." -ForegroundColor Gray
 
-    if ($isOpenLDAP) {
+    if ($isRfcDirectory) {
         # OpenLDAP: both source and target are on the same container
         $containerStatus = docker inspect --format='{{.State.Health.Status}}' $SourceConfig.ContainerName 2>&1
         if ($containerStatus -ne "healthy") {
@@ -146,7 +140,7 @@ try {
     $deletedFromTarget = $false
 
     foreach ($user in $testUsers) {
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # OpenLDAP: delete by DN using ldapdelete
             $sourceUserDN = "$($SourceConfig.UserRdnAttr)=$user,$($SourceConfig.UserContainer)"
             $output = docker exec $SourceConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($SourceConfig.Port)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" "$sourceUserDN" 2>&1
@@ -335,7 +329,7 @@ try {
 
         Write-Host "Creating test user in Source directory..." -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # OpenLDAP: create user via ldapadd with LDIF
             $userDN = "$($SourceConfig.UserRdnAttr)=$testUserSam,$($SourceConfig.UserContainer)"
             $ldif = @"
@@ -393,7 +387,7 @@ userPassword: Password123!
         # Validate user exists in Target directory
         Write-Host "Validating user in Target directory..." -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $targetUserExists = Test-LDAPUserExists -UserIdentifier $testUserSam -DirectoryConfig $TargetConfig
             if ($targetUserExists) {
                 Write-Host "  ✓ User '$testUserSam' provisioned to Target" -ForegroundColor Green
@@ -437,11 +431,11 @@ userPassword: Password123!
         Write-TestSection "Test 2: Forward Sync (Attribute Change)"
 
         # For OpenLDAP we update displayName (SINGLE-VALUE, mapped); for AD we update department
-        $updateAttrName = if ($isOpenLDAP) { "displayName" } else { "department" }
-        $updateNewValue = if ($isOpenLDAP) { "CrossDomain Updated" } else { "Sales" }
+        $updateAttrName = if ($isRfcDirectory) { "displayName" } else { "department" }
+        $updateNewValue = if ($isRfcDirectory) { "CrossDomain Updated" } else { "Sales" }
         Write-Host "Updating user $updateAttrName in Source..." -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $userDN = "$($SourceConfig.UserRdnAttr)=$testUserSam,$($SourceConfig.UserContainer)"
             $modifyLdif = @"
 dn: $userDN
@@ -475,7 +469,7 @@ ldapmodify -x -H ldap://localhost -D '$($SourceConfig.BindDN)' -w '$($SourceConf
         # Validate attribute change in Target
         Write-Host "Validating attribute update in Target..." -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $targetUser = Get-LDAPUser -UserIdentifier $testUserSam -DirectoryConfig $TargetConfig
             if ($targetUser -and $targetUser.$updateAttrName -eq $updateNewValue) {
                 Write-Host "  ✓ $updateAttrName updated to '$updateNewValue' in Target" -ForegroundColor Green
@@ -519,7 +513,7 @@ ldapmodify -x -H ldap://localhost -D '$($SourceConfig.BindDN)' -w '$($SourceConf
         $reverseUserDepartment = "Marketing"
 
         # Create user in Target directory
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $reverseUserDN = "$($TargetConfig.UserRdnAttr)=$reverseUserSam,$($TargetConfig.UserContainer)"
             $ldif = @"
 dn: $reverseUserDN
@@ -582,7 +576,7 @@ userPassword: Password123!
             Write-Host "    Target import rule has ProjectToMetaverse=false - objects can only join, not project" -ForegroundColor Gray
 
             # Also verify the user was NOT provisioned to Source
-            if ($isOpenLDAP) {
+            if ($isRfcDirectory) {
                 $reverseInSource = Test-LDAPUserExists -UserIdentifier $reverseUserSam -DirectoryConfig $SourceConfig
             }
             else {
@@ -616,7 +610,7 @@ userPassword: Password123!
         $conflictUserSam = "cd.conflict.test"
 
         # Create user in Source directory
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $conflictUserDN = "$($SourceConfig.UserRdnAttr)=$conflictUserSam,$($SourceConfig.UserContainer)"
             $ldif = @"
 dn: $conflictUserDN
@@ -653,7 +647,7 @@ userPassword: Password123!
         Invoke-ForwardSync -Context "Conflict"
 
         # Verify user exists in Target
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $conflictUserInTarget = Test-LDAPUserExists -UserIdentifier $conflictUserSam -DirectoryConfig $TargetConfig
         }
         else {

@@ -124,15 +124,15 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
 }
 
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 $hrSystemName = "Scoping HR Source"
-$ldapSystemName = if ($isOpenLDAP) { "Scoping LDAP Target (OpenLDAP)" } else { "Scoping LDAP Target (AD)" }
+$ldapSystemName = if ($isRfcDirectory) { "Scoping LDAP Target (OpenLDAP)" } else { "Scoping LDAP Target (AD)" }
 $importRuleName = "Scoping Import (HR -> MV)"
 $exportRuleName = "Scoping Export (MV -> LDAP)"
 
 Write-TestSection "Scenario 10: Sync Rule Scoping Behaviour"
 Write-Host "Step:      $Step" -ForegroundColor Gray
-Write-Host "Directory: $(if ($isOpenLDAP) { 'OpenLDAP' } else { 'Samba AD' })" -ForegroundColor Gray
+Write-Host "Directory: $($DirectoryConfig.DirectoryType)" -ForegroundColor Gray
 Write-Host "Template:  $Template" -ForegroundColor Gray
 Write-Host ""
 
@@ -203,10 +203,10 @@ function Get-RuleId {
 
 function Remove-LDAPTestUsers {
     param([object[]]$Users, [hashtable]$DirectoryConfig)
-    if ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson") {
-        # OpenLDAP path - use ldapdelete via the container.
-        # -H is required: openldap-primary listens on port 1389, and without an explicit
-        # URI ldapdelete defaults to ldap://localhost:389 and silently fails to connect.
+    if (Test-IsRfcDirectory $DirectoryConfig) {
+        # OpenLDAP / 389 Directory Server path - use ldapdelete via the container.
+        # -H is required: the lab containers listen on non-default ports (1389 / 3389), and
+        # without an explicit URI ldapdelete defaults to ldap://localhost:389 and silently fails to connect.
         $ldapUri = "ldap://localhost:$($DirectoryConfig.Port)"
         foreach ($u in $Users) {
             $dn = "uid=$($u.samAccountName),$($DirectoryConfig.UserContainer)"
@@ -411,7 +411,7 @@ try {
     }
 
     # Wait for the LDAP directory to be healthy (matches Scenario 9's pattern)
-    $containerName = if ($isOpenLDAP) { $DirectoryConfig.ContainerName } else { "samba-ad-primary" }
+    $containerName = if ($isRfcDirectory) { $DirectoryConfig.ContainerName } else { "samba-ad-primary" }
     Write-Host "Waiting for $containerName to be healthy..." -ForegroundColor Gray
     $elapsed = 0; $maxWait = 120
     while ($elapsed -lt $maxWait) {
@@ -852,7 +852,7 @@ $total = @($testResults.Steps).Count
 $failedCount = $total - $passed
 
 Write-Host "Scenario: $($testResults.Scenario)" -ForegroundColor Cyan
-Write-Host "Directory: $(if ($isOpenLDAP) { 'OpenLDAP' } else { 'Samba AD' })" -ForegroundColor Cyan
+Write-Host "Directory: $($DirectoryConfig.DirectoryType)" -ForegroundColor Cyan
 Write-Host ""
 
 foreach ($testStep in $testResults.Steps) {

@@ -64,15 +64,11 @@ $ErrorActionPreference = "Stop"
 
 # Derive Source and Target configs from directory type
 # S2 needs two LDAP connected systems — for SambaAD these are separate containers,
-# for OpenLDAP these are different suffixes on the same container.
-if ($DirectoryConfig -and $DirectoryConfig.UserObjectClass -eq "inetOrgPerson") {
-    $directoryType = "OpenLDAP"
-} else {
-    $directoryType = "SambaAD"
-}
+# for OpenLDAP and 389 Directory Server these are different suffixes on the same container.
+$directoryType = if ($DirectoryConfig) { $DirectoryConfig.DirectoryType } else { "SambaAD" }
 $SourceConfig = Get-DirectoryConfig -DirectoryType $directoryType -Instance Source
 $TargetConfig = Get-DirectoryConfig -DirectoryType $directoryType -Instance Target
-$isOpenLDAP = $directoryType -eq "OpenLDAP"
+$isRfcDirectory = Test-IsRfcDirectory $SourceConfig
 
 Write-TestSection "Scenario 2 Setup: Directory to Directory Synchronisation ($directoryType)"
 
@@ -328,7 +324,7 @@ else {
 Write-TestStep "Step 7" "Creating Test OUs and Selecting Partitions/Containers"
 
 try {
-    if ($isOpenLDAP) {
+    if ($isRfcDirectory) {
         # OpenLDAP: People OUs already exist from bootstrap — no creation needed
         Write-Host "  OpenLDAP: Using existing People OUs (created during bootstrap)" -ForegroundColor Gray
     }
@@ -419,7 +415,7 @@ try {
             Write-Host "    ✓ Selected partition: $($sourceDomainPartition.name)" -ForegroundColor Green
 
             # Find and select the appropriate container
-            $sourceContainerName = if ($isOpenLDAP) {
+            $sourceContainerName = if ($isRfcDirectory) {
                 # OpenLDAP: use People OU (extract short name from UserContainer DN)
                 if ($SourceConfig.UserContainer -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "People" }
             } else { "TestUsers" }
@@ -473,7 +469,7 @@ try {
             Write-Host "    ✓ Selected partition: $($targetDomainPartition.name)" -ForegroundColor Green
 
             # Find and select the appropriate container
-            $targetContainerName = if ($isOpenLDAP) {
+            $targetContainerName = if ($isRfcDirectory) {
                 if ($TargetConfig.UserContainer -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "People" }
             } else { "TestUsers" }
 
@@ -542,7 +538,7 @@ try {
 
     # Select only the LDAP attributes needed for bidirectional sync flows
     # With #435, MVA→SVA import is now allowed (first-value selection with RPEI warning)
-    $requiredLdapAttributes = if ($isOpenLDAP) {
+    $requiredLdapAttributes = if ($isRfcDirectory) {
         @(
             'entryUUID',          # Immutable object identifier - External ID (anchor)
             'uid',                # Account Name - used for matching/joining (MVA, first-value via #435)
@@ -592,8 +588,8 @@ try {
 
     # Create Import sync rule (Source -> Metaverse)
     $existingRules = Get-JIMSyncRule
-    $sourceLabel = if ($isOpenLDAP) { "Yellowstone" } else { "APAC AD" }
-    $targetLabel = if ($isOpenLDAP) { "Glitterband" } else { "EMEA AD" }
+    $sourceLabel = if ($isRfcDirectory) { "Yellowstone" } else { "APAC AD" }
+    $targetLabel = if ($isRfcDirectory) { "Glitterband" } else { "EMEA AD" }
     $sourceImportRuleName = "$sourceLabel Import Users"
     $sourceImportRule = $existingRules | Where-Object { $_.name -eq $sourceImportRuleName }
 
@@ -685,7 +681,7 @@ try {
 
         # Define attribute mappings for forward sync (Source -> Metaverse -> Target)
         # With #435, MVA→SVA import is allowed — first value is selected with RPEI warning
-        $importMappings = if ($isOpenLDAP) {
+        $importMappings = if ($isRfcDirectory) {
             @(
                 @{ LdapAttr = "uid";                MvAttr = "Account Name" }
                 @{ LdapAttr = "givenName";          MvAttr = "First Name" }
@@ -708,7 +704,7 @@ try {
         }
 
         # Target exports these attributes from Metaverse (SVA→MVA always allowed)
-        $exportMappings = if ($isOpenLDAP) {
+        $exportMappings = if ($isRfcDirectory) {
             @(
                 @{ MvAttr = "Account Name";   LdapAttr = "uid" }
                 @{ MvAttr = "First Name";     LdapAttr = "givenName" }
@@ -736,7 +732,7 @@ try {
         # Expression-based mappings for computed values
         # distinguishedName is required for LDAP provisioning — tells the connector where to create the object
         # DN expression: OpenLDAP uses uid-based RDN, AD uses CN-based
-        $targetExpressionMappings = if ($isOpenLDAP) {
+        $targetExpressionMappings = if ($isRfcDirectory) {
             @(
                 @{
                     LdapAttr = "distinguishedName"
@@ -753,7 +749,7 @@ try {
         }
 
         # For reverse sync (Source export), also need DN expression
-        $sourceExpressionMappings = if ($isOpenLDAP) {
+        $sourceExpressionMappings = if ($isRfcDirectory) {
             @(
                 @{
                     LdapAttr = "distinguishedName"
@@ -973,7 +969,7 @@ try {
         # Add object matching rule for Source (match by account name attribute)
         Write-Host "  Configuring object matching rules..." -ForegroundColor Gray
 
-        $matchingCsAttrName = if ($isOpenLDAP) { 'uid' } else { 'sAMAccountName' }
+        $matchingCsAttrName = if ($isRfcDirectory) { 'uid' } else { 'sAMAccountName' }
         $matchingMvAttrName = 'Account Name'
         $sourceSamAttr = $sourceUserType.attributes | Where-Object { $_.name -eq $matchingCsAttrName }
         $mvAccountNameAttr = $mvAttributes | Where-Object { $_.name -eq $matchingMvAttrName }

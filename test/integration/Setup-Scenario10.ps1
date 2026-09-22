@@ -70,9 +70,9 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
 }
 
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 $hrSystemName = "Scoping HR Source"
-$ldapSystemName = if ($isOpenLDAP) { "Scoping LDAP Target (OpenLDAP)" } else { "Scoping LDAP Target (AD)" }
+$ldapSystemName = if ($isRfcDirectory) { "Scoping LDAP Target (OpenLDAP)" } else { "Scoping LDAP Target (AD)" }
 $importRuleName = "Scoping Import (HR -> MV)"
 $exportRuleName = "Scoping Export (MV -> LDAP)"
 
@@ -226,7 +226,7 @@ Write-Host "  OK Selected $($hrAttrUpdates.Count) HR attributes (employeeId is e
 
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -Selected $true | Out-Null
 
-$ldapAttrs = if ($isOpenLDAP) {
+$ldapAttrs = if ($isRfcDirectory) {
     @("uid", "givenName", "sn", "displayName", "mail", "departmentNumber", "employeeNumber", "distinguishedName", "cn")
 } else {
     @("sAMAccountName", "givenName", "sn", "displayName", "mail", "department", "employeeID", "distinguishedName", "userAccountControl")
@@ -267,7 +267,7 @@ function Find-Container {
     return $null
 }
 
-if ($isOpenLDAP) {
+if ($isRfcDirectory) {
     $targetContainerName = if ($DirectoryConfig.UserContainer -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "People" }
     $container = Find-Container -Containers $domainPartition.containers -Name $targetContainerName
 } else {
@@ -307,7 +307,7 @@ New-JIMMatchingRule `
     -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
 Write-Host "  OK HR matching rule created (employeeId -> Employee ID)" -ForegroundColor Green
 
-$ldapEmployeeIdAttrName = if ($isOpenLDAP) { 'employeeNumber' } else { 'employeeID' }
+$ldapEmployeeIdAttrName = if ($isRfcDirectory) { 'employeeNumber' } else { 'employeeID' }
 $ldapEmployeeIdAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $ldapEmployeeIdAttrName }
 
 if (-not $ldapEmployeeIdAttr) {
@@ -394,7 +394,7 @@ $exportRule = New-JIMSyncRule `
 Write-Host "  OK Created export rule (ID: $($exportRule.id))" -ForegroundColor Green
 
 # Choose export mappings based on directory type
-$exportMappings = if ($isOpenLDAP) {
+$exportMappings = if ($isRfcDirectory) {
     @(
         @{ MVAttr = "Account Name"; CSAttr = "uid" },
         @{ MVAttr = "First Name"; CSAttr = "givenName" },
@@ -435,7 +435,7 @@ foreach ($mapping in $exportMappings) {
 # expression that yields the target DN for the CSO from the MVO's attributes.
 $dnAttr = $ldapUserType.attributes | Where-Object { $_.name -eq "distinguishedName" }
 if (-not $dnAttr) { throw "LDAP 'distinguishedName' attribute not found on schema; cannot configure DN mapping" }
-$dnExpression = if ($isOpenLDAP) {
+$dnExpression = if ($isRfcDirectory) {
     '"uid=" + mv["Account Name"] + ",' + $DirectoryConfig.UserContainer + '"'
 } else {
     '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=TestUsers,' + $DirectoryConfig.BaseDN + '"'

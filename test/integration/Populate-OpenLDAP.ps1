@@ -17,8 +17,19 @@
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 
+.PARAMETER DirectoryType
+    Which RFC 4512 lab to populate: OpenLDAP (default) or DirectoryServer389. Both host the same
+    two suffixes; the container, port and administrator binds come from Get-DirectoryConfig.
+
+.PARAMETER Container
+    Container to populate. Defaults to the directory type's container from Get-DirectoryConfig;
+    the snapshot builder overrides it.
+
 .EXAMPLE
     ./Populate-OpenLDAP.ps1 -Template Micro
+
+.EXAMPLE
+    ./Populate-OpenLDAP.ps1 -Template Micro -DirectoryType DirectoryServer389
 #>
 
 param(
@@ -26,8 +37,16 @@ param(
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$Template = "Small",
 
+    # Which RFC 4512 lab to populate. Both host the same two suffixes; the container name, LDAP
+    # port and the administrator bind for each suffix come from Get-DirectoryConfig for the type.
     [Parameter(Mandatory=$false)]
-    [string]$Container = "openldap-primary"
+    [ValidateSet("OpenLDAP", "DirectoryServer389")]
+    [string]$DirectoryType = "OpenLDAP",
+
+    # Overrides the container from Get-DirectoryConfig (the snapshot builder populates a
+    # differently named container from the same image).
+    [Parameter(Mandatory=$false)]
+    [string]$Container
 )
 
 Set-StrictMode -Version Latest
@@ -36,28 +55,31 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
 
-Write-TestSection "Populating OpenLDAP with $Template template"
+Write-TestSection "Populating $DirectoryType with $Template template"
 
 # Get scale for template
 $scale = Get-TemplateScale -Template $Template
 
-# OpenLDAP configuration
-$container = $Container
-$ldapPort = 1389
+# Directory configuration. Primary carries the Yellowstone administrator as BindDN and the
+# Glitterband administrator as SecondBindDN (one password for both); on 389 Directory Server both
+# are the suffix-less Directory Manager, which is why the DNs are never built from the suffix.
+$directoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType -Instance Primary
+$container = if ($Container) { $Container } else { $directoryConfig.ContainerName }
+$ldapPort = $directoryConfig.Port
 $ldapUri = "ldap://localhost:$ldapPort"
-$adminPassword = "Test@123!"
+$adminPassword = $directoryConfig.BindPassword
 
 $suffixes = @{
     Yellowstone = @{
         Suffix   = "dc=yellowstone,dc=local"
-        AdminDN  = "cn=admin,dc=yellowstone,dc=local"
+        AdminDN  = $directoryConfig.BindDN
         PeopleDN = "ou=People,dc=yellowstone,dc=local"
         GroupsDN = "ou=Groups,dc=yellowstone,dc=local"
         Domain   = "yellowstone.local"
     }
     Glitterband = @{
         Suffix   = "dc=glitterband,dc=local"
-        AdminDN  = "cn=admin,dc=glitterband,dc=local"
+        AdminDN  = $directoryConfig.SecondBindDN
         PeopleDN = "ou=People,dc=glitterband,dc=local"
         GroupsDN = "ou=Groups,dc=glitterband,dc=local"
         Domain   = "glitterband.local"
