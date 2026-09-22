@@ -992,7 +992,7 @@ try {
     foreach ($user in $testUsers) {
         if ($isRfcDirectory) {
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++

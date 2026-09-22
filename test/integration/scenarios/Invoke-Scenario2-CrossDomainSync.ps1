@@ -143,14 +143,14 @@ try {
         if ($isRfcDirectory) {
             # OpenLDAP: delete by DN using ldapdelete
             $sourceUserDN = "$($SourceConfig.UserRdnAttr)=$user,$($SourceConfig.UserContainer)"
-            $output = docker exec $SourceConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($SourceConfig.Port)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" "$sourceUserDN" 2>&1
+            $output = docker exec $SourceConfig.ContainerName ldapdelete -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" "$sourceUserDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Deleted $user from Source" -ForegroundColor Gray
                 $deletedFromSource = $true
             }
 
             $targetUserDN = "$($TargetConfig.UserRdnAttr)=$user,$($TargetConfig.UserContainer)"
-            $output = docker exec $TargetConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($TargetConfig.Port)" -D "$($TargetConfig.BindDN)" -w "$($TargetConfig.BindPassword)" "$targetUserDN" 2>&1
+            $output = docker exec $TargetConfig.ContainerName ldapdelete -x -H "$($TargetConfig.LdapSearchScheme)://localhost:$($TargetConfig.LdapSearchPort)" -D "$($TargetConfig.BindDN)" -w "$($TargetConfig.BindPassword)" "$targetUserDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Deleted $user from Target" -ForegroundColor Gray
                 $deletedFromTarget = $true
@@ -347,7 +347,7 @@ mail: $testUserEmail
 employeeNumber: $testUserEmployeeNumber
 userPassword: Password123!
 "@
-            $createResult = $ldif | docker exec -i $SourceConfig.ContainerName ldapadd -x -H "ldap://localhost:$($SourceConfig.Port)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
+            $createResult = $ldif | docker exec -i $SourceConfig.ContainerName ldapadd -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
 
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Created $testUserSam in Source" -ForegroundColor Green
@@ -443,7 +443,7 @@ changetype: modify
 replace: $updateAttrName
 $updateAttrName`: $updateNewValue
 "@
-            $modifyResult = $modifyLdif | docker exec -i $SourceConfig.ContainerName ldapmodify -x -H "ldap://localhost:$($SourceConfig.Port)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
+            $modifyResult = $modifyLdif | docker exec -i $SourceConfig.ContainerName ldapmodify -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
         }
         else {
             $userDN = "CN=$testUserDisplayName,OU=TestUsers,$($SourceConfig.BaseDN)"
@@ -453,7 +453,7 @@ changetype: modify
 replace: $updateAttrName
 $updateAttrName`: $updateNewValue
 LDIFEOF
-ldapmodify -x -H ldap://localhost -D '$($SourceConfig.BindDN)' -w '$($SourceConfig.BindPassword)' -f /tmp/modify.ldif" 2>&1
+ldapmodify -x -H '$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)' -D '$($SourceConfig.BindDN)' -w '$($SourceConfig.BindPassword)' -f /tmp/modify.ldif" 2>&1
         }
 
         if ($LASTEXITCODE -eq 0 -or $modifyResult -match "modifying entry") {
@@ -529,7 +529,7 @@ displayName: $reverseUserFirstName $reverseUserLastName
 employeeNumber: CDREV01
 userPassword: Password123!
 "@
-            $createResult = $ldif | docker exec -i $TargetConfig.ContainerName ldapadd -x -H "ldap://localhost:$($TargetConfig.Port)" -D "$($TargetConfig.BindDN)" -w "$($TargetConfig.BindPassword)" 2>&1
+            $createResult = $ldif | docker exec -i $TargetConfig.ContainerName ldapadd -x -H "$($TargetConfig.LdapSearchScheme)://localhost:$($TargetConfig.LdapSearchPort)" -D "$($TargetConfig.BindDN)" -w "$($TargetConfig.BindPassword)" 2>&1
         }
         else {
             $createResult = docker exec $TargetConfig.ContainerName samba-tool user create `
@@ -626,7 +626,7 @@ displayName: Conflict TestUser
 employeeNumber: CDCON01
 userPassword: Password123!
 "@
-            $createResult = $ldif | docker exec -i $SourceConfig.ContainerName ldapadd -x -H "ldap://localhost:$($SourceConfig.Port)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
+            $createResult = $ldif | docker exec -i $SourceConfig.ContainerName ldapadd -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
         }
         else {
             $createResult = docker exec $SourceConfig.ContainerName samba-tool user create `

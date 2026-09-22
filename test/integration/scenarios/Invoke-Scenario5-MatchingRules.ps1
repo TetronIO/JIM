@@ -139,7 +139,7 @@ try {
     foreach ($user in $testUsers) {
         if ($isRfcDirectory) {
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
@@ -1407,7 +1407,7 @@ mail: $omjEmail
 employeeNumber: $omjEmployeeId
 userPassword: Password123!
 "@
-            $omjCreateResult = $omjLdif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
+            $omjCreateResult = $omjLdif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
 
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Created out-of-band account $omjSamAccountName in OpenLDAP (DN: $omjUserDN)" -ForegroundColor Green
@@ -1602,7 +1602,7 @@ employeeID: $omjEmployeeId
         $omjCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
 
         if ($isRfcDirectory) {
-            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$omjUserDN" 2>&1
+            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$omjUserDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
             }

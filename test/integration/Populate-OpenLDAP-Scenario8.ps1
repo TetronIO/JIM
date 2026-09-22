@@ -90,7 +90,7 @@ $groupScale = Get-Scenario8GroupScale -Template $Template
 # Server both are the suffix-less Directory Manager, which is why it is never built from the suffix).
 $directoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType -Instance $Instance
 $containerName = if ($Container) { $Container } else { $directoryConfig.ContainerName }
-$ldapUri = "ldap://localhost:$($directoryConfig.Port)"
+$ldapUri = "$($directoryConfig.LdapSearchScheme)://localhost:$($directoryConfig.LdapSearchPort)"
 
 $configMap = @{
     Source = @{

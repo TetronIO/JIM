@@ -387,8 +387,8 @@ $secondarySystemName = "Scenario 14 Secondary"
 # suffixes' bind credentials are needed regardless of which one -DirectoryConfig pointed at.
 $primaryLdapConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 $secondaryLdapConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
-$primaryLdapUri = "ldap://localhost:$($primaryLdapConfig.Port)"
-$secondaryLdapUri = "ldap://localhost:$($secondaryLdapConfig.Port)"
+$primaryLdapUri = "$($primaryLdapConfig.LdapSearchScheme)://localhost:$($primaryLdapConfig.LdapSearchPort)"
+$secondaryLdapUri = "$($secondaryLdapConfig.LdapSearchScheme)://localhost:$($secondaryLdapConfig.LdapSearchPort)"
 
 function Invoke-Scenario14LdapModify {
     <#
@@ -443,7 +443,7 @@ function Get-Scenario14LdapAttribute {
         [Parameter(Mandatory=$true)] [string]$AttributeName
     )
 
-    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.Port `
+    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.LdapSearchPort -Scheme $LdapConfig.LdapSearchScheme `
         -BaseDN $LdapConfig.UserContainer -BindDN $LdapConfig.BindDN -BindPassword $LdapConfig.BindPassword `
         -Filter "(uid=$Uid)" -Attributes @($AttributeName)
     if ($null -eq $raw) {
@@ -490,7 +490,7 @@ function Get-Scenario14LdapAttributeValues {
         [Parameter(Mandatory=$true)] [string]$AttributeName
     )
 
-    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.Port `
+    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.LdapSearchPort -Scheme $LdapConfig.LdapSearchScheme `
         -BaseDN $LdapConfig.UserContainer -BindDN $LdapConfig.BindDN -BindPassword $LdapConfig.BindPassword `
         -Filter "(uid=$Uid)" -Attributes @($AttributeName)
     if ($null -eq $raw) {

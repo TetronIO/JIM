@@ -287,13 +287,13 @@ function Set-DirectoryUserAttributes {
     $ldif = $ldifLines -join "`n"
 
     if ($isRfcDirectory) {
-        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
+        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
     }
     else {
         $result = docker exec $DirectoryConfig.ContainerName bash -c "cat > /tmp/scenario1-ieo-modify.ldif << 'LDIFEOF'
 $ldif
 LDIFEOF
-ldapmodify -x -H ldap://localhost -D '$($DirectoryConfig.BindDN)' -w '$($DirectoryConfig.BindPassword)' -f /tmp/scenario1-ieo-modify.ldif" 2>&1
+ldapmodify -x -H '$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)' -D '$($DirectoryConfig.BindDN)' -w '$($DirectoryConfig.BindPassword)' -f /tmp/scenario1-ieo-modify.ldif" 2>&1
     }
     if ($LASTEXITCODE -ne 0) {
         throw "$Label failed to modify directory user ${UserDn}: $result"
@@ -367,7 +367,7 @@ try {
         if ($isRfcDirectory) {
             # For OpenLDAP, delete by DN using ldapdelete
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = & docker exec $($DirectoryConfig.ContainerName) ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            $output = & docker exec $($DirectoryConfig.ContainerName) ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++

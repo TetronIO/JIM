@@ -314,7 +314,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
@@ -348,7 +348,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
@@ -377,7 +377,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapadd -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapadd -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "ldapadd failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
@@ -399,7 +399,7 @@ try {
         )
         if ($isRfcDirectory) {
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
-            $result = docker exec $Config.ContainerName ldapdelete -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword "$groupDn" 2>&1
+            $result = docker exec $Config.ContainerName ldapdelete -x -H "$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword "$groupDn" 2>&1
             return $result
         }
         else {
@@ -1850,7 +1850,7 @@ try {
             $stampLdifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $stampLdifPath -Value $stampLdifBuilder.ToString() -NoNewline
             try {
-                $stampResult = bash -c "cat '$stampLdifPath' | docker exec -i $($sourceConfig.ContainerName) ldapmodify -x -H 'ldap://localhost:$($sourceConfig.LdapSearchPort)' -D '$($sourceConfig.BindDN)' -w '$($sourceConfig.BindPassword)' -c" 2>&1
+                $stampResult = bash -c "cat '$stampLdifPath' | docker exec -i $($sourceConfig.ContainerName) ldapmodify -x -H '$($sourceConfig.LdapSearchScheme)://localhost:$($sourceConfig.LdapSearchPort)' -D '$($sourceConfig.BindDN)' -w '$($sourceConfig.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "Failed to stamp cohort end dates (exit code $LASTEXITCODE): $stampResult" }
             }
             finally {

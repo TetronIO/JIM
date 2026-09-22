@@ -207,7 +207,7 @@ function Remove-LDAPTestUsers {
         # OpenLDAP / 389 Directory Server path - use ldapdelete via the container.
         # -H is required: the lab containers listen on non-default ports (1389 / 3389), and
         # without an explicit URI ldapdelete defaults to ldap://localhost:389 and silently fails to connect.
-        $ldapUri = "ldap://localhost:$($DirectoryConfig.Port)"
+        $ldapUri = "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)"
         foreach ($u in $Users) {
             $dn = "uid=$($u.samAccountName),$($DirectoryConfig.UserContainer)"
             $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H $ldapUri `

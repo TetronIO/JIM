@@ -65,8 +65,7 @@ $scale = Get-TemplateScale -Template $Template
 # are the suffix-less Directory Manager, which is why the DNs are never built from the suffix.
 $directoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType -Instance Primary
 $container = if ($Container) { $Container } else { $directoryConfig.ContainerName }
-$ldapPort = $directoryConfig.Port
-$ldapUri = "ldap://localhost:$ldapPort"
+$ldapUri = "$($directoryConfig.LdapSearchScheme)://localhost:$($directoryConfig.LdapSearchPort)"
 $adminPassword = $directoryConfig.BindPassword
 
 $suffixes = @{
