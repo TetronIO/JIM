@@ -64,6 +64,29 @@ public class ReadOnlySyncRepositoryGuardTests
     }
 
     [Test]
+    public void CreateGeneratedValueAssignmentsAsync_IsAWrite_Throws()
+    {
+        Assert.That(() => _guard.CreateGeneratedValueAssignmentsAsync([]),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.CreateGeneratedValueAssignmentsAsync)));
+    }
+
+    [Test]
+    public void ReserveGeneratedValueSequenceBlockAsync_IsAWrite_Throws()
+    {
+        // The block reservation moves the counter forward even though its name reads like a read; the sweep
+        // below only catches this because "Reserve" is in the mutating-verb list (#242).
+        Assert.That(() => _guard.ReserveGeneratedValueSequenceBlockAsync(1, null, 1, 10, 1),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.ReserveGeneratedValueSequenceBlockAsync)));
+    }
+
+    [Test]
+    public void IncrementGeneratedValueSequenceAssignedCountAsync_IsAWrite_Throws()
+    {
+        Assert.That(() => _guard.IncrementGeneratedValueSequenceAssignedCountAsync(1, 5),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.IncrementGeneratedValueSequenceAssignedCountAsync)));
+    }
+
+    [Test]
     public async Task GetAllSyncRulesAsync_IsARead_DelegatesToTheWrappedRepository()
     {
         var rules = new List<SyncRule> { new() { Name = "rule" } };
@@ -102,7 +125,7 @@ public class ReadOnlySyncRepositoryGuardTests
             "Create", "Update", "Delete", "Add", "Remove", "Set", "Stamp", "Disconnect", "Bulk", "Save",
             "Truncate", "Mark", "TryClaim", "Claim", "Flush", "Insert", "Upsert", "Replace", "Reset",
             "Persist", "Write", "Apply", "Queue", "Enqueue", "Cancel", "Obsolete", "Expire", "Link",
-            "Unlink", "Assign", "Increment", "Record", "Fixup", "Stage", "Release"
+            "Unlink", "Assign", "Increment", "Record", "Fixup", "Stage", "Release", "Reserve"
         };
 
         // Change-tracker state operations mutate nothing in the database; the guard delegates them so reused
