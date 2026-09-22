@@ -18,6 +18,10 @@
     throughout (snapshot selection, directory-type restrictions, template relevance), so a short
     form that merely happened to find the script would still take the wrong branches. Numbers
     match exactly, never as a prefix, so 1 is Scenario 1 and not Scenario 10.
+
+    Get-IntegrationScenarioNumber turns a canonical name into its number, which is what the
+    runner's scenario-specific branches compare (`$scenarioNumber -in 14, 19, 22`). Matching the
+    name with wildcards instead made "*Scenario1*" match Scenarios 10-19 too (#1762).
 #>
 
 function Resolve-IntegrationScenarioName {
@@ -57,4 +61,22 @@ function Resolve-IntegrationScenarioName {
 
     $reason = if ($match.Count -gt 1) { "matches more than one scenario ($($match -join ', '))" } else { 'matches no scenario' }
     throw "Unknown scenario '$requested': it $reason. Pass a number (5), ScenarioN (Scenario5) or one of:`n  All`n  $($names -join "`n  ")"
+}
+
+function Get-IntegrationScenarioNumber {
+    <#
+    .SYNOPSIS
+        The number of a canonical scenario name (Scenario14-AttributePriority -> 14), or $null for
+        All or any name that is not a numbered scenario.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Scenario
+    )
+
+    if ($Scenario -match '^Scenario(\d+)-') { return [int]$Matches[1] }
+    return $null
 }

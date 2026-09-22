@@ -90,3 +90,28 @@ Describe 'Resolve-IntegrationScenarioName' {
         }
     }
 }
+
+Describe 'Get-IntegrationScenarioNumber' {
+    It 'returns the number of a canonical scenario name as an integer' {
+        $number = Get-IntegrationScenarioNumber -Scenario 'Scenario14-AttributePriority'
+        $number | Should -Be 14
+        $number | Should -BeOfType [int]
+    }
+
+    It 'distinguishes Scenario 1 from Scenarios 10-19' {
+        Get-IntegrationScenarioNumber -Scenario 'Scenario1-HRToIdentityDirectory' | Should -Be 1
+        Get-IntegrationScenarioNumber -Scenario 'Scenario19-AuxiliaryClasses' | Should -Be 19
+    }
+
+    It 'returns null for All, so no scenario-specific branch matches it' {
+        Get-IntegrationScenarioNumber -Scenario 'All' | Should -BeNullOrEmpty
+    }
+
+    It 'returns null when no scenario has been chosen yet (the interactive menu comes later)' {
+        Get-IntegrationScenarioNumber -Scenario $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns null for a name that is not a scenario' {
+        Get-IntegrationScenarioNumber -Scenario 'Pre-Release' | Should -BeNullOrEmpty
+    }
+}
