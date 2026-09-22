@@ -24,6 +24,9 @@
 .PARAMETER Scenario
     The test scenario to run. If not specified, an interactive menu will be displayed.
     Available scenarios are in test/integration/scenarios/
+    Pass the full name (Scenario5-MatchingRules) or a short form that resolves to it: the
+    number (5), ScenarioN (Scenario5) or the descriptive part (MatchingRules). An unknown
+    name fails immediately, before any container starts, and lists the valid names.
     Use "All" to run every implemented (non-stub) scenario sequentially. Docker images
     are built once on the first scenario; subsequent scenarios reset the environment
     without rebuilding. A pass/fail summary is printed at the end.
@@ -331,6 +334,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 . "$scriptRoot/utils/Test-Helpers.ps1"
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
 . "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
+. "$scriptRoot/utils/Resolve-IntegrationScenarioName.ps1"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -1257,6 +1261,19 @@ if ($PreRelease) {
     $TemplateDirectoryServer389 = "Large"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
+}
+
+# Resolve -Scenario to its canonical name before anything touches Docker: short forms ("5",
+# "Scenario5", "MatchingRules") become "Scenario5-MatchingRules", which every later branch on
+# $Scenario depends on, and an unknown name fails here in seconds instead of after the stack is up.
+if ($Scenario) {
+    try {
+        $Scenario = Resolve-IntegrationScenarioName -Scenario $Scenario -ScenariosPath (Join-Path $scriptRoot "scenarios")
+    }
+    catch {
+        Write-Failure $_.Exception.Message
+        exit 1
+    }
 }
 
 # If no scenario specified, show interactive menu

@@ -20,6 +20,10 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -Template Nano
 # Large-scale test with reduced logging and no change tracking
 pwsh test/integration/Run-IntegrationTests.ps1 -Template Large -LogLevel Warning -DisableChangeTracking
 
+# One scenario: its number, ScenarioN, its descriptive name or its full name all work
+# (5, Scenario5, MatchingRules, Scenario5-MatchingRules); an unknown one fails at once with the list
+pwsh test/integration/Run-IntegrationTests.ps1 -Scenario 5 -DirectoryType OpenLDAP
+
 # Customer-representative directory write performance (OpenLDAP; see warning below)
 pwsh test/integration/Run-IntegrationTests.ps1 -Scenario Scenario8-CrossDomainEntitlementSync -Template Large -DirectoryType OpenLDAP -DurableDirectoryWrites
 ```
