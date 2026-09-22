@@ -2999,8 +2999,11 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 # every Samba AD scenario connection from here on is validated for real. Trust each running instance's
 # self-signed CA (it doubles as its own CA) before any scenario setup script connects to it, so the
 # very first LDAPS connection succeeds instead of failing with a validation error that reads exactly
-# like "server unavailable". Skipped entirely for OpenLDAP-only runs, which connect unencrypted and
-# have no certificate to trust.
+# like "server unavailable". 389 Directory Server connects over LDAPS too (Password Modify needs a
+# secure connection there), so its lab CA is trusted the same way. Skipped entirely for OpenLDAP-only
+# runs, which connect unencrypted and have no certificate to trust. Both branches sit here, after the
+# JIM Web API readiness wait above and the directory readiness waits before it, because the upload
+# needs JIM up and docker cp needs the directory container running.
 if ($DirectoryType -eq "SambaAD") {
     Write-Section "Step 4a: Trusting Samba AD Certificates"
 
@@ -3017,6 +3020,12 @@ if ($DirectoryType -eq "SambaAD") {
             Add-SambaCertificateToJimStore -ContainerName $otherSambaContainer -JIMUrl "http://localhost:5200" -ApiKey $apiKey
         }
     }
+}
+elseif ($DirectoryType -eq "DirectoryServer389") {
+    Write-Section "Step 4a: Trusting the 389 Directory Server Lab CA"
+
+    # One container hosts both suffixes, so one CA covers Primary, Source and Target alike.
+    Add-DirsrvCertificateToJimStore -ContainerName "dirsrv-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
 }
 
 # Step 4b: Prepare Samba AD for testing

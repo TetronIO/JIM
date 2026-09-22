@@ -13,13 +13,17 @@
 #    targetfilter confines the rule to the one entry of class nsslapdConfig,
 #    so nothing else under cn=config becomes visible through it.
 #
-# 2. The Retro Changelog plug-in's own settings, so JIM can see that the
-#    changelog is on and how long it is kept (a Delta Import older than that
-#    has to be a Full Import). nsslapd-log-deleted, the switch that makes delete
-#    records carry the deleted entry's attributes, is deliberately not listed:
-#    the plug-in reads it, but 389 ships no schema definition for it, and an
-#    ACI whose targetattr names an attribute absent from the schema is refused
-#    with "ACL Syntax Error". Check that one as Directory Manager.
+# 2. The Retro Changelog plug-in's own settings. JIM reads three of them:
+#    nsslapd-pluginEnabled (the changelog is on), nsslapd-changelogmaxage (how
+#    long it is kept; a Delta Import older than that has to be a Full Import)
+#    and nsslapd-log-deleted, the switch that makes a delete record carry the
+#    deleted entry's attributes. JIM's Delta Import refuses to run while that
+#    switch is off, because without it deletions would go unnoticed. 389 ships
+#    no schema definition for nsslapd-log-deleted, and an ACI whose targetattr
+#    lists an attribute absent from the schema is refused with "ACL Syntax
+#    Error", so the rule cannot name it. It therefore grants every attribute of
+#    that one entry except aci itself: the entry holds nothing but the plug-in's
+#    settings, so nothing else becomes readable through it.
 #
 # A server hosting more than one suffix names every suffix's cn=jim group, as
 # further "ldap:///" URLs inside the one groupdn value separated by " || ". A
@@ -40,4 +44,4 @@ aci: (targetfilter = "(objectClass=nsslapdConfig)")(targetattr = "objectClass ||
 dn: cn=Retro Changelog Plugin,cn=plugins,cn=config
 changetype: modify
 add: aci
-aci: (targetattr = "objectClass || cn || nsslapd-pluginEnabled || nsslapd-changelogmaxage")(version 3.0; acl "JIM: read the Retro Changelog plug-in settings"; allow (read, search, compare) groupdn = "ldap:///__JIM_GROUP_DN__ || ldap:///__JIM_GROUP_DN_2__";)
+aci: (targetattr != "aci")(version 3.0; acl "JIM: read the Retro Changelog plug-in settings"; allow (read, search, compare) groupdn = "ldap:///__JIM_GROUP_DN__ || ldap:///__JIM_GROUP_DN_2__";)

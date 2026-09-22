@@ -19,10 +19,16 @@
 #     emit loads here too.
 #   - The Retro Changelog plug-in (cn=changelog) with deleted entries logged: what
 #     JIM's Delta Import reads on 389 Directory Server.
+#   - A global password policy with syntax checking on and a minimum length of 7
+#     (passwordCheckSyntax on, passwordMinLength 7, passwordMinCategories 3),
+#     mirroring the OpenLDAP lab's pwdMinLength 7: a too-short password is
+#     refused, which the scenarios that park a refused change rely on.
 #   - A lab CA and a server certificate for dirsrv-primary and localhost under
 #     /data/tls, so LDAPS on 3636 presents a name-valid certificate. 389 accepts
-#     the RFC 3062 Password Modify operation only over a secure connection, so a
-#     Connected System that sets passwords must connect over LDAPS.
+#     the RFC 3062 Password Modify operation only over a secure connection, so
+#     the Connected System connects over LDAPS 3636 (the runner adds the lab CA
+#     to JIM's certificate store); the harness's own direct ldapsearch checks
+#     run inside the container over plain LDAP on 3389.
 #
 # The access-control files under aci/ are the single source for both this lab and
 # the customer recipe: they are published verbatim in

@@ -580,17 +580,19 @@ function Get-DirectoryConfig {
             # compose profile differ. The administrator is cn=Directory Manager for every suffix
             # (389 has one, server-wide), so BindDN and SecondBindDN are the same value.
             #
-            # Port 3389 is plain LDAP. 389 accepts the RFC 3062 Password Modify operation only over
-            # a secure connection, so a scenario that sets passwords must connect the Connected
-            # System over LDAPS (port 3636, UseSSL) and trust the image's lab CA
+            # The Connected System connects over LDAPS (port 3636, UseSSL): 389 accepts the RFC 3062
+            # Password Modify operation only over a secure connection, and JIM validates the
+            # directory's certificate for real, so the runner's Step 4a adds the image's lab CA
             # (/data/tls/ca/jim-dirsrv-lab-ca.crt in the container; the certificate names
-            # dirsrv-primary). The lab's imports and exports otherwise work over 3389.
+            # dirsrv-primary) to JIM's certificate store before any scenario connects
+            # (Add-DirsrvCertificateToJimStore below). LdapSearchPort stays 3389: the harness's
+            # own docker exec ldapsearch checks run inside the container over plain LDAP.
             $instanceConfigs = @{
                 Primary = @{
                     ContainerName    = "dirsrv-primary"
                     Host             = "dirsrv-primary"
-                    Port             = 3389
-                    UseSSL           = $false
+                    Port             = 3636
+                    UseSSL           = $true
                     BindDN           = "cn=Directory Manager"
                     BindPassword     = "Test@123!"
                     # JIM binds as a delegated service account, never the Directory Manager: the
@@ -634,8 +636,8 @@ function Get-DirectoryConfig {
                 Source = @{
                     ContainerName    = "dirsrv-primary"
                     Host             = "dirsrv-primary"
-                    Port             = 3389
-                    UseSSL           = $false
+                    Port             = 3636
+                    UseSSL           = $true
                     BindDN           = "cn=Directory Manager"
                     BindPassword     = "Test@123!"
                     JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
@@ -664,8 +666,8 @@ function Get-DirectoryConfig {
                 Target = @{
                     ContainerName    = "dirsrv-primary"
                     Host             = "dirsrv-primary"
-                    Port             = 3389
-                    UseSSL           = $false
+                    Port             = 3636
+                    UseSSL           = $true
                     BindDN           = "cn=Directory Manager"
                     BindPassword     = "Test@123!"
                     JimBindDN        = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
@@ -873,6 +875,110 @@ function Add-SambaCertificateToJimStore {
         }
 
         Write-Host "  OK Trusted ${ContainerName}'s CA (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
+    }
+    finally {
+        Disconnect-JIM -ErrorAction SilentlyContinue
+        Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Add-DirsrvCertificateToJimStore {
+    <#
+    .SYNOPSIS
+        Trust the 389 Directory Server lab CA in JIM's certificate store.
+
+    .DESCRIPTION
+        The 389 Directory Server Connected Systems connect over LDAPS (Get-DirectoryConfig
+        -DirectoryType DirectoryServer389 sets Port 3636 and UseSSL), because 389 accepts the RFC 3062
+        Password Modify operation only over a secure connection. JIM validates the directory's
+        certificate against the operating system's trust anchors plus its own certificate store, so
+        the lab CA that signed the image's server certificate (create_lab_tls in
+        test/integration/docker/dirsrv/build/configure.sh) has to be in that store before the first
+        scenario connects, or every connection fails with a validation error that reads exactly like
+        "server unavailable".
+
+        The same shape as Add-SambaCertificateToJimStore: copy the CA off the container, remove any
+        certificate of the same name left by a previous run, then upload the fresh bytes. The lab CA
+        is baked into the image and only changes on a rebuild, so re-uploading costs nothing and never
+        leaves a CA for a key the image no longer holds. No SAN check is needed here: the build fails
+        unless the server certificate names dirsrv-primary (run_checks in configure.sh).
+
+    .PARAMETER ContainerName
+        The Docker container name of the 389 Directory Server instance to trust (dirsrv-primary).
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .EXAMPLE
+        Add-DirsrvCertificateToJimStore -ContainerName "dirsrv-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey
+    )
+
+    Write-Host "  Trusting the 389 Directory Server lab CA from ${ContainerName} in the JIM certificate store..." -ForegroundColor Gray
+
+    # Guard: a clear message here beats a confusing docker cp failure a few lines down.
+    $running = docker ps --filter "name=^/${ContainerName}$" --format '{{.Names}}' 2>$null
+    if (-not $running) {
+        throw "Add-DirsrvCertificateToJimStore: container '$ContainerName' is not running. Cannot trust its CA certificate."
+    }
+
+    # Copy the lab CA off the container. configure.sh leaves it at this path for exactly this purpose;
+    # the CA's private key was discarded at build time, so the file is safe to hand around.
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "jim-dirsrv-ca"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    $localCaPath = Join-Path $tempDir "$ContainerName-lab-ca.crt"
+    if (Test-Path $localCaPath) { Remove-Item $localCaPath -Force }
+
+    docker cp "${ContainerName}:/data/tls/ca/jim-dirsrv-lab-ca.crt" $localCaPath 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $localCaPath)) {
+        throw "Add-DirsrvCertificateToJimStore: 'docker cp' failed to copy the lab CA from '$ContainerName'. Is the container built from the current image (pwsh ./test/integration/docker/dirsrv/Build-DirsrvImage.ps1)?"
+    }
+
+    # Import the JIM PowerShell module and connect. Self-contained per call, as
+    # Add-SambaCertificateToJimStore is, so this function has no dependency on caller connection state.
+    $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
+    if (-not (Test-Path $modulePath)) {
+        throw "Add-DirsrvCertificateToJimStore: JIM PowerShell module not found at: $modulePath"
+    }
+
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Import-Module $modulePath -Force -ErrorAction Stop
+    try {
+        Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+        $certificateName = "$ContainerName lab CA"
+        $existingCertificates = @(Get-JIMCertificate -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $certificateName }
+        foreach ($certificate in $existingCertificates) {
+            # An image rebuild mints a new lab CA (create_lab_tls discards the key), so a certificate
+            # left from a previous run may be for a CA the image no longer uses.
+            Remove-JIMCertificate -Id $certificate.id -Force | Out-Null
+            Write-Host "    Removed stale trusted certificate from a previous run" -ForegroundColor Gray
+        }
+
+        $certificateBytes = [System.IO.File]::ReadAllBytes($localCaPath)
+        $trusted = Add-JIMCertificate `
+            -Name $certificateName `
+            -CertificateData $certificateBytes `
+            -Notes "389 Directory Server lab CA for $ContainerName, trusted automatically by the integration test runner." `
+            -PassThru
+
+        if (-not $trusted) {
+            throw "Add-DirsrvCertificateToJimStore: Add-JIMCertificate returned nothing for '$certificateName'; upload failed."
+        }
+
+        Write-Host "  OK Trusted the 389 Directory Server lab CA (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
     }
     finally {
         Disconnect-JIM -ErrorAction SilentlyContinue

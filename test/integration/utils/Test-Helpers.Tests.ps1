@@ -62,12 +62,11 @@ Describe 'Get-DirectoryConfig' {
             $script:primary = Get-DirectoryConfig -DirectoryType DirectoryServer389 -Instance Primary
         }
 
-        It 'Primary binds as Directory Manager on 3389 under the dirsrv compose profile' {
+        It 'Primary binds as Directory Manager over LDAPS 3636 under the dirsrv compose profile' {
             $script:primary.ContainerName   | Should -Be 'dirsrv-primary'
             $script:primary.Host            | Should -Be 'dirsrv-primary'
-            $script:primary.Port            | Should -Be 3389
-            $script:primary.LdapSearchPort  | Should -Be 3389
-            $script:primary.UseSSL          | Should -BeFalse
+            $script:primary.Port            | Should -Be 3636
+            $script:primary.UseSSL          | Should -BeTrue
             $script:primary.BindDN          | Should -Be 'cn=Directory Manager'
             $script:primary.BindPassword    | Should -Be 'Test@123!'
             $script:primary.SecondBindDN    | Should -Be 'cn=Directory Manager'
@@ -80,6 +79,20 @@ Describe 'Get-DirectoryConfig' {
             $script:primary.MultiPartitionJimBindDN       | Should -Be 'cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local'
             $script:primary.MultiPartitionJimBindPassword | Should -Be 'Svc-Jim-Partitions@123!'
             $script:primary.SecondJimBindDN               | Should -Be 'cn=svc-jim,ou=Services,dc=glitterband,dc=local'
+        }
+
+        It 'connects the <Instance> Connected System over LDAPS 3636 and keeps the in-container ldapsearch checks on plain LDAP 3389' -ForEach @(
+            @{ Instance = 'Primary' }
+            @{ Instance = 'Source' }
+            @{ Instance = 'Target' }
+        ) {
+            # 389 accepts Password Modify only over a secure connection; the harness's own docker exec
+            # ldapsearch checks stay on the container's plain LDAP port.
+            $dirsrv = Get-DirectoryConfig -DirectoryType DirectoryServer389 -Instance $Instance
+            $dirsrv.Port             | Should -Be 3636
+            $dirsrv.UseSSL           | Should -BeTrue
+            $dirsrv.LdapSearchPort   | Should -Be 3389
+            $dirsrv.LdapSearchScheme | Should -Be 'ldap'
         }
 
         It 'shares the OpenLDAP populate script and the two-suffix model' {

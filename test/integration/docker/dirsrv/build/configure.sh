@@ -230,6 +230,22 @@ nsslapd-log-deleted: on
 LDIF
 }
 
+set_password_policy() {
+    # Mirrors the OpenLDAP lab's pwdMinLength 7 ppolicy: a password shorter than
+    # seven characters is refused, which the scenarios that need a change parked
+    # rely on. 389 ships passwordMinLength 8 and passwordMinCategories 3 but with
+    # passwordCheckSyntax off, so nothing is enforced until the switch is on;
+    # JIM's 389 password policy reader honours the same switch. Categories stay
+    # at the default so the figures JIM reads are the ones the server applies.
+    # With syntax checking on, 389 also refuses a password whose 3+ character
+    # tokens appear in the entry's own uid, cn or sn ("password based off of
+    # user entry"), and applies that check to a password set by the service
+    # account too; run_checks' probe password is chosen with that in mind.
+    # (--pwdmincatagories is dsconf's own spelling.)
+    log "Setting the global password policy (passwordCheckSyntax on, passwordMinLength 7, passwordMinCategories 3)..."
+    dsconf localhost pwpolicy set --pwdchecksyntax on --pwdminlen 7 --pwdmincatagories 3
+}
+
 # ---- Build-time checks ------------------------------------------------------------------
 # Each one fails the build with a message naming what is missing. They run as
 # the JIM service accounts wherever the point is what those accounts can do.
@@ -275,17 +291,20 @@ run_checks() {
     done
     log "OK: jim-extensions schema present"
 
-    out=$(as_search "$GLITTERBAND_SVC_DN" "$SVC_JIM_PW" -b cn=config -s base passwordCheckSyntax passwordMinLength passwordExp)
-    grep -qi '^passwordCheckSyntax: ' <<<"$out" || fail "svc-jim cannot read the global password policy on cn=config"
+    out=$(as_search "$GLITTERBAND_SVC_DN" "$SVC_JIM_PW" -b cn=config -s base passwordCheckSyntax passwordMinLength passwordMinCategories passwordExp)
+    grep -qi '^passwordCheckSyntax: on$' <<<"$out"   || fail "svc-jim cannot read passwordCheckSyntax on cn=config, or it is not on"
+    grep -qi '^passwordMinLength: 7$' <<<"$out"      || fail "svc-jim cannot read passwordMinLength on cn=config, or it is not 7"
+    grep -qi '^passwordMinCategories: 3$' <<<"$out"  || fail "svc-jim cannot read passwordMinCategories on cn=config, or it is not 3"
     out=$(as_search "$GLITTERBAND_SVC_DN" "$SVC_JIM_PW" -b cn=config -s base nsslapd-rootpw nsslapd-port nsslapd-localhost)
     if grep -qi '^nsslapd-' <<<"$out"; then fail "svc-jim can read cn=config attributes outside the password policy"; fi
-    # nsslapd-log-deleted has no schema definition, so the ACI cannot name it and
-    # only Directory Manager reads it (checked above); the two settings JIM can
-    # act on are readable by the service account.
-    out=$(as_search "$YELLOWSTONE_SVC_DN" "$SVC_JIM_PW" -b "$RETROCL_DN" -s base nsslapd-pluginEnabled nsslapd-changelogmaxage)
+    # All three plug-in settings JIM reads must be readable as the service
+    # account, nsslapd-log-deleted included: JIM's Delta Import readiness check
+    # reads it as the account it connects as and refuses to run when it is off.
+    out=$(as_search "$YELLOWSTONE_SVC_DN" "$SVC_JIM_PW" -b "$RETROCL_DN" -s base nsslapd-pluginEnabled nsslapd-changelogmaxage nsslapd-log-deleted)
     grep -qi '^nsslapd-pluginEnabled: on$' <<<"$out" || fail "svc-jim cannot read the Retro Changelog plug-in settings"
     grep -qi '^nsslapd-changelogmaxage: 7d$' <<<"$out" || fail "svc-jim cannot read nsslapd-changelogmaxage (or it is not 7d)"
-    log "OK: cn=config password policy and plug-in settings readable, nothing else"
+    grep -qi '^nsslapd-log-deleted: on$' <<<"$out"   || fail "svc-jim cannot read nsslapd-log-deleted on the Retro Changelog plug-in (or it is not on)"
+    log "OK: cn=config password policy (syntax checking on, minimum length 7) and all three plug-in settings readable as svc-jim, nothing else"
 
     # Export rights, end to end, as svc-jim under ou=People; then the changelog
     # must show the delete, with the deleted entry's attributes.
@@ -308,11 +327,19 @@ description: modified by the build check
 LDIF
     ldapmodrdn -x -H "$LDAP_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -r "$probe_dn" "$renamed_rdn" >/dev/null \
         || fail "svc-jim cannot rename under ou=People"
-    LDAPTLS_CACERT="$LAB_CA_CERT" ldappasswd -x -H "$LDAPS_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -s 'Build-Probe@1' "$renamed_dn" >/dev/null \
-        || fail "svc-jim cannot set a password with Password Modify over LDAPS (validated against the lab CA)"
-    ldapwhoami -x -H "$LDAP_URI" -D "$renamed_dn" -w 'Build-Probe@1' >/dev/null \
+    # The global password policy must bite for a password set by the service
+    # account: six characters is under passwordMinLength 7. The accepted probe
+    # password avoids the entry's own words (see set_password_policy) and
+    # carries four character classes against passwordMinCategories 3.
+    out=$(LDAPTLS_CACERT="$LAB_CA_CERT" ldappasswd -x -H "$LDAPS_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -s 'Ab1!xy' "$renamed_dn" 2>&1 || true)
+    grep -qi 'Constraint violation' <<<"$out" \
+        || fail "a six-character password was not refused by the global password policy (passwordMinLength 7 not enforced); got: $out"
+    log "OK: the global password policy refuses a six-character password set by svc-jim over LDAPS"
+    LDAPTLS_CACERT="$LAB_CA_CERT" ldappasswd -x -H "$LDAPS_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -s 'Lab-Check@1' "$renamed_dn" >/dev/null \
+        || fail "svc-jim cannot set a policy-compliant password with Password Modify over LDAPS (validated against the lab CA)"
+    ldapwhoami -x -H "$LDAP_URI" -D "$renamed_dn" -w 'Lab-Check@1' >/dev/null \
         || fail "the password set by Password Modify does not bind"
-    if ldappasswd -x -H "$LDAP_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -s 'Build-Probe@2' "$renamed_dn" >/dev/null 2>&1; then
+    if ldappasswd -x -H "$LDAP_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -s 'Lab-Check@2' "$renamed_dn" >/dev/null 2>&1; then
         log "NOTE: this build accepts Password Modify over plain LDAP; the LDAPS requirement in the Dockerfile header no longer applies"
     else
         log "OK: Password Modify is refused over plain LDAP and works over LDAPS, as documented"
@@ -371,8 +398,10 @@ main() {
         for attr in uid cn entryUUID; do ensure_eq_index "$be" "$attr"; done
     done
     enable_retro_changelog
+    set_password_policy
     # The plug-in (and its cn=changelog backend) only comes to life on restart;
-    # the changelog ACI needs the cn=changelog entry to exist.
+    # the changelog ACI needs the cn=changelog entry to exist. The password
+    # policy is set before the restart so run_checks proves it survives one.
     stop_server
     start_server
     apply_changelog_and_config_acis
