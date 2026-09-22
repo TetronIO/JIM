@@ -152,6 +152,17 @@ internal static class LdapConnectorConstants
     /// Server's Retro Changelog plug-in, and most others, put it here).
     /// </summary>
     internal const string DEFAULT_CHANGELOG_DN = "cn=changelog";
+
+    /// <summary>
+    /// 389 Directory Server's Retro Changelog plug-in entry, whose <see cref="RETRO_CHANGELOG_LOG_DELETED_ATTRIBUTE"/>
+    /// decides whether a delete record carries the deleted entry (in its <c>changes</c> attribute, as LDIF). Off by
+    /// default, and a change needs a restart of the directory to take effect.
+    /// </summary>
+    internal const string RETRO_CHANGELOG_PLUGIN_DN = "cn=Retro Changelog Plugin,cn=plugins,cn=config";
+
+    /// <summary>The switch on <see cref="RETRO_CHANGELOG_PLUGIN_DN"/>: <c>on</c> when delete records carry the deleted entry.</summary>
+    internal const string RETRO_CHANGELOG_LOG_DELETED_ATTRIBUTE = "nsslapd-log-deleted";
+
     internal const string SETTING_GROUP_PLACEHOLDER_MEMBER_DN = "Group Placeholder Member DN";
 
     /// <summary>

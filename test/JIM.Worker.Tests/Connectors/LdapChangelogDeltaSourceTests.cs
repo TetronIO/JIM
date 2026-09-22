@@ -9,8 +9,11 @@ using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using System.DirectoryServices.Protocols;
 using System.Reflection;
+using System.Text;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -28,6 +31,9 @@ public class LdapChangelogDeltaSourceTests
     private const string ContainerDn = "ou=People,dc=example,dc=com";
     private const string InScopeDn = "uid=jsmith,ou=People,dc=example,dc=com";
     private const string OutOfScopeDn = "uid=jsmith,ou=Elsewhere,dc=example,dc=com";
+    private const string PluginDn = "cn=Retro Changelog Plugin,cn=plugins,cn=config";
+    private const string LogDeletedAttribute = "nsslapd-log-deleted";
+    private const string Uuid = "1c0d8f2e-4d1a-4b2b-9c3e-1e2f3a4b5c6d";
     private const int PreviousChangeNumber = 1200;
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
@@ -41,9 +47,10 @@ public class LdapChangelogDeltaSourceTests
     {
         _sent = [];
 
-        // By default the changelog is there and readable, and empty: the base-scope read answers its entry and a
-        // search under it answers nothing. Tests that need otherwise replace one or the other.
-        _baseReadAnswer = request => LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(request.DistinguishedName, ("objectClass", "top")));
+        // By default the changelog is there and readable, and empty, and the Retro Changelog plug-in records
+        // deleted entries: a base-scope read answers the entry asked for (the plug-in's with nsslapd-log-deleted on)
+        // and a search under the changelog answers nothing. Tests that need otherwise replace one or the other.
+        _baseReadAnswer = PluginEntryAnswering("on");
         _searchAnswer = _ => LdapTestResponses.EmptySearchResponse();
 
         _executor = new Mock<ILdapOperationExecutor>();
@@ -59,7 +66,8 @@ public class LdapChangelogDeltaSourceTests
         return request.Scope == SearchScope.Base ? _baseReadAnswer(request) : _searchAnswer(request);
     }
 
-    private LdapChangelogDeltaSource Source() => new(_executor.Object, Log.Logger);
+    private LdapChangelogDeltaSource Source(CapturingSink? sink = null) =>
+        new(_executor.Object, sink == null ? Log.Logger : new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger());
 
     #region VerifyReadinessAsync
 
@@ -68,8 +76,8 @@ public class LdapChangelogDeltaSourceTests
     {
         var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), ["dc=example,dc=com"], CancellationToken.None);
 
-        var finding = findings.Single();
-        var probe = _sent.Single();
+        var finding = findings[0];
+        var probe = _sent[0];
         using (Assert.EnterMultipleScope())
         {
             Assert.That(finding.Subject, Is.EqualTo(DefaultChangelogDn));
@@ -91,8 +99,8 @@ public class LdapChangelogDeltaSourceTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(_sent.Single().Request.DistinguishedName, Is.EqualTo(AdvertisedChangelogDn));
-            Assert.That(findings.Single().Subject, Is.EqualTo(AdvertisedChangelogDn));
+            Assert.That(_sent[0].Request.DistinguishedName, Is.EqualTo(AdvertisedChangelogDn));
+            Assert.That(findings[0].Subject, Is.EqualTo(AdvertisedChangelogDn));
         }
     }
 
@@ -201,6 +209,180 @@ public class LdapChangelogDeltaSourceTests
             "Full Import works as normal and also detects deletions by absence. " +
             "To use Delta Import, enable the directory's changelog (389 Directory Server: the Retro Changelog plug-in) and grant the account read access to it; " +
             "see the LDAP Connector documentation, Service Account Permissions."));
+    }
+
+    #endregion
+
+    #region VerifyReadinessAsync: deleted-entry recording
+
+    [Test]
+    public async Task VerifyReadinessAsync_LogDeletedOn_ReportsTheRetroChangelogPlugInAvailableAsync()
+    {
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        Assert.That(findings, Has.Count.EqualTo(2), "one finding about the changelog, one about the plug-in recording deleted entries");
+        var finding = findings[1];
+        var probe = _sent[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Subject, Is.EqualTo(PluginDn));
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Available));
+            Assert.That(finding.Detail, Is.EqualTo($"the Retro Changelog plug-in ({PluginDn}) records deleted entries ({LogDeletedAttribute} is on)"));
+            Assert.That(finding.DeltaImportText, Is.Null);
+            Assert.That(finding.SchemaDiscoveryText, Is.Null);
+            Assert.That(probe.Request.DistinguishedName, Is.EqualTo(PluginDn));
+            Assert.That(probe.Request.Scope, Is.EqualTo(SearchScope.Base));
+            Assert.That(probe.Request.Filter, Is.EqualTo("(objectClass=*)"));
+            Assert.That(probe.Request.Attributes.Cast<string>(), Is.EqualTo(new[] { LogDeletedAttribute }));
+            Assert.That(probe.Timeout, Is.Null, "the same connection-level timeout as the changelog probe");
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_LogDeletedOnInAnyCase_ReportsAvailableAsync()
+    {
+        _baseReadAnswer = PluginEntryAnswering("ON");
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        Assert.That(findings[1].Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Available));
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_LogDeletedOff_ReportsUnavailableWithBothTextsAsync()
+    {
+        _baseReadAnswer = PluginEntryAnswering("off");
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        var finding = findings[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Subject, Is.EqualTo(PluginDn));
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Unavailable), "read in full: the plug-in provably does not record deleted entries");
+            Assert.That(finding.Detail, Is.EqualTo($"the Retro Changelog plug-in ({PluginDn}) is not recording deleted entries ({LogDeletedAttribute} is off)"));
+            Assert.That(finding.DeltaImportText, Is.EqualTo(
+                $"Deletions cannot be detected: the Retro Changelog plug-in ({PluginDn}) is not recording deleted entries ({LogDeletedAttribute} is off), " +
+                "so objects deleted in the directory would stay in JIM. " +
+                $"Set {LogDeletedAttribute} to on on that entry and restart the directory, or run a Full Import, which detects deletions by absence; " +
+                "the LDAP Connector documentation, under Service Account Permissions, gives the detail."));
+            Assert.That(finding.SchemaDiscoveryText, Is.EqualTo(
+                $"The Retro Changelog plug-in ({PluginDn}) is not recording deleted entries ({LogDeletedAttribute} is off), " +
+                "so Delta Import is not available until it does; Full Import works as normal and also detects deletions by absence. " +
+                $"To use Delta Import, set {LogDeletedAttribute} to on on that entry and restart the directory; " +
+                "see the LDAP Connector documentation, Service Account Permissions."));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_LogDeletedAbsent_ReportsUnavailableAsync()
+    {
+        _baseReadAnswer = PluginEntryAnswering(null);
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        var finding = findings[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.Unavailable), "the entry was read in full and says nothing about recording deleted entries, which is off");
+            Assert.That(finding.Detail, Is.EqualTo($"the Retro Changelog plug-in ({PluginDn}) is not recording deleted entries ({LogDeletedAttribute} is not set)"));
+            Assert.That(finding.DeltaImportText, Does.StartWith("Deletions cannot be detected:"));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_PlugInNotFoundAsDirectoryOperationException_ReportsCouldNotDetermineAsync()
+    {
+        _baseReadAnswer = request => request.DistinguishedName == PluginDn ? throw NoSuchObject() : ChangelogEntryAnswer(request);
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        var finding = findings[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.CouldNotDetermine), "389 Directory Server answers noSuchObject for an entry the account may not read, so absence is not proven");
+            Assert.That(finding.Detail, Is.EqualTo("the entry was not found, or the account JIM connects as may not read it"));
+            Assert.That(finding.DeltaImportText, Is.EqualTo(
+                $"JIM could not confirm that the Retro Changelog plug-in ({PluginDn}) records deleted entries: the entry was not found, or the account JIM connects as may not read it. " +
+                "Grant the account it connects as read access to that entry (the LDAP Connector documentation, under Service Account Permissions, asks for read on cn=config for 389 Directory Server); " +
+                "if the plug-in is not recording deleted entries, Delta Imports would miss deletions."));
+            Assert.That(finding.SchemaDiscoveryText, Is.EqualTo(finding.DeltaImportText));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_PlugInNotFoundAsLdapException32_ReportsCouldNotDetermineAsync()
+    {
+        _baseReadAnswer = request => request.DistinguishedName == PluginDn ? throw new LdapException(32, "no such object") : ChangelogEntryAnswer(request);
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(findings[1].Outcome, Is.EqualTo(LdapDeltaSourceOutcome.CouldNotDetermine));
+            Assert.That(findings[1].Detail, Is.EqualTo("the entry was not found, or the account JIM connects as may not read it"));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_PlugInReadAnsweredWithNoEntry_ReportsCouldNotDetermineAsync()
+    {
+        _baseReadAnswer = request => request.DistinguishedName == PluginDn ? LdapTestResponses.EmptySearchResponse() : ChangelogEntryAnswer(request);
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        Assert.That(findings[1].Outcome, Is.EqualTo(LdapDeltaSourceOutcome.CouldNotDetermine));
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_PlugInReadRefused_ReportsCouldNotDetermineWithTheDirectorysReasonAsync()
+    {
+        _baseReadAnswer = request => request.DistinguishedName == PluginDn ? throw Refused("insufficient access rights") : ChangelogEntryAnswer(request);
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        var finding = findings[1];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finding.Outcome, Is.EqualTo(LdapDeltaSourceOutcome.CouldNotDetermine), "a refusal to read the plug-in's entry says nothing about what the entry holds");
+            Assert.That(finding.Detail, Is.EqualTo("the directory refused to read it (insufficient access rights)"));
+            Assert.That(finding.DeltaImportText, Does.StartWith($"JIM could not confirm that the Retro Changelog plug-in ({PluginDn}) records deleted entries: the directory refused to read it (insufficient access rights)."));
+        }
+    }
+
+    [Test]
+    public async Task VerifyReadinessAsync_PlugInReadConnectionFailure_ReportsCouldNotDetermineAsync()
+    {
+        _baseReadAnswer = request => request.DistinguishedName == PluginDn ? throw new LdapException(81, "The LDAP server is unavailable.") : ChangelogEntryAnswer(request);
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(findings[1].Outcome, Is.EqualTo(LdapDeltaSourceOutcome.CouldNotDetermine));
+            Assert.That(findings[1].Detail, Is.EqualTo("the directory answered: The LDAP server is unavailable."));
+        }
+    }
+
+    [TestCase("not found", Description = "no changelog at all: there is nothing to record deletions in")]
+    [TestCase("refused", Description = "the changelog is unavailable: the plug-in's recording is moot")]
+    [TestCase("connection failure", Description = "nothing is known about the changelog: a second probe would only fail the same way")]
+    public async Task VerifyReadinessAsync_ChangelogNotAvailable_DoesNotProbeThePlugInAsync(string changelogOutcome)
+    {
+        _baseReadAnswer = _ => changelogOutcome switch
+        {
+            "not found" => throw NoSuchObject(),
+            "refused" => throw Refused("insufficient access rights"),
+            _ => throw new LdapException(81, "The LDAP server is unavailable.")
+        };
+
+        var findings = await Source().VerifyReadinessAsync(new LdapConnectorRootDse(), [], CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(findings, Has.Count.EqualTo(1), "the plug-in is only worth asking about when there is a changelog to read");
+            Assert.That(_sent.Select(s => s.Request.DistinguishedName), Is.EqualTo(new[] { DefaultChangelogDn }), "no second search");
+        }
     }
 
     #endregion
@@ -415,14 +597,14 @@ public class LdapChangelogDeltaSourceTests
     }
 
     [Test]
-    public async Task ReadChangesAsync_Always_RequestsOnlyChangeNumberChangeTypeAndTargetDnAsync()
+    public async Task ReadChangesAsync_Always_RequestsTheChangeItsTargetAndWhatARenameOrDeleteNeedsAsync()
     {
         var host = new Mock<ILdapDeltaImportHost>();
 
         await Source().ReadChangesAsync(Context(host), new ConnectedSystemImportResult(), CancellationToken.None);
 
-        Assert.That(_sent.Single().Request.Attributes.Cast<string>(), Is.EquivalentTo(new[] { "changeNumber", "changeType", "targetDN" }),
-            "the target's current state is fetched by DN, so the LDIF of the change is not wanted");
+        Assert.That(_sent.Single().Request.Attributes.Cast<string>(), Is.EquivalentTo(new[] { "changeNumber", "changeType", "targetDN", "changes", "newRdn", "newSuperior" }),
+            "a delete record's changes carry the deleted entry, and a rename's newRdn and newSuperior name where the object now is");
     }
 
     [Test]
@@ -478,9 +660,175 @@ public class LdapChangelogDeltaSourceTests
     }
 
     [Test]
-    public async Task ReadChangesAsync_Delete_YieldsADeletedImportObjectAsync()
+    public async Task ReadChangesAsync_Delete_YieldsADeletedImportObjectWithObjectTypeExternalIdAndDnAsync()
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid)));
+        var host = new Mock<ILdapDeltaImportHost>();
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        var deleted = result.ImportObjects.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted.ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+            Assert.That(deleted.ObjectType, Is.EqualTo("inetOrgPerson"), "resolved from the objectClass values in the record's changes, as a live entry's would be");
+            Assert.That(deleted.Attributes.Single(a => a.Name == "entryUUID").StringValues, Is.EqualTo(new[] { Uuid }), "the external id the import matches the deletion on");
+            Assert.That(deleted.Attributes.Single(a => a.Name == "distinguishedName").StringValues, Is.EqualTo(new[] { InScopeDn }));
+            host.Verify(h => h.GetObjectByDn(It.IsAny<string>(), It.IsAny<ObjectChangeType>()), Times.Never, "a deleted object cannot be fetched");
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_DeleteWithCrLfChanges_IsStillIdentifiedAsync()
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid).Replace("\n", "\r\n")));
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), result, CancellationToken.None);
+
+        Assert.That(result.ImportObjects.Single().Attributes.Single(a => a.Name == "entryUUID").StringValues, Is.EqualTo(new[] { Uuid }));
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_DeleteWithChangesAnsweredAsBytes_IsStillIdentifiedAsync()
+    {
+        // 389 Directory Server declares changes with Octet String syntax, and System.DirectoryServices.Protocols hands a
+        // search-result value back as bytes rather than a string when it is not valid UTF-8 throughout.
+        var ldif = Encoding.UTF8.GetBytes(DeletedEntryLdif(Uuid)).Concat(new byte[] { 0xFF }).ToArray();
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntryWithBinaryChanges(InScopeDn, ldif));
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>()), result, CancellationToken.None);
+
+        Assert.That(result.ImportObjects.Single().Attributes.Single(a => a.Name == "entryUUID").StringValues, Is.EqualTo(new[] { Uuid }));
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_DeleteWithoutChanges_EmitsNothingAndNotesWhyAsync()
     {
         _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("delete", InScopeDn));
+        var notes = new LdapDeltaSourceNotes();
+        var log = new CapturingSink();
+        var result = new ConnectedSystemImportResult();
+
+        await Source(log).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), notes: notes), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ImportObjects, Is.Empty, "a delete with no identity would be discarded by the import anyway; better to say so than to stage it");
+            Assert.That(notes.Warning, Is.EqualTo(LdapChangelogDeltaSource.DescribeUnidentifiedDeletion(InScopeDn)));
+            Assert.That(notes.Warning, Does.Contain(InScopeDn).And.Contain("carries no deleted entry").And.Contain("nsslapd-log-deleted").And.Contain("restart"));
+            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains(InScopeDn)), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_DeleteWhoseChangesDescribeNoEntry_EmitsNothingAndNotesWhyAsync()
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, "changetype: delete\n"));
+        var notes = new LdapDeltaSourceNotes();
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), notes: notes), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ImportObjects, Is.Empty);
+            Assert.That(notes.Warning, Is.EqualTo(LdapChangelogDeltaSource.DescribeUnidentifiedDeletion(InScopeDn)), "no objectClass and no entryUUID is a record without the deleted entry");
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_DeleteOfAnUnselectedObjectType_EmitsNothingWithoutANoteAsync()
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(DeleteEntry(InScopeDn, $"objectClass: top\nobjectClass: organizationalUnit\nentryUUID: {Uuid}\n"));
+        var notes = new LdapDeltaSourceNotes();
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), notes: notes), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ImportObjects, Is.Empty);
+            Assert.That(notes.Warning, Is.Null, "the record did carry the deleted entry; it is one this Connected System does not import, which is not a fault");
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_DeleteOutsideSelectedContainers_IsSkippedBeforeAnyParsingAsync()
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("delete", OutOfScopeDn));
+        var notes = new LdapDeltaSourceNotes();
+        var log = new CapturingSink();
+        var result = new ConnectedSystemImportResult();
+
+        await Source(log).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), notes: notes), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ImportObjects, Is.Empty);
+            Assert.That(notes.Warning, Is.Null, "an out-of-scope deletion, with or without changes, is nothing to warn about");
+            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning), Is.False);
+        }
+    }
+
+    [TestCase("modrdn")]
+    [TestCase("moddn")]
+    public async Task ReadChangesAsync_RenameWithinTheParent_FetchesTheNewDnAsync(string changeType)
+    {
+        const string newDn = "uid=jsmith2," + ContainerDn;
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(RenameEntry(changeType, InScopeDn, "uid=jsmith2", newSuperior: null));
+        var fetched = new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated };
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(newDn, ObjectChangeType.Updated)).Returns(fetched);
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn(newDn, ObjectChangeType.Updated), Times.Once, "targetDN is the DN before the rename; the object now lives at the new RDN under the same parent");
+            host.Verify(h => h.GetObjectByDn(InScopeDn, It.IsAny<ObjectChangeType>()), Times.Never, "the old DN answers nothing");
+            Assert.That(result.ImportObjects, Is.EqualTo(new[] { fetched }));
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_RenameWithNewSuperior_FetchesTheNewRdnUnderTheNewSuperiorAsync()
+    {
+        const string newSuperior = "ou=Staff," + ContainerDn;
+        const string newDn = "uid=jsmith," + newSuperior;
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(RenameEntry("modrdn", InScopeDn, "uid=jsmith", newSuperior));
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(newDn, ObjectChangeType.Updated)).Returns(new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn(newDn, ObjectChangeType.Updated), Times.Once);
+            host.Verify(h => h.GetObjectByDn(InScopeDn, It.IsAny<ObjectChangeType>()), Times.Never);
+            Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_RenameWithoutNewRdn_FallsBackToFetchingTheTargetDnAsync()
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangeEntry("modrdn", InScopeDn));
+        var host = new Mock<ILdapDeltaImportHost>();
+
+        await Source().ReadChangesAsync(Context(host), new ConnectedSystemImportResult(), CancellationToken.None);
+
+        host.Verify(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Updated), Times.Once, "with no newRdn there is nothing better to fetch than the DN the record names");
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_MoveOutOfScope_IsSkippedWithoutFetchingAsync()
+    {
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(RenameEntry("modrdn", InScopeDn, "uid=jsmith", "ou=Elsewhere,dc=example,dc=com"));
         var host = new Mock<ILdapDeltaImportHost>();
         var result = new ConnectedSystemImportResult();
 
@@ -488,9 +836,26 @@ public class LdapChangelogDeltaSourceTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
-            Assert.That(result.ImportObjects[0].ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+            Assert.That(result.ImportObjects, Is.Empty, "the object now lives where a Full Import would not look, so it is not an update");
             host.Verify(h => h.GetObjectByDn(It.IsAny<string>(), It.IsAny<ObjectChangeType>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_MoveIntoScope_FetchesTheNewDnAsync()
+    {
+        const string newDn = "uid=jsmith," + ContainerDn;
+        _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(RenameEntry("modrdn", OutOfScopeDn, "uid=jsmith", ContainerDn));
+        var host = new Mock<ILdapDeltaImportHost>();
+        host.Setup(h => h.GetObjectByDn(newDn, ObjectChangeType.Updated)).Returns(new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Updated });
+        var result = new ConnectedSystemImportResult();
+
+        await Source().ReadChangesAsync(Context(host), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn(newDn, ObjectChangeType.Updated), Times.Once, "scope is judged where the object now is, not where it came from");
+            Assert.That(result.ImportObjects, Has.Count.EqualTo(1));
         }
     }
 
@@ -523,7 +888,7 @@ public class LdapChangelogDeltaSourceTests
     {
         _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(
             ChangeEntry("add", InScopeDn),
-            ChangeEntry("delete", InScopeDn),
+            DeleteEntry(InScopeDn, DeletedEntryLdif(Uuid)),
             ChangeEntry("modify", OutOfScopeDn));
         var host = new Mock<ILdapDeltaImportHost>();
         host.Setup(h => h.GetObjectByDn(InScopeDn, ObjectChangeType.Added)).Returns(new ConnectedSystemImportObject { ChangeType = ObjectChangeType.Added });
@@ -663,21 +1028,97 @@ public class LdapChangelogDeltaSourceTests
             ("changeType", changeType),
             ("targetDN", targetDn));
 
+    /// <summary>
+    /// A delete record as 389 Directory Server's Retro Changelog writes it once nsslapd-log-deleted is on: the
+    /// changes attribute holds the deleted entry as LDIF text, without its dn line.
+    /// </summary>
+    private static SearchResultEntry DeleteEntry(string targetDn, string changes, long changeNumber = PreviousChangeNumber + 1) =>
+        LdapTestResponses.Entry($"changeNumber={changeNumber},cn=changelog",
+            ("changeNumber", changeNumber.ToString()),
+            ("changeType", "delete"),
+            ("targetDN", targetDn),
+            ("changes", changes));
+
+    /// <summary>A delete record whose changes value arrives as bytes, as a value that is not valid UTF-8 does.</summary>
+    private static SearchResultEntry DeleteEntryWithBinaryChanges(string targetDn, byte[] changes, long changeNumber = PreviousChangeNumber + 1)
+    {
+        const BindingFlags nonPublicInstance = BindingFlags.NonPublic | BindingFlags.Instance;
+        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
+        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", nonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
+
+        add.Invoke(attributeCollection, ["changeNumber", new DirectoryAttribute("changeNumber", changeNumber.ToString())]);
+        add.Invoke(attributeCollection, ["changeType", new DirectoryAttribute("changeType", "delete")]);
+        add.Invoke(attributeCollection, ["targetDN", new DirectoryAttribute("targetDN", targetDn)]);
+        add.Invoke(attributeCollection, ["changes", new DirectoryAttribute("changes", changes)]);
+
+        return (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), nonPublicInstance, binder: null,
+            args: [$"changeNumber={changeNumber},cn=changelog", attributeCollection], culture: null)!;
+    }
+
+    private static string DeletedEntryLdif(string entryUuid) =>
+        $"objectClass: top\nobjectClass: person\nobjectClass: inetOrgPerson\nuid: jsmith\nentryUUID: {entryUuid}\n";
+
+    /// <summary>A modrdn record: targetDN is the DN before the rename, newRdn and newSuperior say where the entry went.</summary>
+    private static SearchResultEntry RenameEntry(string changeType, string targetDn, string newRdn, string? newSuperior, long changeNumber = PreviousChangeNumber + 1)
+    {
+        var attributes = new List<(string Name, string Value)>
+        {
+            ("changeNumber", changeNumber.ToString()),
+            ("changeType", changeType),
+            ("targetDN", targetDn),
+            ("newRdn", newRdn),
+            ("deleteOldRdn", "TRUE")
+        };
+        if (newSuperior != null)
+            attributes.Add(("newSuperior", newSuperior));
+
+        return LdapTestResponses.Entry($"changeNumber={changeNumber},cn=changelog", [.. attributes]);
+    }
+
     private static SearchResultEntry RootDseEntry() => LdapTestResponses.Entry("", ("vendorName", "389 Project"));
 
-    private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, long previousChangeNumber = PreviousChangeNumber, LdapConnectorRootDse? currentRootDse = null) => new()
+    /// <summary>The changelog's own entry, as the default base-scope read answers it.</summary>
+    private static SearchResponse ChangelogEntryAnswer(SearchRequest request) =>
+        LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(request.DistinguishedName, ("objectClass", "top")));
+
+    /// <summary>
+    /// A base-scope read answering the Retro Changelog plug-in's entry with the given nsslapd-log-deleted value
+    /// (none when null), and any other entry (the changelog's) as readable.
+    /// </summary>
+    private static Func<SearchRequest, SearchResponse> PluginEntryAnswering(string? logDeleted) => request =>
+        request.DistinguishedName != PluginDn ? ChangelogEntryAnswer(request)
+        : logDeleted == null ? LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(PluginDn, ("objectClass", "top")))
+        : LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(PluginDn, ("objectClass", "top"), (LogDeletedAttribute, logDeleted)));
+
+    private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, long previousChangeNumber = PreviousChangeNumber, LdapConnectorRootDse? currentRootDse = null, LdapDeltaSourceNotes? notes = null) => new()
     {
         PreviousRootDse = new LdapConnectorRootDse { LastChangeNumber = previousChangeNumber },
         CurrentRootDse = currentRootDse ?? new LdapConnectorRootDse { LastChangeNumber = previousChangeNumber + 10 },
         TargetPartitions = [],
         ScopeDecidingContainers = [new ConnectedSystemContainer { ExternalId = ContainerDn, Name = "People", Selected = true }],
-        ObjectTypes = [new ConnectedSystemObjectType { Name = "inetOrgPerson", Selected = true }],
+        ObjectTypes = [InetOrgPerson()],
         PaginationTokens = [],
         PageSize = 500,
         SearchTimeout = Timeout,
-        Notes = new LdapDeltaSourceNotes(),
+        Notes = notes ?? new LdapDeltaSourceNotes(),
         Host = host.Object
     };
+
+    private static ConnectedSystemObjectType InetOrgPerson()
+    {
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "inetOrgPerson", Selected = true };
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "entryUUID", Type = AttributeDataType.Text, Selected = true, IsExternalId = true });
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "distinguishedName", Type = AttributeDataType.Text, Selected = true });
+        return objectType;
+    }
+
+    /// <summary>Collects what the source logs, so a test can assert on the warning it raises.</summary>
+    private sealed class CapturingSink : ILogEventSink
+    {
+        internal List<LogEvent> Events { get; } = [];
+
+        public void Emit(LogEvent logEvent) => Events.Add(logEvent);
+    }
 
     #endregion
 }
