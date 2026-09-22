@@ -237,13 +237,19 @@ set_password_policy() {
     # passwordCheckSyntax off, so nothing is enforced until the switch is on;
     # JIM's 389 password policy reader honours the same switch. Categories stay
     # at the default so the figures JIM reads are the ones the server applies.
-    # With syntax checking on, 389 also refuses a password whose 3+ character
-    # tokens appear in the entry's own uid, cn or sn ("password based off of
-    # user entry"), and applies that check to a password set by the service
-    # account too; run_checks' probe password is chosen with that in mind.
-    # (--pwdmincatagories is dsconf's own spelling.)
-    log "Setting the global password policy (passwordCheckSyntax on, passwordMinLength 7, passwordMinCategories 3)..."
-    dsconf localhost pwpolicy set --pwdchecksyntax on --pwdminlen 7 --pwdmincatagories 3
+    # With syntax checking on, 389 also applies its trivial-words rule: a
+    # password is refused ("password based off of user entry") if it contains
+    # any run of passwordMinTokenLength characters (case-insensitive,
+    # leet-normalised) of the entry's own uid, cn, sn, givenName, ou or mail,
+    # and the rule applies to a password set by the service account too. Three
+    # is 389's default, and at three a shared static lab password fails
+    # non-deterministically per name: Chalkstream-7-Vault! shares "Cha" with a
+    # user called Charlie, so the lab refused one account of a batch and
+    # accepted its neighbours. Five keeps the rule alive (customers have it on,
+    # and run_checks proves it still catches "Charl") while letting the lab's
+    # fixed passwords through. (--pwdmincatagories is dsconf's own spelling.)
+    log "Setting the global password policy (passwordCheckSyntax on, passwordMinLength 7, passwordMinCategories 3, passwordMinTokenLength 5)..."
+    dsconf localhost pwpolicy set --pwdchecksyntax on --pwdminlen 7 --pwdmincatagories 3 --pwdmintokenlen 5
 }
 
 # ---- Build-time checks ------------------------------------------------------------------
@@ -352,6 +358,33 @@ description: must be refused
 LDIF
     ldapdelete -x -H "$LDAP_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" "$renamed_dn" || fail "svc-jim cannot delete under ou=People"
     log "OK: svc-jim can add, modify, rename, set a password and delete under ou=People, and cannot write ou=Services"
+
+    # The trivial-words rule at passwordMinTokenLength 5 (see set_password_policy):
+    # the scenarios' shared static password must pass for an entry named like
+    # the account the default of 3 refused in the lab, and a password carrying
+    # the entry's own name must still be refused. Both as svc-jim over LDAPS,
+    # which is how JIM sets them.
+    out=$(dm_search -b cn=config -s base passwordMinTokenLength)
+    grep -qi '^passwordMinTokenLength: 5$' <<<"$out" || fail "passwordMinTokenLength on cn=config is not 5 (got: $out)"
+    local words_dn="uid=charlie.check,ou=People,$YELLOWSTONE_SUFFIX"
+    ldapadd -x -H "$LDAP_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" >/dev/null <<LDIF || fail "svc-jim cannot add the trivial-words check entry under ou=People"
+dn: $words_dn
+objectClass: top
+objectClass: jimPerson
+uid: charlie.check
+cn: Charlie Mathews
+sn: Mathews
+givenName: Charlie
+mail: charlie.check@panoply.local
+LDIF
+    out=$(LDAPTLS_CACERT="$LAB_CA_CERT" ldappasswd -x -H "$LDAPS_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -s 'Chalkstream-7-Vault!' "$words_dn" 2>&1) \
+        || fail "the scenarios' static password was refused for an entry with givenName Charlie (passwordMinTokenLength 5 not effective); got: $out"
+    log "OK: the scenarios' static password is accepted for an entry named Charlie (passwordMinTokenLength 5, so \"Cha\" no longer trips the trivial-words rule)"
+    out=$(LDAPTLS_CACERT="$LAB_CA_CERT" ldappasswd -x -H "$LDAPS_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" -s 'Charlie-7-Vault!' "$words_dn" 2>&1 || true)
+    grep -qi 'Constraint violation' <<<"$out" \
+        || fail "a password carrying the entry's own givenName was not refused (the trivial-words rule is no longer enforced); got: $out"
+    log "OK: a password carrying the entry's own name is still refused (the five-character run \"Charl\" is caught)"
+    ldapdelete -x -H "$LDAP_URI" -D "$YELLOWSTONE_SVC_DN" -w "$SVC_JIM_PW" "$words_dn" || fail "svc-jim cannot delete the trivial-words check entry"
 
     out=$(as_search "$YELLOWSTONE_SVC_DN" "$SVC_JIM_PW" -b cn=changelog -s one "(&(changeType=delete)(targetDn=$renamed_dn))" changeNumber changeType targetDn changes)
     grep -qi '^changeType: delete$' <<<"$out" || fail "svc-jim finds no delete record for $renamed_dn in cn=changelog (got: $out)"

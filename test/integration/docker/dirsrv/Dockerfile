@@ -22,7 +22,11 @@
 #   - A global password policy with syntax checking on and a minimum length of 7
 #     (passwordCheckSyntax on, passwordMinLength 7, passwordMinCategories 3),
 #     mirroring the OpenLDAP lab's pwdMinLength 7: a too-short password is
-#     refused, which the scenarios that park a refused change rely on.
+#     refused, which the scenarios that park a refused change rely on. The
+#     trivial-words token length is raised from 389's default of 3 to 5
+#     (passwordMinTokenLength 5), so the scenarios' shared static password is
+#     not refused for whichever user's name happens to share three letters
+#     with it, while a password carrying the user's own name is still refused.
 #   - A lab CA and a server certificate for dirsrv-primary and localhost under
 #     /data/tls, so LDAPS on 3636 presents a name-valid certificate. 389 accepts
 #     the RFC 3062 Password Modify operation only over a secure connection, so
