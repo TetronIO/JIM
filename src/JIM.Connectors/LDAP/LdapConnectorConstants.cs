@@ -155,6 +155,12 @@ internal static class LdapConnectorConstants
     internal const string SETTING_GROUP_PLACEHOLDER_MEMBER_DN = "Group Placeholder Member DN";
 
     /// <summary>
+    /// The Connected System setting holding the identity JIM binds as: a DN on OpenLDAP, a DOMAIN\name or UPN on
+    /// Active Directory. Named in the message an import gives when the directory limits that identity's searches.
+    /// </summary>
+    internal const string SETTING_USERNAME = "Username";
+
+    /// <summary>
     /// LDAP object classes that require at least one member value (MUST constraint on the member attribute).
     /// When exporting to directories using these classes, a placeholder member is injected
     /// to satisfy the schema constraint when the group would otherwise be empty.
