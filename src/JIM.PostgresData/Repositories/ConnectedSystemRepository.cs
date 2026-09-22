@@ -5584,6 +5584,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
+            // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
+            // sources do, so the engine and every surface reading a loaded mapping's Sources can also read
+            // whether it is generated and what it excludes.
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Generation)
+            .ThenInclude(g => g!.Exclusions)
             .Include(sr => sr.ConnectedSystem)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
@@ -5661,6 +5667,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
+            // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
+            // sources do, so the engine and every surface reading a loaded mapping's Sources can also read
+            // whether it is generated and what it excludes.
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Generation)
+            .ThenInclude(g => g!.Exclusions)
             .Include(sr => sr.ConnectedSystem)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
@@ -6333,6 +6345,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
+            // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
+            // sources do, so the editor, the API and the engine can all read whether a loaded mapping is
+            // generated and what it excludes.
+            .Include(sr => sr.AttributeFlowRules)
+            .ThenInclude(afr => afr.Generation)
+            .ThenInclude(g => g!.Exclusions)
             .Include(sr => sr.ConnectedSystem)
             // Required, not optional: the configuration snapshot reads this navigation, and an unloaded
             // navigation is indistinguishable from an unconfigured one. Without the Include, every change
@@ -6429,6 +6447,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(m => m.Sources)
                 .ThenInclude(s => s.MetaverseAttribute)
+            // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
+            // sources do.
+            .Include(m => m.Generation)
+                .ThenInclude(g => g!.Exclusions)
             .Include(m => m.TargetMetaverseAttribute)
             .Include(m => m.TargetConnectedSystemAttribute)
             .Where(m => m.SyncRule!.Id == syncRuleId)
@@ -6448,6 +6470,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(m => m.Sources)
                 .ThenInclude(s => s.MetaverseAttribute)
+            // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
+            // sources do.
+            .Include(m => m.Generation)
+                .ThenInclude(g => g!.Exclusions)
             .Include(m => m.TargetMetaverseAttribute)
             .Include(m => m.TargetConnectedSystemAttribute)
             .SingleOrDefaultAsync(m => m.Id == id);
@@ -6474,6 +6500,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(m => m.Sources)
                 .ThenInclude(s => s.MetaverseAttribute)
+            // A generated mapping's settings (Unique Value Generation, #242) travel with it wherever its
+            // sources do, so a settings update that touches Generation loads it tracked too.
+            .Include(m => m.Generation)
+                .ThenInclude(g => g!.Exclusions)
             .Include(m => m.TargetMetaverseAttribute)
             .Include(m => m.TargetConnectedSystemAttribute)
             .SingleOrDefaultAsync(m => m.Id == id);
