@@ -986,6 +986,68 @@ function Add-DirsrvCertificateToJimStore {
     }
 }
 
+function Add-DirectoryCertificateToJimStore {
+    <#
+    .SYNOPSIS
+        Trust a directory lab's CA in JIM's certificate store, whichever directory the config describes.
+
+    .DESCRIPTION
+        The function a scenario calls when it must re-trust its directory after a factory reset
+        (Reset-JIMSystem truncates Trusted Certificates, and the runner only trusts the directory's CA
+        once, in Step 4a). A scenario never has to know which directory it is on: this dispatches on
+        DirectoryConfig.DirectoryType to Add-SambaCertificateToJimStore or
+        Add-DirsrvCertificateToJimStore, each with the config's ContainerName, and does nothing for
+        OpenLDAP, whose lab connects over plain LDAP and has no certificate to trust. Scenario 10 on
+        the 389 lab failed exactly because it called the Samba function against dirsrv-primary.
+
+        Callers still guard on DirectoryConfig.UseSSL, so a directory that connects unencrypted never
+        reaches this function; the OpenLDAP branch is belt and braces for a caller that does not.
+
+    .PARAMETER DirectoryConfig
+        A directory config from Get-DirectoryConfig. DirectoryType chooses the function to call and
+        ContainerName names the container whose CA is trusted.
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .EXAMPLE
+        if ($DirectoryConfig.UseSSL) {
+            Add-DirectoryCertificateToJimStore -DirectoryConfig $DirectoryConfig -JIMUrl $JIMUrl -ApiKey $ApiKey
+        }
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey
+    )
+
+    $directoryType = if ($DirectoryConfig.ContainsKey('DirectoryType')) { [string]$DirectoryConfig.DirectoryType } else { '' }
+
+    switch ($directoryType) {
+        "SambaAD" {
+            Add-SambaCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
+        }
+        "DirectoryServer389" {
+            Add-DirsrvCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
+        }
+        "OpenLDAP" {
+            Write-Host "  The OpenLDAP lab connects over plain LDAP; no certificate to trust." -ForegroundColor Gray
+            return
+        }
+        default {
+            throw "Add-DirectoryCertificateToJimStore: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP or DirectoryServer389). Build configs with Get-DirectoryConfig."
+        }
+    }
+}
+
 function Grant-JimAdDelegation {
     <#
     .SYNOPSIS

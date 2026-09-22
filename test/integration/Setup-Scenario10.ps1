@@ -72,7 +72,10 @@ if (-not $DirectoryConfig) {
 
 $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 $hrSystemName = "Scoping HR Source"
-$ldapSystemName = if ($isRfcDirectory) { "Scoping LDAP Target (OpenLDAP)" } else { "Scoping LDAP Target (AD)" }
+# The RFC label is the config's DirectoryType, so the name reads "(OpenLDAP)" or "(DirectoryServer389)"
+# for whichever lab is in use; Samba AD keeps its "(AD)" label. Setup-Scenario10 and the scenario build
+# this name identically.
+$ldapSystemName = if ($isRfcDirectory) { "Scoping LDAP Target ($($DirectoryConfig.DirectoryType))" } else { "Scoping LDAP Target (AD)" }
 $importRuleName = "Scoping Import (HR -> MV)"
 $exportRuleName = "Scoping Export (MV -> LDAP)"
 

@@ -126,7 +126,10 @@ if (-not $DirectoryConfig) {
 
 $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 $hrSystemName = "Scoping HR Source"
-$ldapSystemName = if ($isRfcDirectory) { "Scoping LDAP Target (OpenLDAP)" } else { "Scoping LDAP Target (AD)" }
+# The RFC label is the config's DirectoryType, so the name reads "(OpenLDAP)" or "(DirectoryServer389)"
+# for whichever lab is in use; Samba AD keeps its "(AD)" label. Setup-Scenario10 and the scenario build
+# this name identically.
+$ldapSystemName = if ($isRfcDirectory) { "Scoping LDAP Target ($($DirectoryConfig.DirectoryType))" } else { "Scoping LDAP Target (AD)" }
 $importRuleName = "Scoping Import (HR -> MV)"
 $exportRuleName = "Scoping Export (MV -> LDAP)"
 
@@ -294,11 +297,11 @@ function Reset-JIMForCascadeTest {
     # runner only trusts the directory's CA once, at environment setup. Setup-Scenario10 validates the
     # LDAPS settings against the directory when it configures the Connected System, so without
     # re-trusting the CA here every post-reset setup fails with "One or more Connected System settings
-    # are invalid" (TestDirectoryConnectivity certificate validation). OpenLDAP runs plain LDAP in the
-    # integration environment and needs no certificate.
+    # are invalid" (TestDirectoryConnectivity certificate validation). The helper decides per directory
+    # (Samba AD's self-signed CA, the 389 Directory Server lab CA) from the config's DirectoryType.
     if ($DirectoryConfig.UseSSL) {
         Write-Host "  Re-trusting $($DirectoryConfig.ContainerName)'s CA (the reset removed it)..." -ForegroundColor Gray
-        Add-SambaCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
+        Add-DirectoryCertificateToJimStore -DirectoryConfig $DirectoryConfig -JIMUrl $JIMUrl -ApiKey $ApiKey
     }
 
     # Re-run setup to rebuild connected systems, sync rules, run profiles, etc.

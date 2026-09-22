@@ -5,14 +5,16 @@
 
 <#
 .SYNOPSIS
-    Pester tests for Get-DirectoryConfig and Test-IsRfcDirectory in Test-Helpers.ps1.
+    Pester tests for Get-DirectoryConfig, Test-IsRfcDirectory and Add-DirectoryCertificateToJimStore in
+    Test-Helpers.ps1.
 
 .DESCRIPTION
     Guards the directory-config contract the scenario scripts and the runner build on: every
     directory type and instance returns a hashtable stamped with its DirectoryType; the 389
     Directory Server configs mirror the OpenLDAP ones key for key (the two share populate scripts
     and scenarios); and Test-IsRfcDirectory answers the RFC-versus-AD question for every type and
-    refuses an unknown one.
+    refuses an unknown one; and Add-DirectoryCertificateToJimStore re-trusts the right directory's CA
+    (or none, for OpenLDAP) from a config's DirectoryType.
 #>
 
 BeforeAll {
@@ -199,6 +201,58 @@ Describe 'Test-IsRfcDirectory' {
 
     It 'throws when the config carries no DirectoryType at all' {
         { Test-IsRfcDirectory @{ ContainerName = 'hand-built' } } | Should -Throw '*unknown DirectoryType*'
+    }
+}
+
+Describe 'Add-DirectoryCertificateToJimStore' {
+    <#
+        The dispatcher a scenario calls to re-trust its directory after a factory reset. It must pick
+        the right per-directory function from DirectoryType and hand it the config's ContainerName,
+        so a scenario never runs the Samba function against dirsrv-primary again (the Scenario 10
+        failure on the 389 lab). Both leaf functions are mocked: they docker cp and upload.
+    #>
+    BeforeAll {
+        Mock Add-SambaCertificateToJimStore { }
+        Mock Add-DirsrvCertificateToJimStore { }
+        $script:jimUrl = 'http://localhost:5200'
+        $script:apiKey = 'jim_test'
+    }
+
+    It 'returns without calling either leaf function for OpenLDAP' {
+        $config = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Primary
+        Add-DirectoryCertificateToJimStore -DirectoryConfig $config -JIMUrl $script:jimUrl -ApiKey $script:apiKey
+        Should -Invoke Add-SambaCertificateToJimStore -Times 0 -Exactly
+        Should -Invoke Add-DirsrvCertificateToJimStore -Times 0 -Exactly
+    }
+
+    It 'calls the Samba function with the config''s container for SambaAD' {
+        $config = Get-DirectoryConfig -DirectoryType SambaAD -Instance Target
+        Add-DirectoryCertificateToJimStore -DirectoryConfig $config -JIMUrl $script:jimUrl -ApiKey $script:apiKey
+        Should -Invoke Add-SambaCertificateToJimStore -Times 1 -Exactly -ParameterFilter {
+            $ContainerName -eq $config.ContainerName -and $JIMUrl -eq $script:jimUrl -and $ApiKey -eq $script:apiKey
+        }
+        Should -Invoke Add-DirsrvCertificateToJimStore -Times 0 -Exactly
+    }
+
+    It 'calls the dirsrv function with the config''s container for DirectoryServer389' {
+        $config = Get-DirectoryConfig -DirectoryType DirectoryServer389 -Instance Primary
+        Add-DirectoryCertificateToJimStore -DirectoryConfig $config -JIMUrl $script:jimUrl -ApiKey $script:apiKey
+        Should -Invoke Add-DirsrvCertificateToJimStore -Times 1 -Exactly -ParameterFilter {
+            $ContainerName -eq $config.ContainerName -and $JIMUrl -eq $script:jimUrl -and $ApiKey -eq $script:apiKey
+        }
+        Should -Invoke Add-SambaCertificateToJimStore -Times 0 -Exactly
+    }
+
+    It 'throws on an unknown DirectoryType' {
+        { Add-DirectoryCertificateToJimStore -DirectoryConfig @{ DirectoryType = 'eDirectory'; ContainerName = 'x' } -JIMUrl $script:jimUrl -ApiKey $script:apiKey } |
+            Should -Throw '*unknown DirectoryType*eDirectory*'
+        Should -Invoke Add-SambaCertificateToJimStore -Times 0 -Exactly
+        Should -Invoke Add-DirsrvCertificateToJimStore -Times 0 -Exactly
+    }
+
+    It 'throws when the config carries no DirectoryType at all' {
+        { Add-DirectoryCertificateToJimStore -DirectoryConfig @{ ContainerName = 'hand-built' } -JIMUrl $script:jimUrl -ApiKey $script:apiKey } |
+            Should -Throw '*unknown DirectoryType*'
     }
 }
 
