@@ -1,9 +1,9 @@
 # Unique Value Generation and Collision Remediation
 
-- **Status:** Planned
+- **Status:** Doing (release 1, Phase 1 in progress)
 - **Issue:** [#242](https://github.com/TetronIO/JIM/issues/242)
-- **PRD:** [`../prd/PRD_UNIQUE_VALUE_GENERATION.md`](../prd/PRD_UNIQUE_VALUE_GENERATION.md)
-- **Depends on (release 2):** [`../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
+- **PRD:** [`../../prd/doing/PRD_UNIQUE_VALUE_GENERATION.md`](../../prd/doing/PRD_UNIQUE_VALUE_GENERATION.md)
+- **Depends on (release 2):** [`../../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
 - **Related:** [#399](https://github.com/TetronIO/JIM/issues/399) attribute provenance display (delivers the Metaverse Object page chips), [#614](https://github.com/TetronIO/JIM/issues/614) internal Metaverse Object management (Set Value and Generate a new value deferred there), [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (parked state, release on configuration change, queue-and-follow), [#1087](https://github.com/TetronIO/JIM/issues/1087) / [#1495](https://github.com/TetronIO/JIM/issues/1495) causality views, [#1079](https://github.com/TetronIO/JIM/issues/1079) optimistic export apply, [#91](https://github.com/TetronIO/JIM/issues/91) attribute priority, [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler (review flag)
 - **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) · [Generated Value Options](https://claude.ai/artifact/AnigVtXRxx1t71qVS41yMr) (release 1 form) · [Linked Identifiers](https://claude.ai/artifact/KEbCieWusy8aoxnZqkMagD)
 - **Plan explainer:** [Unique Value Generation Plan](https://claude.ai/artifact/WsfoqDR7PrwiQZLQBPCt9q) (what changes per layer, the data model, the three data flows, the assignment lifecycle and the releases)

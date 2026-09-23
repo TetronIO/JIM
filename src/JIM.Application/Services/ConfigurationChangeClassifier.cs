@@ -99,6 +99,29 @@ public static class ConfigurationChangeClassifier
         ["nullIsValue"] = B,
         ["initialExportOnly"] = B,
 
+        // Unique Value Generation (#242): a generated mapping's base expression is an ordinary mapping source (see
+        // below), so it needs no key of its own here; these are the uniqueness token and its settings. Every key
+        // is Class B, never A: a token or base-expression change alters what a future object receives, but a value
+        // already committed to an object is sticky and unaffected (PRD FR 10 and 29).
+        // "connectedSystemId" (the exclusion's target) deliberately reuses the key already declared above, at the
+        // same class, rather than being redeclared here.
+        ["generation"] = B,
+        ["tokenKind"] = B,
+        ["suffixStyle"] = B,
+        ["suffixStart"] = B,
+        ["sequenceStart"] = B,
+        ["sequenceIncrement"] = B,
+        ["fixedWidth"] = B,
+        ["onWidthExceeded"] = B,
+        ["randomFormat"] = B,
+        ["randomLength"] = B,
+        ["separator"] = B,
+        ["attemptLimit"] = B,
+        ["neverReuse"] = B,
+        ["collisionRemediation"] = B,
+        ["exclusions"] = B,
+        ["exclusion"] = B,
+
         // Mapping and matching sources: change the computed value.
         ["sources"] = B,
         ["source"] = B,

@@ -335,7 +335,33 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// which reports a Delete that genuinely is staged for an object that exists (or may exist) in the target
     /// system.
     /// </summary>
-    ProvisioningCancelled
+    ProvisioningCancelled,
+
+    /// <summary>
+    /// Unique Value Generation (#242): JIM generated a value for the attribute, because it was the winning
+    /// contributor and no participating target already held a value the object could adopt instead.
+    /// </summary>
+    GeneratedValueAssigned,
+
+    /// <summary>
+    /// Unique Value Generation (#242): a value a participating target already held for the attribute was
+    /// adopted as the object's assignment instead of generating a new one (adopt before generate, FR 30).
+    /// </summary>
+    GeneratedValueAdopted,
+
+    /// <summary>
+    /// Unique Value Generation (#242): a generated value assignment was deleted (the object or its
+    /// generation mapping was removed, or another contributor won the attribute) and, with "Never reuse a
+    /// value" on, the value was written to the attribute's retired values register (FR 28).
+    /// </summary>
+    GeneratedValueRetired,
+
+    /// <summary>
+    /// Unique Value Generation (#242): Collision Remediation revised a generated value after the target
+    /// rejected it as already in use. Recorded on the export item that saw the rejection; the revised value
+    /// itself is written to the Metaverse Object (import mode) or the Connected System Object (export mode).
+    /// </summary>
+    GeneratedValueRemediated
 }
 
 /// <summary>

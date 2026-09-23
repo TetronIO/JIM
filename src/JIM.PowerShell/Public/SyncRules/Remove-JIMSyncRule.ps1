@@ -24,7 +24,9 @@ function Remove-JIMSyncRule {
         (-Force skips both the lookup and the prompt).
 
         Use -Wait to block until a queued recall has finished, so the rule really has gone by the time the
-        cmdlet returns; without it, anything the caller does next races the recall task.
+        cmdlet returns; without it, the rule can still be read back (disabled) until the recall lands. A rule
+        whose recall is queued drops to the bottom of every attribute priority order it contributes to, so
+        reordering the surviving contributors need not wait.
 
     .PARAMETER Id
         The unique identifier of the Synchronisation Rule to delete.
@@ -44,8 +46,8 @@ function Remove-JIMSyncRule {
     .PARAMETER Wait
         Waits for a queued contributed-values recall to finish before returning, so the rule really has
         gone when the cmdlet does. Without it the cmdlet returns as soon as the recall is queued, and a
-        caller that immediately reads the rule back, or reorders the attribute's contributors, races the
-        recall task. Has no effect when the deletion completes immediately.
+        caller that immediately reads the rule back still finds it (disabled) until the recall lands. Has
+        no effect when the deletion completes immediately.
 
     .PARAMETER Timeout
         Maximum seconds to wait when -Wait is supplied. Omit to wait indefinitely. A recall that has not
@@ -96,11 +98,17 @@ function Remove-JIMSyncRule {
 
     .EXAMPLE
         Remove-JIMSyncRule -Id 1 -Force -Wait
+
+        Removes a contributing Synchronisation Rule and returns only once its recall has finished and the
+        rule has been deleted.
+
+    .EXAMPLE
+        Remove-JIMSyncRule -Id 1 -Force
         Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 3 -MappingId @(7, 9)
 
-        Removes a contributing Synchronisation Rule and waits for its recall to finish before reordering
-        the attribute's surviving contributors. Without -Wait the reorder races the recall, and is
-        refused while the deleted rule still counts as a contributor.
+        Removes a contributing Synchronisation Rule and reorders the attribute's surviving contributors
+        straight away. The rule drops to the bottom of the order as soon as its recall is queued, so the
+        new order may leave its mapping out.
 
     .EXAMPLE
         Get-JIMSyncRule | Where-Object { $_.name -like "Test*" } | Remove-JIMSyncRule -Force

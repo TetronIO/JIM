@@ -127,6 +127,23 @@ public class OutcomeDisplayMapHopOperationTests
     }
 
     [Test]
+    public void GetHopOperation_GeneratedValueRevisionEdge_ReadsUpdatedInfo()
+    {
+        // Unique Value Generation (#242): Collision Remediation revised the value, the same "Updated" verb
+        // an attribute change carries anywhere else in this map.
+        var cohort = new CausalChainCohort { EdgeType = CausalEdgeType.ExportRejectionCausedGeneratedValueRevision };
+
+        var display = OutcomeDisplayMap.GetHopOperation(cohort);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(display!.Label, Is.EqualTo("Updated"));
+            Assert.That(display.Tone, Is.EqualTo(CausalityTone.Info));
+            Assert.That(display.Icon, Is.EqualTo(Icons.Material.Filled.Edit));
+        }
+    }
+
+    [Test]
     public void GetHopOperation_ExportConfirmation_IsNullBecauseAConfirmationIsNotAnObjectOperation()
     {
         var cohort = new CausalChainCohort { EdgeType = CausalEdgeType.ExportCausedImportConfirmation };
