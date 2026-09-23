@@ -381,6 +381,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
+      # Publish-Module needs the dotnet CLI for NuGet-based repositories. GitHub-hosted runners have it; the
+      # self-hosted runners do not, so it is installed for this job as the validate job installs it.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -508,6 +515,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # "Create GitHub Release" below uses the GitHub CLI. GitHub-hosted runners have it; the self-hosted
+      # runners may not, so fetch a pinned, checksum-verified copy into this job's temp directory when absent.
+      - name: Ensure GitHub CLI
+        env:
+          GH_CLI_VERSION: 2.97.0
+          GH_CLI_SHA256: a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112
+        run: |
+          if command -v gh >/dev/null 2>&1; then
+            echo "Using the runner's GitHub CLI: $(gh --version | head -1)"
+            exit 0
+          fi
+          archive="gh_${GH_CLI_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${archive}" "https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/${archive}"
+          echo "${GH_CLI_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/gh_${GH_CLI_VERSION}_linux_amd64/bin" >> "$GITHUB_PATH"
 
       - name: Get version from tag
         id: version
