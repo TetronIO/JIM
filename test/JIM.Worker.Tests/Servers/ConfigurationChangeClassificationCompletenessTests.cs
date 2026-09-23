@@ -243,7 +243,10 @@ public class ConfigurationChangeClassificationCompletenessTests
             TargetConnectedSystemAttributeId = 6,
             Priority = 2,
             NullIsValue = true,
-            InitialExportOnly = true
+            InitialExportOnly = true,
+            // The snapshot skips null values, so without a reason here disabledReason is never emitted and the
+            // guard cannot see it; that is how it went unclassified (#1753).
+            DisabledReason = "Everything populated."
         };
         mapping.Sources.Add(new SyncRuleMappingSource
         {
@@ -279,6 +282,7 @@ public class ConfigurationChangeClassificationCompletenessTests
             Description = "Everything populated.",
             Direction = SyncRuleDirection.Import,
             Enabled = true,
+            DisabledReason = "Everything populated.",
             ProvisionToConnectedSystem = true,
             ProjectToMetaverse = true,
             EnforceState = true,
