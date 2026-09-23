@@ -556,72 +556,12 @@ public class ExportExecutionParallelBatchTests
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
-        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
-        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
         var baseTime = DateTime.UtcNow.AddMinutes(-10);
 
         // A resolvable reference target shared by every deferred export below.
-        var referencedMvoId = Guid.NewGuid();
-        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = referencedMvoId });
-        var referencedCso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            Type = targetUserType,
-            TypeId = targetUserType.Id,
-            MetaverseObjectId = referencedMvoId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-            {
-                new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
-            }
-        };
-        SyncRepo.SeedConnectedSystemObject(referencedCso);
-
-        PendingExport CreateDeferredExport(PendingExportChangeType changeType, DateTime createdAt)
-        {
-            var cso = CreateCso(targetSystem, targetUserType);
-            ConnectedSystemObjectsData.Add(cso);
-            SyncRepo.SeedConnectedSystemObject(cso);
-
-            var export = new PendingExport
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = targetSystem.Id,
-                ConnectedSystem = targetSystem,
-                ConnectedSystemObject = cso,
-                ConnectedSystemObjectId = cso.Id,
-                Status = PendingExportStatus.Pending,
-                ChangeType = changeType,
-                CreatedAt = createdAt,
-                HasUnresolvedReferences = true,
-                MaxRetries = 3,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        ChangeType = PendingExportAttributeChangeType.Update,
-                        AttributeId = displayNameAttr.Id,
-                        Attribute = displayNameAttr,
-                        StringValue = "Resolvable",
-                        Status = PendingExportAttributeChangeStatus.Pending
-                    },
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        ChangeType = PendingExportAttributeChangeType.Update,
-                        AttributeId = managerAttr.Id,
-                        Attribute = managerAttr,
-                        UnresolvedReferenceValue = referencedMvoId.ToString(),
-                        Status = PendingExportAttributeChangeStatus.Pending
-                    }
-                }
-            };
-            PendingExportsData.Add(export);
-            SyncRepo.SeedPendingExport(export);
-            return export;
-        }
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        PendingExport CreateDeferredExport(PendingExportChangeType changeType, DateTime createdAt) =>
+            SeedResolvableDeferredExport(targetSystem, targetUserType, changeType, createdAt, referencedMvoId);
 
         // 4 allowed-type (Update, no limit) deferred exports: with BatchSize=2 these span 2 batches,
         // enough for the parallel dispatcher (useParallelBatches requires deferredBatches.Count > 1).
@@ -674,6 +614,107 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// Every connector used for an export must be told the Connected System's managed scope (#1764), not only
+    /// the primary one. Each parallel batch gets a fresh connector from the factory, and one that never receives
+    /// the scope writes wherever the Attribute Flow points it, including into containers the next import cannot
+    /// read back: the very churn the managed scope exists to prevent (#1250, #1255).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatches_EveryConnectorReceivesManagedScopeAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        // A selection with an exclusion beneath it, so the scope stated must carry both (#1255).
+        var serviceAccounts = new ConnectedSystemContainer { Name = "Service Accounts", ExternalId = "OU=Service Accounts,OU=Corp,DC=test,DC=local", Excluded = true };
+        var corp = new ConnectedSystemContainer { Name = "Corp", ExternalId = "OU=Corp,DC=test,DC=local", Selected = true };
+        serviceAccounts.ParentContainer = corp;
+        corp.ChildContainers.Add(serviceAccounts);
+        targetSystem.Partitions = [new ConnectedSystemPartition { Name = "test.local", Selected = true, Containers = [corp] }];
+
+        // 4 deferred exports: with BatchSize=2 these span 2 batches, enough for the parallel dispatcher.
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        for (var i = 0; i < 4; i++)
+            SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Update, baseTime.AddSeconds(i), referencedMvoId);
+
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        var primaryScope = primaryConnector.As<IConnectorManagedScope>();
+
+        var batchScopes = new System.Collections.Concurrent.ConcurrentBag<Mock<IConnectorManagedScope>>();
+        Func<IConnector> connectorFactory = () =>
+        {
+            var batchConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+            batchScopes.Add(batchConnector.As<IConnectorManagedScope>());
+            return batchConnector.Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 2
+        };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            primaryConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            connectorFactory: connectorFactory,
+            repositoryFactory: repositoryFactory);
+
+        // Assert - the exports went through genuine parallel dispatch, so a batch connector was in play
+        Assert.That(result.SuccessCount, Is.EqualTo(4));
+        Assert.That(batchScopes, Is.Not.Empty, "the exports must have gone through the parallel path, not the sequential fallback");
+
+        // Assert - every batch connector and the primary connector were told the same scope
+        var expectedScope = new[] { corp, serviceAccounts };
+        foreach (var batchScope in batchScopes)
+            batchScope.Verify(s => s.SetManagedScope(It.Is<IReadOnlyList<ConnectedSystemContainer>>(scope => scope.OrderBy(c => c.ExternalId).SequenceEqual(expectedScope.OrderBy(c => c.ExternalId)))), Times.Once,
+                "a parallel batch's connector must receive the managed scope, or it can write outside the selected containers");
+        primaryScope.Verify(s => s.SetManagedScope(It.Is<IReadOnlyList<ConnectedSystemContainer>>(scope => scope.OrderBy(c => c.ExternalId).SequenceEqual(expectedScope.OrderBy(c => c.ExternalId)))), Times.Once);
+    }
+
+    /// <summary>
+    /// A Connected System with no container selections states no scope at all: the connector is never asked,
+    /// so an unset scope keeps permitting everything, exactly as it did before managed scope existed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_NoContainerSelections_DoesNotStateManagedScopeAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        targetSystem.Partitions = null;
+
+        var cso = CreateCso(targetSystem, targetUserType);
+        ConnectedSystemObjectsData.Add(cso);
+        var pe = CreatePendingExport(targetSystem, cso, displayNameAttr, "Value");
+        PendingExportsData.Add(pe);
+        SyncRepo.SeedPendingExport(pe);
+
+        var connector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        var scope = connector.As<IConnectorManagedScope>();
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            connector.Object,
+            SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions(),
+            CancellationToken.None);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(1));
+        scope.Verify(s => s.SetManagedScope(It.IsAny<IReadOnlyList<ConnectedSystemContainer>>()), Times.Never);
+    }
+
+    /// <summary>
     /// Tests that the ExportExecutionOptions.MaxParallelism defaults to 1 (sequential).
     /// </summary>
     [Test]
@@ -694,6 +735,88 @@ public class ExportExecutionParallelBatchTests
     }
 
     #region Helper Methods
+
+    /// <summary>
+    /// Seeds a Metaverse Object with a joined CSO carrying an external identifier, so a deferred export
+    /// referencing it resolves on the second pass.
+    /// </summary>
+    private Guid SeedResolvableReferenceTarget(ConnectedSystem targetSystem, ConnectedSystemObjectType targetUserType)
+    {
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+        var referencedMvoId = Guid.NewGuid();
+        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = referencedMvoId });
+        var referencedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = referencedMvoId,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
+            }
+        };
+        SyncRepo.SeedConnectedSystemObject(referencedCso);
+        return referencedMvoId;
+    }
+
+    /// <summary>
+    /// Seeds a Pending Export whose reference is unresolved on the first pass but resolvable against
+    /// <paramref name="referencedMvoId"/>, so it is written by the deferred pass.
+    /// </summary>
+    private PendingExport SeedResolvableDeferredExport(
+        ConnectedSystem targetSystem,
+        ConnectedSystemObjectType targetUserType,
+        PendingExportChangeType changeType,
+        DateTime createdAt,
+        Guid referencedMvoId)
+    {
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+
+        var cso = CreateCso(targetSystem, targetUserType);
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var export = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = changeType,
+            CreatedAt = createdAt,
+            HasUnresolvedReferences = true,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Resolvable",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = managerAttr.Id,
+                    Attribute = managerAttr,
+                    UnresolvedReferenceValue = referencedMvoId.ToString(),
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(export);
+        SyncRepo.SeedPendingExport(export);
+        return export;
+    }
 
     private static ConnectedSystemObject CreateCso(ConnectedSystem system, ConnectedSystemObjectType type)
     {

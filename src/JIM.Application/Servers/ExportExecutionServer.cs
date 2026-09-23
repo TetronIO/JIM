@@ -356,6 +356,7 @@ public class ExportExecutionServer
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
         {
+            PrepareConnectorForExport(connector, connectedSystem);
             await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options, changeLimitLedger,
                 cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
         }
@@ -370,6 +371,7 @@ public class ExportExecutionServer
             // Withheld exports are simply excluded here: never touched, never marked, left Pending.
             pendingExports = ReserveAgainstLedger(pendingExports, changeLimitLedger);
 
+            PrepareConnectorForExport(connector, connectedSystem);
             await ExecuteUsingFilesWithBatchingAsync(connectedSystem, filesConnector, pendingExports, result, options, cancellationToken, progressCallback);
         }
         else
@@ -417,10 +419,31 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Prepares a connector instance for export by injecting required services.
+    /// Prepares a connector instance for export by injecting required services and stating the Connected
+    /// System's managed scope. The one place every export connector is prepared, the primary and each parallel
+    /// batch's alike: a batch connector left unprepared would export without the state the primary has (#1764).
     /// </summary>
-    private void PrepareConnectorForExport(IConnectorExportUsingCalls connector)
+    private void PrepareConnectorForExport(IConnector connector, ConnectedSystem connectedSystem)
     {
+        // Tell the Connector which containers the administrator manages, so it can refuse to write outside them.
+        // Container selection used to apply only on the way in, so an Attribute Flow that moved an object into an
+        // unselected container wrote it where JIM could not read it back: the export went unconfirmed, the next
+        // Full Import treated the object as deleted, and synchronisation then disconnected and re-provisioned it.
+        // Stated only when there is a selection to state; a Connected System with none permits everything, exactly
+        // as before.
+        // Selections and exclusions both, because both decide where JIM may write: an export into an excluded
+        // branch is as unreadable on the way back as one into a container that was never selected (#1255).
+        if (connector is IConnectorManagedScope scopedConnector)
+        {
+            var managedContainers = connectedSystem.GetScopeDecidingContainers();
+            if (managedContainers.Count > 0)
+            {
+                scopedConnector.SetManagedScope(managedContainers);
+                Log.Debug("PrepareConnectorForExport: Stated a managed scope of {ContainerCount} container(s) to the {Connector} connector",
+                    managedContainers.Count, connector.Name);
+            }
+        }
+
         // Inject certificate provider for connectors that support it
         if (connector is IConnectorCertificateAware certificateAwareConnector)
         {
@@ -458,9 +481,7 @@ public class ExportExecutionServer
     {
         try
         {
-            PrepareConnectorForExport(connector);
-
-            // Open connection for the primary connector
+            // Open connection for the primary connector (prepared for export by the caller)
             using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
             {
                 connector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
@@ -1296,7 +1317,7 @@ public class ExportExecutionServer
                         return;
                     }
                     batchConnector = callsConnector;
-                    PrepareConnectorForExport(batchConnector);
+                    PrepareConnectorForExport(newConnector, connectedSystem);
                     batchConnector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
                 }
 
