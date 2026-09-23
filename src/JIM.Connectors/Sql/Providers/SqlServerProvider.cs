@@ -21,6 +21,11 @@ internal class SqlServerProvider : SqlProviderBase
     /// </summary>
     private const int DefaultPort = 1433;
 
+    /// <summary>
+    /// The legacy datetime type as <see cref="SqlTypeMapper.Normalise"/> spells it.
+    /// </summary>
+    private const string LegacyDateTimeTypeName = "DATETIME";
+
     public override SqlDatabaseType DatabaseType => SqlDatabaseType.SqlServer;
 
     public override string DisplayName => "Microsoft SQL Server";
@@ -54,24 +59,66 @@ internal class SqlServerProvider : SqlProviderBase
 
     #region Parameters
 
-    public override DbParameter CreateParameter(string parameterName, object? value)
+    /// <summary>
+    /// Binds a value, choosing the type of a <see cref="DateTime"/> by the column it meets.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>datetime2 by default.</b> Left to infer, SqlClient binds a DateTime as the legacy datetime
+    /// type, which rounds to a 1/300-second grid (.000, .003, .007). Every datetime2 value JIM binds (a
+    /// watermark, a keyset position, an exported column) would be moved by up to two milliseconds on
+    /// the way in: a Delta Import re-reads the row at the top of the last run, or silently skips rows
+    /// committed inside the gap. datetime2 carries the full value (#170).
+    /// </para>
+    /// <para>
+    /// <b>datetime where the column is the legacy datetime (#1451), and this is not a performance
+    /// choice.</b> Compared with a datetime column, a datetime2 parameter makes SQL Server convert the
+    /// column, and from compatibility level 130 (the default for every database created on SQL Server
+    /// 2016 or later) that conversion is exact: a stored .003 becomes .0033333 and .007 becomes
+    /// .0066667. SqlClient reads the same stored values back rounded to the millisecond, .003 and .007,
+    /// so a value JIM read out of the column no longer equals the row it came from. Measured against SQL
+    /// Server 2022 with JIM's own change-log keyset over 2,000 changes sharing one timestamp: a page
+    /// boundary on .007 skipped 1,500 of them without an error, one on .003 re-read the same page for
+    /// ever, and a watermark on .003 re-read its rows on every Delta Import. The same inequality breaks
+    /// a composite anchor's Full Import paging, the related-table gather keyed on it, and an export's
+    /// UPDATE or DELETE keyed on it. Bound as datetime, the value round-trips exactly at every
+    /// compatibility level, because it is compared in the type it was read from.
+    /// </para>
+    /// <para>
+    /// <b>Both bindings stay index seeks; that was measured rather than assumed.</b> Against an indexed
+    /// datetime column and a million rows, at compatibility levels 160, 120 and 100, the Watermark
+    /// Column predicate, a single date anchor's keyset and the Change-Log Table's composite keyset all
+    /// produced an Index Seek with a datetime2 parameter (a dynamic seek through the implicit
+    /// conversion), with the same logical reads as a datetime one. The binding here decides which rows
+    /// are read, not how.
+    /// </para>
+    /// <para>
+    /// smalldatetime needs nothing of its own. Its values are whole minutes, which SqlClient reads back
+    /// exactly and datetime2 represents exactly, so a value read out of one already compares equal to
+    /// the row it came from; only datetime's 1/300-second grid has a value no other type spells alike.
+    /// </para>
+    /// </remarks>
+    public override DbParameter CreateParameter(string parameterName, object? value, SqlColumnType? columnType = null)
     {
         SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
 
         // SqlClient accepts the bare name and adds the '@' itself, so the name is stored unprefixed.
         var parameter = new SqlParameter(parameterName, value ?? DBNull.Value);
 
-        // Left to infer, SqlClient binds a DateTime as the legacy datetime type, which rounds to a
-        // 1/300-second grid (.000, .003, .007). Every datetime2 value JIM binds (a watermark, a keyset
-        // position, an exported column) would be moved by up to two milliseconds on the way in: a Delta
-        // Import re-reads the row at the top of the last run, or silently skips rows committed inside
-        // the gap. datetime2 carries the full value, and converts implicitly to every other date type
-        // a column might be.
         if (value is DateTime)
-            parameter.SqlDbType = SqlDbType.DateTime2;
+            parameter.SqlDbType = IsLegacyDateTime(columnType) ? SqlDbType.DateTime : SqlDbType.DateTime2;
 
         return parameter;
     }
+
+    /// <summary>
+    /// A DateTime is the one value whose right binding depends on the column; see
+    /// <see cref="CreateParameter"/>.
+    /// </summary>
+    public override bool NeedsColumnTypeToBind(object? value) => value is DateTime;
+
+    private static bool IsLegacyDateTime(SqlColumnType? columnType) =>
+        columnType != null && SqlTypeMapper.Normalise(columnType.TypeName) == LegacyDateTimeTypeName;
 
     public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType)
     {

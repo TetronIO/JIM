@@ -1047,6 +1047,122 @@ public class SqlConnectorExportTests
             Is.EqualTo("DELETE FROM [HR].[EMPLOYEES] WHERE [COMPANY_ID] = @exAnchor0 AND [EMPLOYEE_ID] = @exAnchor1"));
     }
 
+    /// <summary>
+    /// Job history keyed the way HR systems key it, on an employee and the moment an assignment took
+    /// effect in a SQL Server legacy datetime column, with a multi-valued date attribute of its own.
+    /// </summary>
+    private const string LegacyDateTimeAnchorDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "ASSIGNMENTS",
+              "anchorColumns": [ "EMPLOYEE_ID", "EFFECTIVE_FROM" ],
+              "relatedTables": [
+                {
+                  "attributeName": "LeaveDates",
+                  "schema": "HR",
+                  "table": "ASSIGNMENT_LEAVE",
+                  "valueColumn": "LEAVE_DATE",
+                  "joinColumns": [ "EMPLOYEE_ID", "EFFECTIVE_FROM" ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// The composed external ID an import of an assignment starting at 10:00:00.003 records.
+    /// </summary>
+    private const string LegacyDateTimeExternalId = "4711+2025-06-01T10:00:00.0030000Z";
+
+    [Test]
+    public async Task ExportAsync_ACompositeAnchorWithALegacyDateTimePart_KeysTheUpdateInTheColumnsOwnType()
+    {
+        // #1451. Bound as datetime2, a date read out of a legacy datetime column never equals the row it
+        // came from (.003 against the column's exact .0033333), so the UPDATE matches nothing.
+        var provider = LegacyDateTimeProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID+EFFECTIVE_FROM", AttributeDataType.Text, text: LegacyDateTimeExternalId),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, LegacyDateTimeAnchorDocument, [pendingExport]);
+
+        var update = provider.ExecutedStatements.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(update.ColumnTypes[ParameterFor(update, "EFFECTIVE_FROM")]?.TypeName, Is.EqualTo("datetime"),
+                "The key is bound in the type of the column it is compared with.");
+            Assert.That(update.ColumnTypes[ParameterFor(update, "EMPLOYEE_ID")]?.TypeName, Is.EqualTo("int"));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ACompositeAnchorWithALegacyDateTimePart_KeysEveryDeleteInItsTablesOwnType()
+    {
+        // A delete that matches nothing is deliberately a success, so a key bound as the wrong type
+        // would leave the row, and its related rows, in place without a single error.
+        var provider = LegacyDateTimeProvider();
+        var pendingExport = Delete(Anchor("EMPLOYEE_ID+EFFECTIVE_FROM", AttributeDataType.Text, text: LegacyDateTimeExternalId));
+
+        await ExportAsync(provider, LegacyDateTimeAnchorDocument, [pendingExport]);
+
+        var relatedDelete = provider.ExecutedStatements.Single(statement => statement.CommandText.StartsWith("DELETE FROM [HR].[ASSIGNMENT_LEAVE]", StringComparison.Ordinal));
+        var parentDelete = provider.ExecutedStatements.Single(statement => statement.CommandText.StartsWith("DELETE FROM [HR].[ASSIGNMENTS]", StringComparison.Ordinal));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(relatedDelete.ColumnTypes[ParameterFor(relatedDelete, "EFFECTIVE_FROM")]?.TypeName, Is.EqualTo("datetime2"),
+                "A related table's join column is compared in its own type, which need not be its parent's.");
+            Assert.That(parentDelete.ColumnTypes[ParameterFor(parentDelete, "EFFECTIVE_FROM")]?.TypeName, Is.EqualTo("datetime"));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ALegacyDateTimeValueRemovedFromARelatedTable_IsMatchedInTheColumnsOwnType()
+    {
+        var provider = LegacyDateTimeProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID+EFFECTIVE_FROM", AttributeDataType.Text, text: LegacyDateTimeExternalId),
+            Change("LeaveDates", AttributeDataType.DateTime, dateTime: new DateTime(2025, 7, 1, 9, 0, 0, 7, DateTimeKind.Utc),
+                plurality: AttributePlurality.MultiValued, changeType: PendingExportAttributeChangeType.Remove));
+
+        var results = await ExportAsync(provider, LegacyDateTimeAnchorDocument, [pendingExport]);
+
+        var remove = provider.ExecutedStatements.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(remove.ColumnTypes[ParameterFor(remove, "LEAVE_DATE")]?.TypeName, Is.EqualTo("datetime"),
+                "A removal that matches nothing is treated as done, so a value bound as the wrong type would stay in the table for ever.");
+        }
+    }
+
+    /// <summary>
+    /// A stand-in SQL Server whose assignments table starts each assignment in a legacy datetime column,
+    /// while its leave table joins on a datetime2 copy of it and holds the leave dates themselves as
+    /// legacy datetimes.
+    /// </summary>
+    private static FakeSqlProvider LegacyDateTimeProvider()
+    {
+        var provider = new FakeSqlProvider();
+
+        provider.Catalogue.AddTable("HR", "ASSIGNMENTS",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("EFFECTIVE_FROM", "datetime", IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar", MaxLength: 200));
+
+        provider.Catalogue.AddTable("HR", "ASSIGNMENT_LEAVE",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("EFFECTIVE_FROM", "datetime2", IsNullable: false),
+            new FakeCatalogueColumn("LEAVE_DATE", "datetime", IsNullable: false));
+
+        return provider;
+    }
+
     [Test]
     public async Task ExportAsync_ACompositeAnchorWithTheWrongNumberOfParts_FailsThatObjectRatherThanGuessing()
     {
