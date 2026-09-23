@@ -391,6 +391,20 @@ public partial class SyncEngine
                 continue;
             }
 
+            // Unique Value Generation (#242, Phase 2 work package H): a generated mapping evaluates its base
+            // expression exactly as an ordinary expression mapping does, but never resolves a value here (the
+            // engine performs no I/O, plan decision 6) - it stages a marked, unresolved change for the worker
+            // to resolve before the Pending Export is persisted. No-net-change detection cannot decide a
+            // pending generation (the value is unknown), so this bypasses it entirely, unconditionally.
+            if (mapping.Generation != null)
+            {
+                mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
+                var generatedChange = StageGeneratedExportMapping(mapping, exportRule, mvAttributeDictionary, expressionEvaluator, flowErrors);
+                if (generatedChange != null)
+                    changes.Add(generatedChange);
+                continue;
+            }
+
             foreach (var source in mapping.Sources)
             {
                 // Handle expression-based mappings
@@ -403,127 +417,82 @@ public partial class SyncEngine
 
                     // Build expression context with MVO attributes (lazy initialization - only build once)
                     mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
-                    var context = new ExpressionContext(mvAttributeDictionary, null);
 
-                    // Missing Input Behaviour (#1361): an Expression whose input is absent evaluates cleanly and
-                    // produces a structurally broken value that the Connected System is then asked to accept. Only
-                    // Metaverse inputs are considered, because export evaluation runs against the Metaverse Object
-                    // alone; a cs[...] accessor in an export Expression is unsupported rather than an object
-                    // missing a value.
-                    if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
+                    // Missing Input Behaviour (#1361) and the expression's own evaluation and exception mapping
+                    // are shared with a generated mapping's base expression (Unique Value Generation, #242,
+                    // Phase 2 work package H) via EvaluateExportExpressionSource, so both apply identically.
+                    var evaluation = EvaluateExportExpressionSource(mapping, source, mvAttributeDictionary, expressionEvaluator, flowErrors);
+
+                    if (evaluation.Stopped || evaluation.NoValue)
                     {
-                        var missingInputs = ExpressionInputResolver.FindMissingInputs(source.Expression, ExpressionInputSource.Metaverse, mvAttributeDictionary);
-                        if (missingInputs.Count > 0)
+                        // Stopped (FailMapping already recorded its AttributeFlowError) and NoValue
+                        // (ContributeNoValue, or a null expression result - expected when the referenced
+                        // attribute doesn't exist on this MVO) alike stage nothing for this attribute, so the
+                        // Connected System keeps whatever it holds; the difference is whether it is reported.
+                        continue;
+                    }
+
+                    var result = evaluation.Result!;
+                    var change = new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = mapping.TargetConnectedSystemAttribute,
+                        AttributeId = mapping.TargetConnectedSystemAttribute.Id,
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        SyncRuleId = exportRule.Id,
+                        SyncRuleName = exportRule.Name
+                    };
+
+                    // Set the value based on the result type
+                    switch (result)
+                    {
+                        case string strValue:
+                            change.StringValue = strValue;
+                            break;
+                        case int intValue:
+                            change.IntValue = intValue;
+                            break;
+                        case long longValue:
+                            change.LongValue = longValue;
+                            break;
+                        case decimal decimalValue:
+                            change.DecimalValue = decimalValue;
+                            break;
+                        case DateTime dtValue:
+                            change.DateTimeValue = dtValue;
+                            break;
+                        case bool boolValue:
+                            change.BoolValue = boolValue;
+                            break;
+                        case Guid guidValue:
+                            change.GuidValue = guidValue;
+                            break;
+                        case byte[] byteValue:
+                            change.ByteValue = byteValue;
+                            break;
+                        default:
+                            // Fall back to string representation
+                            change.StringValue = result.ToString();
+                            break;
+                    }
+
+                    // No-net-change detection for expression-based mappings
+                    if (canDetectNoNetChange)
+                    {
+                        var cacheKey = (existingCso!.Id, change.AttributeId);
+                        var existingCsoValues = csoAttributeCache![cacheKey];
+
+                        if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
                         {
-                            if (source.MissingInputBehaviour == MissingInputBehaviour.FailObject)
-                                throw new SyncExpressionMissingInputException(source.Expression,
-                                    mapping.TargetConnectedSystemAttribute.Name, missingInputs);
-
-                            if (source.MissingInputBehaviour == MissingInputBehaviour.FailMapping)
-                                flowErrors?.Add(new AttributeFlowError
-                                {
-                                    Kind = AttributeFlowErrorKind.ExpressionMissingInput,
-                                    TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
-                                    Expression = source.Expression,
-                                    MissingInputs = missingInputs
-                                });
-
-                            // ContributeNoValue and FailMapping alike stage nothing for this attribute, so the
-                            // Connected System keeps whatever it holds; the difference is whether it is reported.
+                            Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
+                                change.AttributeId, existingCso.Id);
+                            csoAlreadyCurrentCount++;
+                            noNetChangeSkipped?.Add(change);
                             continue;
                         }
                     }
 
-                    // Only the evaluation itself is guarded. A thrown export expression must be surfaced as
-                    // an errored object, never swallowed and never conflated with a deliberate null result.
-                    // Known failure modes are rethrown as SyncExpressionEvaluationException for the worker to
-                    // record as an ExpressionEvaluationError RPEI; anything else propagates to UnhandledError.
-                    object? result;
-                    try
-                    {
-                        result = expressionEvaluator.Evaluate(source.Expression, context);
-                    }
-                    catch (DynamicExpressoException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-                    catch (ArgumentException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-                    catch (FormatException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-                    catch (OverflowException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-                    catch (InvalidOperationException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-                    catch (ArithmeticException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-                    catch (InvalidCastException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-                    catch (KeyNotFoundException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
-
-                    if (result == null)
-                    {
-                        // Null is expected when the referenced attribute doesn't exist on this MVO
-                        Log.Debug("CreateAttributeValueChanges: Expression '{Expression}' for MVO {MvoId} returned null. " +
-                            "Available attributes: [{Attributes}]",
-                            source.Expression, mvo.Id, string.Join(", ", mvAttributeDictionary.Keys));
-                    }
-
-                    if (result != null)
-                    {
-                        var change = new PendingExportAttributeValueChange
-                        {
-                            Id = Guid.NewGuid(),
-                            Attribute = mapping.TargetConnectedSystemAttribute,
-                            AttributeId = mapping.TargetConnectedSystemAttribute.Id,
-                            ChangeType = PendingExportAttributeChangeType.Update,
-                            SyncRuleId = exportRule.Id,
-                            SyncRuleName = exportRule.Name
-                        };
-
-                        // Set the value based on the result type
-                        switch (result)
-                        {
-                            case string strValue:
-                                change.StringValue = strValue;
-                                break;
-                            case int intValue:
-                                change.IntValue = intValue;
-                                break;
-                            case long longValue:
-                                change.LongValue = longValue;
-                                break;
-                            case decimal decimalValue:
-                                change.DecimalValue = decimalValue;
-                                break;
-                            case DateTime dtValue:
-                                change.DateTimeValue = dtValue;
-                                break;
-                            case bool boolValue:
-                                change.BoolValue = boolValue;
-                                break;
-                            case Guid guidValue:
-                                change.GuidValue = guidValue;
-                                break;
-                            case byte[] byteValue:
-                                change.ByteValue = byteValue;
-                                break;
-                            default:
-                                // Fall back to string representation
-                                change.StringValue = result.ToString();
-                                break;
-                        }
-
-                        // No-net-change detection for expression-based mappings
-                        if (canDetectNoNetChange)
-                        {
-                            var cacheKey = (existingCso!.Id, change.AttributeId);
-                            var existingCsoValues = csoAttributeCache![cacheKey];
-
-                            if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
-                            {
-                                Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
-                                    change.AttributeId, existingCso.Id);
-                                csoAlreadyCurrentCount++;
-                                noNetChangeSkipped?.Add(change);
-                                continue;
-                            }
-                        }
-
-                        changes.Add(change);
-                    }
-
+                    changes.Add(change);
                     continue;
                 }
 
@@ -763,6 +732,198 @@ public partial class SyncEngine
         }
 
         return changes;
+    }
+
+    /// <summary>
+    /// The result of evaluating one export mapping's Expression source (Unique Value Generation, #242, Phase 2
+    /// work package H; #1361 Missing Input Behaviour): a pure collaboration detail shared by
+    /// <see cref="ComputeAttributeValueChanges"/>'s ordinary expression-mapping branch and
+    /// <see cref="StageGeneratedExportMapping"/>'s base-expression evaluation, so both apply the same Missing
+    /// Input Behaviour handling and the same exception mapping, never duplicated.
+    /// </summary>
+    private readonly struct ExportExpressionSourceEvaluation
+    {
+        /// <summary>
+        /// Evaluation did not run: a required input is missing and Missing Input Behaviour is <c>FailMapping</c>
+        /// (an <see cref="AttributeFlowError"/> was appended to the caller's list by this method). Nothing is
+        /// staged for this mapping; whatever the Connected System already holds is untouched.
+        /// </summary>
+        public bool Stopped { get; private init; }
+
+        /// <summary>
+        /// The expression contributed no value: Missing Input Behaviour is <c>ContributeNoValue</c> and a
+        /// required input is missing, or the expression itself evaluated to null.
+        /// </summary>
+        public bool NoValue { get; private init; }
+
+        /// <summary>
+        /// The expression's result, only when neither <see cref="Stopped"/> nor <see cref="NoValue"/> apply.
+        /// </summary>
+        public object? Result { get; private init; }
+
+        public static ExportExpressionSourceEvaluation Stop() => new() { Stopped = true };
+        public static ExportExpressionSourceEvaluation Missing() => new() { NoValue = true };
+        public static ExportExpressionSourceEvaluation Scalar(object result) => new() { Result = result };
+    }
+
+    /// <summary>
+    /// Evaluates one export mapping's Expression source against the Metaverse Object (Unique Value Generation,
+    /// #242, Phase 2 work package H; #1361 Missing Input Behaviour): the shared behaviour between an ordinary
+    /// expression mapping and a generated mapping's base expression. <c>FailObject</c> throws
+    /// <see cref="SyncExpressionMissingInputException"/> for the worker to record; known evaluation failure
+    /// modes are rethrown as <see cref="SyncExpressionEvaluationException"/>; anything else propagates to
+    /// UnhandledError, exactly as the export hot path has always done.
+    /// </summary>
+    private static ExportExpressionSourceEvaluation EvaluateExportExpressionSource(
+        SyncRuleMapping mapping,
+        SyncRuleMappingSource source,
+        Dictionary<string, object?> mvAttributeDictionary,
+        IExpressionEvaluator expressionEvaluator,
+        List<AttributeFlowError>? flowErrors)
+    {
+        // Missing Input Behaviour (#1361): an Expression whose input is absent evaluates cleanly and produces a
+        // structurally broken value that the Connected System is then asked to accept. Only Metaverse inputs are
+        // considered, because export evaluation runs against the Metaverse Object alone; a cs[...] accessor in
+        // an export Expression is unsupported rather than an object missing a value.
+        if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
+        {
+            var missingInputs = ExpressionInputResolver.FindMissingInputs(source.Expression, ExpressionInputSource.Metaverse, mvAttributeDictionary);
+            if (missingInputs.Count > 0)
+            {
+                if (source.MissingInputBehaviour == MissingInputBehaviour.FailObject)
+                    throw new SyncExpressionMissingInputException(source.Expression,
+                        mapping.TargetConnectedSystemAttribute?.Name, missingInputs);
+
+                if (source.MissingInputBehaviour == MissingInputBehaviour.FailMapping)
+                {
+                    flowErrors?.Add(new AttributeFlowError
+                    {
+                        Kind = AttributeFlowErrorKind.ExpressionMissingInput,
+                        TargetAttributeName = mapping.TargetConnectedSystemAttribute!.Name,
+                        Expression = source.Expression,
+                        MissingInputs = missingInputs
+                    });
+                    return ExportExpressionSourceEvaluation.Stop();
+                }
+
+                // ContributeNoValue
+                return ExportExpressionSourceEvaluation.Missing();
+            }
+        }
+
+        // Only the evaluation itself is guarded. A thrown export expression must be surfaced as an errored
+        // object, never swallowed and never conflated with a deliberate null result. Known failure modes are
+        // rethrown as SyncExpressionEvaluationException for the worker to record as an ExpressionEvaluationError
+        // RPEI; anything else propagates to UnhandledError.
+        object? result;
+        try
+        {
+            result = expressionEvaluator.Evaluate(source.Expression!, new ExpressionContext(mvAttributeDictionary, null));
+        }
+        catch (DynamicExpressoException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (ArgumentException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (FormatException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (OverflowException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (InvalidOperationException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (ArithmeticException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (InvalidCastException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+        catch (KeyNotFoundException ex) { throw BuildExportExpressionEvaluationException(mapping, source, ex); }
+
+        if (result == null)
+        {
+            // Null is expected when the referenced attribute doesn't exist on this MVO.
+            Log.Debug("EvaluateExportExpressionSource: Expression '{Expression}' returned null. Available attributes: [{Attributes}]",
+                source.Expression, string.Join(", ", mvAttributeDictionary.Keys));
+            return ExportExpressionSourceEvaluation.Missing();
+        }
+
+        return ExportExpressionSourceEvaluation.Scalar(result);
+    }
+
+    /// <summary>
+    /// Stages a generated export mapping's (Unique Value Generation, #242, Phase 2 work package H) pending
+    /// change: evaluates the base expression exactly as <see cref="EvaluateExportExpressionSource"/> evaluates
+    /// an ordinary one, then produces an unresolved, marked <see cref="PendingExportAttributeValueChange"/>
+    /// (Update, single value, every value field left null) carrying a <see cref="PendingGeneratedExportValue"/>
+    /// for the worker to resolve before the Pending Export is persisted. Returns null only when nothing is
+    /// staged at all: the base expression's Missing Input Behaviour is <c>FailMapping</c> (its
+    /// <see cref="AttributeFlowError"/> was already recorded) - the only outcome with nothing to resolve later,
+    /// since even a missing input otherwise becomes a marked change carrying <c>BaseUnavailable</c> so the
+    /// worker can still reassert a live assignment (FR 10).
+    /// </summary>
+    private static PendingExportAttributeValueChange? StageGeneratedExportMapping(
+        SyncRuleMapping mapping,
+        SyncRule exportRule,
+        Dictionary<string, object?> mvAttributeDictionary,
+        IExpressionEvaluator expressionEvaluator,
+        List<AttributeFlowError>? flowErrors)
+    {
+        var source = mapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
+
+        string? baseValue;
+        bool baseUnavailable;
+
+        if (source == null)
+        {
+            // No base expression: valid for Sequence and Random tokens (SyncRuleMappingGenerationValidator).
+            baseValue = null;
+            baseUnavailable = false;
+        }
+        else
+        {
+            var evaluation = EvaluateExportExpressionSource(mapping, source, mvAttributeDictionary, expressionEvaluator, flowErrors);
+
+            if (evaluation.Stopped)
+            {
+                // FailMapping already recorded its AttributeFlowError; nothing is staged for this attribute at
+                // all, exactly as an ordinary mapping in the same state stages nothing.
+                return null;
+            }
+
+            if (evaluation.NoValue)
+            {
+                // Missing inputs (ContributeNoValue, the default Missing Input Behaviour for a generated
+                // mapping, FR 29) or a null result: wait. The worker resolves this as StickyOnly, which reasserts
+                // whatever the Connected System Object already holds rather than clearing it (FR 10): a
+                // committed generated value must never be recomputed or cleared by its inputs.
+                baseValue = null;
+                baseUnavailable = true;
+            }
+            else if (evaluation.Result is string[])
+            {
+                // A generated value's base must be a single text value: a uniqueness token is appended to
+                // exactly one candidate, so an array or other multi-valued result is a misconfiguration, not
+                // data to select from. Nothing is staged for this attribute this pass.
+                flowErrors?.Add(new AttributeFlowError
+                {
+                    Kind = AttributeFlowErrorKind.GeneratedBaseNotSingleValue,
+                    TargetAttributeName = mapping.TargetConnectedSystemAttribute!.Name,
+                    Expression = source.Expression
+                });
+                return null;
+            }
+            else
+            {
+                baseValue = evaluation.Result!.ToString();
+                baseUnavailable = baseValue == null;
+            }
+        }
+
+        return new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = mapping.TargetConnectedSystemAttribute!,
+            AttributeId = mapping.TargetConnectedSystemAttribute!.Id,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            SyncRuleId = exportRule.Id,
+            SyncRuleName = exportRule.Name,
+            PendingGeneration = new PendingGeneratedExportValue
+            {
+                Mapping = mapping,
+                BaseValue = baseValue,
+                BaseUnavailable = baseUnavailable
+            }
+        };
     }
 
     /// <summary>

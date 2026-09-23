@@ -393,6 +393,24 @@ public partial class ConnectedSystemServer
         // processed just before a crash replaces its target's previous staging rather than duplicating it.
         if (stagedPendingExports.Count > 0)
         {
+            // Unique Value Generation (#242, Phase 2 work package H) integrity guard: this reconciliation path
+            // has no run-scoped Unique Value Generation service to resolve a generated export mapping's marked
+            // change through (unlike the sync worker's own flush), so fail fast rather than silently persist a
+            // change with a blank value. Reaching this in practice would mean a generated export mapping's
+            // Attribute Flow is relevant to a synchronised-deprovisioning reconciliation pass, which this
+            // release does not resolve for; treat it as a signal that this path needs the same resolution the
+            // worker's page flush has (Synchronisation Integrity).
+            var leftoverExportGeneration = stagedPendingExports
+                .SelectMany(pe => pe.AttributeValueChanges)
+                .FirstOrDefault(change => change.PendingGeneration != null);
+            if (leftoverExportGeneration != null)
+            {
+                throw new InvalidOperationException(
+                    $"Pending Export attribute change {leftoverExportGeneration.Id} still has an unresolved generated value marker for " +
+                    $"attribute {leftoverExportGeneration.AttributeId}. Synchronised deprovisioning does not resolve generated export " +
+                    "values; persisting now would silently drop the value.");
+            }
+
             var targetCsoIds = stagedPendingExports
                 .Where(pe => pe.ConnectedSystemObjectId.HasValue)
                 .Select(pe => pe.ConnectedSystemObjectId!.Value)
