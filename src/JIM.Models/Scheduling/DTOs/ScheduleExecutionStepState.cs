@@ -87,6 +87,12 @@ public class ScheduleExecutionStepState
     public string? ErrorMessage { get; set; }
 
     /// <summary>
+    /// Why a Cancelled step did not run (#1768), such as "Not run: an earlier step stopped the Schedule.". Null for a
+    /// step in any other state, and for one that was already running when it was cancelled, since that step did run.
+    /// </summary>
+    public string? CancellationReason { get; set; }
+
+    /// <summary>
     /// The Activity this step produced, if one exists.
     /// </summary>
     public Guid? ActivityId { get; set; }

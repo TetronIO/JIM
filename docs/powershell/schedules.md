@@ -572,7 +572,8 @@ One or more schedule execution objects. Every shape carries `StepDisplay`, the s
 | `Progress.CurrentStepNumber` | The step group being run, 1-based. |
 | `Progress.TotalSteps` | How many step groups the Schedule has. Steps that run concurrently are one group, so a Schedule of six steps where two run together is five steps long. |
 | `Progress.Steps` | One entry per step group, each with its `StepIndex`, `Name`, `Status` (`Pending`, `Running`, `Completed`, `Failed` or `Cancelled`), `IsParallel`, and `TaskStatuses`, every concurrent task's own outcome. |
-| `Steps` | Unchanged: one entry per Schedule Step *row*, naming it and carrying its type, timings, errors and Activity id. A step group that runs three Run Profiles concurrently appears here three times and in `Progress.Steps` once. |
+| `Steps` | Unchanged: one entry per Schedule Step *row*, naming it and carrying its type, timings, errors (`ErrorMessage`) and Activity id. A step group that runs three Run Profiles concurrently appears here three times and in `Progress.Steps` once. |
+| `Steps.CancellationReason` | Why a `Cancelled` step did not run, such as `Not run: an earlier step stopped the Schedule.`; empty for any other step, including one that was already running when it was cancelled. |
 
 #### Examples
 
@@ -591,6 +592,11 @@ $execution.Progress.Steps | Where-Object { $_.IsParallel -and $_.TaskStatuses -c
 
 ```powershell title="Get a specific execution"
 Get-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
+```
+
+```powershell title="See why each step of an execution did not run"
+$execution = Get-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
+$execution.Steps | Where-Object { $_.CancellationReason } | Select-Object StepIndex, Name, CancellationReason
 ```
 
 ```powershell title="List failed executions for a schedule"

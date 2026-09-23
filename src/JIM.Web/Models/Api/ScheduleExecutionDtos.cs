@@ -243,6 +243,12 @@ public class ScheduleExecutionStepDto
     public bool ContinueOnFailure { get; set; }
 
     /// <summary>
+    /// Why a Cancelled step did not run, for example "Not run: an earlier step stopped the Schedule.". Null for a step
+    /// in any other state, and for one that was already running when it was cancelled.
+    /// </summary>
+    public string? CancellationReason { get; set; }
+
+    /// <summary>
     /// Creates a DTO from the application layer's assembled step state.
     /// </summary>
     /// <remarks>
@@ -270,7 +276,8 @@ public class ScheduleExecutionStepDto
             ConnectedSystemName = step.ConnectedSystemName,
             RunProfileId = step.RunProfileId,
             RunProfileName = step.RunProfileName,
-            ContinueOnFailure = step.ContinueOnFailure
+            ContinueOnFailure = step.ContinueOnFailure,
+            CancellationReason = step.CancellationReason
         };
     }
 }

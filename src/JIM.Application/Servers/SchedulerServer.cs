@@ -464,13 +464,15 @@ public class SchedulerServer
 
             foreach (var step in stepsAtIndex)
             {
-                // Parallel steps share a step index, so the Connected System is what tells their Activities apart.
-                // Where an index holds a single step, fall back to whatever is there: steps that are not Run
-                // Profile steps carry no Connected System to match on.
-                var activity = stepActivities?.FirstOrDefault(a => a.ConnectedSystemId == step.ConnectedSystemId)
-                               ?? (stepsAtIndex.Count == 1 ? stepActivities?.FirstOrDefault() : null);
-                var task = stepTasks?.FirstOrDefault(t => t is SynchronisationWorkerTask swt && swt.ConnectedSystemId == step.ConnectedSystemId)
-                           ?? (stepsAtIndex.Count == 1 ? stepTasks?.FirstOrDefault() : null);
+                // Parallel steps share a step index. Each Activity and Worker Task records the step it belongs to
+                // (#1768), which tells them apart even when two parallel steps run against the same Connected System.
+                // Records made before that was recorded carry no step, so those fall back to the Connected System, and
+                // where an index holds a single step, to whatever is there: steps that are not Run Profile steps carry
+                // no Connected System to match on.
+                var activity = stepActivities?.FirstOrDefault(a => a.ScheduleStepId == step.Id)
+                               ?? MatchUnidentified(stepActivities, a => a.ScheduleStepId, a => a.ConnectedSystemId, step, stepsAtIndex.Count);
+                var task = stepTasks?.FirstOrDefault(t => t.ScheduleStepId == step.Id)
+                           ?? MatchUnidentified(stepTasks, t => t.ScheduleStepId, t => (t as SynchronisationWorkerTask)?.ConnectedSystemId, step, stepsAtIndex.Count);
 
                 string? connectedSystemName = null;
                 string? runProfileName = null;
@@ -499,6 +501,11 @@ public class SchedulerServer
                         ? activity.Executed + (activity.TotalActivityTime ?? TimeSpan.Zero)
                         : null,
                     ErrorMessage = activity?.ErrorMessage,
+                    // Only the reasons JIM writes when it cancels a step that had not started. A step cancelled while
+                    // running did run, and its message is whatever progress it last reported.
+                    CancellationReason = activity is { Status: ActivityStatus.Cancelled } && ScheduleStepNotRunReasons.IsNotRunReason(activity.Message)
+                        ? activity.Message
+                        : null,
                     ActivityId = activity?.Id,
                     ActivityStatus = activity?.Status,
                     ContinueOnFailure = step.ContinueOnFailure
@@ -507,6 +514,27 @@ public class SchedulerServer
         }
 
         return detail;
+    }
+
+    /// <summary>
+    /// The fallback match for a step's Activity or Worker Task when none records the step itself: those recorded before
+    /// steps were identified. Matched on the Connected System, or, where the step index holds a single step, taken as
+    /// whatever is there. Only records that identify no step are considered, so one belonging to a sibling is never
+    /// borrowed.
+    /// </summary>
+    private static T? MatchUnidentified<T>(
+        List<T>? candidates,
+        Func<T, Guid?> stepIdOf,
+        Func<T, int?> connectedSystemIdOf,
+        ScheduleStep step,
+        int stepsAtIndex) where T : class
+    {
+        var unidentified = candidates?.Where(c => stepIdOf(c) == null).ToList();
+        if (unidentified == null || unidentified.Count == 0)
+            return null;
+
+        return unidentified.FirstOrDefault(c => connectedSystemIdOf(c) == step.ConnectedSystemId)
+               ?? (stepsAtIndex == 1 ? unidentified[0] : null);
     }
 
     /// <summary>

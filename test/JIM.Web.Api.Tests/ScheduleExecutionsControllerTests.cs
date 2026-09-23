@@ -445,6 +445,57 @@ public class ScheduleExecutionsControllerTests
     }
 
     [Test]
+    public async Task GetByIdAsync_StepCancelledBeforeItRan_IncludesTheReasonAsync()
+    {
+        // Read parity with the portal (#1768): the REST API says why a cancelled step did not run.
+        var id = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
+
+        var execution = new ScheduleExecution
+        {
+            Id = id,
+            ScheduleId = scheduleId,
+            Status = ScheduleExecutionStatus.Failed,
+            TotalSteps = 2,
+            CurrentStepIndex = 0,
+            Schedule = new Schedule
+            {
+                Id = scheduleId,
+                Name = "Test Schedule",
+                Steps = new List<ScheduleStep>
+                {
+                    new() { StepIndex = 0, Name = "Import", StepType = ScheduleStepType.RunProfile },
+                    new() { StepIndex = 1, Name = "Export", StepType = ScheduleStepType.RunProfile }
+                }
+            }
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionWithScheduleAsync(id))
+            .ReturnsAsync(execution);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(scheduleId))
+            .ReturnsAsync(execution.Schedule.Steps);
+        _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(id))
+            .ReturnsAsync(new List<WorkerTask>());
+        _mockActivityRepository.Setup(r => r.GetActivitiesByScheduleExecutionAsync(id))
+            .ReturnsAsync(new List<Activity>
+            {
+                new() { Id = Guid.NewGuid(), Status = ActivityStatus.FailedWithError, ErrorMessage = "Import failed", ScheduleExecutionId = id, ScheduleStepIndex = 0 },
+                new() { Id = Guid.NewGuid(), Status = ActivityStatus.Cancelled, Message = ScheduleStepNotRunReasons.EarlierStepStoppedSchedule, ScheduleExecutionId = id, ScheduleStepIndex = 1 }
+            });
+
+        var result = await _controller.GetByIdAsync(id) as OkObjectResult;
+        var dto = result?.Value as ScheduleExecutionDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.Steps[1].Status, Is.EqualTo("Cancelled"));
+            Assert.That(dto.Steps[1].CancellationReason, Is.EqualTo(ScheduleStepNotRunReasons.EarlierStepStoppedSchedule));
+            Assert.That(dto.Steps[0].CancellationReason, Is.Null);
+        }
+    }
+
+    [Test]
     public async Task GetByIdAsync_ActiveWorkerTask_ShowsProcessingStatusAsync()
     {
         var id = Guid.NewGuid();
