@@ -182,6 +182,31 @@ public class UniqueValueGenerationServerResolveTests
         Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
     }
 
+    [Test]
+    public async Task ResolveAsync_AdoptableValueHeldByAnotherGenerationOnTheSameAttribute_ReturnsAdoptionConflictAsync()
+    {
+        // Two different Synchronisation Rule mappings can target the same Metaverse attribute (plan decision 3):
+        // the adoption conflict check must be scoped by attribute, not by which generation row asked.
+        var repo = new InMemorySyncRepository();
+        var attributeId = UniqueValueTestHelpers.NextAttributeId();
+        var generationA = UniqueValueTestHelpers.Generation();
+        var generationB = UniqueValueTestHelpers.Generation();
+
+        repo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = attributeId,
+            Value = "jsmith", NormalisedValue = "jsmith", State = GeneratedValueAssignmentState.Committed,
+            SyncRuleMappingGenerationId = generationA.Id
+        });
+
+        var server = new UniqueValueGenerationServer(repo);
+        var request = UniqueValueTestHelpers.ImportRequest(generationB, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
+
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
+    }
+
     // ---- Gate order and short-circuit ----
 
     [Test]
@@ -274,6 +299,54 @@ public class UniqueValueGenerationServerResolveTests
             Assert.That(outcomes[0].Value, Is.Not.EqualTo(outcomes[1].Value));
             Assert.That(new[] { outcomes[0].Value, outcomes[1].Value }, Is.EquivalentTo(new[] { "john.smith", "john.smith1" }));
         }
+    }
+
+    // ---- Gate (e): scoped by attribute, not by generation ----
+
+    [Test]
+    public async Task ResolveAsync_TwoGenerationRowsOnTheSameAttribute_CannotIssueTheSameValueAsync()
+    {
+        // Decision 3: two different Synchronisation Rule mappings (so two different SyncRuleMappingGeneration
+        // rows) can target the same attribute. A live assignment from one must still be seen as taken by the
+        // other, or gate (e) scoped by generation instead of attribute would let them collide.
+        var repo = new InMemorySyncRepository();
+        var attributeId = UniqueValueTestHelpers.NextAttributeId();
+        var generationA = UniqueValueTestHelpers.Generation();
+        var generationB = UniqueValueTestHelpers.Generation();
+
+        repo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = attributeId,
+            Value = "joe.bloggs", NormalisedValue = "joe.bloggs", State = GeneratedValueAssignmentState.Committed,
+            SyncRuleMappingGenerationId = generationA.Id
+        });
+
+        var server = new UniqueValueGenerationServer(repo);
+        var request = UniqueValueTestHelpers.ImportRequest(generationB, attributeId, null, baseValue: "joe.bloggs");
+
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs1"),
+            "a live assignment from a DIFFERENT generation row on the SAME attribute must still be treated as taken");
+    }
+
+    [Test]
+    public async Task ResolveAsync_NeverCallsGetGeneratedValueAssignmentsForGenerationAsync()
+    {
+        // A 100k-object run calls ResolveAsync once per object; scanning every assignment a generation has ever
+        // produced on every call does not scale. Gate (e) and the adoption conflict check must use the targeted,
+        // indexed lookup instead.
+        var repo = new InMemorySyncRepository();
+        var (countingRepo, counts) = CountingSyncRepositoryProxy.Create(repo);
+        var server = new UniqueValueGenerationServer(countingRepo);
+        var generation = UniqueValueTestHelpers.Generation();
+
+        var generateRequest = UniqueValueTestHelpers.ImportRequest(generation, UniqueValueTestHelpers.NextAttributeId(), null, baseValue: "joe.bloggs");
+        var adoptRequest = UniqueValueTestHelpers.ImportRequest(generation, UniqueValueTestHelpers.NextAttributeId(), null, baseValue: null, adoptableValue: "jsmith");
+
+        await server.ResolveAsync([generateRequest, adoptRequest], UniqueValueTestHelpers.Options());
+
+        Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForGenerationAsync)), Is.False);
     }
 
     // ---- Exhaustion (FR 11) ----
@@ -572,6 +645,53 @@ public class UniqueValueGenerationServerResolveTests
         var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options(dryRun: true));
 
         Assert.That(outcomes[0].NumericValue, Is.EqualTo(101000), "a dry run seeds its simulated counter from the same rule as a real run");
+    }
+
+    [Test]
+    public async Task ResolveAsync_DryRunWithAnExistingCounter_YieldsTheCountersNextValueNotTheConfiguredStartAsync()
+    {
+        // A real reservation lets the database's GREATEST("NextValue", @floor) supply the counter, but a dry
+        // run never reaches the database: ComputeFloorAsync must read the existing counter itself, or Sync
+        // Preview would show the flow's configured start value instead of the real next number.
+        var repo = new InMemorySyncRepository();
+        var guardedRepo = new ReadOnlySyncRepositoryGuard(repo);
+        var attributeId = UniqueValueTestHelpers.NextAttributeId();
+        repo.SeedGeneratedValueSequence(new GeneratedValueSequence { MetaverseAttributeId = attributeId, NextValue = 5000 });
+
+        var server = new UniqueValueGenerationServer(guardedRepo);
+        var generation = UniqueValueTestHelpers.Generation(tokenKind: GeneratedValueTokenKind.Sequence, sequenceStart: 1);
+        var request = UniqueValueTestHelpers.ImportRequest(generation, attributeId, null, baseValue: null, targetType: AttributeDataType.Number);
+
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options(dryRun: true));
+
+        Assert.That(outcomes[0].NumericValue, Is.EqualTo(5000));
+    }
+
+    [Test]
+    public async Task ResolveAsync_FlowStartHigherThanAQueuedNumber_DiscardsTheRemainderAndDrawsItsOwnFloorAsync()
+    {
+        // The block is keyed by attribute and shared across flows (decision 3), but decision 3 also says the
+        // next number is the higher of the counter and any flow's start: a flow whose start is above what is
+        // left in the queue must not receive a stale, too-low queued number.
+        var repo = new InMemorySyncRepository();
+        var attributeId = UniqueValueTestHelpers.NextAttributeId();
+        var flowA = UniqueValueTestHelpers.Generation(tokenKind: GeneratedValueTokenKind.Sequence, sequenceStart: 100);
+        var flowB = UniqueValueTestHelpers.Generation(tokenKind: GeneratedValueTokenKind.Sequence, sequenceStart: 5000);
+        var server = new UniqueValueGenerationServer(repo);
+        var options = UniqueValueTestHelpers.Options(sequenceBlockSize: 10);
+
+        var requestA = UniqueValueTestHelpers.ImportRequest(flowA, attributeId, null, baseValue: null, targetType: AttributeDataType.Number);
+        var requestB = UniqueValueTestHelpers.ImportRequest(flowB, attributeId, null, baseValue: null, targetType: AttributeDataType.Number);
+
+        var outcomeA = (await server.ResolveAsync([requestA], options))[0];
+        var outcomeB = (await server.ResolveAsync([requestB], options))[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomeA.NumericValue, Is.EqualTo(100));
+            Assert.That(outcomeB.NumericValue, Is.EqualTo(5000),
+                "flow B's start is above the queued remainder (101..109), so those numbers must be discarded as gaps, not issued to it");
+        }
     }
 
     // ---- Helpers ----

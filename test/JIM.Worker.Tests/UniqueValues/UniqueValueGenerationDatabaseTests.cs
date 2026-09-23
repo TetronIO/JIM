@@ -184,6 +184,35 @@ public class UniqueValueGenerationDatabaseTests
         }
     }
 
+    /// <summary>
+    /// The companion direction the mixed-case test above does not cover: a MIXED-CASE candidate (base value not
+    /// already lower) checked against a LOWER-CASE stored value. PostgreSQL's gate queries only lower the stored
+    /// side (matching the expression index); an un-normalised candidate sent as the query parameter would not
+    /// match, silently issuing a case-insensitive duplicate of an existing value.
+    /// </summary>
+    [Test]
+    public async Task ResolveAsync_MixedCaseCandidate_StillCollidesWithALowerCaseSeededValueAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await SeedMvoWithTextValueAsync(estate, "joe.bloggs");
+
+        await using var ctx = NewContext();
+        var repository = NewSyncRepository(ctx);
+        var server = new UniqueValueGenerationServer(repository);
+        var options = new UniqueValueResolveOptions { Reservations = new UniqueValueReservationSet(), ReservationOwnerId = Guid.NewGuid() };
+
+        var request = new GenerationRequest
+        {
+            Mode = GeneratedValueMode.Import, MetaverseAttributeId = estate.TextAttributeId, Generation = estate.TextGeneration,
+            TargetType = AttributeDataType.Text, AttributeName = "Account Name", BaseValue = "Joe.Bloggs"
+        };
+
+        var outcomes = await server.ResolveAsync([request], options);
+
+        Assert.That(outcomes[0].Value, Is.EqualTo("Joe.Bloggs1"),
+            "the mixed-case candidate must still be recognised as colliding with the lower-case seeded value");
+    }
+
     [Test]
     public async Task ResolveAsync_SequenceFirstUseAgainstSeededValues_SeedsFromTheHighestExistingValueAsync()
     {

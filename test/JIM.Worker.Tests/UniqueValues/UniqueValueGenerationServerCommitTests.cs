@@ -150,6 +150,52 @@ public class UniqueValueGenerationServerCommitTests
         }
     }
 
+    /// <summary>
+    /// Work package E fix #2 follow-up: a batch of more than two outcomes, with the loser in the middle, must
+    /// report exactly that one loser and save every other outcome either side of it.
+    /// </summary>
+    [Test]
+    public async Task CommitAssignmentsAsync_ThreeItemBatchWithOneLoserInTheMiddle_ReportsExactlyOneLoserAndSavesTheOtherTwoAsync()
+    {
+        var repo = new InMemorySyncRepository();
+        var attributeId = UniqueValueTestHelpers.NextAttributeId();
+        var generation = UniqueValueTestHelpers.Generation();
+
+        repo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = attributeId,
+            Value = "joe.bloggs1", NormalisedValue = "joe.bloggs1", State = GeneratedValueAssignmentState.Committed,
+            SyncRuleMappingGenerationId = generation.Id
+        });
+
+        var winnerA = new GenerationOutcome(
+            UniqueValueTestHelpers.ImportRequest(generation, attributeId, null, baseValue: "alpha"),
+            GenerationOutcomeKind.Generated, "alpha", null,
+            BuildUnsavedAssignment(generation, attributeId, "alpha"), null);
+        var loser = new GenerationOutcome(
+            UniqueValueTestHelpers.ImportRequest(generation, attributeId, null, baseValue: "joe.bloggs1"),
+            GenerationOutcomeKind.Generated, "joe.bloggs1", null,
+            BuildUnsavedAssignment(generation, attributeId, "joe.bloggs1"), null);
+        var winnerB = new GenerationOutcome(
+            UniqueValueTestHelpers.ImportRequest(generation, attributeId, null, baseValue: "beta"),
+            GenerationOutcomeKind.Generated, "beta", null,
+            BuildUnsavedAssignment(generation, attributeId, "beta"), null);
+
+        var server = new UniqueValueGenerationServer(repo);
+        var losers = await server.CommitAssignmentsAsync([winnerA, loser, winnerB], _ => Guid.NewGuid());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(losers, Has.Count.EqualTo(1));
+            Assert.That(losers[0], Is.SameAs(loser));
+
+            var savedA = await repo.GetGeneratedValueAssignmentAsync(winnerA.Assignment!.MetaverseObjectId!.Value, attributeId);
+            var savedB = await repo.GetGeneratedValueAssignmentAsync(winnerB.Assignment!.MetaverseObjectId!.Value, attributeId);
+            Assert.That(savedA, Is.Not.Null, "the winner before the loser in the batch must still be saved");
+            Assert.That(savedB, Is.Not.Null, "the winner after the loser in the batch must still be saved");
+        }
+    }
+
     [Test]
     public async Task CommitAssignmentsAsync_WithOptions_UpdatesTheRunScopedCacheAsync()
     {

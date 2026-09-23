@@ -268,6 +268,82 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(result, Is.Empty);
     }
 
+    // ---- Gate (e) / adoption gate: GetGeneratedValueAssignmentValuesInUseAsync ----
+
+    [Test]
+    public void GetGeneratedValueAssignmentValuesInUseAsync_NeitherIdGiven_ThrowsArgumentExceptionAsync()
+    {
+        using var ctx = NewContext();
+        var repo = NewSyncRepository(ctx);
+
+        Assert.That(async () => await repo.GetGeneratedValueAssignmentValuesInUseAsync(null, null, ["a"], null), Throws.ArgumentException);
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_EmptyInput_ReturnsEmptyWithoutQueryingAsync()
+    {
+        await using var ctx = NewContext();
+        var repo = NewSyncRepository(ctx);
+
+        var result = await repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, [], null);
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ScopedByAttributeNotByGeneration_FindsAssignmentsFromAnotherGenerationAsync()
+    {
+        // Decision 3: two different generation rows can target the same attribute; the gate must be scoped by
+        // attribute so it sees a live assignment regardless of which generation row produced it.
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        int secondGenerationId;
+
+        await using (var ctx = NewContext())
+        {
+            var secondMapping = new SyncRuleMapping { SyncRuleId = estate.ImportRuleId, TargetMetaverseAttributeId = estate.MvTextAttributeId };
+            ctx.SyncRuleMappings.Add(secondMapping);
+            await ctx.SaveChangesAsync();
+
+            var secondGeneration = new SyncRuleMappingGeneration { SyncRuleMappingId = secondMapping.Id, TokenKind = GeneratedValueTokenKind.OnlyIfTaken };
+            ctx.SyncRuleMappingGenerations.Add(secondGeneration);
+            await ctx.SaveChangesAsync();
+            secondGenerationId = secondGeneration.Id;
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var assignment = ImportAssignment(estate, "joe.bloggs");
+            assignment.SyncRuleMappingGenerationId = secondGenerationId;
+            await NewSyncRepository(ctx).CreateGeneratedValueAssignmentsAsync([assignment]);
+        }
+
+        await using var readCtx = NewContext();
+        var result = await NewSyncRepository(readCtx).GetGeneratedValueAssignmentValuesInUseAsync(estate.MvTextAttributeId, null, ["joe.bloggs"], null);
+
+        Assert.That(result, Is.EquivalentTo(new[] { "joe.bloggs" }),
+            "gate (e) must find a live assignment from a DIFFERENT generation row targeting the same attribute");
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ExcludesTheRequestingObjectAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).CreateGeneratedValueAssignmentsAsync([ImportAssignment(estate, "joe.bloggs")]);
+
+        await using var readCtx = NewContext();
+        var repo = NewSyncRepository(readCtx);
+
+        var excluded = await repo.GetGeneratedValueAssignmentValuesInUseAsync(estate.MvTextAttributeId, null, ["joe.bloggs"], estate.MvoId);
+        var notExcluded = await repo.GetGeneratedValueAssignmentValuesInUseAsync(estate.MvTextAttributeId, null, ["joe.bloggs"], Guid.NewGuid());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(excluded, Is.Empty, "the requesting object's own live assignment must be free for it");
+            Assert.That(notExcluded, Is.EquivalentTo(new[] { "joe.bloggs" }));
+        }
+    }
+
     // ---- Seeding query ----
 
     [Test]
@@ -445,6 +521,68 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(async () => await NewSyncRepository(ctx2).CreateGeneratedValueAssignmentsAsync([colliding]),
             Throws.InstanceOf<GeneratedValueConflictException>(),
             "the losing side of a concurrent create must see GeneratedValueConflictException, not a raw DbUpdateException");
+    }
+
+    /// <summary>
+    /// Work package E fix #2: a failed batch insert must not leave its entities tracked as Added, or the
+    /// worker's per-run context (which lives for the whole page flush) re-attempts the same failed INSERT on
+    /// its next, wholly unrelated <c>SaveChangesAsync</c> and throws again.
+    /// </summary>
+    [Test]
+    public async Task CreateGeneratedValueAssignmentsAsync_BatchConflict_DetachesTheFailedEntitiesSoTheContextRecoversAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var goodMvoId1 = await CreateSecondMvoAsync(estate);
+        var conflictingMvoId = await CreateSecondMvoAsync(estate);
+        var goodMvoId2 = await CreateSecondMvoAsync(estate);
+
+        // A concurrent, already-persisted assignment the batch's middle row will collide with.
+        await using (var seedCtx = NewContext())
+            await NewSyncRepository(seedCtx).CreateGeneratedValueAssignmentsAsync([ImportAssignment(estate, "joe.bloggs")]);
+
+        await using var ctx = NewContext();
+        var repo = NewSyncRepository(ctx);
+
+        var good1 = new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(), MetaverseObjectId = goodMvoId1, MetaverseAttributeId = estate.MvTextAttributeId,
+            Value = "alpha", NormalisedValue = "alpha", State = GeneratedValueAssignmentState.Proposed,
+            SyncRuleMappingGenerationId = estate.ImportGenerationId
+        };
+        var conflicting = new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(), MetaverseObjectId = conflictingMvoId, MetaverseAttributeId = estate.MvTextAttributeId,
+            Value = "JOE.BLOGGS", NormalisedValue = "joe.bloggs", State = GeneratedValueAssignmentState.Proposed,
+            SyncRuleMappingGenerationId = estate.ImportGenerationId
+        };
+        var good2 = new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(), MetaverseObjectId = goodMvoId2, MetaverseAttributeId = estate.MvTextAttributeId,
+            Value = "beta", NormalisedValue = "beta", State = GeneratedValueAssignmentState.Proposed,
+            SyncRuleMappingGenerationId = estate.ImportGenerationId
+        };
+
+        Assert.That(async () => await repo.CreateGeneratedValueAssignmentsAsync([good1, conflicting, good2]),
+            Throws.InstanceOf<GeneratedValueConflictException>());
+
+        var stillAdded = ctx.ChangeTracker.Entries<GeneratedValueAssignment>().Where(e => e.State == EntityState.Added).ToList();
+        Assert.That(stillAdded, Is.Empty, "a failed batch insert must not leave any of its entities tracked as Added");
+
+        // Retried individually: the two good ones succeed, the conflicting one fails again.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(async () => await repo.CreateGeneratedValueAssignmentsAsync([good1]), Throws.Nothing);
+            Assert.That(async () => await repo.CreateGeneratedValueAssignmentsAsync([good2]), Throws.Nothing);
+            Assert.That(async () => await repo.CreateGeneratedValueAssignmentsAsync([conflicting]), Throws.InstanceOf<GeneratedValueConflictException>());
+        }
+
+        // A later, wholly unrelated SaveChangesAsync on the same context must not be poisoned by the earlier
+        // failed insert.
+        var unrelatedMvo = new MetaverseObject { Id = Guid.NewGuid(), Created = DateTime.UtcNow };
+        ctx.MetaverseObjects.Add(unrelatedMvo);
+        ctx.Entry(unrelatedMvo).Property("TypeId").CurrentValue = estate.MvoTypeId;
+        Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing,
+            "a subsequent unrelated SaveChangesAsync on the same context must succeed");
     }
 
     [Test]

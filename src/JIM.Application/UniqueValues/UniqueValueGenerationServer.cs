@@ -302,9 +302,13 @@ public sealed class UniqueValueGenerationServer
 
     private async Task<bool> IsHeldByAnotherLiveAssignmentAsync(GenerationRequest request, string normalisedValue)
     {
-        var assignments = await _repository.GetGeneratedValueAssignmentsForGenerationAsync(request.Generation.Id);
-        return assignments.Any(a =>
-            string.Equals(a.NormalisedValue, normalisedValue, StringComparison.OrdinalIgnoreCase) && !IsSameObject(request, a));
+        var (attributeId, _) = AttributeAndScope(request);
+        var mvAttributeId = request.Mode == GeneratedValueMode.Import ? attributeId : (int?)null;
+        var csAttributeId = request.Mode == GeneratedValueMode.Export ? attributeId : (int?)null;
+        var excludingId = ExcludingObjectId(request);
+
+        var taken = await _repository.GetGeneratedValueAssignmentValuesInUseAsync(mvAttributeId, csAttributeId, [normalisedValue], excludingId);
+        return taken.Contains(normalisedValue);
     }
 
     // ---- Generation rounds ----
@@ -449,7 +453,9 @@ public sealed class UniqueValueGenerationServer
 
         foreach (var group in active.Where(i => !isNumberTarget[i]).GroupBy(i => (AttributeAndScope(requests[i]).AttributeId, ExcludingObjectId(requests[i]))))
         {
-            var values = group.Select(i => candidates[i].Text).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            // Values must arrive already lower-cased: the repository's expression index is on the lower-cased
+            // stored value, and does not lower the query's own array a second time.
+            var values = group.Select(i => candidates[i].Text.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var mode = requests[group.First()].Mode;
             var takenValues = mode == GeneratedValueMode.Import
                 ? await _repository.GetMetaverseAttributeValuesInUseAsync(group.Key.AttributeId, values, group.Key.Item2)
@@ -517,7 +523,7 @@ public sealed class UniqueValueGenerationServer
 
         foreach (var (csAttributeId, indices) in stringByAttribute)
         {
-            var values = indices.Select(i => candidates[i].Text).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var values = indices.Select(i => candidates[i].Text.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var takenValues = await _repository.GetConnectedSystemAttributeValuesInUseAsync(csAttributeId, values, null);
             foreach (var i in indices)
             {
@@ -541,7 +547,10 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// Gate (e): every other object's live assignment for the same generated mapping, batched per generation id.
+    /// Gate (e): every other object's live assignment for the same attribute, batched per (attribute, excluding
+    /// id) over the targeted, indexed <see cref="ISyncRepository.GetGeneratedValueAssignmentValuesInUseAsync"/>
+    /// read; scoped by attribute rather than by which generation row asked, since two different generation rows
+    /// can target the same attribute (decision 3) and must not be able to issue it the same value twice.
     /// </summary>
     private async Task<List<int>> FilterOtherAssignmentsGateAsync(
         List<int> active,
@@ -551,18 +560,18 @@ public sealed class UniqueValueGenerationServer
     {
         var taken = new HashSet<int>();
 
-        foreach (var group in active.GroupBy(i => requests[i].Generation.Id))
+        foreach (var group in active.GroupBy(i => (AttributeAndScope(requests[i]).AttributeId, requests[i].Mode, ExcludingObjectId(requests[i]))))
         {
-            var assignments = await _repository.GetGeneratedValueAssignmentsForGenerationAsync(group.Key);
-            if (assignments.Count == 0)
-                continue;
+            var values = group.Select(i => candidates[i].Text.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var mvAttributeId = group.Key.Mode == GeneratedValueMode.Import ? group.Key.AttributeId : (int?)null;
+            var csAttributeId = group.Key.Mode == GeneratedValueMode.Export ? group.Key.AttributeId : (int?)null;
 
-            var byNormalisedValue = assignments.ToLookup(a => a.NormalisedValue, StringComparer.OrdinalIgnoreCase);
+            var takenValues = await _repository.GetGeneratedValueAssignmentValuesInUseAsync(mvAttributeId, csAttributeId, values, group.Key.Item3);
+
             foreach (var i in group)
             {
-                var request = requests[i];
                 var normalisedValue = candidates[i].Text.ToLowerInvariant();
-                if (!byNormalisedValue[normalisedValue].Any(a => !IsSameObject(request, a)))
+                if (!takenValues.Contains(normalisedValue))
                     continue;
 
                 taken.Add(i);
@@ -653,11 +662,6 @@ public sealed class UniqueValueGenerationServer
 
     private static Guid? ExcludingObjectId(GenerationRequest request) =>
         request.Mode == GeneratedValueMode.Import ? request.MetaverseObjectId : request.ConnectedSystemObjectId;
-
-    private static bool IsSameObject(GenerationRequest request, GeneratedValueAssignment assignment) =>
-        request.Mode == GeneratedValueMode.Import
-            ? assignment.MetaverseObjectId == request.MetaverseObjectId
-            : assignment.ConnectedSystemObjectId == request.ConnectedSystemObjectId;
 
     private static long? TryParseNumeric(GenerationRequest request, string value) =>
         request.TargetType is AttributeDataType.Number or AttributeDataType.LongNumber
