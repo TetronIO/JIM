@@ -1002,6 +1002,221 @@ public class SqlConnectorDeltaImportTests
 
     #endregion
 
+    #region SQL Server legacy datetime columns (#1451)
+
+    /// <summary>
+    /// A change log ordered by when each change happened, in a legacy datetime column, which is how most
+    /// hand-built audit tables record it.
+    /// </summary>
+    private const string DateTimeChangeLogDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "changeLog": {
+                "schema": "HR",
+                "table": "EMPLOYEE_CHANGES",
+                "anchorColumns": [ "EMPLOYEE_ID" ],
+                "sequenceColumn": "CHANGED_AT",
+                "changeTypeColumn": "CHANGE_TYPE",
+                "createValues": [ "I" ],
+                "updateValues": [ "U" ],
+                "deleteValues": [ "D" ]
+              }
+            }
+          ]
+        }
+        """;
+
+    [TestCase(1, TestName = "ImportAsync_ChangeLogModeLegacyDateTimeSequence_TiesOnAFirstTickAcrossPages_AreEachReadOnce")]
+    [TestCase(2, TestName = "ImportAsync_ChangeLogModeLegacyDateTimeSequence_TiesOnASecondTickAcrossPages_AreEachReadOnce")]
+    public async Task ImportAsync_ChangeLogModeLegacyDateTimeSequence_TiesAcrossPages_AreEachReadOnce(int sqlTicks)
+    {
+        // One bulk UPDATE stamps every row it touches with the same GETDATE(), so five changes sharing a
+        // timestamp is the ordinary case, not a contrived one. Two a page puts a boundary inside the
+        // tie. Measured against SQL Server 2022 with a datetime2 parameter: a boundary on the second
+        // tick of a millisecond (.007) skipped the rest of the tie without an error, and one on the first
+        // (.003) re-read the same page for ever.
+        var tie = LegacyDateTime(sqlTicks);
+        var later = FakeSqlServerDateTime.Stored(new DateTime(2025, 6, 1, 10, 0, 1));
+
+        var provider = DateTimeChangeLogProvider(
+            employees: [[1, "Ada"], [2, "Grace"], [3, "Katherine"], [4, "Dorothy"], [5, "Mary"], [6, "Annie"]],
+            changes: [[tie, 1, "U"], [tie, 2, "U"], [tie, 3, "U"], [tie, 4, "U"], [tie, 5, "U"], [later, 6, "U"]]);
+
+        var run = await RunDeltaAsync(provider, DateTimeChangeLogDocument, PersonSystem(), pageSize: 2,
+            Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, TokenFor(new DateTime(2025, 6, 1, 9, 0, 0))!, AttributeDataType.DateTime)));
+
+        Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2, 3, 4, 5, 6 }), "Every change is read, and none of them twice.");
+    }
+
+    [Test]
+    public async Task ImportAsync_ChangeLogModeLegacyDateTimeWatermarkOnAFirstTick_DoesNotReadTheLastRunsChangesAgain()
+    {
+        var stamp = LegacyDateTime(1);
+
+        var provider = DateTimeChangeLogProvider(
+            employees: [[1, "Ada"], [2, "Grace"]],
+            changes: [[stamp, 1, "U"], [stamp, 2, "U"]]);
+
+        // What the last run recorded is exactly what the driver hands back for the column's highest value.
+        var run = await RunDeltaAsync(provider, DateTimeChangeLogDocument, PersonSystem(), pageSize: 10,
+            Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, TokenFor(stamp.ReadValue())!, AttributeDataType.DateTime)));
+
+        Assert.That(run.ImportObjects, Is.Empty,
+            "Nothing has changed since the last run, whose watermark is these changes' own timestamp. Bound as datetime2, .003 compares below the column's exact .0033333 and they are all read again.");
+    }
+
+    [Test]
+    public async Task ImportAsync_ChangeLogModeCompositeAnchorWithALegacyDateTimePart_ReadsEachChangedRowBack()
+    {
+        const string document = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "schema": "HR",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID", "EFFECTIVE_FROM" ],
+                  "changeLog": {
+                    "schema": "HR",
+                    "table": "EMPLOYEE_CHANGES",
+                    "anchorColumns": [ "EMPLOYEE_ID", "EFFECTIVE_FROM" ],
+                    "sequenceColumn": "CHANGE_NUMBER",
+                    "changeTypeColumn": "CHANGE_TYPE",
+                    "createValues": [ "I" ],
+                    "updateValues": [ "U" ],
+                    "deleteValues": [ "D" ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("EFFECTIVE_FROM", "datetime"),
+            new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar"));
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "EFFECTIVE_FROM", "DISPLAY_NAME"],
+            [1, LegacyDateTime(1), "Ada"], [2, LegacyDateTime(2), "Grace"]);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_CHANGES", ["CHANGE_NUMBER", "EMPLOYEE_ID", "EFFECTIVE_FROM", "CHANGE_TYPE"],
+            [1, 1, LegacyDateTime(1), "U"], [2, 2, LegacyDateTime(2), "U"]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("EMPLOYEE_ID", AttributeDataType.Number),
+                    Attribute("EFFECTIVE_FROM", AttributeDataType.DateTime),
+                    Attribute("DISPLAY_NAME", AttributeDataType.Text),
+                    Attribute("EMPLOYEE_ID+EFFECTIVE_FROM", AttributeDataType.Text, isExternalId: true))
+            ]
+        };
+
+        var run = await RunDeltaAsync(provider, document, connectedSystem, pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
+
+        Assert.That(run.ImportObjects.Select(importObject => AttributeOf(importObject, "DISPLAY_NAME").StringValues.Single()), Is.EquivalentTo(new[] { "Ada", "Grace" }),
+            "Each change is read back from the object type's own source by its anchor. Bound as datetime2, the anchor's date never equals the row's, and the updates vanish as though the rows had been deleted.");
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeLegacyDateTimeWatermarkOnAFirstTick_DoesNotReadUnchangedRowsAgain()
+    {
+        var stamp = LegacyDateTime(1);
+
+        var provider = WatermarkProvider([1, "Ada", stamp], [2, "Grace", stamp]);
+        DeclareLegacyDateTimeWatermark(provider);
+
+        var run = await RunWatermarkDeltaAsync(provider, WatermarkDocument, WatermarkSystem(), PersonWatermark(TokenFor(stamp.ReadValue())!));
+
+        Assert.That(run.ImportObjects, Is.Empty, "Neither row has changed since the watermark, which is their own last-modified time.");
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeOverASelectStatementWithALegacyDateTimeColumn_DoesNotReadUnchangedRowsAgain()
+    {
+        const string statement = "SELECT EMPLOYEE_ID, DISPLAY_NAME, LAST_MODIFIED FROM [HR].[EMPLOYEES]";
+        var document = $$"""
+            {
+              "objectTypes": [
+                { "name": "Person", "select": "{{statement}}", "anchorColumns": [ "EMPLOYEE_ID" ], "watermarkColumn": "LAST_MODIFIED" }
+              ]
+            }
+            """;
+
+        var stamp = LegacyDateTime(1);
+
+        var provider = WatermarkProvider([1, "Ada", stamp], [2, "Grace", stamp]);
+
+        // A statement has no catalogue entry, so what its columns are is learned from the statement.
+        provider.Catalogue.AddSelectStatement(statement,
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar"),
+            new FakeCatalogueColumn("LAST_MODIFIED", "datetime"));
+
+        var run = await RunWatermarkDeltaAsync(provider, document, WatermarkSystem(), PersonWatermark(TokenFor(stamp.ReadValue())!));
+
+        Assert.That(run.ImportObjects, Is.Empty);
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeRelatedTableLegacyDateTimeWatermarkOnAFirstTick_DoesNotReadUnchangedParentsAgain()
+    {
+        var stamp = LegacyDateTime(1);
+
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", BeforeTheWatermark], [2, "Grace", BeforeTheWatermark]],
+            phones: [[1, "0100", stamp], [2, "0200", stamp]]);
+
+        provider.Catalogue.AddTable("HR", "EMPLOYEE_PHONES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("PHONE_NUMBER", "nvarchar"),
+            new FakeCatalogueColumn("ROW_CHANGED", "datetime"));
+
+        var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
+            PersonWatermark(TheWatermark, ("PhoneNumbers", TokenFor(stamp.ReadValue())!)));
+
+        Assert.That(run.ImportObjects, Is.Empty, "No phone number has changed since the related table's own watermark.");
+    }
+
+    /// <summary>
+    /// A stand-in SQL Server holding an object type's rows and a change log ordered by a legacy datetime.
+    /// </summary>
+    private static FakeSqlProvider DateTimeChangeLogProvider(object?[][] employees, object?[][] changes)
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEE_CHANGES",
+            new FakeCatalogueColumn("CHANGED_AT", "datetime"),
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("CHANGE_TYPE", "char"));
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "DISPLAY_NAME"], employees);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_CHANGES", ["CHANGED_AT", "EMPLOYEE_ID", "CHANGE_TYPE"], changes);
+        return provider;
+    }
+
+    /// <summary>
+    /// Declares the object type's last-modified column a legacy datetime.
+    /// </summary>
+    private static void DeclareLegacyDateTimeWatermark(FakeSqlProvider provider) =>
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar"),
+            new FakeCatalogueColumn("LAST_MODIFIED", "datetime"));
+
+    /// <summary>
+    /// A value held in a legacy datetime column, a whole number of 1/300-second ticks after 10:00.
+    /// </summary>
+    private static FakeSqlServerDateTime LegacyDateTime(int sqlTicks) =>
+        FakeSqlServerDateTime.Stored(new DateTime(2025, 6, 1, 10, 0, 0).AddTicks((long)Math.Round(sqlTicks * (TimeSpan.TicksPerSecond / 300d))));
+
+    #endregion
+
     #region Test helpers
 
     /// <summary>

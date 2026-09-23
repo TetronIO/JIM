@@ -52,7 +52,23 @@ internal interface ISqlProvider
     /// Creates a bound parameter carrying a value. A null value becomes <see cref="DBNull"/>, which is
     /// how ADO.NET expresses SQL NULL.
     /// </summary>
-    DbParameter CreateParameter(string parameterName, object? value);
+    /// <param name="parameterName">The parameter's bare name, which must be identifier-shaped.</param>
+    /// <param name="value">The value to bind.</param>
+    /// <param name="columnType">
+    /// The declared type of the column the value is compared with or written into, where the caller
+    /// knows it. A dialect that binds some values differently depending on the column they meet (see
+    /// <see cref="NeedsColumnTypeToBind"/>) binds them in the column's own type; every other value, and
+    /// every other dialect, ignores it.
+    /// </param>
+    DbParameter CreateParameter(string parameterName, object? value, SqlColumnType? columnType = null);
+
+    /// <summary>
+    /// Whether this dialect binds a value differently depending on the type of the column it meets, so
+    /// that <see cref="CreateParameter"/> has to be told that column's type to bind it correctly. A
+    /// caller that does not already hold the column's type asks this first, and reads the type only
+    /// where the answer is yes: for almost every value it is no, and a catalogue read would be wasted.
+    /// </summary>
+    bool NeedsColumnTypeToBind(object? value);
 
     #endregion
 

@@ -306,7 +306,7 @@ internal static class SqlTypeMapper
     /// precision removed and internal whitespace collapsed. Oracle reports "TIMESTAMP(6) WITH TIME
     /// ZONE" and "INTERVAL DAY(2) TO SECOND(6)", where the family is all that decides the mapping.
     /// </summary>
-    private static string Normalise(string? typeName)
+    internal static string Normalise(string? typeName)
     {
         if (string.IsNullOrWhiteSpace(typeName))
             return string.Empty;
