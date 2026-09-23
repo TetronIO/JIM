@@ -1009,6 +1009,113 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// The Scheduler's safety net over active Schedule Executions, run once per polling cycle. Normally the Worker drives
+    /// step transitions (TaskingServer.TryAdvanceScheduleExecutionAsync) as each task completes; this catches what it
+    /// cannot:
+    /// <list type="bullet">
+    /// <item>An InProgress execution with nothing Queued or Processing, most likely because the Worker stopped after
+    /// completing a task but before advancing: it is concluded exactly as the Worker would have concluded it.</item>
+    /// <item>A Queued execution left part-way through starting (#1768), most likely because a JIM service stopped
+    /// mid-start. A Queued execution is still starting, and is never advanced or completed here; only once it has been
+    /// Queued for longer than <see cref="StaleStartThreshold"/> are its waiting steps cancelled and the execution
+    /// failed. Only this safety net does that.</item>
+    /// </list>
+    /// </summary>
+    /// <remarks>
+    /// Each execution is handled in isolation: a failure with one is logged and the rest are still recovered.
+    /// </remarks>
+    public async Task RecoverStuckExecutionsAsync()
+    {
+        var activeExecutions = await GetActiveExecutionsAsync();
+        int abandonedStarts = 0, concluded = 0, errors = 0;
+
+        foreach (var execution in activeExecutions)
+        {
+            try
+            {
+                switch (execution.Status)
+                {
+                    case ScheduleExecutionStatus.Queued when DateTime.UtcNow - execution.QueuedAt > StaleStartThreshold:
+                        if (await FailAbandonedStartAsync(execution))
+                            abandonedStarts++;
+                        break;
+
+                    case ScheduleExecutionStatus.InProgress:
+                        if (await ConcludeIfNothingIsRunningAsync(execution))
+                            concluded++;
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                errors++;
+                Log.Error(ex, "RecoverStuckExecutionsAsync: Error recovering execution {ExecutionId} of schedule {ScheduleName}. It will be tried again next cycle.",
+                    execution.Id, execution.ScheduleName);
+            }
+        }
+
+        if (abandonedStarts > 0 || concluded > 0 || errors > 0)
+        {
+            Log.Information("RecoverStuckExecutionsAsync: {ActiveCount} active execution(s): {AbandonedStarts} abandoned start(s) failed, {Concluded} stuck execution(s) concluded, {Errors} error(s).",
+                activeExecutions.Count, abandonedStarts, concluded, errors);
+        }
+    }
+
+    /// <summary>
+    /// Fails an execution that never finished starting: cancels its waiting steps, saying the Schedule could not start,
+    /// then marks it Failed if it is still Queued. The steps are removed first, and a failure to remove them is thrown,
+    /// so the execution is only ever failed once nothing is left waiting; otherwise it stays Queued and is tried again
+    /// next cycle.
+    /// </summary>
+    /// <returns>True if the execution was failed.</returns>
+    private async Task<bool> FailAbandonedStartAsync(ScheduleExecution execution)
+    {
+        Log.Warning("FailAbandonedStartAsync: Execution {ExecutionId} of schedule {ScheduleName} has been Queued since {QueuedAt}, longer than any start takes. Failing it.",
+            execution.Id, execution.ScheduleName, execution.QueuedAt);
+
+        await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id, ScheduleStepNotRunReasons.ScheduleCouldNotStart);
+
+        return await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+            execution,
+            [ScheduleExecutionStatus.Queued],
+            ScheduleExecutionStatus.Failed,
+            "The Schedule did not finish starting, most likely because a JIM service stopped part-way through. No steps ran.");
+    }
+
+    /// <summary>
+    /// Concludes an InProgress execution the Worker has lost track of: one with no Queued or Processing task, but with
+    /// steps still waiting (the Worker stopped before advancing) or no tasks at all (the last step finished but the
+    /// execution was never completed).
+    /// </summary>
+    /// <returns>True if the safety net acted on the execution.</returns>
+    private async Task<bool> ConcludeIfNothingIsRunningAsync(ScheduleExecution execution)
+    {
+        var allTasks = await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(execution.Id);
+        if (allTasks.Any(t => t.Status is WorkerTaskStatus.Queued or WorkerTaskStatus.Processing))
+            return false; // Normal operation: the Worker is handling it.
+
+        var waitingCount = allTasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
+        if (waitingCount > 0)
+        {
+            Log.Warning("ConcludeIfNothingIsRunningAsync: Execution {ExecutionId} for schedule {ScheduleName} has no active tasks but {WaitingCount} waiting tasks. Running safety-net advancement.",
+                execution.Id, execution.ScheduleName, waitingCount);
+        }
+        else if (allTasks.Count == 0)
+        {
+            Log.Warning("ConcludeIfNothingIsRunningAsync: Execution {ExecutionId} for schedule {ScheduleName} has no tasks at all. Running safety-net completion.",
+                execution.Id, execution.ScheduleName);
+        }
+        else
+        {
+            // Only tasks already being cancelled remain; the Worker finishes those.
+            return false;
+        }
+
+        await CheckAndAdvanceExecutionAsync(execution);
+        return true;
+    }
+
+    /// <summary>
     /// Gets all active (in-progress, queued, or paused) schedule executions.
     /// Used by the scheduler to monitor ongoing executions.
     /// </summary>
