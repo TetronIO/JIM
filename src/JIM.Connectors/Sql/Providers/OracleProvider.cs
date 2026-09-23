@@ -81,11 +81,29 @@ internal class OracleProvider : SqlProviderBase
 
     #region Parameters
 
+    /// <summary>
+    /// Binds a value, stating a UTC instant's offset where the column it meets carries one.
+    /// </summary>
     /// <remarks>
-    /// The column's type is not consulted. ODP.NET binds a DateTime as TIMESTAMP, which keeps the
-    /// fraction, and a DATE or a TIMESTAMP of up to seven fractional digits reads back into a DateTime
-    /// exactly, so a value read out of one compares equal to the row it came from. SQL Server's legacy
-    /// datetime, which does not (#1451), has no counterpart here.
+    /// <para>
+    /// ODP.NET binds a DateTime as TIMESTAMP, which keeps the fraction, and a DATE, a TIMESTAMP of up to
+    /// seven fractional digits and a TIMESTAMP WITH LOCAL TIME ZONE all read back into a DateTime that
+    /// compares equal to the row it came from. None of them needs the column's type.
+    /// </para>
+    /// <para>
+    /// <b>TIMESTAMP WITH TIME ZONE does (#1783).</b> A watermark or a page boundary read out of one
+    /// travels between calls as a UTC instant, a DateTime of kind UTC. Bound as a bare TIMESTAMP,
+    /// Oracle converts it in the session's time zone, which <see cref="ConfigureOpenedConnection"/>
+    /// pins to the Database Time Zone, so anywhere but UTC the boundary moves by the zone's offset.
+    /// Measured against Oracle Database Free 23ai, with a change two hours after the watermark: in
+    /// America/New_York the Delta Import skipped it without an error, and in Australia/Sydney it read
+    /// every unchanged row again. Stated with its offset, the instant compares exactly in every zone.
+    /// </para>
+    /// <para>
+    /// Only a value of kind UTC is treated as an instant. A zoneless value compared with an
+    /// offset-carrying column (a TIMESTAMP anchor joined to a TIMESTAMP WITH TIME ZONE column) is left
+    /// to the session's zone, which is exactly how the database compares the two columns itself.
+    /// </para>
     /// </remarks>
     public override DbParameter CreateParameter(string parameterName, object? value, SqlColumnType? columnType = null)
     {
@@ -96,9 +114,23 @@ internal class OracleProvider : SqlProviderBase
         // where a size is meant binds as the value instead, silently and without a compiler complaint.
         // ODP.NET accepts the bare name and matches it against the ':'-prefixed placeholder.
         var parameter = new OracleParameter { ParameterName = parameterName };
+
+        if (value is DateTime { Kind: DateTimeKind.Utc } instant && columnType != null && SqlTypeMapper.CarriesAnOffset(columnType))
+        {
+            parameter.OracleDbType = OracleDbType.TimeStampTZ;
+            parameter.Value = new DateTimeOffset(instant);
+            return parameter;
+        }
+
         parameter.Value = value ?? DBNull.Value;
         return parameter;
     }
+
+    /// <summary>
+    /// A DateTime is the one value whose right binding depends on the column; see
+    /// <see cref="CreateParameter"/>.
+    /// </summary>
+    public override bool NeedsColumnTypeToBind(object? value) => value is DateTime;
 
     public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType)
     {

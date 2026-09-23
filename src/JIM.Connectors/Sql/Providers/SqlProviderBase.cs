@@ -93,8 +93,8 @@ internal abstract class SqlProviderBase : ISqlProvider
     public abstract DbParameter CreateParameter(string parameterName, object? value, SqlColumnType? columnType = null);
 
     /// <summary>
-    /// No by default: a dialect binds a value by the value alone unless its driver genuinely leaves the
-    /// right type to the column, and only Microsoft SQL Server currently does.
+    /// No by default: a dialect binds a value by the value alone unless the right type genuinely depends
+    /// on the column, as a date and time's does in both Microsoft SQL Server and Oracle Database.
     /// </summary>
     public virtual bool NeedsColumnTypeToBind(object? value) => false;
 

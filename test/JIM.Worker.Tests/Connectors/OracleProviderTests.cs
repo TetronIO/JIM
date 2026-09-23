@@ -92,6 +92,67 @@ public class OracleProviderTests
         Assert.That(parameter.OracleDbType, Is.EqualTo(OracleDbType.TimeStamp));
     }
 
+    [TestCase("TIMESTAMP(6) WITH TIME ZONE")]
+    [TestCase("TIMESTAMP WITH TIME ZONE")]
+    [TestCase("timestamp(9)  with time zone")]
+    public void CreateParameter_UtcDateTimeComparedWithATimestampWithTimeZoneColumn_BindsTheInstantWithItsOffset(string typeName)
+    {
+        // #1783. A watermark or a page boundary read out of a TIMESTAMP WITH TIME ZONE column travels
+        // between calls as a UTC instant. Bound as a bare TIMESTAMP, Oracle converts it in the session's
+        // time zone, which JIM pins to the Database Time Zone, so the boundary moves by the zone's offset.
+        // Measured against Oracle Database Free 23ai: in America/New_York a change two hours after the
+        // watermark was skipped without an error, and in Australia/Sydney unchanged rows were read again.
+        var watermark = new DateTime(2025, 6, 1, 12, 0, 0, 123, DateTimeKind.Utc);
+
+        var parameter = (OracleParameter)_provider.CreateParameter("jimWatermark", watermark, new SqlColumnType(typeName));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parameter.OracleDbType, Is.EqualTo(OracleDbType.TimeStampTZ));
+            Assert.That(parameter.Value, Is.EqualTo(new DateTimeOffset(watermark)), "The same instant, stated with its offset so no session zone can move it.");
+            Assert.That(((DateTimeOffset)parameter.Value).Offset, Is.EqualTo(TimeSpan.Zero));
+        }
+    }
+
+    [TestCase("TIMESTAMP(6) WITH LOCAL TIME ZONE")]
+    [TestCase("TIMESTAMP(6)")]
+    [TestCase("DATE")]
+    public void CreateParameter_UtcDateTimeComparedWithAZonelessColumn_StaysATimestamp(string typeName)
+    {
+        // A zoneless column's value travels marked UTC without ever having been converted (it is a
+        // marker, not an instant), and a LOCAL TIME ZONE column is read in the session's zone, so each
+        // compares exactly as a bare TIMESTAMP. Stating an offset would move them instead.
+        var parameter = (OracleParameter)_provider.CreateParameter("jimWatermark", new DateTime(2025, 6, 1, 12, 0, 0, DateTimeKind.Utc), new SqlColumnType(typeName));
+
+        Assert.That(parameter.OracleDbType, Is.EqualTo(OracleDbType.TimeStamp));
+    }
+
+    [Test]
+    public void CreateParameter_UnspecifiedDateTimeComparedWithATimestampWithTimeZoneColumn_IsLeftToTheSessionZone()
+    {
+        // Only a value JIM carried as a UTC instant is one. A zoneless value compared with an
+        // offset-carrying column (a TIMESTAMP anchor joined to a TIMESTAMP WITH TIME ZONE column) is
+        // converted in the session's zone, exactly as the database would convert the column itself.
+        var parameter = (OracleParameter)_provider.CreateParameter("jimJoin0_0", new DateTime(2025, 6, 1, 12, 0, 0, DateTimeKind.Unspecified), new SqlColumnType("TIMESTAMP(6) WITH TIME ZONE"));
+
+        Assert.That(parameter.OracleDbType, Is.EqualTo(OracleDbType.TimeStamp));
+    }
+
+    [Test]
+    public void NeedsColumnTypeToBind_DateTime_IsTrue()
+    {
+        Assert.That(_provider.NeedsColumnTypeToBind(new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc)), Is.True,
+            "A DateTime's right binding depends on whether the column it meets carries an offset.");
+    }
+
+    [TestCase(42)]
+    [TestCase("text")]
+    [TestCase(null)]
+    public void NeedsColumnTypeToBind_AnythingElse_IsFalse(object? value)
+    {
+        Assert.That(_provider.NeedsColumnTypeToBind(value), Is.False);
+    }
+
     #endregion
 
     #region Identifier quoting
