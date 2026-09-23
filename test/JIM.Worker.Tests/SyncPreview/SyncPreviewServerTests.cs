@@ -244,6 +244,44 @@ public class SyncPreviewServerTests
         return (cso, importRule, mvEmployeeIdAttr);
     }
 
+    /// <summary>
+    /// The generated-mapping counterpart of <see cref="ArrangeInboundFixture"/> (Unique Value Generation,
+    /// #242): the same import Synchronisation Rule and target Metaverse attribute, but with a "JIM generates
+    /// it" mapping (a <see cref="SyncRuleMappingGeneration"/> row, default settings: OnlyIfTaken) whose base
+    /// Expression is <paramref name="baseExpression"/> against the seeded unjoined SOURCE_USER CSO.
+    /// </summary>
+    private (ConnectedSystemObject Cso, SyncRule ImportRule, MetaverseAttribute MvEmployeeIdAttr, SyncRuleMapping Mapping)
+        ArrangeGeneratedInboundFixture(string baseExpression = "cs[\"EMPLOYEE_ID\"]")
+    {
+        var importRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Import Synchronisation Rule 1");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var mvEmployeeIdAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+
+        importRule.MetaverseObjectType = mvUserType;
+        importRule.MetaverseObjectTypeId = mvUserType.Id;
+        importRule.AttributeFlowRules.Clear();
+        var mapping = new SyncRuleMapping
+        {
+            Id = 7202,
+            SyncRule = importRule,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Generation = new SyncRuleMappingGeneration()
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 7202,
+            Order = 1,
+            Expression = baseExpression
+        });
+        importRule.AttributeFlowRules.Add(mapping);
+
+        var cso = ConnectedSystemObjectsData[0];
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        return (cso, importRule, mvEmployeeIdAttr, mapping);
+    }
+
     #endregion
 
     #region PreviewSyncForMvoAsync
@@ -1063,6 +1101,109 @@ public class SyncPreviewServerTests
         Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
             c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "EMP-WINNER"), Is.True,
             "The winning contribution is what the next synchronisation would write");
+    }
+
+    #endregion
+
+    #region Unique Value Generation (#242)
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ProjectingObjectWithGeneratedMapping_ShowsCandidateRecordsOutcomeMakesNoWriteAsync()
+    {
+        // Arrange - a generated mapping (OnlyIfTaken, base expression cs["EMPLOYEE_ID"] = "E123") on a
+        // projecting import Synchronisation Rule.
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture();
+        importRule.ProjectToMetaverse = true;
+        var mvoCountBefore = MetaverseObjectsData.Count;
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - the candidate flows exactly like an ordinary Attribute Flow value would
+        Assert.That(result.Inbound, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound!.WouldProject, Is.True);
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "E123"), Is.True,
+                "The generated candidate must be captured as an inbound attribute change, exactly like an ordinary flow");
+            Assert.That(result.HasBlockingErrors, Is.False);
+        }
+
+        // The outcome tree records a GeneratedValueAssigned child of the Projected root, alongside the
+        // Attribute Flow child, naming the attribute and the candidate value.
+        var root = result.OutcomeTree.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Projected));
+            var generatedNode = root.Children.SingleOrDefault(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
+            Assert.That(generatedNode, Is.Not.Null, "the outcome tree must record the generated value");
+            Assert.That(generatedNode!.DetailMessage, Is.EqualTo($"{mvEmployeeIdAttr.Name}: E123"));
+        }
+
+        // Zero side effects: a preview never writes an assignment or joins/creates anything. The guard
+        // (ReadOnlySyncRepositoryGuard) would throw PreviewWriteAttemptedException if the resolve path ever
+        // reached for one (CreateGeneratedValueAssignmentsAsync is never called here at all, since
+        // CommitAssignmentsAsync is not); this asserts the observable consequence, that nothing changed.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObject, Is.Null, "a preview must not join the CSO");
+            Assert.That(cso.MetaverseObjectId, Is.Null);
+            Assert.That(MetaverseObjectsData, Has.Count.EqualTo(mvoCountBefore));
+            Assert.That(PendingExportsData, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Nothing is reserved or written by a dry-run resolve (plan "The service": DryRun releases whatever it
+    /// claims before <c>ResolveAsync</c> returns), so a second, independent preview of the same object sees
+    /// the identical free candidate rather than a collision-suffixed one.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_CalledTwiceInARow_ShowsTheSameCandidateBothTimesAsync()
+    {
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture();
+        importRule.ProjectToMetaverse = true;
+
+        var first = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+        var second = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        var firstValue = first.Inbound!.AttributeFlowChanges.Single(c => c.AttributeId == mvEmployeeIdAttr.Id).Value;
+        var secondValue = second.Inbound!.AttributeFlowChanges.Single(c => c.AttributeId == mvEmployeeIdAttr.Id).Value;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstValue, Is.EqualTo("E123"));
+            Assert.That(secondValue, Is.EqualTo(firstValue), "nothing was reserved or written by the first preview");
+        }
+    }
+
+    /// <summary>
+    /// The flow-errors ternary fix: a generated mapping whose base Expression returns more than one value
+    /// (here, <c>Split</c> producing a <c>string[]</c>, the same array shape
+    /// <see cref="AttributeFlowErrorKind.GeneratedBaseNotSingleValue"/> exists for) gets its own accurate
+    /// message rather than the generic "a required input has no value" one, which described a different
+    /// failure entirely.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_GeneratedBaseExpressionReturnsMultipleValues_ReportsItsOwnMessageAsync()
+    {
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture(baseExpression: "Split(\"a,b\", \",\")");
+        importRule.ProjectToMetaverse = true;
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        Assert.That(result.Errors, Has.Count.EqualTo(1));
+        var error = result.Errors[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(error.Code, Is.EqualTo(SyncPreviewMessageCode.ExpressionEvaluationError));
+            Assert.That(error.AttributeName, Is.EqualTo(mvEmployeeIdAttr.Name));
+            Assert.That(error.Detail, Does.Contain("returned more than one value"));
+            Assert.That(error.Detail, Does.Contain("must produce a single text value, not an array"));
+            Assert.That(error.Detail, Does.Not.Contain("a required input has no value"),
+                "this failure is not a missing-input failure, and must not read like one");
+        }
     }
 
     #endregion

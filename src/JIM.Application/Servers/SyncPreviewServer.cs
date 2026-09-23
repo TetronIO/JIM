@@ -5,6 +5,7 @@ using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Servers.Preview;
 using JIM.Application.Services;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -453,8 +454,25 @@ public class SyncPreviewServer
 
         var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
         var cache = await previewServer.BuildExportEvaluationCacheAsync();
+
+        // Unique Value Generation (#242): one service and one dry-run options instance per preview, over the
+        // SAME read-only guarded repository every other preview read uses, so an orchestration bug that
+        // reaches for a write (there is exactly one: CommitAssignmentsAsync, which this preview never calls)
+        // fails loudly rather than persisting. DryRun means ResolveAsync also never reserves a sequence block;
+        // SequenceAllocator simulates it locally instead. A fresh UniqueValueReservationSet and a random owner
+        // id keep this preview's candidates from ever being seen as claimed by a real run's reservations, and
+        // ResolveAsync releases whatever it claims under that id before it returns, so nothing outlives the call.
+        var uniqueValueGenerationServer = new UniqueValueGenerationServer(guardedRepository);
+        var uniqueValueResolveOptions = new UniqueValueResolveOptions
+        {
+            DryRun = true,
+            Reservations = new UniqueValueReservationSet(),
+            ReservationOwnerId = Guid.NewGuid()
+        };
+
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
-            BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext);
+            BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext,
+            uniqueValueGenerationServer, uniqueValueResolveOptions);
     }
 
     /// <summary>
@@ -640,20 +658,40 @@ public class SyncPreviewServer
 
         foreach (var (rule, flowError) in flowErrors)
         {
+            // The ternary here used to collapse ExpressionMissingInput and GeneratedBaseNotSingleValue (Unique
+            // Value Generation, #242) into the same "a required input has no value" message; the latter is a
+            // different failure (the base Expression evaluated fine but returned more than one value), so it
+            // gets its own accurate message, matching the worker's own wording (DescribeAttributeFlowError).
+            var (code, detail) = flowError.Kind switch
+            {
+                AttributeFlowErrorKind.MultiValuedToSingleValued => (
+                    SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
+                    $"The multi-valued source attribute '{flowError.SourceAttributeName}' holds {flowError.ValueCount} values but flows to the single-valued attribute '{flowError.TargetAttributeName}'; the attribute would not flow."),
+                AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
+                    SyncPreviewMessageCode.ExpressionEvaluationError,
+                    $"The base Expression for the generated value targeting '{flowError.TargetAttributeName}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{flowError.Expression}'."),
+                _ => (
+                    SyncPreviewMessageCode.ExpressionEvaluationError,
+                    $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")
+            };
+
             result.Errors.Add(new SyncPreviewMessage
             {
-                Code = flowError.Kind == AttributeFlowErrorKind.MultiValuedToSingleValued
-                    ? SyncPreviewMessageCode.MultiValuedToSingleValuedFlow
-                    : SyncPreviewMessageCode.ExpressionEvaluationError,
-                Detail = flowError.Kind == AttributeFlowErrorKind.MultiValuedToSingleValued
-                    ? $"The multi-valued source attribute '{flowError.SourceAttributeName}' holds {flowError.ValueCount} values but flows to the single-valued attribute '{flowError.TargetAttributeName}'; the attribute would not flow."
-                    : $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.",
+                Code = code,
+                Detail = detail,
                 SyncRuleId = rule.Id,
                 SyncRuleName = rule.Name,
                 ConnectedSystemId = connectedSystemId,
                 AttributeName = flowError.TargetAttributeName
             });
         }
+
+        // Unique Value Generation (#242): resolve this object's pending generated values the way the worker
+        // does (SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync), but read-only. Must run before the
+        // flows are captured immediately below, since ApplyGeneratedValue stages its result the same way an
+        // ordinary Attribute Flow writer does (mirrors the worker's own "before Count actual attribute
+        // changes" ordering).
+        var generatedValueOutcomes = await ResolvePendingGeneratedValuesForPreviewAsync(workingMvo, context);
 
         // Capture the flows before applying them, exactly as the real processor snapshots its change lists.
         foreach (var addition in workingMvo.PendingAttributeValueAdditions)
@@ -705,6 +743,22 @@ public class SyncPreviewServer
                 root.Children.Add(attributeFlowChild);
             }
 
+            // Unique Value Generation (#242): a GeneratedValueAssigned/GeneratedValueAdopted child per
+            // resolved attribute, mirroring exactly where the worker records them: a child of the root
+            // (alongside, not nested inside, the Attribute Flow child), never gated to a tracking level,
+            // since a generated value is as much an audit signal in a preview as it is in a real run.
+            foreach (var (outcomeType, attributeName, value) in generatedValueOutcomes)
+            {
+                root.Children.Add(new SyncOutcomeNode
+                {
+                    OutcomeType = outcomeType,
+                    TargetEntityId = root.TargetEntityId,
+                    TargetEntityDescription = root.TargetEntityDescription,
+                    DetailMessage = $"{attributeName}: {value}",
+                    Ordinal = root.Children.Count
+                });
+            }
+
             // The outbound outcomes nest under the Attribute Flow child where there is one, because what
             // is exported is caused by what flowed in. Fidelity (PRD requirement 9, the paired test)
             // mirrors what a real run RECORDS rather than what its comments intend, so this line follows
@@ -719,6 +773,103 @@ public class SyncPreviewServer
         Log.Debug("PreviewCsoCoreAsync: Previewed CSO {CsoId} in system {SystemId}: {FlowCount} inbound flow(s), {EntryCount} outbound decision(s), {ErrorCount} error(s), {WarningCount} warning(s).",
             cso.Id, connectedSystemId, flowCount, outbound.Entries.Count, result.Errors.Count, result.Warnings.Count);
         return result;
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242): resolves <paramref name="workingMvo"/>'s pending generated values
+    /// (recorded by <see cref="ISyncEngine.FlowInboundAttributes"/>'s inbound pass, just like a real run) into
+    /// candidate values, applies each one through <see cref="ISyncEngine.ApplyGeneratedValue"/> so it appears
+    /// in the preview's Attribute Flow changes exactly as a real value would, and always clears
+    /// <see cref="MetaverseObject.PendingGeneratedValues"/>, mirroring the worker's own
+    /// <c>SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync</c>.
+    /// <para>
+    /// Two simplifications versus the worker, both because a preview evaluates one Connected System's inbound
+    /// chain in isolation and has no per-run cache of every export mapping across every Connected System to
+    /// draw on: it never computes adopt-before-generate's participating targets
+    /// (<see cref="GenerationRequest.AdoptableValue"/> is always null here, so a generated mapping never shows
+    /// an existing value being adopted in a preview), and it never populates
+    /// <see cref="GenerationRequest.ConnectorSpaceAttributeIds"/>, so the connector space gate never runs. The
+    /// value shown is therefore always the next locally-free candidate, which is exactly what the preview's
+    /// own honesty note in the portal says.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// One (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c> result, for the
+    /// caller to record as a <c>GeneratedValueAssigned</c>/<c>GeneratedValueAdopted</c> node in the speculative
+    /// outcome tree; empty when nothing was generated or adopted.
+    /// </returns>
+    private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesForPreviewAsync(
+        MetaverseObject workingMvo, CsoPreviewContext context)
+    {
+        var pending = workingMvo.PendingGeneratedValues.ToList();
+        if (pending.Count == 0)
+            return [];
+
+        var forOutcomeTree = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, string, string)>();
+        try
+        {
+            var requests = pending.Select(p => new GenerationRequest
+            {
+                Mode = GeneratedValueMode.Import,
+                MetaverseObjectId = workingMvo.Id == Guid.Empty ? null : workingMvo.Id,
+                MetaverseAttributeId = p.AttributeId,
+                Generation = p.Mapping.Generation!,
+                TargetType = p.Mapping.TargetMetaverseAttribute!.Type,
+                AttributeName = p.Mapping.TargetMetaverseAttribute!.Name,
+                BaseValue = p.BaseValue,
+                StickyOnly = p.BaseUnavailable
+            }).ToList();
+
+            var outcomes = await context.UniqueValueGenerationServer.ResolveAsync(requests, context.UniqueValueResolveOptions);
+
+            for (var i = 0; i < outcomes.Count; i++)
+            {
+                var outcome = outcomes[i];
+                var request = pending[i];
+
+                switch (outcome.Kind)
+                {
+                    case GenerationOutcomeKind.Generated:
+                        _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
+                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
+                        break;
+
+                    case GenerationOutcomeKind.Adopted:
+                        // Never actually reached here today (AdoptableValue is always null above); kept so
+                        // this switch stays correct if adoption is added to the preview later, rather than
+                        // silently dropping an Adopted outcome the service could someday return.
+                        _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
+                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
+                        break;
+
+                    case GenerationOutcomeKind.Sticky:
+                        // Re-apply unconditionally, exactly as the worker does: a no-op when the object
+                        // already holds the value, and what carries a genuinely recovered value back onto
+                        // the object when something else cleared it this pass.
+                        _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
+                        break;
+
+                    case GenerationOutcomeKind.Waiting:
+                    case GenerationOutcomeKind.Exhausted:
+                    case GenerationOutcomeKind.NoBaseValue:
+                    case GenerationOutcomeKind.WidthExceeded:
+                    case GenerationOutcomeKind.AdoptionConflict:
+                        // Nothing to apply. Unlike the worker, a preview raises no error surface for these: the
+                        // reservation and other-live-assignment gates are time-sensitive, so a preview cannot
+                        // promise a real run would hit the same one, and staying silent about a future outcome
+                        // it cannot guarantee is more honest than reporting one it might not reproduce.
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            // Always clear, on every exit path, exactly like the worker's own resolution method: a leftover
+            // request here would carry into whatever else touches this working copy next.
+            workingMvo.PendingGeneratedValues.Clear();
+        }
+
+        return forOutcomeTree;
     }
 
     /// <summary>
@@ -1042,7 +1193,9 @@ public class SyncPreviewServer
         ExportEvaluationCache Cache,
         Dictionary<int, string> SystemNames,
         ISyncRepository GuardedRepository,
-        AttributePriorityContext PriorityContext)
+        AttributePriorityContext PriorityContext,
+        UniqueValueGenerationServer UniqueValueGenerationServer,
+        UniqueValueResolveOptions UniqueValueResolveOptions)
     {
         /// <summary>
         /// Per-page prefetch of every Connected System Object joined to this page's joined Metaverse

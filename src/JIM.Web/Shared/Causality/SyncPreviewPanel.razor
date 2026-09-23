@@ -1,3 +1,4 @@
+@using JIM.Models.Activities
 @using JIM.Models.Transactional
 @using JIM.Web.Causality
 
@@ -36,6 +37,12 @@
             </div>
         </MudAlert>
     }
+    @if (HasGeneratedValue)
+    {
+        <MudAlert Severity="Severity.Info" data-testid="jim-sync-preview-generated-value-notice">
+            Generated values shown are the next free value now. The synchronisation checks again when it runs, so it can issue a different one if another object takes this one first.
+        </MudAlert>
+    }
     <CausalityPanel PreviewResult="PreviewResult" Context="Context" OnClose="OnClose" />
 </div>
 
@@ -58,4 +65,15 @@
     /// </summary>
     [Parameter]
     public EventCallback OnClose { get; set; }
+
+    /// <summary>
+    /// Whether the previewed tree carries a Unique Value Generation candidate (#242), which is when the
+    /// honesty note above the causality panel applies: the next free value the preview shows is only free
+    /// now, and the real synchronisation could issue a different one.
+    /// </summary>
+    private bool HasGeneratedValue => ContainsGeneratedValueAssigned(PreviewResult.OutcomeTree);
+
+    private static bool ContainsGeneratedValueAssigned(IReadOnlyList<SyncOutcomeNode> nodes) =>
+        nodes.Any(node => node.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
+            || ContainsGeneratedValueAssigned(node.Children));
 }

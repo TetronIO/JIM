@@ -678,6 +678,23 @@ public class ActivityRunProfileExecutionStatsDto
     /// Number of CSOs provisioned to target Connected Systems during sync.
     /// </summary>
     public int TotalProvisioned { get; set; }
+
+    /// <summary>
+    /// Number of values JIM generated for a target attribute during sync (Unique Value Generation, #242).
+    /// </summary>
+    public int TotalGeneratedValues { get; set; }
+
+    /// <summary>
+    /// Number of existing values adopted rather than generated, because a participating target already
+    /// held one for the object and attribute (Unique Value Generation, #242).
+    /// </summary>
+    public int TotalGeneratedValuesAdopted { get; set; }
+
+    /// <summary>
+    /// Number of Run Profile Execution Items whose error type is a Unique Value Generation failure
+    /// (exhausted, width exceeded, or an unresolved collision).
+    /// </summary>
+    public int TotalGeneratedValueFailures { get; set; }
     #endregion
 
     #region Export Stats
@@ -776,6 +793,9 @@ public class ActivityRunProfileExecutionStatsDto
             TotalOutOfScopeRetainJoin = stats.TotalOutOfScopeRetainJoin,
             TotalDriftCorrections = stats.TotalDriftCorrections,
             TotalProvisioned = stats.TotalProvisioned,
+            TotalGeneratedValues = stats.TotalGeneratedValues,
+            TotalGeneratedValuesAdopted = stats.TotalGeneratedValuesAdopted,
+            TotalGeneratedValueFailures = stats.TotalGeneratedValueFailures,
 
             // Export
             TotalExported = stats.TotalExported,
