@@ -1182,7 +1182,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to set attribute priority order: {Message}", ex.Message);
+            // The message can name a Synchronisation Rule, which is administrator-supplied text.
+            _logger.LogWarning(ex, "Failed to set attribute priority order: {Message}", LogSanitiser.Sanitise(ex.Message));
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
