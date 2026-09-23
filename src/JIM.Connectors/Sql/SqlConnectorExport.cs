@@ -309,7 +309,7 @@ internal sealed class SqlConnectorExport
                 $"Object Type '{plan.Name}' inserted a row, but the database returned no value for its anchor column '{anchorColumn}'. " +
                 "Nothing would identify the new object, so the write is being rolled back; check that the column is backed by an identity, a sequence or a default.");
 
-        var anchor = new[] { new SqlExportColumnValue(anchorColumn, AnchorParameterName(0), generatedKey) };
+        var anchor = new[] { new SqlExportColumnValue(anchorColumn, AnchorParameterName(0), generatedKey, plan.ParentColumns.Require(anchorColumn)) };
         return (ComposeExternalId(anchorTypes, anchor), anchor);
     }
 
@@ -373,7 +373,7 @@ internal sealed class SqlConnectorExport
 
         foreach (var relatedTable in plan.Configuration.RelatedTables)
         {
-            var joinValues = BuildJoinValues(relatedTable, anchor);
+            var joinValues = BuildJoinValues(relatedTable, plan.RequireRelatedTableColumns(relatedTable.AttributeName), anchor);
             var delete = new SqlDeleteCommand
             {
                 SchemaName = relatedTable.SchemaName,
@@ -427,7 +427,7 @@ internal sealed class SqlConnectorExport
         {
             var relatedTable = plan.RequireRelatedTable(change.Attribute.Name);
             var relatedColumns = plan.RequireRelatedTableColumns(change.Attribute.Name);
-            var statement = BuildRelatedTableStatement(relatedTable, relatedColumns, BuildJoinValues(relatedTable, anchor), change);
+            var statement = BuildRelatedTableStatement(relatedTable, relatedColumns, BuildJoinValues(relatedTable, relatedColumns, anchor), change);
             var rowsAffected = await ExecuteAsync(statement.CommandText, statement.BoundValues, transaction, cancellationToken);
 
             // A removal that matched nothing has already reached the end state it asked for, so it is
@@ -456,11 +456,6 @@ internal sealed class SqlConnectorExport
         IReadOnlyList<SqlExportColumnValue> joinValues,
         PendingExportAttributeValueChange change)
     {
-        // Refused before anything is generated, so a related table that no longer has the columns the
-        // Object Types document names never produces a statement the database has to reject.
-        foreach (var joinColumnName in joinValues.Select(joinValue => joinValue.ColumnName))
-            relatedColumns.Require(joinColumnName);
-
         if (change.ChangeType == PendingExportAttributeChangeType.RemoveAll)
         {
             var clear = new SqlDeleteCommand
@@ -473,8 +468,9 @@ internal sealed class SqlConnectorExport
             return new SqlExportStatement(_provider.BuildDeleteCommandText(clear), joinValues, AddsARow: false);
         }
 
+        var valueColumnType = relatedColumns.Require(relatedTable.ValueColumn);
         var value = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0),
-            ToDatabaseValue(change, relatedTable.ValueColumn, relatedColumns.Require(relatedTable.ValueColumn)));
+            ToDatabaseValue(change, relatedTable.ValueColumn, valueColumnType), valueColumnType);
         List<SqlExportColumnValue> boundValues = [.. joinValues, value];
 
         if (change.ChangeType == PendingExportAttributeChangeType.Remove)
@@ -503,14 +499,23 @@ internal sealed class SqlConnectorExport
     /// The parent's anchor, expressed as the related table's own join columns. Every anchor column is
     /// joined: correlating on fewer would write, or remove, another object's values without any error.
     /// </summary>
-    private static List<SqlExportColumnValue> BuildJoinValues(SqlRelatedTableConfiguration relatedTable, IReadOnlyList<SqlExportColumnValue> anchor)
+    /// <remarks>
+    /// Each value takes the related table's own column type, which need not be its parent's, and a join
+    /// column the related table no longer has is refused here, before anything is generated, rather than
+    /// in a statement the database has to reject.
+    /// </remarks>
+    private static List<SqlExportColumnValue> BuildJoinValues(
+        SqlRelatedTableConfiguration relatedTable,
+        SqlExportColumnTypes relatedColumns,
+        IReadOnlyList<SqlExportColumnValue> anchor)
     {
         if (relatedTable.JoinColumns.Count != anchor.Count)
             throw new SqlSchemaConfigurationException(
                 $"Attribute '{relatedTable.AttributeName}' joins its related table on {relatedTable.JoinColumns.Count} column(s), but the Object Type's anchor has {anchor.Count}. " +
                 "Joining on part of an anchor would act on another object's values, so the join must name one column per anchor column, in the same order.");
 
-        return [.. relatedTable.JoinColumns.Select((joinColumn, index) => anchor[index] with { ColumnName = joinColumn })];
+        return [.. relatedTable.JoinColumns.Select((joinColumn, index) =>
+            anchor[index] with { ColumnName = joinColumn, ColumnType = relatedColumns.Require(joinColumn) })];
     }
 
     #endregion
@@ -532,11 +537,10 @@ internal sealed class SqlConnectorExport
                 $"The Connected System Object has no external ID value, so JIM cannot tell which row of Object Type '{plan.Name}' to change.");
 
         if (plan.AnchorColumns.Count == 1)
-            return
-            [
-                new SqlExportColumnValue(plan.AnchorColumns[0], AnchorParameterName(0),
-                    ToDatabaseValue(externalId, plan.AnchorColumns[0], plan.ParentColumns.Require(plan.AnchorColumns[0])))
-            ];
+        {
+            var anchorColumnType = plan.ParentColumns.Require(plan.AnchorColumns[0]);
+            return [new SqlExportColumnValue(plan.AnchorColumns[0], AnchorParameterName(0), ToDatabaseValue(externalId, plan.AnchorColumns[0], anchorColumnType), anchorColumnType)];
+        }
 
         // A composite anchor reaches JIM as the single Text attribute discovery composes for it, because
         // a Connected System Object is identified by one value. Its parts are separated exactly as the
@@ -549,8 +553,11 @@ internal sealed class SqlConnectorExport
                 "Import the schema and run a Full Import so that external IDs are composed from the anchor the Object Types document now declares.");
 
         return [.. plan.AnchorColumns.Select((anchorColumn, index) =>
-            new SqlExportColumnValue(anchorColumn, AnchorParameterName(index),
-                ResolveAnchorPart(connectedSystemObject, anchorColumn, plan.ParentColumns.Require(anchorColumn), parts[index])))];
+        {
+            var anchorColumnType = plan.ParentColumns.Require(anchorColumn);
+            return new SqlExportColumnValue(anchorColumn, AnchorParameterName(index),
+                ResolveAnchorPart(connectedSystemObject, anchorColumn, anchorColumnType, parts[index]), anchorColumnType);
+        })];
     }
 
     /// <summary>
@@ -704,7 +711,8 @@ internal sealed class SqlConnectorExport
             return new SqlExportColumnValue(
                 change.Attribute.Name,
                 ValueParameterName(index),
-                IsRemoval(change) ? null : ToDatabaseValue(change, change.Attribute.Name, columnType));
+                IsRemoval(change) ? null : ToDatabaseValue(change, change.Attribute.Name, columnType),
+                columnType);
         })];
     }
 
@@ -975,7 +983,7 @@ internal sealed class SqlConnectorExport
         command.Transaction = transaction;
 
         foreach (var boundValue in boundValues)
-            command.Parameters.Add(_provider.CreateParameter(boundValue.ParameterName, boundValue.Value));
+            command.Parameters.Add(_provider.CreateParameter(boundValue.ParameterName, boundValue.Value, boundValue.ColumnType));
 
         return command;
     }
@@ -1058,10 +1066,19 @@ internal sealed class SqlConnectorExport
 }
 
 /// <summary>
-/// A column an export writes or keys on, the parameter carrying its value, and the value itself. The
-/// three travel together so a generated statement can never drift out of step with what is bound to it.
+/// A column an export writes or keys on, the parameter carrying its value, the value itself, and the
+/// column's declared type. They travel together so a generated statement can never drift out of step
+/// with what is bound to it.
 /// </summary>
-internal sealed record SqlExportColumnValue(string ColumnName, string ParameterName, object? Value);
+/// <param name="ColumnName">The column written, or compared with.</param>
+/// <param name="ParameterName">The parameter carrying the value.</param>
+/// <param name="Value">The value, already converted to what the driver binds.</param>
+/// <param name="ColumnType">
+/// The column's type as the catalogue reports it, which is what the value is bound as wherever the
+/// dialect's binding depends on the column (#1451): a key or a removed value matched as any other type
+/// can fail to match the very row it was read from.
+/// </param>
+internal sealed record SqlExportColumnValue(string ColumnName, string ParameterName, object? Value, SqlColumnType ColumnType);
 
 /// <summary>
 /// One statement an export runs, with everything bound to it.

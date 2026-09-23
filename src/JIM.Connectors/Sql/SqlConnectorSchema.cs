@@ -482,27 +482,14 @@ internal sealed class SqlConnectorSchema
     /// </remarks>
     private async Task<List<SqlDiscoveredColumn>> ReadStatementColumnsAsync(SqlObjectTypeConfiguration configuration)
     {
-        using var command = _provider.CreateCommand(_connection, configuration.SelectStatement!);
-
-        DbDataReader reader;
         try
         {
-            reader = await command.ExecuteReaderAsync(CommandBehavior.SchemaOnly);
+            return await SqlCatalogueReader.ReadStatementColumnsAsync(_provider, _connection, configuration.SelectStatement!);
         }
         catch (DbException ex)
         {
             throw new SqlSchemaConfigurationException(
                 $"Object Type '{configuration.Name}' has a 'select' the database would not accept: {ex.Message}", ex);
-        }
-
-        using (reader)
-        {
-            return reader.GetColumnSchema()
-                .Select(column => new SqlDiscoveredColumn(
-                    column.ColumnName,
-                    new SqlColumnType(column.DataTypeName ?? string.Empty, column.NumericPrecision, column.NumericScale, column.ColumnSize),
-                    column.AllowDBNull ?? true))
-                .ToList();
         }
     }
 

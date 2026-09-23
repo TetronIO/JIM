@@ -90,7 +90,13 @@ internal abstract class SqlProviderBase : ISqlProvider
         return ParameterPrefix + parameterName;
     }
 
-    public abstract DbParameter CreateParameter(string parameterName, object? value);
+    public abstract DbParameter CreateParameter(string parameterName, object? value, SqlColumnType? columnType = null);
+
+    /// <summary>
+    /// No by default: a dialect binds a value by the value alone unless its driver genuinely leaves the
+    /// right type to the column, and only Microsoft SQL Server currently does.
+    /// </summary>
+    public virtual bool NeedsColumnTypeToBind(object? value) => false;
 
     public abstract DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType);
 

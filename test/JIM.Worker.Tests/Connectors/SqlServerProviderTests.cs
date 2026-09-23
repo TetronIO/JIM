@@ -97,6 +97,78 @@ public class SqlServerProviderTests
     }
 
     [Test]
+    public void CreateParameter_DateTimeComparedWithALegacyDateTimeColumn_BindsAsDateTime()
+    {
+        // #1451. Against a legacy datetime column, a datetime2 parameter makes SQL Server convert the
+        // column instead, and from compatibility level 130 that conversion is exact: .003 becomes
+        // .0033333. SqlClient reads the same value back rounded to the millisecond (.003), so a value JIM
+        // read out of the column never equals the row it came from. Measured against SQL Server 2022, a
+        // change-log keyset boundary on .007 skipped every later row sharing its timestamp, and one on
+        // .003 never advanced. Bound as the column's own type, the value compares exactly.
+        var value = new DateTime(2025, 6, 1, 10, 0, 0, 7, DateTimeKind.Unspecified);
+
+        var parameter = (SqlParameter)_provider.CreateParameter("jimAnchor0", value, new SqlColumnType("datetime"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parameter.SqlDbType, Is.EqualTo(SqlDbType.DateTime));
+            Assert.That(parameter.Value, Is.EqualTo(value));
+        }
+    }
+
+    [TestCase("DATETIME")]
+    [TestCase(" datetime ")]
+    public void CreateParameter_LegacyDateTimeColumnTypeSpelledDifferently_StillBindsAsDateTime(string typeName)
+    {
+        var parameter = (SqlParameter)_provider.CreateParameter("jimWatermark", new DateTime(2025, 6, 1, 10, 0, 0, 3), new SqlColumnType(typeName));
+
+        Assert.That(parameter.SqlDbType, Is.EqualTo(SqlDbType.DateTime), "A catalogue's spelling of a type is not the type.");
+    }
+
+    [TestCase("datetime2")]
+    [TestCase("date")]
+    [TestCase("smalldatetime")]
+    [TestCase("nvarchar")]
+    public void CreateParameter_DateTimeComparedWithAnyOtherColumnType_StaysDateTime2(string typeName)
+    {
+        // smalldatetime is deliberately not special-cased: its values are whole minutes, which SqlClient
+        // reads back exactly and datetime2 represents exactly, so there is nothing to disagree about.
+        var parameter = (SqlParameter)_provider.CreateParameter("jimWatermark", new DateTime(2025, 6, 1, 10, 0, 0, 3), new SqlColumnType(typeName));
+
+        Assert.That(parameter.SqlDbType, Is.EqualTo(SqlDbType.DateTime2));
+    }
+
+    [Test]
+    public void CreateParameter_NonDateValueComparedWithALegacyDateTimeColumn_IsLeftToTheDriver()
+    {
+        var parameter = (SqlParameter)_provider.CreateParameter("value", "2025-06-01", new SqlColumnType("datetime"));
+
+        Assert.That(parameter.SqlDbType, Is.EqualTo(SqlDbType.NVarChar), "Only a DateTime has more than one type it could be bound as.");
+    }
+
+    [Test]
+    public void NeedsColumnTypeToBind_DateTime_IsTrue()
+    {
+        Assert.That(_provider.NeedsColumnTypeToBind(new DateTime(2025, 6, 1)), Is.True);
+    }
+
+    [TestCase(42)]
+    [TestCase("text")]
+    [TestCase(null)]
+    public void NeedsColumnTypeToBind_AnythingElse_IsFalse(object? value)
+    {
+        Assert.That(_provider.NeedsColumnTypeToBind(value), Is.False,
+            "Only a value whose binding the column decides is worth a catalogue read to find out what the column is.");
+    }
+
+    [Test]
+    public void NeedsColumnTypeToBind_DateTimeOffset_IsFalse()
+    {
+        Assert.That(_provider.NeedsColumnTypeToBind(new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero)), Is.False,
+            "An offset-carrying value binds as datetimeoffset whatever the column is.");
+    }
+
+    [Test]
     public void CreateParameter_DateTimeOffsetValue_BindsAsDateTimeOffset()
     {
         var parameter = (SqlParameter)_provider.CreateParameter("watermark", new DateTimeOffset(2026, 7, 15, 12, 0, 0, 124, TimeSpan.FromHours(10)));

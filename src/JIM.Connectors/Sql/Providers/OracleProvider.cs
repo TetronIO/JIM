@@ -81,7 +81,13 @@ internal class OracleProvider : SqlProviderBase
 
     #region Parameters
 
-    public override DbParameter CreateParameter(string parameterName, object? value)
+    /// <remarks>
+    /// The column's type is not consulted. ODP.NET binds a DateTime as TIMESTAMP, which keeps the
+    /// fraction, and a DATE or a TIMESTAMP of up to seven fractional digits reads back into a DateTime
+    /// exactly, so a value read out of one compares equal to the row it came from. SQL Server's legacy
+    /// datetime, which does not (#1451), has no counterpart here.
+    /// </remarks>
+    public override DbParameter CreateParameter(string parameterName, object? value, SqlColumnType? columnType = null)
     {
         SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
 
