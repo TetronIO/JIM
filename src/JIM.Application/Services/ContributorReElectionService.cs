@@ -3,6 +3,7 @@
 
 using JIM.Application.Interfaces;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -46,13 +47,22 @@ public static class ContributorReElectionService
     /// called with <paramref name="mvo"/>, after every survivor has flowed, when a re-elected survivor's own
     /// mapping is a generated one and left a marker on <see cref="MetaverseObject.PendingGeneratedValues"/>
     /// rather than a resolved value (plan decision 6). A caller running inside a synchronisation (the worker's
-    /// re-election paths) supplies a resolver that generates the value inline through its own run-scoped
-    /// Unique Value Generation context, with outcomes and errors, before returning; the default (null, every
-    /// other caller: Synchronisation Rule deletion recall, Synchronised Deprovisioning, Sync Preview) clears
-    /// the marker and logs instead, because none of those callers hold a run-scoped reservation set to resolve
+    /// re-election paths, and Sync Preview's own dry-run resolver, work package J) supplies a resolver that
+    /// generates the value inline through its own run-scoped Unique Value Generation context, with outcomes
+    /// and errors, returning one (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c>
+    /// result for this method to hand back to ITS OWN caller (see the return value below); the default (null,
+    /// every other caller: Synchronisation Rule deletion recall, Synchronised Deprovisioning) clears the
+    /// marker and logs instead, because none of those callers hold a run-scoped reservation set to resolve
     /// it through, and the generating Connected System's own next synchronisation will see its mapping as the
     /// winning contributor and generate the value then.</param>
-    public static async Task ReElectSurvivingContributorsAsync(
+    /// <returns>
+    /// One (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c> result
+    /// <paramref name="resolvePendingGeneratedValues"/> returned (work package J), for the caller to record as
+    /// a <c>GeneratedValueAssigned</c>/<c>GeneratedValueAdopted</c> child outcome once it has built its own
+    /// root outcome; empty whenever nothing was re-elected, no generated mapping was involved, or no resolver
+    /// was supplied.
+    /// </returns>
+    public static async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ReElectSurvivingContributorsAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> recalledValues,
         ContributorRecallScope scope,
@@ -62,10 +72,10 @@ public static class ContributorReElectionService
         Func<ConnectedSystemObject, SyncRule, bool> isCsoInScopeForImportRule,
         IReadOnlyList<ConnectedSystemObjectType>? objectTypes,
         IExpressionEvaluator expressionEvaluator,
-        Func<MetaverseObject, Task>? resolvePendingGeneratedValues = null)
+        Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null)
     {
         if (mvo.Type == null)
-            return;
+            return [];
 
         var objectTypeId = mvo.Type.Id;
         var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
@@ -79,7 +89,7 @@ public static class ContributorReElectionService
                 .Any(c => c.SyncRule != null && scope.IsEligibleContributorRule(c.SyncRule)))
             .ToList();
         if (reElectableAttributeIds.Count == 0)
-            return;
+            return [];
 
         // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
         // page loads hydrate the Metaverse Object with Type and AttributeValues only, so on PostgreSQL that
@@ -157,23 +167,21 @@ public static class ContributorReElectionService
         if (mvo.PendingGeneratedValues.Count > 0)
         {
             if (resolvePendingGeneratedValues != null)
-            {
-                await resolvePendingGeneratedValues(mvo);
-            }
-            else
-            {
-                foreach (var pending in mvo.PendingGeneratedValues)
-                {
-                    Log.Information(
-                        "ReElectSurvivingContributorsAsync: a re-elected generated mapping for attribute {AttributeId} on " +
-                        "Metaverse Object {MetaverseObjectId} was left unresolved (no run-scoped Unique Value Generation " +
-                        "context here); Connected System {ContributedBySystemId}'s next synchronisation will generate the value.",
-                        pending.AttributeId, mvo.Id, pending.ContributedBySystemId);
-                }
+                return await resolvePendingGeneratedValues(mvo);
 
-                mvo.PendingGeneratedValues.Clear();
+            foreach (var pending in mvo.PendingGeneratedValues)
+            {
+                Log.Information(
+                    "ReElectSurvivingContributorsAsync: a re-elected generated mapping for attribute {AttributeId} on " +
+                    "Metaverse Object {MetaverseObjectId} was left unresolved (no run-scoped Unique Value Generation " +
+                    "context here); Connected System {ContributedBySystemId}'s next synchronisation will generate the value.",
+                    pending.AttributeId, mvo.Id, pending.ContributedBySystemId);
             }
+
+            mvo.PendingGeneratedValues.Clear();
         }
+
+        return [];
     }
 
     /// <summary>
