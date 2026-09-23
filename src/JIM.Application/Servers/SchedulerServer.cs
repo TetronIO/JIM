@@ -779,7 +779,7 @@ public class SchedulerServer
                 await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
 
                 // Clean up remaining WaitingForPreviousStep tasks
-                var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id);
+                var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id, ScheduleStepNotRunReasons.EarlierStepStoppedSchedule);
                 if (deletedCount > 0)
                 {
                     Log.Information("CheckAndAdvanceExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",

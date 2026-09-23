@@ -107,11 +107,14 @@ public interface ITaskingRepository
     public Task<int> TransitionStepToQueuedAsync(Guid scheduleExecutionId, int stepIndex);
 
     /// <summary>
-    /// Deletes all WaitingForPreviousStep tasks for a schedule execution and fails their associated activities.
-    /// Called when a step fails and ContinueOnFailure is false, or when an execution is cancelled.
-    /// Returns the number of tasks deleted.
+    /// Deletes all WaitingForPreviousStep tasks for a schedule execution and cancels their associated activities,
+    /// recording <paramref name="reason"/> as each activity's message so the step says why it did not run. Called
+    /// when a step that is set to stop the Schedule fails, when a Schedule cannot finish starting, and when an
+    /// execution is cancelled while it is starting. Returns the number of tasks deleted.
     /// </summary>
-    public Task<int> DeleteWaitingTasksForExecutionAsync(Guid scheduleExecutionId);
+    /// <param name="scheduleExecutionId">The execution whose waiting tasks are to be removed.</param>
+    /// <param name="reason">Why the steps did not run; one of <c>ScheduleStepNotRunReasons</c>.</param>
+    public Task<int> DeleteWaitingTasksForExecutionAsync(Guid scheduleExecutionId, string reason);
 
     /// <summary>
     /// Gets the minimum ScheduleStepIndex among remaining WaitingForPreviousStep tasks

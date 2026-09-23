@@ -4,6 +4,7 @@
 using JIM.Data.Repositories;
 using JIM.Models.Scheduling;
 using JIM.Models.Scheduling.DTOs;
+using JIM.Models.Tasking;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
@@ -458,6 +459,168 @@ public class SchedulingRepository : ISchedulingRepository
     {
         Repository.Database.ScheduleExecutions.Update(execution);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryStartScheduleExecutionAsync(ScheduleExecution execution, int firstStepIndex)
+    {
+        var executionId = execution.Id;
+        var startedAt = DateTime.UtcNow;
+
+        var started = await ReleaseStepGroupAsync(executionId, firstStepIndex, () => Repository.Database.ScheduleExecutions
+            .Where(e => e.Id == executionId && e.Status == ScheduleExecutionStatus.Queued)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.Status, ScheduleExecutionStatus.InProgress)
+                .SetProperty(e => e.CurrentStepIndex, firstStepIndex)
+                .SetProperty(e => e.StartedAt, startedAt)));
+
+        if (started)
+        {
+            ApplyCommittedValues(execution, e =>
+            {
+                e.Status = ScheduleExecutionStatus.InProgress;
+                e.CurrentStepIndex = firstStepIndex;
+                e.StartedAt = startedAt;
+            }, nameof(ScheduleExecution.Status), nameof(ScheduleExecution.CurrentStepIndex), nameof(ScheduleExecution.StartedAt));
+        }
+
+        return started;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryAdvanceScheduleExecutionAsync(ScheduleExecution execution, int nextStepIndex)
+    {
+        var executionId = execution.Id;
+
+        // Advancing only ever moves forwards. The Worker and the Scheduler's safety net can reach the same decision
+        // for the same execution at the same moment; this makes the second of them a no-op rather than a second
+        // release, and stops a caller acting on a stale reading from moving the execution backwards.
+        var advanced = await ReleaseStepGroupAsync(executionId, nextStepIndex, () => Repository.Database.ScheduleExecutions
+            .Where(e => e.Id == executionId && e.Status == ScheduleExecutionStatus.InProgress && e.CurrentStepIndex < nextStepIndex)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.CurrentStepIndex, nextStepIndex)));
+
+        if (advanced)
+            ApplyCommittedValues(execution, e => e.CurrentStepIndex = nextStepIndex, nameof(ScheduleExecution.CurrentStepIndex));
+
+        return advanced;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryFinishScheduleExecutionAsync(
+        ScheduleExecution execution,
+        IReadOnlyCollection<ScheduleExecutionStatus> fromStatuses,
+        ScheduleExecutionStatus finalStatus,
+        string? errorMessage)
+    {
+        var executionId = execution.Id;
+        var allowedStatuses = fromStatuses.ToList();
+        var completedAt = DateTime.UtcNow;
+
+        // One conditional statement: whichever of two competing callers (a step finishing, an administrator
+        // cancelling, the safety net) reaches the row first decides how the execution ended, and the other finds its
+        // condition no longer true and changes nothing.
+        var updated = await Repository.Database.ScheduleExecutions
+            .Where(e => e.Id == executionId && allowedStatuses.Contains(e.Status))
+            .ExecuteUpdateAsync(s =>
+            {
+                s.SetProperty(e => e.Status, finalStatus);
+                s.SetProperty(e => e.CompletedAt, completedAt);
+                if (errorMessage != null)
+                    s.SetProperty(e => e.ErrorMessage, errorMessage);
+            });
+
+        if (updated == 0)
+            return false;
+
+        var changedProperties = errorMessage != null
+            ? new[] { nameof(ScheduleExecution.Status), nameof(ScheduleExecution.CompletedAt), nameof(ScheduleExecution.ErrorMessage) }
+            : new[] { nameof(ScheduleExecution.Status), nameof(ScheduleExecution.CompletedAt) };
+
+        ApplyCommittedValues(execution, e =>
+        {
+            e.Status = finalStatus;
+            e.CompletedAt = completedAt;
+            if (errorMessage != null)
+                e.ErrorMessage = errorMessage;
+        }, changedProperties);
+
+        return true;
+    }
+
+    /// <summary>
+    /// The shared core of starting and advancing an execution: runs the caller's conditional update of the execution
+    /// row, and only if it matched, moves the step group's waiting Worker Tasks to Queued, both inside one
+    /// transaction. Reuses an ambient transaction where there is one (Npgsql does not nest them) and commits only a
+    /// transaction it began itself.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately two small set-based statements rather than a transaction around the whole start. A rolled-back
+    /// transaction does not roll back the change tracker, and the Scheduler reuses one context for its whole polling
+    /// cycle (the same Schedule is saved again afterwards to advance its next run time), so a wide transaction that
+    /// rolled back could leave tracked inserts behind to fail every later save on that context (#1765). Set-based
+    /// statements add nothing to the tracker to go stale.
+    /// </remarks>
+    /// <returns>True if the execution row matched and the group was released; false if nothing changed.</returns>
+    private async Task<bool> ReleaseStepGroupAsync(Guid executionId, int stepIndex, Func<Task<int>> updateExecutionAsync)
+    {
+        var database = Repository.Database.Database;
+        var ownsTransaction = database.CurrentTransaction == null;
+        await using var transaction = ownsTransaction ? await database.BeginTransactionAsync() : null;
+
+        // No match means the execution is no longer in the state the caller saw. Nothing has been written, so an
+        // owned transaction simply rolls back when it is disposed.
+        if (await updateExecutionAsync() == 0)
+            return false;
+
+        await Repository.Database.WorkerTasks
+            .Where(t => t.ScheduleExecutionId == executionId
+                        && t.ScheduleStepIndex == stepIndex
+                        && t.Status == WorkerTaskStatus.WaitingForPreviousStep)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, WorkerTaskStatus.Queued));
+
+        if (ownsTransaction)
+            await transaction!.CommitAsync();
+
+        return true;
+    }
+
+    /// <summary>
+    /// Brings an execution in memory into line with a set-based update that has just been written, which bypassed the
+    /// change tracker. Applies the new values to the caller's instance and to whichever instance this context tracks
+    /// for the same row, and accepts them as that tracked instance's original values, so the tracker sees the row as
+    /// unchanged. Without that last step a later save on the same context (the Scheduler saving a Schedule's next run
+    /// time, say) would detect the difference and write these values back over whatever has happened to the row since,
+    /// such as the Worker completing the execution.
+    /// </summary>
+    private void ApplyCommittedValues(ScheduleExecution execution, Action<ScheduleExecution> apply, params string[] propertyNames)
+    {
+        apply(execution);
+
+        // Reading the tracker must not trigger DetectChanges: on a long-lived context that can attach unrelated
+        // untracked graphs (see "Tracker surgery must not trigger DetectChanges" in src/CLAUDE.md).
+        var changeTracker = Repository.Database.ChangeTracker;
+        var autoDetectChanges = changeTracker.AutoDetectChangesEnabled;
+        changeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entry = Repository.Database.ScheduleExecutions.Local.FindEntry(execution.Id);
+            if (entry == null)
+                return;
+
+            if (!ReferenceEquals(entry.Entity, execution))
+                apply(entry.Entity);
+
+            foreach (var propertyName in propertyNames)
+            {
+                var property = entry.Property(propertyName);
+                property.OriginalValue = property.CurrentValue;
+                property.IsModified = false;
+            }
+        }
+        finally
+        {
+            changeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------------

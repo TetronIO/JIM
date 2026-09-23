@@ -375,9 +375,9 @@ public class TaskingRepository : ITaskingRepository
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, WorkerTaskStatus.Queued));
     }
 
-    public async Task<int> DeleteWaitingTasksForExecutionAsync(Guid scheduleExecutionId)
+    public async Task<int> DeleteWaitingTasksForExecutionAsync(Guid scheduleExecutionId, string reason)
     {
-        // Fail the activities for all waiting tasks before deleting them
+        // Cancel the activities for all waiting tasks before deleting them, recording why each step did not run.
         var waitingTasks = await Repository.Database.WorkerTasks
             .Include(st => st.Activity)
             .AsTracking()
@@ -391,7 +391,7 @@ public class TaskingRepository : ITaskingRepository
             {
                 task.Activity.Status = Models.Activities.ActivityStatus.Cancelled;
                 task.Activity.TotalActivityTime = DateTime.UtcNow - task.Activity.Created;
-                task.Activity.Message = "Cancelled: previous step failed or execution was cancelled.";
+                task.Activity.Message = reason;
             }
         }
 
@@ -403,6 +403,12 @@ public class TaskingRepository : ITaskingRepository
             .Where(st => st.ScheduleExecutionId == scheduleExecutionId
                          && st.Status == WorkerTaskStatus.WaitingForPreviousStep)
             .ExecuteDeleteAsync();
+
+        // The raw delete bypassed the tracker, so the tasks loaded above are still tracked as if their rows existed.
+        // Detach them, or a later save on this context (the Scheduler reuses one for its whole polling cycle) could act
+        // on a row that is gone. Their Activities remain, and stay tracked.
+        foreach (var task in waitingTasks)
+            Repository.Database.Entry(task).State = EntityState.Detached;
 
         return deletedCount;
     }

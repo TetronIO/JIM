@@ -614,7 +614,7 @@ namespace JIM.Application.Servers
                         await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
 
                         // Clean up all remaining WaitingForPreviousStep tasks
-                        var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(scheduleExecutionId);
+                        var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(scheduleExecutionId, ScheduleStepNotRunReasons.EarlierStepStoppedSchedule);
                         if (deletedCount > 0)
                         {
                             Log.Information("TryAdvanceScheduleExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",

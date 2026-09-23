@@ -188,7 +188,7 @@ public class TaskingServerStepAdvancementTests
             });
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionWithScheduleAsync(executionId))
             .ReturnsAsync(execution);
-        _mockTaskingRepository.Setup(r => r.DeleteWaitingTasksForExecutionAsync(executionId))
+        _mockTaskingRepository.Setup(r => r.DeleteWaitingTasksForExecutionAsync(executionId, It.IsAny<string>()))
             .ReturnsAsync(3);
 
         // Act
@@ -202,7 +202,7 @@ public class TaskingServerStepAdvancementTests
                 e.ErrorMessage != null)),
             Times.Once);
         _mockTaskingRepository.Verify(
-            r => r.DeleteWaitingTasksForExecutionAsync(executionId),
+            r => r.DeleteWaitingTasksForExecutionAsync(executionId, It.IsAny<string>()),
             Times.Once);
     }
 

@@ -125,6 +125,54 @@ public interface ISchedulingRepository
 
     Task UpdateScheduleExecutionAsync(ScheduleExecution execution);
 
+    /// <summary>
+    /// Finishes starting a Schedule Execution (#1768): switches it from Queued to InProgress, sets its current step to
+    /// <paramref name="firstStepIndex"/> and its start time, and releases that step group's waiting Worker Tasks to
+    /// the queue, all as one atomic operation. It only takes effect while the execution is still Queued, so a
+    /// cancellation made while the Schedule was starting is never overwritten and nothing is released after it.
+    /// </summary>
+    /// <remarks>
+    /// Written as set-based updates, which bypass the change tracker, so on success the passed instance is brought
+    /// into line with the new database state and, where the context tracks it, left unchanged in the tracker; a later
+    /// save on the same context therefore cannot write stale values back over it.
+    /// </remarks>
+    /// <param name="execution">The execution to start.</param>
+    /// <param name="firstStepIndex">The step index of the first step group that has Worker Tasks waiting to run.</param>
+    /// <returns>True if the execution was started; false if it was no longer Queued and nothing changed.</returns>
+    Task<bool> TryStartScheduleExecutionAsync(ScheduleExecution execution, int firstStepIndex);
+
+    /// <summary>
+    /// Moves an InProgress Schedule Execution on to <paramref name="nextStepIndex"/> and releases that step group's
+    /// waiting Worker Tasks to the queue, as one atomic operation (#1768). It only takes effect while the execution is
+    /// still InProgress and has not already reached that step, so a cancelled or finished execution stays as it is,
+    /// and two callers racing to advance the same execution cannot both do so, nor move it backwards.
+    /// </summary>
+    /// <remarks>Brings the passed instance, and any tracked copy of it, into line on success; see
+    /// <see cref="TryStartScheduleExecutionAsync"/>.</remarks>
+    /// <param name="execution">The execution to advance.</param>
+    /// <param name="nextStepIndex">The step index of the next step group with Worker Tasks waiting to run.</param>
+    /// <returns>True if the execution advanced; false if it was not InProgress or had already reached the step.</returns>
+    Task<bool> TryAdvanceScheduleExecutionAsync(ScheduleExecution execution, int nextStepIndex);
+
+    /// <summary>
+    /// Ends a Schedule Execution with <paramref name="finalStatus"/>, stamping its completion time and, when one is
+    /// given, its error message, but only if its status is still one of <paramref name="fromStatuses"/> (#1768). A
+    /// single conditional update, so an execution that has already finished (been cancelled, failed or completed by
+    /// another caller in the meantime) stays exactly as it finished.
+    /// </summary>
+    /// <remarks>Brings the passed instance, and any tracked copy of it, into line on success; see
+    /// <see cref="TryStartScheduleExecutionAsync"/>.</remarks>
+    /// <param name="execution">The execution to end.</param>
+    /// <param name="fromStatuses">The statuses the execution may be in for the change to take effect.</param>
+    /// <param name="finalStatus">The status to end it with.</param>
+    /// <param name="errorMessage">The reason to record, or null to leave the stored message as it is.</param>
+    /// <returns>True if the execution was ended; false if its status was not one of <paramref name="fromStatuses"/>.</returns>
+    Task<bool> TryFinishScheduleExecutionAsync(
+        ScheduleExecution execution,
+        IReadOnlyCollection<ScheduleExecutionStatus> fromStatuses,
+        ScheduleExecutionStatus finalStatus,
+        string? errorMessage);
+
     // -----------------------------------------------------------------------------------------------------------------
     // Scheduler Service Queries
     // -----------------------------------------------------------------------------------------------------------------
