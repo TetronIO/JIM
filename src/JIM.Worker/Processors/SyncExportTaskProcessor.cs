@@ -145,24 +145,8 @@ public class SyncExportTaskProcessor
             return;
         }
 
-        // Tell the Connector which containers the administrator manages, so it can refuse to write outside them.
-        // Container selection used to apply only on the way in, so an Attribute Flow that moved an object into an
-        // unselected container wrote it where JIM could not read it back: the export went unconfirmed, the next
-        // Full Import treated the object as deleted, and synchronisation then disconnected and re-provisioned it.
-        // Stated only when there is a selection to state; a Connected System with none permits everything, exactly
-        // as before.
-        // Selections and exclusions both, because both decide where JIM may write: an export into an excluded
-        // branch is as unreadable on the way back as one into a container that was never selected (#1255).
-        if (_connector is IConnectorManagedScope scopedConnector)
-        {
-            var managedContainers = _connectedSystem.GetScopeDecidingContainers();
-            if (managedContainers.Count > 0)
-            {
-                scopedConnector.SetManagedScope(managedContainers);
-                Log.Debug("PerformExportAsync: Stated a managed scope of {ContainerCount} container(s) to the {Connector} connector",
-                    managedContainers.Count, _connector.Name);
-            }
-        }
+        // The Connected System's managed scope (#1250, #1255) is stated by ExportExecutionServer as it prepares each
+        // connector for export, so every parallel batch's connector receives it too, not only this one (#1764).
 
         try
         {
