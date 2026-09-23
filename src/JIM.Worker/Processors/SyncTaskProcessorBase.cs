@@ -4628,6 +4628,12 @@ public abstract class SyncTaskProcessorBase
                     "Missing Input Behaviour is set to Fail this mapping on this Attribute Flow. Supply the missing value, " +
                     "handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.");
 
+            case AttributeFlowErrorKind.GeneratedBaseNotSingleValue:
+                return (ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError,
+                    $"The base Expression for the generated value targeting {target} returned more than one value, so {outcome}; " +
+                    "the object's other attributes were unaffected. A generated value's base Expression must produce a single " +
+                    $"text value, not an array: '{error.Expression}'.");
+
             case AttributeFlowErrorKind.MultiValuedToSingleValued:
             default:
                 var source = exporting

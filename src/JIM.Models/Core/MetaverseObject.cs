@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Security;
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 
 namespace JIM.Models.Core;
 
@@ -119,6 +120,15 @@ public class MetaverseObject
     /// </summary>
     [NotMapped]
     public List<MetaverseObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
+
+    /// <summary>
+    /// Generated mappings (Unique Value Generation, #242) that won attribute priority for their target attribute
+    /// this pass, recorded by inbound Attribute Flow in place of a value (<see cref="PendingGeneratedValue"/>). The
+    /// worker MUST resolve and clear every entry before the page is persisted; an entry still here when the page
+    /// is written is a defect, not a valid state.
+    /// </summary>
+    [NotMapped]
+    public List<PendingGeneratedValue> PendingGeneratedValues { get; set; } = new();
 
     /// <summary>
     /// Navigation link to any joined Connected System Objects.
