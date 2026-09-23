@@ -130,12 +130,13 @@ public class Scheduler : BackgroundService
                 await heartbeat.WriteAsync(jim, null, null, null, stoppingToken);
 
                 // Step 1: Check for and start due schedules. This runs BEFORE the next-run-time bootstrap
-                // below, and must keep doing so: both read NextRunTime, and starting a schedule is what
-                // advances it. Bootstrapping first is how every cron-triggered schedule came to be swallowed
-                // on the cycle it became due (the bootstrap query has since been narrowed to rows with no next
-                // run time at all, so the two can no longer claim the same schedule; the order is kept because
-                // "start the work, then fill in what is missing" is the honest reading).
-                await ProcessDueSchedulesAsync(jim);
+                // below, and must keep doing so: both read NextRunTime, and attempting to start a schedule is
+                // what advances it (whether or not the start succeeds). Bootstrapping first is how every
+                // cron-triggered schedule came to be swallowed on the cycle it became due (the bootstrap query
+                // has since been narrowed to rows with no next run time at all, so the two can no longer claim
+                // the same schedule; the order is kept because "start the work, then fill in what is missing"
+                // is the honest reading).
+                await jim.Scheduler.StartDueSchedulesAsync();
 
                 // Step 2: Give a next run time to any cron-based schedule that has none yet: newly created,
                 // newly enabled, or newly switched from a manual trigger.
@@ -248,54 +249,6 @@ public class Scheduler : BackgroundService
         }
 
         return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Checks for schedules that are due to run and starts their execution.
-    /// </summary>
-    private static async Task ProcessDueSchedulesAsync(JimApplication jim)
-    {
-        var dueSchedules = await jim.Scheduler.GetDueSchedulesAsync();
-
-        foreach (var schedule in dueSchedules)
-        {
-            try
-            {
-                // Check if this schedule already has an active execution (prevent overlap)
-                var activeExecutions = await jim.Scheduler.GetActiveExecutionsAsync();
-                var hasActiveExecution = activeExecutions.Any(e => e.ScheduleId == schedule.Id);
-
-                if (hasActiveExecution)
-                {
-                    Log.Warning("ProcessDueSchedulesAsync: Schedule {ScheduleId} ({ScheduleName}) is due but already has an active execution. Skipping.",
-                        schedule.Id, schedule.Name);
-                    continue;
-                }
-
-                Log.Information("ProcessDueSchedulesAsync: Starting execution of due schedule {ScheduleId} ({ScheduleName})",
-                    schedule.Id, schedule.Name);
-
-                // Start the schedule execution - initiated by System for cron-triggered schedules
-                await jim.Scheduler.StartScheduleExecutionAsync(
-                    schedule,
-                    Models.Activities.ActivityInitiatorType.System,
-                    null,
-                    "Scheduler Service");
-
-                // Calculate and set the next run time after starting
-                var nextRunTime = jim.Scheduler.CalculateNextRunTime(schedule);
-                if (nextRunTime.HasValue)
-                {
-                    schedule.NextRunTime = nextRunTime.Value;
-                    await jim.Scheduler.UpdateScheduleRunTimesAsync(schedule);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "ProcessDueSchedulesAsync: Failed to start execution for schedule {ScheduleId} ({ScheduleName})",
-                    schedule.Id, schedule.Name);
-            }
-        }
     }
 
     /// <summary>

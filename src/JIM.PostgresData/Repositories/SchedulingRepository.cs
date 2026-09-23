@@ -479,7 +479,7 @@ public class SchedulingRepository : ISchedulingRepository
     {
         // Deliberately only schedules with NO next run time: this bootstraps a newly created, newly enabled or
         // newly cron-triggered schedule, and nothing else. Advancing one that has just run belongs to the code
-        // that started it (Scheduler.ProcessDueSchedulesAsync), which already does it.
+        // that started it (SchedulerServer.StartDueSchedulesAsync), which already does it.
         //
         // This used to include schedules whose next run time had already arrived, which meant the scheduler's
         // polling cycle recomputed the time into the future in step 1 and then found nothing due in step 2, on
