@@ -19,6 +19,13 @@ function Set-JIMConnectedSystemObjectType {
     .PARAMETER Selected
         Whether the object type should be managed by JIM.
         When set to $true, JIM will synchronise objects of this type.
+        When set to $false, the object type is taken out of management: the next
+        Full Import no longer returns its objects, so it marks them as deleted, and
+        the following synchronisation disconnects them from their Metaverse Objects
+        and applies the Metaverse Object deletion rules, exactly as deselecting a
+        Partition does.
+        Deselecting is refused while an enabled Synchronisation Rule is bound to the
+        object type; disable those Synchronisation Rules first.
 
     .PARAMETER RemoveContributedAttributesOnObsoletion
         Whether to remove contributed attributes from the Metaverse object
@@ -46,9 +53,22 @@ function Set-JIMConnectedSystemObjectType {
 
         Selects the User object type for management.
 
+    .EXAMPLE
+        Get-JIMSyncRule -ConnectedSystemId 1 | Where-Object { $_.connectedSystemObjectTypeId -eq 5 } | Set-JIMSyncRule -Disable
+        Set-JIMConnectedSystemObjectType -ConnectedSystemId 1 -ObjectTypeId 5 -Selected $false
+
+        Takes object type 5 out of management. The first line disables every Synchronisation Rule
+        bound to it, which deselecting requires. On the next Full Import every Connected System Object
+        of that type is marked as deleted, and the following synchronisation disconnects them all and
+        applies their Metaverse Objects' deletion rules. Run the first line without the final pipeline
+        stage to see which Synchronisation Rules it would disable, and preview the deselection first with
+        New-JIMConfigurationChangePreview -ConnectedSystemId 1 -SchemaObjectType @(@{ objectTypeId = 5; selected = $false }) -Wait
+
     .LINK
         Get-JIMConnectedSystem
         Set-JIMConnectedSystemAttribute
+        Set-JIMSyncRule
+        New-JIMConfigurationChangePreview
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType([PSCustomObject])]

@@ -713,9 +713,9 @@
     </div>
 
     <MudStack Row="true" Spacing="2" Class="mt-6">
-        @* Preview (#1475): deselecting an Object Type or an attribute has no visible effect at all. Nothing fails
-           and nothing is deleted; JIM stops reading, and the objects already imported go on contributing values
-           that never refresh again. This is the count an administrator needs before saving, not afterwards. *@
+        @* Preview (#1475): deselecting an Object Type obsoletes its objects on the next Full Import, well after the
+           save (#1474), and deselecting an attribute has no visible effect at all. Either way this is the count an
+           administrator needs before saving, not afterwards. *@
         <MudButton data-testid="jim-preview-schema-selection"
                    Variant="Variant.Outlined"
                    Color="Color.Primary"
@@ -1383,10 +1383,9 @@
         // attribute the update to the user
         using var jim = JimFactory.Create();
 
-        // deselecting an Object Type stops its objects being imported and leaves the ones already imported joined
-        // and contributing values that will never refresh again; deselecting a Partition or Container takes objects
-        // out of an import that still runs, which obsoletes and deprovisions them. Both save silently otherwise, so
-        // the administrator acknowledges whichever consequence applies first, and where a preview was run the
+        // deselecting an Object Type, a Partition or a Container takes objects out of management: the next Full
+        // Import obsoletes them and the following synchronisation disconnects them (#1474). That would save silently
+        // otherwise, so the administrator acknowledges the consequence first, and where a preview was run the
         // acknowledgement says how many objects that is (#1475).
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
@@ -1402,8 +1401,9 @@
         }
         catch (InvalidSettingValuesException ex)
         {
-            // the Connector refused the selection against this Connected System's settings (an Object Type selected
-            // without what the configured Delta Import Mode needs, say). Nothing was saved; the message names the fix.
+            // the selection was refused: the Connector said this Connected System's settings cannot serve it (an Object
+            // Type selected without what the configured Delta Import Mode needs, say), or an Object Type is deselected
+            // while an enabled Synchronisation Rule still manages it (#1474). Nothing was saved; the message names the fix.
             Snackbar.Add(ex.Message, Severity.Error, options => options.RequireInteraction = true);
             return;
         }

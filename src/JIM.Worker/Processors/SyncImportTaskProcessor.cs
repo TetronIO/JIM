@@ -1021,34 +1021,32 @@ public class SyncImportTaskProcessor
     /// (<see cref="ApplyDeletionCandidatesAsync"/>) can decide whether the whole run's worth of
     /// detected deletions is within the Run Profile's limits before anything is touched.
     /// </summary>
-    private async Task<DeletionCandidates> ResolveDeletionCandidatesAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
+    private async Task<DeletionCandidates> ResolveDeletionCandidatesAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, IReadOnlyCollection<ConnectedSystemObjectType> objectTypesToCheck)
     {
         var candidates = new DeletionCandidates([], []);
-
-        if (_connectedSystem.ObjectTypes == null)
-            return candidates;
 
         // Get the IDs of CSOs that were already processed in this import run
         // These should not be marked as obsolete even if their external ID isn't in the import (e.g., because their
         // external ID was updated during import processing and the new value isn't in externalIdsImported)
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
 
-        // have any objects been deleted in the Connected System since our last import?
-        // get the Connected System Object Type list for the ones the user has selected to manage
-        foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
+        // have any objects been deleted in the Connected System since our last import? A deselected Object Type is
+        // walked here too (see ResolveDeletionDetectionObjectTypesAsync): the import no longer returns its objects,
+        // so every one of them is missing, which is exactly what taking the type out of management means.
+        foreach (var objectType in objectTypesToCheck)
         {
             // what's the external id attribute for this object type?
-            var objectTypeExternalIdAttribute = selectedObjectType.Attributes.Single(q => q.IsExternalId);
+            var objectTypeExternalIdAttribute = objectType.Attributes.Single(q => q.IsExternalId);
             switch (objectTypeExternalIdAttribute.Type)
             {
                 case AttributeDataType.Number:
                 {
                     // get the int Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeInt = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
+                    var connectedSystemObjectExternalIdsOfTypeInt = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, objectType.Id, partitionId);
 
                     // get the int import object external ids for this object type
                     var connectedSystemIntExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.IntValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -1062,11 +1060,11 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Text:
                 {
                     // get the string Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeString = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
+                    var connectedSystemObjectExternalIdsOfTypeString = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, objectType.Id, partitionId);
 
                     // get the string import object external ids for this object type
                     var connectedSystemStringExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -1080,11 +1078,11 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Guid:
                 {
                     // get the guid Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeGuid = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
+                    var connectedSystemObjectExternalIdsOfTypeGuid = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, objectType.Id, partitionId);
 
                     // get the guid import object external ids for this object type
                     var connectedSystemGuidExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.GuidValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -1098,11 +1096,11 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.LongNumber:
                 {
                     // get the long Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeLong = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
+                    var connectedSystemObjectExternalIdsOfTypeLong = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, objectType.Id, partitionId);
 
                     // get the long import object external ids for this object type
                     var connectedSystemLongExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.LongValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -1119,11 +1117,11 @@ public class SyncImportTaskProcessor
                     // primary key on that provider (#1283). Set comparison is safe without normalising
                     // the scale: equal decimals hash equally regardless of how many trailing zeros
                     // they carry, so 4200.00m and 4200m are the same member.
-                    var connectedSystemObjectExternalIdsOfTypeDecimal = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
+                    var connectedSystemObjectExternalIdsOfTypeDecimal = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(_connectedSystem.Id, objectType.Id, partitionId);
 
                     // get the decimal import object external ids for this object type
                     var connectedSystemDecimalExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.DecimalValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -1148,7 +1146,7 @@ public class SyncImportTaskProcessor
                         nameof(objectTypeExternalIdAttribute),
                         objectTypeExternalIdAttribute.Type,
                         $"Deletion detection cannot handle an external ID attribute of type {objectTypeExternalIdAttribute.Type} " +
-                        $"('{objectTypeExternalIdAttribute.Name}' on Object Type '{selectedObjectType.Name}').");
+                        $"('{objectTypeExternalIdAttribute.Name}' on Object Type '{objectType.Name}').");
             }
         }
 
@@ -1189,7 +1187,8 @@ public class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             return;
 
-        var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, partitionId);
+        var objectTypesToCheck = await ResolveDeletionDetectionObjectTypesAsync();
+        var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, partitionId, objectTypesToCheck);
         var newlyMarkedCount = candidates.NewlyMarked.Count;
 
         var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
@@ -1232,6 +1231,71 @@ public class SyncImportTaskProcessor
             Log.Information("ProcessConnectedSystemObjectDeletionsAsync: deletion detection applied. {NewlyMarkedCount} Connected System Object(s) newly marked as deleted, {AlreadyObsoleteCount} already-Obsolete candidate(s) re-checked for stale Pending Exports.",
                 newlyMarkedCount, candidates.AlreadyObsolete.Count);
         }
+    }
+
+    /// <summary>
+    /// Which Object Types deletion detection walks (#1474): every selected one, and every deselected one that can
+    /// hold objects, unless an enabled Synchronisation Rule is still bound to it.
+    /// </summary>
+    /// <remarks>
+    /// Deselecting an Object Type takes it out of management, as deselecting a Partition or a Container does. The
+    /// Connector stops returning its objects, so every one already imported is missing from this Full Import, and
+    /// obsoleting them is what disconnects them and recalls their contributions on the next synchronisation. A
+    /// deselected type used to be skipped here outright, which left its objects joined and contributing values that
+    /// were never refreshed again.
+    ///
+    /// A deselected type with no External ID was never configured, so it cannot hold objects and is passed over
+    /// rather than queried. Every other deselected type costs one query per Full Import, including the hundreds of
+    /// classes a directory's schema discovery lists and gives an External ID to; for a type that never held objects
+    /// that query is a probe of the (Connected System, Object Type) index that returns nothing.
+    ///
+    /// A deselected type an enabled Synchronisation Rule is still bound to is held back, and the Activity says so.
+    /// Saving that configuration is refused, but a database can still hold one from before the refusal existed or
+    /// from a change made outside the save paths, and obsoleting objects an outbound rule still targets would
+    /// disconnect them only for the rule to act on them again. Leaving them in place is the fail-safe; the warning
+    /// names the rules to disable.
+    /// </remarks>
+    private async Task<List<ConnectedSystemObjectType>> ResolveDeletionDetectionObjectTypesAsync()
+    {
+        var objectTypes = _connectedSystem.ObjectTypes!.Where(ot => ot.Selected).ToList();
+
+        var deselectedObjectTypes = _connectedSystem.ObjectTypes!
+            .Where(ot => !ot.Selected && ot.Attributes.Any(a => a.IsExternalId))
+            .ToList();
+        if (deselectedObjectTypes.Count == 0)
+            return objectTypes;
+
+        var enabledSyncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: false);
+        var heldBack = new List<(string ObjectTypeName, IReadOnlyList<string> SyncRuleNames)>();
+
+        foreach (var objectType in deselectedObjectTypes)
+        {
+            var boundSyncRuleNames = enabledSyncRules
+                .Where(rule => rule.ConnectedSystemObjectTypeId == objectType.Id)
+                .Select(rule => rule.Name)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (boundSyncRuleNames.Count == 0)
+            {
+                objectTypes.Add(objectType);
+                continue;
+            }
+
+            heldBack.Add((objectType.Name, boundSyncRuleNames));
+            Log.Warning("ResolveDeletionDetectionObjectTypesAsync: Object Type {ObjectType} is deselected but {SyncRuleCount} enabled Synchronisation Rule(s) are still bound to it ({SyncRules}); its Connected System Objects are left out of deletion detection.",
+                objectType.Name, boundSyncRuleNames.Count, string.Join(", ", boundSyncRuleNames));
+        }
+
+        if (heldBack.Count > 0)
+        {
+            var warning = ImportOutcomeMessage.ForDeselectedObjectTypesHeldBack(heldBack);
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                ? warning
+                : $"{_activity.WarningMessage}\n{warning}";
+        }
+
+        return objectTypes;
     }
 
     /// <summary>

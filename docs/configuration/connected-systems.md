@@ -229,18 +229,18 @@ An export that wrote in part is counted as succeeded on the Activity ("43 succee
 
 ## What deselecting means
 
-The Schema tab's ticks decide what JIM **reads**. That is narrower than it looks, and worth being precise about, because deselecting has no visible effect at all: nothing fails, nothing is deleted, and nothing is disconnected.
+The Schema tab's ticks decide what JIM **reads**, and the two kinds of tick behave very differently when you clear them.
 
 | What you deselect | What actually happens |
 |---|---|
-| An **Object Type** | JIM stops importing it. The Connected System Objects already imported from it are left exactly as they are: still joined to their Metaverse Objects, and still contributing the values they last imported, which stop being refreshed. Nothing is obsoleted and nothing is deprovisioned. |
+| An **Object Type** | JIM takes it out of management. The Connector stops returning its objects, so the next **Full Import** finds every Connected System Object already imported from it missing and marks it obsolete, and the following synchronisation disconnects the joined ones from their Metaverse Objects. Their contributed values are withdrawn (see below), and a Metaverse Object left with no connectors may become eligible for deletion under its type's deletion rule. Nothing happens on save, and a Delta Import does not act on it; the Full Import does. |
 | An **attribute** | JIM stops fetching it. The values already held for it stay on the Connected System Objects, and any Attribute Flow reading it goes on flowing them, without them ever being refreshed again. |
 
-Neither is the same as deselecting a partition or a container. Those take objects out of an import that still runs, so the next Full Import does not find them, marks them obsolete, and the following synchronisation disconnects them. Deselecting an Object Type removes it from that comparison altogether, so its objects are never looked for.
+Deselecting an Object Type is the same as deselecting a partition or a container: all three take objects out of an import that still runs, so the next Full Import does not find them and marks them obsolete. They go through the same deletion detection as any other missing object, so a Full Import Run Profile's [deletion limits](run-profiles.md#safeguards) hold them back too, which is worth setting before taking a large Object Type out of management.
 
-Selection is also an **import-side** idea only. Synchronisation and export do not consult it: an export Attribute Flow whose target attribute is deselected still writes it.
+**Disable the Synchronisation Rules first.** An Object Type cannot be deselected while an enabled Synchronisation Rule is still bound to it, and a Synchronisation Rule cannot be enabled against an Object Type that is not selected. Saving either is refused with a message naming the rules. The two refusals keep a rule from ever running against a type JIM no longer imports; an outbound rule would otherwise go on provisioning into it, and would provision the obsoleted objects all over again. So taking a type out of management is two deliberate steps: disable (or delete) its Synchronisation Rules, then deselect it. If a Full Import ever finds a deselected Object Type with an enabled Synchronisation Rule still bound to it, it leaves that type's objects as they are and completes with a warning naming the rules to disable.
 
-So if your intent is to take a type genuinely out of management, deselecting it is not sufficient on its own. Disable or delete the Synchronisation Rules that manage it too, or its objects will go on contributing stale values indefinitely.
+Attribute selection is an **import-side** idea only. Synchronisation and export do not consult it: an export Attribute Flow whose target attribute is deselected still writes it.
 
 ### Obsoletion and contributed values
 
@@ -257,7 +257,10 @@ The preview reports:
 
 | Transition | What it means |
 |---|---|
-| Stops being imported, stays joined | Connected System Objects that would stop being imported. Where the row names an attribute, only that attribute freezes; otherwise the whole object does. |
+| Disconnects from its Metaverse Object | Joined objects of an Object Type you are deselecting: the next Full Import obsoletes them and the following synchronisation disconnects them. |
+| Leaves import scope | Unjoined objects of an Object Type you are deselecting, which the next Full Import obsoletes with nothing to disconnect. |
+| Becomes eligible for deletion | Metaverse Objects those disconnections would leave eligible for deletion under their type's deletion rule. |
+| Stops being imported, stays joined | Objects holding a value for an attribute you are deselecting: that attribute freezes, and nothing else changes. |
 | Imported again | Objects, or attribute values, that would start tracking the Connected System again. |
 | Contributed values withdrawn | Metaverse Objects that would have this system's contributed values withdrawn when their obsolete objects are next synchronised. |
 | Contributed values kept | The inverse: values that would be left in place instead. |
@@ -267,7 +270,7 @@ Two things the preview is deliberately careful about:
 - **Only the objects that hold a value are counted for an attribute.** An object with nothing stored for a deselected attribute has nothing to freeze, so counting it would inflate the answer with objects the change does not touch.
 - **The obsoletion toggle is counted against the objects already obsolete and still joined**, which are the only ones whose fate it changes now. Objects obsoleted in future are governed by the setting too, but there is no population to count yet.
 
-Validation names what would go on running over the frozen data: Synchronisation Rules still bound to an Object Type you are deselecting, and Attribute Flow mappings still reading an attribute you are deselecting. Deselecting an External ID is refused outright.
+Validation names what stands in the way and what would go on running over frozen data. Deselecting an Object Type that an enabled Synchronisation Rule still manages is a blocking finding naming the rules, because saving it is refused; the preview counts nothing until those rules are disabled. Attribute Flow mappings still reading an attribute you are deselecting are named as a warning. Deselecting an External ID is refused outright.
 
 Save after previewing and the confirmation opens with the preview's own sentence, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
 
@@ -555,7 +558,7 @@ classes that alter outcomes are counted:
 | Class | Examples | How it shows |
 |-------|----------|--------------|
 | Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
-| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning, or leave objects joined and contributing values that never refresh |
+| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
 
 **Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
 Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises
@@ -582,7 +585,7 @@ treating `HasPendingChanges` as `false`.
 
 ## Confirming a configuration change
 
-Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the Connected System Objects imported through it become obsolete, and whatever they are joined to is deprovisioned on the next synchronisation. See [Configuration changes](configuration-changes.md).
+Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the next Full Import marks the Connected System Objects imported through it obsolete, and the following synchronisation disconnects them and deprovisions whatever they are joined to. See [Configuration changes](configuration-changes.md).
 
 ## Common workflows
 
