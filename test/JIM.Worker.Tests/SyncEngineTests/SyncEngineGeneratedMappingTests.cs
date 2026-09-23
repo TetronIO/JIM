@@ -372,6 +372,52 @@ public class SyncEngineGeneratedMappingTests
     }
 
     [Test]
+    public void FlowInboundAttributes_HigherPriorityContributorSilentInSamePass_KeepsThePendingGeneration()
+    {
+        // FR 6: generation contributes when every higher-priority contribution is silent. A higher-priority rule
+        // evaluated after the generated mapping wins the gate, but contributes no value (its source attribute is
+        // absent and "Null is a value" is off), so it abstains and the pending generation must survive.
+        var target = TargetAttr();
+        var generatedRule = GeneratedRule(GeneratedMapping(target, syncRuleId: 2, priority: 2), syncRuleId: 2);
+        var ordinaryRule = OrdinaryAttributeRule(target, syncRuleId: 1, priority: 1, csoAttrId: 201);
+        var context = new AttributePriorityContext([generatedRule, ordinaryRule]);
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var generatedCso = JoinedCso(mvo, "Ada", connectedSystemId: 5);
+        _engine.FlowInboundAttributes(generatedCso, generatedRule, [CsoType()], _evaluator, priorityContext: context);
+
+        var ordinaryCsoType = new ConnectedSystemObjectType { Id = 2, Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 201, Name = "accountName", Type = AttributeDataType.Text }] };
+        var silentCso = JoinedCso(mvo, givenName: null, connectedSystemId: 6, csoAttrId: 201, typeId: 2);
+        _engine.FlowInboundAttributes(silentCso, ordinaryRule, [ordinaryCsoType], priorityContext: context);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.PendingGeneratedValues, Has.Count.EqualTo(1), "a silent higher-priority contributor must not cancel generation");
+            Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void FlowInboundAttributes_HigherPriorityContributorAssertsNullInSamePass_RemovesThePendingGeneration()
+    {
+        // "Null is a value" on the higher-priority rule is a positive assertion, not silence: it wins the attribute
+        // with a null marker, so the pending generation goes.
+        var target = TargetAttr();
+        var generatedRule = GeneratedRule(GeneratedMapping(target, syncRuleId: 2, priority: 2), syncRuleId: 2);
+        var ordinaryRule = OrdinaryAttributeRule(target, syncRuleId: 1, priority: 1, csoAttrId: 201);
+        ordinaryRule.AttributeFlowRules[0].NullIsValue = true;
+        var context = new AttributePriorityContext([generatedRule, ordinaryRule]);
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        _engine.FlowInboundAttributes(JoinedCso(mvo, "Ada", connectedSystemId: 5), generatedRule, [CsoType()], _evaluator, priorityContext: context);
+
+        var ordinaryCsoType = new ConnectedSystemObjectType { Id = 2, Attributes = [new ConnectedSystemObjectTypeAttribute { Id = 201, Name = "accountName", Type = AttributeDataType.Text }] };
+        _engine.FlowInboundAttributes(JoinedCso(mvo, givenName: null, connectedSystemId: 6, csoAttrId: 201, typeId: 2), ordinaryRule, [ordinaryCsoType], priorityContext: context);
+
+        Assert.That(mvo.PendingGeneratedValues, Is.Empty);
+    }
+
+    [Test]
     public void FlowInboundAttributes_LowerPriorityOrdinaryContributionEvaluatedAfterGeneratedMapping_IsBlockedByTheGate()
     {
         // The generated mapping is the higher-priority incumbent (via FindEffectiveIncumbentSyncRuleId reading

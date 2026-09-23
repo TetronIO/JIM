@@ -59,6 +59,8 @@ public partial class SyncEngine
         // writes (#91), so the Metaverse Object value records which rule contributed it, not just which system.
         var contributingSyncRuleId = syncRuleMapping.SyncRuleId;
 
+        List<PendingGeneratedValue>? supersededGenerations = null;
+
         // Attribute priority gate (#91): when an attribute has more than one contributing rule, a contribution that
         // loses priority resolution to the rule currently owning the value (the incumbent) must never reach the
         // Metaverse Object. Single-contributor attributes, and runs without a priority context, use the unchanged
@@ -89,13 +91,16 @@ public partial class SyncEngine
                 av.ContributedBySyncRuleId != contributingSyncRuleId);
 
             // A later winner also supersedes a pending generation request (Unique Value Generation, #242, plan
-            // decision 6): this is the single choke point every write path funnels through after winning the
-            // gate, so extending it here is enough to cover every writer below (ApplyNoValueOutcome included)
-            // without touching each one. An ordinary higher-priority contribution therefore visibly supersedes a
-            // lower-priority generated mapping's pending value in the same pass (FR 6).
-            mvo.PendingGeneratedValues.RemoveAll(p =>
-                p.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id &&
-                p.ContributedBySyncRuleId != contributingSyncRuleId);
+            // decision 6), but only if it actually contributes. Winning the gate is not the same as contributing: a
+            // higher-priority rule whose source is silent abstains, and FR 6 says generation is exactly what fills
+            // that silence. So the superseded requests are held here and restored after the writers below have run
+            // if this rule staged nothing for the attribute (see the end of this method). A value, or a "Null is a
+            // value" marker, is a contribution and keeps them removed.
+            supersededGenerations = mvo.PendingGeneratedValues
+                .Where(p => p.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id && p.ContributedBySyncRuleId != contributingSyncRuleId)
+                .ToList();
+            if (supersededGenerations.Count > 0)
+                mvo.PendingGeneratedValues.RemoveAll(supersededGenerations.Contains);
         }
 
         // A generated mapping (Unique Value Generation, #242) produces no value here: the synchronous engine
@@ -217,6 +222,15 @@ public partial class SyncEngine
                                                "This operation is focused on import flow, so Connected System to Metaverse Object.");
             else
                 throw new InvalidDataException("Expected ConnectedSystemAttribute or Expression to be populated in a SyncRuleMappingSource object.");
+        }
+
+        // The other half of the superseded-generation hand-off above: this rule won the gate but staged nothing for
+        // the attribute (it abstained), so the lower-priority generation it displaced still stands (FR 6).
+        if (supersededGenerations is { Count: > 0 } &&
+            !mvo.PendingAttributeValueAdditions.Any(av =>
+                av.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id && av.ContributedBySyncRuleId == contributingSyncRuleId))
+        {
+            mvo.PendingGeneratedValues.AddRange(supersededGenerations);
         }
     }
 
