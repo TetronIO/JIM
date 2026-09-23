@@ -100,9 +100,9 @@ public static class CausalitySummaryBuilder
     }
 
     /// <summary>
-    /// The list conjunction rule shared by <see cref="AppendClauses"/> (the sentence's top-level clause list)
-    /// and <see cref="BuildGeneratedValueClause"/> (one clause naming several generated attributes): items
-    /// joined by ", ", the last joined by ", and ". Factored out so a second list never re-implements it.
+    /// The sentence's list conjunction rule: items joined by ", ", the last joined by ", and ". Every clause,
+    /// generated-value clauses included (<see cref="BuildGeneratedValueClauses"/>), goes through this once, so a
+    /// sentence never carries a second "and".
     /// </summary>
     private static List<SummarySegment> JoinClauseItems(List<List<SummarySegment>> items)
     {
@@ -202,9 +202,7 @@ public static class CausalitySummaryBuilder
                 : "attributes would flow to it")]);
         }
 
-        var generatedValueClause = BuildGeneratedValueClause(allEvents, isSpeculative: true);
-        if (generatedValueClause != null)
-            clauses.Add(generatedValueClause);
+        clauses.AddRange(BuildGeneratedValueClauses(allEvents, isSpeculative: true));
 
         var queuedExports = allEvents.Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated).ToList();
         if (queuedExports.Count > 0)
@@ -345,9 +343,7 @@ public static class CausalitySummaryBuilder
         if (attributeFlowClause != null)
             clauses.Add(attributeFlowClause);
 
-        var generatedValueClause = BuildGeneratedValueClause(allEvents, isSpeculative: false);
-        if (generatedValueClause != null)
-            clauses.Add(generatedValueClause);
+        clauses.AddRange(BuildGeneratedValueClauses(allEvents, isSpeculative: false));
 
         var exportClause = BuildQueuedExportClause(allEvents);
         if (exportClause != null)
@@ -383,25 +379,24 @@ public static class CausalitySummaryBuilder
     }
 
     /// <summary>
-    /// Unique Value Generation (#242): the clause naming each attribute a value was generated or adopted for
-    /// on this pass, joined by <see cref="JoinClauseItems"/> when more than one attribute is involved
-    /// ("Account Name was generated as jallen42, and the existing Employee Number 40021 was adopted"). Null
-    /// when the item recorded neither outcome type.
+    /// Unique Value Generation (#242): one clause per attribute a value was generated or adopted for on this
+    /// pass ("Account Name was generated as jallen42", "the existing Employee Number 40021 was adopted"), for
+    /// the caller to add to the sentence's clause list. Empty when the item recorded neither outcome type.
     /// </summary>
-    private static List<SummarySegment>? BuildGeneratedValueClause(IReadOnlyList<CausalityEvent> allEvents, bool isSpeculative)
+    private static List<List<SummarySegment>> BuildGeneratedValueClauses(IReadOnlyList<CausalityEvent> allEvents, bool isSpeculative)
     {
-        var generatedValueEvents = allEvents
+        // One clause per generated attribute, returned for the caller to add to the sentence's own clause list:
+        // joining them into a single clause first would give the sentence two "and"s ("..., and Account Name was
+        // generated as ..., and Badge Number was generated as ...").
+        return allEvents
             .Where(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
                 or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
+            .Select(e => BuildGeneratedValueItem(e, isSpeculative))
             .ToList();
-        if (generatedValueEvents.Count == 0)
-            return null;
-
-        return JoinClauseItems(generatedValueEvents.Select(e => BuildGeneratedValueItem(e, isSpeculative)).ToList());
     }
 
     /// <summary>
-    /// One event's clause within <see cref="BuildGeneratedValueClause"/>. The attribute name and value come
+    /// One event's clause within <see cref="BuildGeneratedValueClauses"/>. The attribute name and value come
     /// from the outcome's DetailMessage (<see cref="GeneratedValueDetailParser"/>); a missing or malformed
     /// detail (legacy data, or a caller that never populated it) falls back to a generic sentence rather than
     /// rendering a blank attribute name or value.
@@ -638,7 +633,7 @@ public static class CausalitySummaryBuilder
     /// yields a valid sentence for unanticipated shapes.
     /// <para>
     /// Unique Value Generation (#242): a generated-value outcome is excluded from the plain-label pass and
-    /// given the same richer clause the joiner shape uses (<see cref="BuildGeneratedValueClause"/>), inserted
+    /// given the same richer clause the joiner shape uses (<see cref="BuildGeneratedValueClauses"/>), inserted
     /// directly after an Attribute Flow clause where one is present (or appended, when there is none), so an
     /// Attribute-Flow-rooted item (an already-joined object whose only change this pass is a generated value)
     /// reads the same way <see cref="BuildJoinerClauses"/> does.
@@ -663,9 +658,7 @@ public static class CausalitySummaryBuilder
                 insertIndex = clauses.Count;
         }
 
-        var generatedValueClause = BuildGeneratedValueClause(allEvents, isSpeculative);
-        if (generatedValueClause != null)
-            clauses.Insert(insertIndex >= 0 ? insertIndex : clauses.Count, generatedValueClause);
+        clauses.InsertRange(insertIndex >= 0 ? insertIndex : clauses.Count, BuildGeneratedValueClauses(allEvents, isSpeculative));
 
         return clauses;
     }

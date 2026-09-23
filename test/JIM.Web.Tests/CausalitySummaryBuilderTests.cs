@@ -326,8 +326,8 @@ public class CausalitySummaryBuilderTests
     }
 
     /// <summary>
-    /// Two generated attributes join with the builder's own list conjunction: ", " between items, ", and "
-    /// before the last.
+    /// Two generated attributes are two clauses of the sentence, joined by the sentence's one list rule: ", " between
+    /// clauses and ", and " before the last, never a second "and".
     /// </summary>
     [Test]
     public void Build_JoinShapeWithTwoGeneratedValues_JoinsThemWithTheListConjunction()
@@ -342,11 +342,12 @@ public class CausalitySummaryBuilderTests
 
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
-        // Two top-level clauses here (the joiner clause, and the one combined generated-value clause), joined
-        // with ", and "; the generated-value clause's own two items are joined the same way internally.
+        // Each generated attribute is a clause of the sentence in its own right, so the sentence's list rule
+        // applies once: ", " between clauses and ", and " only before the last. Joining the generated items
+        // into one clause first produced "..., and Account Name was generated as ..., and Employee Number ...".
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
             "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
-            "it was joined to the Metaverse Object Liam Allen, and Account Name was generated as jallen42, " +
+            "it was joined to the Metaverse Object Liam Allen, Account Name was generated as jallen42, " +
             "and Employee Number was generated as 40021."));
     }
 
