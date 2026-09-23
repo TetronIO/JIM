@@ -117,6 +117,19 @@ jobs:
             startup-log: "Starting JIM.Scheduler"
 
     steps:
+      # The self-hosted runners share one home directory, so without this every job reads and writes the same
+      # ~/.docker: `setup-buildx-action --use` in one job switches every runner onto its builder (and removes
+      # it when that job ends, killing any build still using it), and the login action's `docker logout`
+      # logs every runner out of the registry (#1773). A per-job copy keeps the host's settings and plugins
+      # while keeping each job's changes to itself. The runner empties RUNNER_TEMP after every job.
+      - name: Isolate Docker client config
+        run: |
+          DOCKER_CONFIG_DIR="$RUNNER_TEMP/docker-config"
+          mkdir -p "$DOCKER_CONFIG_DIR"
+          if [ -f "$HOME/.docker/config.json" ]; then cp "$HOME/.docker/config.json" "$DOCKER_CONFIG_DIR/"; fi
+          if [ -d "$HOME/.docker/cli-plugins" ]; then ln -s "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG_DIR/cli-plugins"; fi
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG_DIR" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
@@ -130,6 +143,7 @@ jobs:
 
       # Phase 8: Docker layer caching
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
 
       - name: Log in to GitHub Container Registry
@@ -161,6 +175,7 @@ jobs:
       - name: Build Docker image (local)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
         with:
+          builder: ${{ steps.buildx.outputs.name }}
           context: .
           file: ${{ matrix.dockerfile }}
           load: true
@@ -230,6 +245,7 @@ jobs:
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
         with:
+          builder: ${{ steps.buildx.outputs.name }}
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
@@ -301,6 +317,19 @@ jobs:
       packages: read
 
     steps:
+      # The self-hosted runners share one home directory, so without this every job reads and writes the same
+      # ~/.docker: `setup-buildx-action --use` in one job switches every runner onto its builder (and removes
+      # it when that job ends, killing any build still using it), and the login action's `docker logout`
+      # logs every runner out of the registry (#1773). A per-job copy keeps the host's settings and plugins
+      # while keeping each job's changes to itself. The runner empties RUNNER_TEMP after every job.
+      - name: Isolate Docker client config
+        run: |
+          DOCKER_CONFIG_DIR="$RUNNER_TEMP/docker-config"
+          mkdir -p "$DOCKER_CONFIG_DIR"
+          if [ -f "$HOME/.docker/config.json" ]; then cp "$HOME/.docker/config.json" "$DOCKER_CONFIG_DIR/"; fi
+          if [ -d "$HOME/.docker/cli-plugins" ]; then ln -s "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG_DIR/cli-plugins"; fi
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG_DIR" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
@@ -468,6 +497,19 @@ jobs:
       bundle-name: ${{ steps.bundle.outputs.name }}
 
     steps:
+      # The self-hosted runners share one home directory, so without this every job reads and writes the same
+      # ~/.docker: `setup-buildx-action --use` in one job switches every runner onto its builder (and removes
+      # it when that job ends, killing any build still using it), and the login action's `docker logout`
+      # logs every runner out of the registry (#1773). A per-job copy keeps the host's settings and plugins
+      # while keeping each job's changes to itself. The runner empties RUNNER_TEMP after every job.
+      - name: Isolate Docker client config
+        run: |
+          DOCKER_CONFIG_DIR="$RUNNER_TEMP/docker-config"
+          mkdir -p "$DOCKER_CONFIG_DIR"
+          if [ -f "$HOME/.docker/config.json" ]; then cp "$HOME/.docker/config.json" "$DOCKER_CONFIG_DIR/"; fi
+          if [ -d "$HOME/.docker/cli-plugins" ]; then ln -s "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG_DIR/cli-plugins"; fi
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG_DIR" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
