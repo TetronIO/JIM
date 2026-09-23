@@ -10,8 +10,12 @@ function Set-JIMMetaverseAttributePriority {
         Transactionally renumbers the priorities of all import contributions to a Metaverse
         Attribute for a given Metaverse Object Type. -MappingId must list every current
         contributing Synchronisation Rule Mapping for the Attribute exactly once, in the
-        desired priority order (highest first). To reposition a single mapping without
-        restating the whole list, use Move-JIMMetaverseAttributePriority instead.
+        desired priority order (highest first). The one exception is a mapping whose
+        Synchronisation Rule is being deleted (its contributed-values recall has not finished
+        yet): it may be left out, and stays at the bottom of the order. A refused order names
+        the mappings it is missing and any listed mapping that is not a contributor. To
+        reposition a single mapping without restating the whole list, use
+        Move-JIMMetaverseAttributePriority instead.
 
     .PARAMETER AttributeId
         The unique identifier of the Metaverse Attribute.
@@ -20,7 +24,8 @@ function Set-JIMMetaverseAttributePriority {
         The unique identifier of the Metaverse Object Type that scopes the priority list.
 
     .PARAMETER MappingId
-        Every current contributing mapping ID, in the desired priority order (highest first).
+        Every current contributing mapping ID, in the desired priority order (highest first). A
+        mapping whose Synchronisation Rule is being deleted may be omitted.
 
     .PARAMETER NullIsValueMappingId
         Mapping IDs (from -MappingId) that should have their "Null is a value" flag set, so an

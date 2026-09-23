@@ -3,6 +3,7 @@
 
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using System.Text.Json;
 using JIM.Application.Staging;
 using JIM.Connectors;
@@ -7346,9 +7347,10 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="metaverseObjectTypeId">The object type that scopes the attribute's priority list.</param>
     /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list changed.</param>
-    /// <param name="arrivingMappingIds">Mappings joining this attribute's list from elsewhere (a retargeted mapping),
-    /// which must land at the bottom. Omit where nothing is arriving, such as a deletion.</param>
-    private async Task ReconcileAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlySet<int>? arrivingMappingIds = null)
+    /// <param name="mappingIdsToPlaceLast">Mappings that must land at the bottom of the list: ones joining it from
+    /// elsewhere (a retargeted mapping), or ones whose Synchronisation Rule has just had its deletion queued (#1597).
+    /// Omit where nothing is moving, such as a completed deletion.</param>
+    private async Task ReconcileAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlySet<int>? mappingIdsToPlaceLast = null)
     {
         var contributors = await Application.Repository.ConnectedSystems
             .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
@@ -7361,9 +7363,10 @@ public partial class ConnectedSystemServer
         // and a retargeted mapping is by definition older than at least some incumbents: it would take the top of its
         // new attribute's list and silently start winning resolution. Ordering arrivals last is what makes the
         // safe-addition promise hold for a retarget as well as for a genuine insert (whose id happens to be highest
-        // anyway). OrderBy is stable, so the existing contributors keep their relative order.
-        if (arrivingMappingIds is { Count: > 0 })
-            contributors = contributors.OrderBy(m => arrivingMappingIds.Contains(m.Id) ? 1 : 0).ToList();
+        // anyway). A rule whose deletion is queued goes last by the same route. OrderBy is stable, so the existing
+        // contributors keep their relative order.
+        if (mappingIdsToPlaceLast is { Count: > 0 })
+            contributors = contributors.OrderBy(m => mappingIdsToPlaceLast.Contains(m.Id) ? 1 : 0).ToList();
 
         if (contributors.Count == 1)
         {
@@ -7389,10 +7392,17 @@ public partial class ConnectedSystemServer
     /// Builds the renumbered ordered list from a complete-order request: the request must list every current
     /// contributor for the attribute exactly once and no others, so renumbering produces no gaps or duplicate
     /// priorities. Used by the "replace the whole order" surface (drag-reorder-then-save).
+    /// <para>
+    /// The one exception is a mapping whose Synchronisation Rule has its deletion queued behind a contributed-values
+    /// recall (#1597): the administrator has just deleted it, so the request may leave it out, and it is placed
+    /// beneath every listed contributor. Listing it is equally valid and honours its position. Either is safe because
+    /// the rule is disabled for the whole window, and a disabled rule's mappings take no part in priority resolution.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="orderedContributors"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when the attribute has no contributors, or the requested order
-    /// does not match the attribute's current contributor set exactly.</exception>
+    /// does not match the attribute's current contributor set exactly (the message names what is missing and what
+    /// is not a contributor).</exception>
     private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed)> BuildAttributePriorityFromFullOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
     {
         if (orderedContributors == null)
@@ -7408,12 +7418,17 @@ public partial class ConnectedSystemServer
             throw new ArgumentException("The attribute priority order contains duplicate mapping identifiers.");
 
         var existingIds = existing.Select(m => m.Id).ToHashSet();
-        if (!requestedDistinct.SetEquals(existingIds))
-            throw new ArgumentException("The attribute priority order must list every contributing mapping for the attribute exactly once, and no others.");
+        var notContributors = requestedIds.Where(id => !existingIds.Contains(id)).ToList();
+        var omitted = existing.Where(m => !requestedDistinct.Contains(m.Id)).ToList();
+        var omittedPendingDeletion = await GetMappingsWithQueuedRuleDeletionAsync(omitted);
+        var missing = omitted.Where(m => !omittedPendingDeletion.Contains(m)).ToList();
+
+        if (notContributors.Count > 0 || missing.Count > 0)
+            throw new ArgumentException(BuildAttributePriorityMismatchMessage(missing, notContributors));
 
         var snapshot = SnapshotPriorityState(existing);
         var byId = existing.ToDictionary(m => m.Id);
-        var ordered = new List<SyncRuleMapping>(orderedContributors.Count);
+        var ordered = new List<SyncRuleMapping>(existing.Count);
         foreach (var contributor in orderedContributors)
         {
             var mapping = byId[contributor.MappingId];
@@ -7421,8 +7436,56 @@ public partial class ConnectedSystemServer
             ordered.Add(mapping);
         }
 
+        // Left out because their rule is being deleted: beneath everything listed, in their existing relative order.
+        ordered.AddRange(omittedPendingDeletion);
+
         var changed = RenumberAndCollectChanges(ordered, snapshot);
         return (ordered, changed);
+    }
+
+    /// <summary>
+    /// The subset of <paramref name="mappings"/> whose Synchronisation Rule has its deletion queued or in progress
+    /// (#1597), in their given order. Only a disabled rule can qualify (the deletion disables it at queue time), so
+    /// the worker task lookup is skipped entirely when every rule is enabled.
+    /// </summary>
+    private async Task<List<SyncRuleMapping>> GetMappingsWithQueuedRuleDeletionAsync(IReadOnlyCollection<SyncRuleMapping> mappings)
+    {
+        var candidateRuleIds = mappings
+            .Where(m => m.SyncRule is { Enabled: false })
+            .Select(m => m.SyncRuleId)
+            .Distinct()
+            .ToList();
+        if (candidateRuleIds.Count == 0)
+            return [];
+
+        var queuedRuleIds = await Application.Repository.Tasking.GetSyncRuleIdsWithQueuedDeletionAsync(candidateRuleIds);
+        return mappings.Where(m => queuedRuleIds.Contains(m.SyncRuleId)).ToList();
+    }
+
+    /// <summary>
+    /// The refusal for a complete-order request that does not match the attribute's contributors: the fixed rule,
+    /// then what is missing and what is not a contributor, so an administrator need not diff the lists themselves.
+    /// </summary>
+    private static string BuildAttributePriorityMismatchMessage(IReadOnlyCollection<SyncRuleMapping> missing, IReadOnlyCollection<int> notContributors)
+    {
+        var message = new StringBuilder("The attribute priority order must list every contributing mapping for the attribute exactly once, and no others.");
+        if (missing.Count > 0)
+        {
+            message.Append(" Missing: ");
+            message.Append(string.Join(", ", missing.Select(m => m.SyncRule is { Name.Length: > 0 } rule
+                ? $"mapping {m.Id} (Synchronisation Rule '{rule.Name}')"
+                : $"mapping {m.Id}")));
+            message.Append('.');
+        }
+
+        if (notContributors.Count > 0)
+        {
+            message.Append(" Not contributors to this attribute: ");
+            message.Append(string.Join(", ", notContributors.Select(id => $"mapping {id}")));
+            message.Append(". Reload the current order and try again.");
+        }
+
+        return message.ToString();
     }
 
     /// <summary>
@@ -8834,7 +8897,8 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Deletes a Synchronisation Rule with the recall-or-keep choice for its contributed Metaverse attribute
     /// values (#1537). When recall is chosen (the default on every surface) and the rule still contributes
-    /// values, the rule is disabled immediately and a <see cref="DeleteSyncRuleWorkerTask"/> is queued: the
+    /// values, the rule is disabled immediately, moved to the bottom of each attribute priority order it
+    /// contributes to (#1597), and a <see cref="DeleteSyncRuleWorkerTask"/> is queued: the
     /// worker withdraws the values by provenance (re-electing surviving contributors and staging Pending
     /// Exports) and deletes the rule as its final step, and the returned result carries the queued Activity id.
     /// Keep, or a rule with no contributed values, deletes synchronously exactly as before (the ON DELETE SET
@@ -8870,6 +8934,12 @@ public partial class ConnectedSystemServer
             syncRule.DisabledReason = "Deletion in progress: contributed attribute values are being recalled.";
             StampUpdated(syncRule, initiatedBy, initiatedByApiKey);
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+
+            // The rule leaves each attribute's priority order now rather than when the recall lands (#1597), so the
+            // survivors hold positions 1..N for every read, the portal and a positional move, and an administrator
+            // tidying the order to them is never working against a rule they have already deleted. Disabled, its
+            // mappings take no part in resolution, so dropping them to the bottom changes no value.
+            await PlaceSyncRuleContributionsLastAsync(syncRule);
 
             DeleteSyncRuleWorkerTask recallTask;
             if (initiatedByApiKey != null)
@@ -9164,6 +9234,27 @@ public partial class ConnectedSystemServer
                 .Distinct()
                 .ToList()
             : [];
+
+    /// <summary>
+    /// Moves every import mapping of a Synchronisation Rule to the bottom of its target attribute's priority order,
+    /// leaving the other contributors in their relative order (#1597). Called when the rule's deletion is queued
+    /// behind a contributed-values recall, so the rule leaves the order when the administrator deletes it rather than
+    /// when the recall lands. The rule must already be disabled: a disabled rule's mappings take no part in priority
+    /// resolution, which is what makes the move change no value. A no-op for export rules.
+    /// </summary>
+    private async Task PlaceSyncRuleContributionsLastAsync(SyncRule syncRule)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Import)
+            return;
+
+        var mappingIdsByAttribute = syncRule.AttributeFlowRules
+            .Where(m => m.TargetMetaverseAttributeId.HasValue)
+            .GroupBy(m => m.TargetMetaverseAttributeId!.Value)
+            .ToDictionary(g => g.Key, g => (IReadOnlySet<int>)g.Select(m => m.Id).ToHashSet());
+
+        foreach (var (attributeId, mappingIds) in mappingIdsByAttribute)
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId, mappingIds);
+    }
     #endregion
 
     #region Object Matching Rules

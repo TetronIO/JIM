@@ -109,6 +109,7 @@ In the expanded list (highest priority at the top):
 - **Drag** a contributor by its handle to reorder it; JIM renumbers the whole list so it is never left inconsistent.
 - Toggle **Null is a value** per contributor.
 - **Disabled Synchronisation Rules** stay in the list, greyed out, holding their position but never contributing.
+- A **Synchronisation Rule being deleted** (its contributed values are still being recalled) drops to the bottom of the list the moment you delete it, and is gone once the recall finishes. You can reorder the surviving contributors straight away; there is no need to wait for the recall.
 - Changes are held until you click **Save order**, and you can **Reset** to discard them.
 
 ### 🧭 In the Attribute Flow editor
@@ -133,6 +134,7 @@ The same configuration is available for automation:
 
 - Read the ordered contributor list for an attribute.
 - Replace the whole order, or move a single contributor to a position (JIM renumbers the others for you, so the list is never left in an inconsistent state).
+- A replacement order must list every contributor, with one exception: a Synchronisation Rule whose deletion is still recalling its values may be left out, and stays at the bottom. If an order is refused, the error names the contributors it is missing and any listed mapping that is not a contributor.
 - Set **"Null is a value"** when creating an inbound mapping: `New-JIMSyncRuleMapping -NullIsValue`. On an existing mapping it is set through the priority surface instead, with `Set-JIMMetaverseAttributePriority` or `Move-JIMMetaverseAttributePriority`, which write it in the same transaction as the ordering.
 
 ### When changes take effect
