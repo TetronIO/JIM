@@ -552,6 +552,10 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
         await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSync2Profile, fullSync2Activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
 
+        // Resolved before the grouped assertions, which keep running after a failure: a missing item fails here,
+        // plainly, rather than as a null dereference further down.
+        var retainedJoinItem = fullSync2Activity.RunProfileExecutionItems.Single(rpei => rpei.ConnectedSystemObjectId == cso.Id);
+
         using (Assert.EnterMultipleScope())
         {
             Assert.That(preview.Warnings.Any(w => w.Code == SyncPreviewMessageCode.OutOfScope), Is.True);
@@ -565,11 +569,9 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
             var reloadedCso = await ReloadEntityAsync(cso);
             Assert.That(reloadedCso.MetaverseObjectId, Is.EqualTo(mvoId), "The real run must keep the join intact too");
 
-            var retainedJoinItem = fullSync2Activity.RunProfileExecutionItems
-                .SingleOrDefault(rpei => rpei.ConnectedSystemObjectId == cso.Id);
-            Assert.That(retainedJoinItem?.ObjectChangeType, Is.EqualTo(ObjectChangeType.OutOfScopeRetainJoin),
+            Assert.That(retainedJoinItem.ObjectChangeType, Is.EqualTo(ObjectChangeType.OutOfScopeRetainJoin),
                 "The real run must still record the retained join on the object's Execution Item");
-            Assert.That(retainedJoinItem!.SyncOutcomes
+            Assert.That(retainedJoinItem.SyncOutcomes
                     .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow),
                 Is.False, "Nothing flowed for a retained join, so no Attribute Flow outcome may be recorded");
 

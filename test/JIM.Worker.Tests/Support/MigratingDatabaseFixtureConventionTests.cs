@@ -17,7 +17,8 @@ namespace JIM.Worker.Tests.Support;
 /// "DateTime Handling" in <c>src/CLAUDE.md</c>). From then on, in the same process, <c>Migrate()</c> throws on that
 /// warning unless the options suppress it. A fixture that omits the suppression therefore passes on its own and
 /// fails whenever any earlier test has constructed the repository, so whether it fails depends on test order.
-/// Five fixtures had exactly this fault and failed only when the whole Worker suite ran against a database.
+/// Seven fixtures had exactly this fault and failed only when the whole Worker suite ran against a database; two
+/// of them arrived on main while the first five were being fixed, which is why this is a sweep and not a one-off.
 /// </para>
 /// <para>
 /// A source sweep rather than a behavioural test because the fault is order-dependent: no single run of the
