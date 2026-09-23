@@ -14,11 +14,17 @@ Attribute Priority { #attribute-priority }
 Configuration Change History { #configuration-change-history }
 :   A versioned, per-object audit of who changed a configuration entity, what changed, and when, captured as a redacted snapshot on the originating Activity. It covers every administrator-mutable configuration type and is retained on its own, typically much longer, retention period.
 
+Configuration Change Preview { #configuration-change-preview }
+:   An evaluation of a proposed configuration edit, such as a Synchronisation Rule's Scoping Criteria, Attribute Flow or Deprovisioning Action, an Object Matching Rule change, a Connected System schema or container deselection, or a Metaverse Object Type's deletion settings, against the objects JIM already holds, reporting which of them would be affected before you save. It changes nothing. See [Configuration changes](../configuration/configuration-changes.md#previewing-a-change-before-you-make-it).
+
+Connected System { #connected-system }
+:   An external directory, database, file or service that JIM synchronises identity data with, reached through a Connector. Each Connected System has its own connection settings, schema, Connector Space, Run Profiles and Synchronisation Rules. See [Connected Systems](../configuration/connected-systems.md).
+
 Connected System Object (CSO) { #connected-system-object }
 :   The object as a Connected System holds it, staged in the Connector Space: an account, a group, an HR row. Each Connected System Object corresponds to one object in that Connected System, and may be joined to a Metaverse Object once synchronisation processes it.
 
 Connector { #connector }
-:   An adapter for communicating with an external system. Each connector implements the protocol and logic required to import from and export to a specific type of data source (e.g. LDAP directories, CSV files).
+:   An adapter for communicating with an external system. Each connector implements the protocol and logic required to import from and export to a specific type of data source (e.g. LDAP directories, SQL databases, SCIM 2.0 service providers, CSV files). See [Connectors](../connectors/index.md) for the built-in ones.
 
 Connector Space { #connector-space }
 :   The staging area where Connected System Objects reside before and after synchronisation. The Connector Space acts as a buffer between external systems and the Metaverse, ensuring that changes are validated before they are applied.
@@ -80,6 +86,9 @@ Obsoletion { #obsoletion }
 Partition { #partition }
 :   A logical division within a Connected System. Partitions allow JIM to scope imports and exports to specific segments of a directory or data source, such as organisational units in an LDAP directory.
 
+Password Synchronisation { #password-synchronisation }
+:   Delivery of one password change to every Connected System configured to receive it that the Metaverse Object has a Connected System Object in. Each system gets its own queued, encrypted change, delivered and retried independently by the Password Delivery Service, so one unavailable system cannot hold up the rest. Configured per Connected System. See [Passwords](../concepts/passwords.md).
+
 Pending Export { #pending-export }
 :   A queued change waiting to be sent to a target system. Pending Exports are created during synchronisation and held until an export Run Profile is executed, at which point they are applied to the Connected System.
 
@@ -92,14 +101,26 @@ Provisioning { #provisioning }
 Run Profile { #run-profile }
 :   A configured operation that defines what action to perform on a Connected System. Run Profiles include Full Import, Delta Import, Full Synchronisation, Delta Synchronisation, and Export, each with configurable parameters such as page size and target partition.
 
+Safeguards { #safeguards }
+:   Optional Run Profile limits that stop one run becoming a mass change: an Export Run Profile can cap how many creates, updates and deletes it attempts, and a Full Import Run Profile can cap how many objects its deletion detection may newly mark as deleted. A run that would exceed a limit attempts none of that change type, leaves it untouched for a later run, and completes with a warning. See [Run Profiles > Safeguards](../configuration/run-profiles.md#safeguards).
+
+Schedule { #schedule }
+:   An automated sequence of ordered steps, such as Run Profile executions, that JIM runs on a cron trigger or on demand. Steps run sequentially or in parallel, and each run is recorded as a Schedule Execution. See [Schedules](../configuration/schedules.md).
+
 Scoping { #scoping }
 :   The Scoping Criteria that decide which objects a Synchronisation Rule applies to. An object outside the criteria is left alone by that rule, whatever its Attribute Flows and Object Matching Rules say. Configured per Synchronisation Rule as a filter over the object's attributes.
+
+Service Health { #service-health }
+:   Whether JIM's background services, the Worker and the Scheduler, are alive and what each is doing, read from a heartbeat each service writes every few seconds. Shown at the top of **Administration > Operations** and available through the REST API and `Get-JIMServiceHealth`. See [Operations > Service Health](../configuration/operations.md#service-health).
 
 Standard Mappings { #standard-mappings }
 :   The recorded correspondence between a Metaverse Attribute and its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, with notes where the correspondence needs care. Built-in attributes come pre-populated and are kept current by JIM; you can record your own on custom attributes. Standard Mappings are guidance for choosing which attribute to target when connecting a system that speaks either standard; what actually flows between systems is determined solely by your Attribute Flows.
 
+Sync Preview { #sync-preview }
+:   A dry run of what synchronising one Connected System Object, or exporting one Metaverse Object, would do with the configuration already saved: which objects would be projected, joined, updated, deleted or deprovisioned, and why. Nothing is staged, persisted or exported. See [Sync Preview](../configuration/sync-preview.md).
+
 Synchronisation Rule { #synchronisation-rule }
-:   A complete mapping configuration between a Connected System and the metaverse. Synchronisation Rules define object type mappings, Attribute Flows, scoping criteria, Object Matching Rules, and the direction of data flow (inbound or outbound).
+:   A complete mapping configuration between a Connected System and the metaverse. Synchronisation Rules define object type mappings, Attribute Flows, Scoping Criteria, Object Matching Rules, and the direction of data flow (inbound or outbound).
 
 Temporal Scope Reconciliation { #temporal-scope-reconciliation }
 :   A scheduled reconciliation that re-evaluates the scoping criteria of Synchronisation Rules which depend on relative dates, so objects move in or out of scope as time passes even when their own attributes have not changed.

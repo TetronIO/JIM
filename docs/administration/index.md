@@ -34,6 +34,12 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     The defence-in-depth response headers JIM sends on every request, including the Content Security Policy, and what to know if you sit JIM behind a reverse proxy or corporate web proxy.
 
+-   **[Security Audit Events](security-audit-events.md)**
+
+    ---
+
+    The authentication activity JIM records in its Activity log: interactive sign-in success and failure, and API key authentication failure, with its retention and SIEM integration.
+
 -   **[Configuration Reference](configuration.md)**
 
     ---

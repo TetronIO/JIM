@@ -12,7 +12,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 230" role="img" aria-labelledby="jimdg-sd-title jimdg-sd-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-sd-title">Inside the Scheduler Service</title>
-  <desc id="jimdg-sd-desc">The Scheduler Host runs a 30-second polling loop that evaluates schedule due times and performs crash recovery. It queues tasks through the JimApplication facade, which stores schedules and the task queue in PostgreSQL for the Worker to pick up.</desc>
+  <desc id="jimdg-sd-desc">The Scheduler Host runs a polling loop that evaluates schedule due times and performs crash recovery. The loop runs every 30 seconds, or sooner when a Worker Task change notification wakes it, and writes the Scheduler's heartbeat for the Service Health view. It queues tasks through the JimApplication facade, which stores schedules and the task queue in PostgreSQL for the Worker to pick up.</desc>
   <g id="jimdg-sd-boundary">
     <rect class="jimdg-hub" x="90" y="20" width="400" height="200" rx="8"/>
     <text class="jimdg-hub-title" x="290" y="56">JIM.Scheduler</text>
@@ -20,8 +20,8 @@
   <g id="jimdg-sd-host">
     <rect class="jimdg-stage" x="130" y="90" width="320" height="96" rx="8"/>
     <text class="jimdg-stage-label" x="290" y="124">Scheduler Host</text>
-    <text class="jimdg-system-sub" x="290" y="148">30-second polling loop</text>
-    <text class="jimdg-system-sub" x="290" y="167">due times · crash recovery</text>
+    <text class="jimdg-system-sub" x="290" y="148">30-second poll · woken by task changes</text>
+    <text class="jimdg-system-sub" x="290" y="167">due times · crash recovery · heartbeat</text>
   </g>
   <g id="jimdg-sd-facade">
     <rect class="jimdg-stage" x="560" y="106" width="280" height="64" rx="8"/>

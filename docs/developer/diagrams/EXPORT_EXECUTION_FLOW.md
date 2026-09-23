@@ -1,8 +1,8 @@
 # Export Execution Flow
 
-> Last updated: 2026-07-25, JIM v0.14.0
+> Last updated: 2026-09-23, JIM v0.15.0
 
-This diagram shows how Pending Exports are executed against Connected Systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
+This diagram shows how Pending Exports are executed against Connected Systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, retry with backoff, and per-Run Profile limits on how many creates, updates and deletes a run may send.
 
 Since v0.10.0, connector exceptions thrown during export are always reported as RPEIs. Three catch paths (the file-based outer catch in `ExportExecutionServer`, the call-based sequential-batch catch, and the parallel-batch catch) each create `ProcessedExportItems` for every export in the affected scope. Previously, a thrown connector exception set `FailedCount` without creating RPEIs, so the activity could complete successfully despite silent export failures. Per-batch streaming via `batchCompletedCallback` keeps in-memory `ProcessedExportItem` accumulation bounded at 100K+ exports.
 
@@ -23,10 +23,15 @@ flowchart TD
     CheckCancel -->|Yes| CancelMsg[Update activity:<br/>Cancelled before export]
     CancelMsg --> Done
 
-    CheckCancel -->|No| Execute[ExportExecutionServer.ExecuteExportsAsync<br/>See Export Execution below]
-    Execute --> ProcessResult[ProcessExportResultAsync<br/>Create RPEIs for each export:<br/>- Create --> Exported<br/>- Update --> Exported<br/>- Delete --> Deprovisioned<br/>- Failed --> UnhandledError with retry count]
+    CheckCancel -->|No| StateScope[State the managed scope, #1250<br/>container selections and exclusions,<br/>if the connector implements<br/>IConnectorManagedScope]
+    StateScope --> Options[Resolve export parallelism<br/>explicit setting, else connector recommendation<br/>Carry the Run Profile's Max creates,<br/>Max updates and Max deletes, #1629]
+    Options --> Execute[ExportExecutionServer.ExecuteExportsAsync<br/>See Export Execution below]
+    Execute --> ProcessResult[ProcessExportResultAsync<br/>RPEIs were streamed per batch:<br/>- Create --> Exported<br/>- Update --> Exported<br/>- Delete --> Deprovisioned<br/>- Deferred whole --> Pending Export item<br/>- Failed --> error type with retry count<br/>- Unresolved reference --> UnresolvedReference]
 
-    ProcessResult --> CheckContainers{New containers<br/>created during export?}
+    ProcessResult --> Withheld{Any change type<br/>withheld by a limit?}
+    Withheld -->|Yes| WarnWithheld[Record withheld counts<br/>Activity warning names the limit,<br/>the pending count and the remedy]
+    Withheld -->|No| CheckContainers
+    WarnWithheld --> CheckContainers{New containers<br/>created during export?}
     CheckContainers -->|Yes| AutoSelect[Auto-select new containers<br/>Refresh and select containers<br/>by created external IDs<br/>Ensures they appear in future imports]
     CheckContainers -->|No| Done
     AutoSelect --> Done
@@ -36,7 +41,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([ExecuteExportsAsync]) --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>The same filters drive the batch sweep below]
+    Start([ExecuteExportsAsync]) --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>Creates already exported are skipped while<br/>they await confirmation, #1687<br/>The same filters drive the batch sweep below]
     GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
@@ -44,13 +49,16 @@ flowchart TD
     CheckPreview -->|Yes| PreviewResult[Return export IDs<br/>without executing]
     PreviewResult --> Done([Return result])
 
-    CheckPreview -->|No| ConnectorType{Connector<br/>export type?}
+    CheckPreview -->|No| Limits{Run Profile has<br/>export limits?}
+    Limits -->|Yes| Ledger[Count executable exports per change type<br/>ExportChangeLimitLedger withholds, in full,<br/>any type whose count exceeds its limit<br/>Withheld exports stay Pending, untouched]
+    Limits -->|No| ConnectorType
+    Ledger --> ConnectorType{Connector<br/>export type?}
 
     ConnectorType -->|IConnectorExportUsingCalls| PrepareConnector[Inject CertificateProvider<br/>and CredentialProtection]
     PrepareConnector --> OpenExport[OpenExportConnection<br/>with system settings]
 
     %% --- Batch collection: single forward keyset sweep ---
-    OpenExport --> Collect[Collect next page of Pending Exports<br/>keyset cursor on CreatedAt, Id, #985<br/>never rescans from the start]
+    OpenExport --> Collect[Collect next page of Pending Exports<br/>keyset cursor on CreatedAt, Id, #985<br/>never rescans from the start<br/>withheld change types excluded]
     Collect --> Empty{Page<br/>empty?}
     Empty -->|Yes| CaptureContainers
     Empty -->|No| SplitExports[Split the page into:<br/>- Immediate exports: no unresolved references<br/>- Deferred exports: have unresolved references]
@@ -88,7 +96,7 @@ flowchart TD
     CloseExport --> SecondPass[Second pass: retry references deferred<br/>by a PREVIOUS export run<br/>single indexed query on the<br/>unresolved-references partial index, #1102]
     SecondPass --> Done
 
-    ConnectorType -->|IConnectorExportUsingFiles| FileExport[File-based export<br/>with batching]
+    ConnectorType -->|IConnectorExportUsingFiles| FileExport[File-based export<br/>with batching<br/>reserved against the ledger<br/>before the file is written<br/>Auto-confirming connectors delete<br/>each Pending Export on success]
     FileExport --> Done
 ```
 
@@ -99,24 +107,30 @@ Each batch follows this sequence, whether processed sequentially or in parallel:
 ```mermaid
 flowchart TD
     Start([Process batch]) --> MarkExecuting[Mark all exports in batch<br/>as Status = Executing]
-    MarkExecuting --> CallConnector[connector.ExportAsync<br/>Send batch to connector<br/>Returns List of ExportResult]
+    MarkExecuting --> ClassCheck[Pre-send check, #492:<br/>refuse any export that adds an<br/>object class without values for<br/>its required attributes<br/>ClassMembershipRequirementsNotMet]
+    ClassCheck --> CallConnector[connector.ExportAsync<br/>Send the rest via ForConnector:<br/>only what can be written now<br/>Returns List of ExportResult]
     CallConnector --> ProcessResults[For each export + result pair]
     ProcessResults --> CheckResult{Export<br/>succeeded?}
 
     CheckResult -->|Yes, Create| HandleCreate[Record Exported<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported]
     CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported]
+    CheckResult -->|Yes, but references<br/>still unresolved| HandlePartial[Written in part, #1398<br/>Status stays Pending with<br/>HasUnresolvedReferences<br/>A Create becomes an Update]
     CheckResult -->|Yes, Delete| CsoStatus{CSO status =<br/>PendingProvisioning?}
     CsoStatus -->|No, Normal| HandleDelete[Record Deprovisioned<br/>Set Status = Exported<br/>confirming import deletes PE and CSO]
     CsoStatus -->|Yes: provisioning was<br/>never confirmed| HandleUnconfirmedDelete[Record Deprovisioned<br/>Remove Pending Export and CSO now:<br/>import deletion detection excludes<br/>PendingProvisioning objects, so a<br/>successful Delete is the only<br/>confirmation the object will ever get]
-    CheckResult -->|Failed| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]
+    CheckResult -->|Failed, or refused:<br/>outside managed scope,<br/>class requirements unmet| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]
 
-    HandleCreate --> Persist
+    HandleCreate --> InitialPassword{Provisioning rule<br/>asks for an<br/>initial password?}
+    InitialPassword -->|Yes| StagePassword[Stage a Provisioned password change<br/>on the Password Synchronisation queue<br/>for the Password Delivery Service, #1706<br/>after the external ID is assigned]
+    InitialPassword -->|No| Persist
+    StagePassword --> Persist
     HandleUpdate --> Persist
+    HandlePartial --> Persist
     HandleDelete --> Persist
     HandleUnconfirmedDelete --> Persist
     HandleFail --> CheckMaxRetries{ErrorCount >=<br/>MaxRetries?}
     CheckMaxRetries -->|Yes| MarkFailed[Set Status = Failed<br/>Permanent failure<br/>Requires manual intervention]
-    CheckMaxRetries -->|No| SetRetry[Set Status = ExportNotConfirmed<br/>Set NextRetryAt = backoff time]
+    CheckMaxRetries -->|No| SetRetry[Set Status = Pending<br/>Set NextRetryAt = backoff time]
     MarkFailed --> Persist
     SetRetry --> Persist
 
@@ -178,6 +192,14 @@ flowchart TD
 
 - **Two-pass export**<br /> Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 
+- **Run Profile export limits (#1618, #1629)**<br /> An Export Run Profile may carry Max creates, Max updates and Max deletes. When any is set, the executable Pending Exports are counted per change type once at the start of the run, and `ExportChangeLimitLedger` withholds in full any type whose count exceeds its limit: never a head of the queue, so a frequent Schedule cannot trickle a wrong mass change through. Withheld exports stay `Pending` and untouched (not marked, not failed, given no RPEI), withheld types are excluded from the paging query, and one ledger is shared by both passes and both connector shapes. The Activity records the withheld counts and completes with a warning naming the limit and the remedy. An uncapped run does no extra database work.
+
+- **An exported Create is never re-sent while it awaits confirmation (#1687)**<br /> A Create at `Exported` is filtered out of the executable set: re-sending it would ask the connector to create an object that already exists. Changes staged while it waits are appended to it as `Pending` attribute changes, and travel as one Update once the confirming import confirms the object and reconciliation turns the Create into an Update (see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)). A Create at `ExportNotConfirmed` is still exportable, because it genuinely needs to go again.
+
+- **Refusals JIM makes before, or instead of, the target system (#492, #1250)**<br /> Two refusals give an administrator an actionable error rather than whatever the target system would return. Before a batch is sent, any export that adds an object class without values for that class's required attributes is failed as `ClassMembershipRequirementsNotMet`, naming the attributes. During the export, a connector given a managed scope refuses per object any write outside the selected containers, so an Attribute Flow cannot move an object somewhere JIM could not read it back. Both take the ordinary failure path, and the rest of the batch proceeds.
+
+- **Initial passwords are staged, not delivered (#1121, #1706)**<br /> When a Create succeeds for an object whose provisioning Synchronisation Rule asks for an initial password, the export records a Provisioned password change on the Password Synchronisation queue, after the external ID has been assigned so the object can be addressed. The Password Delivery Service delivers it later over the connector's password channel; setting it inside the export would put a second network call in the loop persisting a write that has already succeeded. A staging failure is logged as an error and counted on the Activity, never turned into a failed export.
+
 - **Keyset batch collection (#985)**<br /> Batches are collected in a single forward sweep with a keyset cursor on `(CreatedAt, Id)`. Executed exports drop out of the query mid-run and deferred ones stay `Pending` while being accumulated in memory, so a strictly-increasing cursor never re-reads a row. The previous OFFSET implementation restarted its scan from zero for every batch and degraded to O(n²) page loads once thousands of deferred exports accumulated; at 200,000 objects with 10,000 reference-bearing groups it spent hours re-reading collected rows before the first group reached the target system. Known trade-off: an export whose `NextRetryAt` backoff elapses mid-run at a position already behind the cursor waits for the next export run.
 
 - **All-deferred fast path (#985c)**<br /> When an entire collected page turns out to be deferred, `AnyExecutableNonDeferredExportsAfterAsync` probes for executable exports beyond the cursor; if there are none, `GetRemainingDeferredExportsAsync` collects the rest in one set-based query and the sweep stops. The probe is mandatory: deferred and executable exports interleave in `(CreatedAt, Id)` order, so a full deferred page does not prove the remainder of the queue is deferred, and breaking out without it would silently skip executable exports created after a contiguous deferred run.
@@ -192,7 +214,7 @@ flowchart TD
 
 - **Per-batch resource release (#1006)**<br /> Each parallel batch's `DbContext` and connector are disposed as that batch completes. They were previously held for the remainder of the run, so a large reference-heavy export drained the connection pool after around 29 batches and failed with "the connection pool has been exhausted".
 
-- **Retry with backoff**<br /> Failed exports are retried with exponential backoff via `NextRetryAt`. After `MaxRetries` attempts, the export is marked as permanently `Failed`.
+- **Retry with backoff**<br /> Failed exports are retried with exponential backoff via `NextRetryAt`: a call-based failure returns the export to `Pending`, and a file-based export that throws marks the whole file's exports `ExportNotConfirmed` with the same backoff. After `MaxRetries` attempts, the export is marked as permanently `Failed`.
 
 - **No-net-change detection**<br /> Before exports are created during sync, the system checks if the target CSO already has the expected values. This happens upstream in `EvaluateExportRulesWithNoNetChangeDetectionAsync`, not during export execution.
 

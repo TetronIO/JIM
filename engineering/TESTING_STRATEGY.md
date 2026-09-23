@@ -20,9 +20,13 @@ The middle two tiers both run under `dotnet test`; they differ in the database p
 
 ## 1. Unit Tests
 
-**Location**: `test/JIM.Worker.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Web.Api.Tests/`, `test/JIM.Utilities.Tests/`
+**Location**: `test/JIM.Worker.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Web.Api.Tests/`, `test/JIM.Utilities.Tests/`, `test/JIM.InMemoryData.Tests/`, `test/JIM.Web.Tests/`
 
 **Purpose**: Test individual methods and classes in isolation using mocks
+
+**UI tests** live in `test/JIM.Web.Tests/`: plain NUnit tests for display logic (notably the causality Lineage and Timeline views) and Blazor component tests rendered with [bUnit](https://bunit.dev) (a test-only dependency; nothing ships in the containers). Component tests are kept deliberately narrow, covering components under `src/JIM.Web/Shared/` that carry logic or lifecycle behaviour rather than pure markup or pages; the scope rules are in `test/CLAUDE.md`.
+
+**Supporting projects** (no tests of their own): `test/JIM.TestSupport/` holds shared test helpers, and `test/JIM.TestScimServiceProvider/` is a SCIM 2.0 service provider built on `src/JIM.Scim`. The SCIM 2.0 Client Connector's unit tests in `JIM.Worker.Tests` drive its `MockScimProvider` in process, and the same provider runs as a container over HTTPS for Integration Scenario 15.
 
 **Characteristics**:
 - Fast execution (milliseconds per test)
@@ -63,8 +67,8 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 ## 2. Workflow Tests
 
 **Location**: Two complementary test suites:
-- `test/JIM.Worker.Tests/Workflows/`: Lower-level workflow tests using `WorkflowTestBase` (47 tests)
-- `test/JIM.Workflow.Tests/Scenarios/`: Higher-level scenario tests using `WorkflowTestHarness` (40 tests)
+- `test/JIM.Worker.Tests/Workflows/`: Lower-level workflow tests using `WorkflowTestBase` (over 240 tests across more than 35 fixtures)
+- `test/JIM.Workflow.Tests/Scenarios/`: Higher-level scenario tests using `WorkflowTestHarness` (43 tests)
 
 **Purpose**: Test multi-step business processes using real implementations with in-memory database
 
@@ -74,7 +78,7 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 - Test multiple components working together
 - Focus on workflow correctness and component integration
 
-**Current Coverage**:
+**Current Coverage** (`JIM.Workflow.Tests`):
 
 | Test File | Tests | Area |
 |-----------|------:|------|
@@ -83,11 +87,11 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 | `Scenarios/Joiners/ProvisioningWorkflowTests.cs` | 4 | Joiner provisioning |
 | `Scenarios/Sync/FullSyncAfterImportWorkflowTests.cs` | 2 | Import → Full Sync |
 | `Scenarios/Sync/DeltaSyncAfterImportWorkflowTests.cs` | 2 | Import → Delta Sync |
-| `Scenarios/Sync/DriftDetectionWorkflowTests.cs` | 12 | Export drift detection |
+| `Scenarios/Sync/DriftDetectionWorkflowTests.cs` | 14 | Export drift detection |
 | `Scenarios/Sync/NoNetChangeWorkflowTests.cs` | 12 | No-change optimisation |
-| `Scenarios/Sync/NonStringDataTypeExportTests.cs` | 4 | Non-string data type exports |
+| `Scenarios/Sync/NonStringDataTypeExportTests.cs` | 5 | Non-string data type exports |
 
-Total: 40 tests.
+Total: 43 tests.
 
 **What Workflow Tests Are Good At**:
 - ✅ Testing multi-step workflows (Import -> Sync -> Export)
@@ -115,7 +119,7 @@ Total: 40 tests.
 
 ## 3. Database-Backed Component Tests
 
-**Location**: `test/JIM.Worker.Tests/Servers/*DatabaseTests.cs`
+**Location**: `test/JIM.Worker.Tests/`, mostly `Repositories/*DatabaseTests.cs` and `Servers/*DatabaseTests.cs`, with further fixtures under `Migrations/` (including the upgrade path from the last released schema to head, #1581), `Notifications/` (the PostgreSQL LISTEN/NOTIFY triggers), `SyncPreview/` (preview isolation and scale) and `Workflows/`. Find them all with `Category=RequiresPostgres`.
 
 **Purpose**: Verify repository and server behaviour against a **real PostgreSQL** database, in the .NET test host, with no other external systems. This tier exists to catch the class of bug the EF Core in-memory provider structurally hides: provider-specific behaviour (query-tracking semantics, shadow foreign keys) and hand-written raw SQL the in-memory provider cannot execute.
 
@@ -172,13 +176,13 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 
 ## 4. LDAPS Certificate Validation Tests
 
-**Location**: `test/JIM.Worker.Tests/Connectors/LdapsCertificateValidationTests.cs`, `ServerCertificateProbeTests.cs`
+**Location**: `test/JIM.Worker.Tests/Connectors/LdapsCertificateValidationTests.cs`, `ServerCertificateProbeTests.cs`, `SambaAdAndUnencryptedLdapTests.cs`, `DirectoryServer389LdapTests.cs`
 
 **Purpose**: Verify LDAPS certificate validation against real directory servers presenting real certificates over TLS, in the .NET test host. This tier exists because JIM deliberately does not make the trust decision itself (#1132): the platform LDAP client validates the chain, the validity period and the certificate's name, and JIM only supplies additional trust anchors. What that client does with those anchors can only be observed by actually connecting to a directory server over TLS, so none of it is unit-testable, and it is exactly the validation the integration stacks used to bypass by setting `LDAPTLS_REQCERT=never` (#1141).
 
 **Characteristics**:
 - Real directory servers over real TLS, but no Docker Compose stack and not driven by the PowerShell integration runner: the fixtures connect directly from the .NET test host
-- Covers three OpenLDAP variants (a system-trusted CA, a CA that is only trusted via the JIM certificate store, and an expired certificate), a Samba AD Domain Controller, and a 389 Directory Server pair presenting the same JIM-store-only and expired certificates
+- Covers three OpenLDAP variants (a system-trusted CA, a CA that is only trusted via the JIM certificate store, and an expired certificate), a Samba AD Domain Controller, and a 389 Directory Server pair presenting the same JIM-store-only and expired certificates, plus unencrypted LDAP connections to OpenLDAP and Samba AD
 - Exercises both directions: connections must be refused for untrusted issuers, name mismatches and expired certificates (with the reason reported), and must succeed once the CA is added to the JIM certificate store
 
 **Gating**: Every fixture carries `[Category("RequiresLdaps")]` and, in `[OneTimeSetUp]`, calls `Assert.Ignore` unless `JIM_TEST_LDAPS_HOST` is set. So a normal `dotnet test` / `jim-test` run skips them, and they run only once pointed at real servers.
@@ -195,7 +199,9 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
 | `JIM_TEST_LDAPS_EXPIRED_HOST` / `_EXPIRED_PORT` | Server presenting an expired certificate |
 | `JIM_TEST_LDAPS_SYSTEM_TRUSTED_HOST` / `_SYSTEM_TRUSTED_PORT` | Server whose CA is already trusted by the OS, proving JIM's additions are additive rather than a replacement |
 
-The Samba AD and 389 Directory Server rows read the `JIM_TEST_LDAPS_SAMBA_*` and `JIM_TEST_LDAPS_389_*` variables the script prints, each test ignoring itself when its own are unset.
+The Samba AD and 389 Directory Server rows read the `JIM_TEST_LDAPS_SAMBA_*` and `JIM_TEST_LDAPS_389_*` variables the script prints, and the unencrypted OpenLDAP row reads `JIM_TEST_LDAP_PLAIN_HOST` / `_PORT`, each test ignoring itself when its own are unset.
+
+**Related opt-in category, `RequiresDirectory`**: a few fixtures read a live directory's own data rather than its TLS behaviour: `LdapDnParsingDirectoryTests` (Distinguished Names exactly as OpenLDAP returns them), and `LdapObjectTypeVisibilityDirectoryTests` / `LdapObjectTypeVisibility389DirectoryTests` (which object classes OpenLDAP and 389 Directory Server publish as their own, so the schema screen hides the right ones). They are gated on `JIM_TEST_LDAP_HOST` (OpenLDAP) or `JIM_TEST_DIRSRV_HOST` (389 Directory Server), are not run by any CI job, and are run by hand with `--filter "Category=RequiresDirectory"` when the directory-specific code they cover changes.
 
 **Running locally**: stand up the fixture servers with the standalone script (see `test/scripts/Start-LdapsCertificateTestServers.ps1`; the `-IncludeSambaAd` switch also provisions the Samba AD Domain Controller, and `-Include389` the 389 Directory Server pair), which prints the environment variables above, then:
 
@@ -370,6 +376,11 @@ public class FullSyncAfterImportWorkflowTests
 | Group Membership Sync | ✅ Done | `JIM.Workflow.Tests/Scenarios/Entitlement Management/GroupMembershipSyncTests.cs` |
 | Non-String Data Types | ✅ Done | `JIM.Workflow.Tests/Scenarios/Sync/NonStringDataTypeExportTests.cs` |
 | Projection (CSO -> MVO join) | ⚠️ Partial | Covered implicitly by sync tests; no dedicated test |
+| Synchronised Deprovisioning (Connected System deletion) | ✅ Done | `JIM.Worker.Tests/Workflows/SynchronisedDeprovisioningWorkflowTests.cs` |
+| Stranded-value recall after a Connector Space clear | ✅ Done | `JIM.Worker.Tests/Workflows/StrandedValueSweepWorkflowTests.cs` |
+| Attribute value recall on mapping or Synchronisation Rule deletion | ✅ Done | `JIM.Worker.Tests/Workflows/MappingDeletionChoiceWorkflowTests.cs`, `RemovedMappingRecallWorkflowTests.cs`, `SyncRuleDeletionRecallWorkflowTests.cs` |
+| Pending Export stage-to-execute contract | ✅ Done | `JIM.Worker.Tests/Workflows/StageToExecuteContractTests.cs`, `UnconfirmedProvisioningDeleteWorkflowTests.cs` |
+| Sync Preview fidelity (preview matches a real run) | ✅ Done | `JIM.Worker.Tests/Workflows/SyncPreviewFidelityTests.cs` |
 | Export Evaluation (PendingExport) | ✅ Done | 67 dedicated unit tests in `JIM.Worker.Tests/OutboundSync/` (`ExportEvaluationTests.cs`, `ExportEvaluationMergeTests.cs`, `ExportEvaluationNoChangeTests.cs`) |
 
 ## ⚠️ CRITICAL: EF Core In-Memory Database Limitations ⚠️

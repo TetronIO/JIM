@@ -19,11 +19,11 @@ The first stable release, delivering a production-ready identity lifecycle platf
 
 ## 🌳 v1.x - Connector Ecosystem
 
-Expanding the range of systems JIM can connect to out of the box. The SCIM 2.0 Client Connector has already shipped and is listed here for continuity.
+Expanding the range of systems JIM can connect to out of the box. The JIM SCIM 2.0 Client Connector and the JIM SQL Connector (Microsoft SQL Server and Oracle Database) have already shipped and are listed here for continuity.
 
 | Connector | Description | Status |
 |---|---|---|
-| [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | SCIM 2.0 endpoints | ✅ Available |
+| [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | Any SCIM 2.0 service provider (RFC 7643/7644) | ✅ Available |
 | [JIM SQL Connector](../connectors/jim-sql-connector.md) | Microsoft SQL Server and Oracle Database | ✅ Available |
 | JIM SQL Connector: PostgreSQL and MySQL | The same connector, extended to two further engines | Planned |
 | JIM PowerShell Connector | PowerShell Core scripts | Planned |

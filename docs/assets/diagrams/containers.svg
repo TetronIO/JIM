@@ -15,7 +15,7 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 750" role="img" aria-labelledby="jimdg-ct-title jimdg-ct-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-ct-title">JIM Containers</title>
-  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems, file systems, enterprise databases and cloud applications.</desc>
+  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline, delivers queued passwords, and hosts the Connectors, connecting to Directory Services, HR systems, file systems, enterprise databases and cloud applications.</desc>
   <defs>
     <mask id="jimdg-ct-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="750">
       <rect x="0" y="0" width="1160" height="750" fill="#ffffff"/>
@@ -54,9 +54,10 @@
     <text class="jimdg-stage-label" x="890" y="258">Scheduler Service</text>
     <text class="jimdg-system-sub" x="890" y="280">cron &amp; interval triggers</text>
     <rect class="jimdg-stage" x="460" y="420" width="240" height="96" rx="8"/>
-    <text class="jimdg-stage-label" x="580" y="450">Worker Service</text>
-    <text class="jimdg-system-sub" x="580" y="472">runs the sync pipeline</text>
-    <text class="jimdg-system-sub" x="580" y="491">hosts the Connectors</text>
+    <text class="jimdg-stage-label" x="580" y="446">Worker Service</text>
+    <text class="jimdg-system-sub" x="580" y="467">runs the sync pipeline</text>
+    <text class="jimdg-system-sub" x="580" y="485">delivers passwords</text>
+    <text class="jimdg-system-sub" x="580" y="503">hosts the Connectors</text>
     <path class="jimdg-stage" d="M780,436 A110,16 0 0 1 1000,436 L1000,524 A110,16 0 0 1 780,524 Z"/>
     <ellipse class="jimdg-stage" cx="890" cy="436" rx="110" ry="16"/>
     <text class="jimdg-stage-label" x="890" y="486">PostgreSQL</text>
