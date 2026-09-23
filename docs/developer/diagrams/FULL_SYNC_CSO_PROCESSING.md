@@ -106,7 +106,7 @@ flowchart TD
     HandleOOS --> OosJoined{CSO joined<br/>to MVO?}
     OosJoined -->|No| Done
     OosJoined -->|Yes| OosAction{InboundOutOfScope<br/>Action?}
-    OosAction -->|RemainJoined| RetainJoin[OutOfScopeRetainJoin<br/>No Attribute Flow, preserve join]
+    OosAction -->|RemainJoined| RetainJoin[OutOfScopeRetainJoin<br/>No Attribute Flow, preserve join<br/>OutOfScopeRetainJoin outcome root]
     OosAction -->|Disconnect| DisconnectOOS[DisconnectedOutOfScope<br/>Evaluate deletion, then recall contributed<br/>attributes if enabled on object type,<br/>with the same re-election and freeze rules<br/>Break join, MVO queued for the<br/>page flush, never saved mid-page #1610]
 
     InScope -->|Yes| CheckMvo{CSO joined<br/>to MVO?}

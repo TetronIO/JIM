@@ -236,6 +236,7 @@ public class OutcomeDisplayMapEventOperationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull)]

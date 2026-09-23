@@ -31,6 +31,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Joined, "Joined to Metaverse Object")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, "Disconnected")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, "Left scope")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, "Left scope, join kept")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, "Metaverse Object deleted")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled, "Metaverse Object deletion scheduled")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled, "Metaverse Object deletion cancelled")]
@@ -114,6 +115,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, Color.Secondary)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, Color.Error)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled, Color.Success)]
@@ -215,7 +217,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] = Icons.Material.Filled.Fingerprint,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = Icons.Material.Filled.MoveToInbox,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = Icons.Material.Filled.Archive,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = Icons.Material.Filled.PublishedWithChanges
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = Icons.Material.Filled.PublishedWithChanges,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = Icons.Material.Filled.FilterAlt
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

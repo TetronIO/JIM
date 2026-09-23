@@ -55,6 +55,12 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope] =
             new OutcomeDisplay("Left scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff,
                 SpeculativeLabel: "Would be disconnected from its Metaverse Object"),
+        // The retaining sibling of DisconnectedOutOfScope (#1649): same scope exit, join kept. Info tone and the
+        // FilterAlt icon match what the portal already shows for this change type on the Activity list chip, so
+        // the two surfaces agree; nothing is destroyed or recalled, so it is not a Warning.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] =
+            new OutcomeDisplay("Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt,
+                SpeculativeLabel: "Would leave scope and keep its Metaverse Object join"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted] =
             new OutcomeDisplay("Metaverse Object deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove,
                 SpeculativeLabel: "The Metaverse Object would be deleted"),
@@ -424,8 +430,8 @@ public static class OutcomeDisplayMap
                 GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
             // Every Would* preview (nothing executed), ExportConfirmed/ExportFailed (confirming or
             // failing an export is not itself an object operation),
-            // DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled/MvoDeletionCancelled
-            // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
+            // DeletionDetected/Disconnected/DisconnectedOutOfScope/OutOfScopeRetainJoin/MvoDeletionScheduled/
+            // MvoDeletionCancelled (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
             // (attribute-priority housekeeping, not an object operation), ProvisioningCancelled (nothing was
             // ever created, updated or deleted anywhere: the whole point of a cancellation is that no
             // operation reached the target system) and anything unmapped all fall through here: null rather

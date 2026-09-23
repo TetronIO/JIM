@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Models.Sync;
 using JIM.Worker.Models;
 using NUnit.Framework;
@@ -422,6 +423,37 @@ public class MetaverseObjectChangeResultTests
 
         // Assert
         Assert.That(result.AttributeFlowCount, Is.Null);
+    }
+
+    [Test]
+    public void OutOfScopeRetainJoin_WithScopingSyncRule_AttributesTheRule()
+    {
+        // Arrange
+        var scopingSyncRule = new SyncRule { Id = 42, Name = "HR Users" };
+
+        // Act
+        var result = MetaverseObjectChangeResult.OutOfScopeRetainJoin(scopingSyncRule);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SyncRuleId, Is.EqualTo(42));
+            Assert.That(result.SyncRuleName, Is.EqualTo("HR Users"));
+        }
+    }
+
+    [Test]
+    public void OutOfScopeRetainJoin_WithoutScopingSyncRule_LeavesTheRuleUnattributed()
+    {
+        // Act
+        var result = MetaverseObjectChangeResult.OutOfScopeRetainJoin();
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SyncRuleId, Is.Null);
+            Assert.That(result.SyncRuleName, Is.Null);
+        }
     }
 
     #endregion

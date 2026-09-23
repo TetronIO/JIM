@@ -89,7 +89,7 @@ public enum CausalityAttributeOperation
 /// </summary>
 public enum CausalityTableChangeKind
 {
-    /// <summary>The object's import scope changed (DisconnectedOutOfScope).</summary>
+    /// <summary>The object's import scope changed (DisconnectedOutOfScope, OutOfScopeRetainJoin).</summary>
     Scope,
 
     /// <summary>A new Identity was created for the object (Projected).</summary>

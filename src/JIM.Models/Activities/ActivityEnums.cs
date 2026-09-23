@@ -361,7 +361,19 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// rejected it as already in use. Recorded on the export item that saw the rejection; the revised value
     /// itself is written to the Metaverse Object (import mode) or the Connected System Object (export mode).
     /// </summary>
-    GeneratedValueRemediated
+    GeneratedValueRemediated,
+
+    /// <summary>
+    /// A joined Connected System Object fell out of scope of its import Synchronisation Rule, whose Inbound
+    /// Out-of-Scope Action is RemainJoined, so it kept its Metaverse Object join (#1649). Nothing flows from it
+    /// while it stays out of scope, and nothing is recalled: the values it contributed stay where they are. The
+    /// retaining sibling of <see cref="DisconnectedOutOfScope"/>, and attributed to the same scoping rule.
+    ///
+    /// Its own value rather than an absent tree because the scope exit is an audit event in its own right; before
+    /// it existed the engine recorded an <see cref="AttributeFlow"/> root for it, reporting a flow that never
+    /// happened and inflating the Activity's Attribute Flow count.
+    /// </summary>
+    OutOfScopeRetainJoin
 }
 
 /// <summary>
