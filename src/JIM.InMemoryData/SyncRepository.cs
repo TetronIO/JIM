@@ -3514,7 +3514,7 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
+    public virtual Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
     {
         foreach (var assignment in assignments)
         {

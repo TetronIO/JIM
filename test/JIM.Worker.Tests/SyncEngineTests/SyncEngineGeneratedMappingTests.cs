@@ -418,6 +418,49 @@ public class SyncEngineGeneratedMappingTests
     }
 
     [Test]
+    public void FlowInboundAttributes_OnlyReferenceAttributesPass_RecordsNoPendingGeneration()
+    {
+        // Work package G, task 1a: a generated mapping never targets a Reference attribute, so the deferred
+        // reference-only pass (onlyReferenceAttributes: true) must skip it entirely, never reaching
+        // ProcessGeneratedMapping. Without this guard the reference pass would record a second pending
+        // generation after the worker has already resolved and cleared the first pass's, which nothing then
+        // resolves.
+        var target = TargetAttr();
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = JoinedCso(mvo, "Ada");
+        var mapping = GeneratedMapping(target);
+        var syncRule = GeneratedRule(mapping);
+
+        _engine.FlowInboundAttributes(cso, syncRule, [CsoType()], _evaluator, onlyReferenceAttributes: true);
+
+        Assert.That(mvo.PendingGeneratedValues, Is.Empty, "a generated mapping must record nothing in the reference-only pass");
+    }
+
+    [Test]
+    public void FlowInboundAttributes_ReferencePassAfterFirstPassAlreadyResolved_DoesNotReRecordPendingGeneration()
+    {
+        // Reproduces the worker's real sequencing: pass 1 records a pending generation, the worker resolves and
+        // clears it inline, then the deferred reference-only pass (pass 2) runs over the SAME Synchronisation
+        // Rule for this CSO's other (reference) mappings. Without the guard, pass 2 would call
+        // ProcessGeneratedMapping a second time and leave a pending generation nothing ever resolves.
+        var target = TargetAttr();
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = JoinedCso(mvo, "Ada");
+        var mapping = GeneratedMapping(target);
+        var syncRule = GeneratedRule(mapping);
+
+        _engine.FlowInboundAttributes(cso, syncRule, [CsoType()], _evaluator, skipReferenceAttributes: true);
+        Assert.That(mvo.PendingGeneratedValues, Has.Count.EqualTo(1), "precondition: pass 1 records the pending generation");
+
+        // Simulate the worker's inline resolution having applied and cleared it.
+        mvo.PendingGeneratedValues.Clear();
+
+        _engine.FlowInboundAttributes(cso, syncRule, [CsoType()], _evaluator, onlyReferenceAttributes: true, isFinalReferencePass: true);
+
+        Assert.That(mvo.PendingGeneratedValues, Is.Empty, "the reference-only pass must never re-record a resolved generation");
+    }
+
+    [Test]
     public void FlowInboundAttributes_LowerPriorityOrdinaryContributionEvaluatedAfterGeneratedMapping_IsBlockedByTheGate()
     {
         // The generated mapping is the higher-priority incumbent (via FindEffectiveIncumbentSyncRuleId reading

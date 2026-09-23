@@ -86,6 +86,26 @@ public interface ISyncEngine
         AttributePriorityContext priorityContext);
 
     /// <summary>
+    /// Stages a resolved generated value (Unique Value Generation, #242, Phase 2 work package G) onto the
+    /// Metaverse Object exactly as <c>ProcessExpressionMapping</c>'s scalar path stages an ordinary expression
+    /// result: diffs <paramref name="textValue"/> / <paramref name="numericValue"/> against the object's
+    /// effective current value for <paramref name="pending"/>'s attribute; when different, stages removal of
+    /// the existing value(s) and a pending addition carrying <paramref name="pending"/>'s
+    /// <c>ContributedBySystemId</c> / <c>ContributedBySyncRuleId</c>; always finishes by taking over provenance
+    /// and by removing any other rule's pending addition for the same attribute (winner takes the attribute).
+    /// The unique value service (a worker-only concern) has already resolved the value and performed every I/O
+    /// this needs; this method itself performs none.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object the value belongs to.</param>
+    /// <param name="pending">The pending generation request this value resolves, carrying the target attribute
+    /// and the provenance (system, Synchronisation Rule) to stamp.</param>
+    /// <param name="textValue">The value for a <see cref="Models.Core.AttributeDataType.Text"/> target.</param>
+    /// <param name="numericValue">The value for a <see cref="Models.Core.AttributeDataType.Number"/> or
+    /// <see cref="Models.Core.AttributeDataType.LongNumber"/> target. For a Number target, an out-of-range
+    /// value throws <see cref="InvalidOperationException"/> rather than silently truncating.</param>
+    void ApplyGeneratedValue(MetaverseObject mvo, PendingGeneratedValue pending, string? textValue, long? numericValue);
+
+    /// <summary>
     /// Evaluates whether Pending Exports have been confirmed by a CSO's current attribute state.
     /// Confirmed exports are marked for deletion; partially confirmed exports are updated.
     /// </summary>
