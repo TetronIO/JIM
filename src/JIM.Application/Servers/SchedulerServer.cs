@@ -258,6 +258,97 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// Starts every schedule that is due to run, then advances each one's next run time. Called by the JIM.Scheduler
+    /// service once per polling cycle; cron-triggered executions are initiated by System.
+    /// </summary>
+    /// <remarks>
+    /// The next run time is advanced whether or not the start succeeds. A schedule that cannot start (a step's
+    /// Connected System being deleted, for example) therefore fails once per scheduled occurrence and is attempted
+    /// again at its next one, rather than staying due and failing again on every polling cycle, seconds apart, until
+    /// someone fixes the cause (#1765). Each schedule is isolated: nothing that goes wrong with one stops the others
+    /// being started.
+    /// </remarks>
+    public async Task StartDueSchedulesAsync()
+    {
+        var dueSchedules = await GetDueSchedulesAsync();
+        if (dueSchedules.Count == 0)
+            return;
+
+        int started = 0, skipped = 0, failedToStart = 0, notAdvanced = 0;
+
+        foreach (var schedule in dueSchedules)
+        {
+            try
+            {
+                // Prevent overlap. A schedule skipped here keeps its due time, so it starts on the first cycle after
+                // the running execution ends.
+                var activeExecutions = await GetActiveExecutionsAsync();
+                if (activeExecutions.Any(e => e.ScheduleId == schedule.Id))
+                {
+                    Log.Warning("StartDueSchedulesAsync: Schedule {ScheduleId} ({ScheduleName}) is due but already has an active execution. Skipping.",
+                        schedule.Id, schedule.Name);
+                    skipped++;
+                    continue;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "StartDueSchedulesAsync: Could not check schedule {ScheduleId} ({ScheduleName}) for an active execution. It stays due and will be checked again next cycle.",
+                    schedule.Id, schedule.Name);
+                notAdvanced++;
+                continue;
+            }
+
+            Log.Information("StartDueSchedulesAsync: Starting execution of due schedule {ScheduleId} ({ScheduleName})",
+                schedule.Id, schedule.Name);
+
+            try
+            {
+                await StartScheduleExecutionAsync(schedule, ActivityInitiatorType.System, null, "Scheduler Service");
+                started++;
+            }
+            catch (Exception ex)
+            {
+                // StartScheduleExecutionAsync has already recorded the failure on the Schedule Execution, if it got
+                // as far as creating one. Fall through to advance the next run time regardless.
+                Log.Error(ex, "StartDueSchedulesAsync: Failed to start execution for schedule {ScheduleId} ({ScheduleName}). It will be attempted again at its next scheduled run time.",
+                    schedule.Id, schedule.Name);
+                failedToStart++;
+            }
+
+            if (!await TryAdvanceNextRunTimeAsync(schedule))
+                notAdvanced++;
+        }
+
+        Log.Information("StartDueSchedulesAsync: {DueCount} due schedule(s): {Started} started, {Skipped} skipped (already running), {FailedToStart} failed to start, {NotAdvanced} next run time(s) not advanced.",
+            dueSchedules.Count, started, skipped, failedToStart, notAdvanced);
+    }
+
+    /// <summary>
+    /// Advances a schedule's next run time to its next cron occurrence and saves it. Returns false, having logged
+    /// why, when it cannot; the schedule then stays due and is picked up again next cycle.
+    /// </summary>
+    private async Task<bool> TryAdvanceNextRunTimeAsync(Schedule schedule)
+    {
+        try
+        {
+            var nextRunTime = CalculateNextRunTime(schedule);
+            if (!nextRunTime.HasValue)
+                return false;
+
+            schedule.NextRunTime = nextRunTime.Value;
+            await UpdateScheduleRunTimesAsync(schedule);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "TryAdvanceNextRunTimeAsync: Failed to save the next run time for schedule {ScheduleId} ({ScheduleName}). It stays due and will be picked up again next cycle.",
+                schedule.Id, schedule.Name);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Gets a paginated list of Schedule Executions, optionally filtered by schedule.
     /// </summary>
     /// <param name="scheduleId">Optional filter by schedule ID.</param>
@@ -542,20 +633,31 @@ public class SchedulerServer
         };
         await Application.Repository.Scheduling.CreateScheduleExecutionAsync(execution);
 
-        // Update schedule's last run time
-        schedule.LastRunTime = DateTime.UtcNow;
-        await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
-
-        // Queue ALL step groups upfront
-        var firstStepIndex = distinctStepIndices[0];
-        foreach (var stepIndex in distinctStepIndices)
+        try
         {
-            // First step group is Queued (ready to run), all others are WaitingForPreviousStep
-            var initialStatus = stepIndex == firstStepIndex
-                ? WorkerTaskStatus.Queued
-                : WorkerTaskStatus.WaitingForPreviousStep;
+            // Update schedule's last run time
+            schedule.LastRunTime = DateTime.UtcNow;
+            await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
 
-            await QueueStepGroupAsync(execution, schedule.Steps, stepIndex, initialStatus, initiatorType, initiatorId, initiatorName);
+            // Queue ALL step groups upfront
+            var firstStepIndex = distinctStepIndices[0];
+            foreach (var stepIndex in distinctStepIndices)
+            {
+                // First step group is Queued (ready to run), all others are WaitingForPreviousStep
+                var initialStatus = stepIndex == firstStepIndex
+                    ? WorkerTaskStatus.Queued
+                    : WorkerTaskStatus.WaitingForPreviousStep;
+
+                await QueueStepGroupAsync(execution, schedule.Steps, stepIndex, initialStatus, initiatorType, initiatorId, initiatorName);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Once the execution record exists, a start that fails must leave it Failed with the reason, never
+            // In Progress: the stuck-execution safety net would otherwise find it with no tasks and mark it
+            // Complete, reporting a run that never happened as a success.
+            await FailExecutionThatCouldNotStartAsync(execution, ex);
+            throw;
         }
 
         Log.Information("StartScheduleExecutionAsync: All {StepCount} steps queued for execution {ExecutionId}. Step group 0 is Queued, remaining groups are WaitingForPreviousStep.",
@@ -880,13 +982,33 @@ public class SchedulerServer
                 Log.Error(ex, "QueueStepGroupAsync: Failed to queue step {StepId} ({StepName}) for execution {ExecutionId}",
                     step.Id, step.Name, execution.Id);
 
-                // If we can't queue a step, fail the execution
-                execution.Status = ScheduleExecutionStatus.Failed;
-                execution.CompletedAt = DateTime.UtcNow;
+                // If we can't queue a step, the execution fails. StartScheduleExecutionAsync records that; the step's
+                // name is given here, where it is known, so the recorded reason says which step could not be queued.
                 execution.ErrorMessage = $"Failed to queue step '{step.Name}': {ex.Message}";
-                await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
                 throw;
             }
+        }
+    }
+
+    /// <summary>
+    /// Records a Schedule Execution whose start failed part-way as Failed, with the reason. Uses the reason already
+    /// set on the execution (the step that could not be queued) when there is one. A failure to save this is logged
+    /// rather than thrown, so the caller rethrows the original error, which is the one that explains what happened.
+    /// </summary>
+    private async Task FailExecutionThatCouldNotStartAsync(ScheduleExecution execution, Exception cause)
+    {
+        execution.Status = ScheduleExecutionStatus.Failed;
+        execution.CompletedAt = DateTime.UtcNow;
+        execution.ErrorMessage ??= $"The Schedule could not be started: {cause.Message}";
+
+        try
+        {
+            await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+        }
+        catch (Exception saveEx)
+        {
+            Log.Error(saveEx, "FailExecutionThatCouldNotStartAsync: Could not record execution {ExecutionId} of schedule {ScheduleId} ({ScheduleName}) as Failed after its start failed.",
+                execution.Id, execution.ScheduleId, execution.ScheduleName);
         }
     }
 
