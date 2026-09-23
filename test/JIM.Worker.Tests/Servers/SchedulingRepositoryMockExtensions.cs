@@ -9,7 +9,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Scheduling;
 using Moq;
 
-namespace JIM.Web.Api.Tests;
+namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
 /// Makes a mocked <see cref="ISchedulingRepository"/> behave like the real conditional Schedule Execution transitions
@@ -19,7 +19,7 @@ namespace JIM.Web.Api.Tests;
 /// tests assert on outcomes rather than on which mock was called.
 /// </summary>
 /// <remarks>
-/// JIM.Worker.Tests carries the same helper for the TaskingServer fixtures; the two test projects share no
+/// JIM.Web.Api.Tests carries the same helper for the SchedulerServer fixtures; the two test projects share no
 /// project that references both Moq and JIM.Data, so each keeps its own copy. Keep them identical.
 /// </remarks>
 internal static class SchedulingRepositoryMockExtensions

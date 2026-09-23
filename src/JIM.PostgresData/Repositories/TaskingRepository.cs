@@ -366,15 +366,6 @@ public class TaskingRepository : ITaskingRepository
             .CountAsync(st => st.ScheduleExecutionId == scheduleExecutionId && st.ScheduleStepIndex == stepIndex);
     }
 
-    public async Task<int> TransitionStepToQueuedAsync(Guid scheduleExecutionId, int stepIndex)
-    {
-        return await Repository.Database.WorkerTasks
-            .Where(st => st.ScheduleExecutionId == scheduleExecutionId
-                         && st.ScheduleStepIndex == stepIndex
-                         && st.Status == WorkerTaskStatus.WaitingForPreviousStep)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, WorkerTaskStatus.Queued));
-    }
-
     public async Task<int> DeleteWaitingTasksForExecutionAsync(Guid scheduleExecutionId, string reason)
     {
         // Cancel the activities for all waiting tasks before deleting them, recording why each step did not run.

@@ -822,81 +822,134 @@ public class SchedulerServer
             return true; // Still in progress
         }
 
-        // All activities are in a terminal state. Check for failures.
-        var anyFailed = activitiesForStep.Any(a =>
-            a.Status == ActivityStatus.FailedWithError ||
-            a.Status == ActivityStatus.CompleteWithError ||
-            a.Status == ActivityStatus.Cancelled);
+        // Every Activity has finished: the step group is over, so decide what happens next exactly as the Worker would
+        // have, had it not stopped before it could.
+        Log.Information("CheckAndAdvanceExecutionAsync: Safety net concluding step {StepIndex} of execution {ExecutionId}.",
+            currentStepIndex, execution.Id);
 
-        Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} completed. AnyFailed: {AnyFailed}",
-            execution.Id, currentStepIndex, anyFailed);
+        return await ConcludeStepGroupAsync(freshExecution, currentStepIndex, activitiesForStep);
+    }
 
-        // Check if any failed and ContinueOnFailure is false
-        if (anyFailed)
+    /// <summary>
+    /// Decides what happens once every task in a step group has finished (#1768): stop the Schedule, move on to the
+    /// next step group, or complete the execution. The one implementation, shared by the Worker's advancement
+    /// (TaskingServer.TryAdvanceScheduleExecutionAsync) and the Scheduler's safety net
+    /// (<see cref="CheckAndAdvanceExecutionAsync"/>), so the two can never reach different conclusions about the same
+    /// execution.
+    /// </summary>
+    /// <remarks>
+    /// The caller must have loaded the execution with its Schedule and Steps and confirmed it was InProgress. Every
+    /// change made here is conditional on it still being InProgress when the write lands, so a cancellation (or a
+    /// competing conclusion) that arrives in between stands: a finished execution stays finished.
+    /// </remarks>
+    /// <param name="execution">The execution, with its Schedule and Steps loaded.</param>
+    /// <param name="stepIndex">The step group that has just finished.</param>
+    /// <param name="activitiesForStep">The Activities recorded for that step group.</param>
+    /// <returns>True if the execution is still in progress; false if it stopped, completed, or had already finished.</returns>
+    internal async Task<bool> ConcludeStepGroupAsync(ScheduleExecution execution, int stepIndex, IReadOnlyCollection<Activity> activitiesForStep)
+    {
+        var stopReason = GetReasonToStop(execution.Schedule?.Steps ?? [], stepIndex, activitiesForStep);
+        if (stopReason != null)
         {
-            // Check ALL steps at this index (parallel steps share the same index),
-            // not just the first one. Fail if ANY step has ContinueOnFailure = false.
-            var stepsAtIndex = freshExecution.Schedule.Steps
-                .Where(s => s.StepIndex == currentStepIndex).ToList();
+            Log.Warning("ConcludeStepGroupAsync: Execution {ExecutionId} stops at step {StepIndex}: {Reason}",
+                execution.Id, stepIndex, stopReason);
 
-            if (stepsAtIndex.Count == 0 || stepsAtIndex.Any(s => !s.ContinueOnFailure))
+            // Cancel the remaining steps before marking the execution Failed, so an interruption between the two leaves
+            // an InProgress execution the safety net will conclude again, never a Failed one with waiting tasks that
+            // nothing would ever remove. A failure here is thrown, leaving exactly that retryable state.
+            var cancelled = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(
+                execution.Id, ScheduleStepNotRunReasons.EarlierStepStoppedSchedule);
+            if (cancelled > 0)
             {
-                var failedStepNames = stepsAtIndex
-                    .Where(s => !s.ContinueOnFailure)
-                    .Select(s => string.IsNullOrEmpty(s.Name) ? $"Step {s.StepIndex}" : s.Name)
-                    .ToList();
-
-                var stepDescription = failedStepNames.Count > 0
-                    ? string.Join(", ", failedStepNames)
-                    : $"Step index {currentStepIndex}";
-
-                Log.Warning("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} failed at step {StepIndex} ({StepNames}) due to activity failure.",
-                    execution.Id, currentStepIndex, stepDescription);
-
-                freshExecution.Status = ScheduleExecutionStatus.Failed;
-                freshExecution.CompletedAt = DateTime.UtcNow;
-                freshExecution.ErrorMessage = $"Step '{stepDescription}' failed and ContinueOnFailure is false.";
-                await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
-
-                // Clean up remaining WaitingForPreviousStep tasks
-                var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id, ScheduleStepNotRunReasons.EarlierStepStoppedSchedule);
-                if (deletedCount > 0)
-                {
-                    Log.Information("CheckAndAdvanceExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",
-                        deletedCount, execution.Id);
-                }
-
-                return false;
+                Log.Information("ConcludeStepGroupAsync: Cancelled {Count} remaining step task(s) of execution {ExecutionId}.",
+                    cancelled, execution.Id);
             }
-        }
 
-        // Find the next waiting step group (all steps are queued upfront as WaitingForPreviousStep)
-        var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(execution.Id);
+            if (!await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                    execution, [ScheduleExecutionStatus.InProgress], ScheduleExecutionStatus.Failed, stopReason))
+            {
+                Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} had already finished, so it is left as it is.", execution.Id);
+            }
 
-        if (!nextStepIndex.HasValue)
-        {
-            // No more waiting steps - execution complete
-            Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} completed successfully.", execution.Id);
-
-            freshExecution.Status = ScheduleExecutionStatus.Complete;
-            freshExecution.CompletedAt = DateTime.UtcNow;
-            await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
             return false;
         }
 
-        // Advance to next step group by transitioning WaitingForPreviousStep -> Queued
-        Log.Information("CheckAndAdvanceExecutionAsync: Safety net advancing execution {ExecutionId} to step {StepIndex}",
-            execution.Id, nextStepIndex.Value);
+        var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(execution.Id);
+        if (!nextStepIndex.HasValue)
+        {
+            if (await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                    execution, [ScheduleExecutionStatus.InProgress], ScheduleExecutionStatus.Complete, null))
+            {
+                Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} completed. All steps done.", execution.Id);
+            }
+            else
+            {
+                Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} had already finished, so it is left as it is.", execution.Id);
+            }
 
-        freshExecution.CurrentStepIndex = nextStepIndex.Value;
-        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
+            return false;
+        }
 
-        var transitioned = await Application.Repository.Tasking.TransitionStepToQueuedAsync(execution.Id, nextStepIndex.Value);
-        Log.Information("CheckAndAdvanceExecutionAsync: Transitioned {Count} tasks to Queued for execution {ExecutionId} step {StepIndex}",
-            transitioned, execution.Id, nextStepIndex.Value);
+        if (!await Application.Repository.Scheduling.TryAdvanceScheduleExecutionAsync(execution, nextStepIndex.Value))
+        {
+            Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} was not advanced to step {StepIndex}: it had already finished, or had already been advanced.",
+                execution.Id, nextStepIndex.Value);
+            return false;
+        }
 
+        Log.Information("ConcludeStepGroupAsync: Advanced execution {ExecutionId} from step {CompletedStep} to step {NextStep}.",
+            execution.Id, stepIndex, nextStepIndex.Value);
         return true;
     }
+
+    /// <summary>
+    /// Whether a finished step group stops the Schedule, and if so, why, in words an administrator can act on; null
+    /// when the Schedule carries on.
+    /// </summary>
+    /// <remarks>
+    /// The failing step's own setting decides (#1768): the Schedule stops if any step that FAILED is set to stop it
+    /// when it fails. A sibling that succeeded has no say, whatever its setting. Each failed Activity identifies its
+    /// step by ScheduleStepId. Where one cannot (it was recorded before steps were identified, or its step has since
+    /// been deleted), the group is judged by the older, stricter rule, failing safe: it stops if any step at that
+    /// position is set to stop the Schedule, or if the position no longer has any steps at all.
+    /// </remarks>
+    private static string? GetReasonToStop(IReadOnlyCollection<ScheduleStep> scheduleSteps, int stepIndex, IReadOnlyCollection<Activity> activitiesForStep)
+    {
+        var failed = activitiesForStep.Where(IsFailedStepOutcome).ToList();
+        if (failed.Count == 0)
+            return null;
+
+        var stepsAtIndex = scheduleSteps.Where(s => s.StepIndex == stepIndex).ToList();
+        var failedSteps = failed
+            .Select(activity => (Activity: activity, Step: activity.ScheduleStepId is { } stepId
+                ? stepsAtIndex.FirstOrDefault(s => s.Id == stepId)
+                : null))
+            .ToList();
+
+        if (stepsAtIndex.Count == 0 || failedSteps.Any(f => f.Step == null))
+        {
+            if (stepsAtIndex.Count > 0 && stepsAtIndex.All(s => s.ContinueOnFailure))
+                return null;
+
+            return $"{StepSubject(stepIndex, failedSteps.Select(f => StepDisplayName(f.Step, f.Activity)))} failed, so the remaining steps did not run.";
+        }
+
+        var stopping = failedSteps.Where(f => !f.Step!.ContinueOnFailure).ToList();
+        if (stopping.Count == 0)
+            return null;
+
+        var setting = stopping.Select(f => f.Step!.Id).Distinct().Count() == 1
+            ? "It is set to stop the Schedule when it fails"
+            : "They are set to stop the Schedule when they fail";
+        return $"{StepSubject(stepIndex, stopping.Select(f => StepDisplayName(f.Step, f.Activity)))} failed. {setting}, so the remaining steps did not run.";
+    }
+
+    /// <summary>
+    /// Whether an Activity records a step that did not succeed, for Continue On Failure: it failed outright, completed
+    /// with errors, or was cancelled.
+    /// </summary>
+    private static bool IsFailedStepOutcome(Activity activity) => activity.Status is
+        ActivityStatus.FailedWithError or ActivityStatus.CompleteWithError or ActivityStatus.Cancelled;
 
     /// <summary>
     /// Cancels a running or queued schedule execution.

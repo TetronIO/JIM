@@ -610,10 +610,15 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
-        /// Called after a schedule-linked worker task completes. Checks if this was the last task
-        /// in the step group and, if so, either advances to the next step or completes the execution.
-        /// Handles failure detection and ContinueOnFailure logic.
+        /// Called after a schedule-linked worker task completes. Once the last task in the step group has gone, hands the
+        /// group to SchedulerServer.ConcludeStepGroupAsync, which stops the Schedule, moves it on to the next step group,
+        /// or completes it; the Scheduler's safety net shares that decision, so the two can never disagree.
         /// </summary>
+        /// <remarks>
+        /// A finished execution stays finished (#1768): if the execution is no longer InProgress (typically because an
+        /// administrator cancelled it while this step was running), nothing is released and its status is left alone.
+        /// Before this check, a step finishing after a cancellation overwrote Cancelled with Complete or Failed.
+        /// </remarks>
         private async Task TryAdvanceScheduleExecutionAsync(Guid scheduleExecutionId, int completedStepIndex)
         {
             try
@@ -629,100 +634,26 @@ namespace JIM.Application.Servers
                     return;
                 }
 
-                // 2. This was the last task in the step group. Check for failures.
-                var activitiesForStep = await Application.Repository.Activity.GetActivitiesByScheduleExecutionStepAsync(
-                    scheduleExecutionId, completedStepIndex);
-
-                var anyFailed = activitiesForStep.Any(a =>
-                    a.Status == ActivityStatus.FailedWithError ||
-                    a.Status == ActivityStatus.CompleteWithError ||
-                    a.Status == ActivityStatus.Cancelled);
-
-                if (anyFailed)
+                // 2. This was the last task in the step group. Only an execution still in progress moves on.
+                var execution = await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(scheduleExecutionId);
+                if (execution == null)
                 {
-                    // Check ContinueOnFailure on the worker tasks' activities. Since worker tasks are deleted,
-                    // we check the ContinueOnFailure value we stored on the completed tasks. But those are also
-                    // deleted now. Instead, we check the schedule steps directly.
-                    // Actually, we need to check ContinueOnFailure from the worker tasks that were at this step.
-                    // Since they're all deleted now, we use the Activities to find the ScheduleExecution,
-                    // then load the Schedule Steps.
-                    var execution = await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(scheduleExecutionId);
-                    if (execution == null)
-                    {
-                        Log.Error("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} not found after step completion.", scheduleExecutionId);
-                        return;
-                    }
-
-                    var stepsAtIndex = execution.Schedule.Steps.Where(s => s.StepIndex == completedStepIndex).ToList();
-                    var shouldStop = stepsAtIndex.Count == 0 || stepsAtIndex.Any(s => !s.ContinueOnFailure);
-
-                    if (shouldStop)
-                    {
-                        var failedStepNames = stepsAtIndex
-                            .Where(s => !s.ContinueOnFailure)
-                            .Select(s => string.IsNullOrEmpty(s.Name) ? $"Step {s.StepIndex}" : s.Name)
-                            .ToList();
-
-                        var stepDescription = failedStepNames.Count > 0
-                            ? string.Join(", ", failedStepNames)
-                            : $"Step index {completedStepIndex}";
-
-                        Log.Warning("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} failed at step {StepIndex} ({StepNames}). ContinueOnFailure is false.",
-                            scheduleExecutionId, completedStepIndex, stepDescription);
-
-                        execution.Status = ScheduleExecutionStatus.Failed;
-                        execution.CompletedAt = DateTime.UtcNow;
-                        execution.ErrorMessage = $"Step '{stepDescription}' failed and ContinueOnFailure is false.";
-                        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
-
-                        // Clean up all remaining WaitingForPreviousStep tasks
-                        var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(scheduleExecutionId, ScheduleStepNotRunReasons.EarlierStepStoppedSchedule);
-                        if (deletedCount > 0)
-                        {
-                            Log.Information("TryAdvanceScheduleExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",
-                                deletedCount, scheduleExecutionId);
-                        }
-
-                        return;
-                    }
-
-                    Log.Information("TryAdvanceScheduleExecutionAsync: Step {StepIndex} of execution {ExecutionId} had failures but ContinueOnFailure is true. Continuing.",
-                        completedStepIndex, scheduleExecutionId);
-                }
-
-                // 3. Find the next waiting step group
-                var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(scheduleExecutionId);
-
-                if (!nextStepIndex.HasValue)
-                {
-                    // No more waiting steps — execution complete
-                    var execution = await Application.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
-                    if (execution != null)
-                    {
-                        Log.Information("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} completed. All steps done.", scheduleExecutionId);
-
-                        execution.Status = ScheduleExecutionStatus.Complete;
-                        execution.CompletedAt = DateTime.UtcNow;
-                        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
-                    }
+                    Log.Error("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} not found after step completion.", scheduleExecutionId);
                     return;
                 }
 
-                // 4. Transition the next step group from WaitingForPreviousStep -> Queued
-                Log.Information("TryAdvanceScheduleExecutionAsync: Advancing execution {ExecutionId} from step {CompletedStep} to step {NextStep}",
-                    scheduleExecutionId, completedStepIndex, nextStepIndex.Value);
-
-                var transitioned = await Application.Repository.Tasking.TransitionStepToQueuedAsync(scheduleExecutionId, nextStepIndex.Value);
-                Log.Information("TryAdvanceScheduleExecutionAsync: Transitioned {Count} tasks to Queued for execution {ExecutionId} step {StepIndex}",
-                    transitioned, scheduleExecutionId, nextStepIndex.Value);
-
-                // 5. Update the execution's current step index
-                var exec = await Application.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
-                if (exec != null)
+                if (execution.Status != ScheduleExecutionStatus.InProgress)
                 {
-                    exec.CurrentStepIndex = nextStepIndex.Value;
-                    await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(exec);
+                    Log.Information("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} is {Status}, so step {StepIndex} finishing changes nothing and no further step is released.",
+                        scheduleExecutionId, execution.Status, completedStepIndex);
+                    return;
                 }
+
+                // 3. Decide from the step group's Activities, which survive the tasks' deletion.
+                var activitiesForStep = await Application.Repository.Activity.GetActivitiesByScheduleExecutionStepAsync(
+                    scheduleExecutionId, completedStepIndex);
+
+                await Application.Scheduler.ConcludeStepGroupAsync(execution, completedStepIndex, activitiesForStep);
             }
             catch (Exception ex)
             {

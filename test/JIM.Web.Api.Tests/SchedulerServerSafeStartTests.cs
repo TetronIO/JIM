@@ -213,7 +213,6 @@ public class SchedulerServerSafeStartTests
             Assert.That(_createdExecution.StartedAt, Is.Null, "an execution none of whose steps ran never started");
         }
 
-        _mockTaskingRepository.Verify(r => r.TransitionStepToQueuedAsync(It.IsAny<Guid>(), It.IsAny<int>()), Times.Never);
     }
 
     [Test]

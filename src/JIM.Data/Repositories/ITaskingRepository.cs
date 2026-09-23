@@ -101,12 +101,6 @@ public interface ITaskingRepository
     public Task<int> GetWorkerTaskCountByExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
 
     /// <summary>
-    /// Transitions all WaitingForPreviousStep tasks at the specified step index to Queued status.
-    /// Called by the worker when the previous step group completes successfully.
-    /// </summary>
-    public Task<int> TransitionStepToQueuedAsync(Guid scheduleExecutionId, int stepIndex);
-
-    /// <summary>
     /// Deletes all WaitingForPreviousStep tasks for a schedule execution and cancels their associated activities,
     /// recording <paramref name="reason"/> as each activity's message so the step says why it did not run. Called
     /// when a step that is set to stop the Schedule fails, when a Schedule cannot finish starting, and when an
