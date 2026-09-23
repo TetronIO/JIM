@@ -15,11 +15,12 @@ namespace JIM.Connectors.Sql;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Why the column's type matters at all (#1451).</b> Every such value was read out of the very
-/// column it is compared with, and is meant to compare equal to the row it came from. Microsoft SQL
-/// Server's legacy datetime breaks that unless the value goes back in as a datetime: see
-/// <see cref="SqlServerProvider.CreateParameter"/> for what was measured, which included a Delta Import
-/// skipping changes without an error and another that never finished.
+/// <b>Why the column's type matters at all.</b> Every such value was read out of the very column it
+/// is compared with, and is meant to compare equal to the row it came from. Two column types break that
+/// unless the value goes back in the column's own terms: Microsoft SQL Server's legacy datetime (#1451,
+/// see <see cref="SqlServerProvider.CreateParameter"/>) and Oracle Database's TIMESTAMP WITH TIME ZONE
+/// outside UTC (#1783, see <see cref="OracleProvider.CreateParameter"/>). What was measured for them
+/// includes Delta Imports skipping changes without an error, and one that never finished.
 /// </para>
 /// <para>
 /// <b>The catalogue is read lazily, once per source per call.</b> Only a value the dialect says needs

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A Synchronisation Rule or Attribute Flow disabled with a reason (as a schema refresh's "Apply and Disable Dependents" does), or re-enabled afterwards, is now classified in the configuration change history instead of being recorded without a classification. (#1753)
 - 🐛 The SQL Connector now matches Microsoft SQL Server's legacy `datetime` columns exactly, so a Delta Import no longer skips changes sharing a timestamp, stalls on them, or re-reads unchanged rows, and an export keyed on such a column finds its row. (#1451)
 - 🐛 Reordering an attribute's priority straight after deleting a contributing Synchronisation Rule no longer fails while its values are being recalled: the rule drops to the bottom and may be left out. A refused order now names what is missing. (#1597)
+- 🐛 On Oracle Database, a Delta Import reading a `TIMESTAMP WITH TIME ZONE` watermark or change-log column no longer skips or re-reads changes when the Connected System's Database Time Zone is not UTC. (#1783)
 
 ## [0.15.0] - 2026-09-23
 
