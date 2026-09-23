@@ -1250,9 +1250,10 @@ public class SyncImportTaskProcessor
     /// that query is a probe of the (Connected System, Object Type) index that returns nothing.
     ///
     /// A deselected type an enabled Synchronisation Rule is still bound to is held back, and the Activity says so.
-    /// Saving that configuration is refused now, but a deployment can hold one from before the refusal existed, and
-    /// obsoleting objects an outbound rule still targets would disconnect them only for the rule to act on them
-    /// again. Leaving them in place is the fail-safe; the warning names the rules to disable.
+    /// Saving that configuration is refused, but a database can still hold one from before the refusal existed or
+    /// from a change made outside the save paths, and obsoleting objects an outbound rule still targets would
+    /// disconnect them only for the rule to act on them again. Leaving them in place is the fail-safe; the warning
+    /// names the rules to disable.
     /// </remarks>
     private async Task<List<ConnectedSystemObjectType>> ResolveDeletionDetectionObjectTypesAsync()
     {

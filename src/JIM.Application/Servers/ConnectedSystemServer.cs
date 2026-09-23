@@ -1779,9 +1779,10 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <remarks>
     /// Judged on the proposed state rather than on what changed, because what the caller holds may be the only copy
-    /// of the previous state (the REST API edits a loaded entity in place). A configuration saved before this refusal
-    /// existed can therefore be refused on an unrelated save, which is intended: the message says what to change, and
-    /// until it is changed the import leaves that type's objects as they are and warns on every Full Import.
+    /// of the previous state (the REST API edits a loaded entity in place). A configuration that already holds the
+    /// contradiction (saved before this refusal existed, or changed outside the save paths) is therefore refused on an
+    /// unrelated save, which is intended: the message says what to change, and until it is changed the import leaves
+    /// that type's objects as they are and warns on every Full Import.
     /// </remarks>
     /// <param name="connectedSystemId">The Connected System the Object Types belong to.</param>
     /// <param name="objectTypes">The Object Types being saved, as they will stand once persisted.</param>

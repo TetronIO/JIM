@@ -24,10 +24,11 @@ namespace JIM.Worker.Tests.Processors;
 /// them, and the following synchronisation disconnects them and recalls what they contributed. It goes through the
 /// same deletion detection as any other missing object, so the Run Profile's deletion limits hold it back too.
 ///
-/// The one exception is the configuration JIM now refuses to save: a deselected Object Type an enabled
-/// Synchronisation Rule is still bound to. Deployments can already hold one, from before the refusal existed, and
-/// obsoleting its objects while an outbound rule still targets the type would disconnect them only for the rule to
-/// provision them again. Those objects are left as they are and the Activity says why, rather than cascading.
+/// The one exception is the configuration JIM refuses to save: a deselected Object Type an enabled Synchronisation
+/// Rule is still bound to. A database can still hold one (saved before the refusal existed, or changed outside the
+/// save paths), and obsoleting its objects while an outbound rule still targets the type would disconnect them only
+/// for the rule to provision them again. Those objects are left as they are and the Activity says why, rather than
+/// cascading.
 /// </summary>
 [TestFixture]
 public class DeselectedObjectTypeDeletionDetectionTests
