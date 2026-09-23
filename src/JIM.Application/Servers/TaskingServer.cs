@@ -72,6 +72,10 @@ namespace JIM.Application.Servers
                 activity.ScheduleExecutionId = workerTask.ScheduleExecutionId;
                 activity.ScheduleStepIndex = workerTask.ScheduleStepIndex;
 
+                // Parallel steps share a step index; the step id is what tells their Activities apart when the
+                // scheduler applies the failing step's own Continue On Failure setting (#1768).
+                activity.ScheduleStepId = workerTask.ScheduleStepId;
+
                 // Denormalise the producing Schedule's identity for the same durability reason (issue #1196):
                 // Schedule -> ScheduleExecution cascades on delete, so an Activity that resolved its Schedule through
                 // the execution would lose its attribution the moment the Schedule was deleted. The execution already
