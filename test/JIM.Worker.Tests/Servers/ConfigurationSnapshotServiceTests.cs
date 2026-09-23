@@ -197,6 +197,132 @@ public class ConfigurationSnapshotServiceTests
         }
     }
 
+    // -- Unique Value Generation (#242) --------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_SyncRule_WithGeneratedMapping_CapturesGenerationNodeWithEveryKeyAndLabel()
+    {
+        var connectedSystem = new ConnectedSystem { Id = 8, Name = "Payroll" };
+        var mapping = new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Generation = new SyncRuleMappingGeneration
+            {
+                Id = 900,
+                TokenKind = GeneratedValueTokenKind.Sequence,
+                SuffixStyle = GeneratedValueSuffixStyle.Letter,
+                SuffixStart = 2,
+                SequenceStart = 1000,
+                SequenceIncrement = 5,
+                FixedWidth = 6,
+                OnWidthExceeded = GeneratedValueWidthOverflowBehaviour.AllowLonger,
+                RandomFormat = GeneratedValueRandomFormat.Hex,
+                RandomLength = 12,
+                Separator = "-",
+                AttemptLimit = 50,
+                NeverReuse = false,
+                CollisionRemediation = false
+            }
+        };
+        mapping.Generation.Exclusions.Add(new SyncRuleMappingGenerationExclusion
+        {
+            ConnectedSystemId = 8,
+            ConnectedSystem = connectedSystem
+        });
+
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        var generation = Child(flow, "generation")!;
+        Assert.That(generation.Label, Is.EqualTo("Generated value"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(generation, "tokenKind")!.Value, Is.EqualTo("Sequence"));
+            Assert.That(Child(generation, "tokenKind")!.Label, Is.EqualTo("Uniqueness token"));
+            Assert.That(Child(generation, "suffixStyle")!.Value, Is.EqualTo("Letter"));
+            Assert.That(Child(generation, "suffixStyle")!.Label, Is.EqualTo("Suffix style"));
+            Assert.That(Child(generation, "suffixStart")!.Value, Is.EqualTo("2"));
+            Assert.That(Child(generation, "suffixStart")!.Label, Is.EqualTo("Suffix start"));
+            Assert.That(Child(generation, "sequenceStart")!.Value, Is.EqualTo("1000"));
+            Assert.That(Child(generation, "sequenceStart")!.Label, Is.EqualTo("Sequence start"));
+            Assert.That(Child(generation, "sequenceIncrement")!.Value, Is.EqualTo("5"));
+            Assert.That(Child(generation, "sequenceIncrement")!.Label, Is.EqualTo("Sequence increment"));
+            Assert.That(Child(generation, "fixedWidth")!.Value, Is.EqualTo("6"));
+            Assert.That(Child(generation, "fixedWidth")!.Label, Is.EqualTo("Fixed width"));
+            Assert.That(Child(generation, "onWidthExceeded")!.Value, Is.EqualTo("AllowLonger"));
+            Assert.That(Child(generation, "onWidthExceeded")!.Label, Is.EqualTo("When the width is exceeded"));
+            Assert.That(Child(generation, "randomFormat")!.Value, Is.EqualTo("Hex"));
+            Assert.That(Child(generation, "randomFormat")!.Label, Is.EqualTo("Random format"));
+            Assert.That(Child(generation, "randomLength")!.Value, Is.EqualTo("12"));
+            Assert.That(Child(generation, "randomLength")!.Label, Is.EqualTo("Random length"));
+            Assert.That(Child(generation, "separator")!.Value, Is.EqualTo("-"));
+            Assert.That(Child(generation, "separator")!.Label, Is.EqualTo("Separator"));
+            Assert.That(Child(generation, "attemptLimit")!.Value, Is.EqualTo("50"));
+            Assert.That(Child(generation, "attemptLimit")!.Label, Is.EqualTo("Attempt limit"));
+            Assert.That(Child(generation, "neverReuse")!.Value, Is.EqualTo("false"));
+            Assert.That(Child(generation, "neverReuse")!.Label, Is.EqualTo("Never reuse a value"));
+            Assert.That(Child(generation, "collisionRemediation")!.Value, Is.EqualTo("false"));
+            Assert.That(Child(generation, "collisionRemediation")!.Label, Is.EqualTo("Collision Remediation"));
+        }
+
+        var exclusions = Child(generation, "exclusions")!;
+        Assert.That(exclusions.NodeType, Is.EqualTo(ConfigurationSnapshotNodeType.Collection));
+        Assert.That(exclusions.Label, Is.EqualTo("Excluded Connected Systems"));
+        Assert.That(exclusions.Children, Has.Count.EqualTo(1));
+
+        var exclusion = exclusions.Children![0];
+        Assert.That(exclusion.ItemId, Is.EqualTo(8), "exclusions are keyed by the Connected System id");
+        var connectedSystemIdNode = Child(exclusion, "connectedSystemId")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectedSystemIdNode.Value, Is.EqualTo("8"));
+            Assert.That(connectedSystemIdNode.DisplayValue, Is.EqualTo("Payroll"));
+            Assert.That(connectedSystemIdNode.Label, Is.EqualTo("Connected System"));
+        }
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_WithoutGeneration_OmitsGenerationNode()
+    {
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5 };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "generation"), Is.Null);
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_WithGeneratedMapping_UnsetFixedWidthAndRandomLength_OmitsThem()
+    {
+        // FixedWidth and RandomLength are optional (only-if-taken and GUID-format random tokens leave them null);
+        // Add()'s skip-on-null-or-empty behaviour must apply to them exactly as it does to every other optional field.
+        var mapping = new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Generation = new SyncRuleMappingGeneration { Id = 900 }
+        };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var generation = Child(Child(snapshot.Root, "attributeFlowRules")!.Children![0], "generation")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(generation, "fixedWidth"), Is.Null);
+            Assert.That(Child(generation, "randomLength"), Is.Null);
+        }
+    }
+
     /// <summary>
     /// A Synchronisation Rule now carries a secret: the one password an administrator chose for every account it
     /// provisions (#1273). Change history has to record that it changed, and only that; the ciphertext must not

@@ -16,6 +16,7 @@
     public const string NotYetSentTooltip = "Staged for export, not yet sent";
     public const string AwaitingConfirmationTooltip = "Exported, awaiting confirmation by import";
     public const string FailedTooltip = "Export failed, value not written";
+    public const string ParkedTooltip = "Parked: waiting for an administrator's decision on its generated value";
     public const string UnknownStateTooltip = "Value from a Pending Export";
 
     /// <summary>
@@ -36,6 +37,7 @@
         PendingExportStatus.Pending or PendingExportStatus.Executing => NotYetSentTooltip,
         PendingExportStatus.Exported or PendingExportStatus.ExportNotConfirmed => AwaitingConfirmationTooltip,
         PendingExportStatus.Failed => FailedTooltip,
+        PendingExportStatus.Parked => ParkedTooltip,
         _ => UnknownStateTooltip
     };
 }

@@ -102,6 +102,26 @@ public static class CausalityCauseWording
                     $"{Subject(cohort)} {(plural ? "were" : "was")} deleted, so this deprovisioning was queued"));
                 break;
 
+            case CausalEdgeType.ExportRejectionCausedGeneratedValueRevision:
+                // Unique Value Generation (#242): the system that rejected the value is the sentence's own
+                // subject, exactly as the queueing seam above names its system inline rather than as a chip
+                // (see ShowConnectedSystemChip). The reason code alone decides the verb: what remediation did
+                // is fixed by the code, not by anything else the cohort carries.
+                var rejectingSystem = string.IsNullOrWhiteSpace(cohort.ConnectedSystemName)
+                    ? "The target Connected System"
+                    : cohort.ConnectedSystemName;
+                parts.Add(new CausalityCauseSentencePart(cohort.ReasonCode switch
+                {
+                    CausalReasonCode.GeneratedValueAlreadyInUse =>
+                        $"{rejectingSystem} rejected the generated value as already in use, so JIM generated a new one",
+                    CausalReasonCode.GeneratedValueAnchoredElsewhere =>
+                        $"{rejectingSystem} rejected the generated value, but another Connected System already holds it, so the object needs a decision",
+                    CausalReasonCode.GeneratedValueRenameAuthorised =>
+                        $"{rejectingSystem} rejected the generated value and an administrator allowed the rename, so JIM generated a new one",
+                    _ => $"{rejectingSystem} rejected the generated value, so JIM revised it"
+                }));
+                break;
+
             case CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval:
             default:
                 AppendReferenceRemoval(parts, cohort, effectName, plural);
@@ -221,7 +241,10 @@ public static class CausalityCauseWording
         ArgumentNullException.ThrowIfNull(cohort);
         return cohort.MetaverseChangeType is null
             && cohort.SourceImportChangeType is null
-            && cohort.EdgeType != CausalEdgeType.PendingExportQueueingCausedExportExecution;
+            && cohort.EdgeType != CausalEdgeType.PendingExportQueueingCausedExportExecution
+            // Unique Value Generation (#242): the rejecting system is named inline in the sentence, exactly
+            // as the queueing seam above names its own system, so a chip here would restate it with no role.
+            && cohort.EdgeType != CausalEdgeType.ExportRejectionCausedGeneratedValueRevision;
     }
 
     /// <summary>

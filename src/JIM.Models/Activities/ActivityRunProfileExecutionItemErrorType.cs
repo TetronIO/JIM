@@ -172,5 +172,27 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// exactly what is missing. This is configuration to act on, not a JIM defect: add an Attribute Flow
     /// for the missing attribute(s), or withdraw the auxiliary class selection that brought the class in.
     /// </summary>
-    ClassMembershipRequirementsNotMet
+    ClassMembershipRequirementsNotMet,
+
+    /// <summary>
+    /// Unique Value Generation (#242): no free candidate value was found within the attempt limit. The
+    /// message names the attribute, the last candidate tried and the scope (gate) that rejected it. No
+    /// value is written for the object.
+    /// </summary>
+    GeneratedValueExhausted,
+
+    /// <summary>
+    /// Unique Value Generation (#242): a sequence's next number outgrew the mapping's fixed width, and
+    /// the flow's overflow behaviour is set to stop the object and report rather than allow a longer
+    /// number. No value is written for the object.
+    /// </summary>
+    GeneratedValueWidthExceeded,
+
+    /// <summary>
+    /// Unique Value Generation (#242): the target Connected System rejected a generated value and another
+    /// Connected System already holds it (the value is anchored elsewhere), so the object needs an
+    /// administrator's decision. The Pending Export is Parked until Allow the rename, Retry or Leave it
+    /// resolves it.
+    /// </summary>
+    GeneratedValueCollisionUnresolved
 }

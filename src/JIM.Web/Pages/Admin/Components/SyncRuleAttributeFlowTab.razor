@@ -883,6 +883,10 @@
             SyncRuleMappingSourcesType.ExpressionMapping => "Expression",
             SyncRuleMappingSourcesType.AttributeMapping => "Attribute",
             SyncRuleMappingSourcesType.AdvancedMapping => "Advanced",
+            // Unique Value Generation (#242): the label a Generated mapping's source type resolves to.
+            // The dialog itself gains no "Generated" form until Phase 3; this only stops an existing
+            // Generated mapping's edit from silently losing its source type selection.
+            SyncRuleMappingSourcesType.GeneratedMapping => "Generated",
             _ => null
         };
 

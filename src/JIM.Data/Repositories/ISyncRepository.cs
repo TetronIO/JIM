@@ -1405,4 +1405,138 @@ public interface ISyncRepository
     Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync();
 
     #endregion
+
+    #region Generated Values (#242)
+
+    /// <summary>
+    /// Which of the given normalised (lower-cased) values some Metaverse Object other than
+    /// <paramref name="excludingMetaverseObjectId"/> already holds for <paramref name="metaverseAttributeId"/>:
+    /// the Metaverse availability gate (Unique Value Generation, plan "The service"). Id-only: no
+    /// <see cref="MetaverseObject"/> is hydrated. Case-insensitive over the <c>LOWER("StringValue")</c>
+    /// expression index (plan decision 13); callers must pass values already lower-cased so the comparison
+    /// matches the index expression exactly rather than relying on the database to lower-case again. Returns an
+    /// empty set for an empty <paramref name="normalisedValues"/> without querying.
+    /// </summary>
+    Task<HashSet<string>> GetMetaverseAttributeValuesInUseAsync(int metaverseAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingMetaverseObjectId);
+
+    /// <summary>
+    /// The connector-space counterpart of <see cref="GetMetaverseAttributeValuesInUseAsync"/>, over
+    /// <c>ConnectedSystemObjectAttributeValues</c>. A Connected System Object Type attribute id is unique across
+    /// every Connected System, so no system id is needed to disambiguate which system's attribute this is.
+    /// </summary>
+    Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId);
+
+    /// <summary>
+    /// The numeric counterpart of <see cref="GetMetaverseAttributeValuesInUseAsync"/>, for Number and Long
+    /// Number generation targets. A candidate is taken if it matches an existing value in either <c>IntValue</c>
+    /// or <c>LongValue</c>: the two columns back the same attribute type distinction, not two independent value
+    /// spaces, so a number already held as one still collides with the other.
+    /// </summary>
+    Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId);
+
+    /// <summary>
+    /// The connector-space counterpart of <see cref="GetMetaverseAttributeNumbersInUseAsync"/>.
+    /// </summary>
+    Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId);
+
+    /// <summary>
+    /// Creates one or more <see cref="GeneratedValueAssignment"/> rows. A concurrent insert that collides on the
+    /// cross-assignment unique index on (attribute, normalised value) (plan decision 13) surfaces as
+    /// <see cref="JIM.Models.Exceptions.GeneratedValueConflictException"/>, so the losing side of the race can
+    /// recognise it and draw the next candidate, rather than the write failing as an unclassified database error.
+    /// </summary>
+    Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments);
+
+    /// <summary>
+    /// Saves changes to an existing, already-persisted assignment, stamping
+    /// <see cref="GeneratedValueAssignment.LastUpdated"/>.
+    /// </summary>
+    Task UpdateGeneratedValueAssignmentAsync(GeneratedValueAssignment assignment);
+
+    /// <summary>
+    /// Deletes assignments by id: page-flush lifecycle reconciliation's removal when another contributor wins an
+    /// attribute or a value is recalled (plan: Assignment lifecycle). Retirement, where it applies, is the
+    /// caller's responsibility to write first; deleting the assignment here does not retire its value.
+    /// </summary>
+    Task DeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds);
+
+    /// <summary>
+    /// The live assignment for a Metaverse Object's generated attribute (import mode), if any.
+    /// </summary>
+    Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentAsync(Guid metaverseObjectId, int metaverseAttributeId);
+
+    /// <summary>
+    /// The export-mode counterpart of <see cref="GetGeneratedValueAssignmentAsync"/>: the live assignment for a
+    /// Connected System Object's generated attribute, if any.
+    /// </summary>
+    Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentForConnectedSystemObjectAsync(Guid connectedSystemObjectId, int connectedSystemObjectTypeAttributeId);
+
+    /// <summary>
+    /// Every live assignment (import mode) for the given Metaverse Objects, across every generated attribute.
+    /// The caller batches per page; this loads exactly the ids it is given. <c>AsNoTracking</c>.
+    /// </summary>
+    Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// The export-mode counterpart of <see cref="GetGeneratedValueAssignmentsForMetaverseObjectsAsync"/>, keyed
+    /// on Connected System Object.
+    /// </summary>
+    Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Every live assignment a generated mapping is currently responsible for, across every object it has
+    /// produced a value for. Used when the mapping's settings change in a way that must revisit its assignments.
+    /// </summary>
+    Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForGenerationAsync(int syncRuleMappingGenerationId);
+
+    /// <summary>
+    /// The sequence counter for a target attribute, if one has been created yet (the first block reservation
+    /// creates it; see <see cref="ReserveGeneratedValueSequenceBlockAsync"/>). Exactly one of
+    /// <paramref name="metaverseAttributeId"/> and <paramref name="connectedSystemObjectTypeAttributeId"/> must
+    /// be given; both set or neither set throws <see cref="ArgumentException"/>.
+    /// </summary>
+    Task<GeneratedValueSequence?> GetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId);
+
+    /// <summary>
+    /// The seed for a counter's first use (plan decision 3): the highest existing value already held for the
+    /// attribute, read across numeric storage (<c>IntValue</c>, <c>LongValue</c>) and purely-numeric text values
+    /// (<c>StringValue</c> matching <c>^[0-9]+$</c>, between 1 and 18 digits so it fits a <c>bigint</c>, cast to
+    /// <c>bigint</c>). Null when the attribute holds no such value anywhere.
+    /// <para>
+    /// A prefixed or zero-padded text value (for example "EMP0042") is not purely numeric, so it is never
+    /// considered here; a sequence flow that expects to pick up numbering from values shaped like that will not
+    /// see them and starts from its own configured start value instead.
+    /// </para>
+    /// </summary>
+    Task<long?> GetHighestNumericValueForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId);
+
+    /// <summary>
+    /// Atomically reserves a block of <paramref name="count"/> numbers from the attribute's counter and returns
+    /// the first number of the block; the reserved block is
+    /// <c>first, first + increment, ..., first + (count - 1) * increment</c>. Creates the counter row, seeded at
+    /// <paramref name="floor"/>, the first time this attribute is reserved against; a concurrent creation that
+    /// loses the race is a harmless no-op, since the advance that follows is what actually moves the counter.
+    /// <para>
+    /// The counter only ever moves forward: its stored value becomes
+    /// <c>GREATEST(current, floor) + count * increment</c>, so a <paramref name="floor"/> below the counter's
+    /// current position has no effect beyond this call's own advance, and two concurrent reservations against the
+    /// same attribute serialise on the row and never overlap.
+    /// </para>
+    /// <para>
+    /// Any numbers in the reserved block the caller ultimately does not issue (for example because the object
+    /// generation failed after the block was reserved) are simply never used; the resulting gap in the sequence
+    /// is expected (plan decision 3), is never backfilled, and never causes a number to be re-issued.
+    /// </para>
+    /// </summary>
+    Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment);
+
+    /// <summary>
+    /// Advances a counter's display-only <see cref="GeneratedValueSequence.AssignedCount"/> by
+    /// <paramref name="by"/>, once the caller has determined how many numbers from a reserved block were
+    /// actually issued. Never gates anything; it exists purely to keep the counter's "issued so far" figure
+    /// accurate for display.
+    /// </summary>
+    Task IncrementGeneratedValueSequenceAssignedCountAsync(int sequenceId, long by);
+
+    #endregion
 }
