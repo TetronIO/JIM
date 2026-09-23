@@ -5,6 +5,7 @@ using JIM.Application.Interfaces;
 using JIM.Application.Servers;
 using JIM.Application.Servers.Preview;
 using JIM.Application.Services;
+using JIM.Application.UniqueValues;
 using JIM.Connectors;
 using JIM.Data;
 using JIM.Data.Repositories;
@@ -98,6 +99,13 @@ public class JimApplication : IDisposable
     public SystemHealthServer SystemHealth { get; }
     public TaskingServer Tasking { get; }
 
+    /// <summary>
+    /// The caller-agnostic unique value service (Unique Value Generation, #242, FR 21). Constructed over
+    /// <see cref="SyncRepo"/>, the same repository the sync engine and Sync Preview use, so the sync engine,
+    /// the worker's review-flag pickup, and any future caller share one instance and one set of gates.
+    /// </summary>
+    public UniqueValueGenerationServer UniqueValues { get; }
+
     /// <param name="previewAdapters">
     /// Overrides the configuration change preview adapter list below. Null in every host: the list is deliberately
     /// one readable, compile-time set rather than something that varies by process. It exists so a test can drive
@@ -147,6 +155,7 @@ public class JimApplication : IDisposable
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
         SyncPreview = new SyncPreviewServer(this, SyncRepo);
+        UniqueValues = new UniqueValueGenerationServer(SyncRepo);
         PasswordGenerator = new PasswordGeneratorService();
         // Credential protection is reached through a delegate because the hosts assign CredentialProtection after
         // constructing this facade, so a value read here would always be the null that precedes it. The fallback
