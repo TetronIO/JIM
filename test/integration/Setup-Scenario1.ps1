@@ -662,8 +662,8 @@ try {
         # only import/export the attributes they actually need, rather than the entire schema.
         # See: https://github.com/TetronIO/JIM/issues/227
         # The attribute set varies by directory type (AD vs OpenLDAP use different schema attributes)
-        $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
-        $requiredLdapAttributes = if ($isOpenLDAP) {
+        $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
+        $requiredLdapAttributes = if ($isRfcDirectory) {
             @(
                 'uid',                # User identifier - used as RDN and account name
                 'givenName',          # First Name
@@ -878,7 +878,7 @@ try {
             @{ CsAttr = "status";            MvAttr = "Status" }               # Established/Active/Archived - controls userAccountControl in AD
         )
 
-        $exportMappings = if ($isOpenLDAP) {
+        $exportMappings = if ($isRfcDirectory) {
             @(
                 @{ MvAttr = "Account Name";          LdapAttr = "uid" }
                 @{ MvAttr = "First Name";            LdapAttr = "givenName" }
@@ -914,7 +914,7 @@ try {
         # Expression-based mappings for computed values
         # These vary significantly between AD and OpenLDAP due to different DN structure,
         # account control mechanisms, and attribute semantics
-        $expressionMappings = if ($isOpenLDAP) {
+        $expressionMappings = if ($isRfcDirectory) {
             @(
                 @{
                     # DN for OpenLDAP: uid={Account Name},ou=People,dc=yellowstone,dc=local
@@ -1107,7 +1107,7 @@ try {
         # This is important for joining to pre-existing directory accounts rather than provisioning duplicates
         Write-Host "  Configuring LDAP object matching rule..." -ForegroundColor Gray
 
-        $ldapEmployeeIdAttrName = if ($isOpenLDAP) { 'employeeNumber' } else { 'employeeID' }
+        $ldapEmployeeIdAttrName = if ($isRfcDirectory) { 'employeeNumber' } else { 'employeeID' }
         $ldapEmployeeIdAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $ldapEmployeeIdAttrName }
 
         if (-not $ldapEmployeeIdAttr) {

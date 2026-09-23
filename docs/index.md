@@ -61,7 +61,7 @@ hide:
 
     ---
 
-    Built-in LDAP and CSV connectors, with a framework for developing custom connectors for bespoke scenarios.
+    Built-in LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors, with a framework for developing custom connectors for bespoke scenarios.
 
 -   :material-sort:{ .lg .middle } **[Attribute Priority](concepts/attribute-priority.md)**
 
@@ -85,7 +85,25 @@ hide:
 
     ---
 
-    Run Profile progress, throughput and time remaining stream live to the portal, pushed from the database rather than polled, with `Get-JIMActivity -Follow` for the terminal.
+    Run Profile progress, throughput and time remaining stream live to the portal, pushed from the database rather than polled, with `Get-JIMActivity -Follow` for the terminal. [Service Health](configuration/operations.md#service-health) shows whether the Worker and Scheduler are alive and what each is doing.
+
+-   :material-form-textbox-password:{ .lg .middle } **[Passwords](concepts/passwords.md)**
+
+    ---
+
+    Initial passwords for newly provisioned objects, on-demand password setting, and Password Synchronisation to every configured Connected System, queued, encrypted and retried, with a queue you can watch, retry and cancel.
+
+-   :material-eye-check:{ .lg .middle } **[Preview Before You Commit](configuration/configuration-changes.md#previewing-a-change-before-you-make-it)**
+
+    ---
+
+    A Configuration Change Preview shows which objects a proposed edit would affect; [Sync Preview](configuration/sync-preview.md) shows what synchronising one object would do. Neither changes anything.
+
+-   :material-shield-check:{ .lg .middle } **[Run Profile Safeguards](configuration/run-profiles.md#safeguards)**
+
+    ---
+
+    Cap how many creates, updates, deletes and detected deletions a single run may attempt, so a broken filter or mistaken rule cannot turn one run into a mass change.
 
 </div>
 
@@ -139,20 +157,20 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
     ---
 
-    Connect JIM to LDAP directories, CSV files, and more.
+    Connect JIM to LDAP directories, SQL databases, SCIM 2.0 services, CSV files, and more.
 
 </div>
 
 ## State of Development
 
-JIM has completed **pre-release stabilisation** and moved well beyond its initial MVP. The core identity lifecycle is fully functional:
+JIM is working towards its **v1.0 milestone: Identity Lifecycle Complete**. The core identity lifecycle is fully functional today:
 
-- **Import** identities from source systems (LDAP, CSV)
+- **Import** identities from source systems (LDAP directories, SQL databases, SCIM 2.0 services, CSV files)
 - **Sync** to reconcile identities in the central metaverse
 - **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
-The platform has been hardened for production, with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all synchronisation scenarios. See the [Product Roadmap](reference/roadmap.md) for what is coming as JIM progresses towards its first stable release.
+The platform has been hardened for production, with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all synchronisation scenarios. See the [Product Roadmap](reference/roadmap.md) for what is coming in v1.0 and beyond.
 
 ## 💬 Community & Support
 

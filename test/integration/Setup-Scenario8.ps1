@@ -66,17 +66,12 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
 }
 
-$isOpenLDAP = ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson")
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 
-# Derive Source and Target configs from the DirectoryConfig
-if ($isOpenLDAP) {
-    $sourceConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
-    $targetConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
-}
-else {
-    $sourceConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
-    $targetConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Target
-}
+# Derive Source and Target configs from the DirectoryConfig (two containers for Samba AD; two
+# suffixes on one container for OpenLDAP and 389 Directory Server)
+$sourceConfig = Get-DirectoryConfig -DirectoryType $DirectoryConfig.DirectoryType -Instance Source
+$targetConfig = Get-DirectoryConfig -DirectoryType $DirectoryConfig.DirectoryType -Instance Target
 
 # Directory-specific variables used throughout setup
 $sourceSystemName  = $sourceConfig.ConnectedSystemName
@@ -101,7 +96,7 @@ $groupObjectClass  = $sourceConfig.GroupObjectClass
 # Scenario 8 OpenLDAP uses jimGroup (SUP groupOfNames) which adds mail, jimGroupType, jimGroupStatus,
 # and jimPerson (SUP inetOrgPerson) which adds jimEmployeeEndDate for the LeaverCohort step (#908).
 # Override here rather than in the global Get-DirectoryConfig to avoid affecting other scenarios.
-if ($isOpenLDAP) {
+if ($isRfcDirectory) {
     $groupObjectClass = "jimGroup"
     $userObjectClass = "jimPerson"
 }
@@ -111,7 +106,7 @@ $userTypeName  = $userObjectClass    # "user" for AD, "inetOrgPerson" for OpenLD
 $groupTypeName = $groupObjectClass   # "group" for AD, "jimGroup" for OpenLDAP
 
 # Attribute lists differ by directory type
-if ($isOpenLDAP) {
+if ($isRfcDirectory) {
     # OpenLDAP uses entryUUID (auto-set by connector), uid, departmentNumber
     # No userAccountControl, extensionAttribute1, userPrincipalName, groupType, managedBy
     # jimEmployeeEndDate (Generalized Time, typed DateTime by the connector) backs the
@@ -640,7 +635,7 @@ Write-Host "  ✓ Selected user and group object types" -ForegroundColor Green
 
 # Note: External ID (objectGUID for AD, entryUUID for OpenLDAP) is automatically set by the LDAP
 # connector schema import (the connector marks it as IsExternalId = true). No manual override needed.
-$externalIdAttr = if ($isOpenLDAP) { "entryUUID" } else { "objectGUID" }
+$externalIdAttr = if ($isRfcDirectory) { "entryUUID" } else { "objectGUID" }
 Write-Host "  Set $externalIdAttr as External ID for all object types" -ForegroundColor Green
 
 # Attribute lists are defined at the top of the script based on directory type
@@ -650,7 +645,7 @@ $sourceSchemaAttrNames = @($sourceUserType.attributes | ForEach-Object { $_.name
 $missingUserAttrs = @($requiredUserAttributes | Where-Object { $_ -notin $sourceSchemaAttrNames })
 if ($missingUserAttrs.Count -gt 0) {
     Write-Host "  Required LDAP user attributes not found in schema: $($missingUserAttrs -join ', ')" -ForegroundColor Red
-    if (-not $isOpenLDAP) {
+    if (-not $isRfcDirectory) {
         Write-Host "    This usually means the Samba AD image is outdated and needs rebuilding." -ForegroundColor Yellow
         Write-Host "    Run: docker rmi samba-ad-prebuilt:latest && jim-build" -ForegroundColor Yellow
     }
@@ -704,8 +699,8 @@ $existingRules = Get-JIMSyncRule
 
 # --- User Sync Rules ---
 # Source Import (users)
-$sourceLabel = if ($isOpenLDAP) { "APAC LDAP" } else { "APAC AD" }
-$targetLabel = if ($isOpenLDAP) { "EMEA LDAP" } else { "EMEA AD" }
+$sourceLabel = if ($isRfcDirectory) { "APAC LDAP" } else { "APAC AD" }
+$targetLabel = if ($isRfcDirectory) { "EMEA LDAP" } else { "EMEA AD" }
 $sourceUserImportRuleName = "$sourceLabel Import Users"
 $sourceUserImportRule = $existingRules | Where-Object { $_.name -eq $sourceUserImportRuleName }
 if (-not $sourceUserImportRule) {
@@ -727,7 +722,7 @@ if (-not $sourceUserImportRule) {
     # deletion rule (configured in the deletion-rules step below) can deprovision leavers.
     # Criteria are created only on the rule-creation path: the runner resets JIM between
     # scenario runs, so a fresh run always takes this branch.
-    if ($isOpenLDAP) {
+    if ($isRfcDirectory) {
         $endDateAttr = $sourceUserType.attributes | Where-Object { $_.name -eq "jimEmployeeEndDate" }
         if (-not $endDateAttr) { throw "jimEmployeeEndDate not found in the Source user schema; is the OpenLDAP image up to date?" }
         if ($endDateAttr.type -ne "DateTime") {
@@ -851,7 +846,7 @@ Write-Host "    ✓ Source user import mappings ($userImportMappingsCreated new)
 
 # Add expression mapping for userAccountControl → Status on source user import rule (AD only)
 # OpenLDAP has no userAccountControl attribute
-if (-not $isOpenLDAP) {
+if (-not $isRfcDirectory) {
     $statusAttr = $mvAttributes | Where-Object { $_.name -eq "Status" }
     $uacAttr = $sourceUserType.attributes | Where-Object { $_.name -eq "userAccountControl" }
     if ($statusAttr -and $uacAttr) {
@@ -959,7 +954,7 @@ Write-Host "    ✓ Source group import mappings ($groupImportMappingsCreated ne
 
 # Create expression-based import mappings for Group Type and Group Scope (AD only — derived from groupType flags).
 # OpenLDAP jimGroup flows Group Type directly via jimGroupType (not derived from flags).
-if (-not $isOpenLDAP) {
+if (-not $isRfcDirectory) {
     Write-Host "  Configuring group type/scope expression mappings..." -ForegroundColor Gray
     $groupTypeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Type" }
     $groupScopeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Scope" }
@@ -1278,7 +1273,7 @@ Write-Host "  ✓ Built-in reconciler schedule disabled (ID: $($reconSchedule[0]
 # ============================================================================
 Write-TestSection "Setup Complete"
 Write-Host "Template:          $Template" -ForegroundColor Cyan
-Write-Host "Directory Type:    $(if ($isOpenLDAP) { 'OpenLDAP' } else { 'Samba AD' })" -ForegroundColor Cyan
+Write-Host "Directory Type:    $($DirectoryConfig.DirectoryType)" -ForegroundColor Cyan
 Write-Host "Source System:     $sourceSystemName (ID: $($sourceSystem.id))" -ForegroundColor Cyan
 Write-Host "Target System:     $targetSystemName (ID: $($targetSystem.id))" -ForegroundColor Cyan
 Write-Host ""

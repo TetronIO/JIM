@@ -28,7 +28,7 @@ public static class ConfigurationChangeConsequences
     private const string True = "true";
 
     // Snapshot node keys of the collection items whose own key is not enough to identify what changed. Connected
-    // System Object Types and Partitions both carry a "selected" flag, and the two mean different things.
+    // System Object Types and Partitions both carry a "selected" flag, and each has its own copy.
     private const string ObjectTypeNode = "objectType";
 
     /// <summary>
@@ -63,21 +63,22 @@ public static class ConfigurationChangeConsequences
                     : "Objects that fall out of this rule's scope will stay joined to their Metaverse Objects instead of " +
                       "being disconnected.",
 
-            // Deselecting an Object Type is the one selection that takes nothing out of scope. Deletion detection
-            // walks the SELECTED object types, so a deselected one is never compared against the import at all: its
-            // objects are not missing, they are simply never looked for. Saying otherwise would promise a cascade
-            // that never arrives and leave the administrator believing the type is out of management.
+            // Deselecting an Object Type takes it out of management (#1474). The Connector stops returning its objects,
+            // so deletion detection on the next Full Import finds every one of them missing and obsoletes it, exactly
+            // as for a deselected Partition. Its own arm because the Partition copy below says nothing of when, and for
+            // an Object Type the answer (the next Full Import, not the save) is what a preview or a Run Profile's
+            // deletion limits can still act on.
             (ConfigurationSnapshotService.ConnectedSystemObjectType, ObjectTypeNode, "selected") =>
                 oldValue == True
-                    ? "Deselecting this stops its objects being imported, and does nothing else. The Connected " +
-                      "System Objects already imported from it stay exactly as they are: still joined to their " +
-                      "Metaverse Objects, and still contributing the values they last imported, which will not be " +
-                      "refreshed again while this stays deselected. Nothing is obsoleted and nothing is deprovisioned."
+                    ? "Deselecting this takes its objects out of management. The next Full Import no longer returns " +
+                      "them, so the Connected System Objects already imported from it become obsolete, and the " +
+                      "following synchronisation disconnects them from their Metaverse Objects and deprovisions " +
+                      "whatever they are joined to."
                     : "Selecting this brings its objects into scope for import on the next Import Run Profile.",
 
             // One key, two surfaces: Connected System Object Types and Partitions both snapshot their selection as
-            // "selected". This arm is the Partition's, where deselecting genuinely does take objects out of an
-            // import that still runs.
+            // "selected". This arm is the Partition's: deselecting takes the objects beneath it out of an import that
+            // still runs.
             (ConfigurationSnapshotService.ConnectedSystemObjectType, _, "selected") =>
                 oldValue == True
                     ? "Deselecting this stops its objects being imported. The Connected System Objects already imported " +

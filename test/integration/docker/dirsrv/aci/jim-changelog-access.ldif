@@ -1,0 +1,30 @@
+# JIM service account access control: the changelog (389 Directory Server)
+#
+# JIM's Delta Import reads cn=changelog, the backend the Retro Changelog plug-in
+# keeps, to find what changed since the last run (changeNumber, changeType,
+# targetDn), and takes its watermark from the rootDSE's lastChangeNumber. The
+# plug-in creates cn=changelog with NO access control at all, so out of the box
+# only cn=Directory Manager can read it and a Delta Import as anyone else finds
+# nothing; JIM checks this read at Schema Discovery (a warning) and before every
+# Delta Import (a refusal, rather than a run that imports nothing).
+#
+# A server hosting more than one suffix shares one changelog across all of them,
+# so every suffix's cn=jim group is named here, as further "ldap:///" URLs inside
+# the one groupdn value separated by " || ". A single-suffix deployment names one
+# group: delete " || ldap:///__JIM_GROUP_DN_2__".
+#
+# Prerequisites: the Retro Changelog plug-in enabled and the server restarted
+# (dsconf <instance> plugin retro-changelog enable), so that cn=changelog exists.
+# Recommended alongside it: nsslapd-log-deleted on, so delete records carry the
+# deleted entry's attributes (see jim-config-access.ldif for reading it back).
+#
+# Placeholders (substituted by the build script before this file is applied):
+#   __JIM_GROUP_DN__   - a suffix's cn=jim,ou=Services,<suffix> group DN
+#   __JIM_GROUP_DN_2__ - a second suffix's cn=jim group DN
+#
+# Apply once, bound as cn=Directory Manager:
+#   ldapmodify -x -H ldap://<host>:3389 -D "cn=Directory Manager" -W -f jim-changelog-access.ldif
+dn: cn=changelog
+changetype: modify
+add: aci
+aci: (targetattr != "aci")(version 3.0; acl "JIM: read the changelog"; allow (read, search, compare) groupdn = "ldap:///__JIM_GROUP_DN__ || ldap:///__JIM_GROUP_DN_2__";)

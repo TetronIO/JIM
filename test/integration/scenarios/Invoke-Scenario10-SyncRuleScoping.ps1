@@ -124,15 +124,18 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
 }
 
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 $hrSystemName = "Scoping HR Source"
-$ldapSystemName = if ($isOpenLDAP) { "Scoping LDAP Target (OpenLDAP)" } else { "Scoping LDAP Target (AD)" }
+# The RFC label is the config's DirectoryType, so the name reads "(OpenLDAP)" or "(DirectoryServer389)"
+# for whichever lab is in use; Samba AD keeps its "(AD)" label. Setup-Scenario10 and the scenario build
+# this name identically.
+$ldapSystemName = if ($isRfcDirectory) { "Scoping LDAP Target ($($DirectoryConfig.DirectoryType))" } else { "Scoping LDAP Target (AD)" }
 $importRuleName = "Scoping Import (HR -> MV)"
 $exportRuleName = "Scoping Export (MV -> LDAP)"
 
 Write-TestSection "Scenario 10: Sync Rule Scoping Behaviour"
 Write-Host "Step:      $Step" -ForegroundColor Gray
-Write-Host "Directory: $(if ($isOpenLDAP) { 'OpenLDAP' } else { 'Samba AD' })" -ForegroundColor Gray
+Write-Host "Directory: $($DirectoryConfig.DirectoryType)" -ForegroundColor Gray
 Write-Host "Template:  $Template" -ForegroundColor Gray
 Write-Host ""
 
@@ -203,11 +206,11 @@ function Get-RuleId {
 
 function Remove-LDAPTestUsers {
     param([object[]]$Users, [hashtable]$DirectoryConfig)
-    if ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson") {
-        # OpenLDAP path - use ldapdelete via the container.
-        # -H is required: openldap-primary listens on port 1389, and without an explicit
-        # URI ldapdelete defaults to ldap://localhost:389 and silently fails to connect.
-        $ldapUri = "ldap://localhost:$($DirectoryConfig.Port)"
+    if (Test-IsRfcDirectory $DirectoryConfig) {
+        # OpenLDAP / 389 Directory Server path - use ldapdelete via the container.
+        # -H is required: the lab containers listen on non-default ports (1389 / 3389), and
+        # without an explicit URI ldapdelete defaults to ldap://localhost:389 and silently fails to connect.
+        $ldapUri = "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)"
         foreach ($u in $Users) {
             $dn = "uid=$($u.samAccountName),$($DirectoryConfig.UserContainer)"
             $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H $ldapUri `
@@ -294,11 +297,11 @@ function Reset-JIMForCascadeTest {
     # runner only trusts the directory's CA once, at environment setup. Setup-Scenario10 validates the
     # LDAPS settings against the directory when it configures the Connected System, so without
     # re-trusting the CA here every post-reset setup fails with "One or more Connected System settings
-    # are invalid" (TestDirectoryConnectivity certificate validation). OpenLDAP runs plain LDAP in the
-    # integration environment and needs no certificate.
+    # are invalid" (TestDirectoryConnectivity certificate validation). The helper decides per directory
+    # (Samba AD's self-signed CA, the 389 Directory Server lab CA) from the config's DirectoryType.
     if ($DirectoryConfig.UseSSL) {
         Write-Host "  Re-trusting $($DirectoryConfig.ContainerName)'s CA (the reset removed it)..." -ForegroundColor Gray
-        Add-SambaCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
+        Add-DirectoryCertificateToJimStore -DirectoryConfig $DirectoryConfig -JIMUrl $JIMUrl -ApiKey $ApiKey
     }
 
     # Re-run setup to rebuild connected systems, sync rules, run profiles, etc.
@@ -411,7 +414,7 @@ try {
     }
 
     # Wait for the LDAP directory to be healthy (matches Scenario 9's pattern)
-    $containerName = if ($isOpenLDAP) { $DirectoryConfig.ContainerName } else { "samba-ad-primary" }
+    $containerName = if ($isRfcDirectory) { $DirectoryConfig.ContainerName } else { "samba-ad-primary" }
     Write-Host "Waiting for $containerName to be healthy..." -ForegroundColor Gray
     $elapsed = 0; $maxWait = 120
     while ($elapsed -lt $maxWait) {
@@ -852,7 +855,7 @@ $total = @($testResults.Steps).Count
 $failedCount = $total - $passed
 
 Write-Host "Scenario: $($testResults.Scenario)" -ForegroundColor Cyan
-Write-Host "Directory: $(if ($isOpenLDAP) { 'OpenLDAP' } else { 'Samba AD' })" -ForegroundColor Cyan
+Write-Host "Directory: $($DirectoryConfig.DirectoryType)" -ForegroundColor Cyan
 Write-Host ""
 
 foreach ($testStep in $testResults.Steps) {

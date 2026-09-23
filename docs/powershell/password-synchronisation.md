@@ -4,7 +4,7 @@ title: Password Synchronisation
 
 # Password Synchronisation
 
-These cmdlets read the [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) queue (the password changes on their way to your Connected Systems) and do the two things you can do about the ones that are stuck. Putting a change on the queue is `Set-JIMMetaverseObjectPassword`, below.
+These cmdlets read the [Password Synchronisation](../concepts/passwords.md#password-synchronisation) queue (the password changes on their way to your Connected Systems) and do the two things you can do about the ones that are stuck. Putting a change on the queue is `Set-JIMMetaverseObjectPassword`, below.
 
 The queue cmdlets exist because a recovery is not a job for a browser. When a directory has been refusing passwords and somebody has finally fixed the cause, what you want is one command that releases everything parked behind it, not a page of rows to click through.
 
@@ -219,6 +219,6 @@ Stop-JIMPendingPasswordChange -MetaverseObjectId 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3
 
 ## Related
 
-- [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) explains what the queue is and how a change moves through it, and [The Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) what delivers it
+- [Password Synchronisation](../concepts/passwords.md#password-synchronisation) explains what the queue is and how a change moves through it, and [The Password Delivery Service](../concepts/passwords.md#the-password-delivery-service) what delivers it
 - [Metaverse](metaverse.md#set-jimmetaverseobjectpassword) covers `Set-JIMMetaverseObjectPassword`, which puts a password change on this queue, aimed at named Connected System Objects or at every configured system
 - [Connected Systems](connected-systems.md) covers `Get-` and `Set-JIMConnectedSystemPasswordSynchronisation`, which decide which systems receive them

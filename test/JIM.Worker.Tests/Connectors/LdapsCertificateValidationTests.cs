@@ -4,11 +4,8 @@
 using JIM.Connectors.LDAP;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
-using JIM.Models.Interfaces;
-using JIM.Models.Staging;
 using Serilog;
 using System.DirectoryServices.Protocols;
-using System.Security.Cryptography.X509Certificates;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -67,52 +64,10 @@ public class LdapsCertificateValidationTests
     }
 
     /// <summary>
-    /// Opens an import connection the way the synchronisation engine does, with the supplied certificates standing in
-    /// for the JIM certificate store.
+    /// Opens an LDAPS import connection with this fixture's credentials; the shared helper does the rest.
     /// </summary>
     private void OpenConnection(string host, int port, params string[] trustedCertificatePaths)
-    {
-        using var connector = new LdapConnector();
-        connector.SetCertificateProvider(new FakeCertificateProvider(trustedCertificatePaths));
-
-        try
-        {
-            connector.OpenImportConnection(BuildSettingValues(host, port), null, _logger);
-        }
-        finally
-        {
-            connector.CloseImportConnection();
-        }
-    }
-
-    private List<ConnectedSystemSettingValue> BuildSettingValues(string host, int port)
-    {
-        return
-        [
-            NewSetting("Host", stringValue: host),
-            NewSetting("Port", intValue: port),
-            NewSetting("Use Secure Connection (LDAPS)?", checkboxValue: true),
-            NewSetting("Connection Timeout", intValue: 10),
-            NewSetting("Username", stringValue: _username),
-            NewSetting("Password", encryptedValue: _password),
-            NewSetting("Authentication Type", stringValue: "Simple"),
-            // One attempt only: a rejected certificate reports as a down server, which the connector treats as
-            // transient, and retrying it just multiplies the wait before the test can assert.
-            NewSetting("Maximum Retries", intValue: 0)
-        ];
-    }
-
-    private static ConnectedSystemSettingValue NewSetting(string name, string? stringValue = null, string? encryptedValue = null, int? intValue = null, bool checkboxValue = false)
-    {
-        return new ConnectedSystemSettingValue
-        {
-            Setting = new ConnectorDefinitionSetting { Name = name },
-            StringValue = stringValue,
-            StringEncryptedValue = encryptedValue,
-            IntValue = intValue,
-            CheckboxValue = checkboxValue
-        };
-    }
+        => LdapsTestConnections.OpenConnection(host, port, useSecureConnection: true, _username, _password, _logger, trustedCertificatePaths);
 
     [Test]
     public void OpenImportConnection_WithIssuingCertificateInTheJimStore_Connects()
@@ -198,10 +153,10 @@ public class LdapsCertificateValidationTests
         // Deliberately neither closed nor disposed, mirroring a caller that abandons the connector once the
         // connection attempt throws. The failure path itself has to clean up, not the caller.
         var connector = new LdapConnector();
-        connector.SetCertificateProvider(new FakeCertificateProvider([_caCertificatePath]));
+        connector.SetCertificateProvider(new LdapsTestConnections.FakeCertificateProvider([_caCertificatePath]));
 
         Assert.That(
-            () => connector.OpenImportConnection(BuildSettingValues(_mismatchedHostOrHost, _port), null, _logger),
+            () => connector.OpenImportConnection(LdapsTestConnections.BuildSettingValues(_mismatchedHostOrHost, _port, useSecureConnection: true, _username, _password), null, _logger),
             Throws.TypeOf<ServerCertificateRejectedException>());
 
         Assert.That(CountTrustDirectories(), Is.EqualTo(trustDirectoriesBefore));
@@ -216,25 +171,5 @@ public class LdapsCertificateValidationTests
     private static int CountTrustDirectories()
     {
         return Directory.GetDirectories(Path.GetTempPath(), "jim-ldap-trust-*").Length;
-    }
-
-    /// <summary>
-    /// Supplies certificates from PEM files in place of the JIM certificate store.
-    /// </summary>
-    private sealed class FakeCertificateProvider : ICertificateProvider
-    {
-        private readonly string[] _certificatePaths;
-
-        internal FakeCertificateProvider(string[] certificatePaths)
-        {
-            _certificatePaths = certificatePaths;
-        }
-
-        public Task<List<X509Certificate2>> GetTrustedCertificatesAsync()
-        {
-            return Task.FromResult(_certificatePaths
-                .Select(X509CertificateLoader.LoadCertificateFromFile)
-                .ToList());
-        }
     }
 }

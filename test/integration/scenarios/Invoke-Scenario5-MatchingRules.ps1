@@ -77,13 +77,13 @@ $ErrorActionPreference = "Stop"
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
 }
-$isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 
 # Admin account name for server-routed directory writes (Samba AD only), derived from the bind DN.
 # Test-created Samba objects are written THROUGH the running server (-H ldap://localhost with
 # credentials) rather than directly against the sam.ldb file; direct file writes on a live domain
 # controller are an unsupported access pattern.
-$sambaAdminUser = if (-not $isOpenLDAP) { ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', '' } else { $null }
+$sambaAdminUser = if (-not $isRfcDirectory) { ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', '' } else { $null }
 
 Write-TestSection "Scenario 5: Object Matching Rules"
 Write-Host "Step:     $Step" -ForegroundColor Gray
@@ -137,9 +137,9 @@ try {
     $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1", "test.match.outbound")
     $deletedCount = 0
     foreach ($user in $testUsers) {
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
+            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
@@ -200,7 +200,7 @@ try {
 
     # Create department OUs needed for test users AFTER Setup-Scenario1
     # (Setup may recreate base Corp OU structure, so department OUs must come after)
-    if (-not $isOpenLDAP) {
+    if (-not $isRfcDirectory) {
         # Samba AD: DN expression uses OU=<Department>,OU=Users,OU=Corp,DC=panoply,DC=local
         Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
         $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
@@ -1390,7 +1390,7 @@ try {
 
         Write-Host "  Creating out-of-band directory account (not provisioned by JIM)..." -ForegroundColor Gray
 
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $omjUserDN = "$($DirectoryConfig.UserRdnAttr)=$omjSamAccountName,$($DirectoryConfig.UserContainer)"
             $omjLdif = @"
 dn: $omjUserDN
@@ -1407,7 +1407,7 @@ mail: $omjEmail
 employeeNumber: $omjEmployeeId
 userPassword: Password123!
 "@
-            $omjCreateResult = $omjLdif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
+            $omjCreateResult = $omjLdif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
 
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Created out-of-band account $omjSamAccountName in OpenLDAP (DN: $omjUserDN)" -ForegroundColor Green
@@ -1562,7 +1562,7 @@ employeeID: $omjEmployeeId
             if ($omjMatchingCsos.Count -eq 1 -and "$($omjMatchingCsos[0].joinType)" -eq 'Joined') {
                 Write-Host "  ✓ Connected System Object JoinType=Joined (existing directory account was joined, not provisioned)" -ForegroundColor Green
 
-                $omjDirCount = if ($isOpenLDAP) {
+                $omjDirCount = if ($isRfcDirectory) {
                     Get-LDAPUserCount -DirectoryConfig $DirectoryConfig -Filter "(employeeNumber=$omjEmployeeId)"
                 } else {
                     Get-LDAPUserCount -DirectoryConfig $DirectoryConfig -Filter "(employeeID=$omjEmployeeId)"
@@ -1601,8 +1601,8 @@ employeeID: $omjEmployeeId
         $omjCleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         $omjCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
 
-        if ($isOpenLDAP) {
-            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$omjUserDN" 2>&1
+        if ($isRfcDirectory) {
+            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$omjUserDN" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
             }

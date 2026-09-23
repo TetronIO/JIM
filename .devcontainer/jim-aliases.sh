@@ -500,7 +500,7 @@ jim-cleanup() {
   df -h / | tail -1
 }
 
-# Prune unused images while preserving Samba AD and OpenLDAP snapshot/build images.
+# Prune unused images while preserving Samba AD, OpenLDAP and 389 Directory Server snapshot/build images.
 # NOTE: docker image prune --filter "label!=X" with multiple filters is broken —
 # it deletes labelled images despite the exclusion. Work around this by collecting
 # the IDs of images to preserve, pruning everything, then checking nothing was lost.
@@ -509,7 +509,9 @@ _jim_prune_images_preserving_snapshots() {
   preserve_ids=$(docker images --filter "label=jim.samba.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.samba.build-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.openldap.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
-                 docker images --filter "label=jim.openldap.build-hash" --filter "dangling=false" -q 2>/dev/null)
+                 docker images --filter "label=jim.openldap.build-hash" --filter "dangling=false" -q 2>/dev/null; \
+                 docker images --filter "label=jim.dirsrv.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
+                 docker images --filter "label=jim.dirsrv.build-hash" --filter "dangling=false" -q 2>/dev/null)
   preserve_ids=$(echo "$preserve_ids" | sort -u | grep -v '^$')
 
   if [ -z "$preserve_ids" ]; then
@@ -530,7 +532,7 @@ _jim_prune_images_preserving_snapshots() {
   docker image prune -f 2>/dev/null || true
 }
 
-# Reset (preserves Samba AD and OpenLDAP snapshot images; they take a long time to build)
+# Reset (preserves Samba AD, OpenLDAP and 389 Directory Server snapshot and build images; they take a long time to build)
 jim-reset() {
   # Stop any natively-run JIM.Web/Worker/Scheduler processes so they don't squat on host ports (e.g. 5200)
   local native_pids
@@ -545,12 +547,12 @@ jim-reset() {
   fi
 
   docker compose $(_jim_compose) down --volumes
-  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --volumes --remove-orphans 2>/dev/null || true
-  docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true
+  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile dirsrv down --volumes --remove-orphans 2>/dev/null || true
+  docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
   _jim_prune_images_preserving_snapshots
   docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true
   docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true
-  echo "JIM reset complete. Containers, images, and volumes removed (Samba AD & OpenLDAP snapshots preserved). Run jim-build to rebuild."
+  echo "JIM reset complete. Containers, images, and volumes removed (Samba AD, OpenLDAP and 389 Directory Server snapshot and build images preserved). Run jim-build to rebuild."
 }
 
 # Documentation preview (MkDocs Material)

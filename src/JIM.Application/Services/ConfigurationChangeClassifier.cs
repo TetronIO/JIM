@@ -56,6 +56,9 @@ public static class ConfigurationChangeClassifier
         ["description"] = C,
         ["direction"] = B,
         ["enabled"] = B,
+        // Why a rule or an Attribute Flow was disabled on the administrator's behalf (#1485). It records the reason
+        // and changes nothing about what synchronises; the toggle beside it (`enabled`) carries the class.
+        ["disabledReason"] = C,
         ["provisionToConnectedSystem"] = B,
         ["projectToMetaverse"] = B,
         ["outboundDeprovisionAction"] = A,

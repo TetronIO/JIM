@@ -20,13 +20,21 @@ JIM processes identity data in three distinct phases: **Import**, **Sync**, and 
 
 The **Joiner/Mover/Leaver** lifecycle is the core automation model for identity management. JIM handles new starters, role changes, and leavers through configurable rules that provision, update, and deprovision accounts across your estate. The [JML Lifecycle](jml-lifecycle.md) page covers each phase.
 
+## 🥇 Attribute Priority
+
+When more than one Connected System feeds the same Metaverse attribute, **Attribute Priority** decides which value wins, deterministically, whatever order synchronisations happen to run in. The [Attribute Priority](attribute-priority.md) page explains how resolution works, what "Null is a value" asserts, and how a value hands over to the next contributor when its source departs.
+
 ## 🔑 Passwords
 
-Where a Connector supports it and you have configured it, JIM can set passwords on the accounts it manages. It does so through a **password channel** that runs parallel to attribute flow and never through it: nothing is held in the Metaverse, staged as a Pending Export, or read back. The [Passwords](passwords.md) page covers how JIM discovers what a target will accept, where a password comes from, what happens to an account whose password a target refuses, and the security rules that hold across every surface.
+Where a Connector supports it and you have configured it, JIM can set passwords on the accounts it manages. It does so through a **password channel** that runs parallel to attribute flow and never through it: nothing is held in the Metaverse, staged as a Pending Export, or read back. The [Passwords](passwords.md) page covers how JIM discovers what a target will accept, where a password comes from, what happens to an account whose password a target refuses, and the security rules that hold across every surface. It also covers **Password Synchronisation**: one password change queued, encrypted and delivered to every Connected System configured to receive it.
 
 ## 🧮 Expressions
 
 JIM includes a built-in **expression language** for transforming and mapping identity attributes. Expressions let you build email addresses, control account states, handle missing values, and much more -- all without writing code. See the [Expression Language Guide](expressions.md) for syntax, functions, and examples.
+
+## 🏷️ Object Naming
+
+Wherever JIM shows you an object, it names it the same way: an ordered list of naming attributes, then an identifier as the fallback. The [Object Naming](object-naming.md) page gives the order for Connected System Objects and Metaverse Objects.
 
 ## 🔡 Case Sensitivity
 

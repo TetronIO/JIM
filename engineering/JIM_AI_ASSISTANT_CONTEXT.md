@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.8
+> **Document Version**: 2.0
 >
-> **Last Updated**: 2026-08-17
+> **Last Updated**: 2026-09-23
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -24,7 +24,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Active development, v0.10.0 released |
+| **Status** | Active development, v0.14.0 released; v0.15.0 in preparation |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -89,7 +89,7 @@ JIM is a self-hosted, on-premises identity management platform that synchronises
 | Component | Role | Technology |
 |-----------|------|------------|
 | **JIM.Web** | UI + REST API (at `/api/`) | Blazor Server |
-| **JIM.Worker** | Background task processor | .NET Console |
+| **JIM.Worker** | Background task processor; also hosts the Password Delivery Service | .NET Console |
 | **JIM.Scheduler** | Scheduled job execution | .NET Console |
 | **JIM.Database** | Data persistence | PostgreSQL 18 |
 | **JIM.PowerShell** | Automation module | PowerShell 7+ |
@@ -106,7 +106,7 @@ JIM is a self-hosted, on-premises identity management platform that synchronises
 +------------------------------------------+
 |  Data: JIM.PostgresData (EF Core)        |
 +------------------------------------------+
-|  Integration: JIM.Connectors             |
+|  Integration: JIM.Connectors (+ JIM.Scim)|
 +------------------------------------------+
 ```
 
@@ -187,7 +187,7 @@ Grace periods allow time before actual deletion (e.g., 30 days).
 | Connector | Import | Export | Notes |
 |-----------|--------|--------|-------|
 | **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation |
-| **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, accesslog delta import, partition-scoped imports |
+| **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, delta import from OpenLDAP's accesslog or a changelog (389 Directory Server's Retro Changelog, deletions and renames included), partition-scoped imports |
 | **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, auto-confirm export |
 | **SCIM 2.0 Client** | ✓ | ✓ | Any RFC 7643/7644 service provider; last-modified delta import, optional bulk operations, rate-limit aware |
 | **SQL** | ✓ | ✓ | Microsoft SQL Server and Oracle Database through managed ADO.NET drivers; one Connected System per database with an Object Types document naming tables/views, anchors, references and related tables; keyset-paged full import; delta import from a change-log table or a watermark column; transactional export with generated-key capture; auto-confirm export |
@@ -210,9 +210,13 @@ IConnectorImportUsingCalls    // Pull data via API calls
 IConnectorImportUsingFiles    // Read from files
 IConnectorExportUsingCalls    // Push data via API calls (async with CancellationToken)
 IConnectorExportUsingFiles    // Write to files (async with CancellationToken)
+IConnectorPasswordManagement  // Set a password over the password channel (LDAP today)
+IConnectorPhases              // Declare the sub-phases a run goes through
 ```
 
-All four interaction interfaces take an optional `Func<string, Task>? progressCallback`, which connectors use to narrate their internal sub-phases onto the Activity message ("Loading existing export file...", "Querying root DSE..."). JIM owns the phase and the counts; the connector supplies only the message. See `engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md`.
+All four interaction interfaces take a never-null `IConnectorProgress`, which connectors use to move between the sub-phases they declared through `IConnectorPhases`, narrate within a phase ("Querying root DSE...", "Fetching User objects (page 3)...") and report object counts. See `engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md`.
+
+Passwords never travel through the Metaverse, Attribute Flow or Pending Exports: a separate password channel (initial passwords for provisioned objects, Password Synchronisation, and administrator Set Password) delivers them through `IConnectorPasswordManagement`, driven by the Password Delivery Service in the Worker.
 
 Connectors also declare capability flags via `IConnectorCapabilities`:
 - `SupportsParallelExport`: enables per-system `MaxExportParallelism` setting for parallel batch processing
@@ -277,7 +281,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 
 ### Key Endpoints (v1)
 
-17 API controllers. Key examples:
+21 API controllers. Key examples:
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -293,12 +297,15 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | `GET /api/v1/history/deleted-objects/mvo` | View deleted objects |
 | `GET /api/v1/logs` | Unified log viewer (app + PostgreSQL) |
 | `GET /api/v1/synchronisation/sync-rules/{id}/matching-rules` | Manage Object Matching Rules |
+| `GET /api/v1/password-synchronisation/queue` | Password Synchronisation queue (list, retry, cancel) |
+| `GET /api/v1/metaverse/objects/{id}/sync-preview` | Sync Preview: what synchronising an object would do |
+| `GET /api/v1/previews/{activityId}` | Configuration Change Preview results |
 
 Full interactive Scalar API reference available at `/api/reference` in all environments, including air-gapped deployments. The OpenAPI document is pre-generated at build time and served as a static file at `/api/openapi/v1.json`.
 
 ### PowerShell Module
 
-93 cmdlets for automation:
+168 cmdlets for automation:
 
 ```powershell
 # Connect interactively (opens browser for SSO)
@@ -348,7 +355,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Core Platform (Complete)
 
-- ✅ Connector framework with LDAP, OpenLDAP, and File connectors (import and export)
+- ✅ Connector framework with LDAP (Active Directory, OpenLDAP, 389 Directory Server), File, SQL (SQL Server, Oracle) and SCIM 2.0 Client connectors (import and export)
 - ✅ Full inbound sync (join, project, Attribute Flow)
 - ✅ Full outbound sync (provisioning, export)
 - ✅ LDAP/AD export (create, update, delete, container creation)
@@ -358,18 +365,37 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
 - ✅ Dashboard home page with system overview
-- ✅ API with JWT and API key auth (17 controllers)
-- ✅ PowerShell module (93 cmdlets)
+- ✅ API with JWT and API key auth (21 controllers)
+- ✅ PowerShell module (168 cmdlets)
 - ✅ Docker deployment with air-gapped bundles
-- ✅ Integration testing framework (8 scenarios, Scenarios 1-2 and 4-9)
+- ✅ Integration testing framework (21 scenarios, Scenarios 1-2 and 4-22)
 - ✅ Credential encryption
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page
 - ✅ Unified log viewer (application + PostgreSQL logs)
 
+### Recent Enhancements (in preparation for v0.15.0)
+
+- ✅ **SCIM 2.0 Client Connector** (#545) - Any RFC 7643/7644 service provider; delta import, partial-update exports, optional bulk operations, rate-limit aware
+- ✅ **JIM SQL Connector** (#170) - Built-in Connector for SQL Server and Oracle: schema discovery, full and delta import, export
+- ✅ **Initial Password Provisioning** (#1121) - Provisioned Connected System Objects receive a generated or static first password; retry, park and expiry states
+- ✅ **Password Synchronisation** (#1119, #1635) - A person's password change fans out to every Connected System they have an account in, through an encrypted queue with retry and cancel, delivered by the Password Delivery Service; one Set Password operation across portal, REST API and PowerShell; Require Secure Transport per Connected System
+- ✅ **Sync Preview** (#288, #1519) - Answers "what would synchronising this object do?" end to end, including the destructive cascade, without writing anything
+- ✅ **Configuration Change Preview** (#827) - Preview Scoping Criteria, Attribute Flow, Object Matching, behaviour and destructive toggles, schema and container selection changes before saving
+- ✅ **Schema Refresh Decision** (#421, #1485) - Review a schema refresh before applying it: Cancel, Apply and Disable Dependents, or Apply and Remove
+- ✅ **Container Scope** (#351, #1255) - Subtree or OneLevel per Container, exclusions, scope as text, and per-Container object counts
+- ✅ **LDAP Auxiliary Object Classes** (#492) - Auxiliary class support and discovery on RFC 4512 directories; JIM composes `objectClass` on export
+- ✅ **Run Profile Safeguards** (#1618) - Export caps on creates, updates and deletes; Full Import deletion-detection limits
+- ✅ **Deprovisioning on Connected System Deletion** (#809) - Deleting a Connected System can deprovision through synchronisation
+- ✅ **Attribute Value Recall Choice** (#1537) - Deleting a Synchronisation Rule or mapping asks whether to recall its contributed values; mappings can be disabled
+- ✅ **Lineage and Timeline** (#1495) - The causality panel becomes Lineage, Timeline and Table views, with export chains traced to their root
+- ✅ **Service Health** (#1636) - Worker, Password Delivery Service and Scheduler heartbeats on Administration > Operations
+- ✅ **Schedule-Driven History Retention** (#1118) - A built-in History Retention Cleanup schedule, with its own retention period for password events
+- ✅ **Data Flow View** (#1199) - A system-wide view of every attribute flow, with Attribute Priority in the Attribute Flow editor
+
 ### Recent Enhancements (v0.8.0)
 
-- ✅ **OpenLDAP Connector Support** (#72) - Full OpenLDAP/RFC 4512 LDAP directory support with parallel imports, accesslog delta import, and partition-scoped imports; also supports 389 Directory Server and other RFC 4512-compliant directories
+- ✅ **OpenLDAP Connector Support** (#72) - Full OpenLDAP/RFC 4512 LDAP directory support with parallel imports, accesslog delta import, and partition-scoped imports; also supports 389 Directory Server (changelog delta import via the Retro Changelog plug-in) and other RFC 4512-compliant directories
 - ✅ **Worker Redesign** (#394) - ISyncEngine (pure domain engine) and ISyncRepository (data access boundary) with full DI throughout Worker/Scheduler, ParallelBatchWriter, and COPY binary protocol for bulk persistence
 - ✅ **Bundled Keycloak IdP** (#197) - Zero-config SSO for development environments with pre-configured identity provider
 - ✅ **O(1) Import Matching** (#440) - Constant-time import matching eliminates linear scans for large connector spaces
@@ -523,13 +549,14 @@ JIM/
 |   +-- JIM.Data/            # Repository interfaces
 |   +-- JIM.PostgresData/    # EF Core data access
 |   +-- JIM.Connectors/      # Connector implementations
+|   +-- JIM.Scim/            # SCIM 2.0 wire-protocol library
 |   +-- JIM.Utilities/       # Shared utilities
 |   +-- JIM.Worker/          # Background processor
 |   +-- JIM.Scheduler/       # Scheduled tasks
 |   +-- JIM.PowerShell/      # PowerShell module
 +-- test/                    # Unit, workflow, integration tests
-+-- docs/                    # Documentation
-|   +-- plans/               # Feature design documents
++-- docs/                    # Public documentation (MkDocs site)
++-- engineering/             # Developer guides, PRDs and plans
 +-- .devcontainer/           # GitHub Codespaces config
 ```
 

@@ -1,6 +1,6 @@
 # MVO Deletion and Grace Period
 
-> Last updated: 2026-08-02, JIM v0.14.0
+> Last updated: 2026-09-23, JIM v0.15.0
 
 This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, mode-aware rejoin cancellation, and deferred housekeeping cleanup.
 
@@ -38,14 +38,13 @@ flowchart TD
 
     OosAction -->|RemainJoined| KeepJoin[Delete CSO<br/>Preserve MVO join state<br/>Once managed always managed<br/>No deletion evaluation]
 
-    OosAction -->|Disconnect| RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type?}
-    RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall + re-election:<br/>Mark MVO attributes where<br/>ContributedBySystemId = this system for removal<br/>Re-elect next-priority surviving contributor<br/>Attribute with no survivor is cleared,<br/>or frozen if a deletion grace period is active]
+    OosAction -->|Disconnect| GetRemaining[Get joined Connected System ids<br/>one entry per remaining CSO,<br/>excluding the disconnecting CSO]
+    GetRemaining --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate, applied now<br/>See Deletion Rule Evaluation below]
+    EvalDeletion --> RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type, and<br/>MVO not being deleted immediately?}
+    RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall + re-election:<br/>Mark MVO attributes where<br/>ContributedBySystemId = this system for removal<br/>Re-elect next-priority surviving contributor<br/>Attribute with no survivor is cleared,<br/>or frozen if a deletion is pending,<br/>or preserved if no import source remains #1570]
     RemoveAttrs -->|No| BreakJoin
     RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with recalled + re-elected values<br/>Targets receive removals or a<br/>change-of-value to the survivor]
     QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
-
-    BreakJoin --> GetRemaining[Get joined Connected System ids<br/>one entry per remaining CSO,<br/>excluding the disconnecting CSO]
-    GetRemaining --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
 ```
 
 ## Deletion Rule Evaluation
@@ -90,9 +89,11 @@ flowchart TD
     DedupCheck -->|Yes| Skip([Skip - prevent<br/>double-queueing])
     DedupCheck -->|No| Immediate[Add MVO to<br/>pendingMvoDeletions batch<br/>Deleted at page boundary]
 
-    CheckGrace -->|> 0| Deferred[Set LastConnectorDisconnectedDate<br/>= DateTime.UtcNow<br/>Capture initiator info:<br/>DeletionInitiatedByType<br/>DeletionInitiatedById<br/>DeletionInitiatedByName<br/>Persist DeletionPolicySnapshotJson<br/>at mark-time<br/>Persist via UpdateMetaverseObjectAsync]
+    CheckGrace -->|> 0| Deferred[Set LastConnectorDisconnectedDate<br/>= DateTime.UtcNow<br/>Capture initiator info:<br/>DeletionInitiatedByType<br/>DeletionInitiatedById<br/>DeletionInitiatedByName<br/>Set DeletionPolicySnapshotJson<br/>at mark-time<br/>Queue MVO onto the page-flush<br/>update batch #1613, persisted by<br/>PersistPendingMetaverseObjectsAsync]
     Deferred --> WaitForHousekeeping([Deferred to housekeeping<br/>Eligible after grace period expires])
 ```
+
+The grace-period markers are never saved on the spot (#1613). Marking runs during Pass 1, before the page flush disables automatic change detection, so an immediate `SaveChangesAsync` on the shared sync context would walk the tracked Activity's execution items, insert this page's RPEIs early, and make the flush's own raw SQL RPEI insert fail on a duplicate key, failing the whole Activity. The markers are plain scalar columns, so the ordinary batch MVO update persists them without a context-wide change scan.
 
 ## Mode-Aware Rejoin Cancellation (#119)
 
@@ -136,18 +137,17 @@ Cancellation clears every deletion marker together (`ClearMvoDeletionMarkers`): 
 
 ```mermaid
 flowchart TD
-    PageEnd([Page flush:<br/>FlushPendingMvoDeletionsAsync]) --> Capture[CaptureReferenceRecallContextAsync:<br/>Record who references the candidates and the<br/>candidates' per-system resolved reference values]
-    Capture --> Loop{More MVOs<br/>in batch?}
-    Loop -->|No| Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs]
+    PageEnd([Page flush:<br/>FlushPendingMvoDeletionsAsync]) --> Reconnect{Rejoined during this page<br/>by a CSO of this system, and<br/>ShouldCancelScheduledDeletion?}
+    Reconnect -->|Yes| Rescue[Skip the deletion<br/>Clear deletion markers]
+    Reconnect -->|No| Capture[CaptureReferenceRecallContextAsync:<br/>Record who references the candidates and the<br/>candidates' per-system resolved reference values]
+    Capture --> BulkEval[EvaluateMvoDeletionsAsync, whole page:<br/>1. Cancel never-exported provisioning #1681:<br/>remove the unsent Create Pending Export and<br/>the Pending Provisioning CSO, stage nothing<br/>2. Create delete Pending Exports for CSOs<br/>whose export rule action is Delete<br/>3. Disconnect the remaining CSOs]
+    BulkEval --> BulkDelete[DeleteMetaverseObjectsAsync<br/>in bulk, with initiator info]
+    BulkDelete --> BulkOk{Bulk path<br/>succeeded?}
+    BulkOk -->|No| Fallback[Per-MVO fallback:<br/>EvaluateMvoDeletionAsync, then<br/>DeleteMetaverseObjectAsync per MVO<br/>A failure sets LastConnectorDisconnectedDate<br/>so housekeeping can retry later]
+    BulkOk -->|Yes| Report
+    Fallback --> Report[Report on the Activity:<br/>delete Pending Exports under MvoDeleted #1044<br/>ProvisioningCancelled outcomes under<br/>MvoDeleted #1682]
+    Report --> Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs]
     Recall --> Done([Done])
-
-    Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete Pending Exports for CSOs<br/>whose export rule action is Delete]
-    EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>with initiator info]
-    DeleteMVO --> Success{Success?}
-
-    Success -->|Yes| Loop
-    Success -->|No| Fallback[Set LastConnectorDisconnectedDate<br/>as fallback so housekeeping<br/>can retry later]
-    Fallback --> Loop
 ```
 
 ## Deferred Deletion (Housekeeping)
@@ -170,10 +170,11 @@ flowchart TD
     Loop -->|No| Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs]
     Recall --> Done([Done])
 
-    Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete Pending Exports for remaining CSOs<br/>whose export rule action is Delete]
+    Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Cancel never-exported provisioning #1681<br/>Create delete Pending Exports for remaining CSOs<br/>whose export rule action is Delete]
     EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>Uses ORIGINAL initiator info<br/>from when MVO was marked<br/>Copies the mark-time<br/>DeletionPolicySnapshotJson onto<br/>the deletion record's RPEI]
     DeleteMVO --> Result{Success?}
-    Result -->|Yes| Loop
+    Result -->|Yes| RecordItem[RPEI: MvoDeleted, with its delete<br/>Pending Exports and ProvisioningCancelled<br/>outcomes nested beneath it #1682]
+    RecordItem --> Loop
     Result -->|No| LogError[Log error<br/>Continue with other MVOs<br/>Will retry next cycle]
     LogError --> Loop
 ```
@@ -185,6 +186,8 @@ stateDiagram-v2
     [*] --> Normal: MVO created via<br/>projection or internally
 
     Normal --> MarkedForDeletion: CSO disconnects,<br/>deletion rule triggers,<br/>grace period > 0
+
+    Normal --> MarkedForDeletion: Zero-join pass #1605<br/>(no joined CSO, state-convergent<br/>Deletion Rule, always a marking,<br/>null triggering system)
 
     Normal --> [*]: CSO disconnects,<br/>deletion rule triggers,<br/>grace period = 0<br/>(immediate deletion)
 
@@ -220,11 +223,15 @@ stateDiagram-v2
 
 - **Decision-time policy snapshot (#119)**<br /> Every deletion rule evaluation that records an outcome (scheduled, deleted, or evaluated-but-not-triggered) writes an `MvoDeletionPolicySnapshot` to the RPEI, capturing the rule, trigger mode, selected sources, grace period, triggering system, and the sources still connected at decision time. For grace period deletions the snapshot is captured at mark-time on the MVO and copied onto the housekeeping deletion record at execution, so the final record reflects the policy that scheduled the deletion, not the configuration at execution time. The RPEI detail page renders deletion rule context from this snapshot; legacy records without one fall back to current configuration with a caveat.
 
-- **Connected System deletion path parity (#119)**<br /> `MarkOrphanedMvosForDeletionAsync` (invoked when a Connected System is deleted with "evaluate deletion rules" enabled) applies the same mode semantics when deciding which MVOs the system's removal orphans: in All mode, deleting one of two still-connected sources does not mark MVOs whose other source remains. Preview and execution share one query (`QueryMvosOrphanedByConnectedSystemDeletion`), so `ConnectedSystemDeletionPreview` counts always agree with what execution does, and the marking records the deleted system as the trigger with a policy snapshot, exactly as the worker path does.
+- **Connected System deletion path parity (#119)**<br /> `MarkOrphanedMvosForDeletionAsync` (invoked when a Connected System is deleted with "evaluate deletion rules" enabled) applies the same mode semantics when deciding which MVOs the system's removal orphans: in All mode, deleting one of two still-connected sources does not mark MVOs whose other source remains. Preview and execution share one query (`QueryMvosOrphanedByConnectedSystemDeletion`), so `ConnectedSystemDeletionPreview` counts always agree with what execution does, and the marking records the deleted system as the trigger with a policy snapshot, exactly as the worker path does. The same deletion then runs the state-convergent zero-join pass (#1605), which also catches objects stranded by an earlier Connector Space clear that no Full Synchronisation followed up.
 
 - **Initiator preservation**<br /> When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
 
-- **Export cleanup before deletion**<br /> Both immediate and housekeeping deletion paths call `EvaluateMvoDeletionAsync()` before the actual deletion. This creates delete Pending Exports for every CSO matched by an export Synchronisation Rule whose `OutboundDeprovisionAction` is `Delete`, regardless of how the CSO was joined, ensuring the external system is cleaned up. CSOs with no matching rule, or whose rules say `Disconnect` (the default), are disconnected and left in place in the target system.
+- **Export cleanup before deletion**<br /> Both immediate and housekeeping deletion paths evaluate the deletion (`EvaluateMvoDeletionsAsync()` in bulk at the page flush, `EvaluateMvoDeletionAsync()` per object in the fallback and in housekeeping) before the actual deletion. This creates delete Pending Exports for every CSO matched by an export Synchronisation Rule whose `OutboundDeprovisionAction` is `Delete`, regardless of how the CSO was joined, ensuring the external system is cleaned up. CSOs with no matching rule, or whose rules say `Disconnect` (the default), are disconnected and left in place in the target system.
+
+- **Never-exported provisioning is cancelled, not deleted (#1681, #1682)**<br /> A target CSO still Pending Provisioning whose Create was never exported does not exist in the target system, so neither a Delete nor a Disconnect means anything for it. Ahead of the rules above, the deletion evaluation removes its unsent Create Pending Export and the CSO itself, and records a `ProvisioningCancelled` outcome nested beneath the `MvoDeleted` outcome that caused it (a Warning-toned outcome: nothing was destroyed anywhere, and it is not counted as a Pending Export). An object leaving an export rule's scope gets the same cancellation, recorded as a root outcome on its own item.
+
+- **Deletion Rules after a Connector Space clear (#1605)**<br /> A Connector Space clear hard-deletes CSOs without obsoleting them, so no disconnection event ever reaches the Deletion Rule. The stranded-value sweep that follows the next genuine Full Import and Full Synchronisation evaluates every Metaverse Object recorded as joined at the clear that has still not rejoined, with the cleared system as the disconnecting system, through `MetaverseObjectDeletionRuleApplier` (the same evaluation and marking the obsoletion path uses; objects already pending deletion are skipped). It then runs the state-convergent zero-join pass: every Projected Metaverse Object, metaverse-wide, with no joined CSO at all, no existing marking, and a state-convergent Deletion Rule (`WhenLastConnectorDisconnected`, or `WhenAuthoritativeSourceDisconnected` with no trigger sources or in All mode) is marked with a null triggering system and a `NoConnectorRemainsStateConvergence` policy snapshot. The pass always marks and never deletes immediately; housekeeping treats a null grace period as immediately eligible. A re-join shortfall check refuses the whole sweep first when too many recorded objects are missing. See [Full Synchronisation - CSO Processing Flow](FULL_SYNC_CSO_PROCESSING.md).
 
 - **Reference recall after deletion (#908)**<br /> Both deletion paths also stage membership-removal Pending Exports for every Metaverse Object that referenced a deleted one (for example groups whose Static Members included a deleted leaver). The referencing linkage and the deleted objects' per-system resolved reference values (for example target DNs) are captured via `CaptureReferenceRecallContextAsync()` before deletion, because `DeleteMetaverseObjectAsync()` nulls the reference FKs and `EvaluateMvoDeletionAsync()` disconnects the CSOs. After the deletions, `StageReferenceRecallExportsAsync()` evaluates each referencing object once with every reference it lost in the batch, staging Remove changes whose values are pre-resolved at staging time; export-time resolution walks MVO to joined CSO and can never succeed for a deleted object. Without this recall, targets without referential integrity would keep deleted users as group members forever, because the referencing groups' CSOs never change and the unchanged-skip means no sync re-evaluates them.
 
@@ -236,6 +243,6 @@ stateDiagram-v2
 
 - **Dedup within page**<br /> Multiple CSOs from the same MVO can disconnect in the same sync page. The dedup check in `MarkMvoForDeletionAsync` prevents the same MVO from being queued for immediate deletion twice.
 
-- **Attribute recall, re-election and hand-over via ContributedBySystemId**<br /> MVO attribute values contributed by the disconnecting system (identified by `ContributedBySystemId`) are recalled when **both** of the following hold: `RemoveContributedAttributesOnObsoletion` is enabled on the CSO type, and the MVO is not slated for immediate deletion (the immediate-deletion check avoids nugatory work when the MVO is about to be deleted at page flush, per #390). A configured deletion grace period no longer skips recall wholesale (Attribute Priority, #91): before clearing, a still-joined next-priority contributor is re-elected for each recalled attribute where one survives, so an authoritative source leaving hands the attribute to the next source (a change-of-value) rather than blanking it. Only an attribute with no surviving contributor is affected by the grace period: it is frozen (preserved) for the grace window rather than cleared, so identity-critical single-source values are not lost mid-grace. The diagram shows only the first gate for clarity. Recalled and re-elected values are queued for export evaluation so target systems receive the removals or the change-of-value; the only skip is for MVOs pending immediate deletion, whose Delete Pending Exports are created by `FlushPendingMvoDeletionsAsync`.
+- **Attribute recall, re-election and hand-over via ContributedBySystemId**<br /> MVO attribute values contributed by the disconnecting system (identified by `ContributedBySystemId`) are recalled when **both** of the following hold: `RemoveContributedAttributesOnObsoletion` is enabled on the CSO type, and the MVO is not slated for immediate deletion (the immediate-deletion check avoids nugatory work when the MVO is about to be deleted at page flush, per #390). A configured deletion grace period no longer skips recall wholesale (Attribute Priority, #91): before clearing, a still-joined next-priority contributor is re-elected for each recalled attribute where one survives, so an authoritative source leaving hands the attribute to the next source (a change-of-value) rather than blanking it. Only an attribute with no surviving contributor is affected by the freeze: it is preserved rather than cleared when a deletion is pending (for the grace window), or when no remaining joined system carries an enabled import Synchronisation Rule for the object's type (as the object's last known state, recorded as a `ValuesPreserved` outcome, #1570), so identity-critical single-source values are not lost. While an import source remains, the departed system's leftovers are recalled. Recalled and re-elected values are queued for export evaluation so target systems receive the removals or the change-of-value; the only skip is for MVOs pending immediate deletion, whose Delete Pending Exports are created by `FlushPendingMvoDeletionsAsync`.
 
 - **IsPendingDeletion**<br /> An MVO is considered pending deletion when it has `LastConnectorDisconnectedDate` set, has `Origin = Projected` (not `Internal`), and its type's deletion rule is either `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`.

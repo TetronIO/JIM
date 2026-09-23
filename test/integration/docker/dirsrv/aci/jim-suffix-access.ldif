@@ -1,0 +1,65 @@
+# JIM service account access control: a suffix (389 Directory Server)
+#
+# Grants a JIM service account exactly what a Connected System does over LDAP
+# against one suffix: import (read, search and compare across the suffix, the
+# operational attributes such as entryUUID included), export (add, delete and
+# write under ou=People and ou=Groups) and password changes (write on
+# userPassword, which the RFC 3062 Password Modify operation JIM uses also
+# requires of the bound identity). Nothing else is granted: 389 Directory Server
+# denies whatever no ACI allows, so a request outside these rules is refused.
+#
+# Access is granted to a GROUP, not to an individual service account's DN:
+# create cn=jim,ou=Services,__SUFFIX__ (a groupOfNames) and add each JIM
+# service account that manages this suffix as a "member" of it. One group per
+# suffix. A Connected System that imports more than one partition from the same
+# server uses one service account that is a member of each suffix's group,
+# rather than needing a separate rule set per suffix for that account. 389
+# resolves group membership server-wide, so the group and the entry carrying
+# the ACI can live in different backends.
+#
+# Two 389-specific points a reader used to OpenLDAP should know:
+#   - `targetattr != "aci"` is used rather than `targetattr = "*"` because in
+#     389 "*" means user attributes only: the operational attributes JIM reads
+#     (entryUUID, which identifies every object, and modifyTimestamp) are only
+#     reachable with the negated form. aci itself stays hidden.
+#   - Every ACI must let the bound identity search the attribute its filter
+#     names, and JIM's base reads use (objectClass=*), so any rule with an
+#     explicit attribute list must include objectClass. The rules here grant
+#     every attribute but aci, which covers it.
+#
+# Placeholders (substituted by the build script before this file is applied):
+#   __SUFFIX__       - the suffix DN, e.g. dc=example,dc=com
+#   __JIM_GROUP_DN__ - cn=jim,ou=Services,__SUFFIX__ (must exist first)
+#
+# Apply once per suffix JIM connects to, bound as cn=Directory Manager:
+#   ldapmodify -x -H ldap://<host>:3389 -D "cn=Directory Manager" -W -f jim-suffix-access.ldif
+dn: __SUFFIX__
+changetype: modify
+add: aci
+# Rule 1: import. Read-only access to the whole suffix (ou=Services included),
+# so JIM's directory browsing, schema discovery and imports see a consistent
+# tree without being able to change anything outside rules 2 to 4.
+aci: (targetattr != "aci")(version 3.0; acl "JIM: read the suffix"; allow (read, search, compare) groupdn = "ldap:///__JIM_GROUP_DN__";)
+# Rule 2: JIM exports person objects under ou=People (add, modify, rename, delete).
+aci: (target = "ldap:///ou=People,__SUFFIX__")(targetattr != "aci")(version 3.0; acl "JIM: manage ou=People"; allow (add, delete, write) groupdn = "ldap:///__JIM_GROUP_DN__";)
+# Rule 3: JIM exports group objects under ou=Groups (add, modify, rename, delete).
+aci: (target = "ldap:///ou=Groups,__SUFFIX__")(targetattr != "aci")(version 3.0; acl "JIM: manage ou=Groups"; allow (add, delete, write) groupdn = "ldap:///__JIM_GROUP_DN__";)
+# Rule 4: password changes. JIM never writes userPassword directly; it uses the
+# Password Modify extended operation, which 389 only accepts over a secure
+# connection (LDAPS) and which requires write on userPassword of the target
+# entry. Rule 2 already grants this; it is spelt out so the grant is explicit.
+aci: (target = "ldap:///ou=People,__SUFFIX__")(targetattr = "userPassword")(version 3.0; acl "JIM: set passwords under ou=People"; allow (write) groupdn = "ldap:///__JIM_GROUP_DN__";)
+
+# --- Optional: container creation ("create containers as needed") -----------
+# The OpenLDAP recipe lets JIM create organisational units directly under the
+# suffix root. 389's ACI language has no one-level scope, and a wildcard target
+# (ldap:///ou=*,__SUFFIX__) matches OUs at any depth, so the nearest equivalent
+# lets JIM add an organizationalUnit anywhere in the suffix, ou=Services
+# included. The lab does not apply it (its managed OUs exist already, and every
+# scenario provisions into them). Add it only if administrators will not create
+# target OUs by hand:
+#
+# dn: __SUFFIX__
+# changetype: modify
+# add: aci
+# aci: (target = "ldap:///ou=*,__SUFFIX__")(targetattr != "aci")(targetfilter = "(objectClass=organizationalUnit)")(version 3.0; acl "JIM: create containers"; allow (add) groupdn = "ldap:///__JIM_GROUP_DN__";)

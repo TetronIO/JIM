@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-07-21, JIM v0.13.0
+> Last updated: 2026-09-23, JIM v0.15.0
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target Connected Systems.
 
@@ -10,16 +10,23 @@ This diagram shows the full lifecycle of a Pending Export from creation during s
 stateDiagram-v2
     [*] --> Pending: Created during Sync<br/>(export evaluation)
 
+    Pending --> [*]: Never-exported provisioning<br/>cancelled with its CSO
+
     Pending --> Executing: Export run starts<br/>batch marked executing
 
     Executing --> Exported: Connector reports<br/>success
 
-    Executing --> ExportNotConfirmed: Connector reports<br/>failure (retryable)
+    Executing --> Pending: Connector reports failure<br/>(retry after NextRetryAt backoff),<br/>or written in part while<br/>references are still owed
+    Executing --> ExportNotConfirmed: File-based export<br/>throws (retryable)
     Executing --> Failed: ErrorCount >= MaxRetries
+
+    Executing --> [*]: Delete succeeds for a CSO whose<br/>provisioning was never confirmed,<br/>or an auto-confirming connector<br/>(PE deleted)
 
     Exported --> [*]: Confirming import confirms<br/>all attribute values match<br/>(PE deleted)
 
-    Exported --> ExportNotConfirmed: Confirming import finds<br/>attribute values don't match
+    Exported --> ExportNotConfirmed: Confirming import finds<br/>attribute values don't match,<br/>or a Full Import never returned<br/>an exported Create
+
+    Exported --> Pending: Confirmed, but changes appended<br/>while a Create awaited confirmation<br/>remain (now an Update)
 
     ExportNotConfirmed --> Executing: Next export run<br/>(after NextRetryAt backoff)
 
@@ -33,11 +40,15 @@ stateDiagram-v2
         Initial state.
         Created by EvaluateExportRules
         during Full/Delta Sync.
+        Also the retry state after a
+        connector-reported failure.
     end note
     note right of Exported
         Awaiting confirmation.
         Confirming import checks if
         CSO attributes match expected values.
+        An exported Create is never
+        re-sent while it waits.
     end note
     note left of ExportNotConfirmed
         Retryable failure.
@@ -51,6 +62,8 @@ stateDiagram-v2
     end note
 ```
 
+A change type withheld by a Run Profile export limit (#1629) never leaves `Pending`: the export run does not mark it, attempt it, or record anything against it.
+
 ## Full Lifecycle Across Operations
 
 A Pending Export's journey typically spans three separate Run Profile executions:
@@ -62,45 +75,53 @@ flowchart LR
         CheckDelete -->|Yes| SkipDelete[Skip export evaluation<br/>MVO about to be deleted;<br/>work would be discarded #390<br/>No PE created]
         CheckDelete -->|No| EvalExport[EvaluateExportRules:<br/>Find export Synchronisation Rules<br/>for MVO type]
         EvalExport --> InScope{MVO in scope<br/>for export rule?}
-        InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists]
+        InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists<br/>Cancel never-exported provisioning<br/>instead, #1681]
         InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export Synchronisation Rule mappings]
         MapAttrs --> NetChange{No-net-change<br/>detection}
         NetChange -->|CSO already current| Skip[Skip - no PE created<br/>Target already has correct values]
         NetChange -->|Changes needed| CheckExisting{Existing CSO<br/>in target system?}
+        CheckExisting -->|Yes, of another<br/>Object Type| TypeConflict[No PE: the MVO's one CSO<br/>in this system is of another<br/>Object Type, #1344<br/>RPEI: CouldNotExportDueTo<br/>ExistingConnectedSystemObject]
         CheckExisting -->|Yes| CreateUpdatePE[Create PE:<br/>ChangeType = Update<br/>Status = Pending]
+        CheckExisting -->|Yes, PendingProvisioning,<br/>Create not yet sent| RestageCreate[Restage the Create<br/>from the latest MVO state]
+        CheckExisting -->|Yes, PendingProvisioning,<br/>Create already sent| AppendChanges[Append the changes to the<br/>exported Create as Pending, #1687<br/>they travel as one Update<br/>once the Create is confirmed]
         CheckExisting -->|No| CreateCreatePE[Create PE:<br/>ChangeType = Create<br/>Status = Pending<br/>Provision new CSO]
         CreateUpdatePE --> FlushReconcile
         CreateCreatePE --> FlushReconcile
+        RestageCreate --> FlushReconcile
+        AppendChanges --> FlushReconcile
         EvalDeprov --> FlushReconcile
         FlushReconcile[Flush-time reconciliation:<br/>CREATE+DELETE for same CSO<br/>cancels both no net change<br/>UPDATE+DELETE cancels UPDATE<br/>keeps DELETE]
         FlushReconcile --> PersistPE[Persist remaining PEs]
     end
 
     subgraph "2. Export"
-        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now] --> MarkExec[Mark batch:<br/>Status = Executing]
+        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now<br/>exported Creates skipped<br/>types over a Run Profile limit withheld] --> MarkExec[Mark batch:<br/>Status = Executing]
         MarkExec --> ConnExport[Connector executes<br/>export operations]
         ConnExport --> Success{Success?}
         Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Exported]
         Success -->|Yes, Update| ExpResult[Status = Exported<br/>RPEI: Exported]
-        Success -->|Yes, Delete| DeprovResult[Delete PE + CSO<br/>RPEI: Deprovisioned]
-        Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = ExportNotConfirmed]
+        Success -->|Yes, in part| PartResult[References still owed, #1398<br/>Status = Pending<br/>Create becomes Update<br/>RPEI: Exported]
+        Success -->|Yes, Delete| DeprovResult[Status = Exported<br/>RPEI: Deprovisioned<br/>Never-confirmed provisioning:<br/>delete PE + CSO now, #1685]
+        Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = Pending,<br/>or Failed at MaxRetries]
         ProvResult --> OptimisticApply
         ExpResult --> OptimisticApply[Optimistic apply #1079:<br/>Project exported attribute<br/>changes onto the CSO's<br/>in-memory + persisted values<br/>calls-based connectors only;<br/>never stamps LastUpdated/Status]
+        PartResult --> OptimisticApply
     end
 
     subgraph "3. Confirming Import"
-        ImportData[Import fresh data<br/>from target system] --> Reconcile[PendingExportReconciliationService:<br/>Compare each PE attribute<br/>against imported CSO values]
-        Reconcile --> AllMatch{All attributes<br/>confirmed?}
-        AllMatch -->|Yes| DeletePE[Delete PE<br/>Export confirmed<br/>PE lifecycle complete]
-        AllMatch -->|Partial| PartialConfirm[Remove confirmed attributes<br/>Keep unconfirmed<br/>Change Create to Update<br/>Status = ExportNotConfirmed]
-        AllMatch -->|None| NoneConfirm[Keep all attributes<br/>Increment error count<br/>Status = ExportNotConfirmed]
+        ImportData[Import fresh data<br/>from target system] --> Reconcile[Reconcile each PE for a CSO<br/>the import returned: compare<br/>its attribute changes against<br/>imported CSO values]
+        Reconcile --> AllMatch{Any changes<br/>remain?}
+        AllMatch -->|No| DeletePE[Delete PE<br/>Export confirmed<br/>PE lifecycle complete]
+        AllMatch -->|Yes| Remaining[Remove confirmed changes<br/>A Create becomes an Update:<br/>the object is proven to exist, #1695<br/>Status from what remains:<br/>unconfirmed = ExportNotConfirmed<br/>appended only = Pending<br/>all failed = Failed]
+        ImportData --> Unseen{Full Import did not return<br/>an exported Create at all?}
+        Unseen -->|Yes| RetryCreate[Mark the Create for retry, #1695<br/>Status = ExportNotConfirmed,<br/>or Failed at MaxRetries<br/>RPEI: ExportNotConfirmed<br/>Delta Imports cannot prove absence]
     end
 
     PersistPE --> GetExecutable
     OptimisticApply --> ImportData
     FailResult -.->|Next export run<br/>after backoff| GetExecutable
-    PartialConfirm -.->|Next export run| GetExecutable
-    NoneConfirm -.->|Next export run| GetExecutable
+    Remaining -.->|Next export run| GetExecutable
+    RetryCreate -.->|Next export run| GetExecutable
 ```
 
 ## Pending Export Confirmation During Sync
@@ -153,9 +174,9 @@ stateDiagram-v2
 
 | Type | When Created | What Happens |
 |------|-------------|--------------|
-| Create | No CSO exists in target system for this MVO | Provisions new object in target system. Connector creates object + sets attributes. PE captures DN template + all attributes. |
+| Create | No CSO exists in target system for this MVO | Provisions new object in target system. Connector creates object + sets attributes. PE captures DN template + all attributes. Once exported it is never re-sent while awaiting confirmation; changes arriving meanwhile are appended to it, and it becomes an Update once an import confirms the object exists. |
 | Update | CSO exists but attributes differ from MVO values | Updates existing object attributes. Only changed attributes are included. No-net-change detection avoids unnecessary exports. |
-| Delete | MVO deletion rule triggered, or MVO falls out of export scope | Removes object from target system. Created by EvaluateMvoDeletionAsync or EvaluateOutOfScopeExportsAsync. PE deleted along with CSO on success. |
+| Delete | MVO deletion rule triggered, or MVO falls out of export scope | Removes object from target system. Created by EvaluateMvoDeletionAsync or EvaluateOutOfScopeExportsAsync. On success the PE goes to Exported and the confirming import removes the PE and CSO; for a CSO whose provisioning was never confirmed, the PE and CSO are removed at once. Never staged for provisioning that was never exported: that is cancelled instead. |
 
 ## Drift Detection Creates Corrective Exports
 
@@ -191,7 +212,15 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **Partial confirmation**<br /> Individual attribute changes can be confirmed independently. If 3 out of 5 attributes match the target system, only the 2 unconfirmed attributes remain on the Pending Export for retry.
 
-- **Create-to-Update demotion**<br /> When a Create PE is partially confirmed (object was created but some attributes didn't take), it's demoted to an Update PE. This prevents the next export from trying to create an already-existing object.
+- **Create-to-Update demotion (#1695)**<br /> Reconciliation only runs for a CSO an import actually returned, so a Create PE reaching it proves the object exists. Whatever remains on it once confirmed changes are removed (unconfirmed attributes, or changes appended while it awaited confirmation) therefore travels as an Update, whichever attributes confirmed. This replaced two narrower triggers (a confirmed secondary external ID, or every original change confirmed with more queued), under which a single unconfirmed attribute left the PE shaped as a Create and the retry sent a second Create for an existing object. A Create written in part for want of a reference (#1398) is demoted at export time instead, since the row now exists.
+
+- **An exported Create waits; later changes are appended (#1687)**<br /> A CSO stays `PendingProvisioning` until an import confirms its Create. A Metaverse Object change arriving in that window used to delete the exported Create and stage a fresh one carrying every change, so a second Create reached the connector. Staging now distinguishes a Create never sent (`IsProvisioningNeverExported`: restage it in place) from one already sent: the change is appended to the exported Create as a `Pending` attribute change, the export run never re-sends a Create at `Exported`, and the confirming import turns it into one Update carrying the change. An auto-confirming file export, which deletes the Create on success, stages the Update directly.
+
+- **An exported Create a Full Import never saw is retried (#1695)**<br /> Import deletion detection deliberately excludes `PendingProvisioning` CSOs, so a Create that was exported but never reported back by any import used to sit at `Exported` for ever. A Full Import now finds each such Create for the Object Types it read, marks its exported changes for retry (`ExportNotConfirmed`, or `Failed` once past the retry limit) and reports each on the import Activity. A Delta Import leaves them alone, since it cannot prove an object is absent.
+
+- **One CSO per Metaverse Object per Connected System (#1344)**<br /> Export evaluation resolves the target CSO by Metaverse Object and Connected System, so an export Synchronisation Rule targeting a second Object Type in the same system would resolve to the object already holding that slot. `DetectObjectTypeConflict` catches this where the decision is made: nothing is staged, and a `CouldNotExportDueToExistingConnectedSystemObject` RPEI names the rule, both Object Types and the object holding the slot, rather than the page failing on the one-PE-per-CSO unique index.
+
+- **The cross-page reference pass leaves Pending Exports in place (#1741)**<br /> A Full Synchronisation re-evaluates objects whose references span pages once every page is done. That pass used to batch-delete the targets' Pending Exports first, which (since #1687) made a group whose Create was never sent read as already sent, so only its members were staged as an Update for a group that did not exist. It now lets per-object staging find each existing PE and decide: an unsent Create is rebuilt with the resolved references, an exported one has the changes appended, a pending Update is merged.
 
 - **No-net-change detection**<br /> Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load.
 

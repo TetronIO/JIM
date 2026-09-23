@@ -665,82 +665,18 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// Builds a delete import object from an accesslog auditDelete entry.
-    /// Extracts the objectClass and entryUUID from reqOld attributes to construct
-    /// a proper import object with ObjectType and external ID, matching what the
-    /// USN-based delete detection produces.
+    /// Builds a delete import object from an accesslog auditDelete entry: reqOld holds the deleted entry's
+    /// attributes as "name: value" lines, and reqEntryUUID states its entryUUID directly, outranking any reqOld
+    /// carries. The import object matches what the USN-based delete detection produces (Object Type, external id,
+    /// DN); null, with a warning, when reqOld names no selected Object Type or no entryUUID can be found.
     /// </summary>
     private ConnectedSystemImportObject? BuildDeleteImportObjectFromAccesslog(SearchResultEntry accesslogEntry, IReadOnlyList<ConnectedSystemObjectType> objectTypes)
     {
-        // Extract entryUUID: try reqEntryUUID first (direct attribute), then reqOld
-        var entryUuid = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqEntryUUID");
-
-        // Extract objectClass from reqOld values (format: "attributeName: value")
+        var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
+        var reqEntryUuid = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqEntryUUID");
         var reqOldValues = LdapConnectorUtilities.GetEntryAttributeStringValues(accesslogEntry, "reqOld") ?? [];
 
-        const string objectClassPrefix = "objectClass: ";
-        var objectClasses = reqOldValues
-            .Where(oldValue => oldValue.StartsWith(objectClassPrefix, StringComparison.OrdinalIgnoreCase))
-            .Select(oldValue => oldValue[objectClassPrefix.Length..].Trim());
-
-        // The same precedence as a live entry gets, so a deletion is recorded against the Object Type the object
-        // was imported as.
-        var objectType = LdapObjectTypeMatcher.Match(objectClasses, objectTypes);
-
-        // Also try to get entryUUID from reqOld if not found via reqEntryUUID
-        const string entryUuidPrefix = "entryUUID: ";
-        entryUuid ??= reqOldValues
-            .FirstOrDefault(oldValue => oldValue.StartsWith(entryUuidPrefix, StringComparison.OrdinalIgnoreCase))?
-            [entryUuidPrefix.Length..].Trim();
-
-        if (objectType == null)
-        {
-            var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
-            _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine object type for deleted object. " +
-                "DN: {Dn}. The accesslog entry may not contain reqOld attributes.", LogSanitiser.Sanitise(reqDn));
-            return null;
-        }
-
-        if (string.IsNullOrEmpty(entryUuid))
-        {
-            var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
-            _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine entryUUID for deleted object. " +
-                "DN: {Dn}. The accesslog entry may not contain reqEntryUUID or reqOld entryUUID.", LogSanitiser.Sanitise(reqDn));
-            return null;
-        }
-
-        var importObject = new ConnectedSystemImportObject
-        {
-            ObjectType = objectType.Name,
-            ChangeType = ObjectChangeType.Deleted,
-        };
-
-        // Add entryUUID as an attribute so the import processor can match to the existing CSO
-        var externalIdAttribute = objectType.Attributes.FirstOrDefault(a => a.IsExternalId);
-
-        if (externalIdAttribute != null)
-        {
-            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
-            {
-                Name = externalIdAttribute.Name,
-                StringValues = [entryUuid]
-            });
-        }
-
-        // Add the DN as the secondary external ID (distinguishedName)
-        var reqDnValue = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
-        if (!string.IsNullOrEmpty(reqDnValue))
-        {
-            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
-            {
-                Name = "distinguishedName",
-                StringValues = [reqDnValue]
-            });
-        }
-
-        _logger.Debug("BuildDeleteImportObjectFromAccesslog: Built delete import for {ObjectType} with entryUUID {Uuid}, DN: {Dn}",
-            objectType.Name, LogSanitiser.Sanitise(entryUuid), LogSanitiser.Sanitise(reqDnValue));
-        return importObject;
+        return LdapDeletedEntryIdentity.Identify(reqOldValues, reqDn, reqEntryUuid, objectTypes, _logger);
     }
 
     #endregion

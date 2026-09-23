@@ -98,6 +98,7 @@ The remaining five types are classified per key.
 | `description` | C | Label only. |
 | `direction` | B | Reverses which way attribute values flow. |
 | `enabled` | B | Stops or starts the rule contributing; downstream removal depends on the out-of-scope and deprovision actions. |
+| `disabledReason` | C | Records why the rule, or an Attribute Flow within it, was disabled on the administrator's behalf (#1485). Changes nothing about what synchronises; `enabled` beside it carries the class. |
 | `provisionToConnectedSystem` | B | Governs whether new objects are created in the Connected System. |
 | `projectToMetaverse` | B | Governs whether new Metaverse Objects are created. |
 | `outboundDeprovisionAction` | **A** | Disconnect to Delete converts deprovisioning into deletion in the Connected System. |

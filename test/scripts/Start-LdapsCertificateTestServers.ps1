@@ -19,18 +19,28 @@
         amount to waiving the validity period.
 
     It then prints the environment variables that LdapsCertificateValidationTests, ServerCertificateProbeTests and
-    the Samba AD / unencrypted-connection fixture read.
+    the Samba AD / 389 Directory Server / unencrypted-connection fixtures read.
+
+    -Include389 adds two 389 Directory Server containers presenting the same certificates (one the valid
+    JIM-store-only certificate, one the expired certificate), so the second directory family is covered on the
+    same rows without generating anything new.
 
     Requires Docker, OpenSSL, and root (it writes hosts entries and adds a CA to the machine trust store).
 
 .PARAMETER Stop
     Removes the containers, hosts entries and trusted CA, and deletes the working directory. Always cleans up the
     Samba AD container and its hosts entry too, whether or not -IncludeSambaAd was passed on the run being stopped,
-    so a stale Samba AD container from an earlier run is never left behind.
+    so a stale Samba AD container from an earlier run is never left behind. The two 389 Directory Server containers
+    are removed unconditionally in the same way, whether or not -Include389 was passed.
 
 .PARAMETER IncludeSambaAd
     Also stands up a Samba AD domain controller, covering the AD-family directory type alongside OpenLDAP. First
     boot provisions a domain from scratch, which takes several minutes; the script waits and prints progress.
+
+.PARAMETER Include389
+    Also stands up two 389 Directory Server containers (one presenting the valid JIM-store-only certificate, one
+    presenting the expired certificate), covering the second RFC 4512 directory family alongside OpenLDAP. They
+    reuse the certificates this script already generates and come up in a few seconds.
 
 .PARAMETER WorkingDirectory
     Where certificates are generated. Defaults to a jim-ldaps-test directory under the system temporary path.
@@ -42,12 +52,16 @@
     sudo pwsh ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd
 
 .EXAMPLE
+    sudo pwsh ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd -Include389
+
+.EXAMPLE
     sudo pwsh ./test/scripts/Start-LdapsCertificateTestServers.ps1 -Stop
 #>
 [CmdletBinding()]
 param(
     [switch]$Stop,
     [switch]$IncludeSambaAd,
+    [switch]$Include389,
     [string]$WorkingDirectory = (Join-Path ([System.IO.Path]::GetTempPath()) 'jim-ldaps-test')
 )
 
@@ -91,6 +105,25 @@ $sambaLdapsPort = $null
 $sambaLdapPort = $null
 $sambaCaPath = Join-Path $WorkingDirectory 'samba-ca.pem'
 
+# 389 Directory Server, added by -Include389, covers the second RFC 4512 directory family alongside OpenLDAP.
+# Matches the base image of the integration lab's 389 Directory Server container (test/integration/docker/dirsrv).
+# Both containers present certificates this script already generates: the certificate names a host, both hosts
+# already resolve to loopback via the OpenLDAP hosts entries, so a 389 server presenting the same certificate on
+# its own port is exactly the row wanted, and no new certificates or hosts entries are needed. There is no
+# system-trusted 389 row: additive trust is a property of the client, already proven by the OpenLDAP row.
+$dirsrvImage = '389ds/dirsrv:3.1'
+$dirsrvContainerName = 'jim-ldaps-389'
+$dirsrvExpiredContainerName = 'jim-ldaps-389-expired'
+$dirsrvBindDn = 'cn=Directory Manager'
+$dirsrvBindPassword = 'Test@123!JIM'
+# The image serves plain LDAP on container port 3389 alongside LDAPS on 3636.
+$dirsrvLdapsContainerPort = 3636
+$dirsrvPlainContainerPort = 3389
+# Host ports assigned by Docker after the containers start.
+$dirsrvLdapsPort = $null
+$dirsrvPlainPort = $null
+$dirsrvExpiredLdapsPort = $null
+
 function Assert-Prerequisites {
     foreach ($tool in @('docker', 'openssl')) {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
@@ -111,6 +144,11 @@ function Remove-TestServers {
     # Always removed, whether or not -IncludeSambaAd was passed on this run: a stale Samba AD container from an
     # earlier -IncludeSambaAd run must never survive a plain -Stop.
     docker rm -f $sambaContainerName 2>$null | Out-Null
+
+    # Same rule for the 389 Directory Server pair: a stale container from an earlier -Include389 run must never
+    # survive a plain -Stop.
+    docker rm -f $dirsrvContainerName 2>$null | Out-Null
+    docker rm -f $dirsrvExpiredContainerName 2>$null | Out-Null
 
     if (Test-Path $systemTrustPath) {
         Remove-Item $systemTrustPath -Force
@@ -402,6 +440,98 @@ function Set-SambaHostEntry {
     }
 }
 
+function Wait-ForDirsrvReady {
+    <#
+    .SYNOPSIS
+        Polls a 389 Directory Server container until its own healthcheck (dscontainer -H) passes AND a simple bind
+        as cn=Directory Manager succeeds, which proves DS_DM_PASSWORD has been applied and the listener answers.
+    #>
+    param(
+        [string]$ContainerName,
+        [int]$TimeoutSeconds,
+        [string]$Description
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastReport = Get-Date
+    while ((Get-Date) -lt $deadline) {
+        docker exec $ContainerName /usr/lib/dirsrv/dscontainer -H 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            # The image carries the OpenLDAP client tools, so bind over the container's own plain port.
+            docker exec $ContainerName ldapwhoami -x -H "ldap://localhost:${dirsrvPlainContainerPort}" -D $dirsrvBindDn -w $dirsrvBindPassword 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+        }
+
+        if (((Get-Date) - $lastReport).TotalSeconds -ge 30) {
+            Write-Host "  Still waiting for $Description... ($([int]($deadline - (Get-Date)).TotalSeconds)s remaining)"
+            $lastReport = Get-Date
+        }
+
+        Start-Sleep -Seconds 5
+    }
+
+    return $false
+}
+
+function Start-DirsrvServers {
+    Write-Host ''
+    Write-Host "Starting 389 Directory Server ($dirsrvContainerName, $dirsrvExpiredContainerName)..."
+
+    # On every start dscontainer imports /data/tls/server.key, /data/tls/server.crt and every /data/tls/ca/*.crt
+    # into its NSS database in place of its self-signed certificate, so a host directory bind-mounted at /data/tls
+    # is all that is needed to have the server present one of the certificates generated above. An expired
+    # certificate is imported and served as-is, which is what the expired row relies on.
+    $dirsrvServers = @(
+        @{ Name = $dirsrvContainerName;        CertificateName = 'jim'; Ca = 'caB'; PublishPlainPort = $true }
+        @{ Name = $dirsrvExpiredContainerName; CertificateName = 'old'; Ca = 'caB'; PublishPlainPort = $false }
+    )
+
+    # Start both first, then wait for both: they come up in parallel.
+    foreach ($server in $dirsrvServers) {
+        $tlsDirectory = Join-Path $WorkingDirectory $server.Name 'tls'
+        $caDirectory = Join-Path $tlsDirectory 'ca'
+        New-Item -ItemType Directory -Path $caDirectory -Force | Out-Null
+        Copy-Item (Join-Path $WorkingDirectory "$($server.CertificateName).key") (Join-Path $tlsDirectory 'server.key') -Force
+        Copy-Item (Join-Path $WorkingDirectory "$($server.CertificateName).crt") (Join-Path $tlsDirectory 'server.crt') -Force
+        Copy-Item (Join-Path $WorkingDirectory "$($server.Ca).crt") (Join-Path $caDirectory "$($server.Ca).crt") -Force
+        foreach ($file in @((Join-Path $tlsDirectory 'server.key'), (Join-Path $tlsDirectory 'server.crt'), (Join-Path $caDirectory "$($server.Ca).crt"))) {
+            & chmod 644 $file
+        }
+
+        docker rm -f $server.Name 2>$null | Out-Null
+
+        # Only the valid-certificate server also publishes its unencrypted LDAP port, for the plain-connection
+        # row; the expired server exists solely to exercise LDAPS certificate validation. Same '127.0.0.1::<port>'
+        # ephemeral, loopback-bound publishing as the OpenLDAP servers.
+        $portArguments = @('-p', "127.0.0.1::${dirsrvLdapsContainerPort}")
+        if ($server.PublishPlainPort) {
+            $portArguments += @('-p', "127.0.0.1::${dirsrvPlainContainerPort}")
+        }
+
+        docker run -d --name $server.Name @portArguments `
+            -e DS_DM_PASSWORD=$dirsrvBindPassword `
+            -v "${tlsDirectory}:/data/tls" `
+            $dirsrvImage | Out-Null
+    }
+
+    foreach ($server in $dirsrvServers) {
+        Write-Host "  Waiting for $($server.Name) to become ready..."
+        if (-not (Wait-ForDirsrvReady -ContainerName $server.Name -TimeoutSeconds 300 -Description "$($server.Name) start-up")) {
+            throw "389 Directory Server ($($server.Name)) did not become ready within 300 seconds. Check 'docker logs $($server.Name)'."
+        }
+    }
+
+    # No restart is involved, so the published ports are stable and can be read straight after readiness.
+    $script:dirsrvLdapsPort = Get-PublishedHostPort -ContainerName $dirsrvContainerName -ContainerPort $dirsrvLdapsContainerPort
+    $script:dirsrvPlainPort = Get-PublishedHostPort -ContainerName $dirsrvContainerName -ContainerPort $dirsrvPlainContainerPort
+    $script:dirsrvExpiredLdapsPort = Get-PublishedHostPort -ContainerName $dirsrvExpiredContainerName -ContainerPort $dirsrvLdapsContainerPort
+
+    Write-Host "Started $dirsrvContainerName (LDAPS on $dirsrvLdapsPort, LDAP on $dirsrvPlainPort) as ldap-jim.local."
+    Write-Host "Started $dirsrvExpiredContainerName (LDAPS on $dirsrvExpiredLdapsPort) as ldap-old.local."
+}
+
 function Set-HostEntries {
     $hosts = Get-Content $hostsFile
     foreach ($server in $servers) {
@@ -436,6 +566,11 @@ Add-CaToMachineTrustStore
 if ($IncludeSambaAd) {
     Start-SambaAdServer
     Set-SambaHostEntry
+}
+
+# No hosts entries to add: ldap-jim.local and ldap-old.local already exist for the OpenLDAP servers.
+if ($Include389) {
+    Start-DirsrvServers
 }
 
 Write-Host ''
@@ -474,6 +609,18 @@ if ($IncludeSambaAd) {
     $environmentVariables['JIM_TEST_LDAPS_SAMBA_PASSWORD']     = $sambaAdminPassword
     $environmentVariables['JIM_TEST_LDAPS_SAMBA_CA_PATH']      = $sambaCaPath
     $environmentVariables['JIM_TEST_LDAPS_SAMBA_MISMATCH_HOST'] = '127.0.0.1'
+}
+
+if ($Include389) {
+    $environmentVariables['JIM_TEST_LDAPS_389_HOST']          = 'ldap-jim.local'
+    $environmentVariables['JIM_TEST_LDAPS_389_PORT']          = "$dirsrvLdapsPort"
+    $environmentVariables['JIM_TEST_LDAPS_389_PLAIN_PORT']    = "$dirsrvPlainPort"
+    $environmentVariables['JIM_TEST_LDAPS_389_USERNAME']      = $dirsrvBindDn
+    $environmentVariables['JIM_TEST_LDAPS_389_PASSWORD']      = $dirsrvBindPassword
+    $environmentVariables['JIM_TEST_LDAPS_389_CA_PATH']       = (Join-Path $WorkingDirectory 'caB.crt')
+    $environmentVariables['JIM_TEST_LDAPS_389_MISMATCH_HOST'] = '127.0.0.1'
+    $environmentVariables['JIM_TEST_LDAPS_389_EXPIRED_HOST']  = 'ldap-old.local'
+    $environmentVariables['JIM_TEST_LDAPS_389_EXPIRED_PORT']  = "$dirsrvExpiredLdapsPort"
 }
 
 foreach ($variable in $environmentVariables.GetEnumerator()) {

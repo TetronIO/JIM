@@ -28,12 +28,12 @@ For more detail on these concepts, see [Connected Systems](../configuration/conn
 
 ## 🛠️ Available Connectors
 
-JIM ships with the following built-in connectors:
+JIM ships with the following built-in connectors. **Passwords** means the connector can set passwords, so it can receive initial passwords, on-demand password changes and Password Synchronisation.
 
 | Connector | Description | Capabilities |
 |-----------|-------------|--------------|
 | [JIM File Connector](jim-file-connector.md) | CSV and delimited text files | Full Import, Export |
-| [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export |
+| [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, Samba AD, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export, [Passwords](../concepts/passwords.md) |
 | [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export |
 | [JIM SQL Connector](jim-sql-connector.md) | Microsoft SQL Server and Oracle Database, through fully managed ADO.NET drivers | Full Import, Delta Import, Export |
 

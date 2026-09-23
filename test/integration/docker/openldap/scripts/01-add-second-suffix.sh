@@ -307,11 +307,11 @@ fi
 # file is not expected, but the version is not asserted: the file is loaded if it is there and
 # the version is logged either way, so a base image change shows up in the build log.
 #
-# *** CHANGING THIS FILE CHANGES THE BASE IMAGE HASH. *** Build-OpenLdapImage.ps1 hashes this
-# script into the jim.openldap.build-hash label, Run-IntegrationTests.ps1 rebuilds the base image
-# when that label no longer matches, and Get-OpenLDAPPopulateScriptHash folds this file into every
-# OpenLDAP snapshot's hash, so every existing OpenLDAP snapshot is invalidated and rebuilt on its
-# next use (Build-OpenLDAPSnapshots.ps1). That is the intended way to roll a base change out.
+# *** CHANGING THIS FILE CHANGES THE BASE IMAGE HASH. *** Get-OpenLDAPBuildHash.ps1 hashes every
+# fixture file into the jim.openldap.build-hash label, Run-IntegrationTests.ps1 rebuilds the base
+# image when that label no longer matches, and every OpenLDAP snapshot records the base hash it was
+# baked from, so every existing OpenLDAP snapshot is invalidated and rebuilt on its next use
+# (Build-OpenLDAPSnapshots.ps1). That is the intended way to roll a base change out.
 echo "[openldap-init] Loading the ppolicy overlay module..."
 echo "[openldap-init] slapd version: $($SLAPD -VV 2>&1 | head -1)"
 

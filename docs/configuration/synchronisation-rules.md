@@ -18,6 +18,8 @@ Synchronisation Rules are the central configuration mechanism for identity synch
 
 Each rule also has a name and an optional **description**, a free-text note for recording what the rule is for and why it exists. The description is shown on the rule's Details tab and changes to it are tracked in the [configuration change history](activities.md#configuration-change-history).
 
+A rule's Connected System Object Type must be selected on the Connected System's Schema tab for the rule to be enabled; saving an enabled rule against a deselected Object Type is refused, as is deselecting an Object Type an enabled rule is still bound to. A deselected Object Type is out of management, and its objects are obsoleted by the next Full Import (see [What deselecting means](connected-systems.md#what-deselecting-means)). A disabled rule can be saved against one, which is how you keep a rule while taking its type out of management.
+
 A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. The Metaverse Object Type is always on the left and the Connected System Object Type on the right, with the arrow between them drawn the way data flows: towards the Connected System for an export rule, towards the Metaverse for an import rule. The Connected System's name links to it.
 
 Where a tab introduces a term you might not already know (Projection, Scoping, Object Matching Rules, Attribute Flow and others across JIM's configuration pages), an info icon sits beside it. Selecting it shows a short definition and a link to the full entry in the [glossary](../reference/glossary.md).
@@ -302,7 +304,7 @@ A password the Connected System would refuse is rejected when you set it, rather
 
 Setting the password is a separate concern from creating the Connected System Object, and deliberately cannot fail the export that created it. The Connected System Object exists; reporting its export as failed would have JIM retry the create.
 
-Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. An unreachable or refused Connected System Object is retried on the Connected System's own [Password Synchronisation](../concepts/passwords.md#-password-synchronisation) schedule, or JIM's default (five attempts, backing off from five minutes) where the system has none configured, capped by the time to live below, rather than waiting for another export run.
+Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it and the [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. An unreachable or refused Connected System Object is retried on the Connected System's own [Password Synchronisation](../concepts/passwords.md#password-synchronisation) schedule, or JIM's default (five attempts, backing off from five minutes) where the system has none configured, capped by the time to live below, rather than waiting for another export run.
 
 Each Connected System Object ends up in one of these states, each recorded as a child Activity of the one written when the password was queued:
 

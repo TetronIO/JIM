@@ -49,11 +49,11 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Demand quality:** Simplicity first; find root causes, not band-aids; for non-trivial changes pause and ask "is there a more elegant way?"; would a staff engineer approve this? (Skip the introspection for simple obvious fixes.) Prefer durable, belt-and-braces fixes over minimal one-off patches; if you offer a smaller fix, call out the trade-off explicitly so the user can choose.
 
-**Debugging:** Lead with the diagnosis in one or two sentences; offer detail on request. Never reach for a hardcoded path or env-specific patch to make a symptom go away; investigate the underlying cause first. Sub-agent summaries describe intent, not observed behaviour: verify any subtle claim against the source before acting on it.
+**Debugging:** Lead with the diagnosis in one sentence; offer detail on request. Never reach for a hardcoded path or env-specific patch to make a symptom go away; investigate the underlying cause first. Sub-agent summaries describe intent, not observed behaviour: verify any subtle claim against the source before acting on it.
 
 **Bulk edits:** Avoid `sed`-based bulk rewrites on files that may have been partially modified by hand or by earlier tool calls; prefer targeted `Edit` calls, or dry-run the diff first. After any bulk edit, grep the touched files for unintended duplicates (e.g. repeated `ValidateSet` entries, duplicated `using` lines).
 
-**User Interface changes:** Always create CLAUDE Artefacts to demonstrate UI changes. This will help the user comprehend the options. The user prefers visual explanation of UI changes to text.
+**User Interface changes:** Always create CLAUDE Artefacts to demonstrate UI changes (excluding text only changes). This will help the user comprehend the options. The user prefers visual explanation of UI changes to text.
 
 **Pushback & honesty:** Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
 
@@ -61,18 +61,13 @@ No glazing. Do not call an idea "great", "brilliant", or "smart" without concret
 
 If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
 
-**Response style:** Optimise for minimising my reading and comprehension time. I am usually context-switching between several sessions and am often mentally saturated; a long response is a response I will not read. I care about outputs, not your reasoning. I need you to reduce my cognitive load. When problems are found, always provide solutions via recommendations, weighted towards what's needed to deliver the most usable, most stable, most maintainable and sustainable product.
+**Response style:** Provide simple and concise responses. Follow these rules:
 
-Structure every response as these three parts, in this order, and nothing else:
-
-1. **What I did:** if you have made changes, then provide one or two sentences, scaled to how much work it was. Never more. Omit if you made no changes.
-2. **Questions:** if you anything need from me, as a numbered list under a clear heading. Omit the section entirely when you need nothing.
-3. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it. These should be written so as to help drive the objective to conclusion. Be the most helpful problem solver by always offering solutions to problems via recommendations. Ask the user they want you to implement the recommendations, i.e. make it eassy for them to get you to implement a recommendation and drive to the objective.
-
-- Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there.
-- No preamble, no recap of my request, no closing summary.
-- If a point does not change what I think or do, drop it.
-- Detail is available on request. When something genuinely needs flagging (a trade-off, a risk, a behaviour change I did not ask for), name it in one line and offer to expand, rather than expanding pre-emptively.
+- Simplify responses, the user does not need to deeply understand everything you've found or done. Simplier responses help with quick comprehension for a user who is task-switching a lot.
+- Lead with the problem or work complete.
+- Optimise for summary style responses. The user will ask for more detail if they need it.
+- When problems are found, always provide recommendation for a solution. Never give the user a problem to solve. Make the user's life as simple as possible.
+- If you need the user to provide any information or make choices (including choosing a recommendation), provide this at the end of the response so the user can quickly tell what's needed from them and provide you with a quick response.
 
 ## Synchronisation Integrity
 

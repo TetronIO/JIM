@@ -34,7 +34,7 @@ Rules that follow from this:
 - **Application Layer**: JIM.Application (business logic, domain servers)
 - **Domain Layer**: JIM.Models (entities, DTOs, interfaces)
 - **Data Layer**: JIM.Data (abstractions), JIM.PostgresData (implementation)
-- **Integration Layer**: JIM.Connectors (external systems)
+- **Integration Layer**: JIM.Connectors (external systems), with JIM.Scim (the dependency-light SCIM 2.0 wire-protocol library the SCIM 2.0 Client Connector is built on)
 
 **Rule**: Respect layer boundaries. Upper layers depend on lower layers, never vice versa.
 
@@ -57,12 +57,13 @@ The metaverse is the authoritative identity repository:
 
 ### 3a. Real-Time Notifications (#307)
 
-Services coordinate through the database, and the database also signals change: triggers on `WorkerTasks` (insert, status change, delete) and `Activities` (progress/status columns) publish PostgreSQL `NOTIFY` events on commit. Key components:
+Services coordinate through the database, and the database also signals change: triggers on `WorkerTasks` (insert, status change, delete), `Activities` (progress/status columns) and `PendingPasswordChanges` (insert, update, delete; #1635) publish PostgreSQL `NOTIFY` events on commit. Key components:
 
-- **Channels**: names in `Constants.NotificationChannels` (`JIM.Models`); Worker Task payloads parse via `WorkerTaskChangeNotification.TryParse`, Activity progress payloads are the Activity id.
+- **Channels**: names in `Constants.NotificationChannels` (`JIM.Models`); Worker Task payloads parse via `WorkerTaskChangeNotification.TryParse`, Activity progress payloads are the Activity id, and Password Synchronisation queue payloads (`jim_password_change`) are the row's Connected System id.
 - **Listener**: `IDatabaseNotificationListener` (`JIM.Data`) implemented by `PostgresNotificationListener` (`JIM.PostgresData`); one dedicated non-pooled connection per service (`JimDbContext.BuildListenerConnectionString()`), exponential backoff reconnection, `IsConnected`/`ConnectionStateChanged` for fallback gating.
 - **Scheduler**: listens for terminal Worker Tasks belonging to a Schedule Execution and wakes its polling loop (via `AsyncWakeSignal` in `JIM.Utilities`) within ~500ms; the 30-second cycle remains the fallback.
-- **JIM.Web**: `NotificationListenerService` (hosted service) fans events out to the in-process `IUiNotificationService` relay (consumed by Blazor components; Activity progress debounced 200ms) and the `JimNotificationHub` SignalR hub at `/hubs/notifications` for non-Blazor consumers.
+- **Worker**: the Password Delivery Service (3c below) listens on the Password Synchronisation queue channel, so a queued change, a retry or a released hold is delivered within about a second; its own 30-second safety poll remains the fallback.
+- **JIM.Web**: `NotificationListenerService` (hosted service) fans events out to the in-process `IUiNotificationService` relay (consumed by Blazor components; Activity progress and password queue bursts debounced 200ms) and the `JimNotificationHub` SignalR hub at `/hubs/notifications` for non-Blazor consumers.
 - **Run Profile progress (#202)**: the lightweight progress read path is `IActivityRepository.GetActivityProgressAsync` (scalar projection plus the `ActivityStatCounter` operation breakdown from #1078; never materialises RPEIs), surfaced as `GET /api/v1/activities/{id}/progress` and consumed by the Activity detail page (push-driven via the relay, with adaptive fallback polling) and PowerShell (`Get-JIMActivity -Follow`, `Start-JIMRunProfile -Wait`). Throughput and ETA come from `IActivityEtaTracker` (JIM.Web singleton): a windowed rate over successive progress samples with counter-reset detection, shared by the endpoint and the page so all surfaces agree.
 
 **Rules**: notifications are fire-and-forget hints carrying identifiers only; consumers re-query the database for state and MUST retain a polling fallback (degraded latency, never degraded correctness). Publish new channels via database triggers (delivered on commit, cover every writer), never ad-hoc application-side `pg_notify` calls.
@@ -93,9 +94,9 @@ The channel above delivers **one** password to **one** account, synchronously, a
 
 **Where the pieces live**
 
-- **The queue** (`JIM.Models/Transactional`): `PendingPasswordChange` is one row per (Metaverse Object, Connected System), and the unique index on that pair is what makes coalescing a database guarantee rather than a convention. `PendingPasswordChangeStatus` has four states: `Pending` (JIM will try again), `Parked` (only a person can resolve it), `Expired` (it outlived its time to live) and `Cancelled` (an administrator stopped it). `PendingPasswordChangeBulkColumns` is guarded by `BulkInsertColumnCompletenessTests`.
+- **The queue** (`JIM.Models/Transactional`): `PendingPasswordChange` is one row per (Metaverse Object, Connected System), and the unique index on that pair is what makes coalescing a database guarantee rather than a convention. `PendingPasswordChangeStatus` has five states: `Pending` (JIM will try again), `Delivering` (claimed by the Password Delivery Service; see the lease below), `Parked` (only a person can resolve it), `Expired` (it outlived its time to live) and `Cancelled` (an administrator stopped it). `PendingPasswordChangeBulkColumns` is guarded by `BulkInsertColumnCompletenessTests`.
 - **Fan-out and the queue actions** (`JIM.Application/Servers/PasswordSynchronisationServer`, exposed as `JimApplication.PasswordSynchronisation`): queueing with coalescing, the retry and cancel actions, the per-identity history read, and the retention trim.
-- **Delivery** (`JIM.Worker/Processors`, driven by `PasswordDeliveryWorkerTask`): expiry first, then the due work per system, with a doubling backoff. Raised whenever work is queued, whenever a system is enabled, and by the worker's idle tick when a retry falls due with nothing else happening.
+- **Delivery** (`JIM.Worker/PasswordDeliveryService`, #1635): a second `BackgroundService` in the Worker process, deliberately **not** a Worker Task, so a password change never waits behind a running Run Profile. `PasswordDeliveryScheduler` reads what is due and starts one lane per Connected System with work (never more than one per system, at most `MaximumParallelLanes` across systems); each lane runs expiry first, then the due work for its system, with a doubling backoff. The loop is woken by the queue's `NOTIFY` trigger (3a), by a lane finishing, or at the earliest scheduled retry, with a 30-second safety poll as the floor. A lane claims rows in small batches, moving them to `Delivering` under a 60-second lease stamped with the service instance's name (`PendingPasswordChange.Claim`, `ClaimLease`); a lease rather than a lock, so a deliverer that dies mid-flight cannot strand a row. It reports its own heartbeat under `JimService.WorkerDelivery`, and its faults are contained so they can never stop the synchronisation loop. Every password JIM writes, queued, initial or an administrator's immediate set, goes through the one `PasswordDeliveryCore` sequence (open the channel, enforce Require Secure Transport, set, classify, close).
 - **Retention** (`JIM.Application/Servers/ChangeHistoryServer`, on the built-in History Retention Cleanup Schedule): terminal rows and the Activities recording them, under `History.PasswordEventRetentionPeriod`.
 
 **Rules that are easy to get wrong**
@@ -171,6 +172,7 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 ### Testing
 - **NUnit**: Unit testing framework
 - **Moq**: Mocking framework
+- **bUnit**: Blazor component testing (`test/JIM.Web.Tests/`)
 - **coverlet**: Code coverage
 
 ## Development Guidelines
@@ -358,8 +360,8 @@ public class MetaverseController : ControllerBase
 
 The Worker separates pure domain logic from I/O via two core interfaces:
 
-- **`ISyncEngine`**: stateless domain engine with 7 methods (join resolution, projection, Attribute Flow, scoping, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks.
-- **`ISyncRepository`**: ~80-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+- **`ISyncEngine`**: stateless domain engine (22 methods: projection, Attribute Flow and contribution recall, out-of-scope and Metaverse Object deletion decisions, outbound staging and Pending Export merging, export matching rule selection, Pending Export confirmation, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks. Sync Preview (#288) evaluates through the same engine, which is what keeps a preview faithful to a real run.
+- **`ISyncRepository`**: ~155-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 **Dependency Injection**: The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` for per-task context isolation. Each dispatched task gets its own DI scope with independent `DbContext` and connector instances.
 
@@ -816,7 +818,7 @@ public interface IConnector
 // Import via API calls: JIM calls this repeatedly, once per page, until no pagination tokens come back.
 public interface IConnectorImportUsingCalls
 {
-    void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger);
+    void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger);
 
     Task<ConnectedSystemImportResult> ImportAsync(
         ConnectedSystem connectedSystem,
@@ -825,22 +827,23 @@ public interface IConnectorImportUsingCalls
         string? persistedConnectorData,
         ILogger logger,
         CancellationToken cancellationToken,
-        Func<string, Task>? progressCallback = null);
+        IConnectorProgress progress);
 
-    void CloseImportConnection();
+    // Null leaves the persisted connector data unchanged (the normal case).
+    string? CloseImportConnection();
 }
 
 // Export via API calls: one result per Pending Export, in the same order.
 public interface IConnectorExportUsingCalls
 {
-    void OpenExportConnection(IList<ConnectedSystemSettingValue> settings);
+    void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData);
 
     Task<List<ConnectedSystemExportResult>> ExportAsync(
         IList<PendingExport> pendingExports,
         CancellationToken cancellationToken,
-        Func<string, Task>? progressCallback = null);
+        IConnectorProgress progress);
 
-    void CloseExportConnection();
+    string? CloseExportConnection();
 }
 ```
 
@@ -850,9 +853,9 @@ public interface IConnectorExportUsingCalls
 - `SupportsExport`, `SupportsImport`, `SupportsDeltaImport`, etc.
 - `SupportsParallelExport`: when `true`, the Connected System UI shows the `MaxExportParallelism` setting, enabling parallel batch processing with separate DbContext and connector instances per batch
 
-**Reporting to administrators**: the optional `progressCallback` narrates a connector's internal sub-phases onto the Activity message while a long call is running; it is one of several feedback channels (settings validation, per-object export results, run-level warnings, exceptions, logging), each appropriate to a different moment and severity. The guidance for connector authors is in the public [Writing Custom Connectors](../docs/developer/connectors.md) page; the design rationale is in [`notes/CONNECTOR_SUB_PHASE_PROGRESS.md`](notes/CONNECTOR_SUB_PHASE_PROGRESS.md).
+**Reporting to administrators**: the never-null `IConnectorProgress` moves between the sub-phases a connector declares through `IConnectorPhases` (`EnterPhaseAsync`), narrates within a phase, and reports object counts while a long call is running; it is one of several feedback channels (settings validation, per-object export results, run-level warnings, exceptions, logging), each appropriate to a different moment and severity. The guidance for connector authors is in the public [Writing Custom Connectors](../docs/developer/connectors.md) page; the design rationale is in [`notes/CONNECTOR_SUB_PHASE_PROGRESS.md`](notes/CONNECTOR_SUB_PHASE_PROGRESS.md).
 
-**Rule**: Keep connectors stateless between calls. Anything that must survive to the next run goes in `ConnectedSystemImportResult.PersistedConnectorData`, which JIM stores and replays; anything needed only for the next page goes in `PaginationTokens`.
+**Rule**: Keep connectors stateless between calls. Anything that must survive to the next run goes in `ConnectedSystemImportResult.PersistedConnectorData`, which JIM stores and replays (to the open methods as well as to `ImportAsync`, so a connector can reuse state such as a pinned domain controller when it connects); anything needed only for the next page goes in `PaginationTokens`.
 
 ### 4. Activity Logging
 Log all significant operations for audit:
@@ -1036,8 +1039,8 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 
 ### Service Architecture
 - **jim.web**: Blazor Server UI with integrated REST API at `/api/`. Listens on port 80 in-container; reached at `http://localhost:5200` in the development Docker stack (HTTPS is terminated by a reverse proxy in production). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in development (disabled in production).
-- **jim.worker**: Background task processor built on `ISyncEngine` / `ISyncRepository` separation (see [Background Processing](#7-background-processing)). Per-task DI isolation, `ParallelBatchWriter` for concurrent writes, and COPY binary protocol for bulk inserts. Supports parallel schedule step execution and configurable LDAP pipelining.
-- **jim.scheduler**: Schedule management service with 30-second polling cycle. Detects parallel step groups (steps sharing the same `StepIndex`) and queues them with `ExecutionMode = Parallel` for concurrent worker dispatch.
+- **jim.worker**: Background task processor built on `ISyncEngine` / `ISyncRepository` separation (see [Background Processing](#7-background-processing)). Per-task DI isolation, `ParallelBatchWriter` for concurrent writes, and COPY binary protocol for bulk inserts. Supports parallel schedule step execution and configurable LDAP pipelining. Also hosts the Password Delivery Service (see [Password Synchronisation](#3c-password-synchronisation-1119)) as a second hosted service alongside the task loop.
+- **jim.scheduler**: Schedule management service with a 30-second polling cycle, woken early by Worker Task change notifications. Detects parallel step groups (steps sharing the same `StepIndex`) and queues them with `ExecutionMode = Parallel` for concurrent worker dispatch.
 - **jim.database**: PostgreSQL 18
 - **jim.keycloak**: Bundled Keycloak IdP for development SSO (port 8181). Pre-configured with a `jim` realm and client. Not included in production deployments.
 

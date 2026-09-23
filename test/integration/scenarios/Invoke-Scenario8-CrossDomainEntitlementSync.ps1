@@ -92,15 +92,13 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
 }
 
-$isOpenLDAP = ($DirectoryConfig.UserObjectClass -eq "inetOrgPerson")
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 
-if ($isOpenLDAP) {
-    $sourceConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
-    $targetConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
-}
-else {
-    $sourceConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Source
-    $targetConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Target
+# Source and Target are the two instances of whichever directory type the runner selected (two
+# containers for Samba AD; two suffixes on one container for OpenLDAP and 389 Directory Server).
+$sourceConfig = Get-DirectoryConfig -DirectoryType $DirectoryConfig.DirectoryType -Instance Source
+$targetConfig = Get-DirectoryConfig -DirectoryType $DirectoryConfig.DirectoryType -Instance Target
+if (-not $isRfcDirectory) {
     # Scenario 8 places groups in OU=Entitlements, not the default OU=Groups
     $sourceConfig.GroupContainer = "OU=Entitlements,OU=Corp,DC=resurgam,DC=local"
     $targetConfig.GroupContainer = "OU=Entitlements,OU=CorpManaged,DC=gentian,DC=local"
@@ -136,7 +134,7 @@ try {
     # Verify Scenario 8 containers are running
     Write-Host "Verifying Scenario 8 infrastructure..." -ForegroundColor Gray
 
-    if ($isOpenLDAP) {
+    if ($isRfcDirectory) {
         # OpenLDAP uses a single container for both Source and Target suffixes
         $sourceStatus = docker inspect --format='{{.State.Health.Status}}' $sourceContainerName 2>&1
         if ($sourceStatus -ne "healthy") {
@@ -160,11 +158,11 @@ try {
 
     # Populate test data
     if (-not $SkipPopulate) {
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             Write-Host "Populating test data in Source OpenLDAP..." -ForegroundColor Gray
-            & "$PSScriptRoot/../Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Source
+            & "$PSScriptRoot/../Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Source -DirectoryType $DirectoryConfig.DirectoryType
             Write-Host "Creating OU structure in Target OpenLDAP..." -ForegroundColor Gray
-            & "$PSScriptRoot/../Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Target
+            & "$PSScriptRoot/../Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Target -DirectoryType $DirectoryConfig.DirectoryType
         }
         else {
             Write-Host "Populating test data in Source AD..." -ForegroundColor Gray
@@ -250,7 +248,7 @@ try {
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][hashtable]$Config
         )
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # OpenLDAP: return member DNs (uid=username format, matched by Test-MemberInList)
             return Get-LDAPGroupMembers -GroupName $GroupName -DirectoryConfig $Config
         }
@@ -301,7 +299,7 @@ try {
             [Parameter(Mandatory)][string]$MemberName,
             [Parameter(Mandatory)][hashtable]$Config
         )
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # If MemberName is already a full DN (contains = and ,), use it directly.
             # Otherwise look up the user's DN by username attribute.
             if ($MemberName -match '=.*,') {
@@ -316,7 +314,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
@@ -335,7 +333,7 @@ try {
             [Parameter(Mandatory)][string]$MemberName,
             [Parameter(Mandatory)][hashtable]$Config
         )
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             # If MemberName is already a full DN (contains = and ,), use it directly.
             # Otherwise look up the user's DN by username attribute.
             if ($MemberName -match '=.*,') {
@@ -350,7 +348,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
@@ -370,7 +368,7 @@ try {
             [Parameter(Mandatory)][hashtable]$Config,
             [string]$InitialMemberDn  # Required for jimGroup (inherits groupOfNames MUST constraint)
         )
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
             $memberDn = if ($InitialMemberDn) { $InitialMemberDn } else { "cn=placeholder" }
             $domain = if ($Config.Domain) { $Config.Domain } else { "yellowstone.local" }
@@ -379,7 +377,7 @@ try {
             $ldifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $ldifPath -Value $ldif -NoNewline
             try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapadd -x -H 'ldap://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
+                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapadd -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "ldapadd failed (exit code $LASTEXITCODE): $result" }
                 return $result
             }
@@ -399,9 +397,9 @@ try {
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][hashtable]$Config
         )
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
-            $result = docker exec $Config.ContainerName ldapdelete -x -H "ldap://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword "$groupDn" 2>&1
+            $result = docker exec $Config.ContainerName ldapdelete -x -H "$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword "$groupDn" 2>&1
             return $result
         }
         else {
@@ -529,10 +527,12 @@ try {
         # Step 1: Delta Import from Source
         # OpenLDAP: allow DeltaImportFallbackToFullImport warning — the accesslog watermark may not
         # be available if the accesslog exceeded the server's size limit during the preceding full import.
+        # Kept on the RFC-directory family rather than OpenLDAP alone so 389 Directory Server gets the
+        # same tolerance for a change-log watermark that is not yet established.
         # The connector automatically falls back to a full import and establishes the watermark.
         Write-Host "    Delta importing from Source AD..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaImportProfile.id -Wait -PassThru
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Delta Import$contextSuffix" `
                 -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
         } else {
@@ -557,7 +557,7 @@ try {
         # Step 4: Delta Confirming Import from Target
         Write-Host "    Delta confirming import in Target AD..." -ForegroundColor Gray
         $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix" `
                 -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
         } else {
@@ -880,7 +880,7 @@ try {
 
         # For OpenLDAP groupOfNames, removing the last member is rejected (MUST have at least one).
         # driftGroup2 is used for member removal, so it needs >1 member on OpenLDAP.
-        $minMembersForRemoval = if ($isOpenLDAP) { 2 } else { 1 }
+        $minMembersForRemoval = if ($isRfcDirectory) { 2 } else { 1 }
 
         foreach ($grp in $testGroups) {
             $grpName = $grp.Trim()
@@ -1004,7 +1004,7 @@ try {
         Write-Host "  Running Delta Import on Target AD (to import drifted state)..." -ForegroundColor Gray
 
         $targetImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
-        if ($isOpenLDAP) {
+        if ($isRfcDirectory) {
             Assert-ActivitySuccess -ActivityId $targetImportResult.activityId -Name "Target Delta Import (detect drift)" `
                 -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
         } else {
@@ -1326,7 +1326,7 @@ try {
             $_ -notmatch "^(Administrator|Guest|krbtgt)" -and $_ -notmatch "DNS"
         })
         $initialMemberDn = $null
-        if ($isOpenLDAP -and $allUsers.Count -gt 0) {
+        if ($isRfcDirectory -and $allUsers.Count -gt 0) {
             $firstUser = Get-LDAPUser -UserIdentifier $allUsers[0] -DirectoryConfig $sourceConfig
             if ($firstUser) { $initialMemberDn = $firstUser['dn'] }
         }
@@ -1344,7 +1344,7 @@ try {
             if ($addedCount -ge 3) { break }
             $userName = $user.Trim()
             # For OpenLDAP, skip the initial member (already in the group)
-            if ($isOpenLDAP -and $addedCount -eq 0 -and $userName -eq $allUsers[0]) {
+            if ($isRfcDirectory -and $addedCount -eq 0 -and $userName -eq $allUsers[0]) {
                 $membersToAdd += $userName
                 $addedCount++
                 continue
@@ -1709,7 +1709,7 @@ try {
     if ($Step -eq "LeaverCohort" -or $Step -eq "All") {
         Write-TestSection "Test 7: LeaverCohort (Temporal Scope Reconciler at scale)"
 
-        if (-not $isOpenLDAP) {
+        if (-not $isRfcDirectory) {
             Write-Host "  SKIP LeaverCohort requires OpenLDAP (jimEmployeeEndDate is a Generalized Time attribute" -ForegroundColor Yellow
             Write-Host "       in the OpenLDAP JIM schema extension; Samba AD has no equivalent writable DateTime" -ForegroundColor Yellow
             Write-Host "       attribute). Re-run with -DirectoryType OpenLDAP to execute this step." -ForegroundColor Yellow
@@ -1850,7 +1850,7 @@ try {
             $stampLdifPath = [System.IO.Path]::GetTempFileName()
             Set-Content -Path $stampLdifPath -Value $stampLdifBuilder.ToString() -NoNewline
             try {
-                $stampResult = bash -c "cat '$stampLdifPath' | docker exec -i $($sourceConfig.ContainerName) ldapmodify -x -H 'ldap://localhost:$($sourceConfig.LdapSearchPort)' -D '$($sourceConfig.BindDN)' -w '$($sourceConfig.BindPassword)' -c" 2>&1
+                $stampResult = bash -c "cat '$stampLdifPath' | docker exec -i $($sourceConfig.ContainerName) ldapmodify -x -H '$($sourceConfig.LdapSearchScheme)://localhost:$($sourceConfig.LdapSearchPort)' -D '$($sourceConfig.BindDN)' -w '$($sourceConfig.BindPassword)' -c" 2>&1
                 if ($LASTEXITCODE -ne 0) { throw "Failed to stamp cohort end dates (exit code $LASTEXITCODE): $stampResult" }
             }
             finally {

@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-07-24, JIM v0.13.0
+> Last updated: 2026-09-23, JIM v0.15.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -9,6 +9,14 @@ Since v0.7.1, the import processor uses `ISyncServer` for orchestration (setting
 Since #1082, Full Imports keep a stored content hash on each Connected System Object: an unchanged object (incoming hash matches the stored hash and fingerprint) is skipped before hydration and diffing, and hashes are stamped only after each batch's attribute value writes have committed. A Run Profile Verification Mode disables the skip and reports any disagreement between the stored hash and the honest comparison.
 
 Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run Profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
+
+Since v0.15.0:
+
+- **Run steps on the Activity**: the import enters named steps as it goes (`RunPhaseKeys`: connecting, importing objects with the Connector's own narrated sub-steps and object counts nested inside it, processing deletions, resolving references, saving changes, reconciling Pending Exports, recording results), so an operator sees where a run is rather than a single message.
+- **Container Scope exclusions (#1255)**: a Connector that discards entries under an excluded Container reports how many per Container; the processor accumulates those counts across every page and records them on the Activity (never as a warning, and never failing the run).
+- **Deletion-detection limits (#1618, Run Profile Safeguards)**: a Full Import's deletion detection resolves every candidate first, and refuses outright when the number that would be newly marked as deleted exceeds the Run Profile's `MaxDetectedDeletions` or `MaxDetectedDeletionsPercent`. See Deletion Detection below.
+- **Unconfirmed Create retry (#1695)**: after deletion detection, a Full Import finds every exported Create Pending Export whose Pending Provisioning CSO it did not see at all, and marks it for retry, because deletion detection deliberately excludes Pending Provisioning CSOs and reconciliation only visits CSOs an import returned.
+- **LDAP Delta Import change sources (#1736)**: the LDAP Connector reads changes through one change source per directory family (`uSNChanged` plus the Deleted Objects container for Active Directory and Samba AD, `cn=accesslog` for OpenLDAP, `cn=changelog` for other directories), and a Delta Import checks its change source's readiness first: a finding either stops the run (for example a change source it cannot read, #1737) or becomes the Activity's warning (for example deletions it cannot see, #1727), rather than silently importing nothing.
 
 ## Overall Import Flow
 
@@ -54,15 +62,17 @@ flowchart TD
     FileImport --> FileProgress[Update activity:<br/>Processing N objects]
     FileProgress --> FileCollect[Add external IDs<br/>to collection]
     FileCollect --> FileProcess[ProcessImportObjectsAsync]
-    FileProcess --> PostImport
+    FileProcess --> RecordExclusions
 
-    CloseConn --> PostImport{Full Import<br/>and objects > 0?}
+    CloseConn --> RecordExclusions[Record entries discarded by<br/>excluded Containers on the Activity #1255<br/>Cancelled? Stop here, nothing persisted]
+    RecordExclusions --> PostImport{Full Import<br/>and objects > 0?}
 
     %% --- Deletion detection ---
-    PostImport -->|Yes| DeletionDetection[Deletion Detection<br/>For each selected object type:<br/>Compare imported ext IDs<br/>against existing CSO ext IDs<br/>Mark missing CSOs as Obsolete<br/>Scoped to target partition if set]
+    PostImport -->|Yes| DeletionDetection[Deletion Detection<br/>Resolve candidates, check the<br/>Run Profile's deletion limits #1618,<br/>then mark missing CSOs Obsolete or refuse<br/>Scoped to target partition if set<br/>See Deletion Detection below]
     PostImport -->|No, Delta Import<br/>or 0 objects| RefResolution
 
-    DeletionDetection --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID]
+    DeletionDetection --> RetryCreates[Retry unconfirmed exported Creates #1695<br/>Exported Create Pending Export whose<br/>Pending Provisioning CSO this run did not see:<br/>mark for retry, RPEI: ExportNotConfirmed]
+    RetryCreates --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID]
 
     %% --- Persist via ISyncRepository ---
     RefResolution --> PersistCreate[Batch create new CSOs<br/>via ISyncRepository<br/>Two-phase parallel write for large batches<br/>See Two-Phase CSO Persistence below]
@@ -73,8 +83,8 @@ flowchart TD
     %% --- Reconciliation ---
     Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]
     Reconcile --> ValidateRpeis[Validate RPEIs<br/>Detect orphaned create RPEIs<br/>with no CSO assigned]
-    ValidateRpeis --> PersistRpeis[Add RPEIs to Activity<br/>and persist]
-    PersistRpeis --> End([Import Complete])
+    ValidateRpeis --> PersistRpeis[Flush remaining RPEIs<br/>via raw SQL bulk insert<br/>create/update batches flushed<br/>their own RPEIs as they committed]
+    PersistRpeis --> End([Import Complete<br/>Activity counters and message<br/>describe the whole run])
 ```
 
 ## Per-Object Processing
@@ -83,7 +93,11 @@ For each object in an import page, within `ProcessImportObjectsAsync`:
 
 ```mermaid
 flowchart TD
-    Entry([For each import object]) --> DupAttrs{Duplicate<br/>attribute names?}
+    Entry([For each import object]) --> ConnErr{Connector flagged<br/>an error on it?}
+    ConnErr -->|Object-level| ConnErrSkip[RPEI: mapped Connector error<br/>Skip object]
+    ConnErr -->|Attribute-level| ConnErrKeep[RPEI carries the error<br/>Object still processed]
+    ConnErrKeep --> DupAttrs
+    ConnErr -->|No| DupAttrs{Duplicate<br/>attribute names?}
     DupAttrs -->|Yes| DupAttrErr[RPEI: DuplicateImportedAttributes<br/>Skip object]
 
     DupAttrs -->|No| MatchType[Match string object type<br/>to schema ObjectType]
@@ -131,26 +145,37 @@ flowchart TD
 
 ## Deletion Detection (Full Import Only)
 
+Deletion detection runs in two phases (Run Profile Safeguards, #1618): Phase A resolves every candidate with no side effects, so Phase B can decide whether the whole run's worth of detected deletions is within the Run Profile's limits before anything is touched.
+
 ```mermaid
 flowchart TD
-    Start([For each selected object type]) --> GetExisting[Get all existing CSO external IDs<br/>for this object type from database]
+    Start([For each selected object type]) --> GetExisting[Get all existing CSO external IDs<br/>for this object type from database<br/>Pending Provisioning CSOs excluded<br/>Scoped to target partition if set]
     GetExisting --> GetImported[Get all imported external IDs<br/>for this object type from collection]
     GetImported --> Compare[Except: find CSO external IDs<br/>not in imported set]
     Compare --> Loop{More missing<br/>external IDs?}
-    Loop -->|No| Done([Next object type])
+    Loop -->|No| NextType([Next object type])
     Loop -->|Yes| FindCso[Find CSO by external ID<br/>and attribute ID]
-    FindCso --> CheckProcessed{CSO already processed<br/>in this import run?}
-    CheckProcessed -->|Yes| SkipLog[Skip - ext ID may have<br/>been updated during import]
-    SkipLog --> Loop
-    CheckProcessed -->|No| ClearPes[Clear stale Pending Exports<br/>export evaluation does not<br/>exclude Obsolete CSOs]
-    ClearPes --> AlreadyObsolete{CSO already<br/>Obsolete?}
-    AlreadyObsolete -->|Yes| StillGone[Reported by an earlier import<br/>Awaiting a synchronisation run<br/>No RPEI, no status write]
-    StillGone --> Loop
-    AlreadyObsolete -->|No| Obsolete[Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted<br/>Add to update list]
-    Obsolete --> Loop
+    FindCso --> Found{CSO found and not<br/>already processed<br/>in this import run?}
+    Found -->|No| Drop[Not a candidate<br/>Not found, or ext ID may have<br/>been updated during import]
+    Drop --> Loop
+    Found -->|Yes| Classify{CSO already<br/>Obsolete?}
+    Classify -->|Yes| AlreadyObsolete[Candidate: already Obsolete]
+    Classify -->|No| NewlyMarked[Candidate: newly marked]
+    AlreadyObsolete --> Loop
+    NewlyMarked --> Loop
+
+    NextType -.->|All object types resolved| Limits{Newly marked count above<br/>MaxDetectedDeletions, or share of<br/>in-scope CSOs above<br/>MaxDetectedDeletionsPercent?}
+    Limits -->|Yes| Refuse[Refuse: touch nothing<br/>not even stale Pending Export cleanup<br/>Activity.DetectedDeletionsWithheld = count<br/>Warning appended to the Activity]
+    Limits -->|No, or no limits set| Apply[Apply each candidate]
+    Apply --> ClearPes[Clear stale Pending Exports<br/>export evaluation does not<br/>exclude Obsolete CSOs]
+    ClearPes --> WasObsolete{Already<br/>Obsolete?}
+    WasObsolete -->|Yes| StillGone[Reported by an earlier import<br/>Awaiting a synchronisation run<br/>No RPEI, no status write]
+    WasObsolete -->|No| Obsolete[Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted, DeletionDetected outcome<br/>Add to update list]
 ```
 
-**Reported once, not once per run**: a CSO stays Obsolete until a synchronisation run on its own Connected System deletes it, so every import in between finds it missing again. Only the first records a deletion; the rest change nothing and report nothing, because the object was Obsolete before the run started and Obsolete after. The Pending Export cleanup still runs each time: export evaluation does not exclude Obsolete CSOs, so a synchronisation on another Connected System can stage an export against one at any point between imports.
+**Refused, not partially applied**: when either limit is exceeded, no candidate is marked, because the import that fed detection may itself be wrong (a broken filter or base DN). The warning makes the Activity complete with a warning, and a run that withheld deletions never counts as a successful Full Import for the stranded-value sweep gate (`FullImportSuccessEvaluator`, #1605). The percentage is measured against the number of CSOs in the run's scope at the start of deletion detection.
+
+**Reported once, not once per run**: a CSO stays Obsolete until a synchronisation run on its own Connected System deletes it, so every import in between finds it missing again. Only the first records a deletion; the rest change nothing and report nothing, because the object was Obsolete before the run started and Obsolete after. The Pending Export cleanup still runs each time (unless the run is refused): export evaluation does not exclude Obsolete CSOs, so a synchronisation on another Connected System can stage an export against one at any point between imports.
 
 **Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the Connected System returns no data due to connectivity issues.
 
@@ -212,23 +237,25 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Status = Exported]
+    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Status Exported or ExportNotConfirmed,<br/>or Pending with changes already written<br/>awaiting confirmation #1398]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
     Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed]
     Summary --> Done([Done])
 
-    Loop -->|Yes| Compare[For each attribute change<br/>in Pending Export:<br/>Compare expected value<br/>against CSO current value]
-    Compare --> Result{All attributes<br/>confirmed?}
+    Loop -->|Yes| Compare[For each attribute change<br/>awaiting confirmation:<br/>Compare expected value<br/>against CSO current value]
+    Compare --> PerChange{Change<br/>confirmed?}
+    PerChange -->|Yes| RemoveConfirmed[Remove the confirmed change<br/>from the Pending Export<br/>RPEI: ExportConfirmed outcome]
+    PerChange -->|No, retries remain| Retry[Status = ExportedNotConfirmed<br/>RPEI: ExportNotConfirmed<br/>Retried on the next export]
+    PerChange -->|No, max retries exceeded| PermanentFail[Status = Failed<br/>RPEI: ExportConfirmationFailed<br/>Manual intervention required]
 
-    Result -->|All confirmed| Delete[Queue Pending Export<br/>for batch deletion<br/>Export successfully applied]
-    Result -->|Some confirmed| Partial[Remove confirmed attributes<br/>Keep unconfirmed attributes<br/>If was Create, change to Update<br/>Increment error count<br/>Queue for batch update]
-    Result -->|None confirmed| AllFailed[Increment error count<br/>Queue for batch update]
-    Result -->|Max retries exceeded| PermanentFail[RPEI: ExportConfirmationFailed<br/>Manual intervention required]
+    RemoveConfirmed --> Remaining{Any changes<br/>remaining?}
+    Retry --> Remaining
+    PermanentFail --> Remaining
+    Remaining -->|No| Delete[Queue Pending Export<br/>for batch deletion<br/>Export fully confirmed]
+    Remaining -->|Yes| Update[A Create becomes an Update:<br/>the import proved the object exists<br/>Recompute status, queue for batch update]
 
     Delete --> Loop
-    Partial --> Loop
-    AllFailed --> Loop
-    PermanentFail --> Loop
+    Update --> Loop
 ```
 
 ## Key Design Decisions

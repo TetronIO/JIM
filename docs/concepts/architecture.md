@@ -45,7 +45,7 @@ The web application provides both the **administrative user interface** (built w
 
 ### JIM.Worker
 
-The background processor that executes all identity operations -- imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging.
+The background processor that executes all identity operations -- imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging. The Worker also hosts the [Password Delivery Service](passwords.md#the-password-delivery-service), which delivers queued password changes to Connected Systems on its own clock, and writes a heartbeat that the portal's [Service Health](../configuration/operations.md#service-health) panel reads.
 
 --8<-- "assets/diagrams/worker-components.svg"
 
@@ -102,7 +102,7 @@ For a component-level breakdown of the Application Layer's domain servers and re
 
 ### Integration Layer
 
-**JIM.Connectors** -- contains the connector implementations that communicate with external systems (LDAP directories, file systems, etc.). Each connector implements standardised interfaces for import and export operations.
+**JIM.Connectors** -- contains the connector implementations that communicate with external systems (LDAP directories, SQL databases, SCIM 2.0 service providers, delimited files, etc.). Each connector implements standardised interfaces for import and export operations.
 
 ## Deployment
 

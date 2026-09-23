@@ -23,6 +23,10 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Validated at 500,000-user scale (with tens of thousands of groups of up to 495,000 members)
 - Transform data using expressions with extensive built-in functions for common identity operations
 - Built-in LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors, plus a custom connector framework
+- [Passwords](https://docs.junctional.io/concepts/passwords/): initial passwords for newly provisioned objects, on-demand password setting, and Password Synchronisation to every configured Connected System, queued, encrypted at rest and retried
+- Preview before you commit: a [Configuration Change Preview](https://docs.junctional.io/configuration/configuration-changes/) shows which objects a proposed edit would affect, and [Sync Preview](https://docs.junctional.io/configuration/sync-preview/) shows what synchronising one object would do, changing nothing
+- [Run Profile Safeguards](https://docs.junctional.io/configuration/run-profiles/#safeguards): cap how many creates, updates, deletes and detected deletions a single run may attempt, so one bad filter cannot become a mass change
+- [Service Health](https://docs.junctional.io/configuration/operations/#service-health): see at a glance whether the Worker and Scheduler are alive, and what each is doing
 - Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Real-time activity monitoring, pushed from the database rather than polled
@@ -128,14 +132,14 @@ Connect-JIM -Url "https://jim.example.com"
 JIM includes a cross-platform [PowerShell module](https://docs.junctional.io/powershell/) for scripting, automation, and Identity as Code (IDaC).
 
 ## State of Development
-JIM has reached MVP completion (100%). The core identity lifecycle is fully functional:
+JIM is working towards its v1.0 milestone: Identity Lifecycle Complete. The core identity lifecycle is fully functional today:
 
-- **Import** identities from source systems (LDAP, CSV)
+- **Import** identities from source systems (LDAP directories, SQL databases, SCIM 2.0 services, CSV files)
 - **Sync** to reconcile identities in the central metaverse
 - **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
-For detailed feature checklists and post-MVP roadmap, see the [Roadmap](https://docs.junctional.io/reference/roadmap/).
+For what is coming in v1.0 and beyond, see the [Roadmap](https://docs.junctional.io/reference/roadmap/).
 
 ## Community & Support
 

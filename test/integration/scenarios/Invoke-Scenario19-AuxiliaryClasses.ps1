@@ -135,7 +135,9 @@ $ErrorActionPreference = "Stop"
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 }
-if ($DirectoryConfig.UserObjectClass -ne "inetOrgPerson") {
+# Keyed on the directory type, not the object class: 389 Directory Server also uses inetOrgPerson
+# and must still be refused here (the fixture and its assertions are OpenLDAP-specific).
+if ($DirectoryConfig.DirectoryType -ne "OpenLDAP") {
     throw "Scenario 19 (Auxiliary Classes) is OpenLDAP only. Run-IntegrationTests.ps1 should have rejected this combination before this script was invoked."
 }
 
@@ -148,7 +150,7 @@ $targetSystemName = "Scenario 19 Target"
 # reads Glitterband, so both suffixes' bind credentials are needed.
 $sourceLdapConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
 $targetLdapConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Target
-$sourceLdapUri = "ldap://localhost:$($sourceLdapConfig.Port)"
+$sourceLdapUri = "$($sourceLdapConfig.LdapSearchScheme)://localhost:$($sourceLdapConfig.LdapSearchPort)"
 
 function Invoke-Scenario19LdapAdd {
     <#
@@ -202,7 +204,7 @@ function Get-Scenario19LdapAttributeValues {
         [switch]$AllowMissingEntry
     )
 
-    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.Port `
+    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.LdapSearchPort -Scheme $LdapConfig.LdapSearchScheme `
         -BaseDN $LdapConfig.UserContainer -BindDN $LdapConfig.BindDN -BindPassword $LdapConfig.BindPassword `
         -Filter "(uid=$Uid)" -Attributes @($AttributeName)
 
@@ -603,7 +605,7 @@ delete: roomNumber
         $ldifPath = [System.IO.Path]::GetTempFileName()
         Set-Content -Path $ldifPath -Value $withdrawLdif -NoNewline
         try {
-            $withdrawResult = bash -c "cat '$ldifPath' | docker exec -i $($targetLdapConfig.ContainerName) ldapmodify -x -H 'ldap://localhost:$($targetLdapConfig.Port)' -D '$($targetLdapConfig.BindDN)' -w '$($targetLdapConfig.BindPassword)' -c" 2>&1
+            $withdrawResult = bash -c "cat '$ldifPath' | docker exec -i $($targetLdapConfig.ContainerName) ldapmodify -x -H '$($targetLdapConfig.LdapSearchScheme)://localhost:$($targetLdapConfig.LdapSearchPort)' -D '$($targetLdapConfig.BindDN)' -w '$($targetLdapConfig.BindPassword)' -c" 2>&1
             if ($LASTEXITCODE -ne 0) {
                 throw "ldapmodify failed withdrawing Dora's roomNumber (exit code $LASTEXITCODE): $withdrawResult"
             }

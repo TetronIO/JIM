@@ -182,7 +182,8 @@ jobs:
   ldaps-tests:
     # Runs the RequiresLdaps NUnit tier against real directory servers over TLS:
     # three OpenLDAP variants (system-trusted CA, JIM-store-only CA, expired
-    # certificate) and a Samba AD Domain Controller. These fixtures self-skip in
+    # certificate), a Samba AD Domain Controller and a 389 Directory Server pair
+    # (JIM-store-only CA, expired certificate). These fixtures self-skip in
     # build-and-test (JIM_TEST_LDAPS_HOST unset); here the fixture script stands
     # the servers up and exports the environment variables that flip them from
     # Assert.Ignore to run. This is the regression net for LDAPS certificate
@@ -217,7 +218,7 @@ jobs:
     # docker run fail on a transient refusal.
     - name: Pull directory server images
       run: |
-        for image in bitnamilegacy/openldap:latest diegogslomp/samba-ad-dc:latest; do
+        for image in bitnamilegacy/openldap:latest diegogslomp/samba-ad-dc:latest 389ds/dirsrv:3.1; do
           for attempt in 1 2 3; do
             docker pull "$image" && break
             if [ "$attempt" = "3" ]; then
@@ -231,7 +232,7 @@ jobs:
     # and installs one test CA into the machine trust store. sudo -E preserves
     # GITHUB_ENV so the script can export the connection details to later steps.
     - name: Start LDAPS certificate test servers
-      run: sudo -E pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd
+      run: sudo -E pwsh -File ./test/scripts/Start-LdapsCertificateTestServers.ps1 -IncludeSambaAd -Include389
     - name: Run LDAPS certificate validation tests (RequiresLdaps)
       run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresLdaps" --verbosity normal
     # On push events this job runs on the self-hosted runner, which is NOT ephemeral:
@@ -290,7 +291,21 @@ jobs:
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
+    # The self-hosted runners share one home directory, so without this every job reads and writes the same
+    # ~/.docker: `setup-buildx-action --use` in one job switches every runner onto its builder (and removes
+    # it when that job ends, killing any build still using it), and the login action's `docker logout`
+    # logs every runner out of the registry (#1773). A per-job copy keeps the host's settings and plugins
+    # while keeping each job's changes to itself. The runner empties RUNNER_TEMP after every job.
+    - name: Isolate Docker client config
+      run: |
+        DOCKER_CONFIG_DIR="$RUNNER_TEMP/docker-config"
+        mkdir -p "$DOCKER_CONFIG_DIR"
+        if [ -f "$HOME/.docker/config.json" ]; then cp "$HOME/.docker/config.json" "$DOCKER_CONFIG_DIR/"; fi
+        if [ -d "$HOME/.docker/cli-plugins" ]; then ln -s "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG_DIR/cli-plugins"; fi
+        echo "DOCKER_CONFIG=$DOCKER_CONFIG_DIR" >> "$GITHUB_ENV"
+
     - name: Set up Docker Buildx
+      id: buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
 
     # Same action, pins and cache scope as the release build, so a PR's build warms the
@@ -314,6 +329,7 @@ jobs:
     - name: Build image
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
       with:
+        builder: ${{ steps.buildx.outputs.name }}
         context: .
         file: ${{ matrix.dockerfile }}
         load: true

@@ -21,7 +21,7 @@ By default that password is different for every Connected System Object and JIM 
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM separates populations: contractors and permanent staff provisioned into the same directory can want different password rules.
 
-The Connected System Object exists before its password does: setting a password cannot fail the export that created it, because if it could, JIM would treat the Connected System Object as never created and try to create it again. Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it, recorded as "Initial password queued for delivery to {system}", and the [Password Delivery Service](#-the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. Because it shares the queue with every other password change, a refused or unreachable Connected System Object is retried on the Connected System's own [Password Synchronisation schedule](#-password-synchronisation) rather than waiting for another export run.
+The Connected System Object exists before its password does: setting a password cannot fail the export that created it, because if it could, JIM would treat the Connected System Object as never created and try to create it again. Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it, recorded as "Initial password queued for delivery to {system}", and the [Password Delivery Service](#the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. Because it shares the queue with every other password change, a refused or unreachable Connected System Object is retried on the Connected System's own [Password Synchronisation schedule](#password-synchronisation) rather than waiting for another export run.
 
 ### What you will see afterwards
 
@@ -52,7 +52,7 @@ A Connected System Object stays owed its first password for **seven days** by de
 
 **Raise it before taking a system out of service for longer than the current window.** Every Connected System Object provisioned while the target is unreachable otherwise expires without a password, and each one then needs a password set by hand. Set it on the Connected System's Settings tab, under **Initial Passwords**, or with `Set-JIMConnectedSystem -Id 1 -InitialPasswordTimeToLive (New-TimeSpan -Days 30)`.
 
-Parked, withdrawn and expired records are kept so you can see what became of a Connected System Object, under the same [Password Synchronisation retention period](#-how-long-any-of-it-is-kept) as every other finished password change, a year by default. A record still being worked is never removed, however old, and the Activity recording what happened to the Connected System Object outlives the record either way.
+Parked, withdrawn and expired records are kept so you can see what became of a Connected System Object, under the same [Password Synchronisation retention period](#how-long-any-of-it-is-kept) as every other finished password change, a year by default. A record still being worked is never removed, however old, and the Activity recording what happened to the Connected System Object outlives the record either way.
 
 ### One password for every Connected System Object
 
@@ -121,7 +121,7 @@ Alongside provisioning, you can set a password whenever you need to: the new sta
 
 JIM generates passwords in three styles (random characters, words, or a pronounceable password), always from a cryptographic random source, and tells you the length and character categories the result is guaranteed to carry. You can type your own instead. Automation has the same choice, through `-Generate` or `-Password` on the set-password cmdlets and their REST equivalents.
 
-Whichever way you start it, the password is not written while you watch. It is queued, encrypted, one change per Connected System, and the [Password Delivery Service](#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. The dialog and the API wait briefly and tell you what each system did with it; see [Setting a password](#-setting-a-password) below for the outcomes and what each one asks of you.
+Whichever way you start it, the password is not written while you watch. It is queued, encrypted, one change per Connected System, and the [Password Delivery Service](#the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. The dialog and the API wait briefly and tell you what each system did with it; see [Setting a password](#setting-a-password) below for the outcomes and what each one asks of you.
 
 ### One password across several systems
 
@@ -138,7 +138,7 @@ This is the case where letting JIM generate the password matters most. You canno
 
 ## 🛡️ How JIM handles passwords safely
 
-**A password is held, encrypted, only until it is delivered.** A password you set or propagate is encrypted the moment JIM receives it and sits on the queue only as long as it takes the Password Delivery Service to hand it to each Connected System; the moment a system has it, JIM's copy for that system is gone. A copy a system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with, until the change [expires or retention removes it](#-how-long-any-of-it-is-kept). Nothing else holds one: not JIM's logs, its Activities, its configuration history, its previews or its search, and no page, REST response or cmdlet will show you a queued password. An initial password JIM generates during provisioning is produced at the moment it is delivered and never queued at all.
+**A password is held, encrypted, only until it is delivered.** A password you set or propagate is encrypted the moment JIM receives it and sits on the queue only as long as it takes the Password Delivery Service to hand it to each Connected System; the moment a system has it, JIM's copy for that system is gone. A copy a system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with, until the change [expires or retention removes it](#how-long-any-of-it-is-kept). Nothing else holds one: not JIM's logs, its Activities, its configuration history, its previews or its search, and no page, REST response or cmdlet will show you a queued password. An initial password JIM generates during provisioning is produced at the moment it is delivered and never queued at all.
 
 The one password that is stored for longer is a [shared initial password](#one-password-for-every-connected-system-object) you choose to set on a Synchronisation Rule. That one has to survive until the next Connected System Object is provisioned, so it is stored, encrypted at rest exactly as a Connected System's credentials are. It is write-only on every surface: no portal page, REST response or cmdlet will return it, and your configuration history records a keyed hash of it, which is enough to show that it changed and when without carrying the password.
 
@@ -242,7 +242,7 @@ What happens to a queued change:
 
 A change for someone who changes their password again before the first one is delivered replaces the first, rather than queueing behind it. Only the newest password is ever sent.
 
-An [initial password](#-giving-new-connected-system-objects-their-first-password) queued by an export travels the same way, with one difference: the queued change carries no password value at all, because it never leaves the Connected System Object's Synchronisation Rule. JIM resolves what to send from that rule's Initial Password settings at each attempt, so a later change to those settings is picked up by the very next attempt rather than only by the Connected System Object's next export.
+An [initial password](#giving-new-connected-system-objects-their-first-password) queued by an export travels the same way, with one difference: the queued change carries no password value at all, because it never leaves the Connected System Object's Synchronisation Rule. JIM resolves what to send from that rule's Initial Password settings at each attempt, so a later change to those settings is picked up by the very next attempt rather than only by the Connected System Object's next export.
 
 ### ⚡ The Password Delivery Service
 
@@ -260,7 +260,7 @@ The service reports its own health. Its **Worker · Passwords** card on the [Ser
 
 Delivery works on its own, which is exactly why you need somewhere to look when it does not. The **Passwords** tab of **Administration > Operations** lists every change on its way to a Connected System, one row per Metaverse Object per system, with what the target said about it. It sits beside the Queue, History and Schedules tabs because it answers the same question they do: what JIM is doing, and what it has stopped doing. The tab is badged with how many changes are waiting on a person (parked plus expired), so a backlog is visible from anywhere on the Operations page.
 
-An [initial password](#-giving-new-connected-system-objects-their-first-password) queued by an export appears here too, labelled with origin **Initial** alongside **Set** and **Propagated**, because it is the same queue, the same delivery service and the same outcomes as every other password change.
+An [initial password](#giving-new-connected-system-objects-their-first-password) queued by an export appears here too, labelled with origin **Initial** alongside **Set** and **Propagated**, because it is the same queue, the same delivery service and the same outcomes as every other password change.
 
 It never shows a password, and cannot: the queued value is encrypted in the database and has no representation on any page, in any API response, or in any log line.
 
@@ -277,7 +277,7 @@ Filter by Connected System, by state, or by how the last attempt failed, and sea
 - **Cancel**<br /> Stops JIM delivering them. The changes stay, marked **Cancelled**, recording who cancelled them and when.
 
 !!! note "Cancelling records an outcome; it does not erase one"
-    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting it would leave you believing your systems agree when they do not. Retention removes cancelled changes on the same schedule as any other finished change (see [How long any of it is kept](#-how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
+    A cancelled change is kept for the same reason an expired one is: that person's password on that system is now out of step with the rest, and deleting it would leave you believing your systems agree when they do not. Retention removes cancelled changes on the same schedule as any other finished change (see [How long any of it is kept](#how-long-any-of-it-is-kept)), and a cancelled change can be retried, provided it has not expired in the meantime.
 
 Whatever a retry or a cancel covers, it is recorded as **one** Activity. A retry over a directory that has just come back is a single decision, and a hundred Activities saying so would bury the decision in its own consequences. The Activity is recorded even when nothing matched, so a retry that changed nothing can be told from a retry that never ran.
 

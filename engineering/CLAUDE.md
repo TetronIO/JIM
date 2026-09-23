@@ -215,8 +215,8 @@ Internal engineering artefacts live under `engineering/`; the customer-facing Mk
 ## AI Assistant Context Documents
 
 JIM has context documents for use with AI assistant platforms (Claude Desktop, ChatGPT, etc.) for ideation and research:
-- `docs/JIM_AI_ASSISTANT_INSTRUCTIONS.md` - System prompt/instructions to copy
-- `docs/JIM_AI_ASSISTANT_CONTEXT.md` - Comprehensive context document to upload
+- `engineering/JIM_AI_ASSISTANT_INSTRUCTIONS.md` - System prompt/instructions to copy
+- `engineering/JIM_AI_ASSISTANT_CONTEXT.md` - Comprehensive context document to upload
 
 **Document Versioning:**
 Both documents include a `Document Version` field in their header. This version tracks the document content independently from the JIM product version and makes it easy to verify whether the latest version is deployed to external AI assistant platforms.
@@ -236,8 +236,8 @@ Both documents include a `Document Version` field in their header. This version 
 ## Security and Compliance Documentation
 
 JIM follows strict security development practices aligned with NCSC, CISA, OWASP ASVS, and UK Software Security Code of Practice standards. Full details are in:
-- `docs/COMPLIANCE_MAPPING.md` - Complete security framework and standards mapping
-- `docs/DEVELOPER_GUIDE.md` - Security development guidelines and patterns
+- `engineering/COMPLIANCE_MAPPING.md` - Complete security framework and standards mapping
+- `engineering/DEVELOPER_GUIDE.md` - Security development guidelines and patterns
 
 ---
 
