@@ -124,16 +124,7 @@ namespace JIM.Application.Servers
 
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
-                var activity = new Activity
-                {
-                    TargetName = runProfile.Name,
-                    TargetContext = connectedSystem?.Name,
-                    TargetType = ActivityTargetType.ConnectedSystemRunProfile,
-                    TargetOperationType = ActivityTargetOperationType.Execute,
-                    ConnectedSystemId = synchronisationWorkerTask.ConnectedSystemId,
-                    ConnectedSystemRunProfileId = runProfile.Id,
-                    ConnectedSystemRunType = runProfile.RunType
-                };
+                var activity = NewRunProfileExecutionActivity(synchronisationWorkerTask.ConnectedSystemId, connectedSystem?.Name, runProfile);
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -301,12 +292,7 @@ namespace JIM.Application.Servers
             {
                 // The Temporal Scope Reconciler sweep (issue #892) is a system-wide maintenance operation not
                 // scoped to a single entity, so it is tracked with a system-targeted activity for audit purposes.
-                var activity = new Activity
-                {
-                    TargetName = "Temporal Scope Reconciliation",
-                    TargetType = ActivityTargetType.TemporalScopeReconciliation,
-                    TargetOperationType = ActivityTargetOperationType.Execute
-                };
+                var activity = NewTemporalScopeReconciliationActivity();
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -318,12 +304,7 @@ namespace JIM.Application.Servers
                 // so it is tracked with a system-targeted Activity, under the same target type the manual and
                 // API-initiated cleanups use. That is what keeps one deployment's retention history in one place
                 // however it was triggered.
-                var activity = new Activity
-                {
-                    TargetName = "History Retention Cleanup",
-                    TargetType = ActivityTargetType.HistoryRetentionCleanup,
-                    TargetOperationType = ActivityTargetOperationType.Delete
-                };
+                var activity = NewHistoryRetentionCleanupActivity();
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -339,6 +320,87 @@ namespace JIM.Application.Servers
             }
             return WorkerTaskCreationResult.Succeeded(workerTask.Id);
         }
+
+        /// <summary>
+        /// Records a Failed Activity for a Schedule Step whose Worker Task could not be queued (#1768), shaped exactly
+        /// like the Activity the task would have produced and carrying the same Schedule context, so the step's row on
+        /// the Schedule Execution shows it failed and why, and the scheduler's advancement sees it as a failed step.
+        /// </summary>
+        /// <remarks>
+        /// Tolerates the Connected System or Run Profile having gone (the Activity then names whatever still exists)
+        /// rather than referencing a row that does not exist, which would fail the insert.
+        /// </remarks>
+        /// <param name="workerTask">The task that was built for the step but could not be queued.</param>
+        /// <param name="errorMessage">The reason, as the administrator should read it.</param>
+        /// <returns>The Activity recorded.</returns>
+        internal async Task<Activity> RecordWorkerTaskNotQueuedAsync(WorkerTask workerTask, string errorMessage)
+        {
+            var activity = workerTask switch
+            {
+                SynchronisationWorkerTask synchronisationWorkerTask => await NewNotQueuedRunProfileExecutionActivityAsync(synchronisationWorkerTask),
+                TemporalScopeReconciliationWorkerTask => NewTemporalScopeReconciliationActivity(),
+                HistoryRetentionCleanupWorkerTask => NewHistoryRetentionCleanupActivity(),
+                _ => throw new ArgumentException($"A {workerTask.GetType().Name} is not a Schedule Step task.", nameof(workerTask))
+            };
+
+            await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            return activity;
+        }
+
+        /// <summary>
+        /// The Run Profile execution Activity for a task that could not be queued, naming only the Connected System and
+        /// Run Profile that still exist.
+        /// </summary>
+        private async Task<Activity> NewNotQueuedRunProfileExecutionActivityAsync(SynchronisationWorkerTask workerTask)
+        {
+            var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(workerTask.ConnectedSystemId);
+            ConnectedSystemRunProfile? runProfile = null;
+            if (connectedSystem != null)
+            {
+                var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
+                runProfile = runProfiles.SingleOrDefault(rp => rp.Id == workerTask.ConnectedSystemRunProfileId);
+            }
+
+            return NewRunProfileExecutionActivity(connectedSystem?.Id, connectedSystem?.Name, runProfile);
+        }
+
+        /// <summary>
+        /// The Activity a Run Profile execution is recorded under. The one definition, shared by queuing the task and by
+        /// recording a task that could not be queued, so the two read alike in the Activity history.
+        /// </summary>
+        private static Activity NewRunProfileExecutionActivity(int? connectedSystemId, string? connectedSystemName, ConnectedSystemRunProfile? runProfile) => new()
+        {
+            TargetName = runProfile?.Name,
+            TargetContext = connectedSystemName,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemRunProfileId = runProfile?.Id,
+            ConnectedSystemRunType = runProfile?.RunType ?? ConnectedSystemRunType.NotSet
+        };
+
+        /// <summary>
+        /// The Activity a Temporal Scope Reconciliation sweep (issue #892) is recorded under: a system-wide maintenance
+        /// operation not scoped to a single entity.
+        /// </summary>
+        private static Activity NewTemporalScopeReconciliationActivity() => new()
+        {
+            TargetName = "Temporal Scope Reconciliation",
+            TargetType = ActivityTargetType.TemporalScopeReconciliation,
+            TargetOperationType = ActivityTargetOperationType.Execute
+        };
+
+        /// <summary>
+        /// The Activity a History Retention Cleanup pass is recorded under, the same target type the manual and
+        /// API-initiated cleanups use.
+        /// </summary>
+        private static Activity NewHistoryRetentionCleanupActivity() => new()
+        {
+            TargetName = "History Retention Cleanup",
+            TargetType = ActivityTargetType.HistoryRetentionCleanup,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
 
         /// <summary>
         /// Validates that a Connected System has the required partition/container selections, and that the Run Profile

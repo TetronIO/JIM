@@ -44,9 +44,10 @@ public class SchedulerServerDueScheduleStartTests
     private Dictionary<Guid, List<DateTime?>> _savedNextRunTimes = null!;
 
     /// <summary>
-    /// The status and error message of every Schedule Execution at every point it was saved, keyed by execution id.
+    /// Every Schedule Execution created. The start's outcome is written through the conditional transitions (#1768),
+    /// which the mock applies to these instances, so each one's final state is read straight off it.
     /// </summary>
-    private Dictionary<Guid, List<(ScheduleExecutionStatus Status, string? ErrorMessage)>> _savedExecutionStates = null!;
+    private List<ScheduleExecution> _createdExecutions = null!;
 
     private List<WorkerTask> _createdTasks = null!;
 
@@ -69,7 +70,7 @@ public class SchedulerServerDueScheduleStartTests
         _application = new JimApplication(_mockRepository.Object);
 
         _savedNextRunTimes = new Dictionary<Guid, List<DateTime?>>();
-        _savedExecutionStates = new Dictionary<Guid, List<(ScheduleExecutionStatus, string?)>>();
+        _createdExecutions = new List<ScheduleExecution>();
         _createdTasks = new List<WorkerTask>();
 
         _mockSchedulingRepository.Setup(r => r.GetActiveScheduleExecutionsAsync())
@@ -84,12 +85,9 @@ public class SchedulerServerDueScheduleStartTests
             })
             .Returns(Task.CompletedTask);
 
+        _mockSchedulingRepository.EmulateConditionalTransitions();
         _mockSchedulingRepository.Setup(r => r.CreateScheduleExecutionAsync(It.IsAny<ScheduleExecution>()))
-            .Callback<ScheduleExecution>(RecordExecutionState)
-            .Returns(Task.CompletedTask);
-
-        _mockSchedulingRepository.Setup(r => r.UpdateScheduleExecutionAsync(It.IsAny<ScheduleExecution>()))
-            .Callback<ScheduleExecution>(RecordExecutionState)
+            .Callback<ScheduleExecution>(e => _createdExecutions.Add(e))
             .Returns(Task.CompletedTask);
 
         _mockTaskingRepository.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()))
@@ -213,17 +211,18 @@ public class SchedulerServerDueScheduleStartTests
         Assert.ThrowsAsync<InvalidOperationException>(() => _application.Scheduler.StartScheduleExecutionAsync(
             schedule, ActivityInitiatorType.System, null, "Test"));
 
-        var finalState = _savedExecutionStates.Values.Single().Last();
-        Assert.That(finalState.Status, Is.EqualTo(ScheduleExecutionStatus.Failed));
-        Assert.That(finalState.ErrorMessage, Does.Contain("is being deleted"));
+        var execution = _createdExecutions.Single();
+        Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.Failed));
+        Assert.That(execution.ErrorMessage, Does.Contain("is being deleted"));
     }
 
     [Test]
     public void StartScheduleExecutionAsync_SavingLastRunTimeFails_ExecutionEndsFailedWithErrorAsync()
     {
         // The execution record is created before the Schedule's last run time is saved. If that save throws, the
-        // execution must not be left In Progress with no steps queued: the stuck-execution safety net would later
-        // find it with no tasks and mark it Complete, reporting a run that never happened as a success.
+        // execution must be recorded as Failed with the reason, never left half-started: an In Progress execution
+        // with no steps queued used to be found by the stuck-execution safety net and marked Complete, reporting a
+        // run that never happened as a success.
         var schedule = CreateDueSchedule("Schedule", HealthyConnectedSystemId);
         _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()))
             .ThrowsAsync(new InvalidOperationException("Simulated database failure"));
@@ -231,20 +230,13 @@ public class SchedulerServerDueScheduleStartTests
         Assert.ThrowsAsync<InvalidOperationException>(() => _application.Scheduler.StartScheduleExecutionAsync(
             schedule, ActivityInitiatorType.System, null, "Test"));
 
-        var finalState = _savedExecutionStates.Values.Single().Last();
-        Assert.That(finalState.Status, Is.EqualTo(ScheduleExecutionStatus.Failed));
-        Assert.That(finalState.ErrorMessage, Does.Contain("Simulated database failure"));
+        var execution = _createdExecutions.Single();
+        Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.Failed));
+        Assert.That(execution.ErrorMessage, Does.Contain("Simulated database failure"));
         Assert.That(_createdTasks, Is.Empty);
     }
 
     #region Helpers
-
-    private void RecordExecutionState(ScheduleExecution execution)
-    {
-        if (!_savedExecutionStates.TryGetValue(execution.Id, out var states))
-            _savedExecutionStates[execution.Id] = states = new List<(ScheduleExecutionStatus, string?)>();
-        states.Add((execution.Status, execution.ErrorMessage));
-    }
 
     private void SetDueSchedules(params Schedule[] schedules)
     {

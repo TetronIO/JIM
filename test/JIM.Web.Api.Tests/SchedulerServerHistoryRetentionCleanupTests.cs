@@ -49,6 +49,7 @@ public class SchedulerServerHistoryRetentionCleanupTests
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepository.Object);
 
         _application = new JimApplication(_mockRepository.Object);
+        _mockSchedulingRepository.EmulateConditionalTransitions();
 
         _capturedTasks = new List<WorkerTask>();
         _mockTaskingRepository.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()))
@@ -79,12 +80,15 @@ public class SchedulerServerHistoryRetentionCleanupTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(task, Is.InstanceOf<HistoryRetentionCleanupWorkerTask>());
-            Assert.That(task.Status, Is.EqualTo(WorkerTaskStatus.Queued));
+            // Queued as waiting, then released once the whole Schedule has been queued (#1768).
+            Assert.That(task.Status, Is.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
             Assert.That(task.ScheduleStepIndex, Is.EqualTo(0));
             Assert.That(task.ScheduleExecutionId, Is.EqualTo(execution!.Id),
                 "the task must name the execution it belongs to, or the step's outcome cannot be read back " +
                 "against the Schedule that ran it");
+            Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
         }
+        _mockSchedulingRepository.Verify(r => r.TryStartScheduleExecutionAsync(execution, 0), Times.Once);
     }
 
     [Test]
