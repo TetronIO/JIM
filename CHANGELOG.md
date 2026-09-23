@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-23
+
 ### Added
 
 - ✨ An info icon beside key terms such as Projection, Join, Connector Space and Pending Export explains each one where you first meet it, with a link to the glossary. (#1670)
@@ -1236,7 +1238,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/TetronIO/JIM/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/TetronIO/JIM/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/TetronIO/JIM/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/TetronIO/JIM/compare/v0.11.0...v0.12.0
