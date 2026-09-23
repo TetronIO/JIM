@@ -220,10 +220,59 @@ public class ConfigurationSnapshotService
             Add(children, "enabled", Render(mapping.Enabled), "Enabled");
             Add(children, "disabledReason", mapping.DisabledReason, "Disabled reason");
 
+            if (mapping.Generation != null)
+                children.Add(BuildGeneration(mapping.Generation));
+
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("attributeFlowRules", items, "Attribute Flow");
+    }
+
+    /// <summary>
+    /// Records a generated mapping's uniqueness token and its settings (Unique Value Generation, #242). Present only
+    /// when <see cref="SyncRuleMapping.Generation"/> is set; the base value, if any, is already captured as an
+    /// ordinary mapping source by <see cref="BuildMappingSources"/> (plan decision 1).
+    /// <para>
+    /// Every setting is recorded unconditionally, regardless of which token kind is selected, following
+    /// <see cref="BuildInitialPassword"/>'s precedent of always rendering the full policy rather than only the
+    /// fields the current selection uses: switching token kind must then diff as a change to the fields it newly
+    /// governs, not appear out of nowhere because they were never captured.
+    /// </para>
+    /// </summary>
+    private ConfigurationSnapshotNode BuildGeneration(SyncRuleMappingGeneration generation)
+    {
+        var children = new List<ConfigurationSnapshotNode>();
+        AddEnum(children, "tokenKind", generation.TokenKind, "Uniqueness token");
+        AddEnum(children, "suffixStyle", generation.SuffixStyle, "Suffix style");
+        Add(children, "suffixStart", Render(generation.SuffixStart), "Suffix start");
+        Add(children, "sequenceStart", Render((long?)generation.SequenceStart), "Sequence start");
+        Add(children, "sequenceIncrement", Render(generation.SequenceIncrement), "Sequence increment");
+        Add(children, "fixedWidth", Render(generation.FixedWidth), "Fixed width");
+        AddEnum(children, "onWidthExceeded", generation.OnWidthExceeded, "When the width is exceeded");
+        AddEnum(children, "randomFormat", generation.RandomFormat, "Random format");
+        Add(children, "randomLength", Render(generation.RandomLength), "Random length");
+        Add(children, "separator", generation.Separator, "Separator");
+        Add(children, "attemptLimit", Render(generation.AttemptLimit), "Attempt limit");
+        Add(children, "neverReuse", Render(generation.NeverReuse), "Never reuse a value");
+        Add(children, "collisionRemediation", Render(generation.CollisionRemediation), "Collision Remediation");
+        children.Add(BuildGenerationExclusions(generation.Exclusions));
+        return ConfigurationSnapshotNode.ObjectNode("generation", children, "Generated value", generation.Id);
+    }
+
+    private ConfigurationSnapshotNode BuildGenerationExclusions(List<SyncRuleMappingGenerationExclusion> exclusions)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var exclusion in exclusions.OrderBy(e => e.ConnectedSystemId))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddReference(children, "connectedSystemId", exclusion.ConnectedSystemId, exclusion.ConnectedSystem?.Name, "Connected System");
+            // Keyed by the Connected System id: the composite key (SyncRuleMappingGenerationId, ConnectedSystemId)
+            // has a constant first element within this collection, so the Connected System id is what distinguishes
+            // an item and lets the diff engine match it across versions.
+            items.Add(ConfigurationSnapshotNode.ObjectNode("exclusion", children, "Excluded Connected System", exclusion.ConnectedSystemId));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("exclusions", items, "Excluded Connected Systems");
     }
 
     private ConfigurationSnapshotNode BuildMappingSources(List<SyncRuleMappingSource> sources)

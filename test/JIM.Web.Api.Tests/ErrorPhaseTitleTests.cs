@@ -60,4 +60,13 @@ public class ErrorPhaseTitleTests
     {
         Assert.That(JIM.Web.Helpers.GetErrorPhaseTitle(null), Is.Not.Empty);
     }
+
+    [TestCase(ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted, "No Free Value Found")]
+    [TestCase(ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded, "Sequence Width Exceeded")]
+    [TestCase(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved, "Needs a Decision")]
+    public void GetErrorPhaseTitle_ForAGeneratedValueFailure_NamesWhatHappened(
+        ActivityRunProfileExecutionItemErrorType errorType, string expected)
+    {
+        Assert.That(JIM.Web.Helpers.GetErrorPhaseTitle(errorType), Is.EqualTo(expected));
+    }
 }

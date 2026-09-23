@@ -75,6 +75,12 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, MetaverseObjectChange> _mvoChanges = new();
     private readonly Dictionary<Guid, ActivityPhase> _activityPhases = new();
 
+    // Unique Value Generation (#242)
+    private readonly Dictionary<Guid, GeneratedValueAssignment> _generatedValueAssignments = new();
+    private readonly Dictionary<int, GeneratedValueSequence> _generatedValueSequences = new();
+    private int _nextGeneratedValueSequenceId = 1;
+    private readonly object _generatedValueSequenceLock = new();
+
     // Secondary indexes
     private readonly Dictionary<int, HashSet<Guid>> _csosByConnectedSystem = new();
     private readonly Dictionary<int, HashSet<Guid>> _pendingExportsByCs = new();
@@ -120,6 +126,12 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>All Metaverse Object change records, keyed by change ID.</summary>
     public IReadOnlyDictionary<Guid, MetaverseObjectChange> MetaverseObjectChanges => _mvoChanges;
+
+    /// <summary>All generated value assignments, keyed by assignment ID (#242).</summary>
+    public IReadOnlyDictionary<Guid, GeneratedValueAssignment> GeneratedValueAssignments => _generatedValueAssignments;
+
+    /// <summary>All generated value sequences, keyed by sequence ID (#242).</summary>
+    public IReadOnlyDictionary<int, GeneratedValueSequence> GeneratedValueSequences => _generatedValueSequences;
 
     #endregion
 
@@ -213,6 +225,27 @@ public class SyncRepository : ISyncRepository
 
     public void SetCsoChangeTrackingEnabled(bool enabled) => _csoChangeTrackingEnabled = enabled;
     public void SetMvoChangeTrackingEnabled(bool enabled) => _mvoChangeTrackingEnabled = enabled;
+
+    /// <summary>
+    /// Seeds a generated value assignment directly, bypassing <see cref="CreateGeneratedValueAssignmentsAsync"/>'s
+    /// conflict detection (#242). Tests that want to exercise the conflict path seed the colliding assignment
+    /// this way, then call the real create method to observe <see cref="GeneratedValueConflictException"/>.
+    /// </summary>
+    public void SeedGeneratedValueAssignment(GeneratedValueAssignment assignment)
+        => _generatedValueAssignments[assignment.Id] = assignment;
+
+    /// <summary>
+    /// Seeds a generated value sequence directly, assigning it an id if it does not already have one (#242).
+    /// </summary>
+    public void SeedGeneratedValueSequence(GeneratedValueSequence sequence)
+    {
+        if (sequence.Id == 0)
+            sequence.Id = _nextGeneratedValueSequenceId++;
+        else if (sequence.Id >= _nextGeneratedValueSequenceId)
+            _nextGeneratedValueSequenceId = sequence.Id + 1;
+
+        _generatedValueSequences[sequence.Id] = sequence;
+    }
 
     #endregion
 
@@ -3334,6 +3367,312 @@ public class SyncRepository : ISyncRepository
             _pendingPasswordChanges.Remove(id);
 
         return Task.FromResult(removing.Count);
+    }
+
+    #endregion
+
+    #region Generated Values (#242)
+
+    /// <inheritdoc />
+    public Task<HashSet<string>> GetMetaverseAttributeValuesInUseAsync(int metaverseAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingMetaverseObjectId)
+    {
+        if (normalisedValues.Count == 0)
+            return Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        var wanted = new HashSet<string>(normalisedValues, StringComparer.OrdinalIgnoreCase);
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mvo in _mvos.Values)
+        {
+            if (excludingMetaverseObjectId.HasValue && mvo.Id == excludingMetaverseObjectId.Value)
+                continue;
+
+            foreach (var av in mvo.AttributeValues)
+            {
+                if (av.AttributeId != metaverseAttributeId || av.StringValue == null)
+                    continue;
+                if (wanted.Contains(av.StringValue))
+                    taken.Add(av.StringValue);
+            }
+        }
+
+        return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
+    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId)
+    {
+        if (normalisedValues.Count == 0)
+            return Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        var wanted = new HashSet<string>(normalisedValues, StringComparer.OrdinalIgnoreCase);
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var cso in _csos.Values)
+        {
+            if (excludingConnectedSystemObjectId.HasValue && cso.Id == excludingConnectedSystemObjectId.Value)
+                continue;
+
+            foreach (var av in cso.AttributeValues)
+            {
+                if (av.AttributeId != connectedSystemObjectTypeAttributeId || av.StringValue == null)
+                    continue;
+                if (wanted.Contains(av.StringValue))
+                    taken.Add(av.StringValue);
+            }
+        }
+
+        return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
+    public Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId)
+    {
+        if (values.Count == 0)
+            return Task.FromResult(new HashSet<long>());
+
+        var wanted = new HashSet<long>(values);
+        var taken = new HashSet<long>();
+
+        foreach (var mvo in _mvos.Values)
+        {
+            if (excludingMetaverseObjectId.HasValue && mvo.Id == excludingMetaverseObjectId.Value)
+                continue;
+
+            foreach (var av in mvo.AttributeValues)
+            {
+                if (av.AttributeId != metaverseAttributeId)
+                    continue;
+
+                if (av.IntValue.HasValue && wanted.Contains(av.IntValue.Value))
+                    taken.Add(av.IntValue.Value);
+                if (av.LongValue.HasValue && wanted.Contains(av.LongValue.Value))
+                    taken.Add(av.LongValue.Value);
+            }
+        }
+
+        return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
+    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId)
+    {
+        if (values.Count == 0)
+            return Task.FromResult(new HashSet<long>());
+
+        var wanted = new HashSet<long>(values);
+        var taken = new HashSet<long>();
+
+        foreach (var cso in _csos.Values)
+        {
+            if (excludingConnectedSystemObjectId.HasValue && cso.Id == excludingConnectedSystemObjectId.Value)
+                continue;
+
+            foreach (var av in cso.AttributeValues)
+            {
+                if (av.AttributeId != connectedSystemObjectTypeAttributeId)
+                    continue;
+
+                if (av.IntValue.HasValue && wanted.Contains(av.IntValue.Value))
+                    taken.Add(av.IntValue.Value);
+                if (av.LongValue.HasValue && wanted.Contains(av.LongValue.Value))
+                    taken.Add(av.LongValue.Value);
+            }
+        }
+
+        return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
+    public Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
+    {
+        foreach (var assignment in assignments)
+        {
+            // Mirrors the real repository's cross-assignment unique index on (attribute, NormalisedValue):
+            // a live assignment already holding this attribute/value combination is the losing-run conflict
+            // (plan decision 13), whichever mode (Metaverse or Connected System) the row is in.
+            var conflict = _generatedValueAssignments.Values.Any(a =>
+                a.Id != assignment.Id &&
+                ((a.MetaverseAttributeId.HasValue && a.MetaverseAttributeId == assignment.MetaverseAttributeId) ||
+                 (a.ConnectedSystemObjectTypeAttributeId.HasValue && a.ConnectedSystemObjectTypeAttributeId == assignment.ConnectedSystemObjectTypeAttributeId)) &&
+                string.Equals(a.NormalisedValue, assignment.NormalisedValue, StringComparison.OrdinalIgnoreCase));
+
+            if (conflict)
+                throw new GeneratedValueConflictException(
+                    $"A generated value assignment could not be created because the value '{assignment.Value}' is already held by another live assignment for the same attribute.");
+
+            if (assignment.Id == Guid.Empty)
+                assignment.Id = Guid.NewGuid();
+
+            _generatedValueAssignments[assignment.Id] = assignment;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task UpdateGeneratedValueAssignmentAsync(GeneratedValueAssignment assignment)
+    {
+        assignment.LastUpdated = DateTime.UtcNow;
+        _generatedValueAssignments[assignment.Id] = assignment;
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task DeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds)
+    {
+        foreach (var id in assignmentIds)
+            _generatedValueAssignments.Remove(id);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentAsync(Guid metaverseObjectId, int metaverseAttributeId)
+    {
+        var match = _generatedValueAssignments.Values.SingleOrDefault(a =>
+            a.MetaverseObjectId == metaverseObjectId && a.MetaverseAttributeId == metaverseAttributeId);
+        return Task.FromResult(match);
+    }
+
+    /// <inheritdoc />
+    public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentForConnectedSystemObjectAsync(Guid connectedSystemObjectId, int connectedSystemObjectTypeAttributeId)
+    {
+        var match = _generatedValueAssignments.Values.SingleOrDefault(a =>
+            a.ConnectedSystemObjectId == connectedSystemObjectId && a.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+        return Task.FromResult(match);
+    }
+
+    /// <inheritdoc />
+    public Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        var ids = metaverseObjectIds.ToHashSet();
+        var matches = _generatedValueAssignments.Values
+            .Where(a => a.MetaverseObjectId.HasValue && ids.Contains(a.MetaverseObjectId.Value))
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
+    /// <inheritdoc />
+    public Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var ids = connectedSystemObjectIds.ToHashSet();
+        var matches = _generatedValueAssignments.Values
+            .Where(a => a.ConnectedSystemObjectId.HasValue && ids.Contains(a.ConnectedSystemObjectId.Value))
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
+    /// <inheritdoc />
+    public Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForGenerationAsync(int syncRuleMappingGenerationId)
+    {
+        var matches = _generatedValueAssignments.Values
+            .Where(a => a.SyncRuleMappingGenerationId == syncRuleMappingGenerationId)
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
+    /// <inheritdoc />
+    public Task<GeneratedValueSequence?> GetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        var match = _generatedValueSequences.Values.SingleOrDefault(s =>
+            s.MetaverseAttributeId == metaverseAttributeId && s.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+        return Task.FromResult(match);
+    }
+
+    /// <inheritdoc />
+    public Task<long?> GetHighestNumericValueForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        var candidates = new List<long>();
+
+        if (metaverseAttributeId.HasValue)
+        {
+            foreach (var av in _mvos.Values.SelectMany(mvo => mvo.AttributeValues))
+                CollectNumericCandidate(av.AttributeId, metaverseAttributeId.Value, av.IntValue, av.LongValue, av.StringValue, candidates);
+        }
+        else
+        {
+            foreach (var av in _csos.Values.SelectMany(cso => cso.AttributeValues))
+                CollectNumericCandidate(av.AttributeId, connectedSystemObjectTypeAttributeId!.Value, av.IntValue, av.LongValue, av.StringValue, candidates);
+        }
+
+        return Task.FromResult(candidates.Count == 0 ? (long?)null : candidates.Max());
+    }
+
+    /// <summary>
+    /// Shared by both halves of <see cref="GetHighestNumericValueForAttributeAsync"/>: adds a value to the seed
+    /// candidate list from whichever of IntValue, LongValue or a purely-numeric StringValue is present, mirroring
+    /// the real repository's three-column UNION.
+    /// </summary>
+    private static void CollectNumericCandidate(int rowAttributeId, int wantedAttributeId, int? intValue, long? longValue, string? stringValue, List<long> candidates)
+    {
+        if (rowAttributeId != wantedAttributeId)
+            return;
+
+        if (intValue.HasValue)
+            candidates.Add(intValue.Value);
+        if (longValue.HasValue)
+            candidates.Add(longValue.Value);
+        if (stringValue is { Length: >= 1 and <= 18 } && stringValue.All(char.IsAsciiDigit) && long.TryParse(stringValue, out var parsed))
+            candidates.Add(parsed);
+    }
+
+    /// <inheritdoc />
+    public Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        // A plain lock stands in for the real repository's atomic UPDATE ... RETURNING: it is what makes two
+        // concurrent reservations against the same attribute never overlap here too.
+        lock (_generatedValueSequenceLock)
+        {
+            var sequence = _generatedValueSequences.Values.SingleOrDefault(s =>
+                s.MetaverseAttributeId == metaverseAttributeId && s.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+
+            if (sequence == null)
+            {
+                sequence = new GeneratedValueSequence
+                {
+                    Id = _nextGeneratedValueSequenceId++,
+                    MetaverseAttributeId = metaverseAttributeId,
+                    ConnectedSystemObjectTypeAttributeId = connectedSystemObjectTypeAttributeId,
+                    NextValue = floor
+                };
+                _generatedValueSequences[sequence.Id] = sequence;
+            }
+
+            var advance = (long)count * increment;
+            sequence.NextValue = Math.Max(sequence.NextValue, floor) + advance;
+            sequence.LastUpdated = DateTime.UtcNow;
+
+            return Task.FromResult(sequence.NextValue - advance);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task IncrementGeneratedValueSequenceAssignedCountAsync(int sequenceId, long by)
+    {
+        if (_generatedValueSequences.TryGetValue(sequenceId, out var sequence))
+        {
+            sequence.AssignedCount += by;
+            sequence.LastUpdated = DateTime.UtcNow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Mirrors <c>SyncRepository.GeneratedValueOperations.ValidateExactlyOneAttributeReference</c> in the
+    /// PostgreSQL implementation, so a test exercising the in-memory repository sees the same contract.
+    /// </summary>
+    private static void ValidateExactlyOneAttributeReference(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
+    {
+        if (metaverseAttributeId.HasValue == connectedSystemObjectTypeAttributeId.HasValue)
+            throw new ArgumentException("Exactly one of metaverseAttributeId and connectedSystemObjectTypeAttributeId must be given.");
     }
 
     #endregion

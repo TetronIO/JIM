@@ -7,10 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
+
 ### Fixed
 
 - 🐛 An object that leaves scope but keeps its join is now recorded as **Left scope, join kept**, naming its Synchronisation Rule, rather than as an Attribute Flow that never happened and inflated the Activity's Attribute Flows count. (#1649)
 - 🐛 A Synchronisation Rule or Attribute Flow disabled with a reason (as a schema refresh's "Apply and Disable Dependents" does), or re-enabled afterwards, is now classified in the configuration change history instead of being recorded without a classification. (#1753)
+- 🐛 Reordering an attribute's priority straight after deleting a contributing Synchronisation Rule no longer fails while its values are being recalled: the rule drops to the bottom and may be left out. A refused order now names what is missing. (#1597)
 
 ## [0.15.0] - 2026-09-23
 

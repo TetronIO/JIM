@@ -634,7 +634,7 @@ Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1
 
 ### Set-JIMMetaverseAttributePriority
 
-Replaces a metaverse attribute's entire import priority order in one call. Every current contributing mapping must be listed exactly once, in the desired priority order.
+Replaces a metaverse attribute's entire import priority order in one call. Every current contributing mapping must be listed exactly once, in the desired priority order. The one exception is a mapping whose Synchronisation Rule is being deleted (its contributed-values recall has not finished yet): it may be left out, and stays at the bottom of the order. A refused order names the mappings it is missing and any listed mapping that is not a contributor.
 
 #### Syntax
 
@@ -649,7 +649,7 @@ Set-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int> -Mappin
 |------|------|----------|---------|-------------|
 | `AttributeId` | `int` | Yes | | The ID of the Metaverse Attribute |
 | `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type that scopes the priority list |
-| `MappingId` | `int[]` | Yes | | Every current contributing mapping ID, in the desired priority order (highest first) |
+| `MappingId` | `int[]` | Yes | | Every current contributing mapping ID, in the desired priority order (highest first). A mapping whose Synchronisation Rule is being deleted may be omitted. |
 | `NullIsValueMappingId` | `int[]` | No | | Mapping IDs (from `-MappingId`) that should have "Null is a value" enabled |
 | `PassThru` | `switch` | No | `$false` | Returns the resulting priority order |
 

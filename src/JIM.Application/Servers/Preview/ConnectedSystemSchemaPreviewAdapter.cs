@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Runtime.CompilerServices;
+using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
@@ -14,20 +16,21 @@ namespace JIM.Application.Servers.Preview;
 /// manages, which of their attributes it imports, and whether obsoleting an object withdraws the Metaverse values
 /// it contributed.
 ///
-/// The one adapter that runs no evaluation engine, because none of these settings changes an answer the engine
-/// computes. They change what JIM READS. Everything downstream goes on behaving exactly as it did, over data that
-/// has stopped moving, and that is precisely why the surface needs a preview: a change with no visible effect at
-/// all is the hardest kind to picture.
+/// None of these settings changes an answer the synchronisation engine computes about an object. They change what
+/// JIM READS, and two of the three have no visible effect at all: everything downstream goes on behaving exactly as
+/// it did, over data that has stopped moving, which is the hardest kind of change to picture. The engine is consulted
+/// for one question only, whether a Metaverse Object left without connectors becomes eligible for deletion, and it is
+/// asked through the evaluator every disconnecting preview shares.
 ///
 /// The three levers, and what each actually does:
 ///
-/// - <b>Deselecting an Object Type</b> stops it being imported and does nothing else. Deletion detection walks the
-///   SELECTED types, so its objects are never compared against an import again: they stay joined and keep
-///   contributing the values they last imported. Not a cascade, a freeze. See #1474, where whether that is the
-///   right behaviour is being decided; this reports the behaviour in force.
-/// - <b>Deselecting an attribute</b> is the same freeze one level down. The import reconciles only the attributes
-///   it was sent, so values already held for a deselected attribute are left exactly as they are, and any Attribute
-///   Flow mapping reading it goes on flowing them.
+/// - <b>Deselecting an Object Type</b> takes it out of management (#1474), exactly as deselecting a Partition does.
+///   The Connector stops returning its objects, so the next Full Import finds every one of them missing and obsoletes
+///   it, and the following synchronisation disconnects the joined ones from their Metaverse Objects. It is refused
+///   while an enabled Synchronisation Rule is bound to the type, so the preview reports that as Blocking.
+/// - <b>Deselecting an attribute</b> is a freeze. The import reconciles only the attributes it was sent, so values
+///   already held for a deselected attribute are left exactly as they are, and any Attribute Flow mapping reading it
+///   goes on flowing them.
 /// - <b>Remove Contributed Attributes On Obsoletion</b> changes what happens to contributed Metaverse values when
 ///   an object is obsoleted. Its immediately affected population is the objects already obsolete and still joined,
 ///   waiting for the synchronisation that will disconnect them.
@@ -35,13 +38,15 @@ namespace JIM.Application.Servers.Preview;
 public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAdapter
 {
     private readonly JimApplication _application;
+    private readonly ISyncEngine _syncEngine;
 
     /// <summary>
-    /// How a freeze is written into a delta row's value columns, so a drill-down reads as the state the object
+    /// How a transition is written into a delta row's value columns, so a drill-down reads as the state the object
     /// moves between rather than as an internal transition name.
     /// </summary>
     private const string ImportedValue = "Imported";
     private const string NotImportedValue = "Not imported, values frozen";
+    private const string ObsoletedValue = "Obsoleted by the next Full Import";
     private const string WithdrawnValue = "Withdrawn on obsoletion";
     private const string RetainedValue = "Left on the Metaverse Object";
 
@@ -52,9 +57,10 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
     /// </summary>
     private const int FetchBatchSize = 200;
 
-    public ConnectedSystemSchemaPreviewAdapter(JimApplication application)
+    public ConnectedSystemSchemaPreviewAdapter(JimApplication application, ISyncEngine syncEngine)
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
+        _syncEngine = syncEngine ?? throw new ArgumentNullException(nameof(syncEngine));
     }
 
     public ConfigurationChangePreviewSurface Surface => ConfigurationChangePreviewSurface.ConnectedSystemSchema;
@@ -83,9 +89,14 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
         var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(ConnectedSystemId(context), true) ?? [];
 
+        // Judged over every Object Type the proposal would leave deselected, not only the ones it changes, because
+        // that is how the save judges it: a type deselected before the refusal existed, with a rule still enabled
+        // against it, is refused on the next save whatever else that save changes.
+        findings.AddRange(ValidateNoDeselectedObjectTypeStillManaged(stored, proposal, syncRules));
+
         foreach (var change in Changes(stored, proposal))
         {
-            findings.AddRange(ValidateObjectTypeSelection(change, syncRules));
+            findings.AddRange(ValidateObjectTypeSelection(change));
             findings.AddRange(ValidateAttributeSelection(change, stored, syncRules));
             findings.AddRange(ValidateObsoletionToggle(change));
         }
@@ -122,11 +133,22 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
         var connectedSystemId = ConnectedSystemId(context);
         var counts = new Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int>();
+        var disconnectingIds = new List<Guid>();
 
-        // No engine evaluation happens here or in the delta walk, so counting by streaming the transitions costs
-        // one population read per lever that moved rather than a per-object preview.
+        // Counting by streaming the transitions costs one population read per lever that moved rather than a
+        // per-object preview. The one exception is the Metaverse consequence of a deselected Object Type, which needs
+        // to know what each disconnecting object is joined to, so only that population is fetched.
         await foreach (var transition in TransitionsAsync(context, CancellationToken.None))
+        {
             counts[transition.TransitionType] = counts.GetValueOrDefault(transition.TransitionType) + transition.Count;
+            if (transition.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject)
+                disconnectingIds.AddRange(transition.ConnectedSystemObjectIds);
+        }
+
+        var disconnectionsByMetaverseObject = await DisconnectionsByMetaverseObjectAsync(connectedSystemId, disconnectingIds);
+        await foreach (var delta in PreviewDeletionEligibilityEvaluator.EvaluateAsync(
+                           _application, _syncEngine, connectedSystemId, disconnectionsByMetaverseObject, CancellationToken.None))
+            counts[delta.TransitionType] = counts.GetValueOrDefault(delta.TransitionType) + 1;
 
         return
         [
@@ -143,6 +165,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
         ArgumentNullException.ThrowIfNull(context);
 
         var connectedSystemId = ConnectedSystemId(context);
+        var disconnectionsByMetaverseObject = new Dictionary<Guid, int>();
 
         await foreach (var transition in TransitionsAsync(context, cancellationToken))
         {
@@ -157,6 +180,13 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
                 foreach (var cso in objects)
                 {
+                    if (transition.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject &&
+                        cso.MetaverseObjectId is { } metaverseObjectId)
+                    {
+                        disconnectionsByMetaverseObject[metaverseObjectId] =
+                            disconnectionsByMetaverseObject.GetValueOrDefault(metaverseObjectId) + 1;
+                    }
+
                     yield return new PreviewDelta(
                         transition.TransitionType,
                         ObjectDisplayName: cso.NameOrId,
@@ -170,6 +200,39 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
                 }
             }
         }
+
+        // The Metaverse consequence, evaluated only once every disconnection is known, because whether an object
+        // becomes eligible for deletion depends on how many of its connectors survive.
+        await foreach (var delta in PreviewDeletionEligibilityEvaluator.EvaluateAsync(
+                           _application, _syncEngine, connectedSystemId, disconnectionsByMetaverseObject, cancellationToken))
+            yield return delta;
+    }
+
+    /// <summary>
+    /// How many of each Metaverse Object's connectors in this Connected System the disconnecting objects account for:
+    /// the input the shared deletion-eligibility evaluator takes. Fetched in batches, for the joined objects of a
+    /// deselected Object Type only.
+    /// </summary>
+    private async Task<Dictionary<Guid, int>> DisconnectionsByMetaverseObjectAsync(int connectedSystemId,
+        IReadOnlyCollection<Guid> disconnectingIds)
+    {
+        var disconnectionsByMetaverseObject = new Dictionary<Guid, int>();
+
+        foreach (var batch in disconnectingIds.Chunk(FetchBatchSize))
+        {
+            var objects = await _application.ConnectedSystems
+                .GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, batch);
+
+            foreach (var metaverseObjectId in objects
+                         .Where(cso => cso.MetaverseObjectId.HasValue)
+                         .Select(cso => cso.MetaverseObjectId!.Value))
+            {
+                disconnectionsByMetaverseObject[metaverseObjectId] =
+                    disconnectionsByMetaverseObject.GetValueOrDefault(metaverseObjectId) + 1;
+            }
+        }
+
+        return disconnectionsByMetaverseObject;
     }
 
     #region transitions
@@ -211,15 +274,38 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
                 var ids = await _application.ConnectedSystems
                     .GetLiveConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, change.ObjectTypeId);
 
-                if (ids.Count > 0)
+                if (ids.Count > 0 && change.ProposedSelected)
                 {
-                    yield return change.ProposedSelected
-                        ? new SchemaTransition(
-                            ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported,
-                            change.ObjectTypeName, ids, null, NotImportedValue, ImportedValue)
-                        : new SchemaTransition(
-                            ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported,
-                            change.ObjectTypeName, ids, null, ImportedValue, NotImportedValue);
+                    // Only objects still held can be counted; ones JIM has never imported are found by the next
+                    // Full Import, and there is nothing to count until it runs.
+                    yield return new SchemaTransition(
+                        ActivityRunProfileExecutionItemSyncOutcomeType.WouldResumeBeingImported,
+                        change.ObjectTypeName, ids, null, NotImportedValue, ImportedValue);
+                }
+                else if (ids.Count > 0)
+                {
+                    // Every live object is obsoleted by the next Full Import (#1474). The joined ones are then
+                    // disconnected, which is what costs the Metaverse anything; the rest simply leave. Live is the
+                    // same population deletion detection walks: an obsolete object is already on its way out, and
+                    // one still pending provisioning is never obsoleted as missing.
+                    var unjoined = (await _application.ConnectedSystems
+                        .GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(connectedSystemId, change.ObjectTypeId)).ToHashSet();
+                    var joined = ids.Where(id => !unjoined.Contains(id)).ToList();
+                    var leaving = ids.Where(unjoined.Contains).ToList();
+
+                    if (joined.Count > 0)
+                    {
+                        yield return new SchemaTransition(
+                            ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject,
+                            change.ObjectTypeName, joined, null, ImportedValue, ObsoletedValue);
+                    }
+
+                    if (leaving.Count > 0)
+                    {
+                        yield return new SchemaTransition(
+                            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope,
+                            change.ObjectTypeName, leaving, null, ImportedValue, ObsoletedValue);
+                    }
                 }
             }
             else if (change.AttributesChanged)
@@ -285,8 +371,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
     #region validation
 
-    private static IEnumerable<PreviewValidationFinding> ValidateObjectTypeSelection(SchemaChange change,
-        IReadOnlyCollection<SyncRule> syncRules)
+    private static IEnumerable<PreviewValidationFinding> ValidateObjectTypeSelection(SchemaChange change)
     {
         if (!change.SelectionChanged)
             yield break;
@@ -301,34 +386,45 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
             yield break;
         }
 
-        // The freeze, said in the words #1474 established. Warning rather than Blocking: it is a legitimate thing
-        // to do, and what it needs is for the administrator to know it takes nothing out of management.
+        // Warning rather than Blocking: taking a type out of management is a legitimate thing to do once nothing
+        // manages it. What the administrator needs is to know it is a cascade, and when it happens.
         yield return new PreviewValidationFinding(
             PreviewValidationSeverity.Warning,
-            $"Deselecting {change.ObjectTypeName} stops its objects being imported and does nothing else. The " +
-            "objects already imported stay joined to their Metaverse Objects and go on contributing the values " +
-            "they last imported, which will not be refreshed again. Nothing is obsoleted and nothing is " +
-            "deprovisioned.",
+            $"Deselecting {change.ObjectTypeName} takes its objects out of management. The next Full Import no " +
+            "longer returns them, so the objects already imported become obsolete, and the following synchronisation " +
+            "disconnects them from their Metaverse Objects, which may leave those eligible for deletion. The Run " +
+            "Profile's deletion limits apply to them as to any other deleted object.",
             nameof(ConnectedSystemObjectType.Selected));
+    }
 
-        var boundRules = syncRules
-            .Where(rule => rule.ConnectedSystemObjectTypeId == change.ObjectTypeId)
-            .Select(rule => rule.Name)
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (boundRules.Count > 0)
+    /// <summary>
+    /// Blocking for every Object Type the proposal would leave deselected while an enabled Synchronisation Rule is
+    /// still bound to it (#1474), in the same words the save refuses it with.
+    /// </summary>
+    private static IEnumerable<PreviewValidationFinding> ValidateNoDeselectedObjectTypeStillManaged(StoredSchema stored,
+        ConnectedSystemSchemaProposal proposal, IReadOnlyCollection<SyncRule> syncRules)
+    {
+        foreach (var storedType in stored.Schema.ObjectTypes
+                     .Where(objectType => !(proposal.For(objectType.ObjectTypeId)?.Selected ?? objectType.Selected))
+                     .OrderBy(objectType => objectType.ObjectTypeId))
         {
-            yield return new PreviewValidationFinding(
-                PreviewValidationSeverity.Warning,
-                $"{Count(boundRules.Count, "Synchronisation Rule")} still manage {change.ObjectTypeName} and will " +
-                $"go on running against the frozen objects: {string.Join(", ", boundRules)}. Disable them too if " +
-                "the type is genuinely leaving management.",
-                nameof(ConnectedSystemObjectType.Selected));
+            var boundRules = syncRules
+                .Where(rule => rule.Enabled && rule.ConnectedSystemObjectTypeId == storedType.ObjectTypeId)
+                .Select(rule => rule.Name)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (boundRules.Count > 0)
+            {
+                yield return new PreviewValidationFinding(
+                    PreviewValidationSeverity.Blocking,
+                    ObjectTypeDeselectionMessages.StillManaged(storedType.Name, boundRules),
+                    nameof(ConnectedSystemObjectType.Selected));
+            }
         }
     }
 
-    private static IEnumerable<PreviewValidationFinding> ValidateAttributeSelection(SchemaChange change,
+        private static IEnumerable<PreviewValidationFinding> ValidateAttributeSelection(SchemaChange change,
         StoredSchema stored, IReadOnlyCollection<SyncRule> syncRules)
     {
         // A type that is leaving or arriving takes its attributes with it, so per-attribute findings beside that

@@ -89,7 +89,7 @@ public class ConfigurationChangePreflightSurfaceTests
         {
             Assert.That(result.IsDestructive, Is.True);
             Assert.That(item, Is.Not.Null);
-            Assert.That(item!.Consequence, Does.Contain("deprovisioned"),
+            Assert.That(item!.Consequence, Does.Contain("become obsolete").And.Contain("deprovision"),
                 "deselecting an Object Type obsoletes its objects and deprovisions what they are joined to; the dialog must say so");
             Assert.That(item!.Label, Does.Contain("Person"),
                 "'Object Types > Object Type > Selected' is the same sentence for all twelve of them; the dialog must name the one being deselected");

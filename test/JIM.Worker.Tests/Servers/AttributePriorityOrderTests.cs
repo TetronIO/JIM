@@ -275,6 +275,29 @@ public class AttributePriorityOrderTests
     }
 
     [Test]
+    public void SetAttributePriorityOrderAsync_MismatchedOrder_MessageNamesMissingAndUnknownMappings()
+    {
+        // A refusal the administrator can act on without diffing the lists: which contributor is missing (with its
+        // Synchronisation Rule) and which listed mapping is not a contributor at all (#1597).
+        var m10 = BuildMapping(10, 1, false);
+        var m20 = BuildMapping(20, 2, false);
+        SetupContributors(m10, m20);
+
+        var requested = new List<(int MappingId, bool NullIsValue)>
+        {
+            (10, false),
+            (99, false)
+        };
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.SetAttributePriorityOrderAsync(ObjectTypeId, AttributeId, requested, _user));
+
+        Assert.That(ex!.Message, Does.StartWith("The attribute priority order must list every contributing mapping for the attribute exactly once, and no others."));
+        Assert.That(ex.Message, Does.Contain("Missing: mapping 20 (Synchronisation Rule 'Rule 20')."));
+        Assert.That(ex.Message, Does.Contain("Not contributors to this attribute: mapping 99."));
+    }
+
+    [Test]
     public void SetAttributePriorityOrderAsync_NoContributors_ThrowsAndDoesNotPersist()
     {
         SetupContributors();

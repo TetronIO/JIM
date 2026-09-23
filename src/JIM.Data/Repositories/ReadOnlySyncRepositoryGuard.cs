@@ -318,6 +318,39 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
         => _inner.GetMetaverseAttributeNamesAsync();
 
+    public Task<HashSet<string>> GetMetaverseAttributeValuesInUseAsync(int metaverseAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingMetaverseObjectId)
+        => _inner.GetMetaverseAttributeValuesInUseAsync(metaverseAttributeId, normalisedValues, excludingMetaverseObjectId);
+
+    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId)
+        => _inner.GetConnectedSystemAttributeValuesInUseAsync(connectedSystemObjectTypeAttributeId, normalisedValues, excludingConnectedSystemObjectId);
+
+    public Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId)
+        => _inner.GetMetaverseAttributeNumbersInUseAsync(metaverseAttributeId, values, excludingMetaverseObjectId);
+
+    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId)
+        => _inner.GetConnectedSystemAttributeNumbersInUseAsync(connectedSystemObjectTypeAttributeId, values, excludingConnectedSystemObjectId);
+
+    public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentAsync(Guid metaverseObjectId, int metaverseAttributeId)
+        => _inner.GetGeneratedValueAssignmentAsync(metaverseObjectId, metaverseAttributeId);
+
+    public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentForConnectedSystemObjectAsync(Guid connectedSystemObjectId, int connectedSystemObjectTypeAttributeId)
+        => _inner.GetGeneratedValueAssignmentForConnectedSystemObjectAsync(connectedSystemObjectId, connectedSystemObjectTypeAttributeId);
+
+    public Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForMetaverseObjectsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+        => _inner.GetGeneratedValueAssignmentsForMetaverseObjectsAsync(metaverseObjectIds);
+
+    public Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetGeneratedValueAssignmentsForConnectedSystemObjectsAsync(connectedSystemObjectIds);
+
+    public Task<List<GeneratedValueAssignment>> GetGeneratedValueAssignmentsForGenerationAsync(int syncRuleMappingGenerationId)
+        => _inner.GetGeneratedValueAssignmentsForGenerationAsync(syncRuleMappingGenerationId);
+
+    public Task<GeneratedValueSequence?> GetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
+        => _inner.GetGeneratedValueSequenceAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+    public Task<long?> GetHighestNumericValueForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
+        => _inner.GetHighestNumericValueForAttributeAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
     #endregion
 
     #region Writes (always throw)
@@ -515,6 +548,21 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
         => throw new PreviewWriteAttemptedException(nameof(BulkInsertCausalEdgesAsync));
+
+    public Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
+        => throw new PreviewWriteAttemptedException(nameof(CreateGeneratedValueAssignmentsAsync));
+
+    public Task UpdateGeneratedValueAssignmentAsync(GeneratedValueAssignment assignment)
+        => throw new PreviewWriteAttemptedException(nameof(UpdateGeneratedValueAssignmentAsync));
+
+    public Task DeleteGeneratedValueAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteGeneratedValueAssignmentsAsync));
+
+    public Task<long> ReserveGeneratedValueSequenceBlockAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long floor, int count, int increment)
+        => throw new PreviewWriteAttemptedException(nameof(ReserveGeneratedValueSequenceBlockAsync));
+
+    public Task IncrementGeneratedValueSequenceAssignedCountAsync(int sequenceId, long by)
+        => throw new PreviewWriteAttemptedException(nameof(IncrementGeneratedValueSequenceAssignedCountAsync));
 
     #endregion
 }

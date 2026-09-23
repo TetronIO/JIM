@@ -68,6 +68,10 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, "Value generated")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, "Value corrected")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsTheOutcomesOneLabel(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -148,6 +152,10 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, Color.Primary)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, Color.Info)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, Color.Warning)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, Color.Warning)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -206,6 +214,10 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope] = Icons.Material.Filled.FilterAltOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = Icons.Material.Filled.FilterAlt,
             [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = Icons.Material.Filled.CancelScheduleSend,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] = Icons.Material.Filled.Fingerprint,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = Icons.Material.Filled.MoveToInbox,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = Icons.Material.Filled.Archive,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = Icons.Material.Filled.PublishedWithChanges,
             [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = Icons.Material.Filled.FilterAlt
         };
 

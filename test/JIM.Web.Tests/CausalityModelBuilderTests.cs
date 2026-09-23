@@ -128,7 +128,15 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] = CausalityLane.Downstream,
             // The same export-side event as DeprovisionQueued, minus the export: nothing was ever created in
             // the target system, so it shares DeprovisionQueued's Downstream lane rather than Identity's.
-            [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = CausalityLane.Downstream
+            [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = CausalityLane.Downstream,
+
+            // Unique Value Generation (#242): Assigned, Adopted and Retired happen on the Metaverse Object's
+            // attributes, like AttributeFlow, so they share its Identity lane. Remediated is recorded on the
+            // export item, like Exported, so it is Downstream.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = CausalityLane.Downstream
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
