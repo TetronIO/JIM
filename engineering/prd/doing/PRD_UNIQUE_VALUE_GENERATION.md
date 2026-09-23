@@ -261,7 +261,7 @@ Unit and database-tier tests cannot prove the parts of this feature that matter 
 
 ### A dedicated scenario
 
-A new scenario, `Invoke-Scenario22-UniqueValueGeneration.ps1` (numbered after the current highest), exercises every positive and negative path and every configuration permutation against the standard Samba AD and OpenLDAP targets plus a CSV target that can neither probe nor classify. Setup, run and teardown follow the runner's conventions (`Run-IntegrationTests.ps1`; scenario scripts are never invoked directly). It must cover, at minimum:
+A new scenario, `Invoke-Scenario23-UniqueValueGeneration.ps1` (numbered after the current highest), exercises every positive and negative path and every configuration permutation against the standard Samba AD and OpenLDAP targets plus a CSV target that can neither probe nor classify. Setup, run and teardown follow the runner's conventions (`Run-IntegrationTests.ps1`; scenario scripts are never invoked directly). It must cover, at minimum:
 
 | Area | Cases |
 |------|-------|
