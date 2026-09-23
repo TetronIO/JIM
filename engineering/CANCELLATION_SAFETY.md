@@ -47,18 +47,21 @@ Without this flush, the database can be left in an inconsistent state where MVOs
 
 ### Sync Operations (Full Sync, Delta Sync)
 
-The sync page pipeline has 8 sequential persistence calls:
+The sync page pipeline has 9 sequential persistence calls (`SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor`):
 
 ```
 1. PersistPendingMetaverseObjectsAsync    -- saves MVO creates/updates
-2. CreatePendingMvoChangeObjectsAsync     -- saves MVO change history
+2. CreatePendingMvoChangeObjectsAsync     -- builds MVO change history
 3. EvaluatePendingExportsAsync            -- evaluates export rules
 4. FlushPendingExportOperationsAsync      -- saves Pending Exports
 5. ResolvePendingExportReferenceSnapshotsAsync -- resolves deferred refs
 6. FlushObsoleteCsoOperationsAsync        -- deletes obsolete CSOs
 7. FlushPendingMvoDeletionsAsync          -- deletes 0-grace-period MVOs
 8. FlushRpeisAsync                        -- bulk inserts RPEIs
+9. FlushPendingMvoChangesAsync            -- persists MVO change records
 ```
+
+After step 9 the page's tracking state is cleared (the EF change tracker and the page's Metaverse Object identity map), so nothing from a flushed page is carried into the next.
 
 **Highest-risk window** (before #339 fix): If a crash or cancellation occurs after step 1 but before step 4, MVOs are updated but no Pending Exports are created. Target systems silently miss the update, and a subsequent sync won't regenerate exports because CSO attributes haven't changed.
 
@@ -86,9 +89,18 @@ No special cancellation handling needed:
 
 - Imports accumulate all CSO creates/updates in memory
 - Persistence happens in a single batch after all pages
-- If cancellation fires mid-import, unpersisted in-memory state is discarded cleanly
+- If cancellation fires mid-import, unpersisted in-memory state is discarded cleanly: the processor checks before and after each connector page, and again after deletion detection, and skips deletions, reference resolution and persistence if cancellation was requested
+- One checkpoint sits after persistence: a cancellation there skips confirming-import reconciliation of Pending Exports, and the persisted CSO changes stand
 - Activity progress updates are idempotent and don't affect data integrity
 - The cancellation token is passed to connectors for network/file I/O responsiveness
+
+### Password Delivery
+
+The Password Delivery Service is not a Worker Task, so it has no cancellation request of its own. It runs as a second hosted service in the Worker process and stops with the process's shutdown token. Its safety rests on how it claims work rather than on how it stops:
+
+- **Claims are leases, not locks.** A delivery pass claims due queue rows with one `FOR UPDATE SKIP LOCKED` statement that marks them `Delivering` and stamps `ClaimedAt` / `ClaimedBy`. A claim is honoured for `PendingPasswordChange.ClaimLease` (60 seconds) and then ignored, so a deliverer that dies or is stopped mid-flight cannot strand a row in `Delivering`; the change becomes claimable again about a minute later.
+- **Outcome writes are guarded.** A deliverer's attempt write only applies while the row is still `Delivering`, so a row taken away in the meantime (cancelled, retried, or superseded by a newer password) keeps that outcome rather than having it overwritten by the attempt.
+- **Administrator cancellation is an outcome.** Cancelling a queued change (queue page, REST API or `Stop-JIMPendingPasswordChange`) records it as `Cancelled`, with who and when, rather than deleting it, because the person's password stays divergent in that system either way. Cancelling mid-delivery wins: the row stays cancelled unless the password actually landed, in which case the row is deleted as delivered. A cancelled change can be put back on the queue by retrying it.
 
 ## Recovery Procedures
 

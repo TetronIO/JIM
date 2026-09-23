@@ -16,7 +16,7 @@ JIM resolves this the same way everywhere: **try an ordered list of naming attri
 | 4 | External ID |
 | 5 | Secondary External ID (the Distinguished Name, for LDAP systems) |
 
-The first of these that holds an actual value wins. Attribute names are matched **case-insensitively**, because the schema belongs to your connected system rather than to JIM, and directory products differ on casing.
+The first of these that holds an actual value wins. Attribute names are matched **case-insensitively**, because the schema belongs to your Connected System rather than to JIM, and directory products differ on casing.
 
 An empty or whitespace-only value counts as absent, so an object whose `displayName` is blank falls through to its `cn` rather than displaying nothing.
 

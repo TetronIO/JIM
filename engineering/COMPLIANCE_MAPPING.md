@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.3 |
-| **Last Updated** | 2026-04-22 |
+| **Version** | 1.4 |
+| **Last Updated** | 2026-09-23 |
 | **Status** | Active |
 
 ---
@@ -60,8 +60,8 @@ Tetron currently runs small, focused development teams on JIM. The security and 
 
 - **Branch protection ruleset ("Protect Main")**: all changes to `main` must land via a pull request, all required status checks must pass before merge, branches must be up to date with `main`, and all review comment threads must be resolved. Direct pushes and force-pushes are blocked. See [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) section 7 for the full ruleset specification.
 - **Automated baseline review**: every pull request receives automated review before it can be merged, regardless of author: CodeQL static analysis (three required `Analyze` checks) posts review comments on the diff via the github-code-quality integration, and unresolved review threads block the merge. An additional AI-assisted review can be requested on demand by commenting `@claude review this PR` on any pull request.
-- **CI-enforced quality gates**: build and test success, CodeQL static analysis, container base image vulnerability scanning, and dependency scanning are all required status checks in the branch protection ruleset. These gates are machine-enforced (not advisory) and operate identically whether the team has one developer or many.
-- **Signed commits**: all contributors sign their commits via the devcontainer's automated signing setup. The pre-commit hook at `.githooks/pre-commit` enforces this locally. Server-side enforcement via `required_signatures` in the branch protection ruleset is planned once all contributor environments are reliably producing signed commits.
+- **CI-enforced quality gates**: build and test success (including the real-PostgreSQL `database-tests` tier and the `ldaps-tests` tier, which proves LDAPS certificate validation against real directory servers), CodeQL static analysis, OpenAPI document generation, production base image digest-pinning, vulnerability scanning of every built production image, and changelog lint are all required status checks in the branch protection ruleset. These gates are machine-enforced (not advisory) and operate identically whether the team has one developer or many.
+- **Signed commits**: all contributors sign their commits via the devcontainer's automated signing setup. The pre-commit hook at `.githooks/pre-commit` enforces this locally, and the branch protection ruleset's `required_signatures` rule enforces it server-side: an unsigned commit cannot be merged to `main`.
 - **Scalable human review**: additional reviewer requirements can be layered onto the branch protection ruleset as team composition supports them. The current configuration is designed to extend cleanly; no restructuring is needed to add reviewer requirements.
 
 ### Commit provenance and author attribution
@@ -95,7 +95,7 @@ This directly supports NIST SP 800-53 SI-7 (Software, Firmware, and Information 
 |-------------|------------------------|--------|
 | PR.AA - Identity Management, Authentication, Access Control | SSO/OIDC mandatory, RBAC, API key auth, JWT Bearer | Implemented |
 | PR.AT - Awareness and Training | Security development guidelines in CLAUDE.md | Implemented |
-| PR.DS - Data Security | AES-256-GCM encryption at rest, TLS in transit, parameterised queries | Implemented |
+| PR.DS - Data Security | AES-256-GCM encryption at rest, TLS in transit, parameterised queries. Passwords JIM delivers to Connected Systems are encrypted at rest under their own key purpose, retained only for a configurable period, and refused on any transport JIM cannot confirm is encrypted (see SC-8 and SC-28) | Implemented |
 | PR.PS - Platform Security | Docker containerisation, minimal base images, non-root execution | Implemented |
 | PR.IR - Technology Infrastructure Resilience | Air-gapped deployment, no cloud dependencies | Implemented |
 
@@ -141,7 +141,7 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 |-----------|-------------|---------------|--------|
 | 5 | Protect the build environment | GitHub Actions CI/CD with every action pinned by immutable 40-character commit SHA (not mutable version tags), preventing tag-rewrite supply chain attacks. Dependabot tracks SHA-pinned updates. All CI checks are required status checks in the branch protection ruleset, ensuring the pipeline cannot be bypassed. See DEVELOPER_GUIDE.md "GitHub Actions" and "Branch Protection Ruleset" sections. | Aligned |
 | 6 | Secure the development tools and processes | Devcontainer with controlled toolchain, dependency pinning | Aligned |
-| 7 | Manage and secure third-party components | Dependency review policy, SBOM generation. Container base image vulnerability scanning runs on every push and PR with results surfaced to GitHub code scanning (SARIF). Digest-pinning of production base images is enforced by CI rather than by convention. | Aligned |
+| 7 | Manage and secure third-party components | Dependency review policy, SBOM generation. Every production container image is built and scanned for vulnerabilities on every push and PR, with results surfaced to GitHub code scanning (SARIF); the built image rather than its base is scanned, because it is what customers run. Digest-pinning of production base images is enforced by CI rather than by convention. | Aligned |
 
 ### Theme 3: Deployment and Maintenance
 
@@ -206,17 +206,18 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
 | IA-2 | Identification and Authentication (Users) | SSO/OIDC mandatory with PKCE |
-| IA-5 | Authenticator Management | API keys: cryptographically random; credentials: AES-256-GCM encrypted |
+| IA-5 | Authenticator Management | API keys: cryptographically random; credentials: AES-256-GCM encrypted. Passwords JIM sets on accounts: generated Initial Passwords are produced at the moment they are set and stored nowhere; a static Initial Password and queued Password Synchronisation changes are stored encrypted. Attributes holding credential material (such as `unicodePwd`, `userPassword`) cannot be imported, managed or used in an Attribute Flow. The PowerShell module keeps its API key, passwords and other credential values out of its debug output |
 | IA-8 | Identification and Authentication (Non-Org Users) | JWT Bearer tokens for API access |
 
 ### SC - System and Communications Protection
 
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
-| SC-8 | Transmission Confidentiality | TLS enforced for all communications |
+| SC-8 | Transmission Confidentiality | TLS enforced for all communications. REST endpoints that accept a password refuse the request unless JIM can confirm the transport is encrypted (a build-time test fails if a new one lacks the guard). A Connected System's **Only send passwords over an encrypted connection** setting governs every password JIM sends to it (Initial Passwords, administrator-set and synchronised). The SCIM 2.0 Client Connector refuses plain HTTP to anything but a loopback address; the SQL Connector encrypts by default (TLS for SQL Server, Native Network Encryption or TCPS for Oracle Database). The LDAP Connector does not chase referrals, so it never opens an unauthenticated connection to a server it was not configured for |
+| SC-17 | Public Key Infrastructure Certificates | Server certificates for LDAPS, SCIM and SQL Server connections are always validated (issuer chain, validity period, host name) against the operating system's trust anchors plus the JIM certificate store (Admin > Certificates), which adds trust and never replaces it; there is no option to skip validation. A refused certificate is shown to the administrator, and trusting it from that failure re-reads it from the server and confirms it is unchanged before adding it |
 | SC-12 | Cryptographic Key Management | ASP.NET Core Data Protection API, automatic key rotation |
 | SC-13 | Cryptographic Protection | AES-256-GCM (NIST approved), HMAC-SHA256 |
-| SC-28 | Protection of Information at Rest | Credential encryption via Data Protection API |
+| SC-28 | Protection of Information at Rest | Credential encryption via Data Protection API. Queued Password Synchronisation changes are encrypted under a separate Data Protection purpose, so code that can decrypt configuration credentials cannot decrypt a queued password; terminal queue rows are removed by the `History.PasswordEventRetentionPeriod` retention period, which bounds how long JIM holds a password it can no longer use |
 
 ### SI - System and Information Integrity
 
@@ -310,7 +311,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Requirement | JIM Alignment | Status |
 |-------------|---------------|--------|
 | Data protection by design (Article 25) | Encryption at rest, access controls, audit logging | Aligned |
-| Data protection by default (Article 25) | Secure defaults, minimal data exposure | Aligned |
+| Data protection by default (Article 25) | Secure defaults, minimal data exposure; credential attributes cannot be imported or flowed, and each class of history (general, configuration change, security event, password) has its own retention period | Aligned |
 | Security of processing (Article 32) | AES-256-GCM encryption, access controls, pseudonymisation support | Aligned |
 | Records of processing activities (Article 30) | Activity logging, sync operation audit trail | Aligned |
 | Data portability (Article 20) | API access to metaverse data, export capabilities | Aligned |
@@ -342,11 +343,11 @@ See the assessment document for the full evidence table and remediation plan.
 
 As of JIM v0.10.0 the following supply chain controls are in place:
 
-- **Docker base images digest-pinned**: all `FROM` lines in `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, and `src/JIM.Scheduler/Dockerfile` pin `image:tag@sha256:<digest>`. Enforced by the CI `scan-base-images` job. Updates are driven by Dependabot.
+- **Docker base images digest-pinned**: all `FROM` lines in `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, and `src/JIM.Scheduler/Dockerfile` pin `image:tag@sha256:<digest>`. Enforced by the CI `discover-base-images` job; the `scan-images` job then builds and scans each production image. Updates are driven by Dependabot.
 - **NuGet transitive dependencies locked**: every project carries a `packages.lock.json`; `RestoreLockedMode` is enforced whenever `CI=true`, so CI, the release workflow, and production container image builds can never silently resolve a different transitive dependency graph. Dependabot NuGet PRs get their lock files regenerated automatically by the `regenerate-nuget-lock-files` workflow, since Dependabot itself does not reliably update them. See [`DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md) for the full policy across every pinned layer.
 - **GitHub Actions pinned by SHA**: every reusable action referenced from `.github/workflows/` is pinned to a commit SHA rather than a mutable tag. Dependabot raises digest/SHA bumps on a weekly cadence.
-- **Main branch protection**: all changes to `main` must land via pull request with required status checks (build, test, CodeQL, container scan, dependency scan, automated baseline review). Direct pushes and force-pushes are blocked.
-- **Signed commits**: contributors cannot commit without signing; the pre-commit hook enforces this locally and server-side enforcement is planned.
+- **Main branch protection**: all changes to `main` must land via pull request with required status checks (build, test, CodeQL, digest-pinning enforcement, container image scan, automated baseline review). Direct pushes and force-pushes are blocked.
+- **Signed commits**: contributors cannot commit without signing; the pre-commit hook enforces this locally and the branch protection ruleset's `required_signatures` rule enforces it server-side.
 
 ---
 

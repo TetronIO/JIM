@@ -1,6 +1,6 @@
 # JIM PostgreSQL Database Guide
 
-> Configuration, connection pooling, backup/restore, and environment-specific notes for JIM's PostgreSQL database.
+> Configuration, connection pooling, notifications, schema migrations, backup/restore, and environment-specific notes for JIM's PostgreSQL database.
 
 ---
 
@@ -35,8 +35,8 @@ checkpoint_completion_target=0.9
 wal_buffers=16MB
 default_statistics_target=100
 random_page_cost=1.1
-effective_io_concurrency=200
-work_mem=10485kB
+effective_io_concurrency=1000
+work_mem=102300kB
 min_wal_size=1GB
 max_wal_size=4GB
 max_worker_processes=16
@@ -44,6 +44,8 @@ max_parallel_workers_per_gather=4
 max_parallel_workers=16
 max_parallel_maintenance_workers=4
 ```
+
+The same command line also sets `statement_timeout=300000` (5 minutes, to stop runaway queries), `log_min_duration_statement` from `JIM_DB_LOG_MIN_DURATION` (default 1000ms, slow-query logging), and the `logging_collector` / `jsonlog` settings that write structured JSON logs to the shared log volume for the Logs page. `shm_size` must be at least `shared_buffers` with some headroom (`10gb` for the 8GB above); the comments in `docker-compose.yml` give the pairing for other host sizes.
 
 ---
 
@@ -60,6 +62,20 @@ JIM uses Npgsql connection pooling with the following default settings:
 
 > **Note:** JIM has 3 services (Web, Worker, Scheduler). The Maximum Pool Size must leave headroom within PostgreSQL's `max_connections` for superuser connections, monitoring tools, and ad-hoc sessions. The default 30 per service uses 90 of the 200 available connections, leaving 110 for headroom.
 
+### Notification Listener Connections
+
+In addition to its pool, each of the three services holds **one dedicated, non-pooled connection** for PostgreSQL `LISTEN`/`NOTIFY` (`PostgresNotificationListener`, built from `JimDbContext.BuildListenerConnectionString`), because `LISTEN` state belongs to a session and cannot survive being returned to a pool. These three connections sit outside `Maximum Pool Size`, so budget for them when sizing `max_connections`.
+
+Database triggers raise notifications on three channels (`Constants.NotificationChannels`):
+
+| Channel | Raised when | Listened to by |
+|---------|-------------|----------------|
+| `jim_worker_task_change` | A Worker Task is inserted, changes status, or is deleted | JIM.Scheduler (to advance Schedule executions); JIM.Web (live portal updates) |
+| `jim_activity_progress` | An Activity's progress, message or status changes | JIM.Web (live progress in the portal) |
+| `jim_password_change` | A Password Synchronisation queue row is inserted, updated or deleted (payload: the Connected System id) | JIM.Worker's Password Delivery Service, so a queued change, a retry or a released hold is delivered within a second rather than on a poll; JIM.Web (live queue updates) |
+
+Notifications are a latency optimisation, not the source of truth: each listener reconnects with exponential backoff (capped at 60 seconds) when its connection drops, and its consumers fall back to polling while it is disconnected.
+
 ### Recommended Pool Sizes by Deployment Size
 
 | Environment | Services | Max Pool/Service | Total Max | PostgreSQL max_connections |
@@ -72,6 +88,32 @@ JIM uses Npgsql connection pooling with the following default settings:
 ### Monitoring Connection Pool
 
 Enable Npgsql logging by setting the logging level to `Debug` for the `Npgsql` logger. Connection pool statistics will appear in logs during high activity.
+
+---
+
+## Schema Migrations
+
+EF Core migrations live in `src/JIM.PostgresData/Migrations/`. JIM.Worker applies any pending migrations at startup (`JimApplication.InitialiseDatabaseAsync`), so upgrading JIM upgrades the schema; there is no separate migration step for an administrator to run.
+
+**Released migrations are frozen.** A migration that has shipped in a release has been applied to customer databases, so renaming, regenerating, editing or deleting it, or adding a new migration whose timestamp sorts before it, would break customer upgrades. `src/JIM.PostgresData/Migrations/released-migrations.lock` records every released migration's id, the SHA-256 of its `.cs` and `.Designer.cs` files, and the version it first shipped in. `ReleasedMigrationImmutabilityTests` (JIM.Worker.Tests) fails the build on any violation. The manifest is append-only: `scripts/Update-ReleasedMigrationsManifest.ps1` adds each release's migrations as a step of the release procedure (see `RELEASE_PROCESS.md`), and it is never edited by hand. Unreleased migrations may still be regenerated freely, for example after `main` moves.
+
+**The upgrade path is tested on real PostgreSQL.** `MigrationUpgradePathDatabaseTests` (a `RequiresPostgres` fixture, run by the CI `database-tests` job) applies the migrations at head over the schema the previous release shipped, which is the path every upgrading customer takes and the one production cannot roll back.
+
+---
+
+## History Retention
+
+Change history, Activities and password records are the tables that grow without bound, so retention is what keeps database size in check. It runs as a Schedule step rather than inside the Worker: the built-in **History Retention Cleanup** Schedule (daily, `30 2 * * *`) queues a `HistoryRetentionCleanupWorkerTask`, which gives each pass an execution history, a next run time and the usual cancel affordance. Each cutoff is derived from Service Settings at execution time, so a changed period takes effect on the next pass:
+
+| Service Setting | Default | Covers |
+|-----------------|---------|--------|
+| `History.RetentionPeriod` | 90 days | General change history and Activities |
+| `History.ConfigurationChangeRetentionPeriod` | 3650 days | Configuration change Activities (the configuration change history) |
+| `History.SecurityEventRetentionPeriod` | 365 days | Security audit Activities (sign-in, API key authentication failure) |
+| `History.PasswordEventRetentionPeriod` | 365 days | Password Synchronisation Activities and terminal queue rows (parked, expired, cancelled), which carry an encrypted password |
+| `History.CleanupBatchSize` | 100 | Records deleted per batch, to avoid long transactions and locks |
+
+Records still being worked (for example a password change still owed to a system) are never removed, however old.
 
 ---
 

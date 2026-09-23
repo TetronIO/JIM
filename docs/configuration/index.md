@@ -12,9 +12,17 @@ The pages in this section explain each configuration object in plain terms, desc
 
 The objects that drive identity flow between external systems and the metaverse.
 
-- [Connected Systems](connected-systems.md) -- external directories, databases, and files that JIM synchronises with
+- [Connected Systems](connected-systems.md) -- external directories, databases, SCIM 2.0 services, and files that JIM synchronises with
 - [Run Profiles](run-profiles.md) -- import, sync, and export operations executed against a Connected System
 - [Synchronisation Rules](synchronisation-rules.md) -- the relationship between a Connected System and the metaverse: scoping, joining, projection, and Attribute Flows
+- [Data Flow](data-flow.md) -- every attribute data flow configured across all Connected Systems, in both directions, in one list
+
+## Changing configuration safely
+
+How JIM judges a save, and how to see what a change would do before you make it.
+
+- [Configuration Changes](configuration-changes.md) -- which edits JIM confirms, and the Configuration Change Preview that shows which objects a proposed edit would affect
+- [Sync Preview](sync-preview.md) -- what synchronising one object would do with the configuration already saved, changing nothing
 
 ## Metaverse
 

@@ -458,7 +458,7 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 
 ### Setting the password on one Connected System Object
 
-Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. It is the same operation as Set Password on the Metaverse Object, aimed at this one Connected System Object: the change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#-the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. It is never staged as a Pending Export, and JIM holds the password only until the object has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. The Connected System Object must be joined to a Metaverse Object, because a password belongs to a Metaverse Object and that is where its history is kept.
+Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. It is the same operation as Set Password on the Metaverse Object, aimed at this one Connected System Object: the change is queued, encrypted, and the [Password Delivery Service](../concepts/passwords.md#the-password-delivery-service) writes it within about a second, whatever the synchronisation engine is doing. It is never staged as a Pending Export, and JIM holds the password only until the object has it; a password the system refused is kept, still encrypted, so JIM can finish the job once the cause is dealt with. The Connected System Object must be joined to a Metaverse Object, because a password belongs to a Metaverse Object and that is where its history is kept.
 
 Use it for the new starter about to sign in for the first time, the Connected System Object whose provisioning password was refused, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the object, where they happen without anybody watching.
 
@@ -498,7 +498,7 @@ The dialog waits for the outcomes and shows one per Connected System: **Set**, *
 
 Every Connected System gets its own Activity, grouped under one parent for the change, so the whole action is findable afterwards and appears in the person's password history beside any propagated change.
 
-For automation, `Set-JIMMetaverseObjectPassword -ConnectedSystemId` does the same thing over the same REST endpoint. Omitting `-ConnectedSystemId` aims the password at every Connected System configured for Password Synchronisation instead; see [Passwords > Setting a password](../concepts/passwords.md#-setting-a-password) for the two modes.
+For automation, `Set-JIMMetaverseObjectPassword -ConnectedSystemId` does the same thing over the same REST endpoint. Omitting `-ConnectedSystemId` aims the password at every Connected System configured for Password Synchronisation instead; see [Passwords > Setting a password](../concepts/passwords.md#setting-a-password) for the two modes.
 
 ## Password Synchronisation
 

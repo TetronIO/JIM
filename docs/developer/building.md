@@ -66,6 +66,18 @@ jim-build-light      # Start db + Keycloak, run JIM.Web natively
 !!! warning "Container rebuilds required"
     When running the Docker stack, compiled code changes (Blazor pages, API controllers, worker processors) require a container rebuild. Simply refreshing the browser will not show changes.
 
+### Building Behind a Proxy or TLS-Inspecting Network
+
+A network that routes outbound traffic through a proxy, or inspects TLS by re-signing it with its own certificate authority, breaks the package restore inside each image's build stage. `docker-compose.yml` passes these optional variables from your `.env` through to the web, worker and scheduler builds; each is empty by default, which changes nothing:
+
+| Variable | Purpose |
+|----------|---------|
+| `JIM_BUILD_EXTRA_CA_BASE64` | Base64 of a PEM bundle holding the authority your network re-signs TLS with, trusted during the build stage only; nothing from it reaches the final image |
+| `JIM_BUILD_HTTP_PROXY`, `JIM_BUILD_HTTPS_PROXY`, `JIM_BUILD_NO_PROXY` | Proxy settings for the build stage |
+| `JIM_BUILD_NETWORK` | The Docker network the build runs on (default `default`) |
+
+Encode only the authority certificates you need rather than a whole system bundle: a large bundle's base64 can exceed the environment size limit.
+
 ## Database Migrations
 
 JIM uses Entity Framework Core migrations for schema management.
