@@ -50,6 +50,9 @@ public class ScheduleExecutionsControllerTests
         _application = new JimApplication(_mockRepository.Object);
         _controller = new ScheduleExecutionsController(_mockLogger.Object, _application);
 
+        // Cancelling writes the execution through the conditional transition (#1768); emulate it against the instance.
+        _mockSchedulingRepository.EmulateConditionalTransitions();
+
         // Set up a default HTTP context with a user
         var claims = new List<Claim>
         {
@@ -637,12 +640,8 @@ public class ScheduleExecutionsControllerTests
             Status = ScheduleExecutionStatus.Queued
         };
 
-        ScheduleExecution? updatedExecution = null;
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(id))
             .ReturnsAsync(execution);
-        _mockSchedulingRepository.Setup(r => r.UpdateScheduleExecutionAsync(It.IsAny<ScheduleExecution>()))
-            .Callback<ScheduleExecution>(e => updatedExecution = e)
-            .Returns(Task.CompletedTask);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(id))
             .ReturnsAsync(new List<WorkerTask>());
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionWithScheduleAsync(id))
@@ -650,10 +649,10 @@ public class ScheduleExecutionsControllerTests
 
         await _controller.CancelAsync(id);
 
-        Assert.That(updatedExecution, Is.Not.Null);
-        Assert.That(updatedExecution!.Status, Is.EqualTo(ScheduleExecutionStatus.Cancelled));
-        Assert.That(updatedExecution.ErrorMessage, Is.EqualTo("Cancelled by user"));
-        Assert.That(updatedExecution.CompletedAt, Is.Not.Null);
+        // Written through the conditional transition, which the fixture applies to the instance it was given.
+        Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.Cancelled));
+        Assert.That(execution.ErrorMessage, Is.EqualTo("Cancelled by user"));
+        Assert.That(execution.CompletedAt, Is.Not.Null);
     }
 
     [Test]

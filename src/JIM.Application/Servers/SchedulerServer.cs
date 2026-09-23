@@ -956,6 +956,11 @@ public class SchedulerServer
     /// Sets the execution status to Cancelled, cancels all task activities,
     /// and deletes all tasks regardless of their current status.
     /// </summary>
+    /// <remarks>
+    /// The cancellation is written conditionally (#1768): it only takes effect while the execution is still Queued or
+    /// InProgress, so an execution that finished between being read and being cancelled stays exactly as it finished.
+    /// Steps that had not started record why they did not run.
+    /// </remarks>
     /// <returns>True if the execution was cancelled, false if it was not in a cancellable state.</returns>
     public async Task<bool> CancelScheduleExecutionAsync(Guid executionId)
     {
@@ -974,10 +979,16 @@ public class SchedulerServer
             return false;
         }
 
-        execution.Status = ScheduleExecutionStatus.Cancelled;
-        execution.CompletedAt = DateTime.UtcNow;
-        execution.ErrorMessage = "Cancelled by user";
-        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+        if (!await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                execution,
+                [ScheduleExecutionStatus.Queued, ScheduleExecutionStatus.InProgress],
+                ScheduleExecutionStatus.Cancelled,
+                "Cancelled by user"))
+        {
+            Log.Warning("CancelScheduleExecutionAsync: Execution {ExecutionId} finished before it could be cancelled, so it is left as it finished.",
+                executionId);
+            return false;
+        }
 
         // Cancel all tasks — processing tasks are signalled for graceful cancellation,
         // queued/waiting tasks are cancelled and removed immediately.
@@ -996,14 +1007,21 @@ public class SchedulerServer
             else
             {
                 if (task.Activity != null)
+                {
+                    // A step that never started says why it did not run. One already being cancelled did run, so its
+                    // Activity keeps whatever it last reported.
+                    if (task.Status is WorkerTaskStatus.Queued or WorkerTaskStatus.WaitingForPreviousStep)
+                        task.Activity.Message = ScheduleStepNotRunReasons.ExecutionCancelled;
+
                     await Application.Activities.CancelActivityAsync(task.Activity);
+                }
 
                 await Application.Repository.Tasking.DeleteWorkerTaskAsync(task);
                 immediatelyCancelled++;
             }
         }
 
-        Log.Information("CancelScheduleExecutionAsync: Cancelled execution {ExecutionId} — {ImmediateCount} tasks cancelled immediately, {SignalledCount} processing tasks signalled for cancellation",
+        Log.Information("CancelScheduleExecutionAsync: Cancelled execution {ExecutionId}: {ImmediateCount} tasks cancelled immediately, {SignalledCount} processing tasks signalled for cancellation",
             executionId, immediatelyCancelled, signalledForCancellation);
         return true;
     }
