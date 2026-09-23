@@ -237,6 +237,42 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task FullSync_AnotherSystemSupersedesTheGeneratedValueInItsOwnRun_GeneratingSystemsNextRunDeletesTheAssignmentAsync()
+    {
+        // Unlike the fine-grained-authority test above (two rules on the SAME Connected System, so the
+        // supersession and the reconciliation happen in one pass), this proves the CROSS-system case: the
+        // superseding value arrives via a DIFFERENT Connected System's own run, which cannot reconcile HR's
+        // assignment itself (work package G review fix 1: reconciliation is keyed to a run's own generated
+        // mappings). Only the generating system's (HR's) own later run, examining every known assignment
+        // rather than only ones touched that pass, sees the value now belongs to another rule and deletes it.
+        var ctx = await SetUpCrossSystemSupersessionScenarioAsync();
+
+        await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"));
+        Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1));
+
+        // Directory supplies its own, higher-priority value in ITS OWN run (not HR's).
+        await SeedDirectoryOverrideCsoAsync(ctx, "E1", "j.bloggs.authoritative");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("j.bloggs.authoritative"), "the higher-priority source must win visibly");
+        Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1),
+            "Directory's own run cannot reconcile an assignment it did not generate; the stale row survives until HR's next run");
+
+        var secondHrActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("j.bloggs.authoritative"), "HR's own re-run must not overwrite Directory's value");
+            Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "the generating system's next run must delete the stale assignment");
+            Assert.That(secondHrActivity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.False,
+                "no new value is generated; only the stale assignment is cleaned up");
+        }
+    }
+
     #endregion
 
     #region Exhaustion and width
@@ -363,6 +399,39 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task FullSync_SequenceOnNumberTarget_ParticipatingSystemAlreadyHoldsANumber_AdoptsItAsync()
+    {
+        // Proves adopt-before-generate reads a Number/LongNumber participating target's IntValue/LongValue,
+        // not just StringValue (work package G review fix 2): without it, FindAdoptableGeneratedValueAsync
+        // never sees Directory's existing 4242 and HR generates a fresh sequence number instead of adopting.
+        var ctx = await SetUpNumericAdoptionScenarioAsync();
+
+        // Directory is a brownfield join: it already holds 4242 for the same Employee Number before HR ever syncs.
+        await SeedDirectoryCsoWithNumericAccountNameAsync(ctx, "E1", 4242);
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        await SeedHrCsoAsync(ctx, "John", "Smith", "E1");
+        var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            var mvo = SyncRepo.MetaverseObjects.Values.Single();
+            var value = mvo.AttributeValues.Single(av => av.AttributeId == ctx.MvAccountNameAttributeId);
+            Assert.That(value.IntValue, Is.EqualTo(4242), "the accepted Directory number is adopted, not a freshly generated sequence number");
+
+            var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
+            Assert.That(assignment.Adopted, Is.True);
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
+            Assert.That(assignment.Value, Is.EqualTo("4242"));
+
+            var adoptedOutcomes = activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
+                .ToList();
+            Assert.That(adoptedOutcomes, Has.Count.EqualTo(1));
+        }
+    }
+
     #endregion
 
     #region Reference pass integrity
@@ -418,6 +487,57 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         var mvo = SyncRepo.MetaverseObjects.Values.Single();
         Assert.That(mvo.PendingGeneratedValues, Is.Empty);
+    }
+
+    #endregion
+
+    #region Re-election into a run with no generated mappings of its own
+
+    [Test]
+    public async Task FullSync_HigherPriorityValueOnASystemWithNoGeneratedMappingsWithdraws_ReElectsTheGeneratedMappingWithNoErrorAsync()
+    {
+        // Proves work package G review fix 3: withdrawal re-election can flow a generated mapping into a run
+        // whose OWN active rules have no generated mapping (Payroll here), so PrepareUniqueValueGenerationAsync
+        // built no service for it. Before the fix, ResolvePendingGeneratedValuesAsync logged an error and
+        // cleared the pending request, silently leaving Account Name blank. The generating system's (HR's) own
+        // source contributes nothing throughout this test; only Payroll's withdrawal moves anything.
+        var ctx = await SetUpReElectedGenerationScenarioAsync();
+
+        await SeedPayrollCsoAsync(ctx, "E1", "payroll.value");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!); // Payroll projects and wins Account Name outright
+
+        await SeedHrCsoAsync(ctx, "Joe", "Bloggs", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr); // HR joins; its generated mapping loses the gate, records nothing
+
+        Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("payroll.value"));
+        Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "the generated mapping has not contributed yet");
+
+        // Payroll withdraws its override: its own run (no generated mappings of its own) re-elects HR's
+        // generated mapping as the surviving contributor, and must resolve the resulting pending generation.
+        var payrollCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Directory!.Id);
+        var overrideValue = payrollCso.AttributeValues.Single(av => av.Attribute?.Name == "accountNameOverride");
+        payrollCso.AttributeValues.Remove(overrideValue);
+        await ModifyCsoAsync(payrollCso);
+
+        var payrollActivity = await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "the generated mapping must take over via re-election");
+            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1), "the generated value must be committed to an assignment, not just written to the object");
+            var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
+            Assert.That(assignment.Adopted, Is.False);
+            // ErrorType defaults to NotSet (not null) on every RunProfileExecutionItem, including ones with no
+            // error at all, so "no error" must check the specific generation error types rather than != null
+            // (the same pattern the exhaustion and width tests above use).
+            var generationErrors = payrollActivity.RunProfileExecutionItems
+                .Where(r => r.ErrorType is ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted
+                    or ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded
+                    or ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved)
+                .ToList();
+            Assert.That(generationErrors, Is.Empty,
+                "a pending generation resolved lazily by a system with no generated mappings of its own must not log an error");
+        }
     }
 
     #endregion
@@ -734,6 +854,143 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         return ctx with { Directory = directory, DirectoryCsoTypeId = directoryType.Id };
     }
 
+    /// <summary>
+    /// Builds a cross-system supersession topology (work package G review fix 1): HR's basic generation
+    /// topology (its generated Account Name mapping at priority 2), plus a Directory Connected System that
+    /// JOINS the same Metaverse Object (by Employee Number, HR already projects) and carries an ORDINARY,
+    /// higher-priority (1) Attribute Flow into the same Account Name attribute.
+    /// </summary>
+    private async Task<GenerationContext> SetUpCrossSystemSupersessionScenarioAsync()
+    {
+        var ctx = await SetUpBasicGenerationAsync(generatedMappingPriority: 2);
+
+        var directory = await CreateConnectedSystemAsync("Directory");
+        var directoryType = await CreateCsoTypeAsync(directory.Id, "DirectoryUser", new List<ConnectedSystemObjectTypeAttribute>
+        {
+            new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "accountNameOverride", Type = AttributeDataType.Text, Selected = true }
+        });
+        var directoryEmployeeIdAttr = directoryType.Attributes.Single(a => a.Name == "employeeId");
+        var directoryOverrideAttr = directoryType.Attributes.Single(a => a.Name == "accountNameOverride");
+
+        var directoryImportRule = await CreateImportSyncRuleAsync(directory.Id, directoryType, ctx.MvType, "Directory Import", enableProjection: false);
+        directoryImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = directoryImportRule,
+            SyncRuleId = directoryImportRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = ctx.MvEmployeeIdAttribute,
+            TargetMetaverseAttributeId = ctx.MvEmployeeIdAttributeId,
+            Sources = { new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = directoryEmployeeIdAttr, ConnectedSystemAttributeId = directoryEmployeeIdAttr.Id } }
+        });
+        directoryImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryImportRule,
+            SyncRuleId = directoryImportRule.Id,
+            Priority = 1,
+            TargetMetaverseAttribute = ctx.MvAccountNameAttribute,
+            TargetMetaverseAttributeId = ctx.MvAccountNameAttributeId,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = directoryOverrideAttr, ConnectedSystemAttributeId = directoryOverrideAttr.Id } }
+        });
+
+        await DbContext.SaveChangesAsync();
+
+        return ctx with { Directory = directory, DirectoryCsoTypeId = directoryType.Id };
+    }
+
+    /// <summary>
+    /// Builds <see cref="SetUpAdoptionScenarioAsync"/>'s topology, then swaps the generated Account Name
+    /// attribute (and Directory's export target) to Number, and the generated mapping to a Sequence token
+    /// (work package G review fix 2): proves adopt-before-generate reads a Number/LongNumber target's
+    /// IntValue/LongValue, not just StringValue.
+    /// </summary>
+    private async Task<GenerationContext> SetUpNumericAdoptionScenarioAsync()
+    {
+        var ctx = await SetUpAdoptionScenarioAsync();
+
+        ctx.MvAccountNameAttribute.Type = AttributeDataType.Number;
+
+        var importRule = SyncRepo.SyncRules[ctx.HrImportRuleId];
+        var generatedMapping = importRule.AttributeFlowRules.Single(m => m.Generation != null);
+        generatedMapping.Sources.Clear();
+        generatedMapping.Generation = new SyncRuleMappingGeneration
+        {
+            TokenKind = GeneratedValueTokenKind.Sequence,
+            SequenceStart = 1000,
+            SequenceIncrement = 1,
+            AttemptLimit = 1000,
+            NeverReuse = true
+        };
+
+        var directoryExportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Export);
+        var exportMapping = directoryExportRule.AttributeFlowRules.Single();
+        exportMapping.TargetConnectedSystemAttribute!.Type = AttributeDataType.Number;
+
+        await DbContext.SaveChangesAsync();
+
+        return ctx;
+    }
+
+    /// <summary>
+    /// Builds a re-election topology (work package G review fix 3): HR's generated Account Name mapping
+    /// (priority 2) plus a Payroll Connected System that PROJECTS the object and carries an ordinary,
+    /// higher-priority (1) Account Name Attribute Flow of its own. Payroll has no generated mapping, so its
+    /// own runs build no Unique Value Generation service until a pending generation actually reaches one via
+    /// withdrawal re-election, which is exactly the gap this fix closes. HR only joins (Payroll projects).
+    /// </summary>
+    private async Task<GenerationContext> SetUpReElectedGenerationScenarioAsync()
+    {
+        var ctx = await SetUpBasicGenerationAsync(generatedMappingPriority: 2);
+
+        var payroll = await CreateConnectedSystemAsync("Payroll");
+        var payrollType = await CreateCsoTypeAsync(payroll.Id, "PayrollUser", new List<ConnectedSystemObjectTypeAttribute>
+        {
+            new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "accountNameOverride", Type = AttributeDataType.Text, Selected = true }
+        });
+        var payrollEmployeeIdAttr = payrollType.Attributes.Single(a => a.Name == "employeeId");
+        var payrollOverrideAttr = payrollType.Attributes.Single(a => a.Name == "accountNameOverride");
+
+        var payrollImportRule = await CreateImportSyncRuleAsync(payroll.Id, payrollType, ctx.MvType, "Payroll Import", enableProjection: true);
+        payrollImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = payrollImportRule,
+            SyncRuleId = payrollImportRule.Id,
+            TargetMetaverseAttribute = ctx.MvEmployeeIdAttribute,
+            TargetMetaverseAttributeId = ctx.MvEmployeeIdAttributeId,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = payrollEmployeeIdAttr, ConnectedSystemAttributeId = payrollEmployeeIdAttr.Id } }
+        });
+        payrollImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = payrollImportRule,
+            SyncRuleId = payrollImportRule.Id,
+            Priority = 1,
+            TargetMetaverseAttribute = ctx.MvAccountNameAttribute,
+            TargetMetaverseAttributeId = ctx.MvAccountNameAttributeId,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = payrollOverrideAttr, ConnectedSystemAttributeId = payrollOverrideAttr.Id } }
+        });
+
+        var hrImportRule = SyncRepo.SyncRules[ctx.HrImportRuleId];
+        hrImportRule.ProjectToMetaverse = false;
+        hrImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = hrImportRule,
+            SyncRuleId = hrImportRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = ctx.MvEmployeeIdAttribute,
+            TargetMetaverseAttributeId = ctx.MvEmployeeIdAttributeId,
+            Sources = { new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = ctx.HrEmployeeIdAttribute, ConnectedSystemAttributeId = ctx.HrEmployeeIdAttribute.Id } }
+        });
+
+        await DbContext.SaveChangesAsync();
+
+        return ctx with { Directory = payroll, DirectoryCsoTypeId = payrollType.Id };
+    }
+
     private async Task<ConnectedSystemObject> SeedHrCsoAsync(GenerationContext ctx, string first, string last, string employeeId)
     {
         var hrType = SyncRepo.ObjectTypes[ctx.HrCsoTypeId];
@@ -781,6 +1038,85 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = externalIdAttr.Id, Attribute = externalIdAttr, GuidValue = Guid.NewGuid() });
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = employeeIdAttr.Id, Attribute = employeeIdAttr, StringValue = employeeId });
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = sAMAccountNameAttr.Id, Attribute = sAMAccountNameAttr, StringValue = sAMAccountName });
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+        await Task.CompletedTask;
+        return cso;
+    }
+
+    private async Task<ConnectedSystemObject> SeedDirectoryOverrideCsoAsync(GenerationContext ctx, string employeeId, string accountNameOverride)
+    {
+        var directory = ctx.Directory ?? throw new InvalidOperationException("Context has no Directory system.");
+        var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
+        var externalIdAttr = directoryType.Attributes.Single(a => a.IsExternalId);
+        var employeeIdAttr = directoryType.Attributes.Single(a => a.Name == "employeeId");
+        var overrideAttr = directoryType.Attributes.Single(a => a.Name == "accountNameOverride");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = directory.Id,
+            TypeId = directoryType.Id,
+            Type = directoryType,
+            ConnectedSystem = SyncRepo.ConnectedSystems[directory.Id],
+            Created = DateTime.UtcNow
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = externalIdAttr.Id, Attribute = externalIdAttr, GuidValue = Guid.NewGuid() });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = employeeIdAttr.Id, Attribute = employeeIdAttr, StringValue = employeeId });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = overrideAttr.Id, Attribute = overrideAttr, StringValue = accountNameOverride });
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+        await Task.CompletedTask;
+        return cso;
+    }
+
+    private async Task<ConnectedSystemObject> SeedDirectoryCsoWithNumericAccountNameAsync(GenerationContext ctx, string employeeId, int accountNumber)
+    {
+        var directory = ctx.Directory ?? throw new InvalidOperationException("Context has no Directory system.");
+        var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
+        var externalIdAttr = directoryType.Attributes.Single(a => a.IsExternalId);
+        var employeeIdAttr = directoryType.Attributes.Single(a => a.Name == "employeeId");
+        var sAMAccountNameAttr = directoryType.Attributes.Single(a => a.Name == "sAMAccountName");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = directory.Id,
+            TypeId = directoryType.Id,
+            Type = directoryType,
+            ConnectedSystem = SyncRepo.ConnectedSystems[directory.Id],
+            Created = DateTime.UtcNow
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = externalIdAttr.Id, Attribute = externalIdAttr, GuidValue = Guid.NewGuid() });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = employeeIdAttr.Id, Attribute = employeeIdAttr, StringValue = employeeId });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = sAMAccountNameAttr.Id, Attribute = sAMAccountNameAttr, IntValue = accountNumber });
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+        await Task.CompletedTask;
+        return cso;
+    }
+
+    private async Task<ConnectedSystemObject> SeedPayrollCsoAsync(GenerationContext ctx, string employeeId, string? accountNameOverride)
+    {
+        var payroll = ctx.Directory ?? throw new InvalidOperationException("Context has no Payroll system.");
+        var payrollType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
+        var externalIdAttr = payrollType.Attributes.Single(a => a.IsExternalId);
+        var employeeIdAttr = payrollType.Attributes.Single(a => a.Name == "employeeId");
+        var overrideAttr = payrollType.Attributes.Single(a => a.Name == "accountNameOverride");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = payroll.Id,
+            TypeId = payrollType.Id,
+            Type = payrollType,
+            ConnectedSystem = SyncRepo.ConnectedSystems[payroll.Id],
+            Created = DateTime.UtcNow
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = externalIdAttr.Id, Attribute = externalIdAttr, GuidValue = Guid.NewGuid() });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = employeeIdAttr.Id, Attribute = employeeIdAttr, StringValue = employeeId });
+        if (accountNameOverride != null)
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = overrideAttr.Id, Attribute = overrideAttr, StringValue = accountNameOverride });
 
         SyncRepo.SeedConnectedSystemObject(cso);
         await Task.CompletedTask;

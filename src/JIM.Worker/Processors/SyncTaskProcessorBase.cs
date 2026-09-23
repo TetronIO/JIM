@@ -323,8 +323,11 @@ public abstract class SyncTaskProcessorBase
     /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>, since two generation rows may
     /// target the same attribute with different exclusions, plan decision 3), the participating export
     /// targets: every enabled export mapping in the run's export evaluation cache whose only source is this
-    /// generated Metaverse attribute, minus the systems in the generation's own exclusions. Built once per run
-    /// alongside <see cref="_uniqueValueGenerationServer"/>.
+    /// generated Metaverse attribute, minus the systems in the generation's own exclusions. Populated lazily by
+    /// <see cref="GetOrComputeGenerationParticipatingTargets"/>: eagerly, for this run's own generated mappings,
+    /// by <see cref="PrepareUniqueValueGenerationAsync"/>; on demand, for any other mapping a pending generation
+    /// carries (review fix for work package G: withdrawal re-election can flow a DIFFERENT Connected System's
+    /// generated mapping into this run), the first time <see cref="ResolvePendingGeneratedValuesAsync"/> needs it.
     /// </summary>
     private Dictionary<int, List<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)>>? _generationParticipatingTargets;
 
@@ -335,6 +338,14 @@ public abstract class SyncTaskProcessorBase
     /// disabled, or it fell out of this run's active rule set) is exactly the "mapping disabled ... keeps its
     /// assignment" case (plan: Assignment lifecycle): reconciliation leaves an unmatched assignment alone
     /// rather than guessing at a rule it cannot see.
+    /// <para>
+    /// Deliberately scoped to THIS run's own active rules only, even after
+    /// <see cref="EnsureUniqueValueGenerationServiceBuilt"/> has lazily built the service for a pending
+    /// generation re-elected from another Connected System's rule (review fix for work package G): lifecycle
+    /// reconciliation and page-start prefetch stay keyed to this run's own generated mappings, never widening to
+    /// a mapping this run only resolved in passing, which is what keeps a run with none of its own free to make
+    /// no assignment queries at page start regardless of what a mid-page re-election later hands it.
+    /// </para>
     /// </summary>
     private Dictionary<int, SyncRuleMapping>? _generationMappingsByGenerationId;
 
@@ -383,10 +394,14 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package G) per-run setup: call once, after
     /// <c>_exportEvaluationCache</c> is built and before the page loop starts. Finds this run's enabled
-    /// generated import mappings; when there are none, every later Unique Value Generation step is a no-op and
-    /// this run costs nothing extra (no repository call, no service, no options). Otherwise builds the run's
-    /// <see cref="UniqueValueGenerationServer"/> and <see cref="UniqueValueResolveOptions"/> (reservations =
-    /// the process-wide set, owner = this run's Activity id) and precomputes each generated mapping's
+    /// generated import mappings; when there are none, this call itself costs nothing extra (no repository
+    /// call, no service, no options) and builds neither <see cref="_generationMappingsByGenerationId"/> nor the
+    /// page-start prefetch's precondition, so reconciliation and prefetch both stay no-ops for the rest of the
+    /// run, keyed to this run's own generated mappings only (review fix for work package G: a run whose rules
+    /// have none never queries or reconciles assignments, even after
+    /// <see cref="EnsureUniqueValueGenerationServiceBuilt"/> below has lazily built the service for an unrelated,
+    /// re-elected pending generation). Otherwise eagerly builds the run's <see cref="UniqueValueGenerationServer"/>
+    /// and <see cref="UniqueValueResolveOptions"/> and precomputes each of this run's own generated mappings'
     /// participating export targets.
     /// </summary>
     protected Task PrepareUniqueValueGenerationAsync(List<SyncRule> activeSyncRules)
@@ -399,15 +414,82 @@ public abstract class SyncTaskProcessorBase
         if (generatedImportMappings.Count == 0)
             return Task.CompletedTask;
 
+        EnsureUniqueValueGenerationServiceBuilt();
+        _generationMappingsByGenerationId = new Dictionary<int, SyncRuleMapping>();
+
+        foreach (var mapping in generatedImportMappings)
+        {
+            _generationMappingsByGenerationId[mapping.Generation!.Id] = mapping;
+
+            // Pre-warms the on-demand participating-targets cache for this run's own mappings; a mapping
+            // reached later only via re-election (never one of activeSyncRules) computes and caches its own
+            // entry lazily instead, the first time GetOrComputeGenerationParticipatingTargets sees it.
+            GetOrComputeGenerationParticipatingTargets(mapping);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Lazily builds <see cref="_uniqueValueGenerationServer"/> and <see cref="_uniqueValueResolveOptions"/> on
+    /// first need, idempotently (review fix for work package G). <see cref="PrepareUniqueValueGenerationAsync"/>
+    /// calls this eagerly when the run's own rules carry a generated mapping; <see cref="ResolvePendingGeneratedValuesAsync"/>
+    /// also calls it, unconditionally, the moment it is handed a pending generation to resolve, because
+    /// withdrawal re-election (<see cref="ContributorReElectionService.ReElectSurvivingContributorsAsync"/>) can
+    /// flow a surviving generated mapping from a DIFFERENT Connected System into a run whose own rules have
+    /// none, and that pending generation must still be resolved, not dropped. A run that never sees a pending
+    /// generation, from either source, never calls this, so the zero-cost path is unchanged.
+    /// </summary>
+    private void EnsureUniqueValueGenerationServiceBuilt()
+    {
+        if (_uniqueValueGenerationServer != null)
+            return;
+
         _uniqueValueGenerationServer = new UniqueValueGenerationServer(_syncRepo);
         _uniqueValueResolveOptions = new UniqueValueResolveOptions
         {
             Reservations = _uniqueValueReservations,
             ReservationOwnerId = _activity.Id
         };
+    }
 
-        _generationParticipatingTargets = new Dictionary<int, List<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)>>();
-        _generationMappingsByGenerationId = new Dictionary<int, SyncRuleMapping>();
+    /// <summary>
+    /// Returns <paramref name="mapping"/>'s generation's participating export targets, computing and caching
+    /// them on first request (review fix for work package G): every enabled export mapping this run knows about
+    /// whose only source is <paramref name="mapping"/>'s target Metaverse attribute, minus the generation's own
+    /// exclusions. Computed on demand rather than only for this run's own generated mappings, because a pending
+    /// generation reaching <see cref="ResolvePendingGeneratedValuesAsync"/> via withdrawal re-election can carry
+    /// a DIFFERENT Connected System's generated mapping, which <see cref="PrepareUniqueValueGenerationAsync"/>
+    /// never precomputed for. <paramref name="mapping"/> is the caller's own reference (the engine's
+    /// <see cref="PendingGeneratedValue.Mapping"/>, or this run's own active rule), so no lookup through
+    /// <see cref="_generationMappingsByGenerationId"/> (which stays scoped to this run's own rules; see its own
+    /// remarks) is needed to find it.
+    /// </summary>
+    private List<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)> GetOrComputeGenerationParticipatingTargets(SyncRuleMapping mapping)
+    {
+        var generation = mapping.Generation!;
+        _generationParticipatingTargets ??= new Dictionary<int, List<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)>>();
+
+        if (_generationParticipatingTargets.TryGetValue(generation.Id, out var cached))
+            return cached;
+
+        var targets = ComputeGenerationParticipatingTargets(mapping, generation);
+        _generationParticipatingTargets[generation.Id] = targets;
+        return targets;
+    }
+
+    /// <summary>
+    /// The participating-targets computation itself; see <see cref="GetOrComputeGenerationParticipatingTargets"/>,
+    /// the only caller.
+    /// </summary>
+    private List<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)> ComputeGenerationParticipatingTargets(
+        SyncRuleMapping mapping, SyncRuleMappingGeneration generation)
+    {
+        if (!mapping.TargetMetaverseAttributeId.HasValue)
+            return [];
+
+        var attributeId = mapping.TargetMetaverseAttributeId.Value;
+        var excludedSystemIds = generation.Exclusions.Select(e => e.ConnectedSystemId).ToHashSet();
 
         // Every enabled export mapping this run knows about, whatever Metaverse Object Type it targets: the
         // participation test below is keyed on which single Metaverse attribute the mapping reads, not on the
@@ -415,42 +497,24 @@ public abstract class SyncTaskProcessorBase
         var exportRuleLists = _exportEvaluationCache != null
             ? _exportEvaluationCache.ExportRulesByMvoTypeId.Values
             : Enumerable.Empty<List<SyncRule>>();
-        var allExportMappings = exportRuleLists
+
+        // A participating target's export mapping has exactly one source, and that source reads this
+        // generated attribute directly. An expression mapping that reads the value via mv["..."] is
+        // deliberately NOT a participating target in this release (Metaverse-Derived Attribute Flows,
+        // release 2, is what makes that safe to detect); the plan's own words: "Expression export mappings
+        // that read the attribute through mv[\"...\"] are not participating targets in this release".
+        return exportRuleLists
             .SelectMany(rules => rules)
             .Where(sr => sr.Enabled)
             .SelectMany(sr => sr.AttributeFlowRules
                 .Where(m => m.Enabled && m.TargetConnectedSystemAttributeId.HasValue)
                 .Select(m => (Rule: sr, Mapping: m)))
+            .Where(x => !excludedSystemIds.Contains(x.Rule.ConnectedSystemId)
+                && x.Mapping.Sources.Count == 1
+                && x.Mapping.Sources[0].MetaverseAttributeId == attributeId)
+            .Select(x => (ConnectedSystemId: x.Rule.ConnectedSystemId, ConnectedSystemObjectTypeAttributeId: x.Mapping.TargetConnectedSystemAttributeId!.Value))
+            .Distinct()
             .ToList();
-
-        foreach (var mapping in generatedImportMappings)
-        {
-            var generation = mapping.Generation!;
-            _generationMappingsByGenerationId[generation.Id] = mapping;
-
-            if (!mapping.TargetMetaverseAttributeId.HasValue)
-                continue;
-
-            var attributeId = mapping.TargetMetaverseAttributeId.Value;
-            var excludedSystemIds = generation.Exclusions.Select(e => e.ConnectedSystemId).ToHashSet();
-
-            // A participating target's export mapping has exactly one source, and that source reads this
-            // generated attribute directly. An expression mapping that reads the value via mv["..."] is
-            // deliberately NOT a participating target in this release (Metaverse-Derived Attribute Flows,
-            // release 2, is what makes that safe to detect); the plan's own words: "Expression export mappings
-            // that read the attribute through mv[\"...\"] are not participating targets in this release".
-            var targets = allExportMappings
-                .Where(x => !excludedSystemIds.Contains(x.Rule.ConnectedSystemId)
-                    && x.Mapping.Sources.Count == 1
-                    && x.Mapping.Sources[0].MetaverseAttributeId == attributeId)
-                .Select(x => (ConnectedSystemId: x.Rule.ConnectedSystemId, ConnectedSystemObjectTypeAttributeId: x.Mapping.TargetConnectedSystemAttributeId!.Value))
-                .Distinct()
-                .ToList();
-
-            _generationParticipatingTargets[generation.Id] = targets;
-        }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -1846,7 +1910,7 @@ public abstract class SyncTaskProcessorBase
             // the object, reconcile the lifecycle of any generated attribute it holds a live assignment for
             // (plan: Assignment lifecycle row 3). Must run after ApplyPendingMetaverseObjectAttributeChanges,
             // which is what settles the object's final AttributeValues for this pass.
-            ReconcileGeneratedValueAssignmentLifecycle(connectedSystemObject.MetaverseObject, changedAttributes);
+            ReconcileGeneratedValueAssignmentLifecycle(connectedSystemObject.MetaverseObject);
 
             // Queue MVO for batch persistence at end of page (reduces database round trips)
             if (connectedSystemObject.MetaverseObject.Id == Guid.Empty)
@@ -1903,6 +1967,15 @@ public abstract class SyncTaskProcessorBase
     /// failure kind. Always clears <see cref="MetaverseObject.PendingGeneratedValues"/> in a <c>finally</c>, so
     /// a resolved (or explicitly failed) request never survives to the persistence integrity guard in
     /// <see cref="PersistPendingMetaverseObjectsAsync"/>.
+    /// <para>
+    /// Builds the Unique Value Generation service lazily, via <see cref="EnsureUniqueValueGenerationServiceBuilt"/>,
+    /// rather than assuming <see cref="PrepareUniqueValueGenerationAsync"/> already built it (review fix for
+    /// work package G): a pending generation reaching this method does not always come from this run's own
+    /// rules. Withdrawal re-election (<see cref="ContributorReElectionService.ReElectSurvivingContributorsAsync"/>)
+    /// can flow a surviving generated mapping from a DIFFERENT Connected System's rule into this run, and a run
+    /// whose own rules have none built no service at all for it to use. Before this fix, that case logged an
+    /// error and silently cleared the pending request, leaving the attribute blank.
+    /// </para>
     /// </summary>
     /// <returns>
     /// One (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c> result, for the
@@ -1915,18 +1988,9 @@ public abstract class SyncTaskProcessorBase
     {
         var forRpei = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, string, string)>();
 
-        // Defensive: PrepareUniqueValueGenerationAsync only leaves PendingGeneratedValues non-empty when the
-        // run's active rules genuinely include a generated mapping, so the service is never null here in
-        // practice. Guard anyway so a future caller reaching this state with the service unbuilt fails safe
-        // (clears the pending requests) rather than throwing a NullReferenceException mid-page.
-        if (_uniqueValueGenerationServer == null || _uniqueValueResolveOptions == null)
-        {
-            Log.Error("ResolvePendingGeneratedValuesAsync: MVO {MvoId} has {Count} pending generated value(s) but " +
-                "this run built no Unique Value Generation service; clearing without resolving.",
-                mvo.Id, mvo.PendingGeneratedValues.Count);
-            mvo.PendingGeneratedValues.Clear();
-            return forRpei;
-        }
+        EnsureUniqueValueGenerationServiceBuilt();
+        var generationServer = _uniqueValueGenerationServer!;
+        var resolveOptions = _uniqueValueResolveOptions!;
 
         var pendingValues = mvo.PendingGeneratedValues.ToList();
         try
@@ -1937,9 +2001,7 @@ public abstract class SyncTaskProcessorBase
                 var generation = pending.Mapping.Generation!;
                 var targetAttribute = pending.Mapping.TargetMetaverseAttribute!;
 
-                List<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)> participatingTargets = [];
-                if (_generationParticipatingTargets != null && _generationParticipatingTargets.TryGetValue(generation.Id, out var foundTargets))
-                    participatingTargets = foundTargets;
+                var participatingTargets = GetOrComputeGenerationParticipatingTargets(pending.Mapping);
 
                 var connectorSpaceAttributeIds = participatingTargets
                     .Select(t => t.ConnectedSystemObjectTypeAttributeId)
@@ -1951,7 +2013,7 @@ public abstract class SyncTaskProcessorBase
                 // resolves as Sticky regardless, so the query below would be wasted work.
                 string? adoptableValue = null;
                 if (mvo.Id != Guid.Empty && !pending.BaseUnavailable && connectorSpaceAttributeIds.Count > 0
-                    && !_uniqueValueResolveOptions.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
+                    && !resolveOptions.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
                 {
                     adoptableValue = await FindAdoptableGeneratedValueAsync(mvo.Id, participatingTargets);
                 }
@@ -1972,7 +2034,7 @@ public abstract class SyncTaskProcessorBase
                 });
             }
 
-            var outcomes = await _uniqueValueGenerationServer.ResolveAsync(requests, _uniqueValueResolveOptions);
+            var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
 
             for (var i = 0; i < outcomes.Count; i++)
             {
@@ -2057,10 +2119,31 @@ public abstract class SyncTaskProcessorBase
         {
             var cso = csoLookup[(metaverseObjectId, connectedSystemId)];
             var value = attributeValues.FirstOrDefault(v => v.ConnectedSystemObject.Id == cso.Id && v.AttributeId == attributeId);
-            if (value != null && !string.IsNullOrEmpty(value.StringValue))
-                return value.StringValue;
+            var rendered = value == null ? null : RenderAdoptableConnectedSystemValue(value);
+            if (!string.IsNullOrEmpty(rendered))
+                return rendered;
         }
 
+        return null;
+    }
+
+    /// <summary>
+    /// Renders a Connected System Object attribute value as the text an adopt-before-generate candidate needs
+    /// (review fix for work package G): a Number or LongNumber participating target holds its value in
+    /// <see cref="ConnectedSystemObjectAttributeValue.IntValue"/>/<see cref="ConnectedSystemObjectAttributeValue.LongValue"/>,
+    /// never <see cref="ConnectedSystemObjectAttributeValue.StringValue"/>, so reading only <c>StringValue</c>
+    /// (as before this fix) meant a numeric target never adopted. <see cref="GenerationRequest.AdoptableValue"/>
+    /// is a string regardless of target type; the caller's <c>TryParseNumeric</c> renders it back to a number
+    /// for a Number/LongNumber target when building the outcome.
+    /// </summary>
+    private static string? RenderAdoptableConnectedSystemValue(ConnectedSystemObjectAttributeValue value)
+    {
+        if (!string.IsNullOrEmpty(value.StringValue))
+            return value.StringValue;
+        if (value.IntValue.HasValue)
+            return value.IntValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (value.LongValue.HasValue)
+            return value.LongValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return null;
     }
 
@@ -2082,20 +2165,27 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package G) page-flush lifecycle reconciliation (plan:
-    /// Assignment lifecycle row 3): for each generated attribute <paramref name="mvo"/> has a live assignment
-    /// for in the run cache, if this pass touched the attribute (it appears in <paramref name="changedAttributes"/>)
-    /// and the object's post-pass effective value for it no longer equals the assignment's value, or its
-    /// contributing Synchronisation Rule is no longer the generating mapping's rule, the assignment no longer
-    /// belongs to the object and its id is queued for deletion (flushed by
-    /// <see cref="FlushGeneratedValueAssignmentDeletionsAsync"/> after the page persists). An untouched
-    /// attribute is never examined, so an object with no generated attribute changes costs nothing. A
-    /// generation row not found in <see cref="_generationMappingsByGenerationId"/> (its mapping is disabled,
+    /// Assignment lifecycle row 3): for every generated attribute <paramref name="mvo"/> has a live assignment
+    /// for in the run cache, if the object's post-pass effective value for it no longer equals the assignment's
+    /// value, or its contributing Synchronisation Rule is no longer the generating mapping's rule, the
+    /// assignment no longer belongs to the object and its id is queued for deletion (flushed by
+    /// <see cref="FlushGeneratedValueAssignmentDeletionsAsync"/> after the page persists).
+    /// <para>
+    /// Examines every known assignment on every call, not only ones whose attribute this pass touched (review
+    /// fix for work package G): the page prefetch already holds them in memory, so this costs no query, and it
+    /// is what closes the cross-system case, where a DIFFERENT Connected System's run supersedes the value.
+    /// That other system's own run cannot reconcile the stale assignment (its rule is outside this method's
+    /// generation-mapping cache, so it is exempted below), but the GENERATING system's next synchronisation of
+    /// the object sees the value is now contributed by another rule and deletes it, even though this pass never
+    /// touched the attribute at all (the generating mapping lost the priority gate and wrote nothing).
+    /// </para>
+    /// A generation row not found in <see cref="_generationMappingsByGenerationId"/> (its mapping is disabled,
     /// its rule is disabled, or it is outside this run's active rule set) has no live generation context to
     /// compare against, so its assignment is left untouched ("mapping disabled ... keeps its assignment").
     /// An object awaiting deletion under a grace period likewise keeps every assignment: nothing it still
     /// holds is being superseded, it is only waiting to be recalled or removed as a whole.
     /// </summary>
-    private void ReconcileGeneratedValueAssignmentLifecycle(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
+    private void ReconcileGeneratedValueAssignmentLifecycle(MetaverseObject mvo)
     {
         if (_uniqueValueResolveOptions == null || mvo.Id == Guid.Empty || mvo.IsPendingDeletion)
             return;
@@ -2104,13 +2194,10 @@ public abstract class SyncTaskProcessorBase
         if (assignments.Count == 0)
             return;
 
-        var touchedAttributeIds = changedAttributes.Select(av => av.AttributeId).ToHashSet();
-
-        // Only an assignment whose attribute was touched this pass, and whose generating mapping is still live
-        // in this run's active rule set, is a candidate for reconciliation (a generation absent here is exactly
-        // the "mapping disabled ... keeps its assignment" case, handled by never becoming a candidate at all).
+        // Every known assignment whose generating mapping is still live in this run's active rule set is a
+        // candidate for reconciliation (a generation absent here is exactly the "mapping disabled ... keeps its
+        // assignment" case, handled by never becoming a candidate at all).
         var candidates = assignments
-            .Where(a => a.MetaverseAttributeId.HasValue && touchedAttributeIds.Contains(a.MetaverseAttributeId.Value))
             .Select(a => (Assignment: a, Mapping: _generationMappingsByGenerationId?.GetValueOrDefault(a.SyncRuleMappingGenerationId)))
             .Where(x => x.Mapping != null);
 
