@@ -659,7 +659,7 @@ namespace JIM.Application.Servers
             {
                 Log.Error(ex, "TryAdvanceScheduleExecutionAsync: Error advancing execution {ExecutionId} after step {StepIndex}",
                     scheduleExecutionId, completedStepIndex);
-                // Don't rethrow — the task itself completed successfully. The scheduler safety net
+                // Don't rethrow: the task itself completed successfully. The scheduler safety net
                 // will recover stuck executions if this advancement fails.
             }
         }

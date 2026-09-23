@@ -1018,7 +1018,7 @@ public class SchedulerServer
             return false;
         }
 
-        // Cancel all tasks — processing tasks are signalled for graceful cancellation,
+        // Cancel all tasks: processing tasks are signalled for graceful cancellation,
         // queued/waiting tasks are cancelled and removed immediately.
         var tasks = await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(executionId);
         var immediatelyCancelled = 0;
@@ -1027,7 +1027,7 @@ public class SchedulerServer
         {
             if (task.Status == WorkerTaskStatus.Processing)
             {
-                // Task is actively being processed by the worker — signal it for cancellation.
+                // Task is actively being processed by the worker; signal it for cancellation.
                 task.Status = WorkerTaskStatus.CancellationRequested;
                 await Application.Repository.Tasking.UpdateWorkerTaskAsync(task);
                 signalledForCancellation++;
