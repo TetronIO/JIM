@@ -501,48 +501,19 @@ public abstract class SyncTaskProcessorBase
         if (_generationParticipatingTargets.TryGetValue(generation.Id, out var cached))
             return cached;
 
-        var targets = ComputeGenerationParticipatingTargets(mapping, generation);
+        // Every enabled export mapping this run knows about, whatever Metaverse Object Type it targets: the
+        // shared helper's participation test is keyed on which single Metaverse attribute a mapping reads, not
+        // on the generated mapping's own object type, so there is no benefit to pre-filtering by type here.
+        // Computation itself (single-source export mappings only, exclusions removed, per plan decision 3)
+        // lives in JIM.Application/UniqueValues/GeneratedValueParticipation, so Sync Preview shares the exact
+        // same semantics rather than reimplementing (or omitting) them (#242, Phase 2 work package J).
+        var exportRules = _exportEvaluationCache != null
+            ? _exportEvaluationCache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules)
+            : Enumerable.Empty<SyncRule>();
+
+        var targets = GeneratedValueParticipation.ComputeParticipatingTargets(mapping, exportRules);
         _generationParticipatingTargets[generation.Id] = targets;
         return targets;
-    }
-
-    /// <summary>
-    /// The participating-targets computation itself; see <see cref="GetOrComputeGenerationParticipatingTargets"/>,
-    /// the only caller.
-    /// </summary>
-    private List<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)> ComputeGenerationParticipatingTargets(
-        SyncRuleMapping mapping, SyncRuleMappingGeneration generation)
-    {
-        if (!mapping.TargetMetaverseAttributeId.HasValue)
-            return [];
-
-        var attributeId = mapping.TargetMetaverseAttributeId.Value;
-        var excludedSystemIds = generation.Exclusions.Select(e => e.ConnectedSystemId).ToHashSet();
-
-        // Every enabled export mapping this run knows about, whatever Metaverse Object Type it targets: the
-        // participation test below is keyed on which single Metaverse attribute the mapping reads, not on the
-        // generated mapping's own object type, so there is no benefit to pre-filtering by type here.
-        var exportRuleLists = _exportEvaluationCache != null
-            ? _exportEvaluationCache.ExportRulesByMvoTypeId.Values
-            : Enumerable.Empty<List<SyncRule>>();
-
-        // A participating target's export mapping has exactly one source, and that source reads this
-        // generated attribute directly. An expression mapping that reads the value via mv["..."] is
-        // deliberately NOT a participating target in this release (Metaverse-Derived Attribute Flows,
-        // release 2, is what makes that safe to detect); the plan's own words: "Expression export mappings
-        // that read the attribute through mv[\"...\"] are not participating targets in this release".
-        return exportRuleLists
-            .SelectMany(rules => rules)
-            .Where(sr => sr.Enabled)
-            .SelectMany(sr => sr.AttributeFlowRules
-                .Where(m => m.Enabled && m.TargetConnectedSystemAttributeId.HasValue)
-                .Select(m => (Rule: sr, Mapping: m)))
-            .Where(x => !excludedSystemIds.Contains(x.Rule.ConnectedSystemId)
-                && x.Mapping.Sources.Count == 1
-                && x.Mapping.Sources[0].MetaverseAttributeId == attributeId)
-            .Select(x => (ConnectedSystemId: x.Rule.ConnectedSystemId, ConnectedSystemObjectTypeAttributeId: x.Mapping.TargetConnectedSystemAttributeId!.Value))
-            .Distinct()
-            .ToList();
     }
 
     /// <summary>
@@ -859,6 +830,25 @@ public abstract class SyncTaskProcessorBase
                             existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null), changeResult);
                     }
 
+                    // Defensive parity with the new-RPEI branch below (#242, Phase 2 work package J): record a
+                    // re-elected generated mapping's outcome as a child of the existing root outcome, exactly as
+                    // the ordinary Attribute Flow path records one. Not gated to Detailed mode: a generated value
+                    // is as much an audit signal as the MvoDeletionScheduled case below.
+                    if (changeResult.GeneratedValueOutcomes is { Count: > 0 })
+                    {
+                        var existingRootForGeneratedValues = existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null);
+                        if (existingRootForGeneratedValues != null)
+                        {
+                            foreach (var (generatedOutcomeType, attributeName, value) in changeResult.GeneratedValueOutcomes)
+                            {
+                                SyncOutcomeBuilder.AddChildOutcome(existingRpei, existingRootForGeneratedValues, generatedOutcomeType,
+                                    targetEntityId: changeResult.DisconnectedMvoId,
+                                    targetEntityDescription: changeResult.DisconnectedMvoDisplayName,
+                                    detailMessage: $"{attributeName}: {value}");
+                            }
+                        }
+                    }
+
                     // Defensive parity with the new-RPEI branch below (#1570): surface values preserved because no
                     // import source remains. Outside the recall guard above, because a wholly preserved
                     // disconnection stages no removals at all and would otherwise be silent.
@@ -957,6 +947,23 @@ public abstract class SyncTaskProcessorBase
                             detailCount: rootDetailCount,
                             syncRuleId: changeResult.SyncRuleId,
                             syncRuleName: changeResult.SyncRuleName);
+
+                        // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned or
+                        // GeneratedValueAdopted child per resolved attribute from a re-elected survivor's own
+                        // generated mapping, mirroring exactly where the ordinary Attribute Flow path records
+                        // them: a child of the root, alongside (not nested inside) the AttributeFlow child
+                        // below. Not gated to Detailed mode, since a generated value is as much an audit signal
+                        // here as it is in the ordinary path.
+                        if (changeResult.GeneratedValueOutcomes is { Count: > 0 })
+                        {
+                            foreach (var (generatedOutcomeType, attributeName, value) in changeResult.GeneratedValueOutcomes)
+                            {
+                                SyncOutcomeBuilder.AddChildOutcome(runProfileExecutionItem, rootOutcome, generatedOutcomeType,
+                                    targetEntityId: mvoId,
+                                    targetEntityDescription: mvoDescription,
+                                    detailMessage: $"{attributeName}: {value}");
+                            }
+                        }
 
                         // A pure join (no accompanying Attribute Flow) that cancelled a previously scheduled
                         // deletion (#1620). Not gated to Detailed mode, matching MvoDeletionScheduled's own
@@ -2055,7 +2062,7 @@ public abstract class SyncTaskProcessorBase
                 if (mvo.Id != Guid.Empty && !pending.BaseUnavailable && connectorSpaceAttributeIds.Count > 0
                     && !resolveOptions.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
                 {
-                    adoptableValue = await FindAdoptableGeneratedValueAsync(mvo.Id, participatingTargets);
+                    adoptableValue = await GeneratedValueParticipation.FindAdoptableValueAsync(_syncRepo, mvo.Id, participatingTargets);
                 }
 
                 requests.Add(new GenerationRequest
@@ -2129,62 +2136,6 @@ public abstract class SyncTaskProcessorBase
         }
 
         return forRpei;
-    }
-
-    /// <summary>
-    /// Adopt before generate's value lookup (FR 30): the first non-empty value <paramref name="metaverseObjectId"/>'s
-    /// joined Connected System Objects already hold, among <paramref name="participatingTargets"/>, in ascending
-    /// Connected System id order. Costs two batched queries (never one per target), and only runs at all when
-    /// the caller has already decided there is something worth checking.
-    /// </summary>
-    private async Task<string?> FindAdoptableGeneratedValueAsync(
-        Guid metaverseObjectId, IReadOnlyList<(int ConnectedSystemId, int ConnectedSystemObjectTypeAttributeId)> participatingTargets)
-    {
-        var targetSystemIds = participatingTargets.Select(t => t.ConnectedSystemId).Distinct().ToList();
-        var csoLookup = await _syncRepo.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync([metaverseObjectId], targetSystemIds);
-        if (csoLookup.Count == 0)
-            return null;
-
-        var joined = participatingTargets
-            .Where(t => csoLookup.ContainsKey((metaverseObjectId, t.ConnectedSystemId)))
-            .OrderBy(t => t.ConnectedSystemId)
-            .ToList();
-        if (joined.Count == 0)
-            return null;
-
-        var csoIds = joined.Select(t => csoLookup[(metaverseObjectId, t.ConnectedSystemId)].Id).Distinct().ToList();
-        var attributeValues = await _syncRepo.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
-
-        foreach (var (connectedSystemId, attributeId) in joined)
-        {
-            var cso = csoLookup[(metaverseObjectId, connectedSystemId)];
-            var value = attributeValues.FirstOrDefault(v => v.ConnectedSystemObject.Id == cso.Id && v.AttributeId == attributeId);
-            var rendered = value == null ? null : RenderAdoptableConnectedSystemValue(value);
-            if (!string.IsNullOrEmpty(rendered))
-                return rendered;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Renders a Connected System Object attribute value as the text an adopt-before-generate candidate needs
-    /// (review fix for work package G): a Number or LongNumber participating target holds its value in
-    /// <see cref="ConnectedSystemObjectAttributeValue.IntValue"/>/<see cref="ConnectedSystemObjectAttributeValue.LongValue"/>,
-    /// never <see cref="ConnectedSystemObjectAttributeValue.StringValue"/>, so reading only <c>StringValue</c>
-    /// (as before this fix) meant a numeric target never adopted. <see cref="GenerationRequest.AdoptableValue"/>
-    /// is a string regardless of target type; the caller's <c>TryParseNumeric</c> renders it back to a number
-    /// for a Number/LongNumber target when building the outcome.
-    /// </summary>
-    private static string? RenderAdoptableConnectedSystemValue(ConnectedSystemObjectAttributeValue value)
-    {
-        if (!string.IsNullOrEmpty(value.StringValue))
-            return value.StringValue;
-        if (value.IntValue.HasValue)
-            return value.IntValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (value.LongValue.HasValue)
-            return value.LongValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return null;
     }
 
     /// <summary>
@@ -5597,17 +5548,17 @@ public abstract class SyncTaskProcessorBase
         if (priorityContext == null || mvo.Type == null)
             return [];
 
-        // Unique Value Generation (#242, Phase 2 work package H fix): a re-elected survivor's own mapping can
-        // be a generated one; resolve it inline through this run's own Unique Value Generation context
-        // (outcomes and errors attributed to the leaver) so it lands in mvo.PendingAttributeValueAdditions
-        // before either caller of this wrapper captures the additions/removals for change tracking and
-        // export evaluation.
-        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomes = null;
-
         // The reusable core lives in JIM.Application (#1537 extraction) so the rule-deletion recall task can
         // share it; this scope reproduces the obsoletion semantics exactly (the leaver's whole system is
         // excluded, because its other enabled rules were already evaluated in this pass's ordinary flow).
-        await ContributorReElectionService.ReElectSurvivingContributorsAsync(
+        // Unique Value Generation (#242, Phase 2 work package H fix, plumbing simplified in work package J): a
+        // re-elected survivor's own mapping can be a generated one; resolve it inline through this run's own
+        // Unique Value Generation context (outcomes and errors attributed to the leaver) so it lands in
+        // mvo.PendingAttributeValueAdditions before either caller of this wrapper captures the
+        // additions/removals for change tracking and export evaluation. The core's own return value (work
+        // package J) is exactly this method's return value, since a leaver's re-election has nothing else to
+        // add to it.
+        return await ContributorReElectionService.ReElectSurvivingContributorsAsync(
             mvo,
             recalledValues,
             ContributorRecallScope.ForObsoletingConnectedSystemObject(leaver),
@@ -5617,9 +5568,7 @@ public abstract class SyncTaskProcessorBase
             _syncServer.IsCsoInScopeForImportRule,
             _objectTypes,
             _expressionEvaluator,
-            resolvePendingGeneratedValues: async resolvedMvo => generatedValueOutcomes = await ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo));
-
-        return generatedValueOutcomes ?? [];
+            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo));
     }
 
     /// <summary>
@@ -5780,6 +5729,7 @@ public abstract class SyncTaskProcessorBase
                 var preservedNoSourceAttributeCount = 0;
                 List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
                 List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null;
+                List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomes = null;
                 var mvoDeletionPending = mvoDeletionFate == MvoDeletionFate.DeletionScheduled || mvo.DeletionEligibleDate != null;
                 var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
@@ -5799,8 +5749,11 @@ public abstract class SyncTaskProcessorBase
                     // lower-priority contributor for the recalled attributes so a source falling out of scope
                     // hands the attribute to the next source rather than blanking it. See
                     // ReElectSurvivingContributorsAsync for the election mechanics; an attribute with no other
-                    // contributor is still cleared (the survivor re-flow adds nothing for it).
-                    await ReElectSurvivingContributorsAsync(mvo, contributedAttributes, connectedSystemObject);
+                    // contributor is still cleared (the survivor re-flow adds nothing for it). Its return value
+                    // (Unique Value Generation, #242, Phase 2 work package J) is carried back on the result so
+                    // the caller can record it as a GeneratedValueAssigned/GeneratedValueAdopted child outcome,
+                    // exactly as the ordinary Attribute Flow path does.
+                    generatedValueOutcomes = await ReElectSurvivingContributorsAsync(mvo, contributedAttributes, connectedSystemObject);
 
                     _remainingImportSourceEvaluator ??= new RemainingImportSourceEvaluator(_syncRepo);
                     var noImportSourceRemains = mvo.Type != null
@@ -5896,7 +5849,8 @@ public abstract class SyncTaskProcessorBase
                     // The MVO has been marked by this point, so its computed due date is the
                     // decision-time value the outcome node should state (#119).
                     mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
-                    preservedNoSourceAttributeCount: preservedNoSourceAttributeCount);
+                    preservedNoSourceAttributeCount: preservedNoSourceAttributeCount,
+                    generatedValueOutcomes: generatedValueOutcomes);
         }
     }
 

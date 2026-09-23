@@ -601,6 +601,161 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             "DisplayName, EmployeeId and Description are all cleared with no survivor");
     }
 
+    [Test]
+    public async Task ScopeExit_SurvivingContributorIsGenerated_ResolvesAndRecordsGeneratedValueOutcomeAsync()
+    {
+        // Unique Value Generation (#242, Phase 2 work package J): the surviving Training contributor re-elected
+        // by HandleCsoOutOfScopeAsync's recall carries a GENERATED mapping, not an ordinary Attribute Flow one.
+        // The worker's resolver must be given the chance to generate the value (it already was, per work
+        // package H), AND the resulting GeneratedValueAssigned/Adopted outcome must be recorded under the
+        // DisconnectedOutOfScope root, exactly as the ordinary Attribute Flow path records one - before this
+        // fix, ReElectSurvivingContributorsAsync's return value was discarded at this call site.
+        var ctx = await SetUpScopedHrWithGeneratedTrainingSurvivorAsync();
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(description?.StringValue, Is.EqualTo(HrDescription), "HR (priority 1) should win Description while in scope");
+
+        await PushHrOutOfScopeAsync(ctx);
+        var fullSync2Activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        Assert.That(fullSync2Activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "scope-exit re-election of a generated survivor must complete without unhandled errors");
+
+        mvo = SyncRepo.MetaverseObjects[mvo.Id];
+        var reElected = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(reElected, Is.Not.Null,
+            "Description must not be blanked: the surviving Training contributor's generated mapping should be re-elected");
+        Assert.That(reElected!.StringValue, Is.EqualTo("trn-generated"));
+
+        var outOfScopeRpei = fullSync2Activity.RunProfileExecutionItems
+            .SingleOrDefault(r => r.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope);
+        Assert.That(outOfScopeRpei, Is.Not.Null, "the scope exit should produce a DisconnectedOutOfScope RPEI");
+
+        var rootOutcome = outOfScopeRpei!.SyncOutcomes.SingleOrDefault(o => o.ParentSyncOutcome == null);
+        Assert.That(rootOutcome, Is.Not.Null, "the RPEI should have a root sync outcome");
+
+        var generatedOutcome = rootOutcome!.Children
+            .SingleOrDefault(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
+        Assert.That(generatedOutcome, Is.Not.Null,
+            "the re-elected generated mapping's outcome must be recorded under the DisconnectedOutOfScope root, not discarded");
+        Assert.That(generatedOutcome!.DetailMessage, Is.EqualTo("Description: trn-generated"));
+    }
+
+    /// <summary>
+    /// HR (scoped via ScopeFlag) contributes Description via an ordinary mapping at priority 1; Training joins
+    /// on EmployeeId and contributes Description via a GENERATED mapping at priority 2 (base Expression a
+    /// fixed literal, so the candidate is deterministic). Used only by the generated-survivor scope-exit test
+    /// above; the sibling <see cref="TwoContributorScopedContext"/> fixtures use an ordinary mapping for
+    /// Training instead.
+    /// </summary>
+    private async Task<TwoContributorScopedContext> SetUpScopedHrWithGeneratedTrainingSurvivorAsync()
+    {
+        // --- HR source: primary, recall enabled, scoped via ScopeFlag ---
+        var hrSystem = await CreateConnectedSystemAsync("HR Source");
+        var hrExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var hrEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var hrDescriptionAttr = new ConnectedSystemObjectTypeAttribute { Name = "HrDescription", Type = AttributeDataType.Text, Selected = true };
+        var hrScopeFlagAttr = new ConnectedSystemObjectTypeAttribute { Name = "ScopeFlag", Type = AttributeDataType.Text, Selected = true };
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "HrUser",
+            new List<ConnectedSystemObjectTypeAttribute> { hrExternalIdAttr, hrEmployeeIdAttr, hrDescriptionAttr, hrScopeFlagAttr });
+        hrType.RemoveContributedAttributesOnObsoletion = true;
+
+        // --- Training source: supplemental, joins on EmployeeId, contributes Description via a generated mapping ---
+        var trainingSystem = await CreateConnectedSystemAsync("Training Source");
+        trainingSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var trainingExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var trainingEmployeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var trainingType = await CreateCsoTypeAsync(trainingSystem.Id, "TrainingRecord",
+            new List<ConnectedSystemObjectTypeAttribute> { trainingExternalIdAttr, trainingEmployeeIdAttr });
+
+        // --- MV type with Description ---
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+        var mvDescriptionAttr = new MetaverseAttribute
+        {
+            Name = "Description",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(mvDescriptionAttr);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(mvDescriptionAttr);
+
+        // --- HR import rule: EmployeeId, Description@1, scoped on ScopeFlag == "InScope" ---
+        var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvEmployeeIdAttr, hrEmployeeIdAttr));
+        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvDescriptionAttr, hrDescriptionAttr, priority: 1));
+        hrImportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = new List<SyncRuleScopingCriteria>
+            {
+                new()
+                {
+                    ConnectedSystemAttribute = hrScopeFlagAttr,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = "InScope",
+                    CaseSensitive = true
+                }
+            }
+        });
+        await DbContext.SaveChangesAsync();
+
+        // --- Training import rule: Description@2 via a GENERATED mapping (fixed literal base), join on EmployeeId ---
+        var trainingImportRule = await CreateImportSyncRuleAsync(trainingSystem.Id, trainingType, mvType, "Training Import", enableProjection: false);
+        trainingImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = trainingImportRule,
+            SyncRuleId = trainingImportRule.Id,
+            Priority = 2,
+            TargetMetaverseAttribute = mvDescriptionAttr,
+            TargetMetaverseAttributeId = mvDescriptionAttr.Id,
+            Generation = new SyncRuleMappingGeneration
+            {
+                TokenKind = GeneratedValueTokenKind.OnlyIfTaken,
+                AttemptLimit = 1000,
+                NeverReuse = true
+            },
+            Sources = { new SyncRuleMappingSource { Order = 0, Expression = "\"trn-generated\"" } }
+        });
+        trainingImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = trainingImportRule,
+            SyncRuleId = trainingImportRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new() { Order = 0, ConnectedSystemAttribute = trainingEmployeeIdAttr, ConnectedSystemAttributeId = trainingEmployeeIdAttr.Id }
+            }
+        });
+        await DbContext.SaveChangesAsync();
+
+        // --- Source CSOs (sharing an EmployeeId so Training joins HR's projected MVO); HR starts in scope ---
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", SharedEmployeeId);
+        hrCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = hrDescriptionAttr.Id, Attribute = hrDescriptionAttr, StringValue = HrDescription, ConnectedSystemObject = hrCso
+        });
+        hrCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = hrScopeFlagAttr.Id, Attribute = hrScopeFlagAttr, StringValue = "InScope", ConnectedSystemObject = hrCso
+        });
+
+        await CreateCsoAsync(trainingSystem.Id, trainingType, "unused", SharedEmployeeId);
+
+        return new TwoContributorScopedContext(hrSystem, trainingSystem, hrCso, hrScopeFlagAttr, mvType, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
+    }
+
     private sealed record TwoContributorContext(
         ConnectedSystem Hr,
         ConnectedSystem Training,
