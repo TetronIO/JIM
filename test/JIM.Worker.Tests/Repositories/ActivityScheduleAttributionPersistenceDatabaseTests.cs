@@ -52,6 +52,7 @@ public class ActivityScheduleAttributionPersistenceDatabaseTests
     public async Task Activity_WithScheduleAttribution_RoundTripsBothColumnsAsync()
     {
         var scheduleId = Guid.NewGuid();
+        var scheduleStepId = Guid.NewGuid();
         var activityId = Guid.NewGuid();
 
         await using (var write = NewContext())
@@ -65,6 +66,7 @@ public class ActivityScheduleAttributionPersistenceDatabaseTests
                 InitiatedByName = "System",
                 ScheduleExecutionId = Guid.NewGuid(),
                 ScheduleStepIndex = 3,
+                ScheduleStepId = scheduleStepId,
                 ScheduledByScheduleId = scheduleId,
                 ScheduledByScheduleName = "Nightly Sync"
             });
@@ -78,6 +80,8 @@ public class ActivityScheduleAttributionPersistenceDatabaseTests
         {
             Assert.That(persisted.ScheduledByScheduleId, Is.EqualTo(scheduleId), "the Schedule id column must persist");
             Assert.That(persisted.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"), "the Schedule name column must persist");
+            Assert.That(persisted.ScheduleStepId, Is.EqualTo(scheduleStepId),
+                "the Schedule Step column must persist; it tells parallel steps apart (#1768)");
         }
     }
 

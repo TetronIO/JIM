@@ -56,6 +56,7 @@ public class SchedulerServerParallelExecutionTests
         _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepository.Object);
 
         _application = new JimApplication(_mockRepository.Object);
+        _mockSchedulingRepository.EmulateConditionalTransitions();
 
         _capturedTasks = new List<WorkerTask>();
 
@@ -157,23 +158,24 @@ public class SchedulerServerParallelExecutionTests
     public async Task StartScheduleExecution_MixedSequentialAndParallel_AllStepsQueuedUpfrontAsync()
     {
         // Arrange: StepIndex 0 = single (sequential), StepIndex 1 = two parallel steps
-        // All steps are queued upfront: step 0 as Queued, step 1 as WaitingForPreviousStep.
+        // All steps are queued upfront as WaitingForPreviousStep, then step 0 alone is released (#1768).
         var schedule = CreateScheduleWithSteps(
             new StepConfig(StepIndex: 0, ConnectedSystemId: 1, RunProfileId: 100),
             new StepConfig(StepIndex: 1, ConnectedSystemId: 2, RunProfileId: 200),
             new StepConfig(StepIndex: 1, ConnectedSystemId: 3, RunProfileId: 300));
 
         // Act
-        await _application.Scheduler.StartScheduleExecutionAsync(
+        var execution = await _application.Scheduler.StartScheduleExecutionAsync(
             schedule, ActivityInitiatorType.System, null, "Test");
 
         // Assert: All 3 tasks are created
         Assert.That(_capturedTasks, Has.Count.EqualTo(3));
 
-        // Step 0: Sequential, Queued
+        // Step 0: Sequential, created waiting and then released
         var step0Task = (SynchronisationWorkerTask)_capturedTasks.Single(t => ((SynchronisationWorkerTask)t).ConnectedSystemId == 1);
         Assert.That(step0Task.ExecutionMode, Is.EqualTo(WorkerTaskExecutionMode.Sequential));
-        Assert.That(step0Task.Status, Is.EqualTo(WorkerTaskStatus.Queued));
+        Assert.That(step0Task.Status, Is.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
+        _mockSchedulingRepository.Verify(r => r.TryStartScheduleExecutionAsync(execution!, 0), Times.Once);
 
         // Step 1: Parallel, WaitingForPreviousStep
         var step1Tasks = _capturedTasks.Where(t => t.ScheduleStepIndex == 1).Cast<SynchronisationWorkerTask>().ToList();

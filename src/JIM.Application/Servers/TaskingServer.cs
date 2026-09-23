@@ -72,6 +72,10 @@ namespace JIM.Application.Servers
                 activity.ScheduleExecutionId = workerTask.ScheduleExecutionId;
                 activity.ScheduleStepIndex = workerTask.ScheduleStepIndex;
 
+                // Parallel steps share a step index; the step id is what tells their Activities apart when the
+                // scheduler applies the failing step's own Continue On Failure setting (#1768).
+                activity.ScheduleStepId = workerTask.ScheduleStepId;
+
                 // Denormalise the producing Schedule's identity for the same durability reason (issue #1196):
                 // Schedule -> ScheduleExecution cascades on delete, so an Activity that resolved its Schedule through
                 // the execution would lose its attribution the moment the Schedule was deleted. The execution already
@@ -120,16 +124,7 @@ namespace JIM.Application.Servers
 
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
-                var activity = new Activity
-                {
-                    TargetName = runProfile.Name,
-                    TargetContext = connectedSystem?.Name,
-                    TargetType = ActivityTargetType.ConnectedSystemRunProfile,
-                    TargetOperationType = ActivityTargetOperationType.Execute,
-                    ConnectedSystemId = synchronisationWorkerTask.ConnectedSystemId,
-                    ConnectedSystemRunProfileId = runProfile.Id,
-                    ConnectedSystemRunType = runProfile.RunType
-                };
+                var activity = NewRunProfileExecutionActivity(synchronisationWorkerTask.ConnectedSystemId, connectedSystem?.Name, runProfile);
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -297,12 +292,7 @@ namespace JIM.Application.Servers
             {
                 // The Temporal Scope Reconciler sweep (issue #892) is a system-wide maintenance operation not
                 // scoped to a single entity, so it is tracked with a system-targeted activity for audit purposes.
-                var activity = new Activity
-                {
-                    TargetName = "Temporal Scope Reconciliation",
-                    TargetType = ActivityTargetType.TemporalScopeReconciliation,
-                    TargetOperationType = ActivityTargetOperationType.Execute
-                };
+                var activity = NewTemporalScopeReconciliationActivity();
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -314,12 +304,7 @@ namespace JIM.Application.Servers
                 // so it is tracked with a system-targeted Activity, under the same target type the manual and
                 // API-initiated cleanups use. That is what keeps one deployment's retention history in one place
                 // however it was triggered.
-                var activity = new Activity
-                {
-                    TargetName = "History Retention Cleanup",
-                    TargetType = ActivityTargetType.HistoryRetentionCleanup,
-                    TargetOperationType = ActivityTargetOperationType.Delete
-                };
+                var activity = NewHistoryRetentionCleanupActivity();
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
@@ -335,6 +320,87 @@ namespace JIM.Application.Servers
             }
             return WorkerTaskCreationResult.Succeeded(workerTask.Id);
         }
+
+        /// <summary>
+        /// Records a Failed Activity for a Schedule Step whose Worker Task could not be queued (#1768), shaped exactly
+        /// like the Activity the task would have produced and carrying the same Schedule context, so the step's row on
+        /// the Schedule Execution shows it failed and why, and the scheduler's advancement sees it as a failed step.
+        /// </summary>
+        /// <remarks>
+        /// Tolerates the Connected System or Run Profile having gone (the Activity then names whatever still exists)
+        /// rather than referencing a row that does not exist, which would fail the insert.
+        /// </remarks>
+        /// <param name="workerTask">The task that was built for the step but could not be queued.</param>
+        /// <param name="errorMessage">The reason, as the administrator should read it.</param>
+        /// <returns>The Activity recorded.</returns>
+        internal async Task<Activity> RecordWorkerTaskNotQueuedAsync(WorkerTask workerTask, string errorMessage)
+        {
+            var activity = workerTask switch
+            {
+                SynchronisationWorkerTask synchronisationWorkerTask => await NewNotQueuedRunProfileExecutionActivityAsync(synchronisationWorkerTask),
+                TemporalScopeReconciliationWorkerTask => NewTemporalScopeReconciliationActivity(),
+                HistoryRetentionCleanupWorkerTask => NewHistoryRetentionCleanupActivity(),
+                _ => throw new ArgumentException($"A {workerTask.GetType().Name} is not a Schedule Step task.", nameof(workerTask))
+            };
+
+            await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            return activity;
+        }
+
+        /// <summary>
+        /// The Run Profile execution Activity for a task that could not be queued, naming only the Connected System and
+        /// Run Profile that still exist.
+        /// </summary>
+        private async Task<Activity> NewNotQueuedRunProfileExecutionActivityAsync(SynchronisationWorkerTask workerTask)
+        {
+            var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(workerTask.ConnectedSystemId);
+            ConnectedSystemRunProfile? runProfile = null;
+            if (connectedSystem != null)
+            {
+                var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
+                runProfile = runProfiles.SingleOrDefault(rp => rp.Id == workerTask.ConnectedSystemRunProfileId);
+            }
+
+            return NewRunProfileExecutionActivity(connectedSystem?.Id, connectedSystem?.Name, runProfile);
+        }
+
+        /// <summary>
+        /// The Activity a Run Profile execution is recorded under. The one definition, shared by queuing the task and by
+        /// recording a task that could not be queued, so the two read alike in the Activity history.
+        /// </summary>
+        private static Activity NewRunProfileExecutionActivity(int? connectedSystemId, string? connectedSystemName, ConnectedSystemRunProfile? runProfile) => new()
+        {
+            TargetName = runProfile?.Name,
+            TargetContext = connectedSystemName,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemRunProfileId = runProfile?.Id,
+            ConnectedSystemRunType = runProfile?.RunType ?? ConnectedSystemRunType.NotSet
+        };
+
+        /// <summary>
+        /// The Activity a Temporal Scope Reconciliation sweep (issue #892) is recorded under: a system-wide maintenance
+        /// operation not scoped to a single entity.
+        /// </summary>
+        private static Activity NewTemporalScopeReconciliationActivity() => new()
+        {
+            TargetName = "Temporal Scope Reconciliation",
+            TargetType = ActivityTargetType.TemporalScopeReconciliation,
+            TargetOperationType = ActivityTargetOperationType.Execute
+        };
+
+        /// <summary>
+        /// The Activity a History Retention Cleanup pass is recorded under, the same target type the manual and
+        /// API-initiated cleanups use.
+        /// </summary>
+        private static Activity NewHistoryRetentionCleanupActivity() => new()
+        {
+            TargetName = "History Retention Cleanup",
+            TargetType = ActivityTargetType.HistoryRetentionCleanup,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
 
         /// <summary>
         /// Validates that a Connected System has the required partition/container selections, and that the Run Profile
@@ -544,10 +610,15 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
-        /// Called after a schedule-linked worker task completes. Checks if this was the last task
-        /// in the step group and, if so, either advances to the next step or completes the execution.
-        /// Handles failure detection and ContinueOnFailure logic.
+        /// Called after a schedule-linked worker task completes. Once the last task in the step group has gone, hands the
+        /// group to SchedulerServer.ConcludeStepGroupAsync, which stops the Schedule, moves it on to the next step group,
+        /// or completes it; the Scheduler's safety net shares that decision, so the two can never disagree.
         /// </summary>
+        /// <remarks>
+        /// A finished execution stays finished (#1768): if the execution is no longer InProgress (typically because an
+        /// administrator cancelled it while this step was running), nothing is released and its status is left alone.
+        /// Before this check, a step finishing after a cancellation overwrote Cancelled with Complete or Failed.
+        /// </remarks>
         private async Task TryAdvanceScheduleExecutionAsync(Guid scheduleExecutionId, int completedStepIndex)
         {
             try
@@ -563,106 +634,32 @@ namespace JIM.Application.Servers
                     return;
                 }
 
-                // 2. This was the last task in the step group. Check for failures.
-                var activitiesForStep = await Application.Repository.Activity.GetActivitiesByScheduleExecutionStepAsync(
-                    scheduleExecutionId, completedStepIndex);
-
-                var anyFailed = activitiesForStep.Any(a =>
-                    a.Status == ActivityStatus.FailedWithError ||
-                    a.Status == ActivityStatus.CompleteWithError ||
-                    a.Status == ActivityStatus.Cancelled);
-
-                if (anyFailed)
+                // 2. This was the last task in the step group. Only an execution still in progress moves on.
+                var execution = await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(scheduleExecutionId);
+                if (execution == null)
                 {
-                    // Check ContinueOnFailure on the worker tasks' activities. Since worker tasks are deleted,
-                    // we check the ContinueOnFailure value we stored on the completed tasks. But those are also
-                    // deleted now. Instead, we check the schedule steps directly.
-                    // Actually, we need to check ContinueOnFailure from the worker tasks that were at this step.
-                    // Since they're all deleted now, we use the Activities to find the ScheduleExecution,
-                    // then load the Schedule Steps.
-                    var execution = await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(scheduleExecutionId);
-                    if (execution == null)
-                    {
-                        Log.Error("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} not found after step completion.", scheduleExecutionId);
-                        return;
-                    }
-
-                    var stepsAtIndex = execution.Schedule.Steps.Where(s => s.StepIndex == completedStepIndex).ToList();
-                    var shouldStop = stepsAtIndex.Count == 0 || stepsAtIndex.Any(s => !s.ContinueOnFailure);
-
-                    if (shouldStop)
-                    {
-                        var failedStepNames = stepsAtIndex
-                            .Where(s => !s.ContinueOnFailure)
-                            .Select(s => string.IsNullOrEmpty(s.Name) ? $"Step {s.StepIndex}" : s.Name)
-                            .ToList();
-
-                        var stepDescription = failedStepNames.Count > 0
-                            ? string.Join(", ", failedStepNames)
-                            : $"Step index {completedStepIndex}";
-
-                        Log.Warning("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} failed at step {StepIndex} ({StepNames}). ContinueOnFailure is false.",
-                            scheduleExecutionId, completedStepIndex, stepDescription);
-
-                        execution.Status = ScheduleExecutionStatus.Failed;
-                        execution.CompletedAt = DateTime.UtcNow;
-                        execution.ErrorMessage = $"Step '{stepDescription}' failed and ContinueOnFailure is false.";
-                        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
-
-                        // Clean up all remaining WaitingForPreviousStep tasks
-                        var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(scheduleExecutionId);
-                        if (deletedCount > 0)
-                        {
-                            Log.Information("TryAdvanceScheduleExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",
-                                deletedCount, scheduleExecutionId);
-                        }
-
-                        return;
-                    }
-
-                    Log.Information("TryAdvanceScheduleExecutionAsync: Step {StepIndex} of execution {ExecutionId} had failures but ContinueOnFailure is true. Continuing.",
-                        completedStepIndex, scheduleExecutionId);
-                }
-
-                // 3. Find the next waiting step group
-                var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(scheduleExecutionId);
-
-                if (!nextStepIndex.HasValue)
-                {
-                    // No more waiting steps — execution complete
-                    var execution = await Application.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
-                    if (execution != null)
-                    {
-                        Log.Information("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} completed. All steps done.", scheduleExecutionId);
-
-                        execution.Status = ScheduleExecutionStatus.Complete;
-                        execution.CompletedAt = DateTime.UtcNow;
-                        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
-                    }
+                    Log.Error("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} not found after step completion.", scheduleExecutionId);
                     return;
                 }
 
-                // 4. Transition the next step group from WaitingForPreviousStep -> Queued
-                Log.Information("TryAdvanceScheduleExecutionAsync: Advancing execution {ExecutionId} from step {CompletedStep} to step {NextStep}",
-                    scheduleExecutionId, completedStepIndex, nextStepIndex.Value);
-
-                var transitioned = await Application.Repository.Tasking.TransitionStepToQueuedAsync(scheduleExecutionId, nextStepIndex.Value);
-                Log.Information("TryAdvanceScheduleExecutionAsync: Transitioned {Count} tasks to Queued for execution {ExecutionId} step {StepIndex}",
-                    transitioned, scheduleExecutionId, nextStepIndex.Value);
-
-                // 5. Update the execution's current step index
-                var exec = await Application.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
-                if (exec != null)
+                if (execution.Status != ScheduleExecutionStatus.InProgress)
                 {
-                    exec.CurrentStepIndex = nextStepIndex.Value;
-                    await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(exec);
+                    Log.Information("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} is {Status}, so step {StepIndex} finishing changes nothing and no further step is released.",
+                        scheduleExecutionId, execution.Status, completedStepIndex);
+                    return;
                 }
+
+                // 3. Decide from the step group's Activities, which survive the tasks' deletion.
+                var activitiesForStep = await Application.Repository.Activity.GetActivitiesByScheduleExecutionStepAsync(
+                    scheduleExecutionId, completedStepIndex);
+
+                await Application.Scheduler.ConcludeStepGroupAsync(execution, completedStepIndex, activitiesForStep);
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "TryAdvanceScheduleExecutionAsync: Error advancing execution {ExecutionId} after step {StepIndex}",
                     scheduleExecutionId, completedStepIndex);
-                // Don't rethrow — the task itself completed successfully. The scheduler safety net
+                // Don't rethrow: the task itself completed successfully. The scheduler safety net
                 // will recover stuck executions if this advancement fails.
             }
         }

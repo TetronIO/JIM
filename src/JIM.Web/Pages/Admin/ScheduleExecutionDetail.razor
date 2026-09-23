@@ -193,6 +193,14 @@
                             @context.Item.ErrorMessage
                         </MudText>
                     }
+                    @* Why a step that never started was cancelled. An explanation, not an error, so it reads as
+                       secondary text rather than in the error colour. *@
+                    @if (context.Item.Status == ScheduleExecutionStepStatus.Cancelled && !string.IsNullOrWhiteSpace(context.Item.CancellationReason))
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @context.Item.CancellationReason
+                        </MudText>
+                    }
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn T="ScheduleExecutionStepState" Title="Connected System" Sortable="false">

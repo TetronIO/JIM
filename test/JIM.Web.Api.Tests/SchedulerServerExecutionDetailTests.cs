@@ -268,6 +268,80 @@ public class SchedulerServerExecutionDetailTests
         Assert.That(detail!.Steps.Select(s => s.ConnectedSystemId), Is.EqualTo(new int?[] { 99, 5, 20 }));
     }
 
+    /// <summary>
+    /// A step cancelled before it ran says why (#1768), so an administrator can tell "an earlier step stopped the
+    /// Schedule" from "someone cancelled it" without cross-referencing the execution.
+    /// </summary>
+    [TestCase(ScheduleStepNotRunReasons.EarlierStepStoppedSchedule)]
+    [TestCase(ScheduleStepNotRunReasons.ScheduleCouldNotStart)]
+    [TestCase(ScheduleStepNotRunReasons.ExecutionCancelled)]
+    public async Task GetScheduleExecutionDetailAsync_StepCancelledBeforeItRan_CarriesTheReasonAsync(string reason)
+    {
+        var step = NewStep(stepIndex: 1, connectedSystemId: 10, StepExecutionMode.Sequential);
+        var activity = NewActivity(stepIndex: 1, connectedSystemId: 10, ActivityStatus.Cancelled);
+        activity.Message = reason;
+
+        SetUpExecution(NewExecution(), [step], [activity], []);
+
+        var detail = await _application.Scheduler.GetScheduleExecutionDetailAsync(ExecutionId);
+
+        var state = detail!.Steps.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(state.Status, Is.EqualTo(ScheduleExecutionStepStatus.Cancelled));
+            Assert.That(state.CancellationReason, Is.EqualTo(reason));
+            Assert.That(state.ErrorMessage, Is.Null, "a reason for not running is not an error");
+        }
+    }
+
+    /// <summary>
+    /// A step already running when it was cancelled did run, and its Activity's message is whatever progress it last
+    /// reported, which would read as nonsense beneath a cancelled step.
+    /// </summary>
+    [Test]
+    public async Task GetScheduleExecutionDetailAsync_StepCancelledWhileRunning_HasNoReasonAsync()
+    {
+        var step = NewStep(stepIndex: 0, connectedSystemId: 10, StepExecutionMode.Sequential);
+        var activity = NewActivity(stepIndex: 0, connectedSystemId: 10, ActivityStatus.Cancelled);
+        activity.Message = "Importing objects";
+
+        SetUpExecution(NewExecution(), [step], [activity], []);
+
+        var detail = await _application.Scheduler.GetScheduleExecutionDetailAsync(ExecutionId);
+
+        Assert.That(detail!.Steps.Single().CancellationReason, Is.Null);
+    }
+
+    /// <summary>
+    /// Two parallel steps can run against the same Connected System (different Run Profiles). The Connected System
+    /// cannot tell their Activities apart; the step each Activity records can (#1768).
+    /// </summary>
+    [Test]
+    public async Task GetScheduleExecutionDetailAsync_ParallelStepsOnOneConnectedSystem_MatchesEachActivityToItsOwnStepAsync()
+    {
+        var importStep = NewStep(stepIndex: 1, connectedSystemId: 10, StepExecutionMode.Sequential);
+        importStep.RunProfileId = 1;
+        var exportStep = NewStep(stepIndex: 1, connectedSystemId: 10, StepExecutionMode.ParallelWithPrevious);
+        exportStep.RunProfileId = 2;
+
+        var importActivity = NewActivity(stepIndex: 1, connectedSystemId: 10, ActivityStatus.Complete);
+        importActivity.ScheduleStepId = importStep.Id;
+        var exportActivity = NewActivity(stepIndex: 1, connectedSystemId: 10, ActivityStatus.FailedWithError);
+        exportActivity.ScheduleStepId = exportStep.Id;
+
+        // Listed export first, so a match on the Connected System alone would give both steps the export's outcome.
+        SetUpExecution(NewExecution(), [importStep, exportStep], [exportActivity, importActivity], []);
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemRunProfilesAsync(10)).ReturnsAsync([]);
+
+        var detail = await _application.Scheduler.GetScheduleExecutionDetailAsync(ExecutionId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.Steps.Single(s => s.ScheduleStepId == importStep.Id).ActivityId, Is.EqualTo(importActivity.Id));
+            Assert.That(detail.Steps.Single(s => s.ScheduleStepId == exportStep.Id).ActivityId, Is.EqualTo(exportActivity.Id));
+        }
+    }
+
     // ─── helpers ───
 
     private static ScheduleExecution NewExecution()
