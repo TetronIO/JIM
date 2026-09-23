@@ -98,6 +98,12 @@ jobs:
     needs: validate
 
     strategy:
+      # One image at a time. The self-hosted runners share one host: one Docker daemon, one Docker credential
+      # file and one home directory. Three image jobs at once collided on the smoke-test container name, raced
+      # installing cosign into the same directory (a corrupt download failed its checksum), and let the first
+      # job to finish log the others out of the registry. Serial costs a few minutes per release; a release
+      # that fails half-published costs far more.
+      max-parallel: 1
       matrix:
         include:
           - image: jim-web
@@ -235,6 +241,9 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5  # v3.10.1
+        with:
+          # Per-runner, not the shared home directory the runners have in common (see max-parallel above).
+          install-dir: ${{ runner.temp }}/cosign
 
       - name: Sign container image
         run: |
