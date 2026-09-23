@@ -3484,6 +3484,36 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
+    public Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        if (normalisedValues.Count == 0)
+            return Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        var wanted = new HashSet<string>(normalisedValues, StringComparer.OrdinalIgnoreCase);
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var assignment in _generatedValueAssignments.Values)
+        {
+            var attributeMatches = metaverseAttributeId.HasValue
+                ? assignment.MetaverseAttributeId == metaverseAttributeId
+                : assignment.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId;
+            if (!attributeMatches)
+                continue;
+
+            var objectId = metaverseAttributeId.HasValue ? assignment.MetaverseObjectId : assignment.ConnectedSystemObjectId;
+            if (excludingObjectId.HasValue && objectId == excludingObjectId.Value)
+                continue;
+
+            if (wanted.Contains(assignment.NormalisedValue))
+                taken.Add(assignment.NormalisedValue);
+        }
+
+        return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
     public Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
     {
         foreach (var assignment in assignments)
