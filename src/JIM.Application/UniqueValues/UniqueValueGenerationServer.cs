@@ -234,6 +234,38 @@ public sealed class UniqueValueGenerationServer
         return losers;
     }
 
+    /// <summary>
+    /// Deletes the given assignments and drops them from <paramref name="options"/>'s run-scoped cache in the
+    /// same call (Unique Value Generation, #242, Phase 2 work package G: page-flush lifecycle reconciliation,
+    /// plan "Assignment lifecycle"). The two are done together, rather than leaving the caller to delete and
+    /// separately evict, because <see cref="UniqueValueResolveOptions.KnownMetaverseAssignments"/> and
+    /// <see cref="UniqueValueResolveOptions.KnownConnectedSystemAssignments"/> are internal to this assembly:
+    /// only the service can keep the cache honest, the same way <see cref="CommitAssignmentsAsync"/> is the
+    /// only thing that populates it. A caller with nothing to delete pays no repository round trip.
+    /// </summary>
+    public async Task DeleteAssignmentsAsync(IReadOnlyCollection<Guid> assignmentIds, UniqueValueResolveOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(assignmentIds);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (assignmentIds.Count == 0)
+            return;
+
+        await _repository.DeleteGeneratedValueAssignmentsAsync(assignmentIds);
+
+        var idSet = assignmentIds as HashSet<Guid> ?? assignmentIds.ToHashSet();
+        EvictDeletedAssignments(options.KnownMetaverseAssignments, idSet);
+        EvictDeletedAssignments(options.KnownConnectedSystemAssignments, idSet);
+    }
+
+    private static void EvictDeletedAssignments(
+        ConcurrentDictionary<Guid, ConcurrentBag<GeneratedValueAssignment>> cache, HashSet<Guid> deletedIds)
+    {
+        // A snapshot (ToList) so the eviction below does not mutate the dictionary while this enumerates it.
+        foreach (var (objectId, bag) in cache.ToList().Where(kv => kv.Value.Any(a => deletedIds.Contains(a.Id))))
+            cache[objectId] = new ConcurrentBag<GeneratedValueAssignment>(bag.Where(a => !deletedIds.Contains(a.Id)));
+    }
+
     // ---- Sticky ----
 
     private async Task<Dictionary<int, GeneratedValueAssignment>> LoadStickyAssignmentsAsync(IReadOnlyList<GenerationRequest> requests, UniqueValueResolveOptions options)

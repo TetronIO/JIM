@@ -96,4 +96,32 @@ public sealed class UniqueValueResolveOptions
     /// The export-mode counterpart of <see cref="KnownMetaverseAssignments"/>, keyed on Connected System Object.
     /// </summary>
     internal ConcurrentDictionary<Guid, ConcurrentBag<GeneratedValueAssignment>> KnownConnectedSystemAssignments { get; } = new();
+
+    /// <summary>
+    /// Whether the run-scoped cache already holds a live assignment for <paramref name="metaverseObjectId"/>'s
+    /// <paramref name="metaverseAttributeId"/> (import mode). Public so a caller outside <c>JIM.Application</c>
+    /// (the worker's adopt-before-generate step, Phase 2 work package G) can skip its own expensive "is there
+    /// anything to adopt" query for an object <see cref="UniqueValueGenerationServer.ResolveAsync"/> is about
+    /// to resolve as <see cref="GenerationOutcomeKind.Sticky"/> anyway, without needing read access to
+    /// <see cref="KnownMetaverseAssignments"/> itself, which stays internal. Returns false both when the
+    /// object's assignments are known to hold nothing for this attribute and when they are not known at all
+    /// (not yet prefetched or resolved this run); a caller that needs to tell those apart has no use for this
+    /// method, since both answers mean the same thing to it: "there is nothing here to skip a query for".
+    /// </summary>
+    public bool HasKnownMetaverseAssignment(Guid metaverseObjectId, int metaverseAttributeId) =>
+        KnownMetaverseAssignments.TryGetValue(metaverseObjectId, out var assignments) &&
+        assignments.Any(a => a.MetaverseAttributeId == metaverseAttributeId);
+
+    /// <summary>
+    /// Every live assignment the run-scoped cache currently knows about for <paramref name="metaverseObjectId"/>
+    /// (import mode); empty when none are known, whether because the object genuinely holds none or because it
+    /// has not been prefetched or resolved this run. Public for the same reason as
+    /// <see cref="HasKnownMetaverseAssignment"/>: a caller outside <c>JIM.Application</c> (the worker's
+    /// page-flush lifecycle reconciliation, Phase 2 work package G) needs to read this run's known assignments
+    /// for an object without gaining write access to <see cref="KnownMetaverseAssignments"/> itself.
+    /// </summary>
+    public IReadOnlyCollection<GeneratedValueAssignment> GetKnownMetaverseAssignments(Guid metaverseObjectId) =>
+        KnownMetaverseAssignments.TryGetValue(metaverseObjectId, out var assignments)
+            ? assignments
+            : Array.Empty<GeneratedValueAssignment>();
 }

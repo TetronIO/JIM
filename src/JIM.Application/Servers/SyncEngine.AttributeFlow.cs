@@ -52,6 +52,16 @@ public partial class SyncEngine
             return;
         }
 
+        // A generated mapping (Unique Value Generation, #242) never targets a Reference attribute
+        // (SyncRuleMappingGenerationValidator), so it has no part to play in the deferred reference-only pass.
+        // Without this guard, the reference pass would call ProcessGeneratedMapping a second time for the same
+        // attribute after the worker has already resolved and cleared the first pass's pending generation
+        // (Phase 2 work package G): the second call would record a NEW pending generation that nothing then
+        // resolves, tripping the worker's "leftover pending generation" integrity guard before the next page
+        // persists.
+        if (onlyReferenceAttributes && syncRuleMapping.Generation != null)
+            return;
+
         var csoType = objectTypes.Single(t => t.Id == cso.TypeId);
         var mvo = cso.MetaverseObject;
 
@@ -804,6 +814,89 @@ public partial class SyncEngine
             BaseValue = processed,
             BaseUnavailable = processed == null
         });
+    }
+
+    /// <inheritdoc cref="Interfaces.ISyncEngine.ApplyGeneratedValue"/>
+    public void ApplyGeneratedValue(MetaverseObject mvo, PendingGeneratedValue pending, string? textValue, long? numericValue)
+    {
+        ArgumentNullException.ThrowIfNull(mvo);
+        ArgumentNullException.ThrowIfNull(pending);
+
+        var targetAttribute = pending.Mapping.TargetMetaverseAttribute!;
+        var attributeId = pending.AttributeId;
+
+        // Winner takes the attribute: clear whatever another rule staged for it this pass. Ordinarily nothing
+        // is left to clear (ProcessGeneratedMapping already cleared it when it recorded the pending request),
+        // but a later-evaluated rule that abstained and left this generation standing (plan decision 6, the
+        // "supersededGenerations" hand-off in ProcessMapping) could not itself have written anything either, so
+        // this is a defensive repeat of that same clear for the point at which the value is actually written.
+        mvo.PendingAttributeValueAdditions.RemoveAll(av => av.AttributeId == attributeId);
+
+        var existingValue = GetEffectiveAttributeValues(mvo, attributeId).SingleOrDefault();
+
+        bool valueChanged;
+        int? intValue = null;
+        switch (targetAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                valueChanged = existingValue == null || !string.Equals(existingValue.StringValue, textValue, StringComparison.Ordinal);
+                break;
+
+            case AttributeDataType.Number:
+                // Checked conversion: a candidate that does not fit a 32-bit Number is a caller error (the
+                // mapping's target and the token settings that produced this number disagree), never a value
+                // to silently truncate and corrupt (the same #871 lossy-cast class CreateMvoAttributeValueFromExpressionResult
+                // guards against).
+                var numberCandidate = numericValue!.Value;
+                try
+                {
+                    intValue = checked((int)numberCandidate);
+                }
+                catch (OverflowException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Generated value {numberCandidate} for {targetAttribute.Name} does not fit a Number (32-bit) attribute. " +
+                        "This indicates a sequence or random-digits token producing a value too wide for the mapping's target type.", ex);
+                }
+                valueChanged = existingValue == null || existingValue.IntValue != intValue;
+                break;
+
+            case AttributeDataType.LongNumber:
+                valueChanged = existingValue == null || existingValue.LongValue != numericValue;
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(pending), targetAttribute.Type,
+                    $"ApplyGeneratedValue does not support target attribute type {targetAttribute.Type}.");
+        }
+
+        if (valueChanged)
+        {
+            if (existingValue != null)
+                mvo.PendingAttributeValueRemovals.Add(existingValue);
+
+            var newValue = new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = mvo,
+                Attribute = targetAttribute,
+                AttributeId = attributeId,
+                ContributedBySystemId = pending.ContributedBySystemId,
+                ContributedBySyncRuleId = pending.ContributedBySyncRuleId
+            };
+
+            switch (targetAttribute.Type)
+            {
+                case AttributeDataType.Text: newValue.StringValue = textValue; break;
+                case AttributeDataType.Number: newValue.IntValue = intValue; break;
+                case AttributeDataType.LongNumber: newValue.LongValue = numericValue; break;
+            }
+
+            mvo.PendingAttributeValueAdditions.Add(newValue);
+            Log.Debug("ApplyGeneratedValue: generated mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
+                targetAttribute.Name, LogSanitiser.Sanitise(textValue ?? numericValue?.ToString()), mvo.Id);
+        }
+
+        TakeOverProvenance(mvo, attributeId, pending.ContributedBySystemId, pending.ContributedBySyncRuleId);
     }
 
     /// <summary>
