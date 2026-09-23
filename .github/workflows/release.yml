@@ -184,9 +184,20 @@ jobs:
         run: |
           IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
 
+          # The self-hosted runners share one Docker daemon, and the three matrix jobs run at the same time, so
+          # the container name must be unique per image and per run: a fixed name let one image's smoke test
+          # collide with another's ("The container name ... is already in use") and failed the v0.15.0 release.
+          # The trap removes the container however the step ends, including cancellation, so none is left
+          # running on the persistent runner to block a later run.
+          NAME="smoke-test-${{ matrix.image }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
+
+          # Reap a container left running under the old fixed name by a job cancelled before this fix.
+          docker rm -f smoke-test >/dev/null 2>&1 || true
+
           # Start with dummy config — the service will log its startup
           # message before attempting database connection
-          docker run -d --name smoke-test \
+          docker run -d --name "$NAME" \
             -e JIM_DB_HOSTNAME=localhost \
             -e JIM_DB_NAME=jim \
             -e JIM_DB_USERNAME=jim \
@@ -197,17 +208,15 @@ jobs:
 
           # Wait up to 10 seconds for the startup log message
           for i in $(seq 1 10); do
-            if docker logs smoke-test 2>&1 | grep -q "${{ matrix.startup-log }}"; then
+            if docker logs "$NAME" 2>&1 | grep -q "${{ matrix.startup-log }}"; then
               echo "Startup log found: ${{ matrix.startup-log }}"
-              docker rm -f smoke-test
               exit 0
             fi
             sleep 1
           done
 
           echo "::error::Container did not log expected startup message within 10 seconds"
-          docker logs smoke-test
-          docker rm -f smoke-test
+          docker logs "$NAME"
           exit 1
 
       # Push the image (after scan and smoke test pass)
