@@ -70,4 +70,26 @@ internal static class ImportOutcomeMessage
                $"above this Run Profile's {limitDescription}; none were marked as deleted. Check the Connected System's scope and " +
                "the connector's filters, or raise the limit, then run the Full Import again.";
     }
+
+    /// <summary>
+    /// Why a deselected Object Type's objects were left out of deletion detection (#1474): an enabled
+    /// Synchronisation Rule is still bound to it, which saving now refuses but an older configuration can still hold.
+    /// One sentence group per Object Type, each naming the rules to disable, because that is the fix.
+    /// </summary>
+    /// <param name="heldBack">Each held-back Object Type's name and the names of the enabled rules bound to it.</param>
+    internal static string ForDeselectedObjectTypesHeldBack(IReadOnlyList<(string ObjectTypeName, IReadOnlyList<string> SyncRuleNames)> heldBack)
+    {
+        return string.Join(" ", heldBack.Select(item =>
+        {
+            var rules = string.Join(", ", item.SyncRuleNames);
+            var because = item.SyncRuleNames.Count == 1
+                ? $"an enabled Synchronisation Rule still manages it: {rules}."
+                : $"{item.SyncRuleNames.Count} enabled Synchronisation Rules still manage it: {rules}.";
+            var disable = item.SyncRuleNames.Count == 1 ? "that Synchronisation Rule" : "those Synchronisation Rules";
+
+            return $"Object Type '{item.ObjectTypeName}' is deselected, but its objects were not checked for deletion because {because} " +
+                   $"They stay joined and are no longer refreshed. Disable {disable} to take the Object Type out of management, " +
+                   "or select the Object Type again.";
+        }));
+    }
 }

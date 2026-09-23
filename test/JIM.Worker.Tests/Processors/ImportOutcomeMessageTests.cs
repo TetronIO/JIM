@@ -97,4 +97,43 @@ public class ImportOutcomeMessageTests
         // 1 of 3 is 33.33...%, which rounds to 33%.
         Assert.That(message, Does.Contain("(33% of 3)"));
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // ForDeselectedObjectTypesHeldBack: deselected Object Types still managed by enabled Synchronisation Rules (#1474)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public void ForDeselectedObjectTypesHeldBack_OneTypeOneRule_NamesTheTypeTheRuleAndTheFix()
+    {
+        var message = ImportOutcomeMessage.ForDeselectedObjectTypesHeldBack([("group", ["Provision groups"])]);
+
+        Assert.That(message, Is.EqualTo(
+            "Object Type 'group' is deselected, but its objects were not checked for deletion because an enabled " +
+            "Synchronisation Rule still manages it: Provision groups. They stay joined and are no longer refreshed. " +
+            "Disable that Synchronisation Rule to take the Object Type out of management, or select the Object Type again."));
+    }
+
+    [Test]
+    public void ForDeselectedObjectTypesHeldBack_SeveralRules_UsesPluralWording()
+    {
+        var message = ImportOutcomeMessage.ForDeselectedObjectTypesHeldBack([("group", ["Import groups", "Provision groups"])]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("because 2 enabled Synchronisation Rules still manage it: Import groups, Provision groups."));
+            Assert.That(message, Does.Contain("Disable those Synchronisation Rules"));
+        }
+    }
+
+    [Test]
+    public void ForDeselectedObjectTypesHeldBack_SeveralTypes_OneSentencePerType()
+    {
+        var message = ImportOutcomeMessage.ForDeselectedObjectTypesHeldBack([("contact", ["Contacts"]), ("group", ["Groups"])]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.StartWith("Object Type 'contact' is deselected"));
+            Assert.That(message, Does.Contain(" Object Type 'group' is deselected"));
+        }
+    }
 }

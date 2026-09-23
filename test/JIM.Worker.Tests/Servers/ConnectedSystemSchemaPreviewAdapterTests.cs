@@ -2,11 +2,13 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Application.Servers.Preview;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
@@ -18,13 +20,15 @@ namespace JIM.Worker.Tests.Servers;
 /// <summary>
 /// The Connected System schema selection adapter (#1475, #827 gap G6).
 ///
-/// The whole reason this surface needs a preview is that its changes have no visible effect. Nothing fails, nothing
-/// is deleted, nothing is disconnected; JIM simply stops reading, and everything downstream carries on over data
-/// that has stopped moving. So the claims worth pinning are the ones an administrator could not check afterwards:
-/// that deselecting an Object Type is reported as a freeze rather than the cascade the old copy promised (#1474),
-/// that the objects concerned are the ones that actually hold a value for a deselected attribute rather than every
-/// object of the type, and that the obsoletion toggle is measured against the objects already obsolete and still
-/// joined, which are the only ones whose fate it changes now.
+/// Two of its three levers have no visible effect: deselecting an attribute and toggling obsoletion recall change what
+/// JIM reads or keeps, and everything downstream carries on over data that has stopped moving. The third is a
+/// cascade: deselecting an Object Type takes it out of management, so the next Full Import obsoletes its objects and
+/// the following synchronisation disconnects them (#1474), exactly as deselecting a Partition does. So the claims
+/// worth pinning are the ones an administrator could not check afterwards: that deselecting an Object Type is reported
+/// as the disconnections and deletion eligibility it causes, and is Blocking while an enabled Synchronisation Rule
+/// still manages the type (the save refuses it); that the objects concerned by a deselected attribute are the ones
+/// that actually hold a value for it rather than every object of the type; and that the obsoletion toggle is measured
+/// against the objects already obsolete and still joined, which are the only ones whose fate it changes now.
 /// </summary>
 [TestFixture]
 public class ConnectedSystemSchemaPreviewAdapterTests
@@ -40,6 +44,9 @@ public class ConnectedSystemSchemaPreviewAdapterTests
 
     private Mock<IRepository> _repo = null!;
     private Mock<IConnectedSystemRepository> _connectedSystemRepo = null!;
+    private Mock<IMetaverseRepository> _metaverseRepo = null!;
+    private readonly List<MetaverseObjectDisconnectionCandidate> _disconnectionCandidates = [];
+    private readonly Dictionary<Guid, Guid> _joinedTo = [];
     private JimApplication _jim = null!;
     private ConnectedSystemSchemaPreviewAdapter _adapter = null!;
 
@@ -50,6 +57,10 @@ public class ConnectedSystemSchemaPreviewAdapterTests
     private static readonly Guid FirstUser = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid SecondUser = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid ObsoleteUser = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid FirstPerson = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid SecondPerson = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private const int OtherSystemId = 6;
+    private const int PersonTypeId = 1;
 
     [SetUp]
     public void SetUp()
@@ -58,7 +69,13 @@ public class ConnectedSystemSchemaPreviewAdapterTests
 
         _repo = new Mock<IRepository>();
         _connectedSystemRepo = new Mock<IConnectedSystemRepository>();
+        _metaverseRepo = new Mock<IMetaverseRepository>();
         _repo.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+        _repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
+        _disconnectionCandidates.Clear();
+        _joinedTo.Clear();
+        _joinedTo[FirstUser] = FirstPerson;
+        _joinedTo[SecondUser] = SecondPerson;
 
         _userType = new ConnectedSystemObjectType
         {
@@ -109,6 +126,8 @@ public class ConnectedSystemSchemaPreviewAdapterTests
             .ReturnsAsync([FirstUser, SecondUser]);
         _connectedSystemRepo.Setup(r => r.GetLiveConnectedSystemObjectIdsOfTypeAsync(SystemId, GroupTypeId))
             .ReturnsAsync([]);
+        _connectedSystemRepo.Setup(r => r.GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(SystemId, It.IsAny<int>()))
+            .ReturnsAsync([]);
         _connectedSystemRepo.Setup(r => r.GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(SystemId, It.IsAny<int>()))
             .ReturnsAsync([]);
         _connectedSystemRepo.Setup(r => r.GetLiveConnectedSystemObjectIdsHoldingAttributeAsync(SystemId, It.IsAny<int>(), It.IsAny<int>()))
@@ -119,11 +138,13 @@ public class ConnectedSystemSchemaPreviewAdapterTests
                 Id = id,
                 ConnectedSystemId = SystemId,
                 TypeId = UserTypeId,
-                MetaverseObjectId = Guid.NewGuid()
+                MetaverseObjectId = _joinedTo.TryGetValue(id, out var metaverseObjectId) ? metaverseObjectId : null
             }).ToList());
+        _metaverseRepo.Setup(r => r.GetMetaverseObjectDisconnectionCandidatesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => _disconnectionCandidates.Where(c => ids.Contains(c.Id)).ToList());
 
         _jim = new JimApplication(_repo.Object);
-        _adapter = new ConnectedSystemSchemaPreviewAdapter(_jim);
+        _adapter = new ConnectedSystemSchemaPreviewAdapter(_jim, new SyncEngine());
     }
 
     [TearDown]
@@ -194,45 +215,88 @@ public class ConnectedSystemSchemaPreviewAdapterTests
     #region object type selection
 
     [Test]
-    public async Task Validate_DeselectingAnObjectType_ReportsTheFreezeAndNotACascadeAsync()
+    public async Task Validate_DeselectingAnObjectType_ReportsTheCascadeOnTheNextFullImportAsync()
     {
+        _importRule.Enabled = false;
+
         var findings = await _adapter.ValidateAsync(Context(WithUserType(type => type with { Selected = false })));
-        var message = findings.Single(f => f.Message.StartsWith("Deselecting User", StringComparison.Ordinal)).Message;
+        var finding = findings.Single(f => f.Message.StartsWith("Deselecting User", StringComparison.Ordinal));
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(message, Does.Contain("stay joined"),
-                "the objects keep their Metaverse Object join, which is the part an administrator cannot see");
-            Assert.That(message, Does.Contain("Nothing is obsoleted and nothing is deprovisioned"),
-                "and the cascade has to be denied explicitly: the change is classified Destructive, so the " +
-                "administrator will otherwise assume the usual one. See #1474");
-            Assert.That(message, Does.Not.Contain("become obsolete"));
+            Assert.That(finding.Severity, Is.EqualTo(PreviewValidationSeverity.Warning),
+                "taking a type out of management is a legitimate thing to do once nothing manages it any more");
+            Assert.That(finding.Message, Does.Contain("become obsolete"),
+                "deselecting a type obsoletes its objects on the next Full Import (#1474), and the administrator is " +
+                "consenting to that cascade");
+            Assert.That(finding.Message, Does.Contain("next Full Import"));
+            Assert.That(finding.Message, Does.Not.Contain("Nothing is obsoleted"),
+                "the old copy described a freeze that no longer happens");
         }
     }
 
     [Test]
-    public async Task Validate_DeselectingAnObjectTypeStillManagedByRules_NamesThemAsync()
+    public async Task Validate_DeselectingAnObjectTypeAnEnabledRuleManages_IsBlockingAndNamesTheRuleAsync()
     {
         var findings = await _adapter.ValidateAsync(Context(WithUserType(type => type with { Selected = false })));
 
-        Assert.That(findings.Select(f => f.Message),
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).Select(f => f.Message),
             Has.Some.Contains("Directory Import"),
-            "a rule left running against frozen objects is the actionable half of the finding");
+            "saving this selection is refused while an enabled rule manages the type, so the preview must say it " +
+            "cannot be applied and name the rule to disable, rather than count a cascade that will not happen");
     }
 
     [Test]
-    public async Task EvaluateDeltas_DeselectingAnObjectType_ReportsEveryLiveObjectAsFrozenAsync()
+    public async Task Validate_DeselectingAnObjectTypeOnlyADisabledRuleManages_IsNotBlockingAsync()
     {
+        _importRule.Enabled = false;
+
+        var findings = await _adapter.ValidateAsync(Context(WithUserType(type => type with { Selected = false })));
+
+        Assert.That(findings.Select(f => f.Severity), Has.None.EqualTo(PreviewValidationSeverity.Blocking));
+    }
+
+    [Test]
+    public async Task EvaluateDeltas_DeselectingAnObjectType_ReportsJoinedObjectsDisconnectingAndTheRestLeavingScopeAsync()
+    {
+        _joinedTo.Remove(SecondUser);
+        _connectedSystemRepo.Setup(r => r.GetUnjoinedConnectedSystemObjectIdsOfTypeAsync(SystemId, UserTypeId))
+            .ReturnsAsync([SecondUser]);
+
         var deltas = await DeltasAsync(WithUserType(type => type with { Selected = false }));
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(deltas, Has.Count.EqualTo(2));
-            Assert.That(deltas.Select(d => d.TransitionType),
-                Is.All.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported));
-            Assert.That(deltas.Select(d => d.ConnectedSystemObjectId), Is.EquivalentTo(new[] { FirstUser, SecondUser }));
-            Assert.That(deltas[0].AttributeName, Is.Null,
-                "the whole object stops being imported, so no single attribute is named");
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == FirstUser).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject),
+                "a joined object is obsoleted and then disconnected, which is what costs the Metaverse anything");
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == SecondUser).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope),
+                "an unjoined object is obsoleted with nothing to disconnect");
+            Assert.That(deltas.Select(d => d.AttributeName), Is.All.Null,
+                "the whole object leaves, so no single attribute is named");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltas_DeselectingAnObjectType_ReportsMetaverseObjectsLeftEligibleForDeletionAsync()
+    {
+        // FirstPerson's only connector is the object leaving; SecondPerson keeps one in another system.
+        GivenMetaverseObject(FirstPerson, "Ada Lovelace", [SystemId]);
+        GivenMetaverseObject(SecondPerson, "Grace Hopper", [SystemId, OtherSystemId]);
+
+        var deltas = await DeltasAsync(WithUserType(type => type with { Selected = false }));
+        var eligible = deltas
+            .Where(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible)
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(eligible.Select(d => d.MetaverseObjectId), Is.EquivalentTo(new Guid?[] { FirstPerson }),
+                "the Metaverse consequence is the same question every disconnecting preview puts to the engine's " +
+                "own deletion rule; an object with a connector left elsewhere survives");
+            Assert.That(eligible.Single().ObjectDisplayName, Is.EqualTo("Ada Lovelace"));
         }
     }
 
@@ -400,6 +464,7 @@ public class ConnectedSystemSchemaPreviewAdapterTests
     {
         _connectedSystemRepo.Setup(r => r.GetObsoleteJoinedConnectedSystemObjectIdsOfTypeAsync(SystemId, UserTypeId))
             .ReturnsAsync([ObsoleteUser]);
+        GivenMetaverseObject(FirstPerson, "Ada Lovelace", [SystemId]);
 
         var proposal = WithUserType(type => type with { Selected = false, RemoveContributedAttributesOnObsoletion = false });
         var counts = await _adapter.CountImpactAsync(Context(proposal));
@@ -411,7 +476,8 @@ public class ConnectedSystemSchemaPreviewAdapterTests
                 "a count that could disagree with the rows behind it is worse than no count");
             Assert.That(counts.Select(c => c.TransitionType), Is.EquivalentTo(new[]
             {
-                ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported,
+                ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject,
+                ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
                 ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues
             }));
         }
@@ -444,6 +510,12 @@ public class ConnectedSystemSchemaPreviewAdapterTests
         mapping.Sources.Add(new SyncRuleMappingSource { ConnectedSystemAttributeId = connectedSystemAttributeId });
         return mapping;
     }
+
+    private void GivenMetaverseObject(Guid id, string displayName, int[] joinedSystemIds) =>
+        _disconnectionCandidates.Add(new MetaverseObjectDisconnectionCandidate(
+            id, displayName, PersonTypeId, "Person", MetaverseObjectOrigin.Projected,
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, AuthoritativeSourceTriggerMode.AllSourcesDisconnect,
+            TimeSpan.FromDays(7), [], joinedSystemIds));
 
     private PreviewContext Context(ConnectedSystemSchemaProposal proposal) => new()
     {
