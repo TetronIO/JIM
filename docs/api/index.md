@@ -28,7 +28,6 @@ JIM is pre-v1.0, so breaking changes to the API can still occur between releases
 
 **This release**
 
-- **`fineGrainedPolicySignal` is now `policyOverrideSignal`.** The discovered password policy (`GET /api/v1/synchronisation/connected-systems/{id}/password-policy`, and `Get-JIMConnectedSystemPasswordPolicy` in PowerShell) renames its `fineGrainedPolicySignal` field to `policyOverrideSignal`, with the same three values (`Absent`, `Present`, `CouldNotDetermine`), because the signal now covers OpenLDAP's per-entry policy subentries and 389 Directory Server's subtree policies as well as Active Directory's Fine-Grained Password Policies. The same response gains `furtherChecksApply` and `discoveryOutcome`. Consumers reading the old field name must update. This is a pre-v1.0 breaking change.
 - **A successful Schedule Execution's status is now `Complete`, not `Completed`.** The value matches the word Activities already use for the same outcome. The REST API and the JIM PowerShell module both send and accept only `Complete`, so any integration or script that filters Schedule Executions on `Completed` must update. This is a pre-v1.0 breaking change.
 
 **v0.14.0**
