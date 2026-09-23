@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using Serilog;
 
 namespace JIM.Application.Services;
 
@@ -41,6 +42,16 @@ public static class ContributorReElectionService
     /// <param name="objectTypes">The caller's Connected System Object Type cache; each survivor's own type is
     /// appended per re-flow when absent. May be null only when no survivors need re-flowing.</param>
     /// <param name="expressionEvaluator">The evaluator for expression-based mappings.</param>
+    /// <param name="resolvePendingGeneratedValues">Unique Value Generation (#242, Phase 2 work package H fix):
+    /// called with <paramref name="mvo"/>, after every survivor has flowed, when a re-elected survivor's own
+    /// mapping is a generated one and left a marker on <see cref="MetaverseObject.PendingGeneratedValues"/>
+    /// rather than a resolved value (plan decision 6). A caller running inside a synchronisation (the worker's
+    /// re-election paths) supplies a resolver that generates the value inline through its own run-scoped
+    /// Unique Value Generation context, with outcomes and errors, before returning; the default (null, every
+    /// other caller: Synchronisation Rule deletion recall, Synchronised Deprovisioning, Sync Preview) clears
+    /// the marker and logs instead, because none of those callers hold a run-scoped reservation set to resolve
+    /// it through, and the generating Connected System's own next synchronisation will see its mapping as the
+    /// winning contributor and generate the value then.</param>
     public static async Task ReElectSurvivingContributorsAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> recalledValues,
@@ -50,7 +61,8 @@ public static class ContributorReElectionService
         ISyncRepository syncRepository,
         Func<ConnectedSystemObject, SyncRule, bool> isCsoInScopeForImportRule,
         IReadOnlyList<ConnectedSystemObjectType>? objectTypes,
-        IExpressionEvaluator expressionEvaluator)
+        IExpressionEvaluator expressionEvaluator,
+        Func<MetaverseObject, Task>? resolvePendingGeneratedValues = null)
     {
         if (mvo.Type == null)
             return;
@@ -137,6 +149,30 @@ public static class ContributorReElectionService
 
             syncEngine.FlowInboundAttributes(survivor, rule, objectTypesForSurvivor, expressionEvaluator,
                 skipReferenceAttributes: false, onlyReferenceAttributes: false, isFinalReferencePass: true, priorityContext);
+        }
+
+        // Unique Value Generation (#242, Phase 2 work package H fix): see resolvePendingGeneratedValues'
+        // doc comment for why a leftover marker here is expected, not a defect, and why the default when no
+        // resolver is supplied is to clear and log rather than throw.
+        if (mvo.PendingGeneratedValues.Count > 0)
+        {
+            if (resolvePendingGeneratedValues != null)
+            {
+                await resolvePendingGeneratedValues(mvo);
+            }
+            else
+            {
+                foreach (var pending in mvo.PendingGeneratedValues)
+                {
+                    Log.Information(
+                        "ReElectSurvivingContributorsAsync: a re-elected generated mapping for attribute {AttributeId} on " +
+                        "Metaverse Object {MetaverseObjectId} was left unresolved (no run-scoped Unique Value Generation " +
+                        "context here); Connected System {ContributedBySystemId}'s next synchronisation will generate the value.",
+                        pending.AttributeId, mvo.Id, pending.ContributedBySystemId);
+                }
+
+                mvo.PendingGeneratedValues.Clear();
+            }
         }
     }
 

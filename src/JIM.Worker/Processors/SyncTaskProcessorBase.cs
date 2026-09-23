@@ -1248,7 +1248,13 @@ public abstract class SyncTaskProcessorBase
                 // overwrite the pre-recall state the first capture recorded.
                 if (!_preRecallAttributeSnapshots.ContainsKey(mvo.Id))
                     _preRecallAttributeSnapshots[mvo.Id] = mvo.AttributeValues.ToList();
-            });
+            },
+            // Unique Value Generation (#242, Phase 2 work package H fix): a survivor re-elected during this
+            // object's own obsoletion recall can carry a generated mapping; resolve it inline through this
+            // run's own Unique Value Generation context (outcomes and errors attributed to the obsoleting
+            // CSO), so the value lands in mvo.PendingAttributeValueAdditions before this method's caller
+            // captures the additions/removals for change tracking and export evaluation below.
+            resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesAsync(connectedSystemObject, resolvedMvo));
 
         // Fold the staged output into the page-flush accumulators, exactly as the in-processor
         // implementation populated them.
@@ -1772,6 +1778,7 @@ public abstract class SyncTaskProcessorBase
             // system next synchronises. Explicit "Null is a value" assertions write a marker into the additions, so
             // they are never treated as cleared here; the priority gate means only a winning rule's no-value
             // contribution can produce a clear.
+            List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomesForRpei = null;
             if (_attributePriorityContext != null && connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count > 0)
             {
                 var clearedAttributeIds = GetClearedAttributeIds(
@@ -1784,17 +1791,22 @@ public abstract class SyncTaskProcessorBase
                     .ToList();
 
                 if (withdrawnValues.Count > 0)
-                    await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
+                    generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
             }
 
             // Unique Value Generation (#242, Phase 2 work package G): resolve this object's pending generated
             // values inline, right here, so change tracking, outcomes, export evaluation and drift detection
             // below see the result exactly as they see any other Attribute Flow contribution. Must run before
             // "Count actual attribute changes" (immediately below), since ApplyGeneratedValue stages its result
-            // the same way an ordinary Attribute Flow writer does.
-            List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomesForRpei = null;
+            // the same way an ordinary Attribute Flow writer does. Any outcome already resolved above, by a
+            // re-elected survivor's own generated mapping (work package H fix), is merged in rather than lost.
             if (connectedSystemObject.MetaverseObject.PendingGeneratedValues.Count > 0)
-                generatedValueOutcomesForRpei = await ResolvePendingGeneratedValuesAsync(connectedSystemObject, connectedSystemObject.MetaverseObject);
+            {
+                var resolvedHere = await ResolvePendingGeneratedValuesAsync(connectedSystemObject, connectedSystemObject.MetaverseObject);
+                generatedValueOutcomesForRpei = generatedValueOutcomesForRpei == null
+                    ? resolvedHere
+                    : [.. generatedValueOutcomesForRpei, .. resolvedHere];
+            }
 
             // Count actual attribute changes that were queued
             var attributesAdded = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.Count;
@@ -5571,11 +5583,26 @@ public abstract class SyncTaskProcessorBase
     /// <param name="mvo">The Metaverse Object whose attributes are being recalled.</param>
     /// <param name="recalledValues">The attribute values contributed by the obsoleting or withdrawing system, marked for removal.</param>
     /// <param name="leaver">The obsoleting or withdrawing Connected System Object whose contribution is being recalled.</param>
-    protected async Task ReElectSurvivingContributorsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> recalledValues, ConnectedSystemObject leaver)
+    /// <returns>
+    /// One (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c> result from a
+    /// re-elected survivor's own generated mapping (Unique Value Generation, #242, Phase 2 work package H
+    /// fix), for a caller that builds RPEI child outcomes to merge in; empty when re-election generated or
+    /// adopted nothing (the overwhelmingly common case, since most re-elected mappings are ordinary Attribute
+    /// Flow).
+    /// </returns>
+    protected async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ReElectSurvivingContributorsAsync(
+        MetaverseObject mvo, List<MetaverseObjectAttributeValue> recalledValues, ConnectedSystemObject leaver)
     {
         var priorityContext = _attributePriorityContext;
         if (priorityContext == null || mvo.Type == null)
-            return;
+            return [];
+
+        // Unique Value Generation (#242, Phase 2 work package H fix): a re-elected survivor's own mapping can
+        // be a generated one; resolve it inline through this run's own Unique Value Generation context
+        // (outcomes and errors attributed to the leaver) so it lands in mvo.PendingAttributeValueAdditions
+        // before either caller of this wrapper captures the additions/removals for change tracking and
+        // export evaluation.
+        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomes = null;
 
         // The reusable core lives in JIM.Application (#1537 extraction) so the rule-deletion recall task can
         // share it; this scope reproduces the obsoletion semantics exactly (the leaver's whole system is
@@ -5589,7 +5616,10 @@ public abstract class SyncTaskProcessorBase
             _syncRepo,
             _syncServer.IsCsoInScopeForImportRule,
             _objectTypes,
-            _expressionEvaluator);
+            _expressionEvaluator,
+            resolvePendingGeneratedValues: async resolvedMvo => generatedValueOutcomes = await ResolvePendingGeneratedValuesAsync(leaver, resolvedMvo));
+
+        return generatedValueOutcomes ?? [];
     }
 
     /// <summary>

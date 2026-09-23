@@ -70,6 +70,9 @@ public static class ConnectedSystemObjectObsoletionService
     /// <param name="recordPreRecallAttributeSnapshot">Called with the joined Metaverse Object BEFORE the deletion-rule
     /// evaluation and attribute recall run, so the caller can snapshot its attribute values for the deletion change
     /// record should the object be deleted (the caller keeps first-snapshot-wins semantics across objects).</param>
+    /// <param name="resolvePendingGeneratedValues">Threaded straight through to
+    /// <see cref="ContributorReElectionService.ReElectSurvivingContributorsAsync"/>; see that parameter's doc
+    /// comment (Unique Value Generation, #242, Phase 2 work package H fix).</param>
     /// <returns>The staged outcome of the operation, as data; see <see cref="ConnectedSystemObjectObsoletionResult"/>.</returns>
     public static async Task<ConnectedSystemObjectObsoletionResult> ProcessObsoleteConnectedSystemObjectAsync(
         ConnectedSystemObject connectedSystemObject,
@@ -85,7 +88,8 @@ public static class ConnectedSystemObjectObsoletionService
         Func<ActivityRunProfileExecutionItem> executionItemFactory,
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel syncOutcomeTrackingLevel,
         Func<MetaverseObject, int, IReadOnlyCollection<int>, Task<(MvoDeletionDecision Decision, string? PolicySnapshotJson)>> processMvoDeletionRuleAsync,
-        Action<MetaverseObject> recordPreRecallAttributeSnapshot)
+        Action<MetaverseObject> recordPreRecallAttributeSnapshot,
+        Func<MetaverseObject, Task>? resolvePendingGeneratedValues = null)
     {
         var result = new ConnectedSystemObjectObsoletionResult();
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
@@ -234,7 +238,8 @@ public static class ConnectedSystemObjectObsoletionService
                     syncRepository,
                     isCsoInScopeForImportRule,
                     objectTypes,
-                    expressionEvaluator);
+                    expressionEvaluator,
+                    resolvePendingGeneratedValues);
             }
 
             // The no-source preservation applies only to disappearances, never to a deliberate deletion of a

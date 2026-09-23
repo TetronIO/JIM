@@ -391,26 +391,17 @@ public partial class ConnectedSystemServer
         // Step 4: stage the recall/re-election Pending Exports with the same delete-then-create pattern the
         // sync flush uses. This is what makes export staging idempotent on resume: re-evaluating an object
         // processed just before a crash replaces its target's previous staging rather than duplicating it.
+        // Unique Value Generation (#242, Phase 2 work package H fix): this reconciliation pass has no
+        // run-scoped Unique Value Generation service to resolve a generated export mapping's marked change
+        // through (unlike the sync worker's own flush), and export evaluation's conservative relevance check
+        // means a generated mapping's marker is staged on ANY pass touching the object. Strip it rather than
+        // throw (an earlier revision threw here, which would fail deprovisioning outright): the generating
+        // Connected System's own next synchronisation resolves it normally and reasserts the value (FR 10,
+        // Sticky). See StripUnresolvedGeneratedExportMarkers (ConnectedSystemServer.SyncRuleDeletionRecall.cs).
+        StripUnresolvedGeneratedExportMarkers(stagedPendingExports, nameof(ProcessDeprovisioningBatchAsync));
+
         if (stagedPendingExports.Count > 0)
         {
-            // Unique Value Generation (#242, Phase 2 work package H) integrity guard: this reconciliation path
-            // has no run-scoped Unique Value Generation service to resolve a generated export mapping's marked
-            // change through (unlike the sync worker's own flush), so fail fast rather than silently persist a
-            // change with a blank value. Reaching this in practice would mean a generated export mapping's
-            // Attribute Flow is relevant to a synchronised-deprovisioning reconciliation pass, which this
-            // release does not resolve for; treat it as a signal that this path needs the same resolution the
-            // worker's page flush has (Synchronisation Integrity).
-            var leftoverExportGeneration = stagedPendingExports
-                .SelectMany(pe => pe.AttributeValueChanges)
-                .FirstOrDefault(change => change.PendingGeneration != null);
-            if (leftoverExportGeneration != null)
-            {
-                throw new InvalidOperationException(
-                    $"Pending Export attribute change {leftoverExportGeneration.Id} still has an unresolved generated value marker for " +
-                    $"attribute {leftoverExportGeneration.AttributeId}. Synchronised deprovisioning does not resolve generated export " +
-                    "values; persisting now would silently drop the value.");
-            }
-
             var targetCsoIds = stagedPendingExports
                 .Where(pe => pe.ConnectedSystemObjectId.HasValue)
                 .Select(pe => pe.ConnectedSystemObjectId!.Value)

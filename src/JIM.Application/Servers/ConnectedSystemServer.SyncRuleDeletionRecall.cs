@@ -272,23 +272,18 @@ public partial class ConnectedSystemServer
             if (removedValueIds.Count > 0)
                 await Application.SyncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedValueIds);
 
+            // Unique Value Generation (#242, Phase 2 work package H fix): this recall path has no run-scoped
+            // Unique Value Generation service to resolve a generated export mapping's marked change through
+            // (unlike the sync worker's own flush), and "update evaluation always includes expression
+            // mappings" means a generated mapping's marker is staged on ANY pass that touches the object, not
+            // only when the generated attribute itself changed. Throwing here (as an earlier revision did)
+            // would fail an ordinary recall outright, e.g. deleting a Synchronisation Rule whose target export
+            // rule happens to carry a generated mapping. Strip the marker instead: the generating Connected
+            // System's own next synchronisation resolves it normally and reasserts the value (FR 10, Sticky).
+            StripUnresolvedGeneratedExportMarkers(stagedPendingExports, nameof(RecallSyncRuleContributedValuesAsync));
+
             if (stagedPendingExports.Count > 0)
             {
-                // Unique Value Generation (#242, Phase 2 work package H) integrity guard: this recall path has
-                // no run-scoped Unique Value Generation service to resolve a generated export mapping's marked
-                // change through (unlike the sync worker's own flush), so fail fast rather than silently
-                // persist a change with a blank value (Synchronisation Integrity).
-                var leftoverExportGeneration = stagedPendingExports
-                    .SelectMany(pe => pe.AttributeValueChanges)
-                    .FirstOrDefault(change => change.PendingGeneration != null);
-                if (leftoverExportGeneration != null)
-                {
-                    throw new InvalidOperationException(
-                        $"Pending Export attribute change {leftoverExportGeneration.Id} still has an unresolved generated value marker for " +
-                        $"attribute {leftoverExportGeneration.AttributeId}. Synchronisation Rule deletion recall does not resolve generated " +
-                        "export values; persisting now would silently drop the value.");
-                }
-
                 var targetCsoIds = stagedPendingExports
                     .Where(pe => pe.ConnectedSystemObjectId.HasValue)
                     .Select(pe => pe.ConnectedSystemObjectId!.Value)
@@ -387,5 +382,41 @@ public partial class ConnectedSystemServer
 
         item.OutcomeSummary = $"{ActivityRunProfileExecutionItemSyncOutcomeType.ValuesPreserved}:1";
         return item;
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H fix): strips every attribute change still
+    /// carrying an unresolved generated-value marker from <paramref name="pendingExports"/>, then discards any
+    /// Update Pending Export left with no attribute changes as a result (the same shape the sync worker's own
+    /// page flush uses when a generation outcome removes every change on an object,
+    /// <c>SyncTaskProcessorBase.ResolveExportGeneratedValuesAsync</c>). Shared by the Synchronisation Rule
+    /// deletion recall (<see cref="RecallSyncRuleContributedValuesAsync"/>, also used by the Synchronised
+    /// Deprovisioning residue pass) and the Synchronised Deprovisioning per-object pass
+    /// (<c>ConnectedSystemServer.ProcessDeprovisioningBatchAsync</c>): neither holds a run-scoped Unique Value
+    /// Generation context, so a marker reaching either is expected, not a defect (unlike the worker's own page
+    /// flush and <see cref="ExportEvaluationServer"/>'s immediate-persist paths, which still throw). The
+    /// generating Connected System's own next synchronisation resolves the mapping normally and reasserts the
+    /// value there (FR 10, Sticky), so the object's other staged changes are not held back by it.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports about to be persisted; mutated in place.</param>
+    /// <param name="callerName">Names the caller in the Debug log, for whoever is reading the trace.</param>
+    private static void StripUnresolvedGeneratedExportMarkers(List<PendingExport> pendingExports, string callerName)
+    {
+        foreach (var pendingExport in pendingExports)
+        {
+            var markedChanges = pendingExport.AttributeValueChanges.Where(change => change.PendingGeneration != null).ToList();
+            foreach (var change in markedChanges)
+            {
+                Log.Debug(
+                    "{CallerName}: Pending Export {PendingExportId} (Connected System Object {ConnectedSystemObjectId}): " +
+                    "dropping the attribute change for generated attribute {AttributeId}, whose value marker this path " +
+                    "does not resolve; the generating Connected System's next synchronisation will assert the value.",
+                    callerName, pendingExport.Id, pendingExport.ConnectedSystemObjectId, change.AttributeId);
+                pendingExport.AttributeValueChanges.Remove(change);
+            }
+        }
+
+        pendingExports.RemoveAll(pendingExport =>
+            pendingExport.ChangeType == PendingExportChangeType.Update && pendingExport.AttributeValueChanges.Count == 0);
     }
 }
