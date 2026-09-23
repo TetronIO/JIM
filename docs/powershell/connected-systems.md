@@ -755,14 +755,20 @@ When `-PassThru` is specified, returns the updated object type. Otherwise, no ou
 Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 1 -Selected $true
 ```
 
-```powershell title="Deselect an object type"
+```powershell title="Take an object type out of management (obsoletes every object of that type on the next Full Import)"
+# Deselecting is refused while an enabled Synchronisation Rule is bound to the type, so disable those first.
+# Run the first line without the final Set-JIMSyncRule stage to see which rules it would disable.
+Get-JIMSyncRule -ConnectedSystemId 3 | Where-Object { $_.connectedSystemObjectTypeId -eq 2 } | Set-JIMSyncRule -Disable
 Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected $false
 ```
+
+Deselecting an Object Type takes it out of management: the next Full Import marks every Connected System Object of that type obsolete, and the following synchronisation disconnects them from their Metaverse Objects, which may leave those eligible for deletion. Preview it first with `New-JIMConfigurationChangePreview -ConnectedSystemId 3 -SchemaObjectType @(@{ objectTypeId = 2; selected = $false }) -Wait`, and see [What deselecting means](../configuration/connected-systems.md#what-deselecting-means).
 
 ### Notes
 
 - Supports `ShouldProcess` (Medium impact).
-- Selecting an Object Type is refused, with the Connector's own message, when the Connected System's settings cannot serve it: for the JIM SQL Connector, selecting an Object Type that lacks a `watermarkColumn` or a `changeLog` while the matching Delta Import Mode is set. Deselecting is always accepted.
+- Selecting an Object Type is refused, with the Connector's own message, when the Connected System's settings cannot serve it: for the JIM SQL Connector, selecting an Object Type that lacks a `watermarkColumn` or a `changeLog` while the matching Delta Import Mode is set.
+- Deselecting an Object Type is refused while an enabled Synchronisation Rule is bound to it; the error names the rules to disable. The same check refuses any update to an Object Type left deselected with an enabled rule still bound to it (possible in configurations saved before this check existed).
 
 ---
 

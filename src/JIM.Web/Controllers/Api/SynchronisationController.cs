@@ -164,7 +164,9 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Use this endpoint to update properties of an Object Type, such as:
-    /// - Selected: Whether the Object Type is managed by JIM
+    /// - Selected: Whether the Object Type is managed by JIM. Deselecting takes it out of management: the next Full
+    ///   Import marks its Connected System Objects as deleted, and the following synchronisation disconnects them.
+    ///   Deselecting is refused (400) while an enabled Synchronisation Rule is bound to the Object Type.
     /// - RemoveContributedAttributesOnObsoletion: Whether MVO Attributes are removed when CSO is obsoleted
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
@@ -219,8 +221,9 @@ public class SynchronisationController(
         }
         catch (InvalidSettingValuesException ex)
         {
-            // the Connector refused the selection against the Connected System's settings (a Delta Import Mode the
-            // Object Type is not equipped for, say); the message is the Connector's own and names what to change.
+            // the selection was refused: the Connector said the Connected System's settings cannot serve it (a Delta
+            // Import Mode the Object Type is not equipped for, say), or the Object Type is being deselected while an
+            // enabled Synchronisation Rule still manages it (#1474). Either way the message names what to change.
             _logger.LogInformation("Object type {ObjectTypeId} ({Name}) selection refused: {Reason}", objectType.Id, objectType.Name, ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
@@ -1837,14 +1840,16 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Answers what a proposed schema selection would do, without making it (#827 gap G6, #1475): which Connected
-    /// System Objects would stop being imported, which attributes would stop being refreshed and on how many
-    /// objects, and which Metaverse Objects would have this system's contributed values withdrawn, or kept, when
-    /// their obsolete objects are next synchronised.
+    /// System Objects a deselected Object Type takes out of management, which Metaverse Objects that would leave
+    /// eligible for deletion, which attributes would stop being refreshed and on how many objects, and which
+    /// Metaverse Objects would have this system's contributed values withdrawn, or kept, when their obsolete objects
+    /// are next synchronised.
     ///
-    /// This matters because the change has no visible effect. Nothing fails, nothing is deleted and nothing is
-    /// disconnected; JIM simply stops reading, and everything downstream carries on over data that has stopped
-    /// moving. In particular, deselecting an Object Type does **not** obsolete the objects already imported from
-    /// it: they stay joined to their Metaverse Objects and go on contributing the values they last imported.
+    /// Deselecting an Object Type is a cascade that happens later, not on save: the next Full Import obsoletes the
+    /// objects already imported from it, and the following synchronisation disconnects the joined ones (#1474).
+    /// Deselecting one an enabled Synchronisation Rule still manages is reported as Blocking, because saving it is
+    /// refused. The other two levers have no visible effect at all: JIM stops reading an attribute, or changes what
+    /// obsoletion withdraws, and everything downstream carries on over data that has stopped moving.
     ///
     /// Every omission means "leave this as it stands". An Object Type the request does not name is left alone, and
     /// a field it does not set keeps that Type's stored value, so a request changing one attribute cannot

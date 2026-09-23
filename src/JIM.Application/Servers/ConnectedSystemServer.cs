@@ -661,6 +661,7 @@ public partial class ConnectedSystemServer
         // the selection is what this save changes, and some Connectors can only serve their settings for some
         // selections (#1424); refused here, before an Activity is opened for a save that will not happen.
         ThrowIfObjectTypeSelectionInvalid(connectedSystem, connectedSystem.ObjectTypes ?? []);
+        await ThrowIfDeselectedObjectTypesStillManagedAsync(connectedSystem.Id, connectedSystem.ObjectTypes ?? []);
 
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
@@ -1767,6 +1768,85 @@ public partial class ConnectedSystemServer
             .ToList();
 
         ThrowIfObjectTypeSelectionInvalid(connectedSystem, objectTypes);
+    }
+
+    /// <summary>
+    /// Refuses a schema selection that leaves an enabled Synchronisation Rule bound to a deselected Object Type
+    /// (#1474). Deselecting a type takes it out of management, so the next Full Import obsoletes its objects; a rule
+    /// still enabled against it contradicts that, and an outbound one would act on the objects again as soon as they
+    /// were disconnected. The administrator disables the rules first, which is the deliberate step, and then
+    /// deselects.
+    /// </summary>
+    /// <remarks>
+    /// Judged on the proposed state rather than on what changed, because what the caller holds may be the only copy
+    /// of the previous state (the REST API edits a loaded entity in place). A configuration saved before this refusal
+    /// existed can therefore be refused on an unrelated save, which is intended: the message says what to change, and
+    /// until it is changed the import leaves that type's objects as they are and warns on every Full Import.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System the Object Types belong to.</param>
+    /// <param name="objectTypes">The Object Types being saved, as they will stand once persisted.</param>
+    /// <exception cref="InvalidSettingValuesException">An enabled Synchronisation Rule is bound to a deselected Object Type.</exception>
+    private async Task ThrowIfDeselectedObjectTypesStillManagedAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemObjectType> objectTypes)
+    {
+        var deselectedObjectTypes = objectTypes.Where(objectType => !objectType.Selected).ToList();
+        if (deselectedObjectTypes.Count == 0)
+            return;
+
+        var enabledSyncRules = (await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync() ?? [])
+            .Where(rule => rule.Enabled && rule.ConnectedSystemId == connectedSystemId)
+            .ToList();
+        if (enabledSyncRules.Count == 0)
+            return;
+
+        var problems = deselectedObjectTypes
+            .Select(objectType => (objectType.Name, SyncRuleNames: enabledSyncRules
+                .Where(rule => rule.ConnectedSystemObjectTypeId == objectType.Id)
+                .Select(rule => rule.Name)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList()))
+            .Where(problem => problem.SyncRuleNames.Count > 0)
+            .Select(problem => ObjectTypeDeselectionMessages.StillManaged(problem.Name, problem.SyncRuleNames))
+            .ToList();
+
+        if (problems.Count == 0)
+            return;
+
+        var message = string.Join(" ", problems);
+        Log.Information("ThrowIfDeselectedObjectTypesStillManagedAsync: refusing the schema selection for Connected System {ConnectedSystemId}; {Message}",
+            connectedSystemId, LogSanitiser.Sanitise(message));
+        throw new InvalidSettingValuesException(message);
+    }
+
+    /// <summary>
+    /// The other side of <see cref="ThrowIfDeselectedObjectTypesStillManagedAsync"/> (#1474): refuses saving an
+    /// enabled Synchronisation Rule whose Connected System Object Type is not selected, so the two refusals together
+    /// keep an enabled rule from ever being bound to a type JIM does not manage. A disabled rule is left alone, because
+    /// disabling the rules is the first step of taking a type out of management and they must stay editable after it.
+    /// </summary>
+    /// <remarks>
+    /// The Object Type is read as persisted, not from the rule's navigation, which is whatever copy the caller loaded.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The rule is enabled and its Object Type is not selected.</exception>
+    private async Task ThrowIfEnabledOnDeselectedObjectTypeAsync(SyncRule syncRule)
+    {
+        if (!syncRule.Enabled)
+            return;
+
+        var objectTypeId = syncRule.ConnectedSystemObjectTypeId != 0
+            ? syncRule.ConnectedSystemObjectTypeId
+            : syncRule.ConnectedSystemObjectType?.Id ?? 0;
+        if (objectTypeId == 0)
+            return;
+
+        var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        if (objectType == null || objectType.Selected)
+            return;
+
+        var message = $"Synchronisation Rule '{syncRule.Name}' cannot be enabled because its Object Type " +
+                      $"'{objectType.Name}' is not selected on the Connected System. Select the Object Type first, or " +
+                      "save the Synchronisation Rule disabled.";
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
+        throw new ArgumentException(message);
     }
 
     private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)
@@ -4507,6 +4587,7 @@ public partial class ConnectedSystemServer
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType}", objectType.Name);
 
         await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
+        await ThrowIfDeselectedObjectTypesStillManagedAsync(objectType.ConnectedSystemId, [objectType]);
 
         var activity = new Activity
         {
@@ -4574,6 +4655,7 @@ public partial class ConnectedSystemServer
         Log.Debug("UpdateObjectTypeAsync() called for {ObjectType} (API key initiated)", objectType.Name);
 
         await ThrowIfObjectTypeSelectionInvalidAsync(objectType);
+        await ThrowIfDeselectedObjectTypesStillManagedAsync(objectType.ConnectedSystemId, [objectType]);
 
         var activity = new Activity
         {
@@ -8419,6 +8501,10 @@ public partial class ConnectedSystemServer
         // target attribute, so the second would be representable but silently never honoured.
         ValidateNoDuplicateMappingTargets(syncRule);
 
+        // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
+        // of management, and an enabled rule bound to it is the one state in which that would do harm.
+        await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
+
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.
         if (syncRule.Enabled)
@@ -8621,6 +8707,10 @@ public partial class ConnectedSystemServer
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.
         ValidateNoDuplicateMappingTargets(syncRule);
+
+        // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
+        // of management, and an enabled rule bound to it is the one state in which that would do harm.
+        await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.

@@ -39,11 +39,12 @@ function New-JIMConfigurationChangePreview {
           -ObjectMatchingRuleMode to preview the Simple/Advanced switch. Objects already joined are never
           re-matched, so no matching change can move them, and the preview says so.
         - -ConnectedSystemId with -SchemaObjectType previews a change to that system's schema selection:
-          how many Connected System Objects would stop being imported, which attributes would stop being
+          which Connected System Objects a deselected Object Type takes out of management (the next Full
+          Import obsoletes them, so the joined ones disconnect and the rest leave import scope), which
+          Metaverse Objects that would leave eligible for deletion, which attributes would stop being
           refreshed and on how many objects, and whose contributed Metaverse values would be withdrawn, or
-          kept, when their obsolete objects are next synchronised. Deselecting an Object Type does not
-          obsolete the objects already imported from it: they stay joined and keep contributing the values
-          they last imported, which the preview states rather than leaving to be discovered.
+          kept, when their obsolete objects are next synchronised. Deselecting an Object Type that an enabled
+          Synchronisation Rule still manages is reported as Blocking, because saving it is refused.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -310,10 +311,11 @@ function New-JIMConfigurationChangePreview {
     .EXAMPLE
         $types = @(@{ objectTypeId = 9; selected = $false })
         $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 5 -SchemaObjectType $types -Wait
-        $preview.ImpactCounts | Where-Object transitionType -eq 'WouldStopBeingImported'
+        $preview.ImpactCounts | Where-Object transitionType -in 'WouldDisconnectFromMetaverseObject', 'WouldBecomeDeletionEligible'
 
-        Previews deselecting an Object Type and reports how many of its objects would stop being imported
-        while staying joined to their Metaverse Objects, contributing values that never refresh again.
+        Previews deselecting an Object Type and reports how many of its objects would be disconnected from
+        their Metaverse Objects once the next Full Import obsoletes them, and how many of those Metaverse
+        Objects would become eligible for deletion.
 
     .EXAMPLE
         $types = @(@{ objectTypeId = 9; removeContributedAttributesOnObsoletion = $false })
