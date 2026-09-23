@@ -825,6 +825,155 @@ public class SqlConnectorImportTests
 
     #endregion
 
+    #region SQL Server legacy datetime columns (#1451)
+
+    /// <summary>
+    /// Job history keyed the way HR systems key it: an employee and the moment an assignment took effect,
+    /// in a legacy datetime column. The assignment's roles live in a related table keyed the same way.
+    /// </summary>
+    private const string AssignmentDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Assignment",
+              "schema": "HR",
+              "table": "ASSIGNMENTS",
+              "anchorColumns": [ "EMPLOYEE_ID", "EFFECTIVE_FROM" ],
+              "relatedTables": [
+                {
+                  "attributeName": "Roles",
+                  "schema": "HR",
+                  "table": "ASSIGNMENT_ROLES",
+                  "valueColumn": "ROLE_NAME",
+                  "joinColumns": [ "EMPLOYEE_ID", "EFFECTIVE_FROM" ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    [Test]
+    public async Task ImportAsync_CompositeAnchorWithALegacyDateTimePart_ReadsEveryRowExactlyOnce()
+    {
+        // Six assignments a 1/300 second apart, two a page, so page boundaries land on both the first
+        // and the second tick of a millisecond. Bound as datetime2, a boundary on a first tick (.003)
+        // compares below the column's exact .0033333 and the row it ended on is read again.
+        var provider = AssignmentProvider(sqlTicks: [0, 1, 2, 3, 4, 5]);
+
+        var run = await RunImportAsync(provider, AssignmentDocument, AssignmentSystem(), pageSize: 2);
+
+        var composed = run.ImportObjects
+            .Select(importObject => Attribute(importObject, "EMPLOYEE_ID+EFFECTIVE_FROM").StringValues.Single())
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(composed, Has.Count.EqualTo(6), "Every assignment is read, and none of them twice.");
+            Assert.That(composed, Is.Unique);
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_CompositeAnchorWithALegacyDateTimePart_GathersEveryRowsRelatedValues()
+    {
+        // Bound as datetime2, a join value read out of a datetime column never equals the related row's
+        // own copy of it, so an assignment starting on anything but a whole 1/100 second silently loses
+        // every related value it has.
+        var provider = AssignmentProvider(sqlTicks: [0, 1, 2]);
+
+        var run = await RunImportAsync(provider, AssignmentDocument, AssignmentSystem(), pageSize: 10);
+
+        var rolesByStart = run.ImportObjects.ToDictionary(
+            importObject => Attribute(importObject, "EFFECTIVE_FROM").DateTimeValue!.Value.Millisecond,
+            importObject => Attribute(importObject, "Roles").StringValues);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rolesByStart[0], Is.EqualTo(new[] { "Role 0" }));
+            Assert.That(rolesByStart[3], Is.EqualTo(new[] { "Role 1" }), "A start on the first tick of a millisecond.");
+            Assert.That(rolesByStart[7], Is.EqualTo(new[] { "Role 2" }), "A start on the second tick of a millisecond.");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_NoDateValueBound_NeverReadsTheColumnCatalogue()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "DISPLAY_NAME"], [1, "Ada"], [2, "Grace"], [3, "Katherine"]);
+
+        await RunImportAsync(provider, PersonDocument, PersonSystem(), pageSize: 1);
+
+        Assert.That(provider.ColumnCatalogueReadCount, Is.Zero,
+            "Only a date's binding depends on its column, so an import keyed on anything else must not pay a catalogue read per page for it.");
+    }
+
+    [Test]
+    public async Task ImportAsync_ManyDateValuesBoundAgainstOneSource_ReadsItsColumnTypesOncePerCall()
+    {
+        var provider = AssignmentProvider(sqlTicks: [0, 1, 2, 3, 4]);
+
+        // One call: every row fits on the first page, whose related-table gather binds ten values.
+        var run = await RunImportAsync(provider, AssignmentDocument, AssignmentSystem(), pageSize: 10);
+
+        var readsBySource = provider.ExecutedCommands
+            .Where(command => command.CommandText == provider.ColumnsCommandText)
+            .GroupBy(command => command.Parameters[SqlCatalogueParameters.ObjectName] as string)
+            .ToDictionary(group => group.Key!, group => group.Count());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.Pages, Has.Count.EqualTo(1));
+            Assert.That(readsBySource, Is.EqualTo(new Dictionary<string, int> { ["ASSIGNMENT_ROLES"] = 1 }),
+                "A source's column types are read once and kept for the call, never once per bound value.");
+        }
+    }
+
+    /// <summary>
+    /// A stand-in SQL Server holding assignments that start a whole number of 1/300-second ticks after
+    /// ten o'clock, each with one role, and a catalogue saying the start column is a legacy datetime.
+    /// </summary>
+    private static FakeSqlProvider AssignmentProvider(int[] sqlTicks)
+    {
+        var provider = new FakeSqlProvider();
+
+        provider.Catalogue.AddTable("HR", "ASSIGNMENTS",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("EFFECTIVE_FROM", "datetime"));
+        provider.Catalogue.AddTable("HR", "ASSIGNMENT_ROLES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("EFFECTIVE_FROM", "datetime"),
+            new FakeCatalogueColumn("ROLE_NAME", "nvarchar"));
+
+        provider.Catalogue.AddRows("HR", "ASSIGNMENTS", ["EMPLOYEE_ID", "EFFECTIVE_FROM"],
+            [.. sqlTicks.Select(tick => new object?[] { 1, LegacyDateTime(tick) })]);
+        provider.Catalogue.AddRows("HR", "ASSIGNMENT_ROLES", ["EMPLOYEE_ID", "EFFECTIVE_FROM", "ROLE_NAME"],
+            [.. sqlTicks.Select(tick => new object?[] { 1, LegacyDateTime(tick), $"Role {tick}" })]);
+
+        return provider;
+    }
+
+    /// <summary>
+    /// A value held in a legacy datetime column, a whole number of 1/300-second ticks after 10:00.
+    /// </summary>
+    private static FakeSqlServerDateTime LegacyDateTime(int sqlTicks) =>
+        FakeSqlServerDateTime.Stored(new DateTime(2025, 6, 1, 10, 0, 0).AddTicks((long)Math.Round(sqlTicks * (TimeSpan.TicksPerSecond / 300d))));
+
+    private static ConnectedSystem AssignmentSystem() => new()
+    {
+        Name = "HR Database",
+        ObjectTypes =
+        [
+            ObjectType("Assignment",
+                Attribute("EMPLOYEE_ID", AttributeDataType.Number),
+                Attribute("EFFECTIVE_FROM", AttributeDataType.DateTime),
+                Attribute("EMPLOYEE_ID+EFFECTIVE_FROM", AttributeDataType.Text, isExternalId: true),
+                Attribute("Roles", AttributeDataType.Text, plurality: AttributePlurality.MultiValued))
+        ]
+    };
+
+    #endregion
+
     #region Test helpers
 
     private const string PhonesDocument = """

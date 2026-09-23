@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Application.Servers.Preview;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -22,8 +23,9 @@ namespace JIM.Worker.Tests.Servers;
 /// table byte-identical.
 ///
 /// The reads are the part a mocked fixture cannot check, and they are all status-sensitive in ways that are easy
-/// to get quietly wrong: the freeze population is the LIVE objects (an obsolete one is already on its way out), the
-/// attribute population is only the objects holding a value (the rest have nothing to freeze), and the obsoletion
+/// to get quietly wrong: a deselected Object Type's population is the LIVE objects, split into joined and unjoined
+/// (an obsolete one is already on its way out), the attribute population is only the objects holding a value (the
+/// rest have nothing to freeze), and the obsoletion
 /// toggle's population is the objects that are obsolete AND still joined (an obsolete object with no join has no
 /// contributed values to withdraw). Each of those filters returns a plausible non-empty answer when wrong.
 /// </summary>
@@ -78,7 +80,7 @@ public class ConnectedSystemSchemaPreviewIsolationDatabaseTests
     }
 
     [Test]
-    public async Task EvaluateDeltasAsync_ObjectTypeDeselectedOverLiveDatabase_FreezesTheLiveObjectsAndPersistsNothingAsync()
+    public async Task EvaluateDeltasAsync_ObjectTypeDeselectedOverLiveDatabase_ObsoletesTheLiveObjectsAndPersistsNothingAsync()
     {
         var seeded = await SeedSchemaTopologyAsync();
         var before = await DatabaseIsolationSnapshot.CaptureAsync(_connectionString);
@@ -89,7 +91,7 @@ public class ConnectedSystemSchemaPreviewIsolationDatabaseTests
         {
             var repo = new PostgresDataRepository(ctx);
             using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
-            var adapter = new ConnectedSystemSchemaPreviewAdapter(jim);
+            var adapter = new ConnectedSystemSchemaPreviewAdapter(jim, new SyncEngine());
             var context = ContextFor(seeded, objectType => objectType with { Selected = false });
 
             await foreach (var delta in adapter.EvaluateDeltasAsync(context, CancellationToken.None))
@@ -100,12 +102,16 @@ public class ConnectedSystemSchemaPreviewIsolationDatabaseTests
         var after = await DatabaseIsolationSnapshot.CaptureAsync(_connectionString);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(deltas.Select(d => d.ConnectedSystemObjectId),
+            Assert.That(deltas.Where(d => d.ConnectedSystemObjectId != null).Select(d => d.ConnectedSystemObjectId),
                 Is.EquivalentTo(new Guid?[] { seeded.JoinedLiveCsoId, seeded.UnjoinedLiveCsoId }),
-                "the freeze is over the LIVE objects of the type. The obsolete one is already on its way out, and " +
-                "counting it would double-report an object the next synchronisation disconnects anyway");
-            Assert.That(deltas.Select(d => d.TransitionType),
-                Is.All.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopBeingImported));
+                "the next Full Import obsoletes the LIVE objects of the type. The obsolete one is already on its way " +
+                "out, and counting it would double-report an object the next synchronisation disconnects anyway");
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == seeded.JoinedLiveCsoId).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject),
+                "the joined object is disconnected once it is obsoleted");
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == seeded.UnjoinedLiveCsoId).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope),
+                "the unjoined object has nothing to disconnect; it simply leaves");
             Assert.That(counts.Sum(c => c.ObjectCount), Is.EqualTo(deltas.Count));
             Assert.That(() => after.AssertUnchangedSince(before), Throws.Nothing,
                 "a preview of a schema change must not save the schema change");
@@ -123,7 +129,7 @@ public class ConnectedSystemSchemaPreviewIsolationDatabaseTests
         {
             var repo = new PostgresDataRepository(ctx);
             using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
-            var adapter = new ConnectedSystemSchemaPreviewAdapter(jim);
+            var adapter = new ConnectedSystemSchemaPreviewAdapter(jim, new SyncEngine());
 
             var context = ContextFor(seeded, objectType => objectType with
             {
@@ -157,7 +163,7 @@ public class ConnectedSystemSchemaPreviewIsolationDatabaseTests
         {
             var repo = new PostgresDataRepository(ctx);
             using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
-            var adapter = new ConnectedSystemSchemaPreviewAdapter(jim);
+            var adapter = new ConnectedSystemSchemaPreviewAdapter(jim, new SyncEngine());
             var context = ContextFor(seeded, objectType => objectType with
             {
                 RemoveContributedAttributesOnObsoletion = false

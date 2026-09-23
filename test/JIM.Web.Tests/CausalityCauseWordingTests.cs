@@ -494,5 +494,80 @@ public class CausalityCauseWordingTests
 
     #endregion
 
+    #region the export rejection that revised a generated value (#242)
+
+    private static CausalChainCohort GeneratedValueRevisionCohort(
+        CausalReasonCode reasonCode,
+        string? connectedSystemName = "Yellowstone APAC")
+    {
+        return new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.ExportRejectionCausedGeneratedValueRevision,
+            ReasonCode = reasonCode,
+            ConnectedSystemId = connectedSystemName == null ? null : 1,
+            ConnectedSystemName = connectedSystemName,
+            Members = [new CausalChainMember { DisplayName = "Liam Allen" }]
+        };
+    }
+
+    [Test]
+    public void Sentence_GeneratedValueAlreadyInUse_NamesTheRejectingSystemAndTheNewValue()
+    {
+        var sentence = CausalityCauseWording.Sentence(
+            GeneratedValueRevisionCohort(CausalReasonCode.GeneratedValueAlreadyInUse), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Yellowstone APAC rejected the generated value as already in use, so JIM generated a new one"));
+    }
+
+    [Test]
+    public void Sentence_GeneratedValueAnchoredElsewhere_StatesTheObjectNeedsADecision()
+    {
+        var sentence = CausalityCauseWording.Sentence(
+            GeneratedValueRevisionCohort(CausalReasonCode.GeneratedValueAnchoredElsewhere), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Yellowstone APAC rejected the generated value, but another Connected System already holds it, so the object needs a decision"));
+    }
+
+    [Test]
+    public void Sentence_GeneratedValueRenameAuthorised_NamesTheAuthorisedRename()
+    {
+        var sentence = CausalityCauseWording.Sentence(
+            GeneratedValueRevisionCohort(CausalReasonCode.GeneratedValueRenameAuthorised), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "Yellowstone APAC rejected the generated value and an administrator allowed the rename, so JIM generated a new one"));
+    }
+
+    /// <summary>
+    /// No snapshot name to hand still states the claim rather than falling silent on a blank subject.
+    /// </summary>
+    [Test]
+    public void Sentence_GeneratedValueRevisionWithNoSystemName_FallsBackToTheGenericSubject()
+    {
+        var sentence = CausalityCauseWording.Sentence(
+            GeneratedValueRevisionCohort(CausalReasonCode.GeneratedValueAlreadyInUse, connectedSystemName: null),
+            effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "The target Connected System rejected the generated value as already in use, so JIM generated a new one"));
+    }
+
+    /// <summary>
+    /// The system is named in the sentence, exactly as the queueing seam names its own system, so the hop
+    /// must not also render its chip.
+    /// </summary>
+    [Test]
+    public void ShowConnectedSystemChip_GeneratedValueRevisionHop_SuppressesTheChip()
+    {
+        Assert.That(
+            CausalityCauseWording.ShowConnectedSystemChip(
+                GeneratedValueRevisionCohort(CausalReasonCode.GeneratedValueAlreadyInUse)),
+            Is.False);
+    }
+
+    #endregion
+
     #endregion
 }

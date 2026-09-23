@@ -235,6 +235,21 @@ public class TaskingRepository : ITaskingRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<HashSet<int>> GetSyncRuleIdsWithQueuedDeletionAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        // Filtered off the shared Worker Task set for the same reason as the Connected System lookup above.
+        var ids = await Repository.Database.WorkerTasks
+            .OfType<DeleteSyncRuleWorkerTask>()
+            .Where(t => syncRuleIds.Contains(t.SyncRuleId))
+            .Select(t => t.SyncRuleId)
+            .Distinct()
+            .ToListAsync();
+        return ids.ToHashSet();
+    }
+
     public async Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataWorkerTaskAsync(int dataGenerationTemplateId)
     {
         return await Repository.Database.ExampleDataTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);

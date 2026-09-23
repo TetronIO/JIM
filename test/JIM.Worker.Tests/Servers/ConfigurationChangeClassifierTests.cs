@@ -71,6 +71,50 @@ public class ConfigurationChangeClassifierTests
     }
 
     [Test]
+    public void Classify_RuleDisabledWithReason_IsSyncAffecting()
+    {
+        // The schema refresh "Apply and Disable Dependents" path (#1485) disables a rule and records why in the same
+        // save. The reason must classify rather than throw, and must not lift the change above the toggle's class.
+        var before = SyncRule("HR Inbound");
+        var after = SyncRule("HR Inbound");
+        after.Enabled = false;
+        after.DisabledReason = "Attribute 'department' was removed from the Connected System schema.";
+
+        Assert.That(ClassifyChange(before, after), Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+    }
+
+    [Test]
+    public void Classify_DisabledReasonOnly_IsCosmetic()
+    {
+        // The reason records why; it changes nothing about what synchronises.
+        var before = SyncRule("HR Inbound");
+        before.Enabled = false;
+        before.DisabledReason = "Attribute 'department' was removed from the Connected System schema.";
+        var after = SyncRule("HR Inbound");
+        after.Enabled = false;
+        after.DisabledReason = "Attribute 'department' was removed; re-map before enabling.";
+
+        Assert.That(ClassifyChange(before, after), Is.EqualTo(ConfigurationChangeClass.Cosmetic));
+    }
+
+    [Test]
+    public void Classify_AttributeFlowDisabledWithReason_IsSyncAffecting()
+    {
+        var before = SyncRule("HR Inbound");
+        before.AttributeFlowRules.Add(new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5, Enabled = true });
+        var after = SyncRule("HR Inbound");
+        after.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Enabled = false,
+            DisabledReason = "Source attribute 'department' was removed from the Connected System schema."
+        });
+
+        Assert.That(ClassifyChange(before, after), Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
+    }
+
+    [Test]
     public void Classify_DeprovisionActionChange_IsDestructive()
     {
         var before = SyncRule("HR Inbound");
@@ -98,6 +142,17 @@ public class ConfigurationChangeClassifierTests
         var after = SyncRule("HR Inbound");
 
         Assert.That(ClassifyChange(before, after), Is.EqualTo(ConfigurationChangeClass.NotClassified));
+    }
+
+    [Test]
+    public void Classify_GeneratedMappingTokenKindChange_IsSyncAffecting()
+    {
+        // A token change alters what a future object receives; it never touches a value already assigned
+        // (plan decision 10), so this is Class B, never A.
+        var before = SyncRuleWithGeneratedMapping(GeneratedValueTokenKind.OnlyIfTaken);
+        var after = SyncRuleWithGeneratedMapping(GeneratedValueTokenKind.Sequence);
+
+        Assert.That(ClassifyChange(before, after), Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
     }
 
     #endregion
@@ -160,6 +215,30 @@ public class ConfigurationChangeClassifierTests
 
     #endregion
 
+    #region Unique Value Generation (#242)
+
+    [Test]
+    public void ClassifyKey_UniqueValueGenerationKeys_AreSyncAffecting()
+    {
+        string[] keys =
+        [
+            "generation", "tokenKind", "suffixStyle", "suffixStart", "sequenceStart", "sequenceIncrement",
+            "fixedWidth", "onWidthExceeded", "randomFormat", "randomLength", "separator", "attemptLimit",
+            "neverReuse", "collisionRemediation", "exclusions", "exclusion"
+        ];
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var key in keys)
+            {
+                Assert.That(ConfigurationChangeClassifier.ClassifyKey(ConfigurationSnapshotService.SyncRuleObjectType, key),
+                    Is.EqualTo(ConfigurationChangeClass.SyncAffecting), $"'{key}' must classify as sync-affecting");
+            }
+        }
+    }
+
+    #endregion
+
     #region Helpers
 
     private ConfigurationChangeClass ClassifyChange(SyncRule before, SyncRule after)
@@ -178,6 +257,18 @@ public class ConfigurationChangeClassifierTests
         ConnectedSystemObjectTypeId = 7,
         MetaverseObjectTypeId = 1
     };
+
+    private static SyncRule SyncRuleWithGeneratedMapping(GeneratedValueTokenKind tokenKind)
+    {
+        var rule = SyncRule("HR Inbound");
+        rule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Generation = new SyncRuleMappingGeneration { Id = 900, TokenKind = tokenKind }
+        });
+        return rule;
+    }
 
     #endregion
 }

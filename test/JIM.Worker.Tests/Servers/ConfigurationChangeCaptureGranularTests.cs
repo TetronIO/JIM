@@ -163,6 +163,20 @@ public class ConfigurationChangeCaptureGranularTests
     }
 
     [Test]
+    public async Task CreateSyncRuleMappingAsync_GeneratedMapping_CapturesGenerationNodeInSnapshotAsync()
+    {
+        // Unique Value Generation (#242): the reloaded rule carries a generated mapping, so the captured snapshot
+        // must record its "generation" node, not just the ordinary attributeFlowRule wrapper AssertCapturedRuleVersion
+        // already checks for.
+        _csRepo.Setup(r => r.GetSyncRuleAsync(55)).ReturnsAsync(BuildRuleWithGeneratedMapping);
+
+        await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(NewMappingFor(55), NewApiKey());
+
+        AssertCapturedRuleVersion();
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"generation\""));
+    }
+
+    [Test]
     public async Task CreateSyncRuleMappingAsync_WhenTrackingDisabled_RecordsNoSnapshotAsync()
     {
         SetupTrackingSetting(enabled: false);
@@ -210,6 +224,28 @@ public class ConfigurationChangeCaptureGranularTests
         AttributeFlowRules =
         [
             new SyncRuleMapping { Id = 101, TargetConnectedSystemAttributeId = 9 }
+        ]
+    };
+
+    // As BuildRuleWithMapping, but the mapping is generated (Unique Value Generation, #242): a rule that already
+    // carries a generation row, so the captured snapshot's completeness can be checked without touching the sync
+    // engine or repository layers.
+    private static SyncRule BuildRuleWithGeneratedMapping() => new()
+    {
+        Id = 55,
+        Name = "AD Export",
+        Direction = SyncRuleDirection.Export,
+        ConnectedSystemId = 3,
+        ConnectedSystemObjectTypeId = 7,
+        MetaverseObjectTypeId = 1,
+        AttributeFlowRules =
+        [
+            new SyncRuleMapping
+            {
+                Id = 101,
+                TargetConnectedSystemAttributeId = 9,
+                Generation = new SyncRuleMappingGeneration { Id = 900, TokenKind = GeneratedValueTokenKind.Sequence }
+            }
         ]
     };
 

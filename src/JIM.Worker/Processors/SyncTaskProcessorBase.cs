@@ -676,6 +676,9 @@ public abstract class SyncTaskProcessorBase
                             ObjectChangeType.Projected => ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
                             ObjectChangeType.Joined => ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
                             ObjectChangeType.DisconnectedOutOfScope => ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+                            // A retained join flowed nothing; recording it as AttributeFlow reported a flow that never
+                            // happened and inflated the Activity's Attribute Flow count (#1649).
+                            ObjectChangeType.OutOfScopeRetainJoin => ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
                             _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
                         };
                         // Include MVO info for outcomes (only store ID if already persisted). For
@@ -697,7 +700,8 @@ public abstract class SyncTaskProcessorBase
                             ? changeResult.AttributeFlowCount : null;
 
                         // Attribute the Synchronisation Rule carried on the change result (#1085): the
-                        // scoping rule for DisconnectedOutOfScope, the projecting rule for Projected.
+                        // scoping rule for DisconnectedOutOfScope and OutOfScopeRetainJoin, the projecting
+                        // rule for Projected.
                         var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem, outcomeType,
                             targetEntityId: mvoId,
                             targetEntityDescription: mvoDescription,
@@ -4805,7 +4809,7 @@ public abstract class SyncTaskProcessorBase
                 // No Attribute Flow will occur since CSO is out of scope
                 Log.Information("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of scope but InboundOutOfScopeAction=RemainJoined. " +
                     "Join preserved, no Attribute Flow.", connectedSystemObject.Id);
-                return MetaverseObjectChangeResult.OutOfScopeRetainJoin();
+                return MetaverseObjectChangeResult.OutOfScopeRetainJoin(scopingSyncRule);
 
             case InboundOutOfScopeAction.Disconnect:
             default:

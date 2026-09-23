@@ -257,6 +257,8 @@ In a zone with daylight saving, the hour the clocks skip in spring and the hour 
 
 On Oracle, JIM also sets the database session's time zone to the same value, which is what makes `TIMESTAMP WITH LOCAL TIME ZONE` columns read correctly. If the Oracle server does not recognise the zone name you entered, the connection is refused with a message saying so.
 
+JIM holds a date and time to a ten-millionth of a second (seven fractional digits). An Oracle `TIMESTAMP(9)` column is fine as a Delta Import watermark, change-log sequence or anchor so long as its values carry no more digits than that, which is always the case for values from `SYSTIMESTAMP` (microseconds). A value with genuine nanoseconds is read back shortened, so the row a page or a run stopped on is read again.
+
 ## Worked examples
 
 ### Microsoft SQL Server: an HR application

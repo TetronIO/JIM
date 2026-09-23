@@ -59,7 +59,15 @@ public enum SyncRuleMappingSourcesType
     NotSet = 0,
     AttributeMapping = 1,
     ExpressionMapping = 2,
-    AdvancedMapping = 3
+    AdvancedMapping = 3,
+
+    /// <summary>
+    /// "JIM generates it" (#242): the mapping carries a <see cref="SyncRuleMappingGeneration"/> settings row, so
+    /// its value is a base expression (optional for a sequence or random token) plus a uniqueness token, resolved
+    /// by the unique value service rather than by evaluating the sources alone. Persisted by ordinal through the
+    /// REST API's <c>SourceType</c>; append-only.
+    /// </summary>
+    GeneratedMapping = 4
 }
 
 /// <summary>

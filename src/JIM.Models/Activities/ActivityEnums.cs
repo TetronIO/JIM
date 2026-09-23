@@ -236,23 +236,24 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     WouldStopCorrectingDrift,
 
     /// <summary>
-    /// Preview only (#1475): the object would stop being imported, and nothing else would happen to it. Deselecting
-    /// its Object Type removes the type from deletion detection, so the object is never compared against an import
-    /// again: it stays joined to its Metaverse Object and keeps contributing the values it last imported, which stop
-    /// being refreshed.
+    /// Preview only (#1475): the attribute the delta names would stop being imported, and nothing else would happen
+    /// to the object. The Connector stops fetching that attribute and the values already held for it stay exactly as
+    /// they are: still on the object, still flowing, no longer refreshed.
     ///
-    /// Where the delta names an attribute, the same freeze at attribute granularity: the Connector stops fetching
-    /// that attribute and the values already held for it stay exactly as they are.
+    /// Its own transition rather than a disconnection or an obsoletion, because it is neither. A value that keeps
+    /// flowing while nothing refreshes it is the failure this preview exists to make visible, and borrowing either of
+    /// those words would describe a cascade that does not happen.
     ///
-    /// Its own transition rather than a disconnection or an obsoletion, because it is neither. An object that keeps
-    /// contributing stale values while nothing reports it is the failure this preview exists to make visible, and
-    /// borrowing either of those words would describe a cascade that does not happen. See #1474.
+    /// Deselecting a whole Object Type is not this transition: that takes the type out of management, so its objects
+    /// are obsoleted by the next Full Import and reported as <see cref="WouldDisconnectFromMetaverseObject"/> or
+    /// <see cref="WouldFallOutOfScope"/> (#1474). Previews recorded before that change carry this transition with no
+    /// attribute named, for a whole Object Type.
     /// </summary>
     WouldStopBeingImported,
 
     /// <summary>
-    /// Preview only (#1475): the inverse. The object, or the attribute the delta names, would start being imported
-    /// again, so values that had frozen resume tracking the Connected System from the next Import Run Profile.
+    /// Preview only (#1475): the object, or the attribute the delta names, would start being imported again, so its
+    /// values resume tracking the Connected System from the next Import Run Profile.
     /// </summary>
     WouldResumeBeingImported,
 
@@ -334,7 +335,45 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// which reports a Delete that genuinely is staged for an object that exists (or may exist) in the target
     /// system.
     /// </summary>
-    ProvisioningCancelled
+    ProvisioningCancelled,
+
+    /// <summary>
+    /// Unique Value Generation (#242): JIM generated a value for the attribute, because it was the winning
+    /// contributor and no participating target already held a value the object could adopt instead.
+    /// </summary>
+    GeneratedValueAssigned,
+
+    /// <summary>
+    /// Unique Value Generation (#242): a value a participating target already held for the attribute was
+    /// adopted as the object's assignment instead of generating a new one (adopt before generate, FR 30).
+    /// </summary>
+    GeneratedValueAdopted,
+
+    /// <summary>
+    /// Unique Value Generation (#242): a generated value assignment was deleted (the object or its
+    /// generation mapping was removed, or another contributor won the attribute) and, with "Never reuse a
+    /// value" on, the value was written to the attribute's retired values register (FR 28).
+    /// </summary>
+    GeneratedValueRetired,
+
+    /// <summary>
+    /// Unique Value Generation (#242): Collision Remediation revised a generated value after the target
+    /// rejected it as already in use. Recorded on the export item that saw the rejection; the revised value
+    /// itself is written to the Metaverse Object (import mode) or the Connected System Object (export mode).
+    /// </summary>
+    GeneratedValueRemediated,
+
+    /// <summary>
+    /// A joined Connected System Object fell out of scope of its import Synchronisation Rule, whose Inbound
+    /// Out-of-Scope Action is RemainJoined, so it kept its Metaverse Object join (#1649). Nothing flows from it
+    /// while it stays out of scope, and nothing is recalled: the values it contributed stay where they are. The
+    /// retaining sibling of <see cref="DisconnectedOutOfScope"/>, and attributed to the same scoping rule.
+    ///
+    /// Its own value rather than an absent tree because the scope exit is an audit event in its own right; before
+    /// it existed the engine recorded an <see cref="AttributeFlow"/> root for it, reporting a flow that never
+    /// happened and inflating the Activity's Attribute Flow count.
+    /// </summary>
+    OutOfScopeRetainJoin
 }
 
 /// <summary>

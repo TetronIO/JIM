@@ -89,6 +89,7 @@ internal sealed class SqlConnectorImport
     private readonly ILogger _logger;
     private readonly CancellationToken _cancellationToken;
     private readonly IConnectorProgress _progress;
+    private readonly SqlComparisonBinder _comparisons;
 
     internal SqlConnectorImport(
         ISqlProvider provider,
@@ -116,6 +117,7 @@ internal sealed class SqlConnectorImport
         _logger = logger;
         _cancellationToken = cancellationToken;
         _progress = progress;
+        _comparisons = new SqlComparisonBinder(provider, connection, logger, cancellationToken);
     }
 
     /// <exception cref="SqlSchemaConfigurationException">The configuration cannot be acted on: an anchor the schema does not have, or a reference JIM could never resolve.</exception>
@@ -522,6 +524,7 @@ internal sealed class SqlConnectorImport
     {
         var rows = new List<object?[]>(anchors.Count);
         var anchorsPerQuery = Math.Max(1, MaxJoinParametersPerQuery / plan.AnchorColumns.Count);
+        var source = ColumnSourceOf(plan);
 
         for (var offset = 0; offset < anchors.Count; offset += anchorsPerQuery)
         {
@@ -532,7 +535,7 @@ internal sealed class SqlConnectorImport
             for (var anchorIndex = 0; anchorIndex < batch.Count; anchorIndex++)
             {
                 for (var columnIndex = 0; columnIndex < plan.AnchorColumns.Count; columnIndex++)
-                    command.Parameters.Add(_provider.CreateParameter(JoinParameterName(anchorIndex, columnIndex), batch[anchorIndex][columnIndex]));
+                    command.Parameters.Add(await _comparisons.BindAsync(JoinParameterName(anchorIndex, columnIndex), batch[anchorIndex][columnIndex], source, plan.AnchorColumns[columnIndex].Name));
             }
 
             rows.AddRange(await ReadRowsAsync(command, plan.ReadColumns, plan.Name));
@@ -761,8 +764,8 @@ internal sealed class SqlConnectorImport
 
         if (watermark != null)
         {
-            command.Parameters.Add(_provider.CreateParameter(WatermarkParameterName, BindDeltaValue(plan, watermark, "watermark")));
-            BindRelatedWatermarks(command, plan, relatedChanges);
+            command.Parameters.Add(await _comparisons.BindAsync(WatermarkParameterName, BindDeltaValue(plan, watermark, "watermark"), ChangeColumnSourceOf(plan), changeColumn));
+            await BindRelatedWatermarksAsync(command, plan, relatedChanges);
         }
 
         var count = await command.ExecuteScalarAsync(_cancellationToken);
@@ -783,6 +786,20 @@ internal sealed class SqlConnectorImport
 
         var changeLog = RequireChangeLog(plan);
         return (_provider.QualifyObjectName(changeLog.SchemaName, changeLog.TableName), changeLog.SequenceColumn);
+    }
+
+    /// <summary>
+    /// Where the column this object type's changes are ordered by lives, for whichever mode is
+    /// configured: the counterpart of <see cref="ResolveChangeSource"/> that a bound value's column type
+    /// is read from.
+    /// </summary>
+    private SqlColumnSource ChangeColumnSourceOf(SqlImportPlan plan)
+    {
+        if (_deltaMode != SqlDeltaImportMode.ChangeLogTable)
+            return ColumnSourceOf(plan);
+
+        var changeLog = RequireChangeLog(plan);
+        return SqlColumnSource.Table(changeLog.SchemaName, changeLog.TableName);
     }
 
     /// <summary>
@@ -831,12 +848,14 @@ internal sealed class SqlConnectorImport
     /// Binds each related table's own watermark, skipping the ones JIM holds none for: those have no
     /// parameter in the statement because their predicate is existence alone.
     /// </summary>
-    private void BindRelatedWatermarks(DbCommand command, SqlImportPlan plan, IReadOnlyList<SqlRelatedChange> relatedChanges)
+    private async Task BindRelatedWatermarksAsync(DbCommand command, SqlImportPlan plan, IReadOnlyList<SqlRelatedChange> relatedChanges)
     {
         foreach (var relatedChange in relatedChanges.Where(relatedChange => relatedChange.Source.WatermarkParameterName != null))
-            command.Parameters.Add(_provider.CreateParameter(
+            command.Parameters.Add(await _comparisons.BindAsync(
                 relatedChange.Source.WatermarkParameterName!,
-                BindDeltaValue(plan, relatedChange.Watermark!, $"watermark for related table '{relatedChange.Source.TableName}'")));
+                BindDeltaValue(plan, relatedChange.Watermark!, $"watermark for related table '{relatedChange.Source.TableName}'"),
+                SqlColumnSource.Table(relatedChange.Source.SchemaName, relatedChange.Source.TableName),
+                relatedChange.Source.WatermarkColumn));
     }
 
     private static string RelatedWatermarkParameterName(int index) => $"{RelatedWatermarkParameterPrefix}{index}";
@@ -872,14 +891,16 @@ internal sealed class SqlConnectorImport
         using var command = _provider.CreateCommand(_connection, _provider.BuildKeysetPageCommandText(request));
         command.Parameters.Add(_provider.CreateParameter(PageSizeParameterName, _runProfile.PageSize));
 
+        var source = ColumnSourceOf(request);
+
         if (request.HasChangeFilter)
         {
-            command.Parameters.Add(_provider.CreateParameter(WatermarkParameterName, BindDeltaValue(plan, watermark!, "watermark")));
-            BindRelatedWatermarks(command, plan, relatedChanges ?? []);
+            command.Parameters.Add(await _comparisons.BindAsync(WatermarkParameterName, BindDeltaValue(plan, watermark!, "watermark"), source, request.ChangeColumn!));
+            await BindRelatedWatermarksAsync(command, plan, relatedChanges ?? []);
         }
 
         for (var index = 0; index < page.Position.Count; index++)
-            command.Parameters.Add(_provider.CreateParameter(AnchorParameterName(index), BindDeltaValue(plan, page.Position[index], "pagination token")));
+            command.Parameters.Add(await _comparisons.BindAsync(AnchorParameterName(index), BindDeltaValue(plan, page.Position[index], "pagination token"), source, request.AnchorColumns[index]));
 
         return await ReadRowsAsync(command, columns, plan.Name);
     }
@@ -1095,6 +1116,23 @@ internal sealed class SqlConnectorImport
         return aliased ? $"{qualifiedObjectName} {_provider.QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}" : qualifiedObjectName;
     }
 
+    /// <summary>
+    /// Where an object type's columns live, for reading what type they are: the counterpart of
+    /// <see cref="BuildFromClause"/>.
+    /// </summary>
+    private static SqlColumnSource ColumnSourceOf(SqlImportPlan plan) =>
+        plan.Configuration.IsCustomSelect
+            ? SqlColumnSource.Statement(plan.Configuration.SelectStatement!)
+            : SqlColumnSource.Table(plan.Configuration.SchemaName, plan.Configuration.TableName!);
+
+    /// <summary>
+    /// Where the columns a keyset page compares against live.
+    /// </summary>
+    private static SqlColumnSource ColumnSourceOf(SqlKeysetPageRequest request) =>
+        string.IsNullOrWhiteSpace(request.SelectStatement)
+            ? SqlColumnSource.Table(request.SchemaName, request.ObjectName!)
+            : SqlColumnSource.Statement(request.SelectStatement);
+
     #endregion
 
     #region Reading pages
@@ -1115,8 +1153,10 @@ internal sealed class SqlConnectorImport
         using var command = _provider.CreateCommand(_connection, _provider.BuildKeysetPageCommandText(request));
         command.Parameters.Add(_provider.CreateParameter(PageSizeParameterName, _runProfile.PageSize));
 
+        var source = ColumnSourceOf(plan);
+
         for (var index = 0; index < page.LastAnchor.Count; index++)
-            command.Parameters.Add(_provider.CreateParameter(AnchorParameterName(index), BindAnchorValue(plan, index, page.LastAnchor[index])));
+            command.Parameters.Add(await _comparisons.BindAsync(AnchorParameterName(index), BindAnchorValue(plan, index, page.LastAnchor[index]), source, plan.AnchorColumns[index].Name));
 
         return await ReadRowsAsync(command, plan.ReadColumns, plan.Name);
     }
@@ -1519,12 +1559,16 @@ internal sealed class SqlConnectorImport
 
         using var command = _provider.CreateCommand(_connection, BuildRelatedTableCommandText(plan, configuration, rows.Count));
 
+        // Each anchor value is compared with the related table's own join column, whose type is the
+        // one that decides how it binds.
+        var source = SqlColumnSource.Table(configuration.SchemaName, configuration.TableName);
+
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             for (var columnIndex = 0; columnIndex < plan.AnchorColumns.Count; columnIndex++)
             {
                 var anchorValue = rows[rowIndex][plan.ColumnIndex(plan.AnchorColumns[columnIndex].Name)];
-                command.Parameters.Add(_provider.CreateParameter(JoinParameterName(rowIndex, columnIndex), anchorValue));
+                command.Parameters.Add(await _comparisons.BindAsync(JoinParameterName(rowIndex, columnIndex), anchorValue, source, configuration.JoinColumns[columnIndex]));
             }
         }
 

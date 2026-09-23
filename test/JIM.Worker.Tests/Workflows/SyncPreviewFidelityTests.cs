@@ -512,12 +512,13 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// InboundOutOfScopeAction.RemainJoined: the join is preserved, so there is nothing to cascade. The
-    /// preview keeps today's behaviour (the OutOfScope warning, an empty tree); the real run's join is left
-    /// intact and records no DisconnectedOutOfScope outcome anywhere on the Activity.
+    /// InboundOutOfScopeAction.RemainJoined: the join is preserved, so there is nothing to cascade. Both sides
+    /// record a single OutOfScopeRetainJoin root attributed to the scoping rule, and nothing beneath it. Nothing
+    /// flowed, so neither side may report an Attribute Flow (#1649: the real run used to record a stray Attribute
+    /// Flow root for the retained join, and the preview recorded nothing at all).
     /// </summary>
     [Test]
-    public async Task PreviewSyncForCsoAsync_ScopeExitWithRemainJoinedAction_RecordsNoDisconnectedOutOfScopeEitherWayAsync()
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithRemainJoinedAction_TreeMatchesTheRealSyncOutcomeTreeAsync()
     {
         var sourceSystem = await CreateConnectedSystemAsync("HR Source");
         var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
@@ -551,17 +552,39 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
         await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSync2Profile, fullSync2Activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
 
+        // Resolved before the grouped assertions, which keep running after a failure: a missing item fails here,
+        // plainly, rather than as a null dereference further down.
+        var retainedJoinItem = fullSync2Activity.RunProfileExecutionItems.Single(rpei => rpei.ConnectedSystemObjectId == cso.Id);
+
         using (Assert.EnterMultipleScope())
         {
             Assert.That(preview.Warnings.Any(w => w.Code == SyncPreviewMessageCode.OutOfScope), Is.True);
-            Assert.That(preview.OutcomeTree, Is.Empty, "RemainJoined keeps the join intact: nothing to cascade");
+
+            var previewRoot = preview.OutcomeTree.SingleOrDefault();
+            Assert.That(previewRoot?.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin),
+                "The preview must state the retained join, not an empty tree");
+            Assert.That(previewRoot?.SyncRuleId, Is.EqualTo(importRule.Id), "The preview must attribute the scoping rule");
+            Assert.That(previewRoot?.TargetEntityId, Is.EqualTo(mvoId), "The preview must name the Metaverse Object the join is kept to");
 
             var reloadedCso = await ReloadEntityAsync(cso);
             Assert.That(reloadedCso.MetaverseObjectId, Is.EqualTo(mvoId), "The real run must keep the join intact too");
-            Assert.That(fullSync2Activity.RunProfileExecutionItems
-                    .SelectMany(rpei => rpei.SyncOutcomes)
-                    .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope),
-                Is.False, "The real run must record no DisconnectedOutOfScope outcome when the join is retained");
+
+            Assert.That(retainedJoinItem.ObjectChangeType, Is.EqualTo(ObjectChangeType.OutOfScopeRetainJoin),
+                "The real run must still record the retained join on the object's Execution Item");
+            Assert.That(retainedJoinItem.SyncOutcomes
+                    .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow),
+                Is.False, "Nothing flowed for a retained join, so no Attribute Flow outcome may be recorded");
+
+            var realRoot = retainedJoinItem.SyncOutcomes.SingleOrDefault(o => o.ParentSyncOutcome == null && !o.ParentSyncOutcomeId.HasValue);
+            Assert.That(realRoot?.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin),
+                "The real run must record the retained join as its own outcome");
+            Assert.That(realRoot?.SyncRuleId, Is.EqualTo(importRule.Id), "The real run must attribute the scoping rule");
+            Assert.That(realRoot?.SyncRuleName, Is.EqualTo(importRule.Name));
+            Assert.That(realRoot?.TargetEntityId, Is.EqualTo(mvoId), "The real run must name the Metaverse Object the join is kept to");
+            Assert.That(realRoot?.DetailCount, Is.Null, "Nothing flowed, so the root carries no count");
+
+            Assert.That(DescribeTree(preview.OutcomeTree), Is.EqualTo(DescribeTree(MapRealOutcomeTree(fullSync2Activity))),
+                "The preview's outcome tree must have the same shape as the tree the real synchronisation recorded (PRD requirement 9)");
         }
     }
 

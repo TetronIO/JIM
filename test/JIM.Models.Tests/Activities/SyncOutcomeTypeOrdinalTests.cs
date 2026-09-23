@@ -105,7 +105,17 @@ public class SyncOutcomeTypeOrdinalTests
         // Provisioning withdrawn before it was ever exported: a Metaverse Object deletion or a
         // scope exit cancelled a still-PendingProvisioning Connected System Object outright rather than
         // deprovisioning it.
-        [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = 46
+        [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = 46,
+
+        // Unique Value Generation (#242): generation, adoption, retirement and Collision Remediation outcomes.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] = 47,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = 48,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = 49,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] = 50,
+
+        // A joined Connected System Object left import scope under an Inbound Out-of-Scope Action of RemainJoined
+        // and kept its Metaverse Object join (#1649). It used to be recorded as a stray AttributeFlow (8).
+        [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = 51
     };
 
     [Test]

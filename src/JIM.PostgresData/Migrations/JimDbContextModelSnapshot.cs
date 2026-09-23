@@ -1837,6 +1837,86 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("SyncRuleMappings");
                 });
 
+            modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingGeneration", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttemptLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("CollisionRemediation")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FixedWidth")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("NeverReuse")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("OnWidthExceeded")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RandomFormat")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RandomLength")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Separator")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SequenceIncrement")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("SequenceStart")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("SuffixStart")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SuffixStyle")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SyncRuleMappingId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TokenKind")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SyncRuleMappingId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SyncRuleMappingGenerations_SyncRuleMappingId_Unique");
+
+                    b.ToTable("SyncRuleMappingGenerations");
+                });
+
+            modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingGenerationExclusion", b =>
+                {
+                    b.Property<int>("SyncRuleMappingGenerationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SyncRuleMappingGenerationId", "ConnectedSystemId");
+
+                    b.HasIndex("ConnectedSystemId");
+
+                    b.ToTable("SyncRuleMappingGenerationExclusions");
+                });
+
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingSource", b =>
                 {
                     b.Property<int>("Id")
@@ -4001,6 +4081,166 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("DeferredReferences");
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Adopted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("AnchoredByConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CommittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ConnectedSystemObjectTypeAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MetaverseAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("MetaverseObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("NeedsDecisionActivityRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NeedsDecisionEnteredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NormalisedValue")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PreviousValue")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RejectedByConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("RemediatedByActivityRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RemediationCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RenameAuthorised")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RenameAuthorisedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RenameAuthorisedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SyncRuleMappingGenerationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("State")
+                        .HasDatabaseName("IX_GeneratedValueAssignments_State");
+
+                    b.HasIndex("SyncRuleMappingGenerationId")
+                        .HasDatabaseName("IX_GeneratedValueAssignments_SyncRuleMappingGenerationId");
+
+                    b.HasIndex("ConnectedSystemObjectId", "ConnectedSystemObjectTypeAttributeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_GeneratedValueAssignments_CsoId_AttributeId_Unique")
+                        .HasFilter("\"ConnectedSystemObjectId\" IS NOT NULL");
+
+                    b.HasIndex("ConnectedSystemObjectTypeAttributeId", "NormalisedValue")
+                        .IsUnique()
+                        .HasDatabaseName("IX_GeneratedValueAssignments_CsAttributeId_NormalisedValue_Unique")
+                        .HasFilter("\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL");
+
+                    b.HasIndex("MetaverseAttributeId", "NormalisedValue")
+                        .IsUnique()
+                        .HasDatabaseName("IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique")
+                        .HasFilter("\"MetaverseAttributeId\" IS NOT NULL");
+
+                    b.HasIndex("MetaverseObjectId", "MetaverseAttributeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_GeneratedValueAssignments_MvoId_AttributeId_Unique")
+                        .HasFilter("\"MetaverseObjectId\" IS NOT NULL");
+
+                    b.ToTable("GeneratedValueAssignments", t =>
+                        {
+                            t.HasCheckConstraint("CK_GeneratedValueAssignments_OneMode", "(\"MetaverseObjectId\" IS NOT NULL AND \"MetaverseAttributeId\" IS NOT NULL AND \"ConnectedSystemObjectId\" IS NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NULL) OR (\"ConnectedSystemObjectId\" IS NOT NULL AND \"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL AND \"MetaverseObjectId\" IS NULL AND \"MetaverseAttributeId\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<long>("AssignedCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("ConnectedSystemObjectTypeAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastMovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("LastMovedBySyncRuleMappingId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MetaverseAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("NextValue")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectTypeAttributeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_GeneratedValueSequences_ConnectedSystemObjectTypeAttributeId_Unique")
+                        .HasFilter("\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL");
+
+                    b.HasIndex("LastMovedBySyncRuleMappingId");
+
+                    b.HasIndex("MetaverseAttributeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_GeneratedValueSequences_MetaverseAttributeId_Unique")
+                        .HasFilter("\"MetaverseAttributeId\" IS NOT NULL");
+
+                    b.ToTable("GeneratedValueSequences", t =>
+                        {
+                            t.HasCheckConstraint("CK_GeneratedValueSequences_OneAttribute", "(\"MetaverseAttributeId\" IS NOT NULL)::int + (\"ConnectedSystemObjectTypeAttributeId\" IS NOT NULL)::int = 1");
+                        });
+                });
+
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4969,6 +5209,36 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("TargetMetaverseAttribute");
                 });
 
+            modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingGeneration", b =>
+                {
+                    b.HasOne("JIM.Models.Logic.SyncRuleMapping", "SyncRuleMapping")
+                        .WithOne("Generation")
+                        .HasForeignKey("JIM.Models.Logic.SyncRuleMappingGeneration", "SyncRuleMappingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SyncRuleMapping");
+                });
+
+            modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingGenerationExclusion", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Logic.SyncRuleMappingGeneration", "Generation")
+                        .WithMany("Exclusions")
+                        .HasForeignKey("SyncRuleMappingGenerationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystem");
+
+                    b.Navigation("Generation");
+                });
+
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingSource", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "ConnectedSystemAttribute")
@@ -5559,6 +5829,69 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("TargetSystem");
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueAssignment", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ConnectedSystemObject")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "ConnectedSystemObjectTypeAttribute")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectTypeAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
+                        .WithMany()
+                        .HasForeignKey("MetaverseAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Core.MetaverseObject", "MetaverseObject")
+                        .WithMany()
+                        .HasForeignKey("MetaverseObjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Logic.SyncRuleMappingGeneration", "SyncRuleMappingGeneration")
+                        .WithMany()
+                        .HasForeignKey("SyncRuleMappingGenerationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystemObject");
+
+                    b.Navigation("ConnectedSystemObjectTypeAttribute");
+
+                    b.Navigation("MetaverseAttribute");
+
+                    b.Navigation("MetaverseObject");
+
+                    b.Navigation("SyncRuleMappingGeneration");
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.GeneratedValueSequence", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "ConnectedSystemObjectTypeAttribute")
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectTypeAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("JIM.Models.Logic.SyncRuleMapping", "LastMovedBySyncRuleMapping")
+                        .WithMany()
+                        .HasForeignKey("LastMovedBySyncRuleMappingId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
+                        .WithMany()
+                        .HasForeignKey("MetaverseAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("ConnectedSystemObjectTypeAttribute");
+
+                    b.Navigation("LastMovedBySyncRuleMapping");
+
+                    b.Navigation("MetaverseAttribute");
+                });
+
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
@@ -5755,7 +6088,14 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMapping", b =>
                 {
+                    b.Navigation("Generation");
+
                     b.Navigation("Sources");
+                });
+
+            modelBuilder.Entity("JIM.Models.Logic.SyncRuleMappingGeneration", b =>
+                {
+                    b.Navigation("Exclusions");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleScopingCriteriaGroup", b =>

@@ -7,6 +7,7 @@ using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data;
 using JIM.Models.Activities;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -175,7 +176,74 @@ public class ConfigurationDiffServiceTests
         Assert.That(diff.ModifiedCount, Is.EqualTo(1), "exactly step A's script path changed");
     }
 
+    // -- Unique Value Generation (#242) --------------------------------------------------------------------------------
+
+    [Test]
+    public void Diff_ChangedGenerationTokenKind_ReportsModifiedWithLabel()
+    {
+        var old = SnapRule(SyncRuleWithGeneratedMapping(GeneratedValueTokenKind.OnlyIfTaken));
+        var @new = SnapRule(SyncRuleWithGeneratedMapping(GeneratedValueTokenKind.Sequence));
+
+        var diff = _diff.Diff(old, @new);
+
+        var tokenKind = Find(diff.Root, "tokenKind")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tokenKind.ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Modified));
+            Assert.That(tokenKind.OldValue, Is.EqualTo("OnlyIfTaken"));
+            Assert.That(tokenKind.NewValue, Is.EqualTo("Sequence"));
+            Assert.That(tokenKind.Label, Is.EqualTo("Uniqueness token"));
+        }
+    }
+
+    [Test]
+    public void Diff_AddedGenerationExclusion_ReportsAdditionWithLabel()
+    {
+        var old = SnapRule(SyncRuleWithGeneratedMapping(exclusion: false));
+        var @new = SnapRule(SyncRuleWithGeneratedMapping(exclusion: true));
+
+        var diff = _diff.Diff(old, @new);
+
+        var exclusions = Find(diff.Root, "exclusions")!;
+        Assert.That(exclusions.Label, Is.EqualTo("Excluded Connected Systems"));
+
+        var added = exclusions.Children!.Single(c => c.ChangeType == ConfigurationDiffChangeType.Added);
+        Assert.That(added.ItemId, Is.EqualTo(8));
+
+        var connectedSystemId = Find(added, "connectedSystemId")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectedSystemId.NewValue, Is.EqualTo("8"));
+            Assert.That(connectedSystemId.Label, Is.EqualTo("Connected System"));
+        }
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
+
+    private ConfigurationSnapshot SnapRule(SyncRule rule) => _snapshots.CreateSnapshot(rule, HashKey);
+
+    private static SyncRule SyncRuleWithGeneratedMapping(
+        GeneratedValueTokenKind tokenKind = GeneratedValueTokenKind.OnlyIfTaken, bool exclusion = false)
+    {
+        var mapping = new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            Generation = new SyncRuleMappingGeneration { Id = 900, TokenKind = tokenKind }
+        };
+        if (exclusion)
+        {
+            mapping.Generation.Exclusions.Add(new SyncRuleMappingGenerationExclusion
+            {
+                ConnectedSystemId = 8,
+                ConnectedSystem = new ConnectedSystem { Id = 8, Name = "Payroll" }
+            });
+        }
+
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+        return rule;
+    }
 
     private ConfigurationSnapshot Snap(ConnectedSystem cs) => _snapshots.CreateSnapshot(cs, HashKey);
 

@@ -10,11 +10,11 @@ namespace JIM.Worker.Tests.Servers;
 /// The consequence copy an administrator consents to has to be true, because it is the only thing standing between
 /// them and a destructive change they cannot picture.
 ///
-/// Connected System Object Types and Partitions both snapshot their selection as "selected", and the copy for the
-/// pair was written once, for the Partition. The two do not behave alike: deselecting a Partition leaves its objects
-/// missing from an import that still runs, so they are obsoleted and deprovisioned, whereas deselecting an Object
-/// Type removes it from deletion detection altogether (<c>ObjectTypes.Where(ot =&gt; ot.Selected)</c>), so its objects
-/// are never even looked at. See <c>DeselectedObjectTypeDeletionDetectionTests</c>, which pins that behaviour.
+/// Connected System Object Types and Partitions both snapshot their selection as "selected", so the copy is chosen by
+/// the snapshot node the flag hangs from. Deselecting either takes its objects out of management: the next Full Import
+/// no longer returns them, so they are obsoleted and disconnected (#1474). The Object Type's copy says so in its own
+/// words, because an Object Type used to be the one selection that took nothing out of scope and the copy said that.
+/// See <c>DeselectedObjectTypeDeletionDetectionTests</c>, which pins the behaviour the copy describes.
 /// </summary>
 [TestFixture]
 public class ConfigurationChangeConsequenceTests
@@ -26,7 +26,7 @@ public class ConfigurationChangeConsequenceTests
     private const string False = "false";
 
     [Test]
-    public void For_DeselectingAnObjectType_DoesNotPromiseObsoletion()
+    public void For_DeselectingAnObjectType_PromisesObsoletionOnTheNextFullImport()
     {
         var consequence = ConfigurationChangeConsequences.For(
             ConfigurationSnapshotService.ConnectedSystemObjectType, ObjectTypeNode, SelectedKey, True, False);
@@ -34,26 +34,18 @@ public class ConfigurationChangeConsequenceTests
         Assert.That(consequence, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(consequence, Does.Not.Contain("become obsolete"),
-                "deletion detection skips deselected Object Types, so their objects are never compared against the " +
-                "import and never obsoleted. Promising a cascade that never happens teaches the administrator that " +
-                "the type is out of management when its objects are still joined and still contributing.");
-            Assert.That(consequence, Does.Contain("Nothing is obsoleted and nothing is deprovisioned"),
-                "and the denial has to be explicit, because the administrator has just been told the change is " +
-                "destructive and will otherwise assume the usual cascade");
+            Assert.That(consequence, Does.Contain("become obsolete"),
+                "deletion detection now walks deselected Object Types, so their objects are obsoleted as missing. " +
+                "The administrator is consenting to that cascade and has to be told it is coming.");
+            Assert.That(consequence, Does.Contain("Full Import"),
+                "and when: nothing happens on save, it happens on the next Full Import, which is when a preview or a " +
+                "Run Profile's deletion limits can still stop it.");
+            Assert.That(consequence, Does.Contain("disconnect"),
+                "the objects are disconnected from their Metaverse Objects, which is the part with consequences beyond " +
+                "this Connected System.");
+            Assert.That(consequence, Does.Not.Contain("does nothing else"),
+                "the old copy described a freeze that no longer happens.");
         }
-    }
-
-    [Test]
-    public void For_DeselectingAnObjectType_SaysItsObjectsAreLeftInPlaceAndStale()
-    {
-        var consequence = ConfigurationChangeConsequences.For(
-            ConfigurationSnapshotService.ConnectedSystemObjectType, ObjectTypeNode, SelectedKey, True, False);
-
-        Assert.That(consequence, Does.Contain("joined"),
-            "the objects stay joined to their Metaverse Objects, which is the part the administrator cannot see");
-        Assert.That(consequence, Does.Contain("contribut"),
-            "and they keep contributing the values they last imported, which is what makes the freeze dangerous");
     }
 
     [Test]

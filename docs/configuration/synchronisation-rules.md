@@ -18,6 +18,8 @@ Synchronisation Rules are the central configuration mechanism for identity synch
 
 Each rule also has a name and an optional **description**, a free-text note for recording what the rule is for and why it exists. The description is shown on the rule's Details tab and changes to it are tracked in the [configuration change history](activities.md#configuration-change-history).
 
+A rule's Connected System Object Type must be selected on the Connected System's Schema tab for the rule to be enabled; saving an enabled rule against a deselected Object Type is refused, as is deselecting an Object Type an enabled rule is still bound to. A deselected Object Type is out of management, and its objects are obsoleted by the next Full Import (see [What deselecting means](connected-systems.md#what-deselecting-means)). A disabled rule can be saved against one, which is how you keep a rule while taking its type out of management.
+
 A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. The Metaverse Object Type is always on the left and the Connected System Object Type on the right, with the arrow between them drawn the way data flows: towards the Connected System for an export rule, towards the Metaverse for an import rule. The Connected System's name links to it.
 
 Where a tab introduces a term you might not already know (Projection, Scoping, Object Matching Rules, Attribute Flow and others across JIM's configuration pages), an info icon sits beside it. Selecting it shows a short definition and a link to the full entry in the [glossary](../reference/glossary.md).
@@ -67,6 +69,8 @@ mv["Object Type"] = "Person" AND mv["Employee Status"] = "Active"
 ```
 
 Objects that fall out of scope are **disconnected** from the rule. This is important for the [JML lifecycle](../concepts/jml-lifecycle.md): when an employee's status changes to "Leaver", they may fall out of scope for an export rule, triggering deprovisioning.
+
+An import rule's **Out-of-Scope Action** can keep the join instead of disconnecting it. The Connected System Object then stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Activities](activities.md#execution-items).
 
 Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Criteria expressions use the JIM [expression language](../concepts/expressions.md).
 

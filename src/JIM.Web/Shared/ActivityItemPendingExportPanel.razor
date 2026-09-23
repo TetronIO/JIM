@@ -185,6 +185,7 @@
             PendingExportStatus.Exported => Color.Success,
             PendingExportStatus.ExportNotConfirmed => Color.Warning,
             PendingExportStatus.Failed => Color.Error,
+            PendingExportStatus.Parked => Color.Warning,
             _ => Color.Default,
         };
     }

@@ -36,6 +36,14 @@ public interface ITaskingRepository
     public Task<DeleteConnectedSystemWorkerTask?> GetDeleteConnectedSystemWorkerTaskAsync(int connectedSystemId);
 
     /// <summary>
+    /// Which of the given Synchronisation Rules have a deletion queued or in progress: a
+    /// <see cref="DeleteSyncRuleWorkerTask"/> row exists for them (any status). The row is deleted when the
+    /// recall completes AND after a failed run, so a rule the answer omits is either not being deleted or
+    /// survived a failed recall and is an ordinary (disabled) Synchronisation Rule again (#1597).
+    /// </summary>
+    public Task<HashSet<int>> GetSyncRuleIdsWithQueuedDeletionAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
     /// Get all worker tasks that need cancelling.
     /// </summary>
     public Task<List<WorkerTask>> GetWorkerTasksThatNeedCancellingAsync();

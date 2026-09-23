@@ -123,6 +123,9 @@ public static class CausalitySummaryBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Joined))
             return BuildJoinerClauses(allEvents);
 
+        if (allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin) is { } retainedJoin)
+            return [BuildRetainedJoinClause(retainedJoin, isSpeculative: false)];
+
         if (allEvents.Any(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
@@ -151,6 +154,9 @@ public static class CausalitySummaryBuilder
         if (allEvents.Any(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Joined))
             return BuildSpeculativeJoinerClauses(allEvents);
+
+        if (allEvents.FirstOrDefault(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin) is { } retainedJoin)
+            return [BuildRetainedJoinClause(retainedJoin, isSpeculative: true)];
 
         if (allEvents.Any(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
                 or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
@@ -215,6 +221,46 @@ public static class CausalitySummaryBuilder
         }
 
         return clauses;
+    }
+
+    /// <summary>
+    /// The single clause for an object that left scope under RemainJoined and kept its join (#1649): it names the
+    /// scoping rule and the Metaverse Object the join was kept to, falling back to unnamed mentions for either
+    /// where the outcome carries none. One clause rather than two, because the scope exit and the kept join are
+    /// one decision, and the sentence joiner's ", and" would otherwise read them as separate events.
+    /// </summary>
+    private static List<SummarySegment> BuildRetainedJoinClause(CausalityEvent retainedJoin, bool isSpeculative)
+    {
+        var clause = new List<SummarySegment>();
+
+        var rule = retainedJoin.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.SynchronisationRule);
+        if (rule != null)
+        {
+            clause.Add(new SummarySegment.Text(isSpeculative
+                ? "it would leave the scope of Synchronisation Rule "
+                : "it left the scope of Synchronisation Rule "));
+            clause.Add(new SummarySegment.Entity(rule.Label, rule.Href, CausalityEntityKind.SynchronisationRule));
+        }
+        else
+        {
+            clause.Add(new SummarySegment.Text(isSpeculative
+                ? "it would leave the scope of its Synchronisation Rule"
+                : "it left the scope of its Synchronisation Rule"));
+        }
+
+        var keep = isSpeculative ? "keep" : "kept";
+        var identity = retainedJoin.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity);
+        if (identity != null)
+        {
+            clause.Add(new SummarySegment.Text($" and {keep} its join to the Metaverse Object "));
+            clause.Add(new SummarySegment.Entity(identity.Label, identity.Href, CausalityEntityKind.Identity));
+        }
+        else
+        {
+            clause.Add(new SummarySegment.Text($" and {keep} its Metaverse Object join"));
+        }
+
+        return clause;
     }
 
     private static List<List<SummarySegment>> BuildSpeculativeLeaverClauses(IReadOnlyList<CausalityEvent> allEvents)

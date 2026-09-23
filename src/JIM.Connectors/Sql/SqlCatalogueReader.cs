@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.Sql.Providers;
+using System.Data;
 using System.Data.Common;
 using System.Globalization;
 
@@ -12,11 +13,11 @@ namespace JIM.Connectors.Sql;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Shared by schema discovery, which turns the answer into a Connector Schema, and by export, which
-/// needs it to bind a value the way the column it is going into expects. Both ask the same question of
-/// the same catalogue through the same provider seam, so they ask it in one place: two parsers of the
-/// same rows would eventually disagree about what a column is, and the disagreement would surface as an
-/// export writing something an import could not read back.
+/// Shared by schema discovery, which turns the answer into a Connector Schema, and by import and
+/// export, which need it to bind a value the way the column it meets expects. All three ask the same
+/// question of the same catalogue through the same provider seam, so they ask it in one place: two
+/// parsers of the same rows would eventually disagree about what a column is, and the disagreement
+/// would surface as an export writing something an import could not read back.
 /// </para>
 /// <para>
 /// The catalogue is the authority on types rather than the Object Types document, because the document
@@ -70,6 +71,32 @@ internal static class SqlCatalogueReader
         }
 
         return columns;
+    }
+
+    /// <summary>
+    /// The columns an administrator-supplied SELECT statement returns, which no catalogue describes.
+    /// </summary>
+    /// <remarks>
+    /// The statement is executed schema-only, so the database plans it and reports its result columns
+    /// without reading a single row; on a large table that difference is the whole cost. The column
+    /// metadata it hands back carries the same type name, precision and scale a catalogue would, so
+    /// nothing downstream can tell a statement's column from a table's.
+    /// </remarks>
+    /// <exception cref="DbException">The database would not accept the statement.</exception>
+    internal static async Task<List<SqlDiscoveredColumn>> ReadStatementColumnsAsync(
+        ISqlProvider provider,
+        DbConnection connection,
+        string selectStatement,
+        CancellationToken cancellationToken = default)
+    {
+        using var command = provider.CreateCommand(connection, selectStatement);
+        using var reader = await command.ExecuteReaderAsync(CommandBehavior.SchemaOnly, cancellationToken);
+
+        return [.. reader.GetColumnSchema()
+            .Select(column => new SqlDiscoveredColumn(
+                column.ColumnName,
+                new SqlColumnType(column.DataTypeName ?? string.Empty, column.NumericPrecision, column.NumericScale, column.ColumnSize),
+                column.AllowDBNull ?? true))];
     }
 
     internal static string? GetNullableString(DbDataReader reader, int ordinal) =>

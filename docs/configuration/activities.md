@@ -105,6 +105,8 @@ Some accounts never reach a target Connected System before they leave. If a Meta
 !!! note "Applies to new runs"
     Outcomes recorded before this distinction existed remain as they were written, so a deprovisioning cascade on an older Activity still reads **Export queued**. Runs from this version onwards use the new outcome.
 
+An object that leaves an import Synchronisation Rule's scope while the rule's [Out-of-Scope Action](synchronisation-rules.md#scoping-criteria) keeps its join is recorded as **Left scope, join kept**, naming the rule whose scope it left and the Metaverse Object it stays joined to. Nothing flows from it and nothing it contributed is recalled, so nothing is nested beneath it. Activities recorded before this outcome existed show these objects as **Attributes flowed** instead, although nothing flowed, and count them in the Activity's Attribute Flows total; the **Left scope, join kept** filter chip on those Activities still finds them.
+
 A Deletion Rule that evaluates and decides *not* to delete records nothing, because nothing happened, so the causality views show a **Metaverse Object not deleted** step on the Metaverse Object column with the reason beside it ("an authoritative source is still connected"). The rule that decided it is available underneath as **Deletion Rule in force at the time**, collapsed, and is the rule as it was recorded at the moment of the decision rather than the object type's current configuration.
 
 ### Why it happened

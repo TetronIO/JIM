@@ -55,6 +55,12 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope] =
             new OutcomeDisplay("Left scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff,
                 SpeculativeLabel: "Would be disconnected from its Metaverse Object"),
+        // The retaining sibling of DisconnectedOutOfScope (#1649): same scope exit, join kept. Info tone and the
+        // FilterAlt icon match what the portal already shows for this change type on the Activity list chip, so
+        // the two surfaces agree; nothing is destroyed or recalled, so it is not a Warning.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] =
+            new OutcomeDisplay("Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt,
+                SpeculativeLabel: "Would leave scope and keep its Metaverse Object join"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted] =
             new OutcomeDisplay("Metaverse Object deleted", CausalityTone.Error, Icons.Material.Filled.PersonRemove,
                 SpeculativeLabel: "The Metaverse Object would be deleted"),
@@ -218,7 +224,26 @@ public static class OutcomeDisplayMap
                 "leave export scope, with nothing in the target system to remove"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope] =
             new OutcomeDisplay("Enters export scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt,
-                "enter export scope")
+                "enter export scope"),
+
+        // Unique Value Generation (#242). Primary on Assigned: a positive act JIM took, matching the tone
+        // Projected and Provisioned use for their own "JIM did this" outcomes. Fingerprint reads as
+        // "identifier issued" without borrowing the Add glyph every creation outcome already uses.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] =
+            new OutcomeDisplay("Value generated", CausalityTone.Primary, Icons.Material.Filled.Fingerprint),
+        // Info, like the other "JIM used something that was already there" outcomes (CsoUpdated, Exported):
+        // adopting a value a target already held is not a decision that needs the eye drawn to it.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] =
+            new OutcomeDisplay("Existing value adopted", CausalityTone.Info, Icons.Material.Filled.MoveToInbox),
+        // Warning, matching NoContributor and ValuesPreserved: a value leaving live use is worth noticing,
+        // even though nothing failed. Archive reads as "put away", not "deleted".
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] =
+            new OutcomeDisplay("Value retired", CausalityTone.Warning, Icons.Material.Filled.Archive),
+        // Warning, like DriftCorrection: a correction, not a failure, but one an administrator should read.
+        // PublishedWithChanges (a document icon with a revision mark) reads as "this value was revised",
+        // distinct from Archive's "put away" and Fingerprint's "newly issued".
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated] =
+            new OutcomeDisplay("Value corrected", CausalityTone.Warning, Icons.Material.Filled.PublishedWithChanges)
     };
 
     /// <summary>
@@ -325,6 +350,10 @@ public static class OutcomeDisplayMap
             CausalEdgeType.PendingExportQueueingCausedExportExecution => GetQueueingDecisionOperation(cohort.ReasonCode),
             CausalEdgeType.MetaverseObjectDeletionCausedDeprovision or CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval =>
                 new OutcomeDisplay("Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+            // Unique Value Generation (#242): the rejection revised the value, the same verb an attribute
+            // update anywhere else in this map carries (AttributeFlow, DriftCorrection, ExportUpdateStaged).
+            CausalEdgeType.ExportRejectionCausedGeneratedValueRevision =>
+                new OutcomeDisplay("Updated", CausalityTone.Info, Icons.Material.Filled.Edit),
             // ExportCausedImportConfirmation and any seam this map does not know fall through here: a
             // confirmation is not itself an object operation, and an unknown edge is never guessed.
             _ => null
@@ -401,8 +430,8 @@ public static class OutcomeDisplayMap
                 GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
             // Every Would* preview (nothing executed), ExportConfirmed/ExportFailed (confirming or
             // failing an export is not itself an object operation),
-            // DeletionDetected/Disconnected/DisconnectedOutOfScope/MvoDeletionScheduled/MvoDeletionCancelled
-            // (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
+            // DeletionDetected/Disconnected/DisconnectedOutOfScope/OutOfScopeRetainJoin/MvoDeletionScheduled/
+            // MvoDeletionCancelled (a state change, not an operation this map states an icon for), AssertedNull/NoContributor
             // (attribute-priority housekeeping, not an object operation), ProvisioningCancelled (nothing was
             // ever created, updated or deleted anywhere: the whole point of a cancellation is that no
             // operation reached the target system) and anything unmapped all fall through here: null rather

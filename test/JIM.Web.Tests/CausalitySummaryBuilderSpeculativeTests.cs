@@ -69,6 +69,39 @@ public class CausalitySummaryBuilderSpeculativeTests
             "a new Metaverse Object would be projected, and 3 attributes would flow to it."));
     }
 
+    /// <summary>
+    /// #1649: the preview of a RemainJoined scope exit states the retained join in the conditional mood.
+    /// </summary>
+    [Test]
+    public void Build_SpeculativeRetainedJoin_UsesConditionalMood()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+                    TargetEntityId = System.Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                    TargetEntityDescription = "Liam Allen",
+                    SyncRuleId = 5,
+                    SyncRuleName = "Yellowstone People - Inbound"
+                }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+        var summary = CausalitySummaryBuilder.Build(model);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+                "A Full Synchronisation on Yellowstone APAC would process person Liam Allen: " +
+                "it would leave the scope of Synchronisation Rule Yellowstone People - Inbound and keep its join to the Metaverse Object Liam Allen."));
+            Assert.That(model.Roots[0].Label, Is.EqualTo("Would leave scope and keep its Metaverse Object join"));
+        }
+    }
+
     [Test]
     public void Build_SpeculativeEmptyTree_ReadsNoChangesAreNeeded()
     {

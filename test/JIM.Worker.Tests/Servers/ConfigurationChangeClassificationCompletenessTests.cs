@@ -243,11 +243,39 @@ public class ConfigurationChangeClassificationCompletenessTests
             TargetConnectedSystemAttributeId = 6,
             Priority = 2,
             NullIsValue = true,
-            InitialExportOnly = true
+            InitialExportOnly = true,
+            // The snapshot skips null values, so without a reason here disabledReason is never emitted and the
+            // guard cannot see it; that is how it went unclassified (#1753).
+            DisabledReason = "Everything populated."
         };
         mapping.Sources.Add(new SyncRuleMappingSource
         {
             Id = 200, Order = 0, ConnectedSystemAttributeId = 9, MetaverseAttributeId = 10, Expression = "x"
+        });
+        // A generated mapping with one exclusion (Unique Value Generation, #242), so the sweep discovers every key
+        // BuildGeneration/BuildGenerationExclusions can emit; an absent Generation row would leave them unclassified
+        // and unchecked, exactly the gap this guard exists to catch (see the class doc comment above).
+        mapping.Generation = new SyncRuleMappingGeneration
+        {
+            Id = 700,
+            TokenKind = GeneratedValueTokenKind.Sequence,
+            SuffixStyle = GeneratedValueSuffixStyle.Letter,
+            SuffixStart = 2,
+            SequenceStart = 1,
+            SequenceIncrement = 1,
+            FixedWidth = 6,
+            OnWidthExceeded = GeneratedValueWidthOverflowBehaviour.AllowLonger,
+            RandomFormat = GeneratedValueRandomFormat.Hex,
+            RandomLength = 8,
+            Separator = "-",
+            AttemptLimit = 10,
+            NeverReuse = true,
+            CollisionRemediation = true
+        };
+        mapping.Generation.Exclusions.Add(new SyncRuleMappingGenerationExclusion
+        {
+            ConnectedSystemId = 3,
+            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "Payroll" }
         });
 
         var matchingRule = new ObjectMatchingRule { Id = 300, Order = 0, TargetMetaverseAttributeId = 11 };
@@ -279,6 +307,7 @@ public class ConfigurationChangeClassificationCompletenessTests
             Description = "Everything populated.",
             Direction = SyncRuleDirection.Import,
             Enabled = true,
+            DisabledReason = "Everything populated.",
             ProvisionToConnectedSystem = true,
             ProjectToMetaverse = true,
             EnforceState = true,
