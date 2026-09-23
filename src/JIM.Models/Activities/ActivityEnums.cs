@@ -334,7 +334,19 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// which reports a Delete that genuinely is staged for an object that exists (or may exist) in the target
     /// system.
     /// </summary>
-    ProvisioningCancelled
+    ProvisioningCancelled,
+
+    /// <summary>
+    /// A joined Connected System Object fell out of scope of its import Synchronisation Rule, whose Inbound
+    /// Out-of-Scope Action is RemainJoined, so it kept its Metaverse Object join (#1649). Nothing flows from it
+    /// while it stays out of scope, and nothing is recalled: the values it contributed stay where they are. The
+    /// retaining sibling of <see cref="DisconnectedOutOfScope"/>, and attributed to the same scoping rule.
+    ///
+    /// Its own value rather than an absent tree because the scope exit is an audit event in its own right; before
+    /// it existed the engine recorded an <see cref="AttributeFlow"/> root for it, reporting a flow that never
+    /// happened and inflating the Activity's Attribute Flow count.
+    /// </summary>
+    OutOfScopeRetainJoin
 }
 
 /// <summary>

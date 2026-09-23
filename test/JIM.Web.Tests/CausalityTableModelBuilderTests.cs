@@ -106,6 +106,28 @@ public class CausalityTableModelBuilderTests
             "a rejoin that cancels a scheduled deletion is a Join, since the Identity already existed");
     }
 
+    [Test]
+    public void Build_OutOfScopeRetainJoinOutcome_IsAScopeRowCreditedToTheScopingRule()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen",
+            syncRuleId: 5, syncRuleName: "Yellowstone People - Inbound");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var table = CausalityTableModelBuilder.Build(model);
+
+        var scopeRow = table.Rows.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scopeRow.ChangeKind, Is.EqualTo(CausalityTableChangeKind.Scope),
+                "a retained join is a scope exit, like its disconnecting sibling, only with the join kept");
+            Assert.That(scopeRow.OutcomeLabel, Is.EqualTo("Left scope, join kept"));
+            Assert.That(scopeRow.Via, Is.EqualTo("Yellowstone People - Inbound"));
+            Assert.That(scopeRow.SyncRuleId, Is.EqualTo(5));
+        }
+    }
+
     /// <summary>
     /// Before/After are for attribute values only (#1519 Table view fix 7); a scheduled deletion's grace
     /// reasoning is the one thing lost by going silent on them, so it survives as an OutcomeDetail line

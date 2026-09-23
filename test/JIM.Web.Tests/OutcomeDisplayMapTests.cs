@@ -70,7 +70,8 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldRetainContributedValues, "Contributed values kept", CausalityTone.Info, Icons.Material.Filled.Inventory2),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope, "Leaves export scope, nothing to remove", CausalityTone.Info, Icons.Material.Filled.FilterAltOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled", CausalityTone.Warning, Icons.Material.Filled.CancelScheduleSend)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled", CausalityTone.Warning, Icons.Material.Filled.CancelScheduleSend),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, "Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt)
     ];
 
     /// <summary>

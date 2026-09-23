@@ -75,6 +75,8 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope] = CausalityLane.Identity,
+            // Its retaining sibling: the kept join is a Metaverse-side fact, exactly as the disconnect is.
+            [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned] = CausalityLane.Downstream,

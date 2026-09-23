@@ -1677,7 +1677,9 @@ public class Worker : BackgroundService
             activity.TotalDriftCorrections = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
         }
 
-        // Stats that always come from RPEIs (no outcome type equivalent)
+        // Stats that always come from RPEIs. Created has no outcome type equivalent; OutOfScopeRetainJoin has had one
+        // since #1649, but items recorded before then carry a stray AttributeFlow root instead, so the item's own
+        // change type is the only count that is right for every Activity.
         activity.TotalOutOfScopeRetainJoin = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.OutOfScopeRetainJoin);
         activity.TotalCreated = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Created);
 

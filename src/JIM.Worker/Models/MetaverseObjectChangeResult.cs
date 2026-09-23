@@ -134,8 +134,8 @@ public readonly struct MetaverseObjectChangeResult
     /// <summary>
     /// The id of the Synchronisation Rule attributed to this change, when one was determinable at
     /// decision time (#1085): the scoping rule the Connected System Object fell out of scope of for
-    /// DisconnectedOutOfScope, or the projecting rule for Projected. Threaded through to the sync
-    /// outcome node so the causality tree records which rule drove the change. Null when no single
+    /// DisconnectedOutOfScope and OutOfScopeRetainJoin, or the projecting rule for Projected. Threaded
+    /// through to the sync outcome node so the causality tree records which rule drove the change. Null when no single
     /// rule is attributable (e.g. Joined, AttributeFlow).
     /// </summary>
     public int? SyncRuleId { get; init; }
@@ -268,9 +268,12 @@ public readonly struct MetaverseObjectChangeResult
     /// Creates a result indicating a CSO fell out of scope but remained joined
     /// (InboundOutOfScopeAction = RemainJoined).
     /// </summary>
-    public static MetaverseObjectChangeResult OutOfScopeRetainJoin() => new()
+    /// <param name="scopingSyncRule">The Synchronisation Rule whose scope the CSO fell out of, and whose RemainJoined action kept the join, for outcome attribution (#1649).</param>
+    public static MetaverseObjectChangeResult OutOfScopeRetainJoin(SyncRule? scopingSyncRule = null) => new()
     {
         HasChanges = true,
-        ChangeType = ObjectChangeType.OutOfScopeRetainJoin
+        ChangeType = ObjectChangeType.OutOfScopeRetainJoin,
+        SyncRuleId = scopingSyncRule?.Id,
+        SyncRuleName = scopingSyncRule?.Name
     };
 }

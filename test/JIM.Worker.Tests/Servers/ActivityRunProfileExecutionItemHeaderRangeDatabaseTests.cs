@@ -256,6 +256,31 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
         }
     }
 
+    /// <summary>
+    /// #1649: a retained join recorded before it had an outcome type of its own carries a stray AttributeFlow root,
+    /// so its OutcomeSummary never names OutOfScopeRetainJoin. The Activity's retained-join count is taken from the
+    /// items' change type, so the filter must match on it too, or the chip would promise rows it cannot show.
+    /// </summary>
+    [Test]
+    public async Task Range_RetainedJoinOutcomeFilter_AlsoMatchesItemsRecordedBeforeTheOutcomeExistedAsync()
+    {
+        var activityId = await SeedNamedAsync(
+            ["Legacy Retained", "Retained", "Flowed"],
+            outcomeSummaries: ["AttributeFlow:1", "OutOfScopeRetainJoin:1", "AttributeFlow:2"],
+            objectChangeTypes: [ObjectChangeType.OutOfScopeRetainJoin, ObjectChangeType.OutOfScopeRetainJoin, ObjectChangeType.AttributeFlow]);
+        var jim = NewJim();
+
+        var result = await jim.Activities.GetActivityRunProfileExecutionItemHeadersRangeAsync(
+            activityId, offset: 0, count: 10, sortBy: DisplayNameSortKey,
+            outcomeTypeFilter: [ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalResults, Is.EqualTo(2));
+            Assert.That(result.Results.Select(h => h.DisplayName), Is.EqualTo(new[] { "Legacy Retained", "Retained" }));
+        }
+    }
+
     [Test]
     public async Task Range_FullWindow_MatchesPagedReaderAsync()
     {
@@ -298,7 +323,10 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
     /// <paramref name="outcomeSummaries"/>, when given, sets each item's denormalised outcome summary in the
     /// same order.
     /// </summary>
-    private async Task<Guid> SeedNamedAsync(IReadOnlyList<string> displayNames, IReadOnlyList<string>? outcomeSummaries = null)
+    private async Task<Guid> SeedNamedAsync(
+        IReadOnlyList<string> displayNames,
+        IReadOnlyList<string>? outcomeSummaries = null,
+        IReadOnlyList<ObjectChangeType>? objectChangeTypes = null)
     {
         await using var ctx = NewContext();
 
@@ -358,7 +386,7 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
                 Id = Guid.NewGuid(),
                 ActivityId = activity.Id,
                 ConnectedSystemObject = cso,
-                ObjectChangeType = ObjectChangeType.Updated,
+                ObjectChangeType = objectChangeTypes?[i] ?? ObjectChangeType.Updated,
                 OutcomeSummary = outcomeSummaries?[i]
             });
         }
