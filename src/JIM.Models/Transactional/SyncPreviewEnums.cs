@@ -37,7 +37,14 @@ public enum SyncPreviewMessageCode
     /// Synchronisation Rule matches it, or a matching rule's Outbound Deprovision Action is Disconnect. The
     /// real run records no outcome node for a disconnect-only downstream object (#288 Phase 1 of the Sync
     /// Preview Surface plan); this warning is how the preview still surfaces it.</summary>
-    DownstreamDisconnectOnly
+    DownstreamDisconnectOnly,
+    /// <summary>A generated Attribute Flow mapping would fail to resolve (the generation is exhausted, has no
+    /// base value, its width would be exceeded, or an adoption conflict was detected); the real sync would
+    /// record a generated-value error against the object. Added at the end (#242, Phase 2 work package J):
+    /// this enum is not persisted anywhere (no database column or migration references it, and the REST API
+    /// serialises it by name via <c>JsonStringEnumConverter</c>), so member order carries no compatibility
+    /// requirement, but new members are still appended for readability.</summary>
+    GeneratedValueWouldFail
 }
 
 /// <summary>

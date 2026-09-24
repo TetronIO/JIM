@@ -1,11 +1,22 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 namespace JIM.Models.Transactional;
 
 public class PendingExportAttributeValueChange
 {
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H): set by <c>SyncEngine.ComputeAttributeValueChanges</c>
+    /// when this change's target attribute is a generated export mapping's (<see cref="Logic.SyncRuleMapping.Generation"/>).
+    /// The change's own value fields are left unset until the worker resolves this marker, immediately before
+    /// the Pending Export is persisted, and clears it. Transient: never persisted (see
+    /// <see cref="PendingGeneratedExportValue"/>'s own remarks).
+    /// </summary>
+    [NotMapped]
+    public PendingGeneratedExportValue? PendingGeneration { get; set; }
     /// <summary>
     /// The Id of the Connected System Object that this Reference attribute change's Distinguished
     /// Name was resolved to (<c>ExportExecutionServer.TryResolveReferencesFromLookup</c>), stamped

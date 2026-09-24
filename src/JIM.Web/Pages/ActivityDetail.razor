@@ -607,6 +607,24 @@
                         <MudText Typo="Typo.h4" Color="Color.Tertiary">@_activityRunProfileExecutionStats.TotalAttributeFlows.ToString("N0")</MudText>
                     </MudPaper>
 
+                    @* Values Generated - Unique Value Generation (#242) *@
+                    @if (_activityRunProfileExecutionStats.TotalGeneratedValues > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-primary); min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Values Generated</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@_activityRunProfileExecutionStats.TotalGeneratedValues.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+
+                    @* Existing Values Adopted - Unique Value Generation (#242) *@
+                    @if (_activityRunProfileExecutionStats.TotalGeneratedValuesAdopted > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Existing Values Adopted</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalGeneratedValuesAdopted.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+
                     @* CSOs Provisioned - new CSOs created in target systems via export evaluation *@
                     @if (_activityRunProfileExecutionStats.TotalProvisioned > 0)
                     {
@@ -1548,6 +1566,8 @@
         if (s.TotalProjections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Projected, s.TotalProjections);
         if (s.TotalJoins > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Joined, s.TotalJoins);
         if (s.TotalAttributeFlows > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, s.TotalAttributeFlows);
+        if (s.TotalGeneratedValues > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, s.TotalGeneratedValues);
+        if (s.TotalGeneratedValuesAdopted > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, s.TotalGeneratedValuesAdopted);
         if (s.TotalDisconnections > 0 || s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections + s.TotalDisconnectedOutOfScope);
         // Retained joins (#1649): counted from the items' change type, which the filter also matches, so the chip
         // finds items recorded before the outcome type existed as well as those recorded since.
@@ -1624,7 +1644,9 @@
                 (_activityRunProfileExecutionStats.TotalProjections > 0 ||
                  _activityRunProfileExecutionStats.TotalJoins > 0 ||
                  _activityRunProfileExecutionStats.TotalAttributeFlows > 0 ||
-                 _activityRunProfileExecutionStats.TotalDisconnections > 0))
+                 _activityRunProfileExecutionStats.TotalDisconnections > 0 ||
+                 _activityRunProfileExecutionStats.TotalGeneratedValues > 0 ||
+                 _activityRunProfileExecutionStats.TotalGeneratedValuesAdopted > 0))
                 return true;
         }
 

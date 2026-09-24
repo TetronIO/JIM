@@ -52,12 +52,24 @@ public partial class SyncEngine
             return;
         }
 
+        // A generated mapping (Unique Value Generation, #242) never targets a Reference attribute
+        // (SyncRuleMappingGenerationValidator), so it has no part to play in the deferred reference-only pass.
+        // Without this guard, the reference pass would call ProcessGeneratedMapping a second time for the same
+        // attribute after the worker has already resolved and cleared the first pass's pending generation
+        // (Phase 2 work package G): the second call would record a NEW pending generation that nothing then
+        // resolves, tripping the worker's "leftover pending generation" integrity guard before the next page
+        // persists.
+        if (onlyReferenceAttributes && syncRuleMapping.Generation != null)
+            return;
+
         var csoType = objectTypes.Single(t => t.Id == cso.TypeId);
         var mvo = cso.MetaverseObject;
 
         // Provenance: stamp the winning Synchronisation Rule alongside the contributing system on every value this mapping
         // writes (#91), so the Metaverse Object value records which rule contributed it, not just which system.
         var contributingSyncRuleId = syncRuleMapping.SyncRuleId;
+
+        List<PendingGeneratedValue>? supersededGenerations = null;
 
         // Attribute priority gate (#91): when an attribute has more than one contributing rule, a contribution that
         // loses priority resolution to the rule currently owning the value (the incumbent) must never reach the
@@ -87,6 +99,29 @@ public partial class SyncEngine
             mvo.PendingAttributeValueAdditions.RemoveAll(av =>
                 av.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id &&
                 av.ContributedBySyncRuleId != contributingSyncRuleId);
+
+            // A later winner also supersedes a pending generation request (Unique Value Generation, #242, plan
+            // decision 6), but only if it actually contributes. Winning the gate is not the same as contributing: a
+            // higher-priority rule whose source is silent abstains, and FR 6 says generation is exactly what fills
+            // that silence. So the superseded requests are held here and restored after the writers below have run
+            // if this rule staged nothing for the attribute (see the end of this method). A value, or a "Null is a
+            // value" marker, is a contribution and keeps them removed.
+            supersededGenerations = mvo.PendingGeneratedValues
+                .Where(p => p.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id && p.ContributedBySyncRuleId != contributingSyncRuleId)
+                .ToList();
+            if (supersededGenerations.Count > 0)
+                mvo.PendingGeneratedValues.RemoveAll(supersededGenerations.Contains);
+        }
+
+        // A generated mapping (Unique Value Generation, #242) produces no value here: the synchronous engine
+        // performs no I/O and cannot itself generate one. Having reached this point it is the attribute's winning
+        // contributor (the priority gate above, or being the sole contributor), so it records a pending generation
+        // request in place of a value and takes no further part in this call; the per-source loop below is for
+        // ordinary attribute and expression mappings only.
+        if (syncRuleMapping.Generation != null)
+        {
+            ProcessGeneratedMapping(cso, mvo, syncRuleMapping, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, errors);
+            return;
         }
 
         foreach (var source in syncRuleMapping.Sources.OrderBy(q => q.Order))
@@ -198,6 +233,15 @@ public partial class SyncEngine
             else
                 throw new InvalidDataException("Expected ConnectedSystemAttribute or Expression to be populated in a SyncRuleMappingSource object.");
         }
+
+        // The other half of the superseded-generation hand-off above: this rule won the gate but staged nothing for
+        // the attribute (it abstained), so the lower-priority generation it displaced still stands (FR 6).
+        if (supersededGenerations is { Count: > 0 } &&
+            !mvo.PendingAttributeValueAdditions.Any(av =>
+                av.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id && av.ContributedBySyncRuleId == contributingSyncRuleId))
+        {
+            mvo.PendingGeneratedValues.AddRange(supersededGenerations);
+        }
     }
 
     /// <summary>
@@ -253,13 +297,19 @@ public partial class SyncEngine
 
     /// <summary>
     /// Identifies the Synchronisation Rule that currently owns a Metaverse Object attribute's value (the incumbent,
-    /// for the attribute priority gate, #91). Prefers a value written earlier in this run by another mapping (a
-    /// pending addition), otherwise the current persisted row value, ignoring values already pending removal. Under
-    /// winner-takes-all-values any value for the attribute identifies the owning rule. Returns null when nothing owns
-    /// the attribute or the value is internally managed (no contributing rule stamped).
+    /// for the attribute priority gate, #91). Prefers a pending generation request recorded earlier in this run by
+    /// a generated mapping (Unique Value Generation, #242, plan decision 6: the placeholder), then a value written
+    /// earlier in this run by another mapping (a pending addition), then the current persisted row value, ignoring
+    /// values already pending removal. Under winner-takes-all-values any value, or request, for the attribute
+    /// identifies the owning rule. Returns null when nothing owns the attribute or the value is internally managed
+    /// (no contributing rule stamped).
     /// </summary>
     private static int? FindEffectiveIncumbentSyncRuleId(MetaverseObject mvo, int attributeId)
     {
+        var pendingGeneration = mvo.PendingGeneratedValues.LastOrDefault(p => p.AttributeId == attributeId);
+        if (pendingGeneration != null)
+            return pendingGeneration.ContributedBySyncRuleId;
+
         var pendingOwner = mvo.PendingAttributeValueAdditions.LastOrDefault(av => av.AttributeId == attributeId);
         if (pendingOwner != null)
             return pendingOwner.ContributedBySyncRuleId;
@@ -413,30 +463,73 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Processes an expression-based Synchronisation Rule mapping source.
+    /// The result of <see cref="EvaluateExpressionSource"/>: a pure collaboration detail shared by
+    /// <see cref="ProcessExpressionMapping"/> and <see cref="ProcessGeneratedMapping"/> (Unique Value Generation,
+    /// #242), not a public result type, so unlike <c>ProjectionDecision</c> it stays local to this file rather
+    /// than living in <c>JIM.Models</c> (cf. <c>AttributeValueIndex</c> in <c>SyncEngine.Reconciliation.cs</c>,
+    /// the same precedent for a private algorithm-local helper type).
     /// </summary>
-    private static void ProcessExpressionMapping(
+    private readonly struct ExpressionSourceEvaluation
+    {
+        /// <summary>
+        /// Nothing further should happen: no <see cref="IExpressionEvaluator"/> was supplied, or the mapping's
+        /// Missing Input Behaviour is FailMapping (its <see cref="AttributeFlowError"/> is already recorded by
+        /// <see cref="EvaluateExpressionSource"/>). Whatever the caller already holds for the attribute is
+        /// untouched; this is distinct from <see cref="NoValue"/>, which callers resolve as a positive "no value".
+        /// </summary>
+        public bool Stopped { get; private init; }
+
+        /// <summary>
+        /// The expression contributed no value: Missing Input Behaviour is ContributeNoValue and an input is
+        /// absent, or the expression evaluated to null. Each caller applies its own "no value" semantics.
+        /// </summary>
+        public bool NoValue { get; private init; }
+
+        /// <summary>
+        /// The expression returned an array or other <c>IEnumerable&lt;string&gt;</c> (excluding <c>string</c>
+        /// itself), unprocessed (no inbound value processing applied yet).
+        /// </summary>
+        public IReadOnlyList<string>? ArrayResult { get; private init; }
+
+        /// <summary>
+        /// The expression's raw scalar result. Guaranteed non-null, and set, exactly when none of
+        /// <see cref="Stopped"/>, <see cref="NoValue"/> nor <see cref="ArrayResult"/> apply.
+        /// </summary>
+        public object? ScalarResult { get; private init; }
+
+        public static ExpressionSourceEvaluation Stop() => new() { Stopped = true };
+        public static ExpressionSourceEvaluation Missing() => new() { NoValue = true };
+        public static ExpressionSourceEvaluation Array(IReadOnlyList<string> values) => new() { ArrayResult = values };
+        public static ExpressionSourceEvaluation Scalar(object result) => new() { ScalarResult = result };
+    }
+
+    /// <summary>
+    /// Evaluates an expression source against the Connected System Object: Missing Input Behaviour (#1361), then
+    /// the expression itself, exactly as inbound Attribute Flow always has. Shared by
+    /// <see cref="ProcessExpressionMapping"/> and <see cref="ProcessGeneratedMapping"/>'s base expression (Unique
+    /// Value Generation, #242, plan decision 6), so the guarded evaluation and exception mapping exist in one
+    /// place rather than two. FailMapping and FailObject are identical for every caller (record the error, or
+    /// throw) and are resolved here; only ContributeNoValue's consequence differs by caller, communicated through
+    /// <see cref="ExpressionSourceEvaluation.NoValue"/> for each caller to interpret (an ordinary mapping abstains
+    /// or clears by priority; a generated mapping withholds generation without touching any existing value, FR 10).
+    /// </summary>
+    private static ExpressionSourceEvaluation EvaluateExpressionSource(
         ConnectedSystemObject cso,
-        MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
         SyncRuleMappingSource source,
         ConnectedSystemObjectType csoType,
         IExpressionEvaluator? expressionEvaluator,
-        int? contributingSystemId,
-        int? contributingSyncRuleId,
-        int mvoObjectTypeId,
-        AttributePriorityContext? priorityContext,
         List<AttributeFlowError>? errors)
     {
         if (expressionEvaluator == null)
         {
-            Log.Warning("ProcessExpressionMapping: Expression-based mapping requires an IExpressionEvaluator but none was provided. Expression: {Expression}", source.Expression);
-            return;
+            Log.Warning("EvaluateExpressionSource: Expression-based mapping requires an IExpressionEvaluator but none was provided. Expression: {Expression}", source.Expression);
+            return ExpressionSourceEvaluation.Stop();
         }
 
         var csAttributeDictionary = BuildCsoAttributeDictionary(cso, csoType);
 
-        Log.Debug("ProcessExpressionMapping: Evaluating expression for CSO {CsoId}. Expression: '{Expression}', Available attributes: [{Attributes}]",
+        Log.Debug("EvaluateExpressionSource: Evaluating expression for CSO {CsoId}. Expression: '{Expression}', Available attributes: [{Attributes}]",
             cso.Id, source.Expression, string.Join(", ", csAttributeDictionary.Keys));
 
         var context = new ExpressionContext(
@@ -461,12 +554,12 @@ public partial class SyncEngine
                 switch (source.MissingInputBehaviour)
                 {
                     case MissingInputBehaviour.ContributeNoValue:
-                        // Not a fault: the same outcome an Expression returning null produces, resolved by
-                        // Attribute Priority and "Null is a value", so a lower-priority contributor can win.
-                        Log.Debug("ProcessExpressionMapping: not evaluating for CSO {CsoId}; no value for {MissingInputs}. Contributing no value.",
+                        // Not a fault: the same outcome an Expression returning null produces. An ordinary mapping
+                        // resolves this by Attribute Priority and "Null is a value", so a lower-priority
+                        // contributor can win; a generated mapping withholds generation instead (FR 29).
+                        Log.Debug("EvaluateExpressionSource: not evaluating for CSO {CsoId}; no value for {MissingInputs}. Contributing no value.",
                             cso.Id, string.Join(", ", missingInputs));
-                        ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
-                        return;
+                        return ExpressionSourceEvaluation.Missing();
 
                     case MissingInputBehaviour.FailMapping:
                         // One attribute lost, the object's others unaffected: the shape MultiValuedToSingleValued
@@ -478,7 +571,7 @@ public partial class SyncEngine
                             Expression = source.Expression,
                             MissingInputs = missingInputs
                         });
-                        return;
+                        return ExpressionSourceEvaluation.Stop();
 
                     case MissingInputBehaviour.FailObject:
                         // The whole object is left untouched, exactly as for an Expression that threw.
@@ -509,81 +602,301 @@ public partial class SyncEngine
 
         if (result == null)
         {
-            Log.Debug("ProcessExpressionMapping: Expression '{Expression}' for CSO {CsoId} returned null. Available attributes: [{Attributes}]",
+            Log.Debug("EvaluateExpressionSource: Expression '{Expression}' for CSO {CsoId} returned null. Available attributes: [{Attributes}]",
                 source.Expression, cso.Id, string.Join(", ", csAttributeDictionary.Keys));
 
-            // Expression null is a positive "no value" assertion (ConnectedNoValue), not "no opinion": resolve it by
-            // priority and "Null is a value" (#91) instead of clearing unconditionally.
+            // Expression null is a positive "no value" assertion (ConnectedNoValue), not "no opinion".
+            return ExpressionSourceEvaluation.Missing();
+        }
+
+        if (result is string[] stringArrayResult)
+            return ExpressionSourceEvaluation.Array(stringArrayResult);
+
+        if (result is IEnumerable<string> stringEnumerableResult && result is not string)
+            return ExpressionSourceEvaluation.Array(stringEnumerableResult.ToArray());
+
+        return ExpressionSourceEvaluation.Scalar(result);
+    }
+
+    /// <summary>
+    /// Processes an expression-based Synchronisation Rule mapping source.
+    /// </summary>
+    private static void ProcessExpressionMapping(
+        ConnectedSystemObject cso,
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        SyncRuleMappingSource source,
+        ConnectedSystemObjectType csoType,
+        IExpressionEvaluator? expressionEvaluator,
+        int? contributingSystemId,
+        int? contributingSyncRuleId,
+        int mvoObjectTypeId,
+        AttributePriorityContext? priorityContext,
+        List<AttributeFlowError>? errors)
+    {
+        var evaluation = EvaluateExpressionSource(cso, syncRuleMapping, source, csoType, expressionEvaluator, errors);
+
+        if (evaluation.Stopped)
+            return;
+
+        if (evaluation.NoValue)
+        {
+            // Resolve by priority and "Null is a value" (#91): a missing input under ContributeNoValue and a
+            // null/whitespace-collapsed expression result are both the ConnectedNoValue state.
             ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
             return;
         }
 
-        if (result is string[] stringArrayResult)
+        if (evaluation.ArrayResult != null)
         {
             ApplyExpressionArrayResult(mvo, syncRuleMapping,
-                ProcessInboundTextValues(stringArrayResult, syncRuleMapping).ToArray(),
+                ProcessInboundTextValues(evaluation.ArrayResult, syncRuleMapping).ToArray(),
                 contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+            return;
         }
-        else if (result is IEnumerable<string> stringEnumerableResult && result is not string)
-        {
-            ApplyExpressionArrayResult(mvo, syncRuleMapping,
-                ProcessInboundTextValues(stringEnumerableResult, syncRuleMapping).ToArray(),
-                contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
-        }
-        else
-        {
-            var existingMvoValue = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id)
-                .SingleOrDefault();
 
-            var resultString = result.ToString();
-            var isTextTarget = syncRuleMapping.TargetMetaverseAttribute!.Type == AttributeDataType.Text;
+        var result = evaluation.ScalarResult!;
+        var existingMvoValue = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id)
+            .SingleOrDefault();
 
-            if (isTextTarget)
+        var resultString = result.ToString();
+        var isTextTarget = syncRuleMapping.TargetMetaverseAttribute!.Type == AttributeDataType.Text;
+
+        if (isTextTarget)
+        {
+            // Apply the mapping's inbound value processing (#843) to the scalar expression result.
+            var processed = ApplyInboundTextProcessing(resultString, syncRuleMapping.InboundValueProcessing, syncRuleMapping.CaseNormalisation);
+            if (processed == null)
             {
-                // Apply the mapping's inbound value processing (#843) to the scalar expression result.
-                var processed = ApplyInboundTextProcessing(resultString, syncRuleMapping.InboundValueProcessing, syncRuleMapping.CaseNormalisation);
-                if (processed == null)
+                // The processed result collapses to no value: treat as ConnectedNoValue and resolve by priority
+                // and "Null is a value" (#91), the same as a null expression result.
+                ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
+                return;
+            }
+            resultString = processed;
+        }
+
+        var valueChanged = existingMvoValue == null ||
+            !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
+
+        if (valueChanged)
+        {
+            if (existingMvoValue != null)
+                mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
+
+            // For a text target use the processed string directly; for other types convert from the raw result.
+            var newMvoValue = isTextTarget
+                ? new MetaverseObjectAttributeValue
                 {
-                    // The processed result collapses to no value: treat as ConnectedNoValue and resolve by priority
-                    // and "Null is a value" (#91), the same as a null expression result.
-                    ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
-                    return;
+                    MetaverseObject = mvo,
+                    Attribute = syncRuleMapping.TargetMetaverseAttribute!,
+                    AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
+                    StringValue = resultString,
+                    ContributedBySystemId = contributingSystemId,
+                    ContributedBySyncRuleId = contributingSyncRuleId
                 }
-                resultString = processed;
+                : CreateMvoAttributeValueFromExpressionResult(
+                    mvo, syncRuleMapping.TargetMetaverseAttribute!, result, contributingSystemId, contributingSyncRuleId);
+
+            if (newMvoValue != null)
+            {
+                mvo.PendingAttributeValueAdditions.Add(newMvoValue);
+                Log.Debug("ProcessExpressionMapping: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
+                    syncRuleMapping.TargetMetaverseAttribute!.Name, LogSanitiser.Sanitise(resultString), mvo.Id);
+            }
+        }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
+    }
+
+    /// <summary>
+    /// Processes a generated mapping (Unique Value Generation, #242): a <see cref="SyncRuleMapping"/> whose
+    /// <see cref="SyncRuleMapping.Generation"/> row is set. <see cref="ProcessMapping"/> only reaches this method
+    /// once the mapping is already the target attribute's winning contributor (the priority gate, or being the
+    /// sole contributor), so this always records a <see cref="PendingGeneratedValue"/> request in place of a value
+    /// rather than competing for one: the synchronous engine performs no I/O and knows nothing of the unique value
+    /// generation service that would actually produce one (plan decision 6). <see cref="FindEffectiveIncumbentSyncRuleId"/>
+    /// reads the recorded request as ownership of the attribute, so a lower-priority mapping evaluated later in
+    /// this same pass sees it as taken and is blocked by the gate.
+    /// </summary>
+    private static void ProcessGeneratedMapping(
+        ConnectedSystemObject cso,
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        ConnectedSystemObjectType csoType,
+        IExpressionEvaluator? expressionEvaluator,
+        int? contributingSystemId,
+        int? contributingSyncRuleId,
+        List<AttributeFlowError>? errors)
+    {
+        var attributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
+
+        // Winner takes the attribute (plan decision 6): clear whatever an ordinary contribution staged for this
+        // attribute this pass (from any rule) and any earlier generation request for it (this mapping's own
+        // earlier attempt in this pass, or a lower-priority mapping's). ProcessMapping's own #1199 RemoveAll above
+        // only runs with more than one contributor; a generated mapping that is the attribute's SOLE contributor
+        // never reaches it, so this repeats the same clear unconditionally for the generated case.
+        mvo.PendingAttributeValueAdditions.RemoveAll(av => av.AttributeId == attributeId);
+        mvo.PendingGeneratedValues.RemoveAll(p => p.AttributeId == attributeId);
+
+        var source = syncRuleMapping.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));
+        if (source == null)
+        {
+            // No base expression: valid for Sequence and Random tokens (SyncRuleMappingGenerationValidator rule 3).
+            mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
+            {
+                Mapping = syncRuleMapping,
+                AttributeId = attributeId,
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId,
+                SourceConnectedSystemObjectId = cso.Id,
+                BaseValue = null,
+                BaseUnavailable = false
+            });
+            return;
+        }
+
+        var evaluation = EvaluateExpressionSource(cso, syncRuleMapping, source, csoType, expressionEvaluator, errors);
+
+        // Stopped: no evaluator, or FailMapping already recorded its AttributeFlowError. Either way nothing is
+        // recorded for this attribute this pass; unlike an ordinary mapping there is no value for a generated
+        // mapping to leave untouched here, only the absence of a request, which is the correct outcome: a
+        // temporarily unresolvable mapping simply generates nothing this pass rather than failing the object.
+        if (evaluation.Stopped)
+            return;
+
+        // Missing inputs (ContributeNoValue, the default Missing Input Behaviour for a generated mapping, FR 29)
+        // or a null result: wait. NEVER ApplyNoValueOutcome here, unlike ProcessExpressionMapping: that clears an
+        // EXISTING value under Attribute Priority, and a committed generated value must never be recomputed or
+        // cleared by its inputs (FR 10) - "contribute no value" for a generated mapping means wait, not withdraw.
+        if (evaluation.NoValue)
+        {
+            mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
+            {
+                Mapping = syncRuleMapping,
+                AttributeId = attributeId,
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId,
+                SourceConnectedSystemObjectId = cso.Id,
+                BaseValue = null,
+                BaseUnavailable = true
+            });
+            return;
+        }
+
+        if (evaluation.ArrayResult != null)
+        {
+            // A generated value's base must be a single text value: a uniqueness token is appended to exactly one
+            // candidate, so an array or other multi-valued result is a misconfiguration, not data to select from.
+            errors?.Add(new AttributeFlowError
+            {
+                Kind = AttributeFlowErrorKind.GeneratedBaseNotSingleValue,
+                TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute!.Name,
+                Expression = source.Expression
+            });
+            return;
+        }
+
+        // Scalar result: apply the same inbound text processing (#843) an ordinary text expression mapping would.
+        // A generated mapping's target is always Text when it has a base expression
+        // (SyncRuleMappingGenerationValidator rule 4 forbids one on a Number target), so, unlike
+        // ProcessExpressionMapping, no non-text conversion path is needed here.
+        var processed = ApplyInboundTextProcessing(evaluation.ScalarResult!.ToString(),
+            syncRuleMapping.InboundValueProcessing, syncRuleMapping.CaseNormalisation);
+
+        mvo.PendingGeneratedValues.Add(new PendingGeneratedValue
+        {
+            Mapping = syncRuleMapping,
+            AttributeId = attributeId,
+            ContributedBySystemId = contributingSystemId,
+            ContributedBySyncRuleId = contributingSyncRuleId,
+            SourceConnectedSystemObjectId = cso.Id,
+            BaseValue = processed,
+            BaseUnavailable = processed == null
+        });
+    }
+
+    /// <inheritdoc cref="Interfaces.ISyncEngine.ApplyGeneratedValue"/>
+    public void ApplyGeneratedValue(MetaverseObject mvo, PendingGeneratedValue pending, string? textValue, long? numericValue)
+    {
+        ArgumentNullException.ThrowIfNull(mvo);
+        ArgumentNullException.ThrowIfNull(pending);
+
+        var targetAttribute = pending.Mapping.TargetMetaverseAttribute!;
+        var attributeId = pending.AttributeId;
+
+        // Winner takes the attribute: clear whatever another rule staged for it this pass. Ordinarily nothing
+        // is left to clear (ProcessGeneratedMapping already cleared it when it recorded the pending request),
+        // but a later-evaluated rule that abstained and left this generation standing (plan decision 6, the
+        // "supersededGenerations" hand-off in ProcessMapping) could not itself have written anything either, so
+        // this is a defensive repeat of that same clear for the point at which the value is actually written.
+        mvo.PendingAttributeValueAdditions.RemoveAll(av => av.AttributeId == attributeId);
+
+        var existingValue = GetEffectiveAttributeValues(mvo, attributeId).SingleOrDefault();
+
+        bool valueChanged;
+        int? intValue = null;
+        switch (targetAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                valueChanged = existingValue == null || !string.Equals(existingValue.StringValue, textValue, StringComparison.Ordinal);
+                break;
+
+            case AttributeDataType.Number:
+                // Checked conversion: a candidate that does not fit a 32-bit Number is a caller error (the
+                // mapping's target and the token settings that produced this number disagree), never a value
+                // to silently truncate and corrupt (the same #871 lossy-cast class CreateMvoAttributeValueFromExpressionResult
+                // guards against).
+                var numberCandidate = numericValue!.Value;
+                try
+                {
+                    intValue = checked((int)numberCandidate);
+                }
+                catch (OverflowException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Generated value {numberCandidate} for {targetAttribute.Name} does not fit a Number (32-bit) attribute. " +
+                        "This indicates a sequence or random-digits token producing a value too wide for the mapping's target type.", ex);
+                }
+                valueChanged = existingValue == null || existingValue.IntValue != intValue;
+                break;
+
+            case AttributeDataType.LongNumber:
+                valueChanged = existingValue == null || existingValue.LongValue != numericValue;
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(pending), targetAttribute.Type,
+                    $"ApplyGeneratedValue does not support target attribute type {targetAttribute.Type}.");
+        }
+
+        if (valueChanged)
+        {
+            if (existingValue != null)
+                mvo.PendingAttributeValueRemovals.Add(existingValue);
+
+            var newValue = new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = mvo,
+                Attribute = targetAttribute,
+                AttributeId = attributeId,
+                ContributedBySystemId = pending.ContributedBySystemId,
+                ContributedBySyncRuleId = pending.ContributedBySyncRuleId
+            };
+
+            switch (targetAttribute.Type)
+            {
+                case AttributeDataType.Text: newValue.StringValue = textValue; break;
+                case AttributeDataType.Number: newValue.IntValue = intValue; break;
+                case AttributeDataType.LongNumber: newValue.LongValue = numericValue; break;
             }
 
-            var valueChanged = existingMvoValue == null ||
-                !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
-
-            if (valueChanged)
-            {
-                if (existingMvoValue != null)
-                    mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
-
-                // For a text target use the processed string directly; for other types convert from the raw result.
-                var newMvoValue = isTextTarget
-                    ? new MetaverseObjectAttributeValue
-                    {
-                        MetaverseObject = mvo,
-                        Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                        AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                        StringValue = resultString,
-                        ContributedBySystemId = contributingSystemId,
-                        ContributedBySyncRuleId = contributingSyncRuleId
-                    }
-                    : CreateMvoAttributeValueFromExpressionResult(
-                        mvo, syncRuleMapping.TargetMetaverseAttribute!, result, contributingSystemId, contributingSyncRuleId);
-
-                if (newMvoValue != null)
-                {
-                    mvo.PendingAttributeValueAdditions.Add(newMvoValue);
-                    Log.Debug("ProcessExpressionMapping: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
-                        syncRuleMapping.TargetMetaverseAttribute!.Name, LogSanitiser.Sanitise(resultString), mvo.Id);
-                }
-            }
-
-            TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
+            mvo.PendingAttributeValueAdditions.Add(newValue);
+            Log.Debug("ApplyGeneratedValue: generated mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
+                targetAttribute.Name, LogSanitiser.Sanitise(textValue ?? numericValue?.ToString()), mvo.Id);
         }
+
+        TakeOverProvenance(mvo, attributeId, pending.ContributedBySystemId, pending.ContributedBySyncRuleId);
     }
 
     /// <summary>

@@ -130,6 +130,15 @@ public class DriftDetectionService
                     continue;
                 }
 
+                // Unique Value Generation (#242, Phase 2 work package H): a generated mapping's Sources[0]
+                // holds only the base expression, not the value JIM actually asserts (base plus its uniqueness
+                // token), so comparing it against the Connected System Object's current value would flag drift
+                // on every object that ever received a suffix or token. JIM already owns and reasserts a
+                // generated value through ordinary export evaluation's Sticky resolution; Collision Remediation
+                // (release 4) is what handles a target rejecting or losing the value, not drift correction.
+                if (mapping.Generation != null)
+                    continue;
+
                 // Check if this Connected System is a legitimate contributor for this attribute
                 // (i.e., has an import rule that maps to the same MVO attribute)
                 foreach (var source in mapping.Sources)

@@ -330,6 +330,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId)
         => _inner.GetConnectedSystemAttributeNumbersInUseAsync(connectedSystemObjectTypeAttributeId, values, excludingConnectedSystemObjectId);
 
+    public Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId)
+        => _inner.GetGeneratedValueAssignmentValuesInUseAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, normalisedValues, excludingObjectId);
+
     public Task<GeneratedValueAssignment?> GetGeneratedValueAssignmentAsync(Guid metaverseObjectId, int metaverseAttributeId)
         => _inner.GetGeneratedValueAssignmentAsync(metaverseObjectId, metaverseAttributeId);
 
