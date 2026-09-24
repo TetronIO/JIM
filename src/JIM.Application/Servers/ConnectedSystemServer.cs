@@ -6849,6 +6849,8 @@ public partial class ConnectedSystemServer
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
         await ValidateNoDuplicateMappingTargetAsync(mapping);
+        // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
+        ValidateGeneratedMapping(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -6873,6 +6875,11 @@ public partial class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
+        // A brand new generated Sequence mapping can still skip the counter ahead: the counter outlives any
+        // one flow (plan decision 3), so an earlier, now-deleted generated mapping on the same attribute may
+        // have already advanced it.
+        if (mapping.Generation != null)
+            mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -6888,6 +6895,8 @@ public partial class ConnectedSystemServer
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
         await ValidateNoDuplicateMappingTargetAsync(mapping);
+        // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
+        ValidateGeneratedMapping(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -6912,6 +6921,8 @@ public partial class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
+        if (mapping.Generation != null)
+            mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -6929,6 +6940,8 @@ public partial class ConnectedSystemServer
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
         await ValidateNoDuplicateMappingTargetAsync(mapping);
+        // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
+        ValidateGeneratedMapping(mapping);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -6947,6 +6960,8 @@ public partial class ConnectedSystemServer
         AuditHelper.SetUpdated(mapping, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
 
+        if (mapping.Generation != null)
+            mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -7001,6 +7016,8 @@ public partial class ConnectedSystemServer
         ApplySyncRuleMappingSettings(mapping, settings);
         ValidateMappingTypeCompatibility(mapping);
         ValidateMappingWritability(mapping);
+        // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
+        ValidateGeneratedMapping(mapping);
 
         Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
 
@@ -7027,6 +7044,11 @@ public partial class ConnectedSystemServer
 
         var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId;
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
+
+        // A settings update that raised the flow's SequenceStart moves the target attribute's counter forward
+        // and reports the move on the very instance returned below (plan decision 3).
+        if (mapping.Generation != null)
+            mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -7088,6 +7110,54 @@ public partial class ConnectedSystemServer
             if (mapping.Enabled)
                 mapping.DisabledReason = null;
         }
+
+        ApplyGenerationSettings(mapping, settings.Generation);
+    }
+
+    /// <summary>
+    /// The generated-mapping half of <see cref="ApplySyncRuleMappingSettings"/> (Unique Value Generation, #242,
+    /// Phase 3): applies a change to an existing generated mapping's uniqueness token settings. Turning an
+    /// ordinary mapping into a generated one, or vice versa, is not supported here (like retargeting, it remains
+    /// a delete and a create), so a non-null, non-empty <paramref name="update"/> against a mapping whose
+    /// <see cref="SyncRuleMapping.Generation"/> is null is refused rather than silently ignored, for the same
+    /// reason every other inapplicable setting above is refused.
+    /// </summary>
+    private static void ApplyGenerationSettings(SyncRuleMapping mapping, SyncRuleMappingGenerationSettingsUpdate? update)
+    {
+        if (update == null || !update.HasChanges)
+            return;
+
+        if (mapping.Generation == null)
+            throw new ArgumentException("This Attribute Flow is not a generated mapping, so generation settings do not apply to it.");
+
+        var generation = mapping.Generation;
+
+        if (update.TokenKind.HasValue)
+            generation.TokenKind = update.TokenKind.Value;
+        if (update.SuffixStyle.HasValue)
+            generation.SuffixStyle = update.SuffixStyle.Value;
+        if (update.SuffixStart.HasValue)
+            generation.SuffixStart = update.SuffixStart.Value;
+        if (update.SequenceStart.HasValue)
+            generation.SequenceStart = update.SequenceStart.Value;
+        if (update.SequenceIncrement.HasValue)
+            generation.SequenceIncrement = update.SequenceIncrement.Value;
+        if (update.FixedWidth.HasValue)
+            generation.FixedWidth = update.FixedWidth.Value == 0 ? null : update.FixedWidth.Value;
+        if (update.OnWidthExceeded.HasValue)
+            generation.OnWidthExceeded = update.OnWidthExceeded.Value;
+        if (update.RandomFormat.HasValue)
+            generation.RandomFormat = update.RandomFormat.Value;
+        if (update.RandomLength.HasValue)
+            generation.RandomLength = update.RandomLength.Value;
+        if (update.Separator != null)
+            generation.Separator = string.IsNullOrWhiteSpace(update.Separator) ? null : update.Separator;
+        if (update.AttemptLimit.HasValue)
+            generation.AttemptLimit = update.AttemptLimit.Value;
+        if (update.NeverReuse.HasValue)
+            generation.NeverReuse = update.NeverReuse.Value;
+
+        generation.LastUpdated = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -8565,6 +8635,10 @@ public partial class ConnectedSystemServer
         // target attribute, so the second would be representable but silently never honoured.
         ValidateNoDuplicateMappingTargets(syncRule);
 
+        // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
+        // both import and export rules, so this runs for every rule rather than only one direction.
+        ValidateGeneratedMappings(syncRule);
+
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
         await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
@@ -8771,6 +8845,10 @@ public partial class ConnectedSystemServer
         // reject two Attribute Flows targeting the same attribute (#1532): the engine evaluates one mapping per
         // target attribute, so the second would be representable but silently never honoured.
         ValidateNoDuplicateMappingTargets(syncRule);
+
+        // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
+        // both import and export rules, so this runs for every rule rather than only one direction.
+        ValidateGeneratedMappings(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
