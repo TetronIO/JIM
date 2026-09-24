@@ -239,4 +239,4 @@ The legacy no-snapshot fallback is already removed. The rest:
 
 - **[Causality Visualisation Redesign](../prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087)**, still open: the surface Phase 1d attaches to.
 - **[RPEI Outcome Graph](done/RPEI_OUTCOME_GRAPH.md) (#363, Done)**: the single-item outcome tree this extends into a cross-item graph.
-- **[Synchronisation Rule Causality Tracking](SYNC_RULE_CAUSALITY_TRACKING.md) (#399, Planned)**: adjacent and orthogonal; not blocking.
+- **[Synchronisation Rule Causality Tracking](doing/SYNC_RULE_CAUSALITY_TRACKING.md) (#399, Doing)**: adjacent and orthogonal; not blocking.

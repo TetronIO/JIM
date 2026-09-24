@@ -146,5 +146,5 @@ The interactive mock-up (internal) is the canonical example set: https://claude.
 ## Additional Context
 
 - Approved mock-up (canonical design reference): https://claude.ai/code/artifact/c928e648-1fb1-4f39-961d-9c73c497dacb
-- Data foundations: `engineering/plans/SYNC_RULE_CAUSALITY_TRACKING.md` (attribution design) and PR #1098
+- Data foundations: `engineering/plans/doing/SYNC_RULE_CAUSALITY_TRACKING.md` (attribution design) and PR #1098
 - Terminology umbrella (rest of JIM): #1088
