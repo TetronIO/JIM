@@ -90,6 +90,29 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The whole-rule-save counterpart of the single-mapping create/update paths' save-time counter raise
+    /// (Unique Value Generation, #242, Phase 3 follow-up; plan decision 3). Called from both
+    /// <c>CreateOrUpdateSyncRuleAsync</c> overloads, after the rule (and any newly added mappings within it)
+    /// has been persisted, so every mapping's id is populated. For every generated Sequence mapping on the rule
+    /// whose configured
+    /// <see cref="SyncRuleMappingGeneration.SequenceStart"/> now stands above its target attribute's counter,
+    /// raises the counter and stamps the move onto that mapping's transient
+    /// <see cref="SyncRuleMappingGeneration.SequenceSkippedAhead"/>, exactly as the single-mapping paths do; the
+    /// caller (the portal's Attribute Flow tab saves exclusively through <c>CreateOrUpdateSyncRuleAsync</c>, not
+    /// the single-mapping endpoints) already holds the same <paramref name="syncRule"/> instance and can read the
+    /// stamp off each mapping once this returns. A no-op, and no repository call, for every mapping that is not
+    /// a generated Sequence mapping.
+    /// </summary>
+    private async Task ApplyGeneratedValueSequenceSkipsAsync(SyncRule syncRule)
+    {
+        foreach (var mapping in syncRule.AttributeFlowRules)
+        {
+            if (mapping.Generation != null)
+                mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
+        }
+    }
+
+    /// <summary>
     /// Validates a single generated mapping's settings (Unique Value Generation, #242, Phase 3 point 1) via
     /// <see cref="SyncRuleMappingGenerationValidator"/>, and refuses the save with every problem found joined
     /// into one message, the same way <see cref="ValidateMappingTypeCompatibility"/> and

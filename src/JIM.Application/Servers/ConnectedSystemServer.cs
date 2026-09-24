@@ -8763,6 +8763,14 @@ public partial class ConnectedSystemServer
             await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
 
+        // Every generated Sequence mapping's SequenceStart may have just moved the target attribute's counter
+        // forward (#242, Phase 3, plan decision 3). Runs after the write so every mapping (new ones included)
+        // has its id populated, and before the change capture so a later read of the rule via this same
+        // instance already carries the skip. This is the portal's primary save path (the Attribute Flow tab
+        // saves through CreateOrUpdateSyncRuleAsync, never the single-mapping endpoints), so it cannot be
+        // deferred to those alone.
+        await ApplyGeneratedValueSequenceSkipsAsync(syncRule);
+
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
         // so the snapshot records the priorities as they end up (#1199).
@@ -8940,6 +8948,14 @@ public partial class ConnectedSystemServer
 
             await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
+
+        // Every generated Sequence mapping's SequenceStart may have just moved the target attribute's counter
+        // forward (#242, Phase 3, plan decision 3). Runs after the write so every mapping (new ones included)
+        // has its id populated, and before the change capture so a later read of the rule via this same
+        // instance already carries the skip. This is the portal's primary save path (the Attribute Flow tab
+        // saves through CreateOrUpdateSyncRuleAsync, never the single-mapping endpoints), so it cannot be
+        // deferred to those alone.
+        await ApplyGeneratedValueSequenceSkipsAsync(syncRule);
 
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
