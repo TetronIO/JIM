@@ -908,6 +908,59 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ---
 
+### Get-JIMGeneratedValue
+
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
+Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
+committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
+its state, and whether it was adopted from an existing accepted value rather than generated. Empty when
+the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
+[Synchronisation Rules](synchronisation-rules.md#new-jimsyncrulemapping).
+
+#### Syntax
+
+```powershell
+Get-JIMGeneratedValue -MetaverseObjectId <guid>
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `MetaverseObjectId` | `guid` | Yes | | The Metaverse Object's ID. Accepts pipeline input by property name. Alias: `Id` |
+
+#### Output
+
+One `PSCustomObject` per generated value:
+
+| Property | Description |
+|----------|--------------|
+| `AssignmentId` | The assignment's own identifier |
+| `MetaverseAttributeId` | The Metaverse Attribute this value was generated for |
+| `AttributeName` | Its name |
+| `Value` | The committed value |
+| `TokenKind` | `OnlyIfTaken`, `Sequence` or `Random` |
+| `SyncRuleId` | The Synchronisation Rule whose generated mapping produced this value |
+| `SyncRuleName` | Its name |
+| `SyncRuleMappingId` | The mapping responsible |
+| `State` | `Proposed`, `Committed`, `Remediated` or `NeedsDecision` |
+| `Adopted` | `true` when the value was adopted from an existing accepted value, not generated |
+| `AssignedDate` | When the assignment was created |
+
+#### Examples
+
+```powershell title="List everything JIM generated for an Identity"
+Get-JIMGeneratedValue -MetaverseObjectId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Pipe a Metaverse Object straight in"
+Get-JIMMetaverseObject -ObjectTypeName "person" -Search "j.smith" | Get-JIMGeneratedValue
+```
+
+---
+
 ## Set-JIMMetaverseObjectPassword
 
 Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation.

@@ -1,0 +1,452 @@
+@using JIM.Application.Expressions
+@using JIM.Models.Core
+@using JIM.Models.Expressions
+@using JIM.Models.Logic
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The "Generated Value" Attribute Flow form (Unique Value Generation, #242, Phase 3): base expression,
+   uniqueness token and its sub-controls, the read-only "When JIM generates this value" statement, Missing Input
+   Behaviour and the Advanced attempt limit. Extracted from SyncRuleAttributeFlowTab.razor's Add/Edit dialog so
+   that file does not grow past readability; see approved mockup "Generated Value Options" screens 01-03. *@
+
+@if (Mapping.Generation is { } generation)
+{
+    <MudTextField T="string" Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync"
+        Label="Base expression" Disabled="IsNumberTarget"
+        Placeholder="@(IsNumberTarget ? null : "e.g. Lower(cs[\"firstName\"]) + \".\" + Lower(cs[\"lastName\"])")"
+        Class="mt-5" Variant="Variant.Outlined" Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Immediate="true"
+        HelperText="@BaseExpressionHelperText" />
+
+    @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
+    {
+        <ExpressionTester Expression="@BaseSource.Expression" SampleValuesChanged="OnSampleValuesChanged" />
+    }
+
+    <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">Uniqueness token</MudText>
+    <MudRadioGroup T="GeneratedValueTokenKind" Value="generation.TokenKind" ValueChanged="OnTokenKindChangedAsync">
+        <MudStack Spacing="1">
+            <MudRadio Value="GeneratedValueTokenKind.OnlyIfTaken" Color="Color.Primary" Disabled="OnlyIfTakenDisabled">
+                <MudText Typo="Typo.body1">Add a number only if the value is already taken</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@OnlyIfTakenSubtext</MudText>
+            </MudRadio>
+            <MudRadio Value="GeneratedValueTokenKind.Sequence" Color="Color.Primary">
+                <MudText Typo="Typo.body1">Always add a sequence number</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    The next number from a counter kept for the target attribute. Optionally fixed width.
+                </MudText>
+            </MudRadio>
+            <MudRadio Value="GeneratedValueTokenKind.Random" Color="Color.Primary">
+                <MudText Typo="Typo.body1">Always add a random token</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@RandomSubtext</MudText>
+            </MudRadio>
+        </MudStack>
+    </MudRadioGroup>
+
+    @switch (generation.TokenKind)
+    {
+        case GeneratedValueTokenKind.OnlyIfTaken:
+            <MudGrid Spacing="3" Class="mt-1">
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="GeneratedValueSuffixStyle" Value="generation.SuffixStyle" ValueChanged="OnSuffixStyleChangedAsync"
+                        Label="Style" Variant="Variant.Outlined">
+                        <MudSelectItem Value="GeneratedValueSuffixStyle.Number">Number</MudSelectItem>
+                        <MudSelectItem Value="GeneratedValueSuffixStyle.Letter">Letter</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="int" Value="generation.SuffixStart" ValueChanged="OnSuffixStartChangedAsync"
+                        Label="Start at" Min="1" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                @if (ShowSeparator)
+                {
+                    <MudItem xs="12" sm="4">
+                        <GeneratedValueSeparatorField Generation="generation" OnChanged="NotifyChangedAsync" />
+                    </MudItem>
+                }
+            </MudGrid>
+            break;
+
+        case GeneratedValueTokenKind.Sequence:
+            <MudGrid Spacing="3" Class="mt-1">
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="long" Value="generation.SequenceStart" ValueChanged="OnSequenceStartChangedAsync"
+                        Label="Start at" Min="0" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="int" Value="generation.SequenceIncrement" ValueChanged="OnSequenceIncrementChangedAsync"
+                        Label="Increment" Min="1" Variant="Variant.Outlined" Immediate="true" />
+                </MudItem>
+                @if (ShowSeparator)
+                {
+                    <MudItem xs="12" sm="4">
+                        <GeneratedValueSeparatorField Generation="generation" OnChanged="NotifyChangedAsync" />
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <MudSwitch T="bool" Value="generation.FixedWidth.HasValue" ValueChanged="OnPaddingToggledAsync"
+                Color="Color.Primary" Disabled="IsNumberTarget" Class="mt-3" Label="Pad to a fixed width" />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @(IsNumberTarget
+                    ? "Not available: a Number attribute cannot hold leading zeros. Choose a Text attribute for fixed-width values."
+                    : "Off: plain numbers. On: zero-padded to the width below.")
+            </MudText>
+
+            @if (generation.FixedWidth.HasValue && !IsNumberTarget)
+            {
+                var fixedWidth = generation.FixedWidth.Value;
+                <MudGrid Spacing="3" Class="mt-1">
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="int" Value="fixedWidth" ValueChanged="OnFixedWidthChangedAsync"
+                            Label="Width" Min="1" Max="18" Variant="Variant.Outlined" Immediate="true"
+                            HelperText="@RoomRemainingText" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">When the number outgrows the width</MudText>
+                <MudRadioGroup T="GeneratedValueWidthOverflowBehaviour" Value="generation.OnWidthExceeded" ValueChanged="OnWidthExceededChangedAsync">
+                    <MudStack Spacing="1">
+                        <MudRadio Value="GeneratedValueWidthOverflowBehaviour.StopAndReport" Color="Color.Primary">
+                            <MudText Typo="Typo.body1">Stop and report an error</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                For fixed-length validation downstream. The object fails with a clear reason; nothing is written.
+                            </MudText>
+                        </MudRadio>
+                        <MudRadio Value="GeneratedValueWidthOverflowBehaviour.AllowLonger" Color="Color.Primary">
+                            <MudText Typo="Typo.body1">Allow longer numbers</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                The width becomes a minimum: a number that would no longer fit grows past it instead of failing.
+                            </MudText>
+                        </MudRadio>
+                    </MudStack>
+                </MudRadioGroup>
+            }
+
+            @* Read-only, not a disabled switch: a disabled switch reads as greyed-out/off, and this is always
+               on for a sequence token, never a choice to make here. *@
+            <div class="d-flex align-center mt-4">
+                <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Class="mud-text-secondary mr-2" />
+                <MudText Typo="Typo.body1">Never reuse a value</MudText>
+            </div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Always on for sequence numbers: the counter only moves forward.
+            </MudText>
+            break;
+
+        case GeneratedValueTokenKind.Random:
+            @* Format, Length and Separator sit on one row of three, matching Only-if-taken's Style/Start
+               at/Separator row and Sequence's Start at/Increment/Separator row. GUID has no Length, but the
+               slot stays in place (empty) so the grid, and the hint directly under it, never move. *@
+            <MudGrid Spacing="3" Class="mt-1">
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="GeneratedValueRandomFormat" Value="generation.RandomFormat" ValueChanged="OnRandomFormatChangedAsync"
+                        Label="Format" Variant="Variant.Outlined">
+                        <MudSelectItem Value="GeneratedValueRandomFormat.Guid" Disabled="IsNumberTarget">
+                            GUID
+                        </MudSelectItem>
+                        <MudSelectItem Value="GeneratedValueRandomFormat.Hex" Disabled="IsNumberTarget">
+                            Hex
+                        </MudSelectItem>
+                        <MudSelectItem Value="GeneratedValueRandomFormat.Digits">
+                            Digits
+                        </MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    @if (generation.RandomFormat != GeneratedValueRandomFormat.Guid)
+                    {
+                        <MudNumericField T="int" Value="generation.RandomLength ?? DefaultRandomLength"
+                            ValueChanged="OnRandomLengthChangedAsync" Label="Length" Min="1" Max="64"
+                            Variant="Variant.Outlined" Immediate="true" />
+                    }
+                </MudItem>
+                @if (ShowSeparator)
+                {
+                    <MudItem xs="12" sm="4">
+                        <GeneratedValueSeparatorField Generation="generation" OnChanged="NotifyChangedAsync" />
+                    </MudItem>
+                }
+            </MudGrid>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@RandomFormatHint</MudText>
+            break;
+    }
+
+    @* ─── Live preview (Unique Value Generation, #242, Phase 3, Work Package D2) ─── *@
+    <GeneratedValuePreviewPanel Mapping="Mapping" BaseSource="BaseSource" TargetType="TargetType" TargetName="@TargetName"
+        Direction="Direction" SyncRuleId="SyncRuleId" ConnectedSystemId="ConnectedSystemId"
+        MetaverseObjectTypeId="MetaverseObjectTypeId" TargetMetaverseAttributeId="TargetMetaverseAttributeId"
+        SampleValues="_sampleValues" />
+
+    @* ─── When JIM generates this value (read-only) ─── *@
+    <MudPaper Outlined="true" Class="pa-3 mt-5">
+        <MudText Typo="Typo.subtitle2" Class="mb-2">When JIM generates this value</MudText>
+        <MudText Typo="Typo.body2">
+            1. The Metaverse Object has no @(TargetName ?? "this attribute") from a higher-priority source, and no
+            connected system already holds one for it (an existing value is adopted, never replaced).
+        </MudText>
+        @if (BaseExpressionInputs.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2">2. No inputs to wait for: the base expression is empty.</MudText>
+            <MudText Typo="Typo.body2" Class="mt-2">3. Then once only.</MudText>
+        }
+        else
+        {
+            <div class="mt-2 d-flex align-center flex-wrap gap-1">
+                <MudText Typo="Typo.body2">2. Every attribute the base expression reads has a value:</MudText>
+                @foreach (var input in BaseExpressionInputs)
+                {
+                    @* The attribute name alone, per the approved mockup; the full accessor (which side of the
+                       Metaverse it reads from) is available on hover rather than crowding the chip. *@
+                    <MudTooltip Text="@input.Accessor" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@input.AttributeName</MudChip>
+                    </MudTooltip>
+                }
+            </div>
+            <MudText Typo="Typo.body2" Class="mt-2">
+                3. Then once only. The value is kept even if these inputs later change.
+            </MudText>
+        }
+    </MudPaper>
+
+    @* ─── If an input has no value (Missing Input Behaviour), only meaningful with a base expression ─── *@
+    @if (!string.IsNullOrWhiteSpace(BaseSource.Expression))
+    {
+        <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">If an input has no value</MudText>
+        <MudRadioGroup T="MissingInputBehaviour" Value="BaseSource.MissingInputBehaviour" ValueChanged="OnMissingInputBehaviourChangedAsync">
+            <MudStack Spacing="1">
+                <MudRadio Value="MissingInputBehaviour.ContributeNoValue" Color="Color.Primary">
+                    <MudText Typo="Typo.body1">Wait until every input has a value</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Recommended for generated values: a value built from a missing input would be kept for ever.
+                    </MudText>
+                </MudRadio>
+                <MudRadio Value="MissingInputBehaviour.EvaluateAnyway" Color="Color.Primary">
+                    <MudText Typo="Typo.body1">Evaluate anyway</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Only if the expression handles missing values itself, for example with IIF and IsNullOrEmpty.
+                    </MudText>
+                </MudRadio>
+            </MudStack>
+        </MudRadioGroup>
+    }
+
+    @* ─── Advanced: attempt limit ─── *@
+    <MudExpansionPanels Elevation="0" Class="mt-5">
+        <MudExpansionPanel Text="Advanced">
+            <MudNumericField T="int" Value="generation.AttemptLimit" ValueChanged="OnAttemptLimitChangedAsync"
+                Label="Attempt limit" Min="1" Max="100000" Variant="Variant.Outlined" Immediate="true"
+                HelperText="Candidates tried per object per run before the object fails." />
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    @if (ValidationErrors.Count > 0)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-5">
+            <MudText Typo="Typo.body2" Class="mb-1">This configuration cannot be saved:</MudText>
+            <ul class="mb-0">
+                @foreach (var error in ValidationErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </MudAlert>
+    }
+}
+
+@code {
+    /// <summary>Digits chosen when a Number target's Random token first switches to Hex/Digits (unused for Guid).</summary>
+    private const int DefaultRandomLength = 8;
+
+    [Parameter, EditorRequired]
+    public SyncRuleMapping Mapping { get; set; } = null!;
+
+    /// <summary>
+    /// The mapping's single permitted source, holding the base expression and its Missing Input Behaviour. Added
+    /// to or removed from <see cref="Mapping"/>'s <c>Sources</c> as the expression text goes from empty to
+    /// non-empty and back, because <see cref="SyncRuleMappingGenerationValidator"/> reads an empty source as an
+    /// invalid attribute source, not as "no base expression" (plan decision 1: the base expression is optional).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public SyncRuleMappingSource BaseSource { get; set; } = null!;
+
+    [Parameter]
+    public AttributeDataType? TargetType { get; set; }
+
+    /// <summary>The chosen target attribute's display name, for the "When JIM generates this value" statement.</summary>
+    [Parameter]
+    public string? TargetName { get; set; }
+
+    // ─── Live preview parameters (Unique Value Generation, #242, Phase 3, Work Package D2): passed straight
+    // through to GeneratedValuePreviewPanel, which needs them for the existing-object count and sequence state
+    // reads. Kept as plain parameters here (rather than reading them off Mapping/SyncRule directly) because this
+    // component otherwise has no need to know the Synchronisation Rule at all.
+
+    [Parameter]
+    public SyncRuleDirection Direction { get; set; }
+
+    [Parameter]
+    public int SyncRuleId { get; set; }
+
+    [Parameter]
+    public int ConnectedSystemId { get; set; }
+
+    [Parameter]
+    public int MetaverseObjectTypeId { get; set; }
+
+    [Parameter]
+    public int? TargetMetaverseAttributeId { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private IReadOnlyDictionary<string, string?> _sampleValues = new Dictionary<string, string?>();
+
+    private bool IsNumberTarget => GeneratedValueFormHelpers.IsNumberTarget(TargetType);
+
+    private bool OnlyIfTakenDisabled => IsNumberTarget || string.IsNullOrWhiteSpace(BaseSource.Expression);
+
+    private string OnlyIfTakenSubtext => IsNumberTarget
+        ? "Needs a base expression; not available for a Number attribute."
+        : string.IsNullOrWhiteSpace(BaseSource.Expression)
+            ? "Needs a base expression; add one above, or choose a Sequence or Random token instead."
+            : "joe.bloggs, then joe.bloggs1, joe.bloggs2 …";
+
+    private string RandomSubtext => IsNumberTarget
+        ? "Digits only for a Number attribute; GUID and hex are text."
+        : "A GUID, or a short hex or digit string. A clash draws again.";
+
+    private string BaseExpressionHelperText => IsNumberTarget
+        ? "Not available for a Number attribute: a prefix or letters would make the value text."
+        : "Reads the source object's attributes. Optional for a Sequence or Random token.";
+
+    /// <summary>
+    /// The separator control is only meaningful, and only offered, alongside a base expression on a Text target
+    /// (plan reference table, "Separator" row); a Number target never reaches here because its base expression
+    /// is disabled.
+    /// </summary>
+    private bool ShowSeparator => !IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression);
+
+    private string RoomRemainingText =>
+        Mapping.Generation?.FixedWidth is { } width
+            ? GeneratedValueFormHelpers.GetSequenceRoomRemainingText(Mapping.Generation.SequenceStart, width) ?? string.Empty
+            : string.Empty;
+
+    private string RandomFormatHint =>
+        Mapping.Generation is { } generation
+            ? GeneratedValueFormHelpers.GetRandomFormatMenuHint(generation.RandomFormat, generation.RandomLength)
+            : string.Empty;
+
+    private IReadOnlyList<ExpressionInput> BaseExpressionInputs =>
+        ExpressionInputResolver.Resolve(BaseSource.Expression);
+
+    private IReadOnlyList<string> ValidationErrors => SyncRuleMappingGenerationValidator.Validate(Mapping);
+
+    // ─── Change handlers ───
+
+    private async Task OnBaseExpressionChangedAsync(string? value)
+    {
+        BaseSource.Expression = value;
+
+        var hasExpression = !string.IsNullOrWhiteSpace(value);
+        var inSources = Mapping.Sources.Contains(BaseSource);
+        if (hasExpression && !inSources)
+            Mapping.Sources.Add(BaseSource);
+        else if (!hasExpression && inSources)
+            Mapping.Sources.Remove(BaseSource);
+
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnTokenKindChangedAsync(GeneratedValueTokenKind kind)
+    {
+        Mapping.Generation!.TokenKind = kind;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnSuffixStyleChangedAsync(GeneratedValueSuffixStyle style)
+    {
+        Mapping.Generation!.SuffixStyle = style;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnSuffixStartChangedAsync(int value)
+    {
+        Mapping.Generation!.SuffixStart = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnSequenceStartChangedAsync(long value)
+    {
+        Mapping.Generation!.SequenceStart = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnSequenceIncrementChangedAsync(int value)
+    {
+        Mapping.Generation!.SequenceIncrement = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnPaddingToggledAsync(bool padded)
+    {
+        var generation = Mapping.Generation!;
+        generation.FixedWidth = padded ? GeneratedValueFormHelpers.GetDefaultFixedWidth(generation.SequenceStart) : null;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnFixedWidthChangedAsync(int value)
+    {
+        Mapping.Generation!.FixedWidth = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnWidthExceededChangedAsync(GeneratedValueWidthOverflowBehaviour value)
+    {
+        Mapping.Generation!.OnWidthExceeded = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnRandomFormatChangedAsync(GeneratedValueRandomFormat format)
+    {
+        var generation = Mapping.Generation!;
+        generation.RandomFormat = format;
+        generation.RandomLength = format == GeneratedValueRandomFormat.Guid ? null : generation.RandomLength ?? DefaultRandomLength;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnRandomLengthChangedAsync(int value)
+    {
+        Mapping.Generation!.RandomLength = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnMissingInputBehaviourChangedAsync(MissingInputBehaviour value)
+    {
+        BaseSource.MissingInputBehaviour = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnAttemptLimitChangedAsync(int value)
+    {
+        Mapping.Generation!.AttemptLimit = value;
+        await NotifyChangedAsync();
+    }
+
+    /// <summary>
+    /// The live preview's base value evaluates against these exact sample values, so a live preview that
+    /// disagrees with "Run test" above it is a defect, not two independent implementations.
+    /// </summary>
+    private async Task OnSampleValuesChanged(IReadOnlyDictionary<string, string?> sampleValues)
+    {
+        _sampleValues = sampleValues;
+        await NotifyChangedAsync();
+    }
+
+    private async Task NotifyChangedAsync()
+    {
+        if (OnChanged.HasDelegate)
+            await OnChanged.InvokeAsync();
+    }
+}

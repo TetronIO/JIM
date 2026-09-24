@@ -606,3 +606,434 @@ Describe 'Remove-JIMSyncRuleMapping' {
         }
     }
 }
+
+Describe 'New-JIMSyncRuleMapping: Unique Value Generation (#242)' {
+
+    Context 'Parameter sets' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMSyncRuleMapping
+        }
+
+        It 'Has ImportGenerated and ExportGenerated parameter sets' {
+            $command.ParameterSets.Name | Should -Contain 'ImportGenerated'
+            $command.ParameterSets.Name | Should -Contain 'ExportGenerated'
+        }
+
+        It 'Should have a <Name> parameter' -ForEach @(
+            @{ Name = 'Generate' }
+            @{ Name = 'TokenKind' }
+            @{ Name = 'SuffixStyle' }
+            @{ Name = 'SuffixStart' }
+            @{ Name = 'SequenceStart' }
+            @{ Name = 'SequenceIncrement' }
+            @{ Name = 'FixedWidth' }
+            @{ Name = 'OnWidthExceeded' }
+            @{ Name = 'RandomFormat' }
+            @{ Name = 'RandomLength' }
+            @{ Name = 'Separator' }
+            @{ Name = 'AttemptLimit' }
+            @{ Name = 'NeverReuse' }
+        ) {
+            $command.Parameters[$Name] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Generate is only available on the generated parameter sets' {
+            $setNames = $command.Parameters['Generate'].ParameterSets.Keys
+            $setNames | Should -Contain 'ImportGenerated'
+            $setNames | Should -Contain 'ExportGenerated'
+            $setNames | Should -Not -Contain 'ImportAttribute'
+            $setNames | Should -Not -Contain 'ImportExpression'
+            $setNames | Should -Not -Contain 'ExportAttribute'
+            $setNames | Should -Not -Contain 'ExportExpression'
+        }
+
+        It 'Generate is mandatory on the generated parameter sets' {
+            ($command.Parameters['Generate'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ParameterSetName -eq 'ImportGenerated' }).Mandatory | Should -BeTrue
+        }
+
+        It 'Expression is available on the generated parameter sets (the base expression is optional there)' {
+            $setNames = $command.Parameters['Expression'].ParameterSets.Keys
+            $setNames | Should -Contain 'ImportGenerated'
+            $setNames | Should -Contain 'ExportGenerated'
+        }
+
+        It 'TokenKind should validate against OnlyIfTaken/Sequence/Random' {
+            $validateSet = $command.Parameters['TokenKind'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet.ValidValues | Should -Be @('OnlyIfTaken', 'Sequence', 'Random')
+        }
+
+        It 'Does not add -ExcludeConnectedSystemId: exclusions are deferred from every surface in release 1' {
+            $command.Parameters.Keys | Should -Not -Contain 'ExcludeConnectedSystemId'
+        }
+    }
+
+    Context 'Request body composition: import' {
+
+        It 'Creates a generated import mapping with no base expression' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 -Generate -TokenKind Sequence -SequenceStart 100000 -FixedWidth 6 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.targetMetaverseAttributeId -eq 12 -and
+                    $Body.sources.Count -eq 0 -and
+                    $Body.generation.tokenKind -eq 'Sequence' -and
+                    $Body.generation.sequenceStart -eq 100000 -and
+                    $Body.generation.fixedWidth -eq 6
+                }
+            }
+        }
+
+        It 'Creates a generated import mapping with a base expression' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 `
+                    -Expression 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"])' -Generate -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.sources.Count -eq 1 -and
+                    $Body.sources[0].expression -eq 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"])' -and
+                    $Body.generation -is [hashtable]
+                }
+            }
+        }
+
+        It 'Sends only the generation settings that were supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 -Generate -TokenKind Sequence -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.generation.ContainsKey('tokenKind') -and
+                    -not $Body.generation.ContainsKey('sequenceStart') -and
+                    -not $Body.generation.ContainsKey('fixedWidth') -and
+                    -not $Body.generation.ContainsKey('neverReuse')
+                }
+            }
+        }
+    }
+
+    Context 'Request body composition: export' {
+
+        It 'Creates a generated export mapping with a Random token and no base expression' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 2 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 -Generate -TokenKind Random -RandomFormat Hex -RandomLength 12 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.targetConnectedSystemAttributeId -eq 40 -and
+                    $Body.sources.Count -eq 0 -and
+                    $Body.generation.tokenKind -eq 'Random' -and
+                    $Body.generation.randomFormat -eq 'Hex' -and
+                    $Body.generation.randomLength -eq 12
+                }
+            }
+        }
+    }
+
+    Context 'Sequence skipped ahead warning' {
+
+        It 'Warns naming the from and to positions when the response reports a skip' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        Id         = 1
+                        Generation = [PSCustomObject]@{
+                            SequenceSkippedAhead = [PSCustomObject]@{ From = 5; To = 100000 }
+                        }
+                    }
+                }
+
+                $warnings = New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 -Generate -TokenKind Sequence -SequenceStart 100000 -Confirm:$false 3>&1 |
+                    Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+                $warnings.Count | Should -Be 1
+                $warnings[0].Message | Should -Match '5'
+                $warnings[0].Message | Should -Match '100000'
+            }
+        }
+
+        It 'Warns nothing when the response reports no skip' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ Id = 1; Generation = [PSCustomObject]@{ SequenceSkippedAhead = $null } } }
+
+                $warnings = New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 -Generate -TokenKind Sequence -Confirm:$false 3>&1 |
+                    Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+                $warnings.Count | Should -Be 0
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help New-JIMSyncRuleMapping -Full
+        }
+
+        It 'Should document the <Name> parameter' -ForEach @(
+            @{ Name = 'Generate' }
+            @{ Name = 'TokenKind' }
+            @{ Name = 'SequenceStart' }
+            @{ Name = 'RandomFormat' }
+            @{ Name = 'NeverReuse' }
+        ) {
+            ($help.Parameters.Parameter | Where-Object { $_.Name -eq $Name }) | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Set-JIMSyncRuleMapping: Unique Value Generation (#242)' {
+
+    Context 'Parameters' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMSyncRuleMapping
+        }
+
+        It 'Should have a <Name> parameter' -ForEach @(
+            @{ Name = 'TokenKind' }
+            @{ Name = 'SuffixStyle' }
+            @{ Name = 'SuffixStart' }
+            @{ Name = 'SequenceStart' }
+            @{ Name = 'SequenceIncrement' }
+            @{ Name = 'FixedWidth' }
+            @{ Name = 'OnWidthExceeded' }
+            @{ Name = 'RandomFormat' }
+            @{ Name = 'RandomLength' }
+            @{ Name = 'Separator' }
+            @{ Name = 'AttemptLimit' }
+            @{ Name = 'NeverReuse' }
+        ) {
+            $command.Parameters[$Name] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Request body composition' {
+
+        It 'PATCHes only the generation settings that were supplied, nested under generation' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -SequenceStart 500000 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and
+                    $Body.generation.sequenceStart -eq 500000 -and
+                    -not $Body.generation.ContainsKey('tokenKind') -and
+                    -not $Body.ContainsKey('expression')
+                }
+            }
+        }
+
+        It 'Sends fixedWidth=0 to clear the padding' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -FixedWidth 0 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.generation.ContainsKey('fixedWidth') -and $Body.generation.fixedWidth -eq 0
+                }
+            }
+        }
+
+        It 'Warns naming the from and to positions when the response reports a skip' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        Id         = 12
+                        Generation = [PSCustomObject]@{ SequenceSkippedAhead = [PSCustomObject]@{ From = 7; To = 500000 } }
+                    }
+                }
+
+                $warnings = Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -SequenceStart 500000 -Confirm:$false 3>&1 |
+                    Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+                $warnings.Count | Should -Be 1
+                $warnings[0].Message | Should -Match '7'
+                $warnings[0].Message | Should -Match '500000'
+            }
+        }
+
+        It 'Refuses a call naming no setting, generation settings included' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 12 } }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable err
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+                $err | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+}
+
+Describe 'Get-JIMGeneratedValueSequence' {
+
+    Context 'Parameters' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMGeneratedValueSequence
+        }
+
+        It 'Should require SyncRuleId and MappingId' {
+            $command.Parameters['SyncRuleId'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['MappingId'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should alias SyncRuleId to Id, matching the mapping cmdlets around it' {
+            $command.Parameters['SyncRuleId'].Aliases | Should -Contain 'Id'
+        }
+    }
+
+    Context 'Request composition' {
+
+        It 'Requests the mapping-scoped sequence endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ AttributeName = 'Employee Number'; NextNumber = 42 } }
+
+                Get-JIMGeneratedValueSequence -SyncRuleId 1 -MappingId 12 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/mappings/12/sequence'
+                }
+            }
+        }
+
+        It 'Requires a connection' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Invoke-JIMApi { [PSCustomObject]@{} }
+
+                Get-JIMGeneratedValueSequence -SyncRuleId 1 -MappingId 12 -ErrorAction SilentlyContinue -ErrorVariable err | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+                $err | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Get-JIMGeneratedValueSequence -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+    }
+}
+
+Describe 'Restart-JIMGeneratedValues' {
+
+    Context 'Parameters' {
+
+        BeforeAll {
+            $command = Get-Command Restart-JIMGeneratedValues
+        }
+
+        It 'Should require SyncRuleId and MappingId' {
+            $command.Parameters['SyncRuleId'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['MappingId'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should confirm by default (ConfirmImpact High)' {
+            $command.ScriptBlock.Attributes |
+                Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] -and $_.SupportsShouldProcess -and $_.ConfirmImpact -eq 'High' } |
+                Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Request composition' {
+
+        It 'Posts to the mapping-scoped restart endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ RetiredValuesForgotten = 0; CounterFrom = 42; CounterTo = 1 } }
+
+                Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and
+                    $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/mappings/12/generation/restart'
+                }
+            }
+        }
+
+        It 'Does not call the API when -WhatIf is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ RetiredValuesForgotten = 0; CounterFrom = 42; CounterTo = 1 } }
+
+                Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -WhatIf
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            }
+        }
+
+        It 'Returns the restart result (RetiredValuesForgotten always 0 in this release)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ RetiredValuesForgotten = 0; CounterFrom = 42; CounterTo = 1 } }
+
+                $result = Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false
+
+                $result.RetiredValuesForgotten | Should -Be 0
+                $result.CounterFrom | Should -Be 42
+                $result.CounterTo | Should -Be 1
+            }
+        }
+
+        It 'Requires a connection' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Invoke-JIMApi { [PSCustomObject]@{} }
+
+                Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable err | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+                $err | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Restart-JIMGeneratedValues -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+
+        It 'States plainly that no existing value changes and nothing exports' {
+            $description = ($help.Description.Text -join ' ')
+            $description | Should -Match 'exports? nothing|nothing is exported|no existing generated value'
+        }
+
+        It 'States that there are no retired values until a later release' {
+            $description = ($help.Description.Text -join ' ')
+            $description | Should -Match 'retired values'
+            $description | Should -Match 'release 2'
+        }
+    }
+}

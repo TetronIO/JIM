@@ -4425,6 +4425,13 @@ public class SynchronisationController(
         if (request.Enabled.HasValue)
             mapping.Enabled = request.Enabled.Value;
 
+        // "Generated Value" (Unique Value Generation, #242, Phase 3): the presence of this row is what makes
+        // GetSourceType() return GeneratedMapping. Allowed on both import and export rules; server-side
+        // validation (SyncRuleMappingGenerationValidator, run inside CreateSyncRuleMappingAsync below) decides
+        // whether the token kind, target attribute type and sources actually agree with each other.
+        if (request.Generation != null)
+            mapping.Generation = request.Generation.ToEntity();
+
         try
         {
             var apiKey = await GetCurrentApiKeyAsync();
@@ -4437,7 +4444,14 @@ public class SynchronisationController(
 
             // Retrieve the created mapping to get all populated fields
             var created = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mapping.Id);
-            return CreatedAtRoute("GetSyncRuleMapping", new { syncRuleId, mappingId = mapping.Id }, SyncRuleMappingDto.FromEntity(created!));
+            var dto = SyncRuleMappingDto.FromEntity(created!);
+            // The reloaded copy carries no in-memory state, so a save-time sequence skip (plan decision 3) is
+            // reported from the original, saved instance the server stamped it on.
+            if (dto.Generation != null)
+                dto.Generation.SequenceSkippedAhead = mapping.Generation?.SequenceSkippedAhead is { } skip
+                    ? new SequenceSkippedAheadDto { From = skip.From, To = skip.To }
+                    : null;
+            return CreatedAtRoute("GetSyncRuleMapping", new { syncRuleId, mappingId = mapping.Id }, dto);
         }
         catch (ArgumentException ex)
         {
@@ -4618,6 +4632,97 @@ public class SynchronisationController(
 
         var summary = await _application.ConnectedSystems.GetSyncRuleContributedValuesSummaryAsync(syncRuleId, mapping.TargetMetaverseAttributeId.Value);
         return Ok(ContributedValuesSummaryDto.FromModel(summary));
+    }
+
+    /// <summary>
+    /// Get a generated Sequence mapping's counter state
+    /// </summary>
+    /// <remarks>
+    /// The next number a generated Sequence mapping would issue, and how many it has issued so far. Read-only:
+    /// nothing is allocated or reserved by calling this. Useful before raising a mapping's Sequence Start, to
+    /// see what the save would actually move the counter to. Only meaningful for a generated mapping whose
+    /// token kind is Sequence; every other mapping returns 404.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="mappingId">The unique identifier of the mapping.</param>
+    [HttpGet("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}/sequence", Name = "GetSyncRuleMappingSequenceState")]
+    [ProducesResponseType(typeof(GeneratedValueSequenceStateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyncRuleMappingSequenceStateAsync(int syncRuleId, int mappingId)
+    {
+        _logger.LogTrace("Requested sequence state for mapping {MappingId} of Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
+
+        var state = await _application.ConnectedSystems.GetGeneratedValueSequenceStateAsync(mappingId);
+        if (state == null)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} is not a generated Sequence mapping."));
+
+        return Ok(GeneratedValueSequenceStateDto.FromModel(state));
+    }
+
+    /// <summary>
+    /// Start a generated mapping's values again
+    /// </summary>
+    /// <remarks>
+    /// For a generated Sequence mapping, moves the target attribute's counter back to the mapping's configured
+    /// Sequence Start (the move can go either direction; "back" is the common case, but a lower configured start
+    /// is honoured too). Existing values and assignments are left untouched: this is not a recall. For every
+    /// other token kind this is a documented no-op. Retired values are not returned to circulation in this
+    /// release; <c>retiredValuesForgotten</c> is always 0 until the retired values register ships (release 2).
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="mappingId">The unique identifier of the mapping.</param>
+    /// <response code="200">The restart's effect (what, if anything, moved).</response>
+    /// <response code="400">The mapping is not a generated mapping.</response>
+    /// <response code="404">Synchronisation Rule or mapping not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}/generation/restart", Name = "RestartSyncRuleMappingGeneratedValues")]
+    [ProducesResponseType(typeof(GeneratedValueRestartResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RestartSyncRuleMappingGeneratedValuesAsync(int syncRuleId, int mappingId)
+    {
+        _logger.LogInformation("Restarting generated values for mapping {MappingId} of Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for generated value restart");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var mapping = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mappingId);
+        if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            var result = apiKey != null
+                ? await _application.ConnectedSystems.RestartGeneratedValuesAsync(mappingId, apiKey)
+                : await _application.ConnectedSystems.RestartGeneratedValuesAsync(mappingId, initiatedBy);
+
+            _logger.LogInformation("Restarted generated values for mapping {MappingId} of Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
+            return Ok(GeneratedValueRestartResultDto.FromModel(result));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to restart generated values for mapping {MappingId}: {Message}", mappingId, ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
     }
 
     #endregion
