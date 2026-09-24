@@ -76,8 +76,32 @@ public class SyncRuleGeneratedValueSequenceSkipDatabaseTests
             END $$;");
     }
 
+    /// <summary>
+    /// Seeds the Unique Value Generation feature flag (#242) enabled, since every test in this file exercises the
+    /// whole-rule save's generated-mapping path (see "Tests run with flags on" in test/CLAUDE.md). The gate check
+    /// itself is covered separately by <see cref="ConnectedSystemServerGeneratedMappingGateTests"/>.
+    /// </summary>
+    private async Task SeedFeatureFlagEnabledAsync()
+    {
+        await using var seed = NewContext();
+        var flag = FeatureFlagCatalogue.UniqueValueGeneration;
+        seed.Set<ServiceSetting>().Add(new ServiceSetting
+        {
+            Key = flag.Key,
+            DisplayName = flag.DisplayName,
+            Description = flag.Description,
+            Category = ServiceSettingCategory.FeatureFlags,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "false",
+            Value = "true"
+        });
+        await seed.SaveChangesAsync();
+    }
+
     private async Task<SeedIds> SeedAsync()
     {
+        await SeedFeatureFlagEnabledAsync();
+
         await using var seed = NewContext();
         var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
         var system = new ConnectedSystem

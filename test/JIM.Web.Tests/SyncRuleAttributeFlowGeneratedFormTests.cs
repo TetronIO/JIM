@@ -12,6 +12,7 @@ using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.TestSupport;
 using JIM.Web.Pages.Admin.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -35,7 +36,12 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
 
     protected override void ConfigureAdditionalServices()
     {
-        _jim = new JimApplication(new Mock<IRepository>().Object);
+        var repo = new Mock<IRepository>();
+        // Unique Value Generation is gated behind its feature flag (#242, Phase 3.5); this file exercises the
+        // generated form itself, so run with it enabled (test/CLAUDE.md > "Tests run with flags on"). The gate's
+        // own visibility behaviour is covered by SyncRuleAttributeFlowTabFeatureFlagTests.
+        repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        _jim = new JimApplication(repo.Object);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
         Services.AddSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>();
     }

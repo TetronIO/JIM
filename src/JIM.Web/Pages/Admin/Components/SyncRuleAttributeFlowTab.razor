@@ -452,7 +452,14 @@
             Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined">
             <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
             <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
-            <MudSelectItem Value="@("Generated")">JIM generates it</MudSelectItem>
+            @* Unique Value Generation (#242) is gated behind its feature flag while in development: offering the
+               option to create new generated configuration only when it is on, while an already-generated mapping
+               being edited keeps showing its own Source Type regardless (checked once in OnInitializedAsync, not
+               per render). *@
+            @if (_uniqueValueGenerationEnabled || _attributeFlowMappingSourceType == "Generated")
+            {
+                <MudSelectItem Value="@("Generated")">JIM generates it</MudSelectItem>
+            }
         </MudSelect>
 
         @if (_attributeFlowMapping != null && _attributeFlowMappingSource != null && SyncRule.MetaverseObjectType !=
@@ -950,6 +957,13 @@
     private bool _isEditingAttributeFlow;
     private VirtualisedDataGrid<SyncRuleMapping>? _flowGrid;
 
+    /// <summary>
+    /// Whether Unique Value Generation (#242) is on, gating the "JIM generates it" Source Type option in the Add/Edit
+    /// Attribute Flow dialog. Checked once in <see cref="OnInitializedAsync"/>, not per render; existing generated
+    /// configuration keeps working and displaying regardless of this flag (see the Source Type MudSelect markup).
+    /// </summary>
+    private bool _uniqueValueGenerationEnabled;
+
     // Advisory Standard Mapping hints for the dialog's attribute pickers (#1122). Loaded when the dialog opens
     // and cached for as long as the rule keeps pointing at the same Connected System and Metaverse Object Type.
     private StandardMappingHints _standardMappingHints = StandardMappingHints.Empty;
@@ -964,6 +978,9 @@
     {
         var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "attributeFlowView");
         _attributeFlowTableView = storedView != "cards";
+
+        using var jim = JimFactory.Create();
+        _uniqueValueGenerationEnabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key);
     }
 
     private async Task ToggleAttributeFlowViewAsync(bool tableView)

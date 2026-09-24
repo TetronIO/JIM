@@ -6851,6 +6851,9 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
+        // this save would persist a new SyncRuleMappingGeneration row.
+        await EnsureGeneratedMappingAllowedAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -6897,6 +6900,9 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
+        // this save would persist a new SyncRuleMappingGeneration row.
+        await EnsureGeneratedMappingAllowedAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -6942,6 +6948,9 @@ public partial class ConnectedSystemServer
         await ValidateNoDuplicateMappingTargetAsync(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
+        // this save would persist a new SyncRuleMappingGeneration row.
+        await EnsureGeneratedMappingAllowedAsync(mapping);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -7018,6 +7027,9 @@ public partial class ConnectedSystemServer
         ValidateMappingWritability(mapping);
         // A generated mapping's uniqueness token settings (#242, Phase 3); a no-op when Generation is null.
         ValidateGeneratedMapping(mapping);
+        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
+        // this save would persist a new SyncRuleMappingGeneration row.
+        await EnsureGeneratedMappingAllowedAsync(mapping);
 
         Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
 
@@ -8638,6 +8650,9 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
+        // this save would persist a new SyncRuleMappingGeneration row on any mapping.
+        await EnsureGeneratedMappingsAllowedAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
@@ -8857,6 +8872,9 @@ public partial class ConnectedSystemServer
         // reject an invalid generated mapping (#242, Phase 3): direction gating allows generated mappings on
         // both import and export rules, so this runs for every rule rather than only one direction.
         ValidateGeneratedMappings(syncRule);
+        // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
+        // this save would persist a new SyncRuleMappingGeneration row on any mapping.
+        await EnsureGeneratedMappingsAllowedAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.

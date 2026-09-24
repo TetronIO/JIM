@@ -113,6 +113,33 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gates a mapping save on Unique Value Generation's feature flag (#242, Phase 3.5) whenever the save would
+    /// persist a <em>new</em> <see cref="SyncRuleMappingGeneration"/> row (<c>Id == 0</c>): a brand new generated
+    /// mapping, or an existing ordinary mapping being converted to one. A no-op for a mapping that is not
+    /// generated, and for an existing generated mapping whose settings are simply being edited; the flag gates
+    /// creating new generated configuration, never managing configuration that already exists.
+    /// </summary>
+    /// <exception cref="JIM.Application.Exceptions.FeatureDisabledException">The flag is off and this save would
+    /// create a new <see cref="SyncRuleMappingGeneration"/> row.</exception>
+    private async Task EnsureGeneratedMappingAllowedAsync(SyncRuleMapping mapping)
+    {
+        if (mapping.Generation is { Id: 0 })
+            await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key);
+    }
+
+    /// <summary>
+    /// The whole-rule-save sibling of <see cref="EnsureGeneratedMappingAllowedAsync"/>, for
+    /// <see cref="CreateOrUpdateSyncRuleAsync"/>.
+    /// </summary>
+    /// <exception cref="JIM.Application.Exceptions.FeatureDisabledException">The flag is off and the rule's save
+    /// would create a new <see cref="SyncRuleMappingGeneration"/> row on any of its mappings.</exception>
+    private async Task EnsureGeneratedMappingsAllowedAsync(SyncRule syncRule)
+    {
+        foreach (var mapping in syncRule.AttributeFlowRules)
+            await EnsureGeneratedMappingAllowedAsync(mapping);
+    }
+
+    /// <summary>
     /// Validates a single generated mapping's settings (Unique Value Generation, #242, Phase 3 point 1) via
     /// <see cref="SyncRuleMappingGenerationValidator"/>, and refuses the save with every problem found joined
     /// into one message, the same way <see cref="ValidateMappingTypeCompatibility"/> and
