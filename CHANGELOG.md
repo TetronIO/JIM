@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ A Metaverse Object's new **Inspect** view shows where every value comes from, and its attribute inspector explains why a value won: every contributing Synchronisation Rule in priority order with the value each would supply, plus the attribute's history; also via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
+
 ### Changed
 
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
