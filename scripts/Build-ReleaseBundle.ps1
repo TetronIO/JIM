@@ -158,9 +158,11 @@ try {
     # Copy Docker Compose files
     Write-Host "`nCopying Docker Compose configuration..." -ForegroundColor Cyan
 
+    # docker-compose.override.yml is deliberately absent: it holds development-only settings
+    # (Development mode, the demo Keycloak, PostgreSQL published on 5432), and Docker Compose
+    # applies it automatically to any command run without -f in the same directory.
     $composeFiles = @(
         "docker-compose.yml"
-        "docker-compose.override.yml"
         "deploy/docker-compose.production.yml"
         ".env.example"
     )
@@ -265,17 +267,23 @@ Edit `.env` with your configuration:
 
 ### 6. Start JIM
 
+With the bundled PostgreSQL container:
+
 ``````bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
 ``````
+
+With an external PostgreSQL server (set JIM_DB_HOSTNAME in .env), leave out --profile with-db.
+
+Pass the same -f files and --profile to every later docker compose command (ps, logs, stop).
 
 ### 7. Verify Installation
 
-Access JIM at http://localhost:5200 (or your configured port).
+Access JIM at http://localhost:5200 (set JIM_WEB_PORT in .env to use another port).
 
-Run the health check:
+Run the health check; it returns 200 once JIM is ready:
 ``````bash
-curl http://localhost:5200/health
+curl -f http://localhost:5200/api/v1/health/ready
 ``````
 
 ## Installing the PowerShell Module

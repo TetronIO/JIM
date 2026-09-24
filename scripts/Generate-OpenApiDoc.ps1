@@ -18,8 +18,8 @@
 
 .PARAMETER NoBuild
     Run the already-built JIM.Web rather than building it first. For callers that
-    have just built the solution, such as the openapi-document CI job; the build
-    would otherwise be repeated for no benefit.
+    have just built the solution; the build would otherwise be repeated for no
+    benefit.
 
 .EXAMPLE
     ./scripts/Generate-OpenApiDoc.ps1

@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
+- 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
 
 ### Fixed
 
@@ -28,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 The SQL Connector now matches Microsoft SQL Server's legacy `datetime` columns exactly, so a Delta Import no longer skips changes sharing a timestamp, stalls on them, or re-reads unchanged rows, and an export keyed on such a column finds its row. (#1451)
 - 🐛 Reordering an attribute's priority straight after deleting a contributing Synchronisation Rule no longer fails while its values are being recalled: the rule drops to the bottom and may be left out. A refused order now names what is missing. (#1597)
 - 🐛 On Oracle Database, a Delta Import reading a `TIMESTAMP WITH TIME ZONE` watermark or change-log column no longer skips or re-reads changes when the Connected System's Database Time Zone is not UTC. (#1783)
+- 🐛 A new deployment using the bundled PostgreSQL container now starts, instead of failing to create its database because of the `LANG` setting in `.env`.
+- 🐛 A production deployment is now reachable at the address the setup script gives, and the `jim.web` container reports healthy instead of unhealthy.
+- 🐛 The air-gapped release bundle no longer ships development settings (a demo Keycloak with `admin`/`admin`, PostgreSQL open on port 5432) that `docker compose` applied automatically when run without `-f`.
 
 ## [0.15.0] - 2026-09-23
 
