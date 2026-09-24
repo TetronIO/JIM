@@ -103,7 +103,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0, )",
+          "JIM.Models": "[0.15.0, )",
           "Serilog": "[4.4.0, )"
         }
       }
