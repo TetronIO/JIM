@@ -156,9 +156,9 @@
                     <li @key="source.MappingId" class="jim-inspector-source @(source.State == AttributeSourceState.InUse ? "jim-inspector-source-in-use" : null)">
                         <span class="jim-inspector-rank" aria-label="@($"Priority {source.Rank}")">@source.Rank</span>
                         <span class="jim-inspector-source-who">
-                            <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@source.ConnectedSystemName"
-                                        Href="@($"/admin/connected-systems/{source.ConnectedSystemId}")" Class="ma-0" />
-                            <MudLink Href="@($"/admin/sync-rules/{source.SyncRuleId}")" Class="jim-inspector-rule" title="@source.SyncRuleName">@source.SyncRuleName</MudLink>
+                            <SystemRuleChip ConnectedSystemName="@source.ConnectedSystemName"
+                                            ConnectedSystemHref="@($"/admin/connected-systems/{source.ConnectedSystemId}")"
+                                            SyncRuleName="@source.SyncRuleName" SyncRuleHref="@($"/admin/sync-rules/{source.SyncRuleId}")" />
                         </span>
                         <MudTooltip Text="@(source.Note ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top" Class="jim-inspector-state">
                             <MudChip T="string" Variant="Variant.Text" Color="@StateColour(source.State)" Class="ma-0">@StateLabel(source.State)</MudChip>

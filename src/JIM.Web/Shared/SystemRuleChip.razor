@@ -1,0 +1,85 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A Connected System and the Synchronisation Rule a value travelled through, as ONE pill: the CS glyph and   *@
+@* the system's name, then the SR glyph and the rule's name. The SR glyph is the separator, so the pair reads  *@
+@* as one route rather than two objects that happen to sit side by side. Built from the same tokens as          *@
+@* ObjectChip (.jim-object-chip, its glyphs and name clipping) so the two can never drift apart visually.       *@
+@* Each half links on its own where an href is given, and each hovers on its own, so it is always clear which  *@
+@* of the two a click will open. When space runs short the rule's name gives way first.                       *@
+
+<span class="jim-object-chip jim-system-rule-chip @Class" title="@Title">
+    @if (!string.IsNullOrEmpty(ConnectedSystemHref))
+    {
+        <a href="@ConnectedSystemHref" class="jim-system-rule-chip-part jim-system-rule-chip-system" aria-label="@($"Connected System {ConnectedSystemName}")">@SystemPart</a>
+    }
+    else
+    {
+        <span class="jim-system-rule-chip-part jim-system-rule-chip-system">@SystemPart</span>
+    }
+    @if (SyncRuleDeleted)
+    {
+        <span class="jim-system-rule-chip-part jim-system-rule-chip-rule jim-system-rule-chip-deleted">@RulePart("rule deleted")</span>
+    }
+    else if (!string.IsNullOrEmpty(SyncRuleName))
+    {
+        @if (!string.IsNullOrEmpty(SyncRuleHref))
+        {
+            <a href="@SyncRuleHref" class="jim-system-rule-chip-part jim-system-rule-chip-rule" aria-label="@($"Synchronisation Rule {SyncRuleName}")">@RulePart(SyncRuleName)</a>
+        }
+        else
+        {
+            <span class="jim-system-rule-chip-part jim-system-rule-chip-rule">@RulePart(SyncRuleName)</span>
+        }
+    }
+</span>
+
+@code {
+    /// <summary>The Connected System's name.</summary>
+    [Parameter, EditorRequired]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>Where the system half links to, or null to render it unlinked.</summary>
+    [Parameter]
+    public string? ConnectedSystemHref { get; set; }
+
+    /// <summary>The Synchronisation Rule's name, or null to render the system half alone.</summary>
+    [Parameter]
+    public string? SyncRuleName { get; set; }
+
+    /// <summary>Where the rule half links to, or null to render it unlinked.</summary>
+    [Parameter]
+    public string? SyncRuleHref { get; set; }
+
+    /// <summary>
+    /// True when the rule has been deleted since: the rule half then reads "rule deleted", low-lighted and
+    /// unlinked, while the system half still names the Connected System.
+    /// </summary>
+    [Parameter]
+    public bool SyncRuleDeleted { get; set; }
+
+    /// <summary>The call site's surrounding geometry only (for example <c>ma-0</c>); never a restyle.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string Title
+    {
+        get
+        {
+            var system = $"Connected System: {ConnectedSystemName}";
+            if (SyncRuleDeleted)
+                return $"{system}. Synchronisation Rule: deleted";
+            return string.IsNullOrEmpty(SyncRuleName) ? system : $"{system}. Synchronisation Rule: {SyncRuleName}";
+        }
+    }
+
+    private RenderFragment SystemPart => @<text>
+        <span class="jim-object-chip-glyph sys" aria-hidden="true" title="Connected System">CS</span>
+        <span class="jim-object-chip-name">@ConnectedSystemName</span>
+    </text>;
+
+    private RenderFragment RulePart(string name) => @<text>
+        <span class="jim-object-chip-glyph rule" aria-hidden="true" title="Synchronisation Rule">SR</span>
+        <span class="jim-object-chip-name">@name</span>
+    </text>;
+}

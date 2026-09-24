@@ -249,13 +249,10 @@ public class MvoDetailsTableTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Source"));
-            // The header names the source through the same shared chip every origin uses, in the compact form of
-            // the Source column it replaces (a Connected System chip plus the Synchronisation Rule as quiet text),
+            // The header names the source with the same system-and-rule pill as the Source column it replaces,
             // not a hand-built label string.
-            var headerChip = headerRow.QuerySelector(".jim-object-chip-name");
-            Assert.That(headerChip, Is.Not.Null);
-            Assert.That(headerChip!.TextContent, Is.EqualTo("HR"));
-            Assert.That(headerRow.QuerySelector(".jim-value-origin-rule")!.TextContent, Is.EqualTo("HR Import"));
+            Assert.That(headerRow.QuerySelectorAll(".jim-system-rule-chip .jim-object-chip-name").Select(n => n.TextContent),
+                Is.EqualTo(new[] { "HR", "HR Import" }));
             Assert.That(headerRow.TextContent, Does.Contain("2 attributes"));
             Assert.That(cut.FindAll("tr.jim-inspect-row"), Has.Count.EqualTo(2));
         }
