@@ -21,7 +21,7 @@
 
     @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
     {
-        <ExpressionTester Expression="@BaseSource.Expression" />
+        <ExpressionTester Expression="@BaseSource.Expression" SampleValuesChanged="OnSampleValuesChanged" />
     }
 
     <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">Uniqueness token</MudText>
@@ -173,6 +173,12 @@
             break;
     }
 
+    @* ─── Live preview (Unique Value Generation, #242, Phase 3, Work Package D2) ─── *@
+    <GeneratedValuePreviewPanel Mapping="Mapping" BaseSource="BaseSource" TargetType="TargetType" TargetName="@TargetName"
+        Direction="Direction" SyncRuleId="SyncRuleId" ConnectedSystemId="ConnectedSystemId"
+        MetaverseObjectTypeId="MetaverseObjectTypeId" TargetMetaverseAttributeId="TargetMetaverseAttributeId"
+        SampleValues="_sampleValues" />
+
     @* ─── When JIM generates this value (read-only) ─── *@
     <MudPaper Outlined="true" Class="pa-3 mt-5">
         <MudText Typo="Typo.subtitle2" Class="mb-2">When JIM generates this value</MudText>
@@ -272,8 +278,30 @@
     [Parameter]
     public string? TargetName { get; set; }
 
+    // ─── Live preview parameters (Unique Value Generation, #242, Phase 3, Work Package D2): passed straight
+    // through to GeneratedValuePreviewPanel, which needs them for the existing-object count and sequence state
+    // reads. Kept as plain parameters here (rather than reading them off Mapping/SyncRule directly) because this
+    // component otherwise has no need to know the Synchronisation Rule at all.
+
+    [Parameter]
+    public SyncRuleDirection Direction { get; set; }
+
+    [Parameter]
+    public int SyncRuleId { get; set; }
+
+    [Parameter]
+    public int ConnectedSystemId { get; set; }
+
+    [Parameter]
+    public int MetaverseObjectTypeId { get; set; }
+
+    [Parameter]
+    public int? TargetMetaverseAttributeId { get; set; }
+
     [Parameter]
     public EventCallback OnChanged { get; set; }
+
+    private IReadOnlyDictionary<string, string?> _sampleValues = new Dictionary<string, string?>();
 
     private bool IsNumberTarget => GeneratedValueFormHelpers.IsNumberTarget(TargetType);
 
@@ -403,6 +431,16 @@
     private async Task OnAttemptLimitChangedAsync(int value)
     {
         Mapping.Generation!.AttemptLimit = value;
+        await NotifyChangedAsync();
+    }
+
+    /// <summary>
+    /// The live preview's base value evaluates against these exact sample values, so a live preview that
+    /// disagrees with "Run test" above it is a defect, not two independent implementations.
+    /// </summary>
+    private async Task OnSampleValuesChanged(IReadOnlyDictionary<string, string?> sampleValues)
+    {
+        _sampleValues = sampleValues;
         await NotifyChangedAsync();
     }
 

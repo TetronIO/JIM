@@ -1,0 +1,336 @@
+@using JIM.Application
+@using JIM.Application.Expressions
+@using JIM.Models.Core
+@using JIM.Models.Expressions
+@using JIM.Models.Interfaces
+@using JIM.Models.Logic
+@using JIM.Models.Transactional
+@inject IJimApplicationFactory JimFactory
+@inject IExpressionEvaluator ExpressionEvaluator
+@implements IDisposable
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The "JIM generates it" form's live preview (Unique Value Generation, #242, Phase 3, Work Package D2):
+   mockup screen 01's "Preview · sample inputs", screen 02's "Preview / Next values / If a number is taken" and
+   screen 03's random "Example / Source of randomness", plus the existing-object count and the read-only
+   Sequence state panel. Built on UniqueValueGenerationServer.DescribeGeneratedCandidates so it matches the
+   generation engine exactly; the base expression itself is evaluated with IExpressionEvaluator against
+   ExpressionTester's own sample values where the administrator has entered any, or a neutral placeholder
+   otherwise (GeneratedValuePreviewHelpers.BuildSampleContext). Settings changes are debounced before the
+   (cheap, no-I/O) preview is recomputed, and the existing-object count / sequence state (both server reads)
+   refresh only when what they depend on actually changes. *@
+
+@if (Mapping.Generation is { } generation)
+{
+    <MudPaper Outlined="true" Class="pa-3 mt-5">
+        <div class="d-flex align-center flex-wrap gap-1">
+            <MudText Typo="Typo.subtitle2">Preview</MudText>
+            @if (!string.IsNullOrEmpty(_sampleSourceCaption))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">&middot; @_sampleSourceCaption</MudText>
+            }
+        </div>
+
+        @switch (generation.TokenKind)
+        {
+            case GeneratedValueTokenKind.OnlyIfTaken:
+                <div class="mt-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">First value</MudText>
+                    <MudText Typo="Typo.body1" Class="jim-text-code">@(_preview?.FirstValue ?? "-")</MudText>
+                </div>
+                <div class="mt-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">If taken</MudText>
+                    <MudText Typo="Typo.body1" Class="jim-text-code">@CandidatesText</MudText>
+                </div>
+                break;
+
+            case GeneratedValueTokenKind.Sequence:
+                <div class="mt-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Next values</MudText>
+                    <MudText Typo="Typo.body1" Class="jim-text-code">@CandidatesText</MudText>
+                </div>
+                <div class="mt-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">If a number is taken</MudText>
+                    <MudText Typo="Typo.body1">@GeneratedValuePreviewHelpers.SequenceTakenExplanation</MudText>
+                </div>
+                break;
+
+            case GeneratedValueTokenKind.Random:
+                <div class="mt-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Example</MudText>
+                    <MudText Typo="Typo.body1" Class="jim-text-code">@(_preview?.Example ?? "-")</MudText>
+                </div>
+                <div class="mt-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Source of randomness</MudText>
+                    <MudText Typo="Typo.body1">@GeneratedValuePreviewHelpers.RandomSourceOfRandomness</MudText>
+                </div>
+                break;
+        }
+
+        @if (_preview != null)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Where the number goes: @_preview.PlacementText</MudText>
+        }
+
+        @if (_evaluationError != null)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                The sample base value could not be evaluated (@_evaluationError); previewing the token on its own.
+            </MudText>
+        }
+    </MudPaper>
+
+    @if (ShowExistingObjectCount)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3" data-testid="jim-generated-value-existing-count">
+            @if (_ioLoading && _existingObjectCountText == null)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            else
+            {
+                @_existingObjectCountText
+            }
+        </MudText>
+    }
+
+    @if (ShowSequenceStatePanel)
+    {
+        <MudPaper Outlined="true" Class="pa-3 mt-3" data-testid="jim-generated-value-sequence-state">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Sequence state</MudText>
+            @if (_ioLoading && _sequenceState == null)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            }
+            else if (_sequenceState != null)
+            {
+                @if (_sequenceState.IsSeeded)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Next number</MudText>
+                    <MudText Typo="Typo.h5" Class="jim-text-code">@_sequenceState.NextNumberFormatted</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
+                        @GeneratedValuePreviewHelpers.DescribeAssignedSoFar(_sequenceState.AssignedCount, _sequenceState.AttributeName)
+                    </MudText>
+                    @if (_sequenceState.NextNumberWidthExceeded)
+                    {
+                        <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
+                            The next number no longer fits the configured width; generation will fail for this attribute until the width or the counter is corrected.
+                        </MudAlert>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">@GeneratedValuePreviewHelpers.DescribeUnseededCounter(_sequenceState.NextNumberFormatted)</MudText>
+                }
+            }
+        </MudPaper>
+    }
+}
+
+@code {
+    private const int DebounceIntervalMs = 300;
+    private const int PreviewCandidateCount = 3;
+
+    [Parameter, EditorRequired]
+    public SyncRuleMapping Mapping { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public SyncRuleMappingSource BaseSource { get; set; } = null!;
+
+    [Parameter]
+    public AttributeDataType? TargetType { get; set; }
+
+    [Parameter]
+    public SyncRuleDirection Direction { get; set; }
+
+    [Parameter]
+    public int SyncRuleId { get; set; }
+
+    [Parameter]
+    public int ConnectedSystemId { get; set; }
+
+    [Parameter]
+    public int MetaverseObjectTypeId { get; set; }
+
+    /// <summary>The chosen target attribute's display name, for the existing-object count and sequence state lines.</summary>
+    [Parameter]
+    public string? TargetName { get; set; }
+
+    [Parameter]
+    public int? TargetMetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// The administrator's sample values from "Test this Expression" (<see cref="ExpressionTester.SampleValuesChanged"/>),
+    /// keyed by accessor. Empty until any are entered, which is when the preview falls back to a neutral sample.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string?> SampleValues { get; set; } = new Dictionary<string, string?>();
+
+    private GeneratedValueCandidatePreview? _preview;
+    private string? _sampleSourceCaption;
+    private string? _evaluationError;
+
+    private GeneratedValueSequenceState? _sequenceState;
+    private string? _existingObjectCountText;
+    private bool _ioLoading;
+
+    private string? _lastPreviewKey;
+    private string? _lastIoKey;
+    private CancellationTokenSource? _debounceCts;
+
+    private string CandidatesText => _preview == null
+        ? string.Empty
+        : GeneratedValuePreviewHelpers.JoinCandidatesWithEllipsis(_preview.Candidates);
+
+    private bool ShowExistingObjectCount =>
+        GeneratedValuePreviewHelpers.ShowExistingObjectCount(Direction, SyncRuleId, TargetMetaverseAttributeId);
+
+    private bool ShowSequenceStatePanel =>
+        Mapping.Id > 0 && Mapping.Generation?.TokenKind == GeneratedValueTokenKind.Sequence;
+
+    protected override void OnParametersSet()
+    {
+        if (Mapping.Generation == null)
+            return;
+
+        var previewKey = BuildPreviewKey(Mapping.Generation);
+        var ioKey = BuildIoKey();
+        if (previewKey == _lastPreviewKey && ioKey == _lastIoKey)
+            return;
+
+        _lastPreviewKey = previewKey;
+        var ioKeyChanged = ioKey != _lastIoKey;
+        _lastIoKey = ioKey;
+
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _debounceCts = cts;
+        _ = DebounceAndRefreshAsync(cts.Token, ioKeyChanged);
+    }
+
+    private async Task DebounceAndRefreshAsync(CancellationToken token, bool refreshIo)
+    {
+        try
+        {
+            await Task.Delay(DebounceIntervalMs, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested)
+            return;
+
+        RefreshPreview();
+
+        if (refreshIo)
+        {
+            _ioLoading = true;
+            await InvokeAsync(StateHasChanged);
+            await RefreshIoAsync(token);
+            if (token.IsCancellationRequested)
+                return;
+            _ioLoading = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// The pure part of the refresh: evaluates the base expression against the tester's sample values (or a
+    /// neutral fallback) and calls the no-I/O <c>DescribeGeneratedCandidates</c>. Separated from
+    /// <see cref="RefreshIoAsync"/> so the debounce covers only the parts genuinely worth debouncing.
+    /// </summary>
+    private void RefreshPreview()
+    {
+        var generation = Mapping.Generation;
+        if (generation == null)
+            return;
+
+        _evaluationError = null;
+        string? sampleBaseValue = null;
+
+        var expression = BaseSource.Expression;
+        if (!string.IsNullOrWhiteSpace(expression))
+        {
+            var inputs = ExpressionInputResolver.Resolve(expression);
+            var context = GeneratedValuePreviewHelpers.BuildSampleContext(inputs, SampleValues);
+            _sampleSourceCaption = GeneratedValuePreviewHelpers.DescribeSampleSource(inputs.Count > 0, context.UsedNeutralSample);
+
+            var validation = ExpressionEvaluator.Validate(expression);
+            if (validation.IsValid)
+            {
+                var testResult = ExpressionEvaluator.Test(expression, new ExpressionContext(context.Metaverse, context.ConnectedSystem));
+                if (testResult.IsValid)
+                    sampleBaseValue = testResult.Result?.ToString();
+                else
+                    _evaluationError = testResult.ErrorMessage;
+            }
+            else
+            {
+                _evaluationError = validation.ErrorMessage;
+            }
+        }
+        else
+        {
+            _sampleSourceCaption = null;
+        }
+
+        using var jim = JimFactory.Create();
+        _preview = jim.UniqueValues.DescribeGeneratedCandidates(
+            generation, TargetType ?? AttributeDataType.Text, sampleBaseValue, PreviewCandidateCount);
+    }
+
+    private async Task RefreshIoAsync(CancellationToken token)
+    {
+        using var jim = JimFactory.Create();
+
+        if (ShowExistingObjectCount && TargetMetaverseAttributeId is { } targetAttributeId)
+        {
+            var count = await jim.UniqueValues.CountObjectsAwaitingValueAsync(MetaverseObjectTypeId, ConnectedSystemId, targetAttributeId);
+            if (token.IsCancellationRequested)
+                return;
+            _existingObjectCountText = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(count, TargetName ?? "this attribute");
+        }
+        else
+        {
+            _existingObjectCountText = null;
+        }
+
+        if (ShowSequenceStatePanel)
+        {
+            _sequenceState = await jim.ConnectedSystems.GetGeneratedValueSequenceStateAsync(Mapping.Id);
+        }
+        else
+        {
+            _sequenceState = null;
+        }
+    }
+
+    private string BuildPreviewKey(SyncRuleMappingGeneration generation) => string.Join('|',
+        BaseSource.Expression,
+        generation.TokenKind,
+        generation.SuffixStyle,
+        generation.SuffixStart,
+        generation.SequenceStart,
+        generation.SequenceIncrement,
+        generation.FixedWidth,
+        generation.OnWidthExceeded,
+        generation.RandomFormat,
+        generation.RandomLength,
+        generation.Separator,
+        TargetType,
+        string.Join(',', SampleValues.Select(kv => $"{kv.Key}={kv.Value}")));
+
+    private string BuildIoKey() => string.Join('|', Mapping.Id, SyncRuleId, TargetMetaverseAttributeId, ConnectedSystemId, MetaverseObjectTypeId, Direction);
+
+    public void Dispose()
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+    }
+}

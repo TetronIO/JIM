@@ -1,0 +1,265 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Expressions;
+using JIM.Models.Logic;
+using JIM.Models.Transactional;
+using JIM.Web;
+using NUnit.Framework;
+
+namespace JIM.Web.Tests;
+
+/// <summary>
+/// Pure display and decision logic behind the "JIM generates it" form's live preview, existing-object count,
+/// sequence state panel, skip-ahead confirmation and "Start again" row action (Unique Value Generation, #242,
+/// Phase 3, Work Package D2). See <c>GeneratedValuePreviewHelpers</c>.
+/// </summary>
+[TestFixture]
+public class GeneratedValuePreviewHelpersTests
+{
+    // ─── Sample context ───
+
+    [Test]
+    public void HasAnySampleValue_AllEmptyOrNull_ReturnsFalse()
+    {
+        var values = new Dictionary<string, string?> { ["mv[\"a\"]"] = null, ["mv[\"b\"]"] = "" };
+
+        Assert.That(GeneratedValuePreviewHelpers.HasAnySampleValue(values), Is.False);
+    }
+
+    [Test]
+    public void HasAnySampleValue_OneEntered_ReturnsTrue()
+    {
+        var values = new Dictionary<string, string?> { ["mv[\"a\"]"] = null, ["cs[\"b\"]"] = "Joe" };
+
+        Assert.That(GeneratedValuePreviewHelpers.HasAnySampleValue(values), Is.True);
+    }
+
+    [Test]
+    public void BuildSampleContext_NoSamplesEntered_FillsNeutralPlaceholderForEveryInput()
+    {
+        var inputs = new List<ExpressionInput>
+        {
+            new(ExpressionInputSource.ConnectedSystem, "firstName"),
+            new(ExpressionInputSource.ConnectedSystem, "lastName")
+        };
+
+        var result = GeneratedValuePreviewHelpers.BuildSampleContext(inputs, new Dictionary<string, string?>());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.UsedNeutralSample, Is.True);
+            Assert.That(result.ConnectedSystem["firstName"], Is.EqualTo(GeneratedValuePreviewHelpers.NeutralSampleValue));
+            Assert.That(result.ConnectedSystem["lastName"], Is.EqualTo(GeneratedValuePreviewHelpers.NeutralSampleValue));
+            Assert.That(result.Metaverse, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void BuildSampleContext_SamplesEntered_UsesThemAndTreatsMissingAsNull()
+    {
+        var inputs = new List<ExpressionInput>
+        {
+            new(ExpressionInputSource.ConnectedSystem, "firstName"),
+            new(ExpressionInputSource.ConnectedSystem, "lastName")
+        };
+        var testerSamples = new Dictionary<string, string?> { ["cs[\"firstName\"]"] = "Joe" };
+
+        var result = GeneratedValuePreviewHelpers.BuildSampleContext(inputs, testerSamples);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.UsedNeutralSample, Is.False);
+            Assert.That(result.ConnectedSystem["firstName"], Is.EqualTo("Joe"));
+            Assert.That(result.ConnectedSystem["lastName"], Is.Null);
+        }
+    }
+
+    [Test]
+    public void BuildSampleContext_SplitsMetaverseAndConnectedSystemInputs()
+    {
+        var inputs = new List<ExpressionInput>
+        {
+            new(ExpressionInputSource.Metaverse, "Department"),
+            new(ExpressionInputSource.ConnectedSystem, "firstName")
+        };
+        var testerSamples = new Dictionary<string, string?> { ["mv[\"Department\"]"] = "Sales" };
+
+        var result = GeneratedValuePreviewHelpers.BuildSampleContext(inputs, testerSamples);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Metaverse["Department"], Is.EqualTo("Sales"));
+            Assert.That(result.ConnectedSystem.ContainsKey("firstName"), Is.True);
+        }
+    }
+
+    [TestCase(false, false, "")]
+    [TestCase(true, true, "using placeholder sample values; enter your own above, in \"Test this Expression\", to see this reflect them")]
+    [TestCase(true, false, "using the sample values entered above")]
+    public void DescribeSampleSource_ReturnsExpected(bool hasInputs, bool usedNeutralSample, string expected)
+    {
+        Assert.That(GeneratedValuePreviewHelpers.DescribeSampleSource(hasInputs, usedNeutralSample), Is.EqualTo(expected));
+    }
+
+    // ─── Candidate joining ───
+
+    [Test]
+    public void JoinCandidatesWithEllipsis_MultipleCandidates_JoinsWithTrailingEllipsis()
+    {
+        var result = GeneratedValuePreviewHelpers.JoinCandidatesWithEllipsis(new List<string> { "joe.bloggs1", "joe.bloggs2", "joe.bloggs3" });
+
+        Assert.That(result, Is.EqualTo("joe.bloggs1, joe.bloggs2, joe.bloggs3 …"));
+    }
+
+    [Test]
+    public void JoinCandidatesWithEllipsis_Empty_ReturnsEmpty()
+    {
+        Assert.That(GeneratedValuePreviewHelpers.JoinCandidatesWithEllipsis(new List<string>()), Is.Empty);
+    }
+
+    // ─── Existing-object count ───
+
+    [Test]
+    public void DescribeExistingObjectCount_Zero_ReadsAsEveryObjectAlreadyHasAValue()
+    {
+        var result = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(0, "Account Name");
+
+        Assert.That(result, Is.EqualTo("Every existing Metaverse Object already has a value for Account Name."));
+    }
+
+    [Test]
+    public void DescribeExistingObjectCount_One_UsesSingularGrammar()
+    {
+        var result = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(1, "Account Name");
+
+        Assert.That(result, Is.EqualTo("1 existing Metaverse Object has no Account Name and would receive one on the next full synchronisation."));
+    }
+
+    [Test]
+    public void DescribeExistingObjectCount_ManyThousands_UsesThousandsSeparatorAndPluralGrammar()
+    {
+        var result = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(1245, "Account Name");
+
+        Assert.That(result, Is.EqualTo("1,245 existing Metaverse Objects have no Account Name and would receive one on the next full synchronisation."));
+    }
+
+    [TestCase(SyncRuleDirection.Import, 1, 5, true)]
+    [TestCase(SyncRuleDirection.Export, 1, 5, false)]
+    [TestCase(SyncRuleDirection.Import, 0, 5, false)]
+    [TestCase(SyncRuleDirection.Import, 1, null, false)]
+    public void ShowExistingObjectCount_ReturnsExpected(SyncRuleDirection direction, int syncRuleId, int? targetAttributeId, bool expected)
+    {
+        Assert.That(GeneratedValuePreviewHelpers.ShowExistingObjectCount(direction, syncRuleId, targetAttributeId), Is.EqualTo(expected));
+    }
+
+    // ─── Sequence state panel ───
+
+    [Test]
+    public void DescribeAssignedSoFar_MatchesMockupWording()
+    {
+        var result = GeneratedValuePreviewHelpers.DescribeAssignedSoFar(0, "Employee Number");
+
+        Assert.That(result, Is.EqualTo("Assigned so far: 0 · belongs to Employee Number, not this flow · never below any flow's Start at"));
+    }
+
+    [Test]
+    public void DescribeUnseededCounter_StatesFirstNumber()
+    {
+        var result = GeneratedValuePreviewHelpers.DescribeUnseededCounter("00000100456");
+
+        Assert.That(result, Does.Contain("00000100456"));
+        Assert.That(result, Does.Contain("has not issued a number yet"));
+    }
+
+    // ─── Skip-ahead confirmation ───
+
+    [Test]
+    public void ShouldConfirmSkipAhead_SeededAndStartRaisedAboveNext_ReturnsTrue()
+    {
+        var state = new GeneratedValueSequenceState { IsSeeded = true, NextNumber = 100456 };
+
+        Assert.That(GeneratedValuePreviewHelpers.ShouldConfirmSkipAhead(state, 200000), Is.True);
+    }
+
+    [Test]
+    public void ShouldConfirmSkipAhead_StartAtOrBelowNext_ReturnsFalse()
+    {
+        var state = new GeneratedValueSequenceState { IsSeeded = true, NextNumber = 100456 };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GeneratedValuePreviewHelpers.ShouldConfirmSkipAhead(state, 100456), Is.False);
+            Assert.That(GeneratedValuePreviewHelpers.ShouldConfirmSkipAhead(state, 100000), Is.False);
+        }
+    }
+
+    [Test]
+    public void ShouldConfirmSkipAhead_CounterNeverSeeded_ReturnsFalse()
+    {
+        var state = new GeneratedValueSequenceState { IsSeeded = false, NextNumber = 100456 };
+
+        Assert.That(GeneratedValuePreviewHelpers.ShouldConfirmSkipAhead(state, 500000), Is.False);
+    }
+
+    [Test]
+    public void ShouldConfirmSkipAhead_NoState_ReturnsFalse()
+    {
+        Assert.That(GeneratedValuePreviewHelpers.ShouldConfirmSkipAhead(null, 500000), Is.False);
+    }
+
+    // ─── Start again row action ───
+
+    [Test]
+    public void ShowStartAgainAction_SavedSequenceMapping_ReturnsTrue()
+    {
+        var mapping = new SyncRuleMapping { Id = 42, Generation = new SyncRuleMappingGeneration { TokenKind = GeneratedValueTokenKind.Sequence } };
+
+        Assert.That(GeneratedValuePreviewHelpers.ShowStartAgainAction(mapping), Is.True);
+    }
+
+    [Test]
+    public void ShowStartAgainAction_UnsavedMapping_ReturnsFalse()
+    {
+        var mapping = new SyncRuleMapping { Id = 0, Generation = new SyncRuleMappingGeneration { TokenKind = GeneratedValueTokenKind.Sequence } };
+
+        Assert.That(GeneratedValuePreviewHelpers.ShowStartAgainAction(mapping), Is.False);
+    }
+
+    [TestCase(GeneratedValueTokenKind.OnlyIfTaken)]
+    [TestCase(GeneratedValueTokenKind.Random)]
+    public void ShowStartAgainAction_NonSequenceToken_ReturnsFalse(GeneratedValueTokenKind kind)
+    {
+        var mapping = new SyncRuleMapping { Id = 42, Generation = new SyncRuleMappingGeneration { TokenKind = kind } };
+
+        Assert.That(GeneratedValuePreviewHelpers.ShowStartAgainAction(mapping), Is.False);
+    }
+
+    [Test]
+    public void ShowStartAgainAction_NotAGeneratedMapping_ReturnsFalse()
+    {
+        var mapping = new SyncRuleMapping { Id = 42, Generation = null };
+
+        Assert.That(GeneratedValuePreviewHelpers.ShowStartAgainAction(mapping), Is.False);
+    }
+
+    [Test]
+    public void DescribeRestartResult_CounterMoved_NamesFromAndTo()
+    {
+        var result = new GeneratedValueRestartResult { CounterFrom = 101701, CounterTo = 100456 };
+
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result);
+
+        Assert.That(text, Is.EqualTo("Started Employee Number again: the counter moved from 101,701 to 100,456."));
+    }
+
+    [Test]
+    public void DescribeRestartResult_NeverSeeded_StatesNothingMoved()
+    {
+        var result = new GeneratedValueRestartResult { CounterFrom = null, CounterTo = null };
+
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result);
+
+        Assert.That(text, Does.Contain("nothing moved"));
+    }
+}
