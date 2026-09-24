@@ -20,8 +20,19 @@
     Used by Get-OrGenerate-TestCSV.ps1 when generating to a temp directory for archiving;
     the wrapper runs the seeding step itself after extracting to the final output path.
 
+.PARAMETER OmitItOwnedAttributes
+    Omits the IT-owned columns (`samAccountName`, `email`, `userPrincipalName`) from hr-users.csv, so a
+    scenario that generates these values (Unique Value Generation, #242) receives a feed shaped the way
+    a real HR system's would be, rather than one that already carries the identifiers JIM is meant to
+    generate. Used by Scenario 1 (`Setup-Scenario1.ps1 -GenerateAccountName`) and Scenario 23. Every
+    other emitted file, and hr-users.csv's other columns, are unaffected; omitted, the CSV is
+    byte-for-byte identical to a run without this switch.
+
 .EXAMPLE
     ./Generate-TestCSV.ps1 -Template Small
+
+.EXAMPLE
+    ./Generate-TestCSV.ps1 -Template Micro -OmitItOwnedAttributes
 #>
 
 param(
@@ -33,7 +44,10 @@ param(
     [string]$OutputPath = "./test-data",
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipSeed
+    [switch]$SkipSeed,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$OmitItOwnedAttributes
 )
 
 Set-StrictMode -Version Latest
@@ -93,7 +107,11 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
         if ($bucket -lt 17) { "Active" } elseif ($bucket -lt 19) { "Archived" } else { "Established" }
     }
 
-    $users += [PSCustomObject]@{
+    # Built as an ordered hashtable (not a literal PSCustomObject) so -OmitItOwnedAttributes can drop
+    # the IT-owned keys before the row is materialised: Export-Csv derives both the header and every
+    # row's columns from the object's own properties, so removing a key here removes the column
+    # entirely (not merely blanks it), which is the shape #242's scenarios need.
+    $userRecord = [ordered]@{
         employeeId = $user.EmployeeId
         firstName = $user.FirstName
         lastName = $user.LastName
@@ -109,6 +127,14 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
         employeeType = $user.EmployeeType
         employeeEndDate = $employeeEndDateValue
     }
+
+    if ($OmitItOwnedAttributes) {
+        $userRecord.Remove('samAccountName')
+        $userRecord.Remove('email')
+        $userRecord.Remove('userPrincipalName')
+    }
+
+    $users += [PSCustomObject]$userRecord
 
     if (($i % 1000) -eq 0 -or $i -eq $scale.Users) {
         Write-Host "    Generated $i / $($scale.Users) users..." -ForegroundColor Gray
@@ -254,6 +280,7 @@ else {
 # Summary
 Write-TestSection "CSV Generation Summary"
 Write-Host "Template:            $Template" -ForegroundColor Cyan
+Write-Host "IT-owned attributes: $(if ($OmitItOwnedAttributes) { 'Omitted (samAccountName, email, userPrincipalName)' } else { 'Included' })" -ForegroundColor Cyan
 Write-Host "Users:               $($users.Count)" -ForegroundColor Cyan
 Write-Host "Training Records:    $($trainingRecords.Count) (85%)" -ForegroundColor Cyan
 Write-Host "Departments:         $($departments.Count)" -ForegroundColor Cyan
