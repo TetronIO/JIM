@@ -260,7 +260,16 @@ public enum ServiceSettingCategory
     /// Instance identity settings (Service Name, Service ID).
     /// Used by administrators to tell JIM instances apart.
     /// </summary>
-    Instance = 6
+    Instance = 6,
+
+    /// <summary>
+    /// Feature flags (#1781). Each flag is a <see cref="ServiceSetting"/> row in this category, one per entry in
+    /// <see cref="FeatureFlagCatalogue"/>. Never surfaced through the generic Service Settings list, REST or
+    /// PowerShell cmdlets; flags change only through the feature-flag surfaces (<c>FeatureFlagServer</c>,
+    /// <c>api/v1/features</c>, <c>Get-JIMFeature</c>/<c>Enable-JIMFeature</c>/<c>Disable-JIMFeature</c>), which
+    /// enforce the Preview/InDevelopment tier rules.
+    /// </summary>
+    FeatureFlags = 7
 }
 
 /// <summary>
