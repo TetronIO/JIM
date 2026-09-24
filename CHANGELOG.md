@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it, and the step list showing what every step will do; after upgrading, existing Schedules behave exactly as before. (#1787)
+- ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it, and the step list showing what every step will do; the new `Set-JIMScheduleStep` cmdlet changes a single step's setting, and after upgrading, existing Schedules behave exactly as before. (#1787)
 - ✨ A Schedule run that carried on past a failed step now ends **Complete With Error**, naming the failed steps, instead of a plain Complete, so the portal, PowerShell and monitoring scripts can tell it apart from a clean run. (#1787)
 
 ### Changed
