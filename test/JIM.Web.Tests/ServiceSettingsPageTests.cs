@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Web.Pages.Admin;
 using JIM.Web.Services;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using NUnit.Framework;
@@ -46,6 +47,9 @@ public class ServiceSettingsPageTests : JimComponentTestContext
                 Description = "Where JIM sends people to sign in."
             }
         ]);
+        // The Preview features card (#1781) loads each catalogue flag's own setting row, unrelated to this page's
+        // deep-link behaviour under test; none exist here, so every lookup is a clean miss.
+        _serviceSettingsRepository.Setup(r => r.GetSettingAsync(It.IsAny<string>())).ReturnsAsync((ServiceSetting?)null);
 
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.ServiceSettings).Returns(_serviceSettingsRepository.Object);
@@ -53,6 +57,12 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
         Services.AddSingleton<IUserPreferenceService>(new FakeUserPreferenceService());
         Services.AddSingleton(new Mock<ICredentialProtectionService>().Object);
+
+        // Production by default: these tests are about the deep-link/grid behaviour, not the Preview features
+        // card's In Development visibility rule (#1781), so the environment is fixed rather than left unset.
+        var hostEnvironment = new Mock<IWebHostEnvironment>();
+        hostEnvironment.Setup(e => e.EnvironmentName).Returns("Production");
+        Services.AddSingleton(hostEnvironment.Object);
 
         _navigation = Services.GetRequiredService<NavigationManager>();
     }

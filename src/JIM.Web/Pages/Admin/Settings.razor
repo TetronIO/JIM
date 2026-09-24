@@ -11,6 +11,7 @@
 @inject ICredentialProtectionService CredentialProtection
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavManager
+@inject IWebHostEnvironment HostEnvironment
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -23,12 +24,63 @@
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
+@* Preview features (#1781): flags an administrator can turn on themselves. Always shown, even with nothing in
+   it today, so administrators know where preview features will appear once there are any. In Development flags
+   join the card only on a Development host, labelled distinctly, so a developer can toggle them without a
+   Production admin ever seeing them. *@
+<MudPaper Outlined="true" Class="pa-4 mt-2">
+    <MudText Typo="Typo.h5">Preview features</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        Features JIM is rolling out gradually. A preview feature is supported, but its behaviour may still change
+        before it is considered final.
+    </MudText>
+    @if (_previewFlags.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">No preview features are available in this version.</MudText>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-4 mt-4">
+            @foreach (var flagState in _previewFlags)
+            {
+                <div class="d-flex align-start gap-3">
+                    <MudSwitch T="bool" Value="@flagState.Enabled" Color="Color.Primary" Class="mt-n1"
+                               ValueChanged="@(enabled => ToggleFeatureFlagAsync(flagState, enabled))" />
+                    <div>
+                        <div class="d-flex align-center gap-2">
+                            <MudText Typo="Typo.subtitle2">@flagState.Definition.DisplayName</MudText>
+                            @if (flagState.Definition.Tier == FeatureFlagTier.Preview)
+                            {
+                                <PreviewChip />
+                            }
+                            else
+                            {
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Size="Size.Small">In development</MudChip>
+                            }
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@flagState.Definition.Description</MudText>
+                        @if (flagState.LastUpdated.HasValue)
+                        {
+                            var lastUpdated = flagState.LastUpdated.Value.ToLocalTime();
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Changed @lastUpdated.ToRelativeTime()@(flagState.LastUpdatedByName != null ? $" by {flagState.LastUpdatedByName}" : "")
+                            </MudText>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</MudPaper>
+
 @* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
    and the toolbar count) lives in the shared grid. Service Settings are a small configuration list, loaded whole
    once, so the window is sliced from memory rather than becoming a database range read. The Category that used to
    be a collapsible group header is now a sortable column: grouping is computed over the rows a grid is holding,
-   and a virtualised grid holds one window, so a group header would describe the window rather than the list. *@
-<VirtualisedDataGrid GridClass="mt-2" @ref="_grid" T="ServiceSetting"
+   and a virtualised grid holds one window, so a group header would describe the window rather than the list.
+   Feature flags are excluded from this list: they are Service Settings under the hood, but change only through
+   the Preview features card above (and the dedicated REST/PowerShell surfaces), which enforce the tier rules. *@
+<VirtualisedDataGrid GridClass="mt-6" @ref="_grid" T="ServiceSetting"
                      ContainerId="service-setting-list"
                      DefaultSortBy="category"
                      LoadWindow="LoadSettingWindowAsync"
@@ -198,6 +250,7 @@
 
 @code {
     private List<ServiceSetting> _settings = new();
+    private List<FeatureFlagState> _previewFlags = new();
     private bool _showConfigurableOnly;
     private bool _showOverriddenOnly;
     private HashSet<string> _revealedSecrets = new();
@@ -235,14 +288,55 @@
         }
 
         await LoadSettingsAsync();
+        await LoadPreviewFlagsAsync();
     }
 
     private async Task LoadSettingsAsync()
     {
         using var jim = JimFactory.Create();
-        _settings = await jim.ServiceSettings.GetAllSettingsAsync();
+
+        // Feature flags are Service Settings under the hood, but they have their own card above and change only
+        // through the feature-flag surfaces, which enforce the tier rules; excluded here so they never appear
+        // twice, once editable properly and once as an inert row in the generic list.
+        _settings = (await jim.ServiceSettings.GetAllSettingsAsync())
+            .Where(s => s.Category != ServiceSettingCategory.FeatureFlags)
+            .ToList();
         _decryptedCache.Clear();
         _revealedSecrets.Clear();
+    }
+
+    /// <summary>
+    /// Loads the Preview features card's flags. In Development flags join the list only on a Development host, so
+    /// a developer can toggle them here while a Production administrator never sees them.
+    /// </summary>
+    private async Task LoadPreviewFlagsAsync()
+    {
+        using var jim = JimFactory.Create();
+        _previewFlags = await jim.FeatureFlags.GetFeatureFlagsAsync(includeInDevelopment: HostEnvironment.IsDevelopment());
+    }
+
+    /// <summary>
+    /// Switches a feature flag from the Preview features card. In Development flags are only ever shown here on a
+    /// Development host (see <see cref="LoadPreviewFlagsAsync"/>), so enabling one from this card is always
+    /// acknowledged.
+    /// </summary>
+    private async Task ToggleFeatureFlagAsync(FeatureFlagState flagState, bool enabled)
+    {
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var allowInDevelopment = flagState.Definition.Tier == FeatureFlagTier.InDevelopment;
+            await jim.FeatureFlags.SetFeatureFlagAsync(flagState.Definition.Key, enabled, user, allowInDevelopment);
+            await LoadPreviewFlagsAsync();
+            Snackbar.Add($"'{flagState.Definition.DisplayName}' {(enabled ? "enabled" : "disabled")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            // Reload so the switch reflects the setting's actual persisted state rather than the click that failed.
+            await LoadPreviewFlagsAsync();
+            Snackbar.Add($"Failed to update '{flagState.Definition.DisplayName}': {ex.Message}", Severity.Error);
+        }
     }
 
     /// <summary>

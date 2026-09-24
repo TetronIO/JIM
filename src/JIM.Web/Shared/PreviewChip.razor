@@ -1,0 +1,17 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A small "Preview" chip for anywhere a Preview-tier feature flag (#1781) surfaces: the Service Settings page's
+   "Preview features" card, and any control the feature itself adds once enabled. Tertiary is the design system's
+   token reserved for accents outside the Metaverse (primary) / Connected System (secondary) roles
+   (engineering/DESIGN.md), which fits a badge that names neither side of a sync. Deliberately Size.Small: a label
+   riding beside a switch or a control's own name, not a standalone status chip. *@
+<MudChip T="string" Variant="Variant.Text" Color="Color.Tertiary" Size="Size.Small" Class="@Class">Preview</MudChip>
+
+@code {
+    /// <summary>
+    /// Optional extra CSS classes, appended to the chip's own.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+}
