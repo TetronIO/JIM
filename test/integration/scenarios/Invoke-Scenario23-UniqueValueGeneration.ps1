@@ -550,7 +550,7 @@ try {
 
         $population = Get-Population
         $badFormat = @($population | Where-Object { $_.attributes.'Staff Number' -notmatch '^EMP-\d{6}$' })
-        Add-TestResult -Name "Every person has an Staff Number matching EMP-NNNNNN" -Passed ($badFormat.Count -eq 0) `
+        Add-TestResult -Name "Every person has a Staff Number matching EMP-NNNNNN" -Passed ($badFormat.Count -eq 0) `
             -Detail "$($badFormat.Count) values do not match: $(($badFormat | ForEach-Object { $_.attributes.'Staff Number' }) -join ', ')"
 
         $empNumbers = @($population | ForEach-Object { $_.attributes.'Staff Number' })
@@ -611,7 +611,7 @@ try {
 
     # ─────────────────────────────────────────────────────────────────────────────────────
     # Export mode: value lands on the Connected System Object and in the directory; the
-    # Metaverse is never touched (there is no such Metaverse attribute at all).
+    # Metaverse Object never receives the value.
     # ─────────────────────────────────────────────────────────────────────────────────────
     if ($lastStepIndex -ge $stepOrder.IndexOf("ExportMode")) {
         Write-TestSection "Test 6: Export mode (preferredLanguage, Random Digits)"
@@ -619,22 +619,32 @@ try {
         $population = Get-Population
         $sample = @($population | Select-Object -First ([Math]::Min(3, $population.Count)))
         $badPreferredLanguage = @()
+        $exportedValues = @()
         foreach ($person in $sample) {
             $ldapUser = Get-LDAPUser -UserIdentifier $person.attributes.'Account Name' -DirectoryConfig $DirectoryConfig
             $preferredLanguage = if ($ldapUser) { $ldapUser['preferredLanguage'] } else { $null }
             if ($preferredLanguage -notmatch '^\d{6}$') {
                 $badPreferredLanguage += "$($person.displayName): preferredLanguage='$preferredLanguage'"
             }
+            else {
+                $exportedValues += @{ MvoId = $person.id; DisplayName = $person.displayName; Value = $preferredLanguage }
+            }
         }
         Add-TestResult -Name "Every sampled directory entry carries a 6-digit generated preferredLanguage" -Passed ($badPreferredLanguage.Count -eq 0) `
             -Detail ($badPreferredLanguage -join '; ')
 
         # Export-mode assignments are keyed on the Connected System Object, never the Metaverse
-        # Object; there is no Metaverse attribute named preferredLanguage at all for a value to appear on.
-        $mvAttributes = Get-JIMMetaverseAttribute
-        $preferredLanguageMvAttr = $mvAttributes | Where-Object { $_.name -eq 'preferredLanguage' -or $_.name -eq 'Postal Code' }
-        Add-TestResult -Name "The Metaverse has no attribute for the export-mode generated value (it never touches the Metaverse)" -Passed ($null -eq $preferredLanguageMvAttr) `
-            -Detail "Found an unexpected Metaverse attribute: $($preferredLanguageMvAttr.name)"
+        # Object: the value generated for the directory must not appear on the Metaverse Object.
+        $leaked = @()
+        foreach ($entry in $exportedValues) {
+            $mvo = Get-JIMMetaverseObject -Id $entry.MvoId
+            $holding = @($mvo.attributeValues | Where-Object { $_.stringValue -eq $entry.Value })
+            if ($holding.Count -gt 0) {
+                $leaked += "$($entry.DisplayName): '$($entry.Value)' held by Metaverse attribute(s) $(($holding.attributeName | Sort-Object -Unique) -join ', ')"
+            }
+        }
+        Add-TestResult -Name "The export-mode generated value is not written to the Metaverse Object" -Passed ($exportedValues.Count -gt 0 -and $leaked.Count -eq 0) `
+            -Detail $(if ($exportedValues.Count -eq 0) { "No exported values were sampled" } else { $leaked -join '; ' })
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
