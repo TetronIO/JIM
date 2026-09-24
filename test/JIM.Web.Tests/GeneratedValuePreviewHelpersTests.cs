@@ -54,8 +54,11 @@ public class GeneratedValuePreviewHelpersTests
     }
 
     [Test]
-    public void BuildSampleContext_NoSamplesEntered_FillsNeutralPlaceholderForEveryInput()
+    public void BuildSampleContext_NoSamplesEntered_FillsEachInputsOwnAttributeNameAsItsSample()
     {
+        // QA fix (#242 Phase 3 D2): a single generic placeholder for every input produced identical values
+        // ("sample.sample"), which said nothing about the expression's shape. Each input's own name gives a
+        // distinct, recognisable sample per input instead.
         var inputs = new List<ExpressionInput>
         {
             new(ExpressionInputSource.ConnectedSystem, "firstName"),
@@ -67,8 +70,8 @@ public class GeneratedValuePreviewHelpersTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.UsedNeutralSample, Is.True);
-            Assert.That(result.ConnectedSystem["firstName"], Is.EqualTo(GeneratedValuePreviewHelpers.NeutralSampleValue));
-            Assert.That(result.ConnectedSystem["lastName"], Is.EqualTo(GeneratedValuePreviewHelpers.NeutralSampleValue));
+            Assert.That(result.ConnectedSystem["firstName"], Is.EqualTo("firstName"));
+            Assert.That(result.ConnectedSystem["lastName"], Is.EqualTo("lastName"));
             Assert.That(result.Metaverse, Is.Empty);
         }
     }
@@ -262,13 +265,24 @@ public class GeneratedValuePreviewHelpersTests
     }
 
     [Test]
-    public void DescribeRestartResult_CounterMoved_NamesFromAndTo()
+    public void DescribeRestartResult_CounterMoved_NamesFromAndToWithNoThousandsSeparator()
+    {
+        // QA fix (#242 Phase 3 D2): these are identifiers, not quantities, so no "N0" separator.
+        var result = new GeneratedValueRestartResult { CounterFrom = 101701, CounterTo = 100456 };
+
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result, fixedWidth: null);
+
+        Assert.That(text, Is.EqualTo("Started Employee Number again: the counter moved from 101701 to 100456."));
+    }
+
+    [Test]
+    public void DescribeRestartResult_CounterMovedWithFixedWidth_ShowsPaddedForm()
     {
         var result = new GeneratedValueRestartResult { CounterFrom = 101701, CounterTo = 100456 };
 
-        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result);
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result, fixedWidth: 11);
 
-        Assert.That(text, Is.EqualTo("Started Employee Number again: the counter moved from 101,701 to 100,456."));
+        Assert.That(text, Is.EqualTo("Started Employee Number again: the counter moved from 00000101701 to 00000100456."));
     }
 
     [Test]
@@ -276,8 +290,84 @@ public class GeneratedValuePreviewHelpersTests
     {
         var result = new GeneratedValueRestartResult { CounterFrom = null, CounterTo = null };
 
-        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result);
+        var text = GeneratedValuePreviewHelpers.DescribeRestartResult("Employee Number", result, fixedWidth: null);
 
         Assert.That(text, Does.Contain("nothing moved"));
+    }
+
+    // ─── Sequence identifier formatting (QA fix, #242 Phase 3 D2) ───
+
+    [Test]
+    public void FormatSequenceIdentifier_NoFixedWidth_ReturnsPlainDigitsNoSeparator()
+    {
+        Assert.That(GeneratedValuePreviewHelpers.FormatSequenceIdentifier(200000, null), Is.EqualTo("200000"));
+    }
+
+    [Test]
+    public void FormatSequenceIdentifier_FixedWidth_PadsWithLeadingZeros()
+    {
+        Assert.That(GeneratedValuePreviewHelpers.FormatSequenceIdentifier(100456, 11), Is.EqualTo("00000100456"));
+    }
+
+    [Test]
+    public void FormatSequenceIdentifier_NumberExceedsFixedWidth_ReturnsUnpaddedRatherThanTruncated()
+    {
+        Assert.That(GeneratedValuePreviewHelpers.FormatSequenceIdentifier(123456789012, 5), Is.EqualTo("123456789012"));
+    }
+
+    // ─── Start again no-op (QA fix, #242 Phase 3 D2) ───
+
+    [Test]
+    public void IsStartAgainNoOp_CounterAlreadyAtStartAt_ReturnsTrue()
+    {
+        Assert.That(GeneratedValuePreviewHelpers.IsStartAgainNoOp(300000, 300000), Is.True);
+    }
+
+    [Test]
+    public void IsStartAgainNoOp_CounterAheadOfStartAt_ReturnsFalse()
+    {
+        Assert.That(GeneratedValuePreviewHelpers.IsStartAgainNoOp(101701, 100456), Is.False);
+    }
+
+    [Test]
+    public void DescribeStartAgainNoOp_MatchesMockupWording()
+    {
+        var text = GeneratedValuePreviewHelpers.DescribeStartAgainNoOp(300000, 11);
+
+        Assert.That(text, Is.EqualTo("The counter is already at Start at (00000300000); starting again changes nothing."));
+    }
+
+    // ─── Number placement (QA fix, #242 Phase 3 D2) ───
+
+    [Test]
+    public void DescribeNumberPlacement_NoBaseValueSequence_NamesNumber()
+    {
+        var text = GeneratedValuePreviewHelpers.DescribeNumberPlacement(false, false, GeneratedValueTokenKind.Sequence);
+
+        Assert.That(text, Is.EqualTo("no base value: the value is the number on its own"));
+    }
+
+    [Test]
+    public void DescribeNumberPlacement_NoBaseValueRandom_NamesToken()
+    {
+        var text = GeneratedValuePreviewHelpers.DescribeNumberPlacement(false, false, GeneratedValueTokenKind.Random);
+
+        Assert.That(text, Is.EqualTo("no base value: the value is the token on its own"));
+    }
+
+    [Test]
+    public void DescribeNumberPlacement_BaseValueEmailShaped_PlacesBeforeAt()
+    {
+        var text = GeneratedValuePreviewHelpers.DescribeNumberPlacement(true, true, GeneratedValueTokenKind.OnlyIfTaken);
+
+        Assert.That(text, Is.EqualTo("before the @ (the value is email-shaped)"));
+    }
+
+    [Test]
+    public void DescribeNumberPlacement_BaseValueNotEmailShaped_PlacesAtEnd()
+    {
+        var text = GeneratedValuePreviewHelpers.DescribeNumberPlacement(true, false, GeneratedValueTokenKind.OnlyIfTaken);
+
+        Assert.That(text, Is.EqualTo("at the end"));
     }
 }

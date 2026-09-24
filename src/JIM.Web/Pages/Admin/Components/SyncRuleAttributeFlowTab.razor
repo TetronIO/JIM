@@ -1555,7 +1555,7 @@
                 var attributeName = _attributeFlowMapping.TargetMetaverseAttribute?.Name
                     ?? _attributeFlowMapping.TargetConnectedSystemAttribute?.Name ?? "this attribute";
                 var confirmed = await GeneratedValueSkipAheadDialog.ShowAsync(
-                    DialogService, attributeName, currentState!.NextNumber, generation.SequenceStart);
+                    DialogService, attributeName, currentState!.NextNumber, generation.SequenceStart, generation.FixedWidth);
                 if (!confirmed)
                     return;
             }
@@ -1584,7 +1584,8 @@
         var attributeName = attributeFlowRule.TargetMetaverseAttribute?.Name
             ?? attributeFlowRule.TargetConnectedSystemAttribute?.Name ?? "this attribute";
         var configuredStart = attributeFlowRule.Generation!.SequenceStart;
-        await GeneratedValueStartAgainDialog.ShowAsync(DialogService, attributeFlowRule.Id, attributeName, configuredStart);
+        await GeneratedValueStartAgainDialog.ShowAsync(
+            DialogService, attributeFlowRule.Id, attributeName, configuredStart, attributeFlowRule.Generation.FixedWidth);
     }
 
     private async Task HandleAttributeFlowRuleDeleteClickAsync(SyncRuleMapping attributeFlowRule)

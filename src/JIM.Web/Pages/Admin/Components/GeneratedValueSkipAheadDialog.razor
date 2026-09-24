@@ -13,8 +13,8 @@
 <ConsequenceConfirmationDialog ConfirmButtonText="Save and skip ahead" ConfirmButtonColour="Color.Primary">
     <LeadingContent>
         <MudText Typo="Typo.body1">
-            "Start at" is now higher than the next number (@CurrentNext.ToString("N0")). Saving moves the counter to
-            @NewStart.ToString("N0"); numbers @CurrentNext.ToString("N0") to @((NewStart - 1).ToString("N0")) will never be assigned.
+            "Start at" is now higher than the next number (@CurrentNextFormatted). Saving moves the counter to
+            @NewStartFormatted; numbers @CurrentNextFormatted to @NewStartLessOneFormatted will never be assigned.
         </MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
             Reasons why you might do this include using it to reserve a range for another system, or to continue a
@@ -32,18 +32,29 @@
     [Parameter, EditorRequired]
     public long NewStart { get; set; }
 
+    /// <summary>The mapping's configured fixed width, if any: these are identifiers, so they show zero-padded
+    /// to it rather than with a thousands separator (QA fix, #242 Phase 3 D2).</summary>
+    [Parameter]
+    public int? FixedWidth { get; set; }
+
+    private string CurrentNextFormatted => GeneratedValuePreviewHelpers.FormatSequenceIdentifier(CurrentNext, FixedWidth);
+    private string NewStartFormatted => GeneratedValuePreviewHelpers.FormatSequenceIdentifier(NewStart, FixedWidth);
+    private string NewStartLessOneFormatted => GeneratedValuePreviewHelpers.FormatSequenceIdentifier(NewStart - 1, FixedWidth);
+
     /// <summary>
     /// Opens the confirmation. Returns true when the administrator chose to proceed with the save.
     /// </summary>
-    public static async Task<bool> ShowAsync(IDialogService dialogService, string attributeName, long currentNext, long newStart)
+    public static async Task<bool> ShowAsync(IDialogService dialogService, string attributeName, long currentNext, long newStart, int? fixedWidth)
     {
         var parameters = new DialogParameters<GeneratedValueSkipAheadDialog>
         {
             { x => x.CurrentNext, currentNext },
-            { x => x.NewStart, newStart }
+            { x => x.NewStart, newStart },
+            { x => x.FixedWidth, fixedWidth }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var dialog = await dialogService.ShowAsync<GeneratedValueSkipAheadDialog>($"Skip ahead to {newStart:N0}?", parameters, options);
+        var dialog = await dialogService.ShowAsync<GeneratedValueSkipAheadDialog>(
+            $"Skip ahead to {GeneratedValuePreviewHelpers.FormatSequenceIdentifier(newStart, fixedWidth)}?", parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };
     }

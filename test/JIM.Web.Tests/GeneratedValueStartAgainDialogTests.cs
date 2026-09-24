@@ -70,7 +70,7 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
     [TearDown]
     public void TearDown() => _jim?.Dispose();
 
-    private IRenderedComponent<MudDialogProvider> ShowDialog()
+    private IRenderedComponent<MudDialogProvider> ShowDialog(long configuredStart = 100456L, int? fixedWidth = null)
     {
         var provider = Render<MudDialogProvider>();
         var dialogService = Services.GetRequiredService<IDialogService>();
@@ -78,22 +78,72 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
         {
             { x => x.MappingId, MappingId },
             { x => x.AttributeName, AttributeName },
-            { x => x.ConfiguredStart, 100456L }
+            { x => x.ConfiguredStart, configuredStart },
+            { x => x.FixedWidth, fixedWidth }
         };
         provider.InvokeAsync(() => dialogService.ShowAsync<GeneratedValueStartAgainDialog>("Start again?", parameters));
         provider.WaitForElement($"[data-testid='{ConfirmButtonMarker}']");
         provider.WaitForState(() => !provider.Find($"[data-testid='{ConfirmButtonMarker}']").HasAttribute("disabled") ||
-                                     provider.FindAll($"[data-testid='{PhraseFieldMarker}']").Count > 0);
+                                     provider.FindAll($"[data-testid='{PhraseFieldMarker}']").Count > 0 ||
+                                     provider.Markup.Contains("changes nothing"));
         return provider;
     }
 
     [Test]
-    public void GeneratedValueStartAgainDialog_Opens_ShowsCounterFromAndTo()
+    public void GeneratedValueStartAgainDialog_Opens_ShowsCounterFromAndToWithNoThousandsSeparator()
     {
+        // QA fix (#242 Phase 3 D2): these are identifiers, not quantities.
         var provider = ShowDialog();
 
-        Assert.That(provider.Markup, Does.Contain("100,456"));
-        Assert.That(provider.Markup, Does.Contain("101,701"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.Markup, Does.Contain("100456"));
+            Assert.That(provider.Markup, Does.Contain("101701"));
+            Assert.That(provider.Markup, Does.Not.Contain("100,456"));
+            Assert.That(provider.Markup, Does.Not.Contain("101,701"));
+        }
+    }
+
+    [Test]
+    public void GeneratedValueStartAgainDialog_Opens_UsesCorrectedGrammarWithNoArticle()
+    {
+        // QA fix (#242 Phase 3 D2): "a Employee Number" is wrong for any vowel-starting attribute name; the
+        // reworded sentence avoids the article entirely.
+        var provider = ShowDialog();
+
+        var normalised = string.Join(' ', provider.Markup.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(normalised, Does.Contain("Metaverse Objects that already have a value for Employee Number keep it"));
+            Assert.That(normalised, Does.Contain("only Metaverse Objects without one are given a new value"));
+        }
+    }
+
+    [Test]
+    public void GeneratedValueStartAgainDialog_CounterAlreadyAtStartAt_ShowsNoOpMessageAndDisablesConfirm()
+    {
+        // The current counter (101701, per the mock's GetGeneratedValueSequenceAsync setup) is not the one under
+        // test here: use a ConfiguredStart equal to it so the dialog reads "already at Start at".
+        var provider = ShowDialog(configuredStart: 101701L);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.Markup, Does.Contain("The counter is already at Start at (101701); starting again changes nothing."));
+            var confirmButton = provider.Find($"[data-testid='{ConfirmButtonMarker}']");
+            Assert.That(confirmButton.HasAttribute("disabled"), Is.True);
+        }
+    }
+
+    [Test]
+    public void GeneratedValueStartAgainDialog_CounterAlreadyAtStartAt_TypingPhraseStillDoesNotEnableConfirm()
+    {
+        var provider = ShowDialog(configuredStart: 101701L);
+
+        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(AttributeName);
+
+        var confirmButton = provider.Find($"[data-testid='{ConfirmButtonMarker}']");
+        Assert.That(confirmButton.HasAttribute("disabled"), Is.True);
     }
 
     [Test]

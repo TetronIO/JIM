@@ -69,9 +69,12 @@
                 break;
         }
 
-        @if (_preview != null)
+        @if (_placementText != null)
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Where the number goes: @_preview.PlacementText</MudText>
+            <div class="mt-2">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Where the number goes</MudText>
+                <MudText Typo="Typo.body1">@_placementText</MudText>
+            </div>
         }
 
         @if (_evaluationError != null)
@@ -169,6 +172,7 @@
     public IReadOnlyDictionary<string, string?> SampleValues { get; set; } = new Dictionary<string, string?>();
 
     private GeneratedValueCandidatePreview? _preview;
+    private string? _placementText;
     private string? _sampleSourceCaption;
     private string? _evaluationError;
 
@@ -283,6 +287,11 @@
         using var jim = JimFactory.Create();
         _preview = jim.UniqueValues.DescribeGeneratedCandidates(
             generation, TargetType ?? AttributeDataType.Text, sampleBaseValue, PreviewCandidateCount);
+
+        // QA fix (#242 Phase 3 D2): the compact "Where the number goes" row uses its own terse wording rather
+        // than _preview.PlacementText, which is a full sentence shared with the REST/PowerShell surfaces.
+        _placementText = GeneratedValuePreviewHelpers.DescribeNumberPlacement(
+            !string.IsNullOrEmpty(sampleBaseValue), sampleBaseValue?.Contains('@') == true, generation.TokenKind);
     }
 
     private async Task RefreshIoAsync(CancellationToken token)

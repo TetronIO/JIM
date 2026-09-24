@@ -19,16 +19,21 @@
                                ConfirmButtonText="Start again"
                                ConfirmButtonColour="Color.Warning"
                                BusyText="Starting again..."
+                               DisableConfirm="@_isNoOp"
                                OnConfirmAsync="RestartAsync">
     <LeadingContent>
         <MudText Typo="Typo.body1">
-            Metaverse Objects that already hold a @AttributeName keep it; only Metaverse Objects without one are
-            generated for.
+            Metaverse Objects that already have a value for @AttributeName keep it; only Metaverse Objects without
+            one are given a new value.
         </MudText>
-        @if (_currentNext is { } currentNext)
+        @if (_isNoOp)
+        {
+            <MudText Typo="Typo.body1" Class="mt-2">@NoOpMessage</MudText>
+        }
+        else if (_currentNext is { } currentNext)
         {
             <MudText Typo="Typo.body1" Class="mt-2">
-                Counter returns to <b>@ConfiguredStart.ToString("N0")</b> from <b>@currentNext.ToString("N0")</b>
+                Counter returns to <b>@ConfiguredStartFormatted</b> from <b>@GeneratedValuePreviewHelpers.FormatSequenceIdentifier(currentNext, FixedWidth)</b>
             </MudText>
         }
     </LeadingContent>
@@ -54,15 +59,28 @@
     [Parameter, EditorRequired]
     public long ConfiguredStart { get; set; }
 
+    /// <summary>The mapping's configured fixed width, if any: these are identifiers, so they show zero-padded
+    /// to it rather than with a thousands separator (QA fix, #242 Phase 3 D2).</summary>
+    [Parameter]
+    public int? FixedWidth { get; set; }
+
     private long? _currentNext;
+    private bool _isNoOp;
+    private string? _noOpMessage;
+
+    private string ConfiguredStartFormatted => GeneratedValuePreviewHelpers.FormatSequenceIdentifier(ConfiguredStart, FixedWidth);
+    private string NoOpMessage => _noOpMessage ??= GeneratedValuePreviewHelpers.DescribeStartAgainNoOp(ConfiguredStart, FixedWidth);
 
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
         var state = await jim.ConnectedSystems.GetGeneratedValueSequenceStateAsync(MappingId);
         // Unseeded (never issued a number): there is nothing to show a "from", so present the flow's own start
-        // value both ways rather than leaving the panel loading forever.
+        // value both ways rather than leaving the panel loading forever. GetGeneratedValueSequenceStateAsync's
+        // NextNumber is always the higher of the counter's own position and Start at, so it can never read
+        // *behind* Start at here; "already at Start at" (the no-op) is the only equality case reachable.
         _currentNext = state is { IsSeeded: true } ? state.NextNumber : ConfiguredStart;
+        _isNoOp = GeneratedValuePreviewHelpers.IsStartAgainNoOp(_currentNext.Value, ConfiguredStart);
     }
 
     private async Task<bool> RestartAsync()
@@ -72,7 +90,7 @@
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             var result = await jim.ConnectedSystems.RestartGeneratedValuesAsync(MappingId, user);
-            Snackbar.Add(GeneratedValuePreviewHelpers.DescribeRestartResult(AttributeName, result), Severity.Success);
+            Snackbar.Add(GeneratedValuePreviewHelpers.DescribeRestartResult(AttributeName, result, FixedWidth), Severity.Success);
         }
         catch (ArgumentException ex)
         {
@@ -87,13 +105,15 @@
     /// Opens the "Start again…" confirmation for a saved generated Sequence mapping. Returns true once the
     /// restart completed successfully.
     /// </summary>
-    public static async Task<bool> ShowAsync(IDialogService dialogService, int mappingId, string attributeName, long configuredStart)
+    public static async Task<bool> ShowAsync(
+        IDialogService dialogService, int mappingId, string attributeName, long configuredStart, int? fixedWidth)
     {
         var parameters = new DialogParameters<GeneratedValueStartAgainDialog>
         {
             { x => x.MappingId, mappingId },
             { x => x.AttributeName, attributeName },
-            { x => x.ConfiguredStart, configuredStart }
+            { x => x.ConfiguredStart, configuredStart },
+            { x => x.FixedWidth, fixedWidth }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await dialogService.ShowAsync<GeneratedValueStartAgainDialog>($"Start {attributeName} again?", parameters, options);

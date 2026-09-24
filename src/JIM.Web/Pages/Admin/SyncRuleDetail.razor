@@ -880,8 +880,10 @@ else if (_syncRule != null)
                 continue;
 
             var attributeName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "the attribute";
+            var fixedWidth = mapping.Generation?.FixedWidth;
             Snackbar.Add(
-                $"{attributeName}: the counter skipped ahead from {skip.From:N0} to {skip.To:N0}. Numbers in between will never be assigned.",
+                $"{attributeName}: the counter skipped ahead from {GeneratedValuePreviewHelpers.FormatSequenceIdentifier(skip.From, fixedWidth)} " +
+                $"to {GeneratedValuePreviewHelpers.FormatSequenceIdentifier(skip.To, fixedWidth)}. Numbers in between will never be assigned.",
                 Severity.Info);
         }
     }

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Transactional;
@@ -18,12 +19,6 @@ namespace JIM.Web;
 /// </summary>
 public static class GeneratedValuePreviewHelpers
 {
-    /// <summary>
-    /// The placeholder value substituted for every input the base expression reads when the administrator has
-    /// not entered any sample values in "Test this Expression" (approved mockup: "Preview · sample inputs").
-    /// </summary>
-    public const string NeutralSampleValue = "Sample";
-
     /// <summary>The mockup's static explanation for a Sequence token's "If a number is taken" line.</summary>
     public const string SequenceTakenExplanation = "skipped; the next one is used and the skipped number is not reused";
 
@@ -40,8 +35,10 @@ public static class GeneratedValuePreviewHelpers
     /// Builds the Metaverse and Connected System attribute dictionaries an <c>IExpressionEvaluator</c> needs to
     /// evaluate the base expression for the live preview: the administrator's own sample values from "Test this
     /// Expression" when any have been entered (missing inputs read as no value, exactly as the tester itself
-    /// evaluates), otherwise every input filled with <see cref="NeutralSampleValue"/> so an expression with no
-    /// entered samples still previews something rather than a string built from nulls.
+    /// evaluates), otherwise every input filled with its own attribute name (<c>firstName</c> becomes the sample
+    /// value <c>"firstName"</c>, which the expression's own <c>Lower()</c> then renders "firstname" exactly as a
+    /// real value would be) so an expression with no entered samples still previews something meaningful, rather
+    /// than a placeholder so generic that two different inputs render identically (e.g. "sample.sample").
     /// </summary>
     public static GeneratedValueSampleContext BuildSampleContext(
         IReadOnlyList<ExpressionInput> inputs, IReadOnlyDictionary<string, string?> testerSampleValues)
@@ -55,7 +52,10 @@ public static class GeneratedValuePreviewHelpers
             object? value;
             if (usedNeutralSample)
             {
-                value = NeutralSampleValue;
+                // The input is, by construction, always a simple mv[...]/cs[...] accessor (that is what
+                // ExpressionInputResolver extracts), so its own AttributeName already IS "its name" for a
+                // fallback; there is no case here that needs a further fallback.
+                value = input.AttributeName;
             }
             else
             {
@@ -125,6 +125,60 @@ public static class GeneratedValuePreviewHelpers
         $"This counter has not issued a number yet. The first number generated will be {nextNumberFormatted}.";
 
     /// <summary>
+    /// Formats a sequence counter value for display as an identifier, not a quantity (QA fix, #242 Phase 3 D2):
+    /// no thousands separator, since "200000" and "100456" name a specific number the counter holds or will
+    /// hold, they do not count anything. Zero-padded to the mapping's configured fixed width when one is set,
+    /// mirroring the padding <c>UniqueValueCandidates.RenderSequenceNumber</c> (JIM.Application, internal, so
+    /// not callable from here) applies to a real generated value, so a dialog or snackbar showing this counter
+    /// reads identically to the live preview's own padded candidates. A value that no longer fits the width is
+    /// shown unpadded rather than truncated; the sequence state panel's own width-exceeded warning is what
+    /// flags that condition, not this formatter.
+    /// </summary>
+    public static string FormatSequenceIdentifier(long number, int? fixedWidth)
+    {
+        var raw = number.ToString(CultureInfo.InvariantCulture);
+        return fixedWidth.HasValue && raw.Length <= fixedWidth.Value
+            ? raw.PadLeft(fixedWidth.Value, '0')
+            : raw;
+    }
+
+    /// <summary>
+    /// Whether "Start again" would be a no-op (QA fix, #242 Phase 3 D2): the counter's current next number
+    /// already equals the flow's configured Start at, so restarting would move it nowhere. The counter can
+    /// never stand *behind* Start at when read via <c>GetGeneratedValueSequenceStateAsync</c>, whose
+    /// <see cref="GeneratedValueSequenceState.NextNumber"/> is always the higher of the counter's own position
+    /// and Start at (see that type's doc comment), so equality is the only "nothing to do" case reachable here;
+    /// there is no separate "behind" branch to handle.
+    /// </summary>
+    public static bool IsStartAgainNoOp(long currentNext, long configuredStart) => currentNext == configuredStart;
+
+    /// <summary>
+    /// The mockup's "nothing will change" message for <see cref="IsStartAgainNoOp"/>, shown in place of the
+    /// usual "Counter returns to X from Y" line and paired with disabling the confirm action.
+    /// </summary>
+    public static string DescribeStartAgainNoOp(long configuredStart, int? fixedWidth) =>
+        $"The counter is already at Start at ({FormatSequenceIdentifier(configuredStart, fixedWidth)}); starting again changes nothing.";
+
+    /// <summary>
+    /// The live preview's terse "Where the number goes" row (QA fix, #242 Phase 3 D2): "at the end", "before the
+    /// @ (the value is email-shaped)", or, with no base value at all, "no base value: the value is the &lt;noun&gt;
+    /// on its own" ("token" for a Random token, since it is not itself a number). Distinct from
+    /// <c>UniqueValueGenerationServer.DescribeGeneratedCandidates</c>'s own <c>PlacementText</c>, which is a full,
+    /// capitalised sentence shared with the REST and PowerShell surfaces; this is the compact, lower-case-after-
+    /// label wording the live preview's own labelled row uses, matching its "First value"/"If taken" siblings.
+    /// </summary>
+    public static string DescribeNumberPlacement(bool hasBaseValue, bool baseValueIsEmailShaped, GeneratedValueTokenKind tokenKind)
+    {
+        if (!hasBaseValue)
+        {
+            var noun = tokenKind == GeneratedValueTokenKind.Random ? "token" : "number";
+            return $"no base value: the value is the {noun} on its own";
+        }
+
+        return baseValueIsEmailShaped ? "before the @ (the value is email-shaped)" : "at the end";
+    }
+
+    /// <summary>
     /// Whether the Add/Edit dialog's Save should show the mockup's "Skip ahead to N?" confirmation (plan Phase 3
     /// point 4, mockup screen 02): only for a Sequence mapping whose counter has already been seeded, and whose
     /// configured Start at now stands above the counter's next number. An unseeded counter has nothing to skip
@@ -144,11 +198,13 @@ public static class GeneratedValuePreviewHelpers
 
     /// <summary>
     /// The result snackbar text after "Start again" completes (plan Phase 3 point 5), matching the wording
-    /// <see cref="Application.Servers.ConnectedSystemServer"/> records on the Activity.
+    /// <see cref="Application.Servers.ConnectedSystemServer"/> records on the Activity. <paramref name="fixedWidth"/>
+    /// is the mapping's configured fixed width (QA fix, #242 Phase 3 D2): the counter values are identifiers, not
+    /// quantities, so they render zero-padded and without a thousands separator via <see cref="FormatSequenceIdentifier"/>.
     /// </summary>
-    public static string DescribeRestartResult(string attributeName, GeneratedValueRestartResult result) =>
+    public static string DescribeRestartResult(string attributeName, GeneratedValueRestartResult result, int? fixedWidth) =>
         result.CounterFrom.HasValue
-            ? $"Started {attributeName} again: the counter moved from {result.CounterFrom:N0} to {result.CounterTo:N0}."
+            ? $"Started {attributeName} again: the counter moved from {FormatSequenceIdentifier(result.CounterFrom.Value, fixedWidth)} to {FormatSequenceIdentifier(result.CounterTo!.Value, fixedWidth)}."
             : $"\"Start again\" was requested for {attributeName}, but its counter had not issued any numbers yet, so nothing moved.";
 
     /// <summary>
