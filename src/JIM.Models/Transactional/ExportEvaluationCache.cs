@@ -41,6 +41,16 @@ public class ExportEvaluationCache
     public ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> CsoAttributeValues { get; set; }
 
     /// <summary>
+    /// Page-scoped export-matching candidates: populated by a per-page batch prefetch (one query per
+    /// Object Matching Rule per page) so export evaluation can look up an unjoined Connected System
+    /// Object without a per-object database round trip. Null means no prefetch has been performed for
+    /// the current page, so every export-matching lookup must fall back to the per-object query.
+    /// The caller clears this (sets it back to null, or replaces it with a fresh instance) once the
+    /// page's evaluation finishes; it must never be reused across pages.
+    /// </summary>
+    public ExportMatchCandidates? ExportMatchCandidates { get; set; }
+
+    /// <summary>
     /// Creates a new export evaluation cache.
     /// </summary>
     /// <param name="exportRulesByMvoTypeId">Export rules grouped by MVO type ID.</param>

@@ -373,6 +373,27 @@ public interface ISyncRepository
         ConnectedSystemObjectType connectedSystemObjectType,
         ObjectMatchingRule objectMatchingRule);
 
+    /// <summary>
+    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
+    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
+    /// type whose named attribute equals one of the given values, in one query per rule per page
+    /// instead of one query per Metaverse Object. See <c>IConnectedSystemRepository</c> for full
+    /// parameter and eligibility documentation.
+    /// </summary>
+    Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
+    /// See <c>IConnectedSystemRepository</c> for full documentation.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId);
+
     #endregion
 
     #region Metaverse Object — Writes

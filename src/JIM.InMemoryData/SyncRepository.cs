@@ -1225,6 +1225,92 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
+    /// In-memory mirror of the PostgreSQL batch candidate query for a single Object Matching Rule:
+    /// finds every unjoined, Normal-status CSO of the given type whose named attribute equals one of
+    /// the given values. Eligibility mirrors <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>
+    /// exactly; unlike that method, the attribute is identified by name (matching the batch query's
+    /// name-based join), so seeded attribute values must carry their <c>Attribute</c> navigation.
+    /// </summary>
+    public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values)
+    {
+        if (values.Count == 0)
+            return Task.FromResult<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>>([]);
+
+        if (dataType is not (AttributeDataType.Text or AttributeDataType.Number or AttributeDataType.LongNumber
+            or AttributeDataType.Decimal or AttributeDataType.Guid))
+        {
+            throw new ArgumentException($"Attribute type {dataType} is not supported for export match candidate lookup.", nameof(dataType));
+        }
+
+        // Exact equality either way: case-insensitive uses OrdinalIgnoreCase, never wildcard matching.
+        var textComparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+        var matches = new List<(object Value, Guid ConnectedSystemObjectId)>();
+
+        var eligibleCsos = _csos.Values
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
+        foreach (var cso in eligibleCsos)
+        {
+            var candidateAttributeValues = cso.AttributeValues
+                .Where(av => av.Attribute != null && av.Attribute.Name == connectedSystemAttributeName);
+
+            foreach (var av in candidateAttributeValues)
+            {
+                foreach (var value in values)
+                {
+                    var isMatch = dataType switch
+                    {
+                        AttributeDataType.Text => av.StringValue != null && string.Equals(av.StringValue, (string)value, textComparison),
+                        AttributeDataType.Number => av.IntValue.HasValue && av.IntValue.Value == (int)value,
+                        AttributeDataType.LongNumber => av.LongValue.HasValue && av.LongValue.Value == (long)value,
+                        AttributeDataType.Decimal => av.DecimalValue.HasValue && av.DecimalValue.Value == (decimal)value,
+                        AttributeDataType.Guid => av.GuidValue.HasValue && av.GuidValue.Value == (Guid)value,
+                        _ => false
+                    };
+
+                    if (isMatch)
+                        matches.Add((value, cso.Id));
+                }
+            }
+        }
+
+        IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)> ordered = matches
+            .Distinct()
+            .OrderBy(m => m.Value)
+            .ThenBy(m => m.ConnectedSystemObjectId)
+            .ToList();
+
+        return Task.FromResult(ordered);
+    }
+
+    /// <summary>
+    /// In-memory mirror of the PostgreSQL hydration query: returns the CSO if it still exists and is
+    /// still eligible (unjoined and Normal-status), or null otherwise. Same object reference the
+    /// dictionary holds, matching the tracked (not no-tracking) semantics of the PostgreSQL method.
+    /// </summary>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId)
+    {
+        if (_csos.TryGetValue(connectedSystemObjectId, out var cso) &&
+            cso.MetaverseObjectId == null &&
+            cso.Status == ConnectedSystemObjectStatus.Normal)
+        {
+            return Task.FromResult<ConnectedSystemObject?>(cso);
+        }
+
+        return Task.FromResult<ConnectedSystemObject?>(null);
+    }
+
+    /// <summary>
     /// In-memory twin of the PostgreSQL conditional UPDATE (#1051): claims the CSO only if it is
     /// still unclaimed, mirroring the "WHERE MetaverseObjectId IS NULL" guard. Test usage is
     /// single-threaded, so no locking is required here; this method exists purely to give tests a
