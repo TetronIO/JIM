@@ -11,7 +11,7 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Pure display logic for the "JIM generates it" Attribute Flow form (Unique Value Generation, #242, Phase 3):
+/// Pure display logic for the "Generated Value" Attribute Flow form (Unique Value Generation, #242, Phase 3):
 /// room-remaining, row summary, and the Random token's value-space/clash-likelihood hints. These are worth
 /// pinning independently of the Blazor component that renders them, per test/CLAUDE.md's guidance to put pure
 /// logic in small testable helpers.

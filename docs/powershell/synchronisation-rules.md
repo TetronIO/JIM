@@ -472,7 +472,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `Expression` | `string` | Yes (ImportExpression, ExportExpression sets); optional (ImportGenerated, ExportGenerated sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. For a generated mapping this is the base value the uniqueness token is appended to; a Sequence or Random mapping can omit it entirely. |
 | `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
 | `Enabled` | `bool` | No | `$true` | Create the mapping disabled with `-Enabled $false`, ready to switch on later with `Set-JIMSyncRuleMapping -Enabled $true`. A disabled Attribute Flow is skipped by synchronisation in both directions. |
-| `Generate` | `switch` | Yes (ImportGenerated, ExportGenerated sets) | | Makes this "JIM generates it": the mapping's value is its (optional) base expression plus a uniqueness token, instead of an ordinary attribute or Expression mapping. |
+| `Generate` | `switch` | Yes (ImportGenerated, ExportGenerated sets) | | Makes this a "Generated Value" mapping: the mapping's value is its (optional) base expression plus a uniqueness token, instead of an ordinary attribute or Expression mapping. |
 | `TokenKind` | `string` | No | `OnlyIfTaken` | Which uniqueness token to append: `OnlyIfTaken` (try the base value; suffix only if taken; needs `-Expression`), `Sequence` (always append the next counter number, never reused) or `Random` (always append a cryptographic random token). |
 | `SuffixStyle` | `string` | No | `Number` | `OnlyIfTaken` only: `Number` or `Letter` for the collision suffix. |
 | `SuffixStart` | `int` | No | `1` | `OnlyIfTaken` only: the first suffix value tried once the bare base value is taken. |
@@ -555,7 +555,7 @@ New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
 Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
 
 !!! note "Generated-mapping parameters are in development"
-    `-TokenKind` and the other generated-mapping settings below apply only to a mapping already using **JIM generates it**, a Source Type still in development and not yet available for a new mapping (see `New-JIMSyncRuleMapping`); it is hidden behind a feature flag until it is ready. Everything else on this page works as documented.
+    `-TokenKind` and the other generated-mapping settings below apply only to a mapping already using **Generated Value**, a Source Type still in development and not yet available for a new mapping (see `New-JIMSyncRuleMapping`); it is hidden behind a feature flag until it is ready. Everything else on this page works as documented.
 
 ### Syntax
 

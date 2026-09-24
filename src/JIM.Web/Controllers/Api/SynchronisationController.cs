@@ -4425,7 +4425,7 @@ public class SynchronisationController(
         if (request.Enabled.HasValue)
             mapping.Enabled = request.Enabled.Value;
 
-        // "JIM generates it" (Unique Value Generation, #242, Phase 3): the presence of this row is what makes
+        // "Generated Value" (Unique Value Generation, #242, Phase 3): the presence of this row is what makes
         // GetSourceType() return GeneratedMapping. Allowed on both import and export rules; server-side
         // validation (SyncRuleMappingGenerationValidator, run inside CreateSyncRuleMappingAsync below) decides
         // whether the token kind, target attribute type and sources actually agree with each other.

@@ -420,7 +420,7 @@ public class CreateSyncRuleMappingRequest
     public List<CreateSyncRuleMappingSourceRequest> Sources { get; set; } = new();
 
     /// <summary>
-    /// Makes this "JIM generates it" (Unique Value Generation, #242, Phase 3): the mapping's value is its base
+    /// Makes this a "Generated Value" mapping (Unique Value Generation, #242, Phase 3): the mapping's value is its base
     /// expression (read from <see cref="Sources"/>, optional for Sequence and Random tokens) plus a uniqueness
     /// token. Omit for an ordinary attribute or Expression mapping. Allowed on both import and export rules;
     /// direction gating follows the same rule as <see cref="InitialExportOnly"/>.

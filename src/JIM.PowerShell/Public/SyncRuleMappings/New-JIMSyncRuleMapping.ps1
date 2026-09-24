@@ -82,7 +82,7 @@ function New-JIMSyncRuleMapping {
         is re-enabled with Set-JIMSyncRuleMapping -Enabled $true.
 
     .PARAMETER Generate
-        Makes this "JIM generates it" (Unique Value Generation, #242): the mapping's value is its base
+        Makes this a "Generated Value" mapping (Unique Value Generation, #242): the mapping's value is its base
         expression (optional; supply with -Expression) plus a uniqueness token. Requires either
         -TargetMetaverseAttributeId (an import mapping) or -TargetConnectedSystemAttributeId (an export
         mapping). Exclusions and Collision Remediation are not configurable from any surface in this release.
@@ -264,7 +264,7 @@ function New-JIMSyncRuleMapping {
         [ValidateSet('EvaluateAnyway', 'ContributeNoValue', 'FailMapping', 'FailObject')]
         [string]$MissingInputBehaviour,
 
-        # "JIM generates it" (Unique Value Generation, #242), import and export mappings alike: the mapping's
+        # "Generated Value" (Unique Value Generation, #242), import and export mappings alike: the mapping's
         # value is its (optional) base expression plus a uniqueness token, rather than a plain attribute or
         # Expression mapping.
         [Parameter(Mandatory, ParameterSetName = 'ImportGenerated')]
@@ -481,7 +481,7 @@ function New-JIMSyncRuleMapping {
             $body.enabled = $Enabled
         }
 
-        # "JIM generates it" (Unique Value Generation, #242). Only the settings actually supplied are sent;
+        # "Generated Value" (Unique Value Generation, #242). Only the settings actually supplied are sent;
         # every omitted one leaves the server's own default standing (see SyncRuleMappingGeneration).
         if ($isGenerated) {
             $generation = @{}

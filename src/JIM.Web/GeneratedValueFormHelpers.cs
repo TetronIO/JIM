@@ -10,7 +10,7 @@ using JIM.Models.Logic;
 namespace JIM.Web;
 
 /// <summary>
-/// Pure display logic for the "JIM generates it" Attribute Flow form (Unique Value Generation, #242, Phase 3):
+/// Pure display logic for the "Generated Value" Attribute Flow form (Unique Value Generation, #242, Phase 3):
 /// the row's token pill text, the "room remaining" hint for fixed-width sequences, and the value-space and
 /// clash-likelihood hints on the Random token's format menu. Kept free of Blazor/MudBlazor so it is directly
 /// unit-testable; see <c>GeneratedValueFormHelpersTests</c>.

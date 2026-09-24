@@ -10,7 +10,7 @@ using JIM.Web.Models;
 namespace JIM.Web;
 
 /// <summary>
-/// Pure display and decision logic for the "JIM generates it" Attribute Flow form's live preview panel, the
+/// Pure display and decision logic for the "Generated Value" Attribute Flow form's live preview panel, the
 /// sequence state panel, the skip-ahead confirmation and the "Start again" row action (Unique Value Generation,
 /// #242, Phase 3, Work Package D2). Kept free of Blazor/MudBlazor, <c>IExpressionEvaluator</c> and
 /// <c>JimApplication</c> so it is directly unit-testable; see <c>GeneratedValuePreviewHelpersTests</c>. The

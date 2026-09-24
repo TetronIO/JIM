@@ -21,7 +21,7 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// The "JIM generates it" Source Type option's visibility, gated behind Unique Value Generation's feature flag
+/// The "Generated Value" Source Type option's visibility, gated behind Unique Value Generation's feature flag
 /// (#242, Phase 3.5): offered only while the flag is on, but an already-generated mapping still opens for editing
 /// and still shows its own Source Type, flag off or on, so existing configuration is never stranded. See
 /// <see cref="SyncRuleAttributeFlowGeneratedFormTests"/> for the form itself (run with the flag on throughout, as
@@ -103,6 +103,8 @@ public class SyncRuleAttributeFlowTabFeatureFlagTests : JimComponentTestContext
             Assert.That(sourceTypePicker.FindComponents<MudSelectItem<string>>().Select(i => i.Instance.Value),
                 Does.Contain("Generated"),
                 "the option must still render so the selected value resolves to its label, not the raw string");
+            Assert.That(sourceTypePicker.Find("input").GetAttribute("value"), Is.EqualTo("Generated Value"),
+                "the Source Type reads as a noun beside Attribute and Expression");
         }
 #pragma warning restore MUD0012
     }

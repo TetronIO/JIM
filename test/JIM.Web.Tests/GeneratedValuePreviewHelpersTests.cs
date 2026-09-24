@@ -10,7 +10,7 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Pure display and decision logic behind the "JIM generates it" form's live preview, existing-object count,
+/// Pure display and decision logic behind the "Generated Value" form's live preview, existing-object count,
 /// sequence state panel, skip-ahead confirmation and "Start again" row action (Unique Value Generation, #242,
 /// Phase 3, Work Package D2). See <c>GeneratedValuePreviewHelpers</c>.
 /// </summary>

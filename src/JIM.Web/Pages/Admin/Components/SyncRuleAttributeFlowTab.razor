@@ -449,16 +449,26 @@
     </TitleContent>
     <DialogContent>
         <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this Attribute Flow"
-            Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined">
-            <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
-            <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
+            Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined"
+            ToStringFunc="@SourceTypeLabel">
+            <MudSelectItem Value="@("Attribute")">
+                <div>Attribute</div>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Copies an attribute's value</MudText>
+            </MudSelectItem>
+            <MudSelectItem Value="@("Expression")">
+                <div>Expression</div>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Builds the value from attributes with an expression</MudText>
+            </MudSelectItem>
             @* Unique Value Generation (#242) is gated behind its feature flag while in development: offering the
                option to create new generated configuration only when it is on, while an already-generated mapping
                being edited keeps showing its own Source Type regardless (checked once in OnInitializedAsync, not
                per render). *@
             @if (_uniqueValueGenerationEnabled || _attributeFlowMappingSourceType == "Generated")
             {
-                <MudSelectItem Value="@("Generated")">JIM generates it</MudSelectItem>
+                <MudSelectItem Value="@("Generated")">
+                    <div>Generated Value</div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">JIM builds a unique value and keeps it</MudText>
+                </MudSelectItem>
             }
         </MudSelect>
 
@@ -958,7 +968,18 @@
     private VirtualisedDataGrid<SyncRuleMapping>? _flowGrid;
 
     /// <summary>
-    /// Whether Unique Value Generation (#242) is on, gating the "JIM generates it" Source Type option in the Add/Edit
+    /// The Source Type picker's label for each value, so the selected value always reads as its label (for example
+    /// "Generated Value"), even before the picker's items have rendered.
+    /// </summary>
+    private static string SourceTypeLabel(string? sourceType) => sourceType switch
+    {
+        "Generated" => "Generated Value",
+        null => string.Empty,
+        _ => sourceType
+    };
+
+    /// <summary>
+    /// Whether Unique Value Generation (#242) is on, gating the "Generated Value" Source Type option in the Add/Edit
     /// Attribute Flow dialog. Checked once in <see cref="OnInitializedAsync"/>, not per render; existing generated
     /// configuration keeps working and displaying regardless of this flag (see the Source Type MudSelect markup).
     /// </summary>
@@ -1064,7 +1085,7 @@
         _attributeFlowMapping.Sources.Remove(_attributeFlowMappingSource);
 
         // ─── Unique Value Generation (#242, Phase 3) ───
-        // Selecting "JIM generates it" creates the settings row with model defaults; switching away removes it.
+        // Selecting "Generated Value" creates the settings row with model defaults; switching away removes it.
         // The source is left out of Sources here (a generated mapping's base expression is optional, and an
         // empty source in the list would otherwise be misread by SyncRuleMappingGenerationValidator as an
         // attribute source with no value); GeneratedValueOptionsEditor adds it once the expression holds text.

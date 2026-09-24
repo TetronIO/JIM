@@ -22,7 +22,7 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// The "JIM generates it" Source Type on the Attribute Flow Add/Edit dialog (Unique Value Generation, #242,
+/// The "Generated Value" Source Type on the Attribute Flow Add/Edit dialog (Unique Value Generation, #242,
 /// Phase 3): selecting and leaving it, the uniqueness token's sub-controls per kind, and the Number-target
 /// restrictions. These drive <see cref="SyncRuleAttributeFlowTab"/>'s dialog directly (the pattern established by
 /// <see cref="SyncRuleAttributeFlowTabTests"/>) rather than <see cref="GeneratedValueOptionsEditor"/> in
