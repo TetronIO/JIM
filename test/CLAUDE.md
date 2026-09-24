@@ -275,6 +275,16 @@ export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /tmp/egress-cas.pem)
 
 OpenLDAP is the sensible directory type here; Samba AD images may not be cached. Because the bridge is an environment variable, there is nothing in the working tree to revert and nothing that can leak into a commit.
 
+**When Docker Hub answers `429 Too Many Requests` and retries do not clear it, pull through Google's Docker Hub mirror and retag.** The harness needs `bitnamilegacy/openldap:latest`, `diegogslomp/samba-ad-dc:latest` and `389ds/dirsrv:3.1` (the image builds resolve all three even for an OpenLDAP-only run) plus `busybox:1.37.0` for volume seeding; a `429` on any of them fails the run before a test executes. The runner's end-of-run prune removes them again, so repeat this before each run:
+
+```bash
+for img in bitnamilegacy/openldap:latest diegogslomp/samba-ad-dc:latest 389ds/dirsrv:3.1 library/busybox:1.37.0; do
+  docker pull -q "mirror.gcr.io/$img" && docker tag "mirror.gcr.io/$img" "${img#library/}"
+done
+```
+
+(Verified 2026-09-24: Docker Hub refused every pull for over five minutes while the mirror served all four at once.)
+
 (This section previously prescribed copying the CA bundle into the repo root and hand-editing a `COPY`/`ENV SSL_CERT_FILE` pair into each Dockerfile, with a warning to revert it all before committing. That predates the `EXTRA_CA_CERTS_BASE64` argument and is no longer necessary; the build arg installs the CA properly via `update-ca-certificates` instead of overriding `SSL_CERT_FILE` wholesale.)
 
 Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.

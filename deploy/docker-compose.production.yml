@@ -12,6 +12,10 @@ services:
   jim.web:
     build: !reset null
     restart: unless-stopped
+    # Publish the web UI and API on the host. JIM_WEB_PORT in .env changes the host port, and takes
+    # an address prefix to bind one interface only (e.g. 127.0.0.1:5200 behind a local reverse proxy).
+    ports:
+      - "${JIM_WEB_PORT:-5200}:8080"
 
   jim.worker:
     build: !reset null

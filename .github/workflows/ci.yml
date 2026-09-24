@@ -159,6 +159,10 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: jim_test
+          # Same locale as the bundled database in docker-compose.yml (UTF8, code-point
+          # ordering), so these tests see the sorting and case rules production runs with.
+          # The image's own default is en_US.utf8.
+          LANG: C.UTF-8
         # Ephemeral host port. A fixed 5432:5432 collides on the self-hosted runner
         # host, where a second runner service can be running another job (e.g. a
         # JIM-Bench run) with its own PostgreSQL on the same port at the same moment.

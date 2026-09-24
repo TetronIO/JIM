@@ -17,16 +17,19 @@ JIM is configured through environment variables set in the `.env` file alongside
 |----------|-----------------------------------------------------------------------------------------------|--------------------|
 | `LANG`   | Controls date/time formatting and other locale-specific behaviour. Uses standard locale codes. | `en_GB.UTF-8`     |
 
+The bundled PostgreSQL container ignores `LANG` and always initialises its database with the `C.UTF-8` locale, because the PostgreSQL image does not ship regional locales such as `en_GB.UTF-8`.
+
 ---
 
 ## Docker
 
-These variables control how Docker Compose resolves and pulls JIM container images.
+These variables control how Docker Compose resolves and pulls JIM container images, and where it publishes the web UI.
 
 | Variable          | Description                                                                 | Default | Example                     |
 |-------------------|-----------------------------------------------------------------------------|---------|-----------------------------|
 | `DOCKER_REGISTRY` | Container registry prefix for pulling images. Leave empty for local builds. | *(empty)* | `ghcr.io/tetronio/`        |
 | `JIM_VERSION`     | Release version tag. Leave empty for local builds.                          | *(empty)* | `0.10.0`                   |
+| `JIM_WEB_PORT`    | Host port the production compose file publishes the web UI and API on (the container listens on `8080`). Prefix an address to bind one interface only. | `5200` | `127.0.0.1:5200` |
 
 ---
 
