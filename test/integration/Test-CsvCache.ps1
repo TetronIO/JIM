@@ -207,7 +207,7 @@ try {
     New-Item -ItemType Directory -Path $runD -Force | Out-Null
     Invoke-GeneratorOnly -OutputPath $runD -Template $Template -OmitItOwnedAttributes
 
-    $omittedHeader = (Get-Content -Path (Join-Path $runD "hr-users.csv") -TotalCount 1) -split ','
+    $omittedHeader = ((Get-Content -Path (Join-Path $runD "hr-users.csv") -TotalCount 1) -split ',') | ForEach-Object { $_.Trim('"') }
     Assert-True ($omittedHeader -notcontains 'samAccountName') "hr-users.csv header omits samAccountName"
     Assert-True ($omittedHeader -notcontains 'email') "hr-users.csv header omits email"
     Assert-True ($omittedHeader -notcontains 'userPrincipalName') "hr-users.csv header omits userPrincipalName"
