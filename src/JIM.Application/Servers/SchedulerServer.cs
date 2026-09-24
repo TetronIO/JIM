@@ -349,22 +349,26 @@ public class SchedulerServer
     }
 
     /// <summary>
-    /// Gets a paginated list of Schedule Executions, optionally filtered by schedule.
+    /// Gets a paginated list of Schedule Executions, optionally filtered by schedule and by status. The total
+    /// count is taken over the filtered set.
     /// </summary>
     /// <param name="scheduleId">Optional filter by schedule ID.</param>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
     /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
+    /// <param name="status">Optional filter by status; null returns executions of every status.</param>
     /// <returns>A paged result set of Schedule Executions.</returns>
     public async Task<PagedResultSet<ScheduleExecution>> GetScheduleExecutionsAsync(
         Guid? scheduleId,
         int page,
         int pageSize,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        ScheduleExecutionStatus? status = null)
     {
-        return await Application.Repository.Scheduling.GetScheduleExecutionsAsync(scheduleId, page, pageSize, sortBy, sortDescending);
+        return await Application.Repository.Scheduling.GetScheduleExecutionsAsync(
+            scheduleId, page, pageSize, sortBy, sortDescending, status);
     }
 
     /// <summary>
@@ -382,6 +386,7 @@ public class SchedulerServer
     /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
     /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    /// <param name="status">Optional filter by status; null returns executions of every status.</param>
     public async Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
         Guid? scheduleId,
         int offset,
@@ -389,10 +394,11 @@ public class SchedulerServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        ScheduleExecutionStatus? status = null)
     {
         return await Application.Repository.Scheduling.GetScheduleExecutionsRangeAsync(
-            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount, status);
     }
 
     /// <summary>

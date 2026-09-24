@@ -319,12 +319,14 @@ public class SchedulingRepository : ISchedulingRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
     public async Task<PagedResultSet<ScheduleExecution>> GetScheduleExecutionsAsync(
         Guid? scheduleId,
         int page,
         int pageSize,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        ScheduleExecutionStatus? status = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -337,7 +339,7 @@ public class SchedulingRepository : ISchedulingRepository
 
         var offset = (page - 1) * pageSize;
         var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
-            scheduleId, offset, pageSize, searchQuery: null, sortBy, sortDescending, includeTotalCount: true);
+            scheduleId, status, offset, pageSize, searchQuery: null, sortBy, sortDescending, includeTotalCount: true);
 
         var pagedResultSet = new PagedResultSet<ScheduleExecution>
         {
@@ -379,7 +381,8 @@ public class SchedulingRepository : ISchedulingRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        ScheduleExecutionStatus? status = null)
     {
         if (count < 1)
             throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
@@ -391,7 +394,7 @@ public class SchedulingRepository : ISchedulingRepository
             count = MaxExecutionWindowSize;
 
         var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
-            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+            scheduleId, status, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
 
         return new RangeResultSet<ScheduleExecution>
         {
@@ -401,14 +404,15 @@ public class SchedulingRepository : ISchedulingRepository
     }
 
     /// <summary>
-    /// Shared core for the paged and range Schedule Execution reads: applies the optional Schedule filter and
-    /// the sort, windows the result by absolute <paramref name="offset"/> and <paramref name="count"/>, and
-    /// returns it alongside the total match count (or null for that total when
+    /// Shared core for the paged and range Schedule Execution reads: applies the optional Schedule and status
+    /// filters and the sort, windows the result by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, and returns it alongside the total match count (or null for that total when
     /// <paramref name="includeTotalCount"/> is false). Shared so the two reads can never disagree on which
     /// executions match; callers own input validation and clamping.
     /// </summary>
     private async Task<(List<ScheduleExecution> Results, int? TotalResults)> QueryScheduleExecutionsByRangeAsync(
         Guid? scheduleId,
+        ScheduleExecutionStatus? status,
         int offset,
         int count,
         string? searchQuery,
@@ -425,6 +429,13 @@ public class SchedulingRepository : ISchedulingRepository
         {
             var scheduleIdValue = scheduleId.Value;
             query = query.Where(e => e.ScheduleId == scheduleIdValue);
+        }
+
+        // Filter by status if specified. Applied before the count below, so the total describes the matches.
+        if (status.HasValue)
+        {
+            var statusValue = status.Value;
+            query = query.Where(e => e.Status == statusValue);
         }
 
         // Apply search filter. The two names are what a reader can actually recognise an execution by: which
