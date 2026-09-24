@@ -1,13 +1,13 @@
 # Unique Value Generation and Collision Remediation
 
-- **Status:** Doing (release 1, Phase 1 in progress)
+- **Status:** Doing (release 1, Phase 3 in progress: server-side validation, application methods and REST done; portal and PowerShell outstanding)
 - **Issue:** [#242](https://github.com/TetronIO/JIM/issues/242)
 - **PRD:** [`../../prd/doing/PRD_UNIQUE_VALUE_GENERATION.md`](../../prd/doing/PRD_UNIQUE_VALUE_GENERATION.md)
 - **Depends on (release 2):** [`../../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
 - **Related:** [#399](https://github.com/TetronIO/JIM/issues/399) attribute provenance display (delivers the Metaverse Object page chips), [#614](https://github.com/TetronIO/JIM/issues/614) internal Metaverse Object management (Set Value and Generate a new value deferred there), [#223](https://github.com/TetronIO/JIM/issues/223) Initial Export Only (per-mapping flag precedent), [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial Password Provisioning (parked state, release on configuration change, queue-and-follow), [#1087](https://github.com/TetronIO/JIM/issues/1087) / [#1495](https://github.com/TetronIO/JIM/issues/1495) causality views, [#1079](https://github.com/TetronIO/JIM/issues/1079) optimistic export apply, [#91](https://github.com/TetronIO/JIM/issues/91) attribute priority, [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler (review flag)
 - **UI mockups:** [Unique Value Generation: Design and Mockups](https://claude.ai/artifact/G9R6cK7WR7QwmPukctFpkb) · [Generated Value Options](https://claude.ai/artifact/AnigVtXRxx1t71qVS41yMr) (release 1 form) · [Linked Identifiers](https://claude.ai/artifact/KEbCieWusy8aoxnZqkMagD)
 - **Plan explainer:** [Unique Value Generation Plan](https://claude.ai/artifact/WsfoqDR7PrwiQZLQBPCt9q) (what changes per layer, the data model, the three data flows, the assignment lifecycle and the releases)
-- **Last Updated:** 2026-09-23 (decision 6 revised: inline per-object resolution with run-scoped caches); 2026-09-19 (adversarial review applied; four-release delivery; uniqueness tokens, counters and the retired values register added)
+- **Last Updated:** 2026-09-24 (Phase 3 work package A: server-side generation validation, application methods and REST surfaces); 2026-09-23 (decision 6 revised: inline per-object resolution with run-scoped caches); 2026-09-19 (adversarial review applied; four-release delivery; uniqueness tokens, counters and the retired values register added)
 
 ## Overview
 
@@ -222,7 +222,7 @@ Each phase is a PR off `main`, TDD throughout, `dotnet build JIM.sln` and `dotne
 
 ### Release 1: generation
 
-#### Phase 1: Model, persistence and vocabulary
+#### Phase 1: Model, persistence and vocabulary ✅
 
 1. `SyncRuleMappingGeneration`, `SyncRuleMappingGenerationExclusion`, `GeneratedValueSequence`, `GeneratedValueAssignment` and their enums; `SyncRuleMapping.Generation` navigation; `GetSourceType()` returns `GeneratedMapping`; validation: exactly one expression source (optional for sequence and random), single-valued Text target (Number allowed for sequence and digit tokens without fixed width).
 2. Every appended enum member from the table above, with the ordinal tests extended; `RetiredGeneratedValue` is release 2 but its outcome member is appended now.
@@ -232,7 +232,7 @@ Each phase is a PR off `main`, TDD throughout, `dotnet build JIM.sln` and `dotne
 6. Lifecycle by cascade (assignment from object and generation row; counter only from the attribute); database-tier tests for each cascade.
 7. Tests: model validation, ordinal tests, persistence and lookup tests in `test/JIM.Worker.Tests/`.
 
-#### Phase 2: Generation engine
+#### Phase 2: Generation engine ✅
 
 1. `UniqueValueCandidates` for all three tokens (placement, padding, width check, letters, cryptographic random); `UniqueValueReservationSet`; `SequenceAllocator`; the three local gates; `ResolveAsync` with adopt-existing, sticky short-circuit, exhaustion, width failure and dry-run.
 2. `SyncEngine.AttributeFlow`: a generated mapping is evaluated like an expression mapping up to producing a value; when it is the winning contributor (priority, `NullIsValue`, Missing Input Behaviour resolved first) the engine records a `GenerationRequest` and a placeholder pending addition. `SyncEngine.ExportStaging`: the same for export mappings, attached to the Pending Export change.
@@ -245,6 +245,8 @@ Each phase is a PR off `main`, TDD throughout, `dotnet build JIM.sln` and `dotne
 9. **Delivered notes (2026-09-23).** Export mode keys the assignment on the Connected System Object and never writes the Metaverse Object; its value is resolved when export evaluation stages the Pending Export and committed after the provisioning object is persisted. Every caller of contributor re-election (the worker's import, out-of-scope and obsoletion paths, Synchronisation Rule deletion recall, Sync Preview) passes a resolver; the server-side recall and deprovisioning paths pass none, so a re-elected generated mapping there waits for the generating system's next synchronisation, and a generated export change they stage is stripped rather than persisted blank. **Known gap:** drift detection skips generated export mappings (its expected value would be the base expression, not the assigned value), so a generated value changed in the target outside JIM is reasserted only when export evaluation next runs for that object; comparing against the assignment belongs with release 4's anchoring work.
 
 #### Phase 3: Configuration and Metaverse Object surfaces (portal, REST, PowerShell)
+
+**Work package A ✅** (points 2 and 4, plus the application methods points 1/3 need): `SyncRuleMappingGenerationValidator` wired into `ConnectedSystemServer`'s mapping create, update, settings-update and whole-rule save paths; `RaiseSequenceStartIfHigherAsync`/`GetSequenceStateAsync`/`GetAssignmentsForMetaverseObjectAsync`/`RestartAsync`/`CountObjectsAwaitingValueAsync`/`DescribeGeneratedCandidates` on `UniqueValueGenerationServer` and `ConnectedSystemServer`; `SyncRuleAttributeFlowProposalMaterialiser` carries a proposed mapping's Generation settings so Sync Preview evaluates an unsaved generated mapping correctly; the three REST endpoints below, with the `generation` object on the mapping DTOs. Portal (point 1) and PowerShell (point 3) are separate work packages, not yet started; docs (point 5) follow whichever of those ships a user-reachable surface.
 
 1. Portal (`SyncRuleAttributeFlowTab.razor`, inline dialog): a third "Source Type" item, "JIM generates it", with the form in the Generated Value Options mockups: target, base expression (existing editor and `ExpressionTester`), uniqueness token radio group with the sub-controls per kind (style, start, separator; start, increment, a "Pad to a fixed width" switch revealing width with room remaining and the overflow behaviour; random format and length with value-space hint), "Never reuse a value" switch (on), a read-only "When JIM generates this value" statement with the inputs read from the expression via `ExpressionInputResolver`, the Missing Input Behaviour choice defaulting to "wait" for generated mappings, attempt limit (advanced), live preview with the count of existing objects that would receive a value, read-only sequence state panel, save-time confirmation when a raised start value skips numbers; `Generated` row chip in both layouts with a `GetMappingTypeChipColour` case; the row menu gains "View retired values" (release 2) and "Start again…" with the typed confirmation as mocked (screen 02b). Metaverse Object page (`MvoDetailsTable.razor` on `View.razor`): `Generated by JIM` chip and "View history" (the attribute-scoped Timeline), delivered through or consistent with #399's provenance display; no "Generate a new value" (deferred to #614).
 2. REST: `SyncRuleMappingDto`, `CreateSyncRuleMappingRequest`, `UpdateSyncRuleMappingRequest` gain a `generation` object; `SourceType` renders `GeneratedMapping`; direction gating follows the `InitialExportOnly` block; `SyncRuleMappingSettingsUpdate` carries the settings through PATCH. New: `GET metaverse-objects/{id}/generated-values`, `GET sync-rules/{id}/mappings/{mappingId}/sequence` (read-only state), `POST sync-rules/{id}/mappings/{mappingId}/generation/restart` (Start again; returns the counts it forgot and reset). OpenAPI updated; API tests beside `SyncRuleMappingUpdateApiTests.cs`.

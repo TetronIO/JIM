@@ -134,6 +134,7 @@ public class GeneratedValueRepositoryDatabaseTests
             MvTextAttributeId: mvTextAttribute.Id,
             MvNumberAttributeId: mvNumberAttribute.Id,
             CsoId: cso.Id,
+            ConnectedSystemId: system.Id,
             CsTextAttributeId: csTextAttribute.Id,
             CsNumberAttributeId: csNumberAttribute.Id,
             ImportRuleId: importRule.Id,
@@ -147,6 +148,7 @@ public class GeneratedValueRepositoryDatabaseTests
         int MvTextAttributeId,
         int MvNumberAttributeId,
         Guid CsoId,
+        int ConnectedSystemId,
         int CsTextAttributeId,
         int CsNumberAttributeId,
         int ImportRuleId,
@@ -165,6 +167,21 @@ public class GeneratedValueRepositoryDatabaseTests
         ctx.Entry(mvo).Property("TypeId").CurrentValue = estate.MvoTypeId;
         await ctx.SaveChangesAsync();
         return mvo.Id;
+    }
+
+    /// <summary>
+    /// <see cref="SeedEstateAsync"/> creates the estate's Metaverse Object and Connected System Object
+    /// independently (most of this fixture's gate tests need no join between them); the
+    /// <c>CountMetaverseObjectsAwaitingGeneratedValueAsync</c> tests need the real join a Full Import would
+    /// produce, so this sets it explicitly.
+    /// </summary>
+    private async Task JoinCsoToMvoAsync(Estate estate)
+    {
+        await using var ctx = NewContext();
+        var cso = await ctx.ConnectedSystemObjects.SingleAsync(c => c.Id == estate.CsoId);
+        cso.MetaverseObjectId = estate.MvoId;
+        ctx.Update(cso);
+        await ctx.SaveChangesAsync();
     }
 
     private async Task AddMvoStringValueAsync(Guid mvoId, int attributeId, string value)
@@ -461,6 +478,125 @@ public class GeneratedValueRepositoryDatabaseTests
 
         var updated = await repo.GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
         Assert.That(updated?.AssignedCount, Is.EqualTo(4));
+    }
+
+    // ---- Save-time counter moves (Phase 3, #242) ----
+
+    [Test]
+    public async Task RaiseGeneratedValueSequenceIfHigherAsync_HigherThanCurrent_MovesTheCounterAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 1, count: 5, increment: 1);
+        // The counter now stands at 6.
+
+        await using var ctx2 = NewContext();
+        var previous = await NewSyncRepository(ctx2).RaiseGeneratedValueSequenceIfHigherAsync(estate.MvNumberAttributeId, null, newStart: 1000, estate.ImportMappingId);
+
+        Assert.That(previous, Is.EqualTo(6));
+
+        await using var ctx3 = NewContext();
+        var sequence = await NewSyncRepository(ctx3).GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sequence?.NextValue, Is.EqualTo(1000));
+            Assert.That(sequence?.LastMovedBySyncRuleMappingId, Is.EqualTo(estate.ImportMappingId));
+            Assert.That(sequence?.LastMovedAt, Is.Not.Null);
+        }
+    }
+
+    [Test]
+    public async Task RaiseGeneratedValueSequenceIfHigherAsync_NoCounterYet_ReturnsNullAndSeedsNothingAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+
+        await using var ctx = NewContext();
+        var previous = await NewSyncRepository(ctx).RaiseGeneratedValueSequenceIfHigherAsync(estate.MvNumberAttributeId, null, newStart: 1000, estate.ImportMappingId);
+
+        Assert.That(previous, Is.Null);
+
+        await using var ctx2 = NewContext();
+        Assert.That(await NewSyncRepository(ctx2).GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null), Is.Null);
+    }
+
+    [Test]
+    public async Task ResetGeneratedValueSequenceAsync_MovesTheCounterBackwardsAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+
+        await using (var ctx = NewContext())
+            await NewSyncRepository(ctx).ReserveGeneratedValueSequenceBlockAsync(estate.MvNumberAttributeId, null, floor: 100, count: 50, increment: 1);
+        // The counter now stands at 150.
+
+        await using var ctx2 = NewContext();
+        var previous = await NewSyncRepository(ctx2).ResetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null, newValue: 1, estate.ImportMappingId);
+
+        Assert.That(previous, Is.EqualTo(150));
+
+        await using var ctx3 = NewContext();
+        var sequence = await NewSyncRepository(ctx3).GetGeneratedValueSequenceAsync(estate.MvNumberAttributeId, null);
+        Assert.That(sequence?.NextValue, Is.EqualTo(1), "\"Start again\" deliberately moves the counter backwards");
+    }
+
+    // ---- CountMetaverseObjectsAwaitingGeneratedValueAsync ----
+
+    [Test]
+    public async Task CountMetaverseObjectsAwaitingGeneratedValueAsync_ObjectWithNoValue_IsCountedAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await JoinCsoToMvoAsync(estate);
+
+        await using var ctx = NewContext();
+        var count = await NewSyncRepository(ctx).CountMetaverseObjectsAwaitingGeneratedValueAsync(
+            estate.MvoTypeId, estate.ConnectedSystemId, estate.MvTextAttributeId);
+
+        Assert.That(count, Is.EqualTo(1), "the estate's Metaverse Object is joined to the estate's Connected System and holds no value yet");
+    }
+
+    [Test]
+    public async Task CountMetaverseObjectsAwaitingGeneratedValueAsync_ObjectAlreadyHoldingTheAttribute_IsNotCountedAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await JoinCsoToMvoAsync(estate);
+        await AddMvoStringValueAsync(estate.MvoId, estate.MvTextAttributeId, "already-set");
+
+        await using var ctx = NewContext();
+        var count = await NewSyncRepository(ctx).CountMetaverseObjectsAwaitingGeneratedValueAsync(
+            estate.MvoTypeId, estate.ConnectedSystemId, estate.MvTextAttributeId);
+
+        Assert.That(count, Is.Zero);
+    }
+
+    // ---- GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync ----
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync_LiveAssignment_IsReturnedWithNamesAsync()
+    {
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        var assignment = ImportAssignment(estate, "alice.smith1");
+
+        await using (var ctx = NewContext())
+        {
+            ctx.GeneratedValueAssignments.Add(assignment);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var readCtx = NewContext();
+        var headers = await NewSyncRepository(readCtx).GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(estate.MvoId);
+
+        Assert.That(headers, Has.Count.EqualTo(1));
+        var header = headers[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.AssignmentId, Is.EqualTo(assignment.Id));
+            Assert.That(header.Value, Is.EqualTo("alice.smith1"));
+            Assert.That(header.AttributeName, Does.StartWith("Account Name-"));
+            Assert.That(header.TokenKind, Is.EqualTo(GeneratedValueTokenKind.Sequence));
+            Assert.That(header.SyncRuleId, Is.EqualTo(estate.ImportRuleId));
+            Assert.That(header.SyncRuleMappingId, Is.EqualTo(estate.ImportMappingId));
+            Assert.That(header.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
+        }
     }
 
     [Test]

@@ -122,6 +122,56 @@ public class SyncRuleAttributeFlowProposalTests
         Assert.That(proposal.DescribesSameMappingsAs(null), Is.False);
     }
 
+    // ── Generation (Unique Value Generation, #242, Phase 3) ─────────────────────────────────────────────────
+
+    [Test]
+    public void FromMapping_GeneratedMapping_CarriesTheGenerationSettings()
+    {
+        var attribute = new MetaverseAttribute { Id = 301, Name = "Employee Number", Type = AttributeDataType.LongNumber };
+        var rule = new SyncRule { Id = 4, Direction = SyncRuleDirection.Import };
+        var mapping = new SyncRuleMapping
+        {
+            TargetMetaverseAttribute = attribute,
+            TargetMetaverseAttributeId = attribute.Id,
+            Generation = new SyncRuleMappingGeneration { TokenKind = GeneratedValueTokenKind.Sequence, SequenceStart = 1000 }
+        };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var proposal = SyncRuleAttributeFlowProposal.FromCurrentMappings(rule);
+
+        var generation = proposal.Mappings[0].Generation;
+        Assert.That(generation, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generation!.TokenKind, Is.EqualTo(GeneratedValueTokenKind.Sequence));
+            Assert.That(generation.SequenceStart, Is.EqualTo(1000));
+        }
+    }
+
+    [Test]
+    public void FromMapping_OrdinaryMapping_HasNoGeneration()
+    {
+        var rule = BuildImportRuleWithMappings();
+
+        var proposal = SyncRuleAttributeFlowProposal.FromCurrentMappings(rule);
+
+        Assert.That(proposal.Mappings, Has.All.Property(nameof(SyncRuleMappingProposal.Generation)).Null);
+    }
+
+    [Test]
+    public void DescribesSameMappingsAs_GenerationSequenceStartChanged_IsFalse()
+    {
+        var attribute = new MetaverseAttribute { Id = 302, Name = "Employee Number", Type = AttributeDataType.LongNumber };
+        var mapping = new SyncRuleMappingProposal(attribute.Id, null, [],
+            Generation: new SyncRuleMappingGenerationProposal(GeneratedValueTokenKind.Sequence, GeneratedValueSuffixStyle.Number, 1, 1, 1, null, GeneratedValueWidthOverflowBehaviour.StopAndReport, GeneratedValueRandomFormat.Guid, null, null, 1000, true));
+        var changed = mapping with { Generation = mapping.Generation! with { SequenceStart = 5000 } };
+
+        var first = new SyncRuleAttributeFlowProposal([mapping]);
+        var second = new SyncRuleAttributeFlowProposal([changed]);
+
+        Assert.That(first.DescribesSameMappingsAs(second), Is.False);
+    }
+
     [Test]
     public void SyncRuleAttributeFlowProposal_SerialisedAndBack_SurvivesTheQueue()
     {
