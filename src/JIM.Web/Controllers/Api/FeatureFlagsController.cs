@@ -74,7 +74,7 @@ public class FeatureFlagsController(ILogger<FeatureFlagsController> logger, JimA
             var apiKey = await GetCurrentApiKeyAsync();
             var state = apiKey != null
                 ? await _application.FeatureFlags.SetFeatureFlagAsync(key, request.Enabled, apiKey, request.AllowInDevelopment)
-                : await _application.FeatureFlags.SetFeatureFlagAsync(key, request.Enabled, (MetaverseObject?)null, request.AllowInDevelopment);
+                : await _application.FeatureFlags.SetFeatureFlagAsync(key, request.Enabled, await GetCurrentUserAsync(), request.AllowInDevelopment);
 
             return Ok(FeatureFlagDto.FromState(state));
         }

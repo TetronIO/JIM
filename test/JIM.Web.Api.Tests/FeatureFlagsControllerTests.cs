@@ -84,10 +84,7 @@ public class FeatureFlagsControllerTests
         _application = new JimApplication(_mockRepository.Object);
         _controller = new FeatureFlagsController(_mockLogger.Object, _application);
 
-        // API-key authentication, matching ServiceSettingsControllerTests: FeatureFlagsController.UpdateAsync
-        // resolves an interactive (JWT) caller to (MetaverseObject?)null, which ActivityServer.CreateActivityAsync
-        // then rejects (InitiatedByType stays NotSet) - the same pre-existing gap ServiceSettingsController has.
-        // Exercising that path is not this test's job; it authenticates as an API key so the write actually succeeds.
+        // API-key authentication by default; UpdateAsync_InteractiveUser_* re-authenticates as a signed-in user.
         _apiKeyId = Guid.NewGuid();
         var claims = new List<Claim>
         {
@@ -158,6 +155,36 @@ public class FeatureFlagsControllerTests
         Assert.That(dto, Is.Not.Null);
         Assert.That(dto!.Enabled, Is.False);
         Assert.That(_persisted[key].Value, Is.EqualTo("false"));
+    }
+
+    [Test]
+    public async Task UpdateAsync_InteractiveUser_RecordsTheUserAndReturnsOkAsync()
+    {
+        // A signed-in administrator calling the REST API (JWT, not an API key) is resolved to their Metaverse Object,
+        // so the change is attributed to them rather than refused for having no initiator.
+        var metaverseRepo = new Mock<IMetaverseRepository>();
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
+        var ssoAttribute = new MetaverseAttribute { Id = 1, Name = "SsoId" };
+        _mockServiceSettingsRepo.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync(new ServiceSettings
+        {
+            SSOUniqueIdentifierClaimType = "sub",
+            SSOUniqueIdentifierMetaverseAttribute = ssoAttribute
+        });
+        var userType = new MetaverseObjectType { Id = 1, Name = "User" };
+        metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(It.IsAny<string>(), false, It.IsAny<bool>())).ReturnsAsync(userType);
+        var user = new MetaverseObject { Id = Guid.NewGuid(), Type = userType, CachedDisplayName = "Admin User" };
+        metaverseRepo.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(userType, ssoAttribute, It.IsAny<string>())).ReturnsAsync(user);
+        var identity = new ClaimsIdentity(new List<Claim> { new("sub", user.Id.ToString()), new(ClaimTypes.Name, "Admin User") }, "TestAuth");
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } };
+        Activity? recorded = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Callback<Activity>(a => recorded = a).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateAsync(FeatureFlagCatalogue.UniqueValueGeneration.Key,
+            new FeatureFlagUpdateRequestDto { Enabled = true, AllowInDevelopment = true });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>(), () => System.Text.Json.JsonSerializer.Serialize((result as ObjectResult)?.Value));
+        Assert.That(recorded?.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+        Assert.That(recorded?.InitiatedById, Is.EqualTo(user.Id));
     }
 
     [Test]
