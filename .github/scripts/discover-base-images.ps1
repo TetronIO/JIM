@@ -184,12 +184,15 @@ foreach ($r in $deduped) {
 # the apt pins and the build-time apt-get upgrade; a base image scan sees neither. The
 # image name comes from the project directory (src/JIM.Web -> jim-web), which is the name
 # release.yml publishes under, so a finding here and a finding at release time name the
-# same thing.
+# same thing. startup_log is the line the service logs first when it starts ("Starting
+# JIM.Web", from the project name), which the scan job's smoke test waits for; release.yml's
+# smoke test waits for the same lines.
 $imageLegs = @($results | Sort-Object dockerfile -Unique | ForEach-Object {
     $projectDir = Split-Path (Split-Path $_.dockerfile -Parent) -Leaf
     [pscustomobject]@{
-        dockerfile = $_.dockerfile
-        image_name = ($projectDir.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+        dockerfile  = $_.dockerfile
+        image_name  = ($projectDir.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+        startup_log = "Starting $projectDir"
     }
 })
 Write-Host "Production images to build and scan: $($imageLegs.Count)"

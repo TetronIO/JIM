@@ -97,6 +97,21 @@ Describe 'discover-base-images.ps1 image matrix' {
         @($legs | ForEach-Object { $_.image_name }) | Should -Be @('jim-scheduler', 'jim-web', 'jim-worker')
     }
 
+    It 'names the line each image logs when it starts, for the smoke test' {
+        # Every service logs "Starting <project>" first thing (JIM.Web's Program.cs, JIM.Worker's Worker.cs,
+        # JIM.Scheduler's Scheduler.cs), before it touches the database, so the scan job can start each image with
+        # dummy configuration and wait for that line. release.yml's smoke test waits for the same lines.
+        $outcome = Invoke-Discovery @{
+            'src/JIM.Web/Dockerfile'       = New-ProductionDockerfile $script:Aspnet $script:Sdk
+            'src/JIM.Worker/Dockerfile'    = New-ProductionDockerfile $script:Runtime $script:Sdk
+            'src/JIM.Scheduler/Dockerfile' = New-ProductionDockerfile $script:Runtime $script:Sdk
+        }
+
+        $outcome.ExitCode | Should -Be 0
+        @($outcome.Outputs['image_matrix'].include | ForEach-Object { $_.startup_log }) |
+            Should -Be @('Starting JIM.Scheduler', 'Starting JIM.Web', 'Starting JIM.Worker')
+    }
+
     It 'leaves Dockerfiles without the compliance directive out of the image matrix' {
         $outcome = Invoke-Discovery @{
             'src/JIM.Web/Dockerfile'   = New-ProductionDockerfile $script:Aspnet $script:Sdk
