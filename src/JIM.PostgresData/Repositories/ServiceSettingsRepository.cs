@@ -130,6 +130,16 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
         return await Repository.Database.ServiceSettingItems.AnyAsync(s => s.Key == key);
     }
 
+    public async Task DeleteSettingAsync(string key)
+    {
+        var existingSetting = await Repository.Database.ServiceSettingItems.AsTracking().SingleOrDefaultAsync(s => s.Key == key);
+        if (existingSetting == null)
+            return;
+
+        Repository.Database.ServiceSettingItems.Remove(existingSetting);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task<ServiceSetting> GetOrCreateSettingAsync(ServiceSetting setting)
     {
         var existing = await Repository.Database.ServiceSettingItems.FindAsync(setting.Key);

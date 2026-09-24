@@ -28,6 +28,11 @@ public class TaskingServerStepAdvancementTests
     private Mock<ISchedulingRepository> _mockSchedulingRepository = null!;
     private JimApplication _application = null!;
 
+    /// <summary>
+    /// Every Activity recorded against the executions so far, as the repository would hold them.
+    /// </summary>
+    private List<Activity> _recordedActivities = null!;
+
     [SetUp]
     public void SetUp()
     {
@@ -48,6 +53,13 @@ public class TaskingServerStepAdvancementTests
         // Default: DeleteWorkerTaskAsync succeeds
         _mockTaskingRepository.Setup(r => r.DeleteWorkerTaskAsync(It.IsAny<WorkerTask>()))
             .Returns(Task.CompletedTask);
+
+        _recordedActivities = new List<Activity>();
+        _mockActivityRepository.Setup(r => r.GetFailedScheduleExecutionActivitiesAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid executionId) => _recordedActivities
+                .Where(a => a.ScheduleExecutionId == executionId && ScheduleFailureHandling.IsFailedStepOutcome(a.Status))
+                .OrderBy(a => a.ScheduleStepIndex)
+                .ToList());
     }
 
     [TearDown]
@@ -171,6 +183,32 @@ public class TaskingServerStepAdvancementTests
         {
             Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
             Assert.That(execution.CurrentStepIndex, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task CompleteWorkerTask_LastStepFinishesAfterAnEarlierStepFailedAndContinued_CompletesWithErrorAsync()
+    {
+        // #1787: the Worker's advancement shares the Scheduler's conclusion, so a run that carried on past a failed step
+        // ends Complete With Error, naming the step, whichever of the two reaches the end.
+        var failing = RunProfileStep(0);
+        var last = RunProfileStep(1);
+        var execution = SetUpExecution(ScheduleExecutionStatus.InProgress, currentStepIndex: 0, failing, last);
+        execution.Schedule!.OnStepFailure = ScheduleFailureBehaviour.Continue;
+        SetUpStepOutcome(execution.Id, 0, remainingTasks: 0, Outcome(failing, ActivityStatus.FailedWithError, "HR", "Full Import"));
+        SetUpNextWaitingStep(execution.Id, 1);
+        await _application.Tasking.CompleteWorkerTaskAsync(CreateWorkerTask(execution.Id, stepIndex: 0));
+        Assert.That(execution.CurrentStepIndex, Is.EqualTo(1), "the failed step follows the Schedule, which continues");
+
+        SetUpStepOutcome(execution.Id, 1, remainingTasks: 0, Outcome(last, ActivityStatus.Complete));
+        SetUpNextWaitingStep(execution.Id, null);
+        await _application.Tasking.CompleteWorkerTaskAsync(CreateWorkerTask(execution.Id, stepIndex: 1));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.CompleteWithError));
+            Assert.That(execution.ErrorMessage, Is.EqualTo(
+                "The Schedule finished, but step 1, HR - Full Import, failed. It is set to let the Schedule continue."));
         }
     }
 
@@ -360,7 +398,8 @@ public class TaskingServerStepAdvancementTests
         StepType = ScheduleStepType.RunProfile,
         ConnectedSystemId = 1,
         RunProfileId = 100,
-        ContinueOnFailure = continueOnFailure
+        // A step set to continue overrides the Schedule; otherwise it follows the Schedule, which stops (the default).
+        OnFailure = continueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule
     };
 
     private ScheduleExecution SetUpExecution(ScheduleExecutionStatus status, int currentStepIndex, params ScheduleStep[] steps)
@@ -388,6 +427,9 @@ public class TaskingServerStepAdvancementTests
             .ReturnsAsync(remainingTasks);
         _mockActivityRepository.Setup(r => r.GetActivitiesByScheduleExecutionStepAsync(executionId, stepIndex))
             .ReturnsAsync(activities.ToList());
+        foreach (var activity in activities)
+            activity.ScheduleExecutionId = executionId;
+        _recordedActivities.AddRange(activities);
     }
 
     private void SetUpNextWaitingStep(Guid executionId, int? nextStepIndex)

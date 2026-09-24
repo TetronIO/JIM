@@ -91,6 +91,23 @@ public class SchedulingRepositoryWatermarkTests
     }
 
     [Test]
+    public async Task GetLastCompletedScheduleExecutionAsync_CompleteWithErrorIsMostRecent_IgnoresItAndReturnsCompleteAsync()
+    {
+        // Complete With Error (#1787) counts as finished everywhere Complete does, except here: a run that carried on
+        // past a failed step may have missed part of its window, so only a clean run may move the watermark forward.
+        var completed = Execution(_scheduleId, ScheduleExecutionStatus.Complete, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var completeWithError = Execution(_scheduleId, ScheduleExecutionStatus.CompleteWithError, new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
+        _executionsData.AddRange(new[] { completed, completeWithError });
+        BuildRepository();
+
+        var result = await _repository.Scheduling.GetLastCompletedScheduleExecutionAsync(
+            _scheduleId, new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(completed.Id));
+    }
+
+    [Test]
     public async Task GetLastCompletedScheduleExecutionAsync_OnlyInProgressAndFailed_ReturnsNullAsync()
     {
         _executionsData.Add(Execution(_scheduleId, ScheduleExecutionStatus.InProgress, new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)));

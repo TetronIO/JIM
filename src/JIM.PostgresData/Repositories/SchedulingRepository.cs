@@ -171,6 +171,9 @@ public class SchedulingRepository : ISchedulingRepository
         // means "not counted", never "nothing matched".
         int? totalCount = includeTotalCount ? await query.CountAsync() : null;
 
+        // A local array, so the provider translates the membership test to an IN list.
+        var failedOutcomes = ScheduleFailureHandling.FailedStepOutcomes.ToArray();
+
         // The most recent execution is projected via correlated subqueries over the Schedule's executions, ordered by
         // QueuedAt. EF Core renders each of these as a scalar subquery inside the single SELECT that fetches the
         // window ("... ORDER BY s1.QueuedAt DESC LIMIT 1"), so the whole window costs one round trip no matter how
@@ -197,6 +200,7 @@ public class SchedulingRepository : ISchedulingRepository
                 IntervalUnit = s.IntervalUnit,
                 IntervalWindowStart = s.IntervalWindowStart,
                 IntervalWindowEnd = s.IntervalWindowEnd,
+                OnStepFailure = s.OnStepFailure,
                 NextRunTime = s.NextRunTime,
                 LastRunTime = s.LastRunTime,
                 Created = s.Created,
@@ -207,7 +211,24 @@ public class SchedulingRepository : ISchedulingRepository
                 LastExecutionCurrentStepIndex = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (int?)e.CurrentStepIndex).FirstOrDefault(),
                 LastExecutionTotalSteps = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (int?)e.TotalSteps).FirstOrDefault(),
                 LastExecutionCompletedAt = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.CompletedAt).FirstOrDefault(),
-                LastExecutionErrorMessage = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.ErrorMessage).FirstOrDefault()
+                LastExecutionErrorMessage = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.ErrorMessage).FirstOrDefault(),
+                // The steps a Complete With Error run carried on past (#1787), for the list to name. Starts from the newest
+                // execution (one row, from the same backward index scan as above) and only then reaches into Activities,
+                // so PostgreSQL joins that one execution to its Activities through IX_Activities_ScheduleExecutionId
+                // rather than weighing every Activity against it. Empty for any other outcome: a Failed run stopped, and
+                // is described by its current step index.
+                LastExecutionFailedStepIndices = s.Executions
+                    .OrderByDescending(e => e.QueuedAt)
+                    .Take(1)
+                    .Where(e => e.Status == ScheduleExecutionStatus.CompleteWithError)
+                    .SelectMany(e => Repository.Database.Activities
+                        .Where(a => a.ScheduleExecutionId == e.Id &&
+                                    a.ScheduleStepIndex != null &&
+                                    failedOutcomes.Contains(a.Status)))
+                    .Select(a => a.ScheduleStepIndex!.Value)
+                    .Distinct()
+                    .OrderBy(i => i)
+                    .ToArray()
             })
             .ToListAsync();
 
@@ -298,12 +319,14 @@ public class SchedulingRepository : ISchedulingRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
     public async Task<PagedResultSet<ScheduleExecution>> GetScheduleExecutionsAsync(
         Guid? scheduleId,
         int page,
         int pageSize,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        ScheduleExecutionStatus? status = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -316,7 +339,7 @@ public class SchedulingRepository : ISchedulingRepository
 
         var offset = (page - 1) * pageSize;
         var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
-            scheduleId, offset, pageSize, searchQuery: null, sortBy, sortDescending, includeTotalCount: true);
+            scheduleId, status, offset, pageSize, searchQuery: null, sortBy, sortDescending, includeTotalCount: true);
 
         var pagedResultSet = new PagedResultSet<ScheduleExecution>
         {
@@ -358,7 +381,8 @@ public class SchedulingRepository : ISchedulingRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        ScheduleExecutionStatus? status = null)
     {
         if (count < 1)
             throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
@@ -370,7 +394,7 @@ public class SchedulingRepository : ISchedulingRepository
             count = MaxExecutionWindowSize;
 
         var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
-            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+            scheduleId, status, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
 
         return new RangeResultSet<ScheduleExecution>
         {
@@ -380,14 +404,15 @@ public class SchedulingRepository : ISchedulingRepository
     }
 
     /// <summary>
-    /// Shared core for the paged and range Schedule Execution reads: applies the optional Schedule filter and
-    /// the sort, windows the result by absolute <paramref name="offset"/> and <paramref name="count"/>, and
-    /// returns it alongside the total match count (or null for that total when
+    /// Shared core for the paged and range Schedule Execution reads: applies the optional Schedule and status
+    /// filters and the sort, windows the result by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, and returns it alongside the total match count (or null for that total when
     /// <paramref name="includeTotalCount"/> is false). Shared so the two reads can never disagree on which
     /// executions match; callers own input validation and clamping.
     /// </summary>
     private async Task<(List<ScheduleExecution> Results, int? TotalResults)> QueryScheduleExecutionsByRangeAsync(
         Guid? scheduleId,
+        ScheduleExecutionStatus? status,
         int offset,
         int count,
         string? searchQuery,
@@ -404,6 +429,13 @@ public class SchedulingRepository : ISchedulingRepository
         {
             var scheduleIdValue = scheduleId.Value;
             query = query.Where(e => e.ScheduleId == scheduleIdValue);
+        }
+
+        // Filter by status if specified. Applied before the count below, so the total describes the matches.
+        if (status.HasValue)
+        {
+            var statusValue = status.Value;
+            query = query.Where(e => e.Status == statusValue);
         }
 
         // Apply search filter. The two names are what a reader can actually recognise an execution by: which
@@ -657,6 +689,9 @@ public class SchedulingRepository : ISchedulingRepository
 
     public async Task<ScheduleExecution?> GetLastCompletedScheduleExecutionAsync(Guid scheduleId, DateTime beforeStartedAt)
     {
+        // Complete only, deliberately: Complete With Error (#1787) is finished everywhere else, but a run that carried on
+        // past a failed step may have missed part of its window, so it must not move the Temporal Scope Reconciliation
+        // watermark forward. The next clean run's watermark then covers that window again.
         return await Repository.Database.ScheduleExecutions
             .Where(e => e.ScheduleId == scheduleId &&
                         e.Status == ScheduleExecutionStatus.Complete &&

@@ -127,7 +127,7 @@ Total: 43 tests.
 - Fast (the Predefined Search suite runs in ~30s); much faster than the Docker Integration tier
 - Real PostgreSQL, not in-memory: matches the production provider and the production `NoTracking` default
 - No Docker stack, no Samba AD / OpenLDAP / SCIM, not driven by the PowerShell integration runner
-- Each fixture migrates the schema once (`[OneTimeSetUp]`) and `TRUNCATE`s every table between tests (`[SetUp]`), so it needs a **dedicated throwaway database** it may freely wipe
+- Each fixture migrates the schema once (`[OneTimeSetUp]`) and empties every table between tests by calling `PostgresTestDatabase.ResetAsync(_connectionString)` from `[SetUp]`, so it needs a **dedicated throwaway database** it may freely wipe. Use the helper (in `JIM.TestSupport`) rather than writing a reset: it issues one `TRUNCATE` naming every table, where the per-table loop fixtures used to carry cost about a second per test and made up most of the tier's run time. `DatabaseResetConventionTests` fails the build if a test file enumerates `pg_tables` and truncates on its own
 
 **Gating**: Every fixture carries `[Category("RequiresPostgres")]` and, in `[OneTimeSetUp]`, calls `Assert.Ignore` unless `JIM_TEST_RESET_DB` is set. So a normal `dotnet test` / `jim-test` run (in-memory tiers only) skips them, and they run only when explicitly pointed at a throwaway database.
 
@@ -162,7 +162,7 @@ JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=543
   dotnet test JIM.sln --filter "Category=RequiresPostgres"
 ```
 
-**Running in CI**: The `database-tests` job in `.github/workflows/ci.yml` stands up a PostgreSQL service container, points `JIM_TEST_RESET_*` at a throwaway `jim_test` database, and runs `dotnet test JIM.sln --filter "Category=RequiresPostgres"` on every PR. It runs alongside the in-memory `build-and-test` job, so the two tiers give independent feedback and a failure here blocks the PR.
+**Running in CI**: The `database-tests` job in `.github/workflows/ci.yml` stands up a PostgreSQL service container, turns off `fsync`, `synchronous_commit` and `full_page_writes` on it (the database is discarded, and with them on the job's run time followed the runner's disk speed), points `JIM_TEST_RESET_*` at a throwaway `jim_test` database, and runs `dotnet test JIM.sln --filter "Category=RequiresPostgres"` on every PR. It runs alongside the in-memory `build-and-test` job, so the two tiers give independent feedback and a failure here blocks the PR.
 
 **What Database-Backed Component Tests Are Good At**:
 - ✅ Catching persistence bugs the in-memory provider's auto-tracking masks (silent no-op writes)

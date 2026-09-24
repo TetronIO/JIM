@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.PostgresData;
 using MockQueryable.Moq;
@@ -25,6 +26,7 @@ namespace JIM.Worker.Tests.Repositories;
 public class SchedulingRepositoryHeaderTests
 {
     private List<Schedule> _schedulesData = null!;
+    private List<Activity> _activitiesData = null!;
     private Mock<JimDbContext> _mockDbContext = null!;
     private PostgresDataRepository _repository = null!;
 
@@ -33,6 +35,7 @@ public class SchedulingRepositoryHeaderTests
     {
         TestUtilities.SetEnvironmentVariables();
         _schedulesData = new List<Schedule>();
+        _activitiesData = new List<Activity>();
     }
 
     [TearDown]
@@ -46,6 +49,7 @@ public class SchedulingRepositoryHeaderTests
         var mockDbSet = _schedulesData.BuildMockDbSet();
         _mockDbContext = new Mock<JimDbContext>();
         _mockDbContext.Setup(m => m.Schedules).Returns(mockDbSet.Object);
+        _mockDbContext.Setup(m => m.Activities).Returns(_activitiesData.BuildMockDbSet().Object);
         _repository = new PostgresDataRepository(_mockDbContext.Object);
     }
 
@@ -164,6 +168,68 @@ public class SchedulingRepositoryHeaderTests
             Assert.That(header.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Complete));
         }
     }
+
+    [Test]
+    public async Task GetScheduleHeadersAsync_LastExecutionCompleteWithError_ProjectsDistinctFailedStepIndicesAsync()
+    {
+        // #1787: the Schedules list names the steps a Complete With Error run carried on past.
+        var schedule = Schedule("Nightly HR sync", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var older = Execution(schedule, ScheduleExecutionStatus.CompleteWithError, new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+        var newest = Execution(schedule, ScheduleExecutionStatus.CompleteWithError, new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc));
+        schedule.Executions.AddRange(new[] { older, newest });
+        _schedulesData.Add(schedule);
+        _activitiesData.AddRange(new[]
+        {
+            StepActivity(older.Id, 0, ActivityStatus.FailedWithError),
+            StepActivity(newest.Id, 3, ActivityStatus.FailedWithError),
+            StepActivity(newest.Id, 1, ActivityStatus.CompleteWithError),
+            StepActivity(newest.Id, 3, ActivityStatus.Cancelled),
+            StepActivity(newest.Id, 2, ActivityStatus.CompleteWithWarning),
+            StepActivity(newest.Id, 0, ActivityStatus.Complete)
+        });
+        BuildRepository();
+
+        var result = await _repository.Scheduling.GetScheduleHeadersAsync(1, 10);
+
+        Assert.That(result.Results[0].LastExecutionFailedStepIndices, Is.EqualTo(new[] { 1, 3 }));
+    }
+
+    [Test]
+    public async Task GetScheduleHeadersAsync_LastExecutionNotCompleteWithError_ProjectsNoFailedStepIndicesAsync()
+    {
+        var schedule = Schedule("Stopped", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var failed = Execution(schedule, ScheduleExecutionStatus.Failed, new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc));
+        schedule.Executions.Add(failed);
+        _schedulesData.Add(schedule);
+        _activitiesData.Add(StepActivity(failed.Id, 1, ActivityStatus.FailedWithError));
+        BuildRepository();
+
+        var result = await _repository.Scheduling.GetScheduleHeadersAsync(1, 10);
+
+        Assert.That(result.Results[0].LastExecutionFailedStepIndices, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetScheduleHeadersAsync_ScheduleSetToContinue_ProjectsOnStepFailureAsync()
+    {
+        var schedule = Schedule("Carries on", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        schedule.OnStepFailure = ScheduleFailureBehaviour.Continue;
+        _schedulesData.Add(schedule);
+        BuildRepository();
+
+        var result = await _repository.Scheduling.GetScheduleHeadersAsync(1, 10);
+
+        Assert.That(result.Results[0].OnStepFailure, Is.EqualTo(ScheduleFailureBehaviour.Continue));
+    }
+
+    private static Activity StepActivity(Guid scheduleExecutionId, int stepIndex, ActivityStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        TargetName = "Full Import",
+        Status = status,
+        ScheduleExecutionId = scheduleExecutionId,
+        ScheduleStepIndex = stepIndex
+    };
 
     [Test]
     public async Task GetScheduleHeadersAsync_ScheduleWithSteps_ProjectsStepCountAsync()

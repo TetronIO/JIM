@@ -76,11 +76,12 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Metaverse](metaverse.md) | 21 | Query objects and their generated values, set passwords, manage schema types and attributes, set Attribute Priority, and review pending deletions |
 | [Password Synchronisation](password-synchronisation.md) | 3 | List, retry, and cancel queued password changes |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
-| [Schedules](schedules.md) | 11 | Automate synchronisation workflows with scheduled execution |
+| [Schedules](schedules.md) | 12 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
 | [Activities](activities.md) | 3 | Monitor operation history, statistics, and execution items |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
+| [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
 | [Previews](previews.md) | 6 | Preview a configuration change before saving it, and preview what synchronising one object would do |

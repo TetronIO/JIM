@@ -80,7 +80,7 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync();
@@ -98,7 +98,7 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync() as OkObjectResult;
@@ -125,7 +125,7 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync() as OkObjectResult;
@@ -147,12 +147,12 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         await _controller.GetAllAsync(scheduleId: scheduleId);
 
-        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true), Times.Once);
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true, null), Times.Once);
     }
 
     [Test]
@@ -165,12 +165,52 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 2,
             PageSize = 10
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false, null))
             .ReturnsAsync(pagedResult);
 
         await _controller.GetAllAsync(page: 2, pageSize: 10, sortBy: "queuedAt", sortDescending: false);
 
-        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false), Times.Once);
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false, null), Times.Once);
+    }
+
+    [Test]
+    public async Task GetAllAsync_WithStatusFilter_PassesStatusToRepositoryAsync()
+    {
+        // The status filter used to be accepted by Get-JIMScheduleExecution and silently dropped here, so every
+        // status came back whatever was asked for.
+        var pagedResult = new PagedResultSet<ScheduleExecution>
+        {
+            Results = new List<ScheduleExecution>(),
+            TotalResults = 0,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(
+                null, 1, 20, null, true, ScheduleExecutionStatus.CompleteWithError))
+            .ReturnsAsync(pagedResult);
+
+        await _controller.GetAllAsync(status: ScheduleExecutionStatus.CompleteWithError);
+
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(
+            null, 1, 20, null, true, ScheduleExecutionStatus.CompleteWithError), Times.Once);
+    }
+
+    [Test]
+    public async Task GetAllAsync_WithoutStatusFilter_PassesNullStatusToRepositoryAsync()
+    {
+        var pagedResult = new PagedResultSet<ScheduleExecution>
+        {
+            Results = new List<ScheduleExecution>(),
+            TotalResults = 0,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
+            .ReturnsAsync(pagedResult);
+
+        await _controller.GetAllAsync();
+
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null), Times.Once);
     }
 
     #endregion

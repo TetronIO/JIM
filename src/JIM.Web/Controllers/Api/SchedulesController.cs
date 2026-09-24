@@ -114,6 +114,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             TriggerType = request.TriggerType,
             CronExpression = request.CronExpression,
             IsEnabled = request.IsEnabled,
+            OnStepFailure = request.OnStepFailure ?? ScheduleFailureBehaviour.Stop,
             Created = DateTime.UtcNow,
             CreatedByType = initiatorType,
             CreatedById = initiatorId,
@@ -172,16 +173,25 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return BadRequest(new ApiErrorResponse { Message = $"The built-in schedule '{existingSchedule.Name}' cannot be renamed." });
         }
 
-        // A built-in schedule's steps are defined and maintained by JIM. Re-timing and enable/disable are
-        // allowed, but steps cannot be added, removed or replaced. Enforced here as a clean 400 and, as an
-        // authoritative backstop for any caller, in the application layer's step methods.
-        if (existingSchedule.BuiltIn)
+        // A built-in schedule's failure behaviour is JIM's, like its steps (#1787): it stays Stop. Sending the stored
+        // value back is not a change, so a client that round-trips the whole Schedule still works.
+        if (existingSchedule.BuiltIn && request.OnStepFailure.HasValue && request.OnStepFailure.Value != existingSchedule.OnStepFailure)
         {
-            var builtInSteps = await _application.Scheduler.GetScheduleStepsAsync(id);
-            if (BuiltInStepsWouldChange(builtInSteps, request.Steps))
-            {
-                return BadRequest(new ApiErrorResponse { Message = $"The steps of the built-in schedule '{existingSchedule.Name}' cannot be changed." });
-            }
+            return BadRequest(new ApiErrorResponse { Message = $"The failure behaviour of the built-in schedule '{existingSchedule.Name}' cannot be changed." });
+        }
+
+        // Each requested step's failure setting is resolved here, before any field of the Schedule is touched, because
+        // the write rule judges an existing step's continueOnFailure against the Schedule's setting as STORED, not as
+        // this request is about to change it (ScheduleStepFailureWriteRule).
+        var existingSteps = await _application.Scheduler.GetScheduleStepsAsync(id);
+        var resolvedOnFailure = ResolveStepFailureBehaviours(request.Steps, existingSteps, existingSchedule);
+
+        // A built-in schedule's steps are defined and maintained by JIM. Re-timing and enable/disable are
+        // allowed, but steps cannot be added, removed, replaced or given a failure setting of their own. Enforced here
+        // as a clean 400 and, as an authoritative backstop for any caller, in the application layer's step methods.
+        if (existingSchedule.BuiltIn && BuiltInStepsWouldChange(existingSteps, request.Steps, resolvedOnFailure))
+        {
+            return BadRequest(new ApiErrorResponse { Message = $"The steps of the built-in schedule '{existingSchedule.Name}' cannot be changed." });
         }
 
         // Validate request. For a built-in schedule the steps are JIM-owned and immutable (guarded above), so
@@ -203,6 +213,10 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         existingSchedule.TriggerType = request.TriggerType;
         existingSchedule.CronExpression = request.CronExpression;
         existingSchedule.IsEnabled = request.IsEnabled;
+        if (request.OnStepFailure.HasValue)
+        {
+            existingSchedule.OnStepFailure = request.OnStepFailure.Value;
+        }
         existingSchedule.LastUpdated = DateTime.UtcNow;
         existingSchedule.LastUpdatedByType = initiatorType;
         existingSchedule.LastUpdatedById = initiatorId;
@@ -213,7 +227,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         // immutable (guarded above); steps are only reconciled for user schedules.
         if (!existingSchedule.BuiltIn)
         {
-            await ReconcileScheduleStepsAsync(id, request.Steps, initiatorType, initiatorId, initiatorName);
+            await ReconcileScheduleStepsAsync(id, request.Steps, existingSteps, resolvedOnFailure, initiatorType, initiatorId, initiatorName);
         }
 
         await _application.Scheduler.UpdateScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName, changeReason: request.ChangeReason);
@@ -484,10 +498,33 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     }
 
     /// <summary>
-    /// Determines whether an update request would add, remove or replace any step of a built-in schedule.
-    /// The request is considered unchanged only when its steps map exactly onto the existing step Ids.
+    /// Resolves the failure setting each requested step that updates an existing step asks for, through the one write
+    /// rule (<see cref="ScheduleStepFailureWriteRule"/>), judged against the Schedule as stored. New steps are not in the
+    /// result; they resolve as new steps when they are created.
     /// </summary>
-    private static bool BuiltInStepsWouldChange(List<ScheduleStep> existingSteps, List<ScheduleStepRequest> requestedSteps)
+    private static Dictionary<ScheduleStepRequest, ScheduleStepFailureBehaviour> ResolveStepFailureBehaviours(
+        List<ScheduleStepRequest> requestedSteps,
+        List<ScheduleStep> existingSteps,
+        Schedule storedSchedule)
+    {
+        var existingById = existingSteps.ToDictionary(s => s.Id);
+        return requestedSteps
+            .Where(stepRequest => stepRequest.Id.HasValue && existingById.ContainsKey(stepRequest.Id.Value))
+            .ToDictionary<ScheduleStepRequest, ScheduleStepRequest, ScheduleStepFailureBehaviour>(
+                stepRequest => stepRequest,
+                stepRequest => ScheduleStepFailureWriteRule.Resolve(stepRequest, existingById[stepRequest.Id!.Value], storedSchedule),
+                ReferenceEqualityComparer.Instance);
+    }
+
+    /// <summary>
+    /// Determines whether an update request would add, remove or replace any step of a built-in schedule, or change an
+    /// existing step's failure setting. The request is considered unchanged only when its steps map exactly onto the
+    /// existing step Ids and each resolves to the failure setting it already has.
+    /// </summary>
+    private static bool BuiltInStepsWouldChange(
+        List<ScheduleStep> existingSteps,
+        List<ScheduleStepRequest> requestedSteps,
+        Dictionary<ScheduleStepRequest, ScheduleStepFailureBehaviour> resolvedOnFailure)
     {
         var existingIds = existingSteps.Select(s => s.Id).ToHashSet();
         var requestedIds = requestedSteps
@@ -499,8 +536,11 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         var addsOrReplaces = requestedSteps.Any(s => !s.Id.HasValue || s.Id.Value == Guid.Empty || !existingIds.Contains(s.Id.Value));
         // An existing step absent from the request is a removal.
         var removes = existingIds.Any(existingId => !requestedIds.Contains(existingId));
+        // An existing step asked for a failure setting other than the one it has (the Built-in Schedule's steps follow it).
+        var existingOnFailure = existingSteps.ToDictionary(s => s.Id, s => s.OnFailure);
+        var changesFailureBehaviour = resolvedOnFailure.Any(r => r.Value != existingOnFailure[r.Key.Id!.Value]);
 
-        return addsOrReplaces || removes;
+        return addsOrReplaces || removes || changesFailureBehaviour;
     }
 
     /// <summary>
@@ -511,11 +551,12 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     private async Task ReconcileScheduleStepsAsync(
         Guid id,
         List<ScheduleStepRequest> requestedSteps,
+        List<ScheduleStep> existingSteps,
+        Dictionary<ScheduleStepRequest, ScheduleStepFailureBehaviour> resolvedOnFailure,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
     {
-        var existingSteps = await _application.Scheduler.GetScheduleStepsAsync(id);
         var existingStepIds = existingSteps.Select(s => s.Id).ToHashSet();
         var requestStepIds = requestedSteps
             .Where(s => s.Id.HasValue && s.Id.Value != Guid.Empty)
@@ -541,7 +582,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
                     existingStep.Name = stepRequest.Name;
                     existingStep.ExecutionMode = stepRequest.ExecutionMode;
                     existingStep.StepType = stepRequest.StepType;
-                    existingStep.ContinueOnFailure = stepRequest.ContinueOnFailure;
+                    existingStep.OnFailure = resolvedOnFailure[stepRequest];
                     existingStep.Timeout = stepRequest.TimeoutSeconds.HasValue
                         ? TimeSpan.FromSeconds(stepRequest.TimeoutSeconds.Value)
                         : null;

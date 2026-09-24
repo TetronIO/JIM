@@ -12,6 +12,7 @@ using JIM.Models.Activities;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.PostgresData;
+using JIM.TestSupport;
 using JIM.Worker.Tests.Connectors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -71,15 +72,7 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
     [SetUp]
     public async Task SetUp()
     {
-        await using var ctx = NewContext();
-        await ctx.Database.ExecuteSqlRawAsync(@"
-            DO $$
-            DECLARE r RECORD;
-            BEGIN
-                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '__EFMigrationsHistory') LOOP
-                    EXECUTE 'TRUNCATE TABLE ""' || r.tablename || '"" RESTART IDENTITY CASCADE';
-                END LOOP;
-            END $$;");
+        await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
     #region Object Type extensions

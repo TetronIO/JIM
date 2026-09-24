@@ -461,4 +461,64 @@ public class ServiceSettingsControllerTests
     }
 
     #endregion
+
+    #region Feature flag exclusion (#1781)
+
+    [Test]
+    public async Task GetAllAsync_ExcludesFeatureFlagSettingsAsync()
+    {
+        _mockServiceSettingsRepo.Setup(r => r.GetAllSettingsAsync()).ReturnsAsync(new List<ServiceSetting>
+        {
+            new() { Key = "Test.Setting", DisplayName = "Test", Category = ServiceSettingCategory.Synchronisation, ValueType = ServiceSettingValueType.Boolean },
+            new() { Key = "Features.SomeFlag", DisplayName = "Some Flag", Category = ServiceSettingCategory.FeatureFlags, ValueType = ServiceSettingValueType.Boolean }
+        });
+
+        var result = await _controller.GetAllAsync() as OkObjectResult;
+        var settings = (result?.Value as IEnumerable<ServiceSettingDto>)?.ToList();
+
+        Assert.That(settings, Is.Not.Null);
+        Assert.That(settings!.Select(s => s.Key), Does.Not.Contain("Features.SomeFlag"));
+        Assert.That(settings!.Select(s => s.Key), Does.Contain("Test.Setting"));
+    }
+
+    [Test]
+    public async Task GetByKeyAsync_FeatureFlagKey_RefusesWithBadRequestAsync()
+    {
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync("Features.SomeFlag")).ReturnsAsync(new ServiceSetting
+        {
+            Key = "Features.SomeFlag", DisplayName = "Some Flag", Category = ServiceSettingCategory.FeatureFlags, ValueType = ServiceSettingValueType.Boolean
+        });
+
+        var result = await _controller.GetByKeyAsync("Features.SomeFlag");
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateAsync_FeatureFlagKey_RefusesWithBadRequestAsync()
+    {
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync("Features.SomeFlag")).ReturnsAsync(new ServiceSetting
+        {
+            Key = "Features.SomeFlag", DisplayName = "Some Flag", Category = ServiceSettingCategory.FeatureFlags, ValueType = ServiceSettingValueType.Boolean
+        });
+
+        var result = await _controller.UpdateAsync("Features.SomeFlag", new ServiceSettingUpdateRequestDto { Value = "true" });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task RevertAsync_FeatureFlagKey_RefusesWithBadRequestAsync()
+    {
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync("Features.SomeFlag")).ReturnsAsync(new ServiceSetting
+        {
+            Key = "Features.SomeFlag", DisplayName = "Some Flag", Category = ServiceSettingCategory.FeatureFlags, ValueType = ServiceSettingValueType.Boolean
+        });
+
+        var result = await _controller.RevertAsync("Features.SomeFlag");
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    #endregion
 }

@@ -309,6 +309,14 @@ public interface IActivityRepository
     public Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId);
 
     /// <summary>
+    /// Gets the Activities of a Schedule Execution whose step did not succeed (#1787): it failed outright, completed with
+    /// errors, or was cancelled (<see cref="JIM.Models.Scheduling.ScheduleFailureHandling.FailedStepOutcomes"/>), ordered
+    /// by step index. Warnings are not failures. Read when a run reaches its end, to decide between Complete and
+    /// Complete With Error and to name each failed step.
+    /// </summary>
+    public Task<List<Activity>> GetFailedScheduleExecutionActivitiesAsync(Guid scheduleExecutionId);
+
+    /// <summary>
     /// Gets all activities for a specific step within a schedule execution.
     /// A step may have multiple activities if it runs multiple Run Profiles in parallel.
     /// </summary>

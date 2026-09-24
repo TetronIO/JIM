@@ -30,6 +30,11 @@ public class SchedulerServerStepAdvancementTests
     private Mock<IActivityRepository> _mockActivityRepository = null!;
     private JimApplication _application = null!;
 
+    /// <summary>
+    /// Every Activity recorded against the executions so far, as the repository would hold them.
+    /// </summary>
+    private List<Activity> _recordedActivities = null!;
+
     [SetUp]
     public void SetUp()
     {
@@ -44,6 +49,13 @@ public class SchedulerServerStepAdvancementTests
 
         _application = new JimApplication(_mockRepository.Object);
         _mockSchedulingRepository.EmulateConditionalTransitions();
+
+        _recordedActivities = new List<Activity>();
+        _mockActivityRepository.Setup(r => r.GetFailedScheduleExecutionActivitiesAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid executionId) => _recordedActivities
+                .Where(a => a.ScheduleExecutionId == executionId && ScheduleFailureHandling.IsFailedStepOutcome(a.Status))
+                .OrderBy(a => a.ScheduleStepIndex)
+                .ToList());
     }
 
     [TearDown]
@@ -114,7 +126,7 @@ public class SchedulerServerStepAdvancementTests
             StepIndex = 1,
             StepType = ScheduleStepType.TemporalScopeReconciliation,
             Name = "Reconcile Temporal Scope",
-            ContinueOnFailure = false
+            OnFailure = ScheduleStepFailureBehaviour.FollowSchedule
         };
         var execution = SetUpExecution(ScheduleExecutionStatus.InProgress, currentStepIndex: 1, RunProfileStep(0), step, RunProfileStep(2));
         var failure = Outcome(step, ActivityStatus.FailedWithError);
@@ -200,7 +212,8 @@ public class SchedulerServerStepAdvancementTests
         StepType = ScheduleStepType.RunProfile,
         ConnectedSystemId = 1,
         RunProfileId = 100,
-        ContinueOnFailure = continueOnFailure
+        // A step set to continue overrides the Schedule; otherwise it follows the Schedule, which stops (the default).
+        OnFailure = continueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule
     };
 
     private ScheduleExecution SetUpExecution(ScheduleExecutionStatus status, int currentStepIndex, params ScheduleStep[] steps)
@@ -230,6 +243,9 @@ public class SchedulerServerStepAdvancementTests
             .ReturnsAsync(new List<WorkerTask>());
         _mockActivityRepository.Setup(r => r.GetActivitiesByScheduleExecutionStepAsync(executionId, stepIndex))
             .ReturnsAsync(activities.ToList());
+        foreach (var activity in activities)
+            activity.ScheduleExecutionId = executionId;
+        _recordedActivities.AddRange(activities);
     }
 
     private static Activity Outcome(ScheduleStep step, ActivityStatus status, string? connectedSystemName = null, string? runProfileName = null) => new()

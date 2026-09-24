@@ -350,9 +350,9 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.14.0, )",
-          "JIM.Scim": "[0.14.0, )",
-          "JIM.Utilities": "[0.14.0, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Scim": "[0.15.0-dev.20260924.887, )",
+          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
           "Microsoft.Data.SqlClient": "[7.1.0, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.301, )",
           "System.DirectoryServices.Protocols": "[10.0.12, )"
@@ -361,7 +361,7 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0, )"
+          "JIM.Models": "[0.15.0-dev.20260924.887, )"
         }
       },
       "jim.models": {
@@ -374,14 +374,14 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0, )",
-          "JIM.Utilities": "[0.14.0, )"
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Utilities": "[0.15.0-dev.20260924.887, )"
         }
       },
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
           "Serilog": "[4.4.0, )"
         }
       }

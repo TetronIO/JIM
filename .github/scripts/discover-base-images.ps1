@@ -107,18 +107,10 @@ foreach ($dockerfile in $dockerfiles) {
             continue
         }
 
-        # Skip build-arg references (e.g. "FROM ${OPENAPI_STAGE} AS final-source").
-        # These are resolved at build time to one of the file's own stage aliases
-        # via --build-arg, never to an external image. JIM.Web/Dockerfile uses this
-        # pattern to optionally bypass the OpenAPI doc-generation stage in local
-        # dev builds. Verifying the resolution would require executing the build,
-        # which is out of scope for static discovery.
-        if ($imageRef -match '^\$\{[A-Z_][A-Z0-9_]*\}$') {
-            Write-Host "  line ${lineNumber}: build-arg reference '$imageRef' (skipped)"
-            continue
-        }
-
-        # Enforce the digest-pinning policy.
+        # Enforce the digest-pinning policy. A build-argument reference ("FROM ${IMAGE}")
+        # fails it too: the argument can name any image, pinned or not, so nothing here can
+        # vouch for it. JIM.Web's Dockerfile switched stages that way (FROM ${OPENAPI_STAGE})
+        # and was exempted until the switch was removed.
         if ($imageRef -notmatch '@sha256:[0-9a-f]{64}') {
             $policyViolations += "${relativePath}:${lineNumber}: FROM $imageRef is not digest-pinned"
             Write-Host "  line ${lineNumber}: $imageRef (POLICY VIOLATION: not digest-pinned)"
@@ -184,12 +176,15 @@ foreach ($r in $deduped) {
 # the apt pins and the build-time apt-get upgrade; a base image scan sees neither. The
 # image name comes from the project directory (src/JIM.Web -> jim-web), which is the name
 # release.yml publishes under, so a finding here and a finding at release time name the
-# same thing.
+# same thing. startup_log is the line the service logs first when it starts ("Starting
+# JIM.Web", from the project name), which the scan job's smoke test waits for; release.yml's
+# smoke test waits for the same lines.
 $imageLegs = @($results | Sort-Object dockerfile -Unique | ForEach-Object {
     $projectDir = Split-Path (Split-Path $_.dockerfile -Parent) -Leaf
     [pscustomobject]@{
-        dockerfile = $_.dockerfile
-        image_name = ($projectDir.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+        dockerfile  = $_.dockerfile
+        image_name  = ($projectDir.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+        startup_log = "Starting $projectDir"
     }
 })
 Write-Host "Production images to build and scan: $($imageLegs.Count)"

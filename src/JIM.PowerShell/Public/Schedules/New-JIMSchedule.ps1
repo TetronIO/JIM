@@ -57,6 +57,12 @@ function New-JIMSchedule {
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Schedule's change history.
 
+    .PARAMETER OnStepFailure
+        What the Schedule does when a step fails, for every step that follows the Schedule:
+        - Stop (the default): the remaining steps do not run, and the run ends Failed
+        - Continue: the remaining steps run, and a run that carried on past a failure ends CompleteWithError
+        A step with a setting of its own (Add-JIMScheduleStep -OnFailure) overrides it.
+
     .PARAMETER PassThru
         If specified, returns the created Schedule object.
 
@@ -82,6 +88,11 @@ function New-JIMSchedule {
         New-JIMSchedule -Name "Custom Schedule" -TriggerType Cron -PatternType Custom -CronExpression "0 */4 * * 1-5"
 
         Creates a schedule with a custom cron expression (every 4 hours on weekdays).
+
+    .EXAMPLE
+        New-JIMSchedule -Name "Nightly HR sync" -TriggerType Manual -OnStepFailure Continue
+
+        Creates a schedule that carries on past a failed step, reporting the run as CompleteWithError.
 
     .LINK
         Get-JIMSchedule
@@ -136,6 +147,10 @@ function New-JIMSchedule {
         [switch]$Enabled,
 
         [Parameter()]
+        [ValidateSet('Stop', 'Continue')]
+        [string]$OnStepFailure,
+
+        [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
 
@@ -166,6 +181,11 @@ function New-JIMSchedule {
 
             if ($Description) {
                 $body.description = $Description
+            }
+
+            # Only sent when supplied; the API defaults an absent onStepFailure to Stop.
+            if ($OnStepFailure) {
+                $body.onStepFailure = $OnStepFailure
             }
 
             if ($PSBoundParameters.ContainsKey('ChangeReason')) {

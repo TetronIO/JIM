@@ -157,6 +157,21 @@ public class OperationsSchedulesTabTests : JimComponentTestContext
         });
     }
 
+    [Test]
+    public void OperationsSchedulesTab_LastRunCompleteWithError_OutcomeNamesTheFailedSteps()
+    {
+        // #1787: a run that continued past failures must not read as a clean run; the chip names the steps.
+        var schedule = Schedule("Nightly Directory Synchronisation");
+        schedule.LastExecutionId = Guid.NewGuid();
+        schedule.LastExecutionStatus = ScheduleExecutionStatus.CompleteWithError;
+        schedule.LastExecutionFailedStepIndices = [1, 2];
+        ArrangeWindow([schedule], 1);
+
+        var cut = Render<OperationsSchedulesTab>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Complete With Error on steps 2 and 3")));
+    }
+
     private sealed class FakeJimApplicationFactory(JimApplication jimApplication) : IJimApplicationFactory
     {
         public JimApplication Create() => jimApplication;

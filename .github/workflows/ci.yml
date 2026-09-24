@@ -1,5 +1,5 @@
 # CI workflow - builds, tests, and scans for vulnerabilities
-# Runs on pushes to main and all pull requests
+# Runs on pushes to main and all pull requests, and nightly on main (image jobs only)
 
 name: CI
 
@@ -7,6 +7,20 @@ on:
   push:
     branches: [ "main" ]
   pull_request:  # This will run on ALL pull requests regardless of source/target branch
+  # Nightly, main only (a scheduled run always uses the default branch), and only the image jobs:
+  # discover-base-images, scan-images and their summary. Everything else in this file depends only
+  # on the commit, which a push has already tested. The images also depend on what they pull from
+  # outside at build time (the noble archive through apt-get upgrade, the unpinned curl and
+  # iputils-ping), and that can break or go stale with no commit at all: #1374 was main failing to
+  # build for two days with every check green. apt-pin-check probes the pinned packages daily;
+  # this builds, starts and scans the whole image. It also reports a newly published fix for a
+  # HIGH/CRITICAL CVE within a day instead of on whichever PR happens to run next. Scheduled runs
+  # use GitHub-hosted runners (the runs-on expressions below send only push to the self-hosted
+  # host), and GitHub notifies whoever last edited this cron line when one fails. 00:30 UTC, just
+  # after the APT_REFRESH date turns over, so the day's first build of the apt layer lands in the
+  # cache before the working day's PRs need it.
+  schedule:
+    - cron: '30 0 * * *'
 
 permissions:
   contents: read
@@ -31,6 +45,8 @@ jobs:
     # infrastructure. The org runner group must also allowlist this workflow at
     # refs/heads/main only, so that a fork PR editing this expression still cannot
     # reach the runner. Every job in this file uses the same expression.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
@@ -91,14 +107,17 @@ jobs:
     #
     # It is a required check because the alternative was demonstrated: #1238 shipped a
     # cycle between ConnectedSystemObjectType and its tags, every check passed, and no
-    # release image could be built until it was found by hand days later. Local builds do
-    # not cover it either, deliberately: jim-build passes OPENAPI_STAGE=publish to skip
-    # the stage because it costs minutes.
+    # release image could be built until it was found by hand days later. The jim-web
+    # scan-images leg now builds the in-image stage on every PR as well (#1798), and local
+    # and integration builds run it too, so this job is no longer the only guard; it stays
+    # because it is a named required check and is the quickest to diagnose from.
     #
-    # Its own job rather than a step in build-and-test: generation alone takes about five
-    # minutes (measured in both Debug and Release; it is the schema walk over the model
-    # graph, not the build), and it needs nothing the tests produce. Run alongside them
-    # it costs no wall clock; appended to them it would add five minutes to every PR.
+    # Its own job rather than a step in build-and-test, so it runs alongside the tests
+    # rather than after them. Generation used to take about five minutes, which is why it
+    # was split out; it now takes 10 to 15 seconds after the build (September 2026 runs),
+    # and the job's time is almost all that build.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
@@ -126,6 +145,8 @@ jobs:
     # unset); here they execute, guarding provider-specific and raw-SQL behaviour the
     # EF Core in-memory provider cannot reproduce (the class of bug behind #849/#850).
     # See issue #861. Runs on every PR so a failure blocks the merge.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     services:
@@ -143,17 +164,20 @@ jobs:
         # JIM-Bench run) with its own PostgreSQL on the same port at the same moment.
         ports:
           - 5432
-        # Hold the job's steps until PostgreSQL is accepting connections.
+        # Hold the job's steps until PostgreSQL is accepting connections. -U names a role that
+        # exists: without it pg_isready connects as the runner's OS user, and the server logs
+        # 'role "root" does not exist' every ten seconds into the service log this job is
+        # diagnosed from.
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     # The RequiresPostgres fixtures read these to build the connection string and to
     # opt in (JIM_TEST_RESET_DB being set is what flips them from Assert.Ignore to run).
-    # jim_test is a throwaway database: each fixture migrates the schema once and
-    # TRUNCATEs every table between tests.
+    # jim_test is a throwaway database: each fixture migrates the schema once and empties
+    # every table between tests (PostgresTestDatabase.ResetAsync in JIM.TestSupport).
     env:
       JIM_TEST_RESET_HOST: localhost
       JIM_TEST_RESET_USER: postgres
@@ -161,6 +185,23 @@ jobs:
       JIM_TEST_RESET_DB: jim_test
 
     steps:
+    # The database is discarded when the job ends, so durability buys nothing here, and paying
+    # for it made the job hostage to the runner's disk: on slow-disk runners PostgreSQL's
+    # checkpoints took 40 to 50 seconds each and every test ran about 4.5 times slower, the likely
+    # source of the 25 to 39 minute runs. A service container cannot be given server
+    # arguments, so the settings go in through ALTER SYSTEM; all three take effect on reload.
+    # The container id is passed via env rather than interpolated into the script.
+    - name: Relax durability on the throwaway database
+      env:
+        POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+      run: |
+        docker exec "$POSTGRES_CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 \
+          -c "ALTER SYSTEM SET fsync = off" \
+          -c "ALTER SYSTEM SET synchronous_commit = off" \
+          -c "ALTER SYSTEM SET full_page_writes = off" \
+          -c "SELECT pg_reload_conf()"
+        docker exec "$POSTGRES_CONTAINER" psql -U postgres -tA \
+          -c "SELECT name || ' = ' || setting FROM pg_settings WHERE name IN ('fsync', 'synchronous_commit', 'full_page_writes') ORDER BY name"
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     - name: Setup .NET
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
@@ -195,6 +236,8 @@ jobs:
     # LDAPTLS_REQCERT must never be set here: it would disable libldap certificate
     # validation for the whole process and turn every refusal case into a false pass,
     # which is the exact defect class this job exists to catch. A guard step asserts it.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
@@ -278,6 +321,14 @@ jobs:
     # matrix comes from discover-base-images, so adding a new production Dockerfile
     # requires zero changes to this workflow: just add the
     # "# jim-compliance: production-image" directive to the new file.
+    #
+    # Each leg also starts the built image and waits for its startup log line, the smoke
+    # test release.yml runs before it pushes, so an image that builds but cannot start
+    # (a wrong ENTRYPOINT, a missing native library, a runtime the published output does not
+    # match) fails the PR rather than the release.
+    #
+    # Named explicitly so the matrix's startup_log does not leak into the check names.
+    name: scan-images (${{ matrix.dockerfile }}, ${{ matrix.image_name }})
     needs: discover-base-images
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     permissions:
@@ -310,9 +361,10 @@ jobs:
 
     # Same action, pins and cache scope as the release build, so a PR's build warms the
     # cache the release will use and vice versa. The image is loaded into the local
-    # daemon for Trivy to read via --image-src docker; nothing is pushed. OPENAPI_STAGE
-    # skips the JIM.Web OpenAPI generation stage, which costs about five minutes and
-    # contributes nothing to what is scanned; the openapi-document job proves it separately.
+    # daemon for Trivy to read via --image-src docker; nothing is pushed. JIM.Web builds with its
+    # OpenAPI generation stage, as the release does: that stage boots the app inside the image to
+    # write the document, and was otherwise first run at release time (the openapi-document job
+    # generates the document outside the image, with a different base and environment).
     # The base stage's apt-get upgrade has to run against the live noble archive, and served from
     # the cache that layer is replayed as it stood when it last ran (Dockerfile and digest
     # unchanged): the "upgraded" images carried fixes up to two weeks stale and Trivy reported 31
@@ -327,6 +379,7 @@ jobs:
       run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
 
     - name: Build image
+      id: build
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
       with:
         builder: ${{ steps.buildx.outputs.name }}
@@ -336,7 +389,6 @@ jobs:
         tags: ${{ matrix.image_name }}:scan
         build-args: |
           VERSION=scan
-          OPENAPI_STAGE=publish
           APT_REFRESH=${{ steps.apt_refresh.outputs.date }}
         cache-from: type=gha,scope=${{ matrix.image_name }}
         cache-to: type=gha,scope=${{ matrix.image_name }},mode=max
@@ -473,6 +525,53 @@ jobs:
         # next upload rather than sitting orphaned under a category that is
         # never uploaded again. See discover-base-images.ps1.
         category: trivy-image-${{ matrix.image_name }}
+
+    # Start the image just built and wait for the line the service logs first ("Starting JIM.Web" and
+    # so on, from the matrix), as release.yml's smoke test does before it pushes. Dummy database
+    # settings are enough: each service logs that line before it connects, then fails to connect,
+    # which is expected here. Runs whether or not the CVE gate passed, so the two signals stay
+    # independent. The container name is unique per image and run because push runs share one
+    # Docker daemon on the self-hosted host, and the trap removes it however the step ends. The
+    # matrix values reach the script through env, never interpolated into it.
+    - name: Smoke test the image
+      if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+      env:
+        IMAGE: ${{ matrix.image_name }}:scan
+        STARTUP_LOG: ${{ matrix.startup_log }}
+        NAME: smoke-test-${{ matrix.image_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        trap 'docker rm -f "$NAME" > /dev/null 2>&1 || true' EXIT
+        docker run -d --name "$NAME" \
+          -e JIM_DB_HOSTNAME=localhost \
+          -e JIM_DB_NAME=jim \
+          -e JIM_DB_USERNAME=jim \
+          -e JIM_DB_PASSWORD=dummy \
+          -e JIM_LOG_LEVEL=Information \
+          -e JIM_LOG_PATH=/tmp/jim-logs \
+          "$IMAGE" > /dev/null
+
+        # Up to 30 seconds (a cold start on a hosted runner is slower than on the release host),
+        # but no longer than the container lives: one that has exited without the line never will.
+        for _ in $(seq 1 30); do
+          if docker logs "$NAME" 2>&1 | grep -qF "$STARTUP_LOG"; then
+            echo "Startup log found: $STARTUP_LOG"
+            exit 0
+          fi
+          if [ "$(docker inspect --format '{{.State.Running}}' "$NAME")" != "true" ]; then
+            break
+          fi
+          sleep 1
+        done
+
+        # Once more, in case the line landed between the last check and the container exiting.
+        if docker logs "$NAME" 2>&1 | grep -qF "$STARTUP_LOG"; then
+          echo "Startup log found: $STARTUP_LOG"
+          exit 0
+        fi
+
+        echo "::error title=Image did not start::$IMAGE did not log \"$STARTUP_LOG\". Its output follows."
+        docker logs "$NAME" 2>&1 | tail -n 100
+        exit 1
 
   scan-base-images-summary:
     # Stable-name gate for the dynamic scan-images matrix, providing the single

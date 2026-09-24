@@ -133,6 +133,7 @@
         'Disable-JIMSchedule',
         'Start-JIMSchedule',
         'Add-JIMScheduleStep',
+        'Set-JIMScheduleStep',
         'Remove-JIMScheduleStep',
 
         # Schedule Executions
@@ -251,6 +252,11 @@
         'Get-JIMServiceSetting',
         'Set-JIMServiceSetting',
         'Reset-JIMServiceSetting',
+
+        # Feature Flags
+        'Get-JIMFeature',
+        'Enable-JIMFeature',
+        'Disable-JIMFeature',
 
         # System
         'Get-JIMHealth',

@@ -29,8 +29,11 @@ Settings are grouped by concern:
 - **Maintenance**<br /> Maintenance mode and system health settings.
 - **History**<br /> Audit history retention and cleanup settings.
 - **Security**<br /> Credential encryption and [API rate limiting](../api/rate-limiting.md) settings.
+- **Preview Features**<br /> Feature flags: features JIM is rolling out gradually. See below.
 
 The category is mostly a UI grouping; it does not change semantics.
+
+**Preview Features is a category apart.** JIM's feature flags are stored as Service Settings under the hood, and the portal's Service Settings table shows them as ordinary rows under this category, exactly like any other setting (a row's value, status and edit/revert actions work the same way; see [Preview features](../administration/preview-features.md) for what the tier chip beside a flag's name means). Everywhere else, a flag is treated apart from the generic settings surfaces: `api/v1/service-settings` and `Get-JIMServiceSetting`/`Set-JIMServiceSetting`/`Reset-JIMServiceSetting` all exclude and refuse Preview Features rows, because a flag changes only through the dedicated feature-flag surfaces (the portal table included), which enforce rules the generic surfaces do not know about, such as a flag's tier and who is allowed to turn it on. Reverting a flag to default (in the portal, or via `Disable-JIMFeature`) turns it explicitly off, rather than clearing it back to an unset state, since every flag's default is off.
 
 ## Reverting
 

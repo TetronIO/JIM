@@ -84,6 +84,13 @@ public class CreateScheduleRequest
     public bool IsEnabled { get; set; }
 
     /// <summary>
+    /// What the Schedule does when a step fails, for every step that follows the Schedule: <c>Stop</c> ends the run
+    /// (Failed), <c>Continue</c> runs the remaining steps (Complete With Error). A step with a setting of its own
+    /// (a step's <c>onFailure</c>) overrides it. Omit for the default, <c>Stop</c>.
+    /// </summary>
+    public ScheduleFailureBehaviour? OnStepFailure { get; set; }
+
+    /// <summary>
     /// The steps to include in this schedule.
     /// </summary>
     public List<ScheduleStepRequest> Steps { get; set; } = new();
@@ -173,6 +180,13 @@ public class UpdateScheduleRequest
     public bool IsEnabled { get; set; }
 
     /// <summary>
+    /// What the Schedule does when a step fails, for every step that follows the Schedule: <c>Stop</c> or
+    /// <c>Continue</c>. Omit (or send null) to leave it unchanged. A built-in Schedule's setting cannot be changed; sending
+    /// its current value is accepted.
+    /// </summary>
+    public ScheduleFailureBehaviour? OnStepFailure { get; set; }
+
+    /// <summary>
     /// The complete list of steps for this schedule.
     /// Existing steps not in this list will be deleted.
     /// </summary>
@@ -222,9 +236,23 @@ public class ScheduleStepRequest
     public ScheduleStepType StepType { get; set; }
 
     /// <summary>
-    /// Whether to continue the schedule if this step fails.
+    /// What this step does to the Schedule when it fails: <c>FollowSchedule</c> (the Schedule's
+    /// <c>onStepFailure</c> decides), <c>Stop</c> or <c>Continue</c>. When supplied it wins, and
+    /// <c>continueOnFailure</c> is ignored. When omitted, a new step follows the Schedule unless
+    /// <c>continueOnFailure</c> is true, and an existing step keeps its setting unless
+    /// <c>continueOnFailure</c> asks for the opposite of what it does now.
     /// </summary>
-    public bool ContinueOnFailure { get; set; }
+    public ScheduleStepFailureBehaviour? OnFailure { get; set; }
+
+    /// <summary>
+    /// The earlier way to set failure behaviour, kept for existing clients; prefer <c>onFailure</c>. Ignored when
+    /// <c>onFailure</c> is supplied. Otherwise, for a new step, <c>true</c> means <c>Continue</c> and <c>false</c>
+    /// or omitted means <c>FollowSchedule</c>. For an existing step, omitted or equal to what the step does now (its
+    /// effective behaviour, as <c>continueOnFailure</c> reads on a GET, judged against the Schedule's setting before this
+    /// update) leaves the step's setting unchanged, so sending back what a GET returned changes nothing; a value that
+    /// differs sets <c>Continue</c> (true) or <c>Stop</c> (false) on the step.
+    /// </summary>
+    public bool? ContinueOnFailure { get; set; }
 
     /// <summary>
     /// Optional timeout for this step in seconds.
@@ -299,7 +327,8 @@ public class ScheduleStepRequest
     public string? SqlScriptPath { get; set; }
 
     /// <summary>
-    /// Converts this request to a ScheduleStep entity.
+    /// Converts this request to a new ScheduleStep entity, resolving its failure setting through
+    /// <see cref="ScheduleStepFailureWriteRule"/> as a new step.
     /// </summary>
     public ScheduleStep ToEntity(Guid scheduleId)
     {
@@ -311,7 +340,7 @@ public class ScheduleStepRequest
             Name = Name,
             ExecutionMode = ExecutionMode,
             StepType = StepType,
-            ContinueOnFailure = ContinueOnFailure,
+            OnFailure = ScheduleStepFailureWriteRule.Resolve(this, existingStep: null, storedSchedule: null),
             Timeout = TimeoutSeconds.HasValue ? TimeSpan.FromSeconds(TimeoutSeconds.Value) : null,
             // RunProfile
             ConnectedSystemId = ConnectedSystemId,
