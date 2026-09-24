@@ -4,6 +4,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -242,11 +243,15 @@
 
                                 <MudDivider Class="my-2" />
 
-                                @* TODO(#1787 stage 2): replace this switch with the three-way "When this step fails" select. *@
-                                <MudSwitch T="bool" Value="@(_editingStep.OnFailure == ScheduleStepFailureBehaviour.Continue)"
-                                           ValueChanged="@((bool continueOnFailure) => _editingStep.OnFailure = continueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule)"
-                                           Color="Color.Warning"
-                                           Label="@(_editingStep.OnFailure == ScheduleStepFailureBehaviour.Continue ? "Continue schedule if this step fails" : "Stop schedule if this step fails")" />
+                                @* Following the Schedule is the default, so a Schedule set to continue also covers steps added
+                                   later; the option states the Schedule's current setting so nobody has to leave the step to check. *@
+                                <MudSelect T="ScheduleStepFailureBehaviour" @bind-Value="_editingStep.OnFailure" Label="When this step fails"
+                                           Variant="Variant.Outlined" ToStringFunc="@DescribeStepFailureOption"
+                                           HelperText="Follow the Schedule unless this step needs to behave differently.">
+                                    <MudSelectItem Value="ScheduleStepFailureBehaviour.FollowSchedule">@DescribeStepFailureOption(ScheduleStepFailureBehaviour.FollowSchedule)</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepFailureBehaviour.Stop">@DescribeStepFailureOption(ScheduleStepFailureBehaviour.Stop)</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepFailureBehaviour.Continue">@DescribeStepFailureOption(ScheduleStepFailureBehaviour.Continue)</MudSelectItem>
+                                </MudSelect>
 
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                                     <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
@@ -265,7 +270,18 @@
                                     This is a built-in schedule; its steps are managed by JIM and cannot be added, edited, reordered or removed.
                                 </MudAlert>
                             }
-                            else
+
+                            @* The Schedule's own failure setting, which every step follows unless it sets its own (#1787).
+                               A built-in Schedule's is fixed, like its steps. *@
+                            <MudSelect T="ScheduleFailureBehaviour" Value="_schedule.OnStepFailure" ValueChanged="HandleScheduleFailureBehaviourChanged"
+                                       Label="When a step fails" Variant="Variant.Outlined" Disabled="@_schedule.BuiltIn"
+                                       ToStringFunc="@ScheduleFailureBehaviourDisplay.ScheduleOption"
+                                       HelperText="@(_schedule.BuiltIn ? "This is a built-in Schedule; JIM manages what happens when one of its steps fails." : "Applies to every step, unless a step sets its own.")">
+                                <MudSelectItem Value="ScheduleFailureBehaviour.Stop">@ScheduleFailureBehaviourDisplay.ScheduleOption(ScheduleFailureBehaviour.Stop)</MudSelectItem>
+                                <MudSelectItem Value="ScheduleFailureBehaviour.Continue">@ScheduleFailureBehaviourDisplay.ScheduleOption(ScheduleFailureBehaviour.Continue)</MudSelectItem>
+                            </MudSelect>
+
+                            @if (!_schedule.BuiltIn)
                             {
                                 <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
@@ -329,9 +345,12 @@
                                             <div class="jim-step-block-content">
                                                 <div class="jim-step-item-in-block">
                                                     @{ var (runProfileName, connectedSystemName) = GetStepDisplayTexts(step); }
-                                                    <MudText Typo="Typo.body2">
-                                                        <span class="jim-text-emphasis">@connectedSystemName</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfileName</span>
-                                                    </MudText>
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                        <MudText Typo="Typo.body2" Style="flex: 1;">
+                                                            <span class="jim-text-emphasis">@connectedSystemName</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfileName</span>
+                                                        </MudText>
+                                                        @FailureBehaviourIndicator(step)
+                                                    </MudStack>
                                                 </div>
                                             </div>
                                         </MudPaper>
@@ -379,7 +398,6 @@
                                                     </MudStack>
                                                 </div>
                                                 @* Steps in Block *@
-                                                @* Steps in Block *@
                                                 <div class="jim-step-block-content">
                                                     @foreach (var step in block.Steps)
                                                     {
@@ -389,6 +407,7 @@
                                                                 <MudText Typo="Typo.body2" Style="flex: 1;">
                                                                     <span class="jim-text-emphasis">@connectedSystem</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfile</span>
                                                                 </MudText>
+                                                                @FailureBehaviourIndicator(step)
                                                                 @if (!_schedule.BuiltIn)
                                                                 {
                                                                 <MudStack Row="true" Spacing="0">
@@ -923,6 +942,10 @@
                 dbSchedule.IntervalWindowStart = _schedule.IntervalWindowStart;
                 dbSchedule.IntervalWindowEnd = _schedule.IntervalWindowEnd;
                 dbSchedule.NextRunTime = _schedule.NextRunTime;
+                // A built-in Schedule's failure setting is managed by JIM, like its steps; the select is disabled for
+                // it, and this keeps a stale in-memory value from ever reaching the database.
+                if (!_schedule.BuiltIn)
+                    dbSchedule.OnStepFailure = _schedule.OnStepFailure;
                 dbSchedule.LastUpdated = DateTime.UtcNow;
                 dbSchedule.LastUpdatedByType = ActivityInitiatorType.User;
                 dbSchedule.LastUpdatedById = user.Id;
@@ -1392,6 +1415,35 @@
         // Non-RunProfile types use the stored Name
         var primary = !string.IsNullOrWhiteSpace(step.Name) ? step.Name : GetStepTypeName(step.StepType);
         return (primary, GetStepTypeName(step.StepType));
+    }
+
+    private void HandleScheduleFailureBehaviourChanged(ScheduleFailureBehaviour value)
+    {
+        if (_schedule == null || _schedule.BuiltIn)
+            return; // a built-in Schedule's failure setting is managed by JIM
+
+        _schedule.OnStepFailure = value;
+    }
+
+    /// <summary>
+    /// The step editor's option text. Following the Schedule reads the in-memory Schedule's setting, so it states the
+    /// value that will apply once this edit is saved, not the one last persisted.
+    /// </summary>
+    private string DescribeStepFailureOption(ScheduleStepFailureBehaviour option) =>
+        ScheduleFailureBehaviourDisplay.StepOption(option, _schedule?.OnStepFailure ?? ScheduleFailureBehaviour.Stop);
+
+    /// <summary>
+    /// What a step does when it fails and where that comes from, shown on every step row including each member of a
+    /// parallel group. Resolved through the shared resolver against the in-memory Schedule, so changing the Schedule's
+    /// setting updates every following step straight away.
+    /// </summary>
+    private RenderFragment FailureBehaviourIndicator(ScheduleStep step)
+    {
+        var (effective, colour, source) = ScheduleFailureBehaviourDisplay.ForStep(step, _schedule);
+        return @<div class="d-flex align-center gap-2 jim-nowrap" data-testid="jim-step-failure-behaviour">
+            <MudChip T="string" Variant="Variant.Text" Color="@colour" Class="ma-0">@effective</MudChip>
+            <MudText Typo="Typo.body2" HtmlTag="span" Class="mud-text-secondary">@source</MudText>
+        </div>;
     }
 
     private static string GetStepTypeName(ScheduleStepType stepType)
