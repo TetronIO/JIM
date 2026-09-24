@@ -21,7 +21,7 @@
     On top of that substrate, this script adds three further generated mappings, each exercising a
     release-1 capability Account Name alone does not cover:
 
-      - "Employee Number" (new Metaverse attribute, import mode): Sequence token, prefix "EMP-" in
+      - "Staff Number" (new Metaverse attribute, import mode): Sequence token, prefix "EMP-" in
         the base expression, start 1000, increment 1, fixed width 6 (so the counter's zero-padding
         is visible from the first issued value: "EMP-001000", not "EMP-100000"). Raising and
         lowering its Sequence Start, and Start again, are exercised against this mapping.
@@ -108,7 +108,7 @@ $ConfirmPreference = 'None'
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
 
 # Default to OpenLDAP Primary: an empty target directory is the whole point of this scenario (every
-# Account Name and Employee Number is generated, not sourced), and OpenLDAP is the faster of the two
+# Account Name and Staff Number is generated, not sourced), and OpenLDAP is the faster of the two
 # supported directories to stand up. SambaAD is fully supported too (pass -DirectoryConfig
 # explicitly), and is required for the SambaAD-only target-side collision test step.
 if (-not $DirectoryConfig) {
@@ -174,7 +174,7 @@ try {
     }
 
     $extraMvAttributes = @(
-        @{ Name = "Employee Number"; Type = "Text"; Plurality = "SingleValued" }  # Sequence token
+        @{ Name = "Staff Number"; Type = "Text"; Plurality = "SingleValued" }  # Sequence token
         @{ Name = "Badge Code";      Type = "Text"; Plurality = "SingleValued" }  # Random token
         @{ Name = "Call Sign";       Type = "Text"; Plurality = "SingleValued" }  # OnlyIfTaken, Failure test
         @{ Name = "Locker Code";     Type = "Text"; Plurality = "SingleValued" }  # OnlyIfTaken, Adopt before generate test
@@ -197,7 +197,7 @@ try {
         }
     }
 
-    $employeeNumberAttr = $mvAttributes | Where-Object { $_.name -eq "Employee Number" }
+    $employeeNumberAttr = $mvAttributes | Where-Object { $_.name -eq "Staff Number" }
     $badgeCodeAttr = $mvAttributes | Where-Object { $_.name -eq "Badge Code" }
     $callSignAttr = $mvAttributes | Where-Object { $_.name -eq "Call Sign" }
     $lockerCodeAttr = $mvAttributes | Where-Object { $_.name -eq "Locker Code" }
@@ -222,10 +222,10 @@ try {
             -TargetMetaverseAttributeId $employeeNumberAttr.id `
             -Expression '"EMP-"' `
             -Generate -TokenKind Sequence -SequenceStart 1000 -SequenceIncrement 1 -FixedWidth 6
-        Write-Host "  ✓ Generated Employee Number mapping created (Sequence, EMP-NNNNNN from 1000, ID: $($employeeNumberMapping.id))" -ForegroundColor Green
+        Write-Host "  ✓ Generated Staff Number mapping created (Sequence, EMP-NNNNNN from 1000, ID: $($employeeNumberMapping.id))" -ForegroundColor Green
     }
     else {
-        Write-Host "  Employee Number mapping already exists (ID: $($employeeNumberMapping.id))" -ForegroundColor Gray
+        Write-Host "  Staff Number mapping already exists (ID: $($employeeNumberMapping.id))" -ForegroundColor Gray
     }
 
     $badgeCodeMapping = $existingImportMappings | Where-Object { $_.targetMetaverseAttributeId -eq $badgeCodeAttr.id }
@@ -365,7 +365,7 @@ finally {
 Write-TestSection "Scenario 23 Setup Complete"
 Write-Host "Directory:              $($DirectoryConfig.ConnectedSystemName) ($($DirectoryConfig.DirectoryType))" -ForegroundColor Cyan
 Write-Host "Account Name:           Generated (OnlyIfTaken, Number)" -ForegroundColor Cyan
-Write-Host "Employee Number:        Generated (Sequence, EMP-NNNNNN from 1000)" -ForegroundColor Cyan
+Write-Host "Staff Number:        Generated (Sequence, EMP-NNNNNN from 1000)" -ForegroundColor Cyan
 Write-Host "Badge Code:             Generated (Random, Hex, 8 characters)" -ForegroundColor Cyan
 Write-Host "Call Sign:              Generated, disabled (OnlyIfTaken \"CALLSIGN\", AttemptLimit 1)" -ForegroundColor Cyan
 Write-Host "Locker Code:            Generated, disabled (OnlyIfTaken \"LOCKER\"); ordinary export -> physicalDeliveryOfficeName" -ForegroundColor Cyan

@@ -18,7 +18,7 @@
     Setup-Scenario1.ps1 -GenerateAccountName), with the HR CSV generated via Get-OrGenerate-TestCSV.ps1
     -OmitItOwnedAttributes so samAccountName, email and userPrincipalName are genuinely absent, the
     shape this feature exists to make representative. The target directory starts empty: every Account
-    Name, Employee Number and Badge Code is generated, not sourced.
+    Name, Staff Number and Badge Code is generated, not sourced.
 
     Steps are CUMULATIVE, like Scenario 22's: a named step runs everything up to and including itself,
     because most steps depend on the population state earlier steps leave behind (Joiners' baseline,
@@ -240,9 +240,9 @@ function Get-MvoAttributeValue {
 function Get-Population {
     <#
     .SYNOPSIS
-        Every User Metaverse Object's First Name/Last Name/Account Name/Employee Number/Badge Code.
+        Every User Metaverse Object's First Name/Last Name/Account Name/Staff Number/Badge Code.
     #>
-    return @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes @("Account Name", "First Name", "Last Name", "Employee Number", "Badge Code") -All)
+    return @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes @("Account Name", "First Name", "Last Name", "Staff Number", "Badge Code") -All)
 }
 
 function Assert-AccountNameInvariants {
@@ -542,16 +542,16 @@ try {
     # Sequence: format, uniqueness, counter state, raising and lowering Sequence Start
     # ─────────────────────────────────────────────────────────────────────────────────────
     if ($lastStepIndex -ge $stepOrder.IndexOf("Sequence")) {
-        Write-TestSection "Test 4: Sequence token (Employee Number)"
+        Write-TestSection "Test 4: Sequence token (Staff Number)"
 
         $population = Get-Population
-        $badFormat = @($population | Where-Object { $_.attributes.'Employee Number' -notmatch '^EMP-\d{6}$' })
-        Add-TestResult -Name "Every person has an Employee Number matching EMP-NNNNNN" -Passed ($badFormat.Count -eq 0) `
-            -Detail "$($badFormat.Count) values do not match: $(($badFormat | ForEach-Object { $_.attributes.'Employee Number' }) -join ', ')"
+        $badFormat = @($population | Where-Object { $_.attributes.'Staff Number' -notmatch '^EMP-\d{6}$' })
+        Add-TestResult -Name "Every person has an Staff Number matching EMP-NNNNNN" -Passed ($badFormat.Count -eq 0) `
+            -Detail "$($badFormat.Count) values do not match: $(($badFormat | ForEach-Object { $_.attributes.'Staff Number' }) -join ', ')"
 
-        $empNumbers = @($population | ForEach-Object { $_.attributes.'Employee Number' })
+        $empNumbers = @($population | ForEach-Object { $_.attributes.'Staff Number' })
         $dupeNumbers = @($empNumbers | Group-Object | Where-Object { $_.Count -gt 1 })
-        Add-TestResult -Name "Employee Number is unique across the population" -Passed ($dupeNumbers.Count -eq 0) `
+        Add-TestResult -Name "Staff Number is unique across the population" -Passed ($dupeNumbers.Count -eq 0) `
             -Detail "Duplicates: $(($dupeNumbers | ForEach-Object { $_.Name }) -join ', ')"
 
         $sequenceState = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
@@ -569,9 +569,9 @@ try {
 
         $afterRaise = @(Get-Population | Where-Object { $_.attributes.'First Name' -eq 'Quillan' -and $_.attributes.'Last Name' -eq 'Ashby' }) | Select-Object -First 1
         Assert-NotNull -Value $afterRaise -Message "New joiner after raising Sequence Start was projected"
-        $afterRaiseNumber = [int]($afterRaise.attributes.'Employee Number' -replace '^EMP-0*', '')
-        Add-TestResult -Name "New joiner's Employee Number is at least the raised start ($raisedStart)" -Passed ($afterRaiseNumber -ge $raisedStart) `
-            -Detail "Got $($afterRaise.attributes.'Employee Number') ($afterRaiseNumber)"
+        $afterRaiseNumber = [int]($afterRaise.attributes.'Staff Number' -replace '^EMP-0*', '')
+        Add-TestResult -Name "New joiner's Staff Number is at least the raised start ($raisedStart)" -Passed ($afterRaiseNumber -ge $raisedStart) `
+            -Detail "Got $($afterRaise.attributes.'Staff Number') ($afterRaiseNumber)"
 
         # Lower Sequence Start: forward-only, so this must have no effect.
         $stateBeforeLower = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
@@ -583,7 +583,7 @@ try {
         Add-HrCsvJoiner -EmployeeId "EMP900012" -FirstName "Rosalind" -LastName "Peverell"
         Invoke-Cycle -Config $config | Out-Null
         $afterLower = @(Get-Population | Where-Object { $_.attributes.'First Name' -eq 'Rosalind' -and $_.attributes.'Last Name' -eq 'Peverell' }) | Select-Object -First 1
-        $afterLowerNumber = [int]($afterLower.attributes.'Employee Number' -replace '^EMP-0*', '')
+        $afterLowerNumber = [int]($afterLower.attributes.'Staff Number' -replace '^EMP-0*', '')
         Add-TestResult -Name "After lowering Sequence Start, the next joiner still continues forward (no reset to 1)" -Passed ($afterLowerNumber -gt $afterRaiseNumber) `
             -Detail "Expected greater than $afterRaiseNumber, got $afterLowerNumber"
     }
@@ -703,7 +703,7 @@ try {
 
         $survivorBefore = @(Get-Population | Where-Object { $_.attributes.'First Name' -eq 'Quillan' -and $_.attributes.'Last Name' -eq 'Ashby' }) | Select-Object -First 1
         Assert-NotNull -Value $survivorBefore -Message "Survivor (Quillan Ashby, from the Sequence test) exists before Start again"
-        $survivorNumberBefore = $survivorBefore.attributes.'Employee Number'
+        $survivorNumberBefore = $survivorBefore.attributes.'Staff Number'
 
         $sequenceBefore = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
         $configuredStart = 5000  # set by the Sequence test step above
@@ -712,20 +712,20 @@ try {
         Add-TestResult -Name "Restart-JIMGeneratedValues reports the counter moving back to the configured Start" -Passed ($restartResult.counterTo -eq $configuredStart) `
             -Detail "Expected CounterTo=$configuredStart, got $($restartResult.counterTo) (CounterFrom was $($restartResult.counterFrom); counter stood at $($sequenceBefore.nextNumber) beforehand)"
 
-        $survivorNumberAfter = Get-MvoAttributeValue -MvoId $survivorBefore.id -AttributeName "Employee Number"
-        Add-TestResult -Name "The surviving object keeps its Employee Number after Start again" -Passed ($survivorNumberAfter -eq $survivorNumberBefore) `
+        $survivorNumberAfter = Get-MvoAttributeValue -MvoId $survivorBefore.id -AttributeName "Staff Number"
+        Add-TestResult -Name "The surviving object keeps its Staff Number after Start again" -Passed ($survivorNumberAfter -eq $survivorNumberBefore) `
             -Detail "Expected unchanged '$survivorNumberBefore', got '$survivorNumberAfter'"
 
         Add-HrCsvJoiner -EmployeeId "EMP900030" -FirstName "Beatrix" -LastName "Nightingale"
         Invoke-Cycle -Config $config | Out-Null
 
         $newJoiner = @(Get-Population | Where-Object { $_.attributes.'First Name' -eq 'Beatrix' -and $_.attributes.'Last Name' -eq 'Nightingale' }) | Select-Object -First 1
-        Add-TestResult -Name "A joiner after Start again does not collide with the surviving object's number" -Passed ($newJoiner.attributes.'Employee Number' -ne $survivorNumberBefore) `
-            -Detail "Both got '$($newJoiner.attributes.'Employee Number')'"
+        Add-TestResult -Name "A joiner after Start again does not collide with the surviving object's number" -Passed ($newJoiner.attributes.'Staff Number' -ne $survivorNumberBefore) `
+            -Detail "Both got '$($newJoiner.attributes.'Staff Number')'"
 
-        $allNumbers = @((Get-Population) | ForEach-Object { $_.attributes.'Employee Number' })
+        $allNumbers = @((Get-Population) | ForEach-Object { $_.attributes.'Staff Number' })
         $dupesAfterRestart = @($allNumbers | Group-Object | Where-Object { $_.Count -gt 1 })
-        Add-TestResult -Name "No duplicate Employee Number exists after Start again" -Passed ($dupesAfterRestart.Count -eq 0) `
+        Add-TestResult -Name "No duplicate Staff Number exists after Start again" -Passed ($dupesAfterRestart.Count -eq 0) `
             -Detail "Duplicates: $(($dupesAfterRestart | ForEach-Object { $_.Name }) -join ', ')"
 
         # Surface parity: exercise the raw REST restart route once too (a second, harmless restart;
