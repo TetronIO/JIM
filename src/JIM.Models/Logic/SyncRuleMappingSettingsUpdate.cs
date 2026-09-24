@@ -57,6 +57,14 @@ public class SyncRuleMappingSettingsUpdate
     public bool? Enabled { get; set; }
 
     /// <summary>
+    /// Changes to a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3).
+    /// Only applies to a mapping whose <see cref="SyncRuleMapping.Generation"/> is already set; turning an
+    /// ordinary mapping into a generated one, or vice versa, is not supported here and remains a delete and a
+    /// create, for the same reason retargeting is.
+    /// </summary>
+    public SyncRuleMappingGenerationSettingsUpdate? Generation { get; set; }
+
+    /// <summary>
     /// True when the update names at least one setting. A request naming none changes nothing, and is rejected
     /// rather than reported as a successful update.
     /// </summary>
@@ -67,5 +75,6 @@ public class SyncRuleMappingSettingsUpdate
         InboundValueProcessing.HasValue ||
         CaseNormalisation.HasValue ||
         InitialExportOnly.HasValue ||
-        Enabled.HasValue;
+        Enabled.HasValue ||
+        (Generation?.HasChanges ?? false);
 }
