@@ -87,7 +87,7 @@ function Restart-JIMGeneratedValues {
                 $result
             }
             catch {
-                Write-Error "Failed to restart generated values for mapping $MappingId in Synchronisation Rule $SyncRuleId: $_"
+                Write-Error "Failed to restart generated values for mapping $MappingId in Synchronisation Rule ${SyncRuleId}: $_"
             }
         }
     }
