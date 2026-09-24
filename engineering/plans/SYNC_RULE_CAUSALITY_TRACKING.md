@@ -1,171 +1,144 @@
-# Synchronisation Rule Causality Tracking
+# Synchronisation Rule Causality Tracking and Value Provenance
 
 - **Status:** Planned
 - **Issue:** [#399](https://github.com/TetronIO/JIM/issues/399)
+- **Design:** [Value Provenance Options canvas](https://claude.ai/artifact/SLzG2C7hVkVUsTCXsVNmst) (see the "Recommended" row)
 
-> Track and display which Synchronisation Rule caused each MVO projection, MVO attribute change, CSO provisioning, and Pending Export attribute change; surfaced in the UI as icon links on causality trees and attribute change tables.
+> Show administrators where every value on a Metaverse Object came from (a Connected System through a Synchronisation Rule, JIM itself, or a person), why that value beat the other candidates, and how it got there, in the Metaverse Object page's Inspect view, the attribute inspector, the Changes tab and the Pending Export detail page, with REST and PowerShell parity.
 
 ## Overview
 
-Currently, JIM records that a Synchronisation Rule was involved in a change at the `MetaverseObjectChange` level, but does not record causality at the per-attribute level, nor for Pending Export attribute changes. This makes it impossible for administrators to determine, when looking at an Attribute Flow table, which specific Synchronisation Rule drove each individual attribute value. This plan closes that gap across both inbound (import/projection) and outbound (export/provisioning) flows.
+The data for most of this now exists: the sync engine records which Synchronisation Rule contributed each current value, each historical value change, and each Pending Export attribute change. None of it is shown in the portal. This plan is therefore mostly a presentation and query plan: one origin model, rendered consistently wherever a value appears, plus the few queries needed to answer "why this value" on demand.
 
 ## Business Value
 
-Administrators managing complex environments with multiple Synchronisation Rules flowing different attributes to the same object type have no visibility into which rule is responsible for each attribute value in the current UI. This hinders:
+Administrators managing several Synchronisation Rules that flow attributes to the same object type cannot see which rule, system, person or JIM process is responsible for a value. That hinders:
 
-- Troubleshooting incorrect attribute values (which rule is setting the wrong value?)
-- Auditing Attribute Flows for compliance purposes
-- Understanding the impact of editing or disabling a specific Synchronisation Rule
+- Troubleshooting a wrong value (which source set it, and why did it win over the others?)
+- Auditing Attribute Flows
+- Judging the impact of editing or disabling a Synchronisation Rule on a given identity
 
 ## Current State
 
-Reconciled against `main` in August 2026, after the Attribute Priority (#91) and causality (#1223, #1495) work landed.
+Reconciled against `main` on 2026-09-24. The issue's own "Current state" table predates #1519 and the export staging work, and understates what is recorded.
 
-| Record | Synchronisation Rule Field | Populated? |
-|--------|----------------|------------|
-| `MetaverseObjectAttributeValue` | `ContributedBySyncRuleId`, `ContributedBySyncRule` | Yes; the sync engine stamps it on every inbound flow (`SyncEngine.AttributeFlow`), and `MetaverseObjectDto` exposes it over REST |
-| `PendingExport` | `ProvisioningSyncRuleId`, `ProvisioningSyncRule` | Yes, when a create is staged; null for updates and deletes by design |
-| `MetaverseObjectChange` | `SyncRuleId`, `SyncRuleName` (exist) | No; the fields exist from a prior migration and no code path sets them |
-| `MetaverseObjectChangeAttribute` | None | N/A |
-| `PendingExportAttributeValueChange` | None | N/A |
+| Record | Field | Populated? |
+|--------|-------|------------|
+| `MetaverseObjectAttributeValue` | `ContributedBySyncRuleId`, `ContributedBySystemId` | Yes, on every inbound flow (#91). `ContributedBySystemId` survives rule deletion. Exposed on `MetaverseObjectDto` |
+| `MetaverseObjectAttributeValue` | `NullValue` (asserted null, with provenance) | Yes |
+| `MetaverseObjectChangeAttributeValue` | `ContributedBySyncRuleId`, `ContributedBySyncRuleName` | Yes, copied from the live value by `MetaverseObjectChange.AddAttributeValueChange` (#1519) |
+| `PendingExportAttributeValueChange` | `SyncRuleId`, `SyncRuleName` (the outbound rule that staged it) | Yes, stamped at staging time; exposed on the Pending Export DTOs |
+| `PendingExport` | `ProvisioningSyncRuleId` | Yes, for creates (#1223) |
+| `ActivityRunProfileExecutionItemSyncOutcome` | `SyncRuleId`, `SyncRuleName` | Yes, for Projected, Provisioned and DisconnectedOutOfScope outcomes (#1085) |
+| `MetaverseObjectChange` | `SyncRuleId`, `SyncRuleName` | **No.** The fields exist; no code path sets them. The projecting rule is known at that point (it is already on the Projected outcome) |
 
-So **"which rule sets this value now" is answerable over REST but nowhere in the portal, and "which rule set it then" is not answerable at all.** Attribute provenance lives only on the current value, so the next flow overwrites it and the change history keeps no record of what drove each historical change. That gap is what remains of this plan.
+**Nothing above is surfaced in the portal:** not on the Metaverse Object page, not in the Changes tab, not on `PendingExportDetail`.
 
-The Synchronisation Rule context is available in the worker and application code at the point each of the unpopulated records is created; it is simply not being persisted.
+## Design (agreed 2026-09-24)
 
-### Already Delivered by Issue #1085 (Outcome-Level Attribution)
+The design was explored on the canvas linked above; the "Recommended" row is the agreed outcome.
 
-Issue [#1085](https://github.com/TetronIO/JIM/issues/1085) delivered outcome-level Synchronisation Rule attribution ahead of this plan: `ActivityRunProfileExecutionItemSyncOutcome` now carries nullable `SyncRuleId` and `SyncRuleName` (name snapshot) columns, populated by the worker for:
+### One origin model
 
-- `DisconnectedOutOfScope` outcomes: the scoping rule the Connected System Object fell out of scope of (the deterministic first import rule with scoping criteria; the same rule whose `InboundOutOfScopeAction` governs the disconnect).
-- `Projected` outcomes: the projecting rule, threaded through `ProjectionDecision`.
-- `Provisioned` outcomes: the export rule that caused the provisioning, threaded through `ExportEvaluationResult.ProvisioningSyncRulesByCsoId`.
+Every value has exactly one origin, rendered in three forms (a row chip, an inspector sentence, a Timeline sentence) from one shared component, so the same origin reads the same everywhere:
 
-Unlike the FK pattern above, the outcome columns are plain snapshot scalars (no FK), matching the table's existing `TargetEntityId`/`TargetEntityDescription` approach.
+| Origin | Chip | Data |
+|--------|------|------|
+| A Connected System through a Synchronisation Rule | `[CS] HR · HR Import` | Recorded today |
+| Generated by JIM | `[J] Generated by JIM · [CS] HR · HR Import` | #242. JIM leads; the rule and system are the route, not the source, because the value does not exist in that system. The route is optional: a later workflow step generates with no rule |
+| Corrected by JIM | as above, plus `Corrected` | #242 Collision Remediation |
+| Set by a person | `[PS] Set by Priya Shah` | #614 |
+| A system asserts there is no value | `[CS] HR asserts no value` | Recorded today (`NullValue`) |
+| Contributing rule since deleted | `[CS] Facilities · ~~Facilities Import~~ (deleted)` | Recorded today (system kept, rule id nulled) |
+| Not recorded | `Source not recorded` | Values that pre-date provenance |
 
-### Already Delivered by Issues #91 and #1223
+#399 builds the model and the display for all seven; #242 and #614 supply the data for their origins and are its first additional consumers, not separate widgets.
 
-Two further pieces landed for their own reasons rather than for this plan, and neither needs rebuilding:
+### Where it appears
 
-- **#91 (Attribute Priority)** added `ContributedBySyncRuleId` and `ContributedBySystemId` to `MetaverseObjectAttributeValue`, because precedence has to know which rule contributed an incumbent value before it can decide whether a new one may replace it. That satisfies goal 2 for the **current** value; it does not satisfy it for the change history, which is where troubleshooting a value that has since moved on actually looks.
-- **#1223 (causal provenance)** added `ProvisioningSyncRuleId` to `PendingExport`, so an export run can name the decision that queued its change. That satisfies goal 3 outright.
-
-This plan's remaining scope is therefore the per-attribute attribution on the two change records (`MetaverseObjectChangeAttribute`, `PendingExportAttributeValueChange`), the `MetaverseObjectChange` population, and the UI surfacing, which now includes surfacing the `MetaverseObjectAttributeValue` provenance that already exists and is invisible in the portal.
-
-## Goals
-
-1. Know which Synchronisation Rule caused an MVO to be projected (one rule is responsible).
-2. Know which Synchronisation Rule caused each MVO attribute value to be created, updated, or removed. Delivered for the current value by #91; outstanding for the change history.
-3. ~~Know which Synchronisation Rule caused a CSO to be provisioned~~ delivered by #1223 (`PendingExport.ProvisioningSyncRuleId`).
-4. Know which Synchronisation Rule caused each Pending Export attribute value change.
-5. Display these causing Synchronisation Rules as icon links (with tooltip) in the UI. **Note the target has changed:** the causality tree this plan was written against no longer exists (#1087 replaced it, and #1495 replaced Flow, Graph and Caused by with the Lineage view), so attribution belongs in the attribute drawer shared by Lineage and Timeline, and in the attribute change tables. Per the surface parity rule, the portal, REST and PowerShell ship together.
-
-## Non-Goals
-
-- Tracking Synchronisation Rule causality for non-sync-initiated changes (direct user edits, workflow-initiated changes).
-- Retroactively populating causality data for historical records.
+- **Inspect view only.** The Metaverse Object page's Details view switch becomes **Form | Tabs | Inspect**. "Table" is renamed "Inspect" (the label only; the stored preference value stays `table` so saved preferences survive). Form and Tabs are unchanged and show no source information. When RBAC lands, Inspect becomes an administrator-only view.
+- **Contribution bar** at the top of Inspect, headed "Where this {Object Type name} gets its values" (worded to avoid a possessive, so it reads correctly for any type name). A segmented bar shows each source's share of the object's attributes; its legend doubles as the source filter.
+- **Source column** in Inspect, aligned, one line per row.
+- **Group by: None · Source · Category**, a labelled toolbar control. Grouped by Source, the Source column drops away because the group header states it. Remembered per user like table density, and carried in the URL.
+- **Attribute inspector.** Clicking a row opens a side panel beside the table (not a modal over it, so the Source column stays visible and an administrator can step through attributes). It shows:
+  1. The current value and its origin sentence: system, rule, the contributing Connected System Object, and when and by which Activity it was set.
+  2. **Every source for this attribute, in priority order**, each with the value it would contribute, the winner marked "In use" and the rest "Outranked", with a link to change the attribute's priority. This answers "why this value and not the other one", which a history view alone cannot.
+  3. The attribute's history as the causality Timeline scoped to that attribute, with a link to the full Timeline.
+- **Changes tab**: each attribute change carries its origin chip.
+- **Pending Export detail**: two columns, kept apart: **Value from** (where the Metaverse value originated) and **Attribute Flow** (the outbound rule that staged the change). Troubleshooting a wrong export value needs both.
+- **Discoverability**: origin chips on the Changes tab and Pending Export link into Inspect with that attribute's inspector open, and the Inspect button carries a tooltip ("Attributes with their sources and history").
 
 ## Technical Architecture
 
-### Pattern
+### Data still to record
 
-All new Synchronisation Rule references follow the existing pattern established on `MetaverseObjectChange`:
-- `SyncRuleId`: nullable FK to `SyncRule`, becomes null if the Synchronisation Rule is deleted
-- `SyncRuleName`: snapshot string, preserved for audit trail even after Synchronisation Rule deletion
+- Populate `MetaverseObjectChange.SyncRuleId` / `SyncRuleName` for projections, from the same projecting rule already threaded to the Projected outcome (#1085). Raw SQL writers must take the columns from `MvoChangeBulkColumns` (see `src/CLAUDE.md`, Raw SQL Column Lists).
 
-### Changes Required
+No other schema change is needed for the Connected System origin. The generated and person origins arrive with #242 and #614.
 
-#### Models (`JIM.Models`)
+### Queries (application layer, on demand)
 
-**`MetaverseObjectChangeAttribute`**: add:
-```csharp
-public int? SyncRuleId { get; set; }
-public SyncRule? SyncRule { get; set; }
-public string? SyncRuleName { get; set; }
-```
+- **Origin for every attribute of one object** (Inspect view load): from the loaded attribute values' contributor fields. No extra query beyond resolving rule and system names.
+- **Contributing Connected System Object**: derived from the object's joined Connected System Object in the contributing system; not stored on the value.
+- **Set when, by which Activity** (inspector): the latest change row for that attribute on that object, joined through the change and its execution item to the Activity. One indexed query per opened attribute; never computed for the whole table.
+- **Competing sources** (inspector): the attribute's priority list (#91), and for each contributing mapping the value it would supply from its joined Connected System Object. Direct mappings read the attribute; expression mappings are evaluated on demand with the existing evaluator used by Sync Preview. Only for the opened attribute.
+- **Attribute history** (inspector): change values for that attribute on that object, rendered through the existing causality Timeline event model.
 
-**`PendingExport`**: add (represents the rule that triggered provisioning, for Create-type exports):
-```csharp
-public int? SyncRuleId { get; set; }
-public SyncRule? SyncRule { get; set; }
-public string? SyncRuleName { get; set; }
-```
+### Surface parity
 
-**`PendingExportAttributeValueChange`**: add:
-```csharp
-public int? SyncRuleId { get; set; }
-public SyncRule? SyncRule { get; set; }
-public string? SyncRuleName { get; set; }
-```
-
-#### Database (`JIM.PostgresData`)
-
-One migration covering all three model changes above.
-
-#### Worker (`JIM.Worker`)
-
-**`SyncTaskProcessorBase`**:
-- Populate `SyncRuleId` / `SyncRuleName` on `MetaverseObjectChange` when the change type is Projection, using the `projectionSyncRule` local variable already identified in `AttemptProjection()`.
-- Populate `SyncRuleId` / `SyncRuleName` on each `MetaverseObjectChangeAttribute` as it is constructed during inbound Attribute Flow processing, recording which inbound Synchronisation Rule drove that specific attribute.
-
-#### Application (`JIM.Application`)
-
-**`ExportEvaluationServer`**:
-- Populate `SyncRuleId` / `SyncRuleName` on `PendingExport` when it is created for a provisioning (Create) operation; the responsible `exportRule` is already a parameter at that point.
-- Populate `SyncRuleId` / `SyncRuleName` on each `PendingExportAttributeValueChange` as it is constructed in `CreateAttributeValueChanges`: the `exportRule` parameter is already in scope.
-
-#### UI (`JIM.Web`)
-
-**`AttributeChangeTable.razor`**: add a rightmost icon-button column:
-- When `SyncRuleId` is present: render a `MudIconButton` linking to `/sync-rules/{SyncRuleId}` with `SyncRuleName` as the tooltip.
-- When `SyncRuleId` is null but `SyncRuleName` is present (rule deleted): render a disabled icon button with the rule name and "(deleted)" in the tooltip.
-- When both are null: render nothing in that cell.
-
-**`PendingExportDetail.razor`**: apply the same icon-button pattern to the attribute change rows in the Pending Export attribute table.
-
-**Causality tree (projection/provisioning rows)**: for the top-level projection and provisioning rows (not just attribute rows), display the same icon button referencing the Synchronisation Rule on `MetaverseObjectChange` and `PendingExport` respectively.
+- **REST**: a provenance endpoint per Metaverse Object attribute returning the origin, the competing sources and the history; the Pending Export and change DTOs gain the origin where they do not already carry it.
+- **PowerShell**: a cmdlet over the provenance endpoint (for example, provenance for one Metaverse Object's attribute by name), with Pester tests and documented output shape.
+- **Portal**: as above.
 
 ## Implementation Phases
 
-### Phase 1: Model and Migration
+### Phase 1: Origin model and projection attribution
 
-- Add `SyncRuleId`, `SyncRule`, `SyncRuleName` to `MetaverseObjectChangeAttribute`
-- Add `SyncRuleId`, `SyncRule`, `SyncRuleName` to `PendingExport`
-- Add `SyncRuleId`, `SyncRule`, `SyncRuleName` to `PendingExportAttributeValueChange`
-- Create and review EF Core migration
-- Write failing tests for the new fields (TDD)
+- Origin model in `JIM.Models` covering all seven origins, with the generated and person variants present but fed only once #242 and #614 land
+- Populate `MetaverseObjectChange.SyncRuleId` / `SyncRuleName` on projection, with a `RequiresPostgres` round-trip test
+- Tests first
 
-### Phase 2: Worker; Inbound (Import/Projection)
+### Phase 2: Queries and API
 
-- Populate Synchronisation Rule on `MetaverseObjectChange` for projection changes
-- Populate Synchronisation Rule on `MetaverseObjectChangeAttribute` per-attribute during inbound Attribute Flow
-- Tests must pass (red → green)
+- Application-layer methods for the four inspector queries above, respecting the retrieval taxonomy
+- REST endpoint and DTOs; PowerShell cmdlet and Pester tests
+- Performance check against a large object (many attributes, long history)
 
-### Phase 3: Application; Outbound (Export/Provisioning)
+### Phase 3: Inspect view
 
-- Populate Synchronisation Rule on `PendingExport` at provisioning creation time
-- Populate Synchronisation Rule on `PendingExportAttributeValueChange` per-attribute in `CreateAttributeValueChanges`
-- Tests must pass (red → green)
+- Rename Table to Inspect (label only)
+- Contribution bar, Source column, source filter, Group by control (persisted, in the URL)
+- Shared origin chip component (one component, used by every surface)
+- Attribute inspector side panel
+- bUnit tests for the origin chip rendering of each origin kind
 
-### Phase 4: UI
+### Phase 4: Other surfaces
 
-- Add Synchronisation Rule icon button column to `AttributeChangeTable.razor`
-- Add Synchronisation Rule icon button to `PendingExportDetail.razor` attribute rows
-- Add Synchronisation Rule icon button to causality tree projection/provisioning rows
-- Verify with end-to-end smoke test against the Docker stack
+- Origin chips on the Changes tab attribute rows
+- Value from / Attribute Flow columns on Pending Export detail
+- Links from those chips into Inspect with the attribute's inspector open
+- Public docs: the Metaverse Object page and a "why is this value what it is" how-to
 
 ## Success Criteria
 
-- Every `MetaverseObjectChangeAttribute` record produced by a sync run has a non-null `SyncRuleId` (or at minimum `SyncRuleName` if the Synchronisation Rule was deleted between record creation and query time).
-- Every `PendingExportAttributeValueChange` record produced by a sync run has a non-null `SyncRuleId`.
-- Every `PendingExport` created by a provisioning Synchronisation Rule has a non-null `SyncRuleId`.
-- The attribute change table shows a Synchronisation Rule icon button on each attribute row that navigates correctly to the Synchronisation Rule detail page.
-- When a Synchronisation Rule has been deleted, the icon is disabled but the tooltip still shows the rule name.
+- Every attribute in the Inspect view shows its origin, including "Source not recorded" rather than a blank.
+- The inspector answers, for any attribute: where the value came from, which other sources exist and what they would supply, and its history.
+- A value generated by JIM is never presented as coming from the Connected System its rule belongs to.
+- Pending Export detail distinguishes where a value came from and which rule staged it.
+- Portal, REST and PowerShell return the same provenance for the same attribute.
+
+## Non-Goals
+
+- Retroactively populating provenance for historical records; those show "Source not recorded".
+- Showing source information in the Form or Tabs views.
+- Delivering the generated and person origins' data; #242 and #614 own those.
 
 ## Risks and Mitigations
 
 | Risk | Mitigation |
 |------|-----------|
-| Worker creates one `MetaverseObjectChange` per sync run rather than one per Synchronisation Rule, meaning multiple Synchronisation Rules' attribute changes are merged | Verify current worker behaviour before implementing Phase 2; if merging occurs, per-attribute tracking on `MetaverseObjectChangeAttribute` is the correct resolution |
-| Migration on a live database with large `MetaverseObjectChangeAttribute` or `PendingExportAttributeValueChange` tables may be slow (nullable columns) | Nullable columns require no backfill; migration should be fast |
-| Export evaluation creates Pending Exports across multiple code paths | Audit all `PendingExport` and `PendingExportAttributeValueChange` creation sites in `ExportEvaluationServer` before Phase 3 |
+| Competing-source values for expression mappings are costly or have side effects to evaluate | Evaluate only for the opened attribute, through the existing Sync Preview evaluation path, which is already side-effect free |
+| The "set by Activity" lookup is slow on objects with long histories | One indexed query per opened attribute; confirm the index covers object, attribute and change time before Phase 2 ends |
+| An object with one source makes the contribution bar a single block | Collapse to one line ("All 11 values from HR · HR Import") |
+| Multi-valued attributes with values from more than one source | Show per-value origin inside the inspector; the row shows the origin when uniform and "Several sources" otherwise |
+| The Inspect label and the RBAC restriction land at different times | The rename ships with #399; the restriction ships with RBAC, and nothing in this plan depends on it |
