@@ -1,0 +1,103 @@
+@using JIM.Application
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* "Start again…" (Unique Value Generation, #242, Phase 3, Work Package D2): the typed confirmation for a saved
+   generated Sequence mapping's row action, adapted from the approved mockup's screen 02b for release 1 (no
+   retired values register yet, so the "N retired values forgotten" line and "View retired values" are omitted;
+   they arrive with release 2's Phase 6). A thin surface over the shared ConsequenceConfirmationDialog: this
+   component owns loading the current counter state, the wording and performing the restart; that one owns
+   presenting it and the typed-confirmation rule. *@
+
+<ConsequenceConfirmationDialog Loading="@(_currentNext == null)"
+                               LoadingText="Reading the current counter..."
+                               ConfirmationPhrase="@AttributeName"
+                               ConfirmButtonText="Start again"
+                               ConfirmButtonColour="Color.Warning"
+                               BusyText="Starting again..."
+                               OnConfirmAsync="RestartAsync">
+    <LeadingContent>
+        <MudText Typo="Typo.body1">
+            Metaverse Objects that already hold a @AttributeName keep it; only Metaverse Objects without one are
+            generated for.
+        </MudText>
+        @if (_currentNext is { } currentNext)
+        {
+            <MudText Typo="Typo.body1" Class="mt-2">
+                Counter returns to <b>@ConfiguredStart.ToString("N0")</b> from <b>@currentNext.ToString("N0")</b>
+            </MudText>
+        }
+    </LeadingContent>
+    <AdditionalContent>
+        <MudAlert Severity="Severity.Info" Dense="true">
+            Numbers can be issued again once forgotten, but a number still held by a Metaverse Object is skipped
+            when the counter reaches it. No existing value changes and nothing is exported.
+        </MudAlert>
+    </AdditionalContent>
+</ConsequenceConfirmationDialog>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter, EditorRequired]
+    public int MappingId { get; set; }
+
+    [Parameter, EditorRequired]
+    public string AttributeName { get; set; } = null!;
+
+    /// <summary>The flow's configured Start at value: what the counter returns to.</summary>
+    [Parameter, EditorRequired]
+    public long ConfiguredStart { get; set; }
+
+    private long? _currentNext;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        var state = await jim.ConnectedSystems.GetGeneratedValueSequenceStateAsync(MappingId);
+        // Unseeded (never issued a number): there is nothing to show a "from", so present the flow's own start
+        // value both ways rather than leaving the panel loading forever.
+        _currentNext = state is { IsSeeded: true } ? state.NextNumber : ConfiguredStart;
+    }
+
+    private async Task<bool> RestartAsync()
+    {
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var result = await jim.ConnectedSystems.RestartGeneratedValuesAsync(MappingId, user);
+            Snackbar.Add(GeneratedValuePreviewHelpers.DescribeRestartResult(AttributeName, result), Severity.Success);
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Opens the "Start again…" confirmation for a saved generated Sequence mapping. Returns true once the
+    /// restart completed successfully.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, int mappingId, string attributeName, long configuredStart)
+    {
+        var parameters = new DialogParameters<GeneratedValueStartAgainDialog>
+        {
+            { x => x.MappingId, mappingId },
+            { x => x.AttributeName, attributeName },
+            { x => x.ConfiguredStart, configuredStart }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<GeneratedValueStartAgainDialog>($"Start {attributeName} again?", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

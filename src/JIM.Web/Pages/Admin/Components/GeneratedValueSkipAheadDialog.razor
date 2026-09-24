@@ -1,0 +1,50 @@
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The "Skip ahead to N?" confirmation (Unique Value Generation, #242, Phase 3, Work Package D2), shown when
+   the administrator confirms the Add/Edit dialog for a saved Sequence mapping whose Start at now stands above
+   the counter's current next number (approved mockup, screen 02's second save frame). A thin surface over the
+   shared ConsequenceConfirmationDialog: this component owns the wording, that one owns presenting it. Unlike
+   most callers of that dialog this is not destructive (no value or assignment is touched, only the counter's
+   floor moves), so the confirm action stays Primary rather than the dialog's default Error. *@
+
+<ConsequenceConfirmationDialog ConfirmButtonText="Save and skip ahead" ConfirmButtonColour="Color.Primary">
+    <LeadingContent>
+        <MudText Typo="Typo.body1">
+            "Start at" is now higher than the next number (@CurrentNext.ToString("N0")). Saving moves the counter to
+            @NewStart.ToString("N0"); numbers @CurrentNext.ToString("N0") to @((NewStart - 1).ToString("N0")) will never be assigned.
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+            Reasons why you might do this include using it to reserve a range for another system, or to continue a
+            sequence issued elsewhere before JIM. Lowering "Start at" below the counter has no effect.
+        </MudText>
+    </LeadingContent>
+</ConsequenceConfirmationDialog>
+
+@code {
+    /// <summary>The counter's next number as it currently stands, before the save.</summary>
+    [Parameter, EditorRequired]
+    public long CurrentNext { get; set; }
+
+    /// <summary>The Start at value the save would raise the counter to.</summary>
+    [Parameter, EditorRequired]
+    public long NewStart { get; set; }
+
+    /// <summary>
+    /// Opens the confirmation. Returns true when the administrator chose to proceed with the save.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, string attributeName, long currentNext, long newStart)
+    {
+        var parameters = new DialogParameters<GeneratedValueSkipAheadDialog>
+        {
+            { x => x.CurrentNext, currentNext },
+            { x => x.NewStart, newStart }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<GeneratedValueSkipAheadDialog>($"Skip ahead to {newStart:N0}?", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

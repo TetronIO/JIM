@@ -142,7 +142,7 @@
                                         <AttributeChip Kind="AttributeChipKind.Expression" Expression="@rowExpression" />
                                     </span>
                                 }
-                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">
                                     @GeneratedValueFormHelpers.GetTokenPillText(rowGeneration, rowExpression != null)
                                 </MudChip>
                             </div>
@@ -266,6 +266,16 @@
                     <HeaderTemplate></HeaderTemplate>
                     <CellTemplate>
                         <div class="d-flex justify-end gap-2">
+                            @* Unique Value Generation (#242, Phase 3, Work Package D2): "Start again…" is offered
+                               only for a saved generated Sequence mapping, next to the existing row actions. *@
+                            @if (GeneratedValuePreviewHelpers.ShowStartAgainAction(context.Item))
+                            {
+                                <MudTooltip Text="Start again…" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Color="Color.Default"
+                                        Size="Size.Small" aria-label="start again"
+                                        OnClick="@(() => HandleStartAgainClickAsync(context.Item))" />
+                                </MudTooltip>
+                            }
                             <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
                                 Size="Size.Small" aria-label="edit"
                                 OnClick="@(() => HandleEditAttributeFlowRuleAsync(context.Item))" />
@@ -319,6 +329,14 @@
                             }
                         </MudStack>
                         <div class="d-flex gap-2" style="flex-shrink: 0;">
+                            @if (GeneratedValuePreviewHelpers.ShowStartAgainAction(attributeFlowRule))
+                            {
+                                <MudTooltip Text="Start again…" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Color="Color.Default"
+                                        Size="Size.Small" aria-label="start again"
+                                        OnClick="@(() => HandleStartAgainClickAsync(attributeFlowRule))" />
+                                </MudTooltip>
+                            }
                             <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
                                 Size="Size.Small" aria-label="edit"
                                 OnClick="@(() => HandleEditAttributeFlowRuleAsync(attributeFlowRule))" />
@@ -357,7 +375,7 @@
                                base expression; with one, it reads as a continuation of the expression chip above. *@
                             @if (attributeFlowRule.Generation is { } importCardGeneration)
                             {
-                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">
                                     @GeneratedValueFormHelpers.GetTokenPillText(importCardGeneration, attributeFlowRule.Sources.Any(s => !string.IsNullOrWhiteSpace(s.Expression)))
                                 </MudChip>
                             }
@@ -385,7 +403,7 @@
                                branch's token pill above, on the same (source) side of the arrow. *@
                             @if (attributeFlowRule.Generation is { } exportCardGeneration)
                             {
-                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">
                                     @GeneratedValueFormHelpers.GetTokenPillText(exportCardGeneration, attributeFlowRule.Sources.Any(s => !string.IsNullOrWhiteSpace(s.Expression)))
                                 </MudChip>
                             }
@@ -605,7 +623,11 @@
                     if (generatedTargetType.HasValue)
                     {
                         <GeneratedValueOptionsEditor Mapping="_attributeFlowMapping" BaseSource="_attributeFlowMappingSource"
-                            TargetType="generatedTargetType" TargetName="@generatedTargetName" OnChanged="@(() => StateHasChanged())" />
+                            TargetType="generatedTargetType" TargetName="@generatedTargetName"
+                            Direction="SyncRule.Direction" SyncRuleId="SyncRule.Id" ConnectedSystemId="SyncRule.ConnectedSystemId"
+                            MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
+                            TargetMetaverseAttributeId="_attributeFlowMapping.TargetMetaverseAttribute?.Id"
+                            OnChanged="@(() => StateHasChanged())" />
 
                         @* ─── Enabled (#1485): applies to a generated mapping the same as any other ─── *@
                         <MudCheckBox T="bool" Dense="true" Class="mt-5" @bind-Value="_attributeFlowMapping.Enabled" Label="Enabled" />
@@ -1519,6 +1541,26 @@
         if (_attributeFlowMapping == null)
             return;
 
+        // Unique Value Generation (#242, Phase 3, Work Package D2): confirm before saving a raised Start at on a
+        // saved Sequence mapping (mockup screen 02's "Skip ahead to N?" save frame). Only meaningful for a mapping
+        // that already exists (a new mapping has no counter yet to skip ahead from) and only worth a server round
+        // trip when the mapping is a Sequence token in the first place.
+        if (_isEditingAttributeFlow && _attributeFlowMapping.Id > 0 &&
+            _attributeFlowMapping.Generation is { TokenKind: GeneratedValueTokenKind.Sequence } generation)
+        {
+            using var jim = JimFactory.Create();
+            var currentState = await jim.ConnectedSystems.GetGeneratedValueSequenceStateAsync(_attributeFlowMapping.Id);
+            if (GeneratedValuePreviewHelpers.ShouldConfirmSkipAhead(currentState, generation.SequenceStart))
+            {
+                var attributeName = _attributeFlowMapping.TargetMetaverseAttribute?.Name
+                    ?? _attributeFlowMapping.TargetConnectedSystemAttribute?.Name ?? "this attribute";
+                var confirmed = await GeneratedValueSkipAheadDialog.ShowAsync(
+                    DialogService, attributeName, currentState!.NextNumber, generation.SequenceStart);
+                if (!confirmed)
+                    return;
+            }
+        }
+
         // Only add to the list if this is a new mapping (not editing an existing one)
         if (!_isEditingAttributeFlow)
             SyncRule.AttributeFlowRules.Add(_attributeFlowMapping);
@@ -1530,6 +1572,19 @@
         _isEditingAttributeFlow = false;
         await RefreshFlowGridAsync();
         await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// "Start again…" (plan Phase 3 point 5, mockup screen 02b): only ever offered for a saved generated
+    /// Sequence mapping (<see cref="GeneratedValuePreviewHelpers.ShowStartAgainAction"/>), so
+    /// <see cref="SyncRuleMapping.Generation"/> and its target are guaranteed non-null here.
+    /// </summary>
+    private async Task HandleStartAgainClickAsync(SyncRuleMapping attributeFlowRule)
+    {
+        var attributeName = attributeFlowRule.TargetMetaverseAttribute?.Name
+            ?? attributeFlowRule.TargetConnectedSystemAttribute?.Name ?? "this attribute";
+        var configuredStart = attributeFlowRule.Generation!.SequenceStart;
+        await GeneratedValueStartAgainDialog.ShowAsync(DialogService, attributeFlowRule.Id, attributeName, configuredStart);
     }
 
     private async Task HandleAttributeFlowRuleDeleteClickAsync(SyncRuleMapping attributeFlowRule)

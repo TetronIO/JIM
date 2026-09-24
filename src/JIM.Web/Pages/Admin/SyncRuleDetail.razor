@@ -847,6 +847,7 @@ else if (_syncRule != null)
             // lives in the layout, so the message survives the soft navigation and shows on the edit page.
             case true when isSyncRuleNew:
                 Snackbar.Add("Synchronisation Rule created.", Severity.Success);
+                ReportSequenceSkips();
                 NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
                 break;
             case true:
@@ -854,10 +855,34 @@ else if (_syncRule != null)
                 // buttons are offered against; a create re-loads the rule by its new URL and captures it there.
                 _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
                 Snackbar.Add("Changes saved.", Severity.Success);
+                ReportSequenceSkips();
                 break;
             case false:
                 Snackbar.Add("There was a problem saving your changes. Please check the details and try again.", Severity.Error);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 3, Work Package D2): after the whole-rule save, one snackbar per
+    /// generated Sequence mapping whose raised Start at moved the target attribute's counter (stamped on
+    /// <see cref="JIM.Models.Logic.SyncRuleMappingGeneration.SequenceSkippedAhead"/> by
+    /// <c>CreateOrUpdateSyncRuleAsync</c>). A no-op when the save touched no such mapping.
+    /// </summary>
+    private void ReportSequenceSkips()
+    {
+        if (_syncRule == null)
+            return;
+
+        foreach (var mapping in _syncRule.AttributeFlowRules)
+        {
+            if (mapping.Generation?.SequenceSkippedAhead is not { } skip)
+                continue;
+
+            var attributeName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "the attribute";
+            Snackbar.Add(
+                $"{attributeName}: the counter skipped ahead from {skip.From:N0} to {skip.To:N0}. Numbers in between will never be assigned.",
+                Severity.Info);
         }
     }
 
