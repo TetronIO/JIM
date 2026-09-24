@@ -1164,7 +1164,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(matches.Count == 1 ? matches[0] : null);
     }
 
-    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+    public virtual Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
         MetaverseObject metaverseObject,
         ConnectedSystem connectedSystem,
         ConnectedSystemObjectType connectedSystemObjectType,
@@ -1231,7 +1231,7 @@ public class SyncRepository : ISyncRepository
     /// exactly; unlike that method, the attribute is identified by name (matching the batch query's
     /// name-based join), so seeded attribute values must carry their <c>Attribute</c> navigation.
     /// </summary>
-    public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+    public virtual Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
         int connectedSystemId,
         int connectedSystemObjectTypeId,
         string connectedSystemAttributeName,

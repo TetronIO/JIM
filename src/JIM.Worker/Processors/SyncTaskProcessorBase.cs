@@ -3740,25 +3740,53 @@ public abstract class SyncTaskProcessorBase
             ? _pendingMvoDeletions.Select(m => m.Mvo.Id).ToHashSet()
             : null;
 
+        // Prefetch export-matching candidates for the page's eligible MVOs in one batch per Object
+        // Matching Rule group, instead of the one-database-round-trip-per-object cost export matching
+        // otherwise pays for every provisioning verdict below. A Metaverse Object pending immediate
+        // deletion is excluded: FlushPendingMvoDeletionsAsync creates its Delete export separately, so it
+        // is never evaluated here and would only waste prefetch effort.
+        if (_exportEvaluationCache != null)
+        {
+            var mvosForPrefetch = _pendingExportEvaluations
+                .Select(x => x.Mvo)
+                .Where(mvo => mvo.Id != Guid.Empty)
+                .Where(mvo => pendingDeletionMvoIds == null || !pendingDeletionMvoIds.Contains(mvo.Id))
+                .DistinctBy(mvo => mvo.Id)
+                .ToList();
+
+            await _syncServer.PrefetchExportMatchCandidatesForPageAsync(_exportEvaluationCache, mvosForPrefetch);
+        }
+
         var skippedCount = 0;
 
-        foreach (var (mvo, changedAttributes, removedAttributes) in _pendingExportEvaluations)
+        // Page-scoped export-matching candidates must never leak into any other evaluation path (recall,
+        // cross-page reference pass, drift, deprovisioning, preview all keep the per-object query), so the
+        // cache is cleared however the loop below ends, including on an unhandled exception.
+        try
         {
-            if (pendingDeletionMvoIds != null && pendingDeletionMvoIds.Contains(mvo.Id))
+            foreach (var (mvo, changedAttributes, removedAttributes) in _pendingExportEvaluations)
             {
-                Log.Debug("EvaluatePendingExportsAsync: Skipping export evaluation for MVO {MvoId} — " +
-                    "queued for immediate deletion, Delete exports will be created by FlushPendingMvoDeletionsAsync",
-                    mvo.Id);
-                skippedCount++;
-                continue;
-            }
+                if (pendingDeletionMvoIds != null && pendingDeletionMvoIds.Contains(mvo.Id))
+                {
+                    Log.Debug("EvaluatePendingExportsAsync: Skipping export evaluation for MVO {MvoId} — " +
+                        "queued for immediate deletion, Delete exports will be created by FlushPendingMvoDeletionsAsync",
+                        mvo.Id);
+                    skippedCount++;
+                    continue;
+                }
 
-            using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
-                .SetTag("mvoId", mvo.Id)
-                .SetTag("changedAttributeCount", changedAttributes.Count))
-            {
-                await EvaluateOutboundExportsAsync(mvo, changedAttributes, removedAttributes);
+                using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
+                    .SetTag("mvoId", mvo.Id)
+                    .SetTag("changedAttributeCount", changedAttributes.Count))
+                {
+                    await EvaluateOutboundExportsAsync(mvo, changedAttributes, removedAttributes);
+                }
             }
+        }
+        finally
+        {
+            if (_exportEvaluationCache != null)
+                _exportEvaluationCache.ExportMatchCandidates = null;
         }
 
         if (skippedCount > 0)

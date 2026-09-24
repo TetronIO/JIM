@@ -2,6 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Interfaces;
+using JIM.Application.Servers;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -12,6 +15,7 @@ using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Utilities;
+using JIM.Worker.Processors;
 using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
@@ -3338,6 +3342,555 @@ public class ExportEvaluationTests
         Assert.That(secondResult, Is.False, "A second claim on an already-claimed CSO must fail");
         Assert.That(cso.MetaverseObjectId, Is.EqualTo(firstMvoId), "The CSO must remain claimed by the first Metaverse Object");
         Assert.That(cso.DateJoined, Is.EqualTo(firstDateJoined), "The first claim's DateJoined must be untouched by the failed second claim");
+    }
+
+    #endregion
+
+    #region Export Match Candidate Prefetch Tests (page-scoped batch export matching)
+
+    /// <summary>
+    /// In-memory <see cref="SyncRepository"/> that counts calls to the per-object matching query and the
+    /// batch candidate query, so tests can assert which path export matching actually took.
+    /// </summary>
+    private sealed class CountingSyncRepository : SyncRepository
+    {
+        public int PerObjectMatchCallCount { get; private set; }
+        public int BatchCandidateQueryCallCount { get; private set; }
+
+        public override Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+            MetaverseObject metaverseObject,
+            ConnectedSystem connectedSystem,
+            ConnectedSystemObjectType connectedSystemObjectType,
+            ObjectMatchingRule rule)
+        {
+            PerObjectMatchCallCount++;
+            return base.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, rule);
+        }
+
+        public override Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+            int connectedSystemId,
+            int connectedSystemObjectTypeId,
+            string connectedSystemAttributeName,
+            AttributeDataType dataType,
+            bool caseSensitive,
+            IReadOnlyCollection<object> values)
+        {
+            BatchCandidateQueryCallCount++;
+            return base.GetExportMatchCandidateIdsAsync(connectedSystemId, connectedSystemObjectTypeId, connectedSystemAttributeName, dataType, caseSensitive, values);
+        }
+    }
+
+    /// <summary>
+    /// Builds a fresh Metaverse Object of the seeded User type carrying a single EmployeeId value, and
+    /// wires up the shared "Dummy User Export Synchronisation Rule 1" as a provisioning-enabled export
+    /// rule targeting the Dummy Target System with one Object Matching Rule and one Attribute Flow Rule
+    /// mapping EmployeeId. Every prefetch test builds on this shape.
+    /// </summary>
+    private (MetaverseObject Mvo, ConnectedSystem TargetSystem, ConnectedSystemObjectType TargetUserType,
+        ConnectedSystemObjectTypeAttribute CsEmployeeIdAttr, MetaverseAttribute EmployeeIdAttr, SyncRule ExportRule)
+        ArrangePrefetchFixture(string employeeIdValue = "EMP001")
+    {
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = mvUserType,
+            AttributeValues = new List<MetaverseObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = employeeIdAttr,
+                    AttributeId = employeeIdAttr.Id,
+                    StringValue = employeeIdValue
+                }
+            }
+        };
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>
+        {
+            BuildExportMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr)
+        };
+
+        exportRule.AttributeFlowRules.Clear();
+        var employeeIdMapping = new SyncRuleMapping
+        {
+            Id = 7001,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = csEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = csEmployeeIdAttr.Id
+        };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 7001,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
+
+        return (mvo, targetSystem, targetUserType, csEmployeeIdAttr, employeeIdAttr, exportRule);
+    }
+
+    /// <summary>
+    /// Builds an <see cref="ExportEvaluationCache"/> whose stable tiers reflect the given rule and target
+    /// system(s); <c>CsoLookup</c> defaults to empty (no existing join anywhere), matching most tests here.
+    /// </summary>
+    private static ExportEvaluationCache BuildPrefetchCache(
+        MetaverseObjectType mvoType,
+        SyncRule exportRule,
+        IReadOnlyList<int> targetSystemIds,
+        Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>? csoLookup = null)
+        => new(
+            new Dictionary<int, List<SyncRule>> { { mvoType.Id, new List<SyncRule> { exportRule } } },
+            csoLookup ?? new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(),
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            targetSystemIds);
+
+    [Test]
+    public async Task PrefetchExportMatchCandidatesForPageAsync_RuleTargetsSystemNotInTargetSystemIds_ExcludedFromCoverageAsync()
+    {
+        // Arrange - the rule's Connected System is deliberately left out of TargetSystemIds, as though it
+        // were the run's own source system and never a genuine export target for this rule.
+        var (mvo, _, _, _, _, exportRule) = ArrangePrefetchFixture();
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, targetSystemIds: []);
+
+        // Act
+        await Jim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+
+        // Assert
+        Assert.That(cache.ExportMatchCandidates!.IsCovered(mvo.Id, exportRule.Id), Is.False,
+            "A rule whose Connected System is not a target must not be covered by the prefetch");
+    }
+
+    [Test]
+    public async Task PrefetchExportMatchCandidatesForPageAsync_ProvisioningDisabled_ExcludedFromCoverageAsync()
+    {
+        // Arrange
+        var (mvo, targetSystem, _, _, _, exportRule) = ArrangePrefetchFixture();
+        exportRule.ProvisionToConnectedSystem = false;
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        // Act
+        await Jim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+
+        // Assert
+        Assert.That(cache.ExportMatchCandidates!.IsCovered(mvo.Id, exportRule.Id), Is.False,
+            "A rule with provisioning disabled must not be covered by the prefetch");
+    }
+
+    [Test]
+    public async Task PrefetchExportMatchCandidatesForPageAsync_MvoAlreadyHasCsoInTarget_ExcludedFromCoverageAsync()
+    {
+        // Arrange - CsoLookup already carries an entry for this (MVO, Connected System) pair, exactly as
+        // it would once the Metaverse Object is already joined there.
+        var (mvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        var existingCso = SeedUnclaimedTargetCso(SyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        existingCso.MetaverseObjectId = mvo.Id;
+
+        var csoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>
+        {
+            { (mvo.Id, targetSystem.Id), existingCso }
+        };
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id], csoLookup);
+
+        // Act
+        await Jim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+
+        // Assert
+        Assert.That(cache.ExportMatchCandidates!.IsCovered(mvo.Id, exportRule.Id), Is.False,
+            "A Metaverse Object that already has a Connected System Object in the target must not be covered by the prefetch");
+    }
+
+    [Test]
+    public async Task PrefetchExportMatchCandidatesForPageAsync_EligiblePair_CoversItAndPopulatesCandidatesViaOneBatchQueryAsync()
+    {
+        // Arrange
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        var cso = SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        // Act
+        await localJim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+
+        // Assert
+        var matchingRule = exportRule.ObjectMatchingRules.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cache.ExportMatchCandidates!.IsCovered(mvo.Id, exportRule.Id), Is.True);
+            Assert.That(cache.ExportMatchCandidates.GetCandidates(matchingRule.Id, "EMP001"), Does.Contain(cso.Id));
+            Assert.That(countingRepo.BatchCandidateQueryCallCount, Is.EqualTo(1), "One matching-rule group should issue exactly one batch query");
+        }
+    }
+
+    [Test]
+    public async Task PrefetchExportMatchCandidatesForPageAsync_TwoMvosSameRuleAndValue_IssuesOneBatchQueryAsync()
+    {
+        // Arrange - two Metaverse Objects resolve the same rule and value; the batch grouping must
+        // collapse them into a single database round trip rather than one per object.
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo1, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        var (mvo2, _, _, _, _, _) = ArrangePrefetchFixture();
+        SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var cache = BuildPrefetchCache(mvo1.Type!, exportRule, [targetSystem.Id]);
+
+        // Act
+        await localJim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo1, mvo2 });
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cache.ExportMatchCandidates!.IsCovered(mvo1.Id, exportRule.Id), Is.True);
+            Assert.That(cache.ExportMatchCandidates.IsCovered(mvo2.Id, exportRule.Id), Is.True);
+            Assert.That(countingRepo.BatchCandidateQueryCallCount, Is.EqualTo(1),
+                "Two Metaverse Objects resolving the same rule and value must still issue only one batch query");
+        }
+    }
+
+    [Test]
+    public async Task PrefetchExportMatchCandidatesForPageAsync_CalledAgain_ReplacesPreviousPageCandidatesAsync()
+    {
+        // Arrange
+        var (mvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        SeedUnclaimedTargetCso(SyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        await Jim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+        var firstPageCandidates = cache.ExportMatchCandidates;
+        Assert.That(firstPageCandidates!.IsCovered(mvo.Id, exportRule.Id), Is.True, "Sanity check on the first page");
+
+        // Act - the next page has no Metaverse Objects needing export matching at all.
+        await Jim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, Array.Empty<MetaverseObject>());
+
+        // Assert - a fresh instance, and the first page's coverage does not survive into it.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cache.ExportMatchCandidates, Is.Not.SameAs(firstPageCandidates));
+            Assert.That(cache.ExportMatchCandidates!.IsCovered(mvo.Id, exportRule.Id), Is.False,
+                "The previous page's covered pairs must not survive into the new page's candidates");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_PrefetchedCoveredWithCandidate_JoinsWithoutPerObjectQueryAsync()
+    {
+        // Arrange
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        var cso = SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        await localJim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+
+        // Act
+        var result = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, mvo.AttributeValues.ToList(), cache);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "The prefetched candidate should be joined");
+            Assert.That(result.PendingExports, Has.Count.EqualTo(1));
+            Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(0),
+                "A covered pair with a prefetched candidate must never fall back to the per-object query");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_PrefetchedCoveredNoCandidate_ProvisionsWithoutPerObjectQueryAsync()
+    {
+        // Arrange - no CSO seeded: the prefetch covers the pair but finds nothing.
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo, targetSystem, _, _, _, exportRule) = ArrangePrefetchFixture();
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        await localJim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+
+        // Act
+        var result = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, mvo.AttributeValues.ToList(), cache);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExports, Has.Count.EqualTo(1));
+            Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(0),
+                "A covered pair with no prefetched candidate must provision without falling back to the per-object query");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_NotCoveredByPrefetch_UsesPerObjectPathAsync()
+    {
+        // Arrange - no prefetch is performed for this cache, so ExportMatchCandidates stays null (the
+        // default), exactly as every non-worker caller (recall, deprovisioning, preview) leaves it.
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        var cso = SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        // Act
+        var result = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, mvo.AttributeValues.ToList(), cache);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "Export matching should still join via the per-object path");
+            Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(1),
+                "With no prefetch performed, export matching must use the per-object query exactly as today");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_TwoMvosSameValueOneCandidate_FirstJoinsSecondProvisionsAsync()
+    {
+        // Arrange
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo1, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        var (mvo2, _, _, _, _, _) = ArrangePrefetchFixture();
+        var cso = SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var cache = BuildPrefetchCache(mvo1.Type!, exportRule, [targetSystem.Id]);
+
+        await localJim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo1, mvo2 });
+
+        // Act - evaluate in page order
+        var result1 = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo1, mvo1.AttributeValues.ToList(), cache);
+        var result2 = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo2, mvo2.AttributeValues.ToList(), cache);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo1.Id), "The first Metaverse Object should claim the only candidate");
+            Assert.That(result1.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(result2.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+                "The second Metaverse Object must provision once the only candidate has been claimed");
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(0),
+                "Both Metaverse Objects were covered by the prefetch; neither should fall back to the per-object query");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_TwoMvosSameValueTwoCandidates_SecondGetsSecondCandidateAsync()
+    {
+        // Arrange
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo1, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        var (mvo2, _, _, _, _, _) = ArrangePrefetchFixture();
+
+        // Fixed, ordered ids so the batch query's "value then Connected System Object Id ascending" order
+        // is deterministic.
+        ConnectedSystemObject BuildCso(Guid id) => new()
+        {
+            Id = id,
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = csEmployeeIdAttr,
+                    AttributeId = csEmployeeIdAttr.Id,
+                    StringValue = "EMP001"
+                }
+            }
+        };
+        var firstCso = BuildCso(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        var secondCso = BuildCso(Guid.Parse("00000000-0000-0000-0000-000000000002"));
+        localSyncRepo.SeedConnectedSystemObject(firstCso);
+        localSyncRepo.SeedConnectedSystemObject(secondCso);
+
+        var cache = BuildPrefetchCache(mvo1.Type!, exportRule, [targetSystem.Id]);
+        await localJim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo1, mvo2 });
+
+        // Act
+        var result1 = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo1, mvo1.AttributeValues.ToList(), cache);
+        var result2 = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(mvo2, mvo2.AttributeValues.ToList(), cache);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstCso.MetaverseObjectId, Is.EqualTo(mvo1.Id), "The first Metaverse Object should claim the first candidate by ID order");
+            Assert.That(secondCso.MetaverseObjectId, Is.EqualTo(mvo2.Id), "The second Metaverse Object should claim the second candidate");
+            Assert.That(result1.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(result2.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(0));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_PrefetchedMisconfiguredRule_ProvisioningProceedsAsNoMatchAsync()
+    {
+        // Arrange - the rule's only source carries no Connected System attribute (a configuration fault);
+        // both the per-object and prefetched paths must report no match rather than throwing.
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (mvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture();
+        exportRule.ObjectMatchingRules.Single().Sources.Single().ConnectedSystemAttribute = null;
+        exportRule.ObjectMatchingRules.Single().Sources.Single().ConnectedSystemAttributeId = null;
+
+        // A CSO exists that WOULD match on EmployeeId if the rule were configured correctly, proving the
+        // rule genuinely never got to compare it (matching "by luck" would be a worse bug than never matching).
+        SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+        await localJim.ExportEvaluation.PrefetchExportMatchCandidatesForPageAsync(cache, new[] { mvo });
+
+        // Act
+        var result = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, mvo.AttributeValues.ToList(), cache);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+                "A misconfigured Object Matching Rule must never match; provisioning proceeds exactly as the per-object path would");
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(0),
+                "The pair was covered by the prefetch, so the misconfigured rule must be evaluated via the prefetched path, not fall back");
+        }
+    }
+
+    #endregion
+
+    #region Export Match Candidate Lifecycle Tests (SyncTaskProcessorBase.EvaluatePendingExportsAsync)
+
+    /// <summary>
+    /// Exposes <see cref="SyncTaskProcessorBase"/>'s protected export-evaluation state so tests can drive
+    /// <c>EvaluatePendingExportsAsync</c> directly and assert on
+    /// <see cref="ExportEvaluationCache.ExportMatchCandidates"/>'s lifecycle without running a full
+    /// synchronisation.
+    /// </summary>
+    private sealed class TestableSyncFullSyncTaskProcessor : SyncFullSyncTaskProcessor
+    {
+        public TestableSyncFullSyncTaskProcessor(
+            ISyncEngine syncEngine,
+            ISyncServer syncServer,
+            ISyncRepository syncRepository,
+            ConnectedSystem connectedSystem,
+            ConnectedSystemRunProfile connectedSystemRunProfile,
+            Activity activity,
+            CancellationTokenSource cancellationTokenSource)
+            : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        {
+        }
+
+        public ExportEvaluationCache? Cache
+        {
+            get => _exportEvaluationCache;
+            set => _exportEvaluationCache = value;
+        }
+
+        public void QueuePendingExportEvaluation(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
+            => _pendingExportEvaluations.Add((mvo, changedAttributes, null));
+
+        public Task RunEvaluatePendingExportsAsync() => EvaluatePendingExportsAsync();
+    }
+
+    [Test]
+    public async Task EvaluatePendingExportsAsync_NormalCompletion_ClearsExportMatchCandidatesAsync()
+    {
+        // Arrange
+        var (mvo, targetSystem, _, _, _, exportRule) = ArrangePrefetchFixture();
+        SyncRepo.SeedMetaverseObject(mvo);
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        var runProfile = ConnectedSystemRunProfilesData.Single(rp => rp.Name == "Dummy Target System Export");
+        var processor = new TestableSyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(Jim), SyncRepo, targetSystem, runProfile, ActivitiesData.First(), new CancellationTokenSource())
+        {
+            Cache = cache
+        };
+        processor.QueuePendingExportEvaluation(mvo, mvo.AttributeValues.ToList());
+
+        // Act
+        await processor.RunEvaluatePendingExportsAsync();
+
+        // Assert
+        Assert.That(processor.Cache!.ExportMatchCandidates, Is.Null,
+            "Page-scoped export-matching candidates must not survive past the page's own evaluation");
+    }
+
+    [Test]
+    public async Task EvaluatePendingExportsAsync_EvaluationThrows_StillClearsExportMatchCandidatesAsync()
+    {
+        // Arrange - a mocked ISyncServer whose export evaluation throws, simulating an unhandled failure
+        // partway through the page's evaluation loop. PrefetchExportMatchCandidatesForPageAsync's mock
+        // populates the cache exactly as the real implementation would, so the test proves the finally
+        // block clears a genuinely populated instance, not one that was already empty.
+        var mockSyncServer = new Mock<ISyncServer>();
+        mockSyncServer
+            .Setup(s => s.RefreshExportEvaluationCacheForPageAsync(It.IsAny<ExportEvaluationCache>(), It.IsAny<IEnumerable<Guid>>()))
+            .Returns(Task.CompletedTask);
+        mockSyncServer
+            .Setup(s => s.PrefetchExportMatchCandidatesForPageAsync(It.IsAny<ExportEvaluationCache>(), It.IsAny<IReadOnlyCollection<MetaverseObject>>()))
+            .Callback<ExportEvaluationCache, IReadOnlyCollection<MetaverseObject>>((c, _) => c.ExportMatchCandidates = new ExportMatchCandidates())
+            .Returns(Task.CompletedTask);
+        mockSyncServer
+            .Setup(s => s.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+                It.IsAny<MetaverseObject>(), It.IsAny<List<MetaverseObjectAttributeValue>>(), It.IsAny<ExportEvaluationCache>(),
+                It.IsAny<bool>(), It.IsAny<HashSet<MetaverseObjectAttributeValue>>(), It.IsAny<List<PendingExport>>()))
+            .ThrowsAsync(new InvalidOperationException("simulated export evaluation failure"));
+
+        var (mvo, targetSystem, _, _, _, exportRule) = ArrangePrefetchFixture();
+        var cache = BuildPrefetchCache(mvo.Type!, exportRule, [targetSystem.Id]);
+
+        var runProfile = ConnectedSystemRunProfilesData.Single(rp => rp.Name == "Dummy Target System Export");
+        var processor = new TestableSyncFullSyncTaskProcessor(
+            new SyncEngine(), mockSyncServer.Object, SyncRepo, targetSystem, runProfile, ActivitiesData.First(), new CancellationTokenSource())
+        {
+            Cache = cache
+        };
+        processor.QueuePendingExportEvaluation(mvo, mvo.AttributeValues.ToList());
+
+        // Act & Assert
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await processor.RunEvaluatePendingExportsAsync());
+        Assert.That(processor.Cache!.ExportMatchCandidates, Is.Null,
+            "Even when evaluation throws, page-scoped export-matching candidates must be cleared before the exception propagates");
     }
 
     #endregion
