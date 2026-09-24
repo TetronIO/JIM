@@ -1702,6 +1702,356 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    #region value provenance (#399)
+
+    public async Task<MetaverseObjectProvenance?> GetMetaverseObjectProvenanceAsync(Guid metaverseObjectId)
+    {
+        var exists = await Repository.Database.MetaverseObjects.AsNoTracking().AnyAsync(mo => mo.Id == metaverseObjectId);
+        if (!exists)
+            return null;
+
+        var result = new MetaverseObjectProvenance { MetaverseObjectId = metaverseObjectId };
+
+        // Grouped in SQL: a multi-valued attribute can hold well over 100K values, so this must cost one
+        // aggregate query, never a row per value.
+        var groups = await Repository.Database.MetaverseObjectAttributeValues
+            .AsNoTracking()
+            .Where(av => av.MetaverseObject.Id == metaverseObjectId)
+            .GroupBy(av => new
+            {
+                av.AttributeId,
+                AttributeName = av.Attribute.Name,
+                av.ContributedBySystemId,
+                av.ContributedBySyncRuleId,
+                av.NullValue
+            })
+            .Select(g => new
+            {
+                g.Key.AttributeId,
+                g.Key.AttributeName,
+                g.Key.ContributedBySystemId,
+                g.Key.ContributedBySyncRuleId,
+                g.Key.NullValue,
+                Count = g.Count()
+            })
+            .ToListAsync();
+
+        if (groups.Count == 0)
+            return result;
+
+        // Resolve contributing system/rule names in one lookup each, rather than per group.
+        var systemIds = groups.Where(g => g.ContributedBySystemId.HasValue).Select(g => g.ContributedBySystemId!.Value).Distinct().ToList();
+        var ruleIds = groups.Where(g => g.ContributedBySyncRuleId.HasValue).Select(g => g.ContributedBySyncRuleId!.Value).Distinct().ToList();
+
+        var systemNames = systemIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await Repository.Database.ConnectedSystems.AsNoTracking()
+                .Where(cs => systemIds.Contains(cs.Id))
+                .Select(cs => new { cs.Id, cs.Name })
+                .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+        var ruleNames = ruleIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await Repository.Database.SyncRules.AsNoTracking()
+                .Where(r => ruleIds.Contains(r.Id))
+                .Select(r => new { r.Id, r.Name })
+                .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+        foreach (var attributeGroup in groups.GroupBy(g => new { g.AttributeId, g.AttributeName }))
+        {
+            var origins = attributeGroup
+                .Select(g => new
+                {
+                    Origin = ProvenanceLogic.ResolveOrigin(
+                        g.ContributedBySystemId,
+                        g.ContributedBySyncRuleId,
+                        g.NullValue,
+                        g.ContributedBySystemId.HasValue ? systemNames.GetValueOrDefault(g.ContributedBySystemId.Value) : null,
+                        g.ContributedBySyncRuleId.HasValue ? ruleNames.GetValueOrDefault(g.ContributedBySyncRuleId.Value) : null),
+                    g.Count
+                })
+                .OrderByDescending(x => x.Count)
+                .Select(x => x.Origin)
+                .ToList();
+
+            result.Attributes.Add(new MetaverseAttributeOriginSummary
+            {
+                AttributeId = attributeGroup.Key.AttributeId,
+                AttributeName = attributeGroup.Key.AttributeName,
+                Origins = origins
+            });
+        }
+
+        return result;
+    }
+
+    public async Task<int?> GetMetaverseObjectTypeIdAsync(Guid metaverseObjectId)
+    {
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mo => mo.Id == metaverseObjectId)
+            .Select(mo => (int?)mo.Type.Id)
+            .SingleOrDefaultAsync();
+    }
+
+    public async Task<(List<ProvenanceValue> Values, int TotalCount)> GetMetaverseAttributeCurrentValuesAsync(
+        Guid metaverseObjectId, int attributeId, int cap)
+    {
+        var baseQuery = Repository.Database.MetaverseObjectAttributeValues
+            .AsNoTracking()
+            .Where(av => av.MetaverseObject.Id == metaverseObjectId && av.AttributeId == attributeId);
+
+        var totalCount = await baseQuery.CountAsync();
+        if (totalCount == 0)
+            return (new List<ProvenanceValue>(), 0);
+
+        var rows = await baseQuery
+            .OrderBy(av => av.Id)
+            .Take(cap)
+            .Select(av => new
+            {
+                av.StringValue,
+                av.IntValue,
+                av.LongValue,
+                av.DecimalValue,
+                av.DateTimeValue,
+                av.GuidValue,
+                av.BoolValue,
+                ByteLength = av.ByteValue != null ? av.ByteValue.Length : (int?)null,
+                av.ContributedBySystemId,
+                ContributedBySystemName = av.ContributedBySystem != null ? av.ContributedBySystem.Name : null,
+                av.ContributedBySyncRuleId,
+                ContributedBySyncRuleName = av.ContributedBySyncRule != null ? av.ContributedBySyncRule.Name : null,
+                av.NullValue,
+                av.ReferenceValueId,
+                ReferenceTypeName = av.ReferenceValue != null ? av.ReferenceValue.Type.Name : null,
+                ReferenceDisplayName = av.ReferenceValue != null ? av.ReferenceValue.CachedDisplayName : null
+            })
+            .ToListAsync();
+
+        var values = rows.Select(r => new ProvenanceValue
+        {
+            DisplayValue = FormatTypedValueForDisplay(
+                r.StringValue, r.IntValue, r.LongValue, r.DecimalValue, r.DateTimeValue, r.GuidValue, r.BoolValue,
+                r.ByteLength, r.ReferenceDisplayName, r.ReferenceValueId),
+            ReferenceMetaverseObjectId = r.ReferenceValueId,
+            ReferenceTypeName = r.ReferenceTypeName,
+            Origin = ProvenanceLogic.ResolveOrigin(r.ContributedBySystemId, r.ContributedBySyncRuleId, r.NullValue, r.ContributedBySystemName, r.ContributedBySyncRuleName)
+        }).ToList();
+
+        return (values, totalCount);
+    }
+
+    public async Task<ProvenanceConnectedSystemObject?> GetContributingConnectedSystemObjectAsync(
+        Guid metaverseObjectId, int connectedSystemId, int? contributingSyncRuleId)
+    {
+        int? preferredTypeId = null;
+        if (contributingSyncRuleId.HasValue)
+        {
+            preferredTypeId = await Repository.Database.SyncRules
+                .AsNoTracking()
+                .Where(r => r.Id == contributingSyncRuleId.Value)
+                .Select(r => (int?)r.ConnectedSystemObjectTypeId)
+                .SingleOrDefaultAsync();
+        }
+
+        var connectedSystemNameAttributesLower = ObjectNaming.ConnectedSystemNameAttributes
+            .Select(name => name.ToLower())
+            .ToList();
+
+        var candidates = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(cso => cso.MetaverseObjectId == metaverseObjectId && cso.ConnectedSystemId == connectedSystemId)
+            .Include(cso => cso.ConnectedSystem)
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues.Where(av =>
+                connectedSystemNameAttributesLower.Contains(av.Attribute.Name.ToLower()) ||
+                av.Attribute.IsExternalId ||
+                av.Attribute.IsSecondaryExternalId))
+                .ThenInclude(av => av.Attribute)
+            .ToListAsync();
+
+        if (candidates.Count == 0)
+            return null;
+
+        var chosen = preferredTypeId.HasValue
+            ? candidates.FirstOrDefault(c => c.TypeId == preferredTypeId.Value) ?? candidates[0]
+            : candidates[0];
+
+        return new ProvenanceConnectedSystemObject
+        {
+            Id = chosen.Id,
+            ConnectedSystemId = chosen.ConnectedSystemId,
+            ConnectedSystemName = chosen.ConnectedSystem.Name,
+            TypeName = chosen.Type.Name,
+            DisplayName = chosen.NameOrId,
+            ExternalId = chosen.ExternalIdAttributeValue?.ToStringNoName()
+        };
+    }
+
+    public async Task<ConnectedSystemObject?> GetJoinedConnectedSystemObjectForProvenanceAsync(
+        Guid metaverseObjectId, int connectedSystemId, int connectedSystemObjectTypeId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+                .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+            .FirstOrDefaultAsync(cso =>
+                cso.MetaverseObjectId == metaverseObjectId &&
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.TypeId == connectedSystemObjectTypeId);
+    }
+
+    public async Task<ProvenanceChange?> GetLastAttributeSetChangeAsync(Guid metaverseObjectId, int attributeId)
+    {
+        var change = await Repository.Database.MetaverseObjectChangeAttributeValues
+            .AsNoTracking()
+            .Where(vc =>
+                vc.ValueChangeType == ValueChangeType.Add &&
+                EF.Property<int?>(vc.MetaverseObjectChangeAttribute, "AttributeId") == attributeId &&
+                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject != null &&
+                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject.Id == metaverseObjectId)
+            .OrderByDescending(vc => vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime)
+            .Select(vc => new ProvenanceChange
+            {
+                ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
+                ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
+                    ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
+                    : (Guid?)null,
+                ActivityRunProfileExecutionItemId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItemId,
+                ActivityDescription = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
+                    ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.TargetName
+                    : null,
+                InitiatedByName = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.InitiatedByName,
+                ChangeInitiatorType = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeInitiatorType
+            })
+            .FirstOrDefaultAsync();
+
+        if (change != null && change.ActivityDescription == null)
+            change.ActivityDescription = DescribeNonSyncChange(change.ChangeInitiatorType);
+
+        return change;
+    }
+
+    public async Task<List<MetaverseAttributeHistoryRawEntry>> GetAttributeHistoryRawEntriesAsync(
+        Guid metaverseObjectId, int attributeId, int rawCap)
+    {
+        var rows = await Repository.Database.MetaverseObjectChangeAttributeValues
+            .AsNoTracking()
+            .Where(vc =>
+                EF.Property<int?>(vc.MetaverseObjectChangeAttribute, "AttributeId") == attributeId &&
+                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject != null &&
+                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject.Id == metaverseObjectId)
+            .OrderByDescending(vc => vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime)
+            .ThenByDescending(vc => vc.Id)
+            .Take(rawCap)
+            .Select(vc => new
+            {
+                ChangeId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.Id,
+                vc.ValueChangeType,
+                vc.StringValue,
+                vc.IntValue,
+                vc.LongValue,
+                vc.DecimalValue,
+                vc.DateTimeValue,
+                vc.GuidValue,
+                vc.BoolValue,
+                vc.ByteValueLength,
+                vc.ReferenceValueId,
+                ReferenceDisplayName = vc.ReferenceValue != null ? vc.ReferenceValue.CachedDisplayName : null,
+                vc.ContributedBySyncRuleId,
+                vc.ContributedBySyncRuleName,
+                ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
+                ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
+                    ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
+                    : (Guid?)null,
+                ActivityRunProfileExecutionItemId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItemId,
+                ActivityDescription = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
+                    ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.TargetName
+                    : null,
+                InitiatedByName = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.InitiatedByName,
+                ChangeInitiatorType = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeInitiatorType
+            })
+            .ToListAsync();
+
+        return rows.Select(r => new MetaverseAttributeHistoryRawEntry
+        {
+            ChangeId = r.ChangeId,
+            ValueChangeType = r.ValueChangeType,
+            DisplayValue = FormatTypedValueForDisplay(
+                r.StringValue, r.IntValue, r.LongValue, r.DecimalValue, r.DateTimeValue, r.GuidValue, r.BoolValue,
+                r.ByteValueLength, r.ReferenceDisplayName, r.ReferenceValueId),
+            SyncRuleId = r.ContributedBySyncRuleId,
+            SyncRuleName = r.ContributedBySyncRuleName,
+            Change = new ProvenanceChange
+            {
+                ChangeTime = r.ChangeTime,
+                ActivityId = r.ActivityId,
+                ActivityRunProfileExecutionItemId = r.ActivityRunProfileExecutionItemId,
+                ActivityDescription = r.ActivityDescription ?? DescribeNonSyncChange(r.ChangeInitiatorType),
+                InitiatedByName = r.InitiatedByName,
+                ChangeInitiatorType = r.ChangeInitiatorType
+            }
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Formats a raw typed value column set as display text (#399), shared between current-value and
+    /// change-history provenance projections. Mirrors <see cref="MetaverseObjectAttributeValue.ToString()"/>'s
+    /// value selection, minus the attribute name prefix, plus resolving a reference to its display name.
+    /// </summary>
+    private static string? FormatTypedValueForDisplay(
+        string? stringValue, int? intValue, long? longValue, decimal? decimalValue, DateTime? dateTimeValue,
+        Guid? guidValue, bool? boolValue, int? byteLength, string? referenceDisplayName, Guid? referenceId)
+    {
+        if (!string.IsNullOrEmpty(stringValue))
+            return stringValue;
+
+        if (intValue.HasValue)
+            return intValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        if (longValue.HasValue)
+            return longValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        if (decimalValue.HasValue)
+            return decimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        if (dateTimeValue.HasValue)
+            return dateTimeValue.Value.ToString("u", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (guidValue.HasValue)
+            return guidValue.Value.ToString();
+
+        if (boolValue.HasValue)
+            return boolValue.Value.ToString();
+
+        if (byteLength.HasValue)
+            return $"{byteLength.Value} bytes";
+
+        if (referenceId.HasValue)
+            return referenceDisplayName ?? referenceId.Value.ToString();
+
+        return null;
+    }
+
+    /// <summary>A sensible Activity description for a change with no Run Profile execution item (#399).</summary>
+    private static string DescribeNonSyncChange(MetaverseObjectChangeInitiatorType initiatorType) => initiatorType switch
+    {
+        MetaverseObjectChangeInitiatorType.User => "Direct edit",
+        MetaverseObjectChangeInitiatorType.WorkflowInstance => "Workflow",
+        MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation => "Group Membership Rule evaluation",
+        MetaverseObjectChangeInitiatorType.SynchronisationRule => "Synchronisation",
+        MetaverseObjectChangeInitiatorType.ExampleData => "Example data",
+        MetaverseObjectChangeInitiatorType.System => "System-initiated change",
+        _ => "Change"
+    };
+
+    #endregion
+
     /// <summary>
     /// Updates a Metaverse Object and the attribute values it owns.
     /// </summary>

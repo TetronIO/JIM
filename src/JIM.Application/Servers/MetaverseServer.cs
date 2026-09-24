@@ -22,7 +22,7 @@ using JIM.Application.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
-public class MetaverseServer
+public partial class MetaverseServer
 {
     #region accessors
     private JimApplication Application { get; }
@@ -1196,28 +1196,8 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectDetailAsync(id, loadStrategy);
     }
 
-    /// <summary>
-    /// Returns the origin of every attribute value on a Metaverse Object (#399): which Connected System and
-    /// Synchronisation Rule contributed it, or that no contributor is recorded. Drives the Inspect view.
-    /// Returns null when the Metaverse Object does not exist.
-    /// </summary>
-    public Task<MetaverseObjectProvenance?> GetMetaverseObjectProvenanceAsync(Guid metaverseObjectId)
-    {
-        // Contract placeholder: implemented by #399 work package B.
-        throw new NotImplementedException();
-    }
-
-    /// <summary>
-    /// Returns everything the attribute inspector shows for one attribute on one Metaverse Object (#399): current
-    /// values and origin, the contributing Connected System Object, the change that last set the value, every
-    /// contributing source in priority order with the value it would supply, and the attribute's history.
-    /// Returns null when the Metaverse Object or the attribute does not exist.
-    /// </summary>
-    public Task<MetaverseAttributeProvenance?> GetMetaverseAttributeProvenanceAsync(Guid metaverseObjectId, int attributeId)
-    {
-        // Contract placeholder: implemented by #399 work package B.
-        throw new NotImplementedException();
-    }
+    // GetMetaverseObjectProvenanceAsync and GetMetaverseAttributeProvenanceAsync (#399) are implemented in
+    // MetaverseServer.Provenance.cs.
 
     /// <summary>
     /// Returns a page of change-history rows for a Metaverse Object, projected into a flat DTO.

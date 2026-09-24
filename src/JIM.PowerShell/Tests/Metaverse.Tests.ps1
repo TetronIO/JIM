@@ -1176,3 +1176,161 @@ Describe 'Remove-JIMMetaverseObjectType' {
         It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
     }
 }
+
+Describe 'Get-JIMMetaverseObjectProvenance' {
+
+    Context 'Parameter Sets' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMMetaverseObjectProvenance
+        }
+
+        It 'Should have a Summary parameter set as default' {
+            $command.DefaultParameterSet | Should -Be 'Summary'
+        }
+
+        It 'Should have a ByAttributeName parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ByAttributeName'
+        }
+
+        It 'Should have a ByAttributeId parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ByAttributeId'
+        }
+
+        It 'Should not allow AttributeName and AttributeId together' {
+            { Get-JIMMetaverseObjectProvenance -Id ([guid]::NewGuid()) -AttributeName Department -AttributeId 1 -ErrorAction Stop } |
+                Should -Throw
+        }
+    }
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMMetaverseObjectProvenance
+        }
+
+        It 'Should have a mandatory Id parameter that accepts GUID' {
+            $param = $command.Parameters['Id']
+            $param.ParameterType.Name | Should -Be 'Guid'
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Id parameter that accepts pipeline by property name' {
+            $param = $command.Parameters['Id']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have AttributeName parameter with validation' {
+            $param = $command.Parameters['AttributeName']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] } | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Get-JIMMetaverseObjectProvenance -Id ([guid]::NewGuid()) -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Request Binding' {
+
+        It 'Requests the object-level provenance endpoint with just -Id' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ MetaverseObjectId = $mvoId; Attributes = @() } }
+
+                Get-JIMMetaverseObjectProvenance -Id $mvoId | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/provenance"
+                }
+            }
+        }
+
+        It 'Requests the attribute-level provenance endpoint directly with -AttributeId' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ AttributeId = 42; AttributeName = 'Department' } }
+
+                Get-JIMMetaverseObjectProvenance -Id $mvoId -AttributeId 42 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/attributes/42/provenance"
+                }
+            }
+        }
+
+        It 'Resolves -AttributeName to an id via the summary, then requests attribute-level provenance' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/provenance" } {
+                    [PSCustomObject]@{
+                        MetaverseObjectId = $mvoId
+                        Attributes        = @(
+                            [PSCustomObject]@{ AttributeId = 7; AttributeName = 'Display Name'; Origins = @() }
+                            [PSCustomObject]@{ AttributeId = 42; AttributeName = 'Department'; Origins = @() }
+                        )
+                    }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/attributes/42/provenance" } {
+                    [PSCustomObject]@{ AttributeId = 42; AttributeName = 'Department' }
+                }
+
+                $result = Get-JIMMetaverseObjectProvenance -Id $mvoId -AttributeName Department
+
+                $result.AttributeId | Should -Be 42
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/attributes/42/provenance" }
+            }
+        }
+
+        It 'Resolves -AttributeName case-insensitively' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/provenance" } {
+                    [PSCustomObject]@{ MetaverseObjectId = $mvoId; Attributes = @([PSCustomObject]@{ AttributeId = 42; AttributeName = 'Department'; Origins = @() }) }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/attributes/42/provenance" } {
+                    [PSCustomObject]@{ AttributeId = 42; AttributeName = 'Department' }
+                }
+
+                $result = Get-JIMMetaverseObjectProvenance -Id $mvoId -AttributeName 'department'
+
+                $result.AttributeId | Should -Be 42
+            }
+        }
+
+        It 'Errors clearly when -AttributeName does not match any attribute holding a value' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $mvoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -eq "/api/v1/metaverse/objects/$mvoId/provenance" } {
+                    [PSCustomObject]@{ MetaverseObjectId = $mvoId; Attributes = @([PSCustomObject]@{ AttributeId = 42; AttributeName = 'Department'; Origins = @() }) }
+                }
+
+                { Get-JIMMetaverseObjectProvenance -Id $mvoId -AttributeName 'NoSuchAttribute' -ErrorAction Stop } |
+                    Should -Throw "*No attribute named 'NoSuchAttribute'*"
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Get-JIMMetaverseObjectProvenance -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+        It 'Should document its output shape' { $help.returnValues | Out-String | Should -Match 'MetaverseObjectId' }
+    }
+}

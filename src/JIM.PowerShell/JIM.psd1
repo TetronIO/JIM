@@ -160,6 +160,7 @@
         'Get-JIMMetaverseObject',
         'Set-JIMMetaverseObjectPassword',
         'Get-JIMMetaverseObjectChangeHistory',
+        'Get-JIMMetaverseObjectProvenance',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',

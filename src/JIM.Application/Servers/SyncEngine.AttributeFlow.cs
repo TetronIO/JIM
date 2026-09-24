@@ -1074,7 +1074,12 @@ public partial class SyncEngine
         TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
-    private static Dictionary<string, object?> BuildCsoAttributeDictionary(
+    /// <summary>
+    /// Builds the <c>cs[...]</c> attribute dictionary an Expression evaluates against. Internal (rather than
+    /// private) so the provenance inspector (#399) can evaluate an Attribute Priority candidate's expression
+    /// exactly as the engine would, without duplicating this projection logic.
+    /// </summary>
+    internal static Dictionary<string, object?> BuildCsoAttributeDictionary(
         ConnectedSystemObject cso,
         ConnectedSystemObjectType csoType)
     {

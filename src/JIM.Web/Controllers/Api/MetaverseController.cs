@@ -1647,6 +1647,59 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// Get the value provenance of every attribute on a Metaverse Object
+    /// </summary>
+    /// <remarks>
+    /// Returns the origin of every attribute holding at least one value (asserted-null rows included): which
+    /// Connected System and Synchronisation Rule contributed it, or that no contributor is recorded (#399).
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <response code="200">The provenance of every attribute holding a value.</response>
+    /// <response code="404">No such Metaverse Object.</response>
+    [HttpGet("objects/{id:guid}/provenance", Name = "GetObjectProvenance")]
+    [ProducesResponseType(typeof(MetaverseObjectProvenanceDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectProvenanceAsync(Guid id)
+    {
+        _logger.LogTrace("Requested value provenance for Metaverse Object: {Id}", id);
+
+        var provenance = await _application.Metaverse.GetMetaverseObjectProvenanceAsync(id);
+        if (provenance == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
+
+        return Ok(MetaverseObjectProvenanceDto.FromModel(provenance));
+    }
+
+    /// <summary>
+    /// Get the value provenance of one attribute on a Metaverse Object
+    /// </summary>
+    /// <remarks>
+    /// Returns everything the attribute inspector shows for one attribute on one Metaverse Object (#399):
+    /// current values and origin, the contributing Connected System Object, the change that last set the value,
+    /// every contributing Synchronisation Rule mapping in priority order with the value it would supply, and the
+    /// attribute's change history.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    /// <param name="attributeId">The unique identifier of the Metaverse attribute.</param>
+    /// <response code="200">The attribute's provenance.</response>
+    /// <response code="404">No such Metaverse Object, or no such attribute.</response>
+    [HttpGet("objects/{id:guid}/attributes/{attributeId:int}/provenance", Name = "GetObjectAttributeProvenance")]
+    [ProducesResponseType(typeof(MetaverseAttributeProvenanceDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectAttributeProvenanceAsync(Guid id, int attributeId)
+    {
+        _logger.LogTrace("Requested value provenance for Metaverse Object {Id}, attribute {AttributeId}", id, attributeId);
+
+        var provenance = await _application.Metaverse.GetMetaverseAttributeProvenanceAsync(id, attributeId);
+        if (provenance == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id}, or attribute {attributeId}, not found."));
+
+        return Ok(MetaverseAttributeProvenanceDto.FromModel(provenance));
+    }
+
+    /// <summary>
     /// List Metaverse Objects pending deletion
     /// </summary>
     /// <remarks>

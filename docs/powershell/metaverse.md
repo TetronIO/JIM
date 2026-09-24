@@ -908,6 +908,61 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ---
 
+### Get-JIMMetaverseObjectProvenance
+
+Shows where a Metaverse Object's attribute values came from: which Connected System and Synchronisation Rule contributed each one, or that no contributor is recorded.
+
+With just `-Id`, returns a summary: one entry per attribute holding at least one value, with its distinct origins ordered by value count descending. With `-AttributeName` or `-AttributeId`, returns full provenance for that one attribute: the current value(s) and their origin, the joined Connected System Object the value came from, the change that most recently set it, every Synchronisation Rule mapping that could contribute to it (in priority order, each with the value it would currently supply and its standing against the value in use), and the attribute's change history.
+
+#### Syntax
+
+```powershell
+# Summary (default)
+Get-JIMMetaverseObjectProvenance -Id <guid>
+
+# ByAttributeName
+Get-JIMMetaverseObjectProvenance -Id <guid> -AttributeName <string>
+
+# ByAttributeId
+Get-JIMMetaverseObjectProvenance -Id <guid> -AttributeId <int>
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
+| `AttributeName` | `string` | No | | Name of the attribute to get detailed provenance for. Resolved against the object's own attributes (an exact, case-insensitive match). Cannot be used with `-AttributeId`. |
+| `AttributeId` | `int` | No | | Identifier of the attribute to get detailed provenance for. Cannot be used with `-AttributeName`. |
+
+#### Output
+
+With just `-Id`: a `PSCustomObject` with `MetaverseObjectId` and `Attributes` (each with `AttributeId`, `AttributeName` and `Origins`, an array of `{Kind, ConnectedSystemId, ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue}`).
+
+With `-AttributeName` or `-AttributeId`: a `PSCustomObject` with `MetaverseObjectId`, `MetaverseObjectTypeId`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `CurrentValues` (each with `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName`, `Origin`), `CurrentValueTotalCount`, `ContributingConnectedSystemObject`, `LastSet` (the Activity that set the current value), `Sources` (each mapping's `Rank`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName`, `IsExpression`, `Expression`, `State`, `CandidateValues`, `Note`), `History` (newest first) and `HistoryTruncated`.
+
+#### Examples
+
+```powershell title="Get the origin of every attribute holding a value"
+Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Get full provenance for one attribute by name"
+Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -AttributeName Department
+```
+
+```powershell title="List the Synchronisation Rules that could contribute to an attribute but are currently losing Attribute Priority"
+(Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -AttributeId 42).Sources |
+    Where-Object State -eq 'Outranked'
+```
+
+```powershell title="Pipe a Metaverse Object into the cmdlet"
+Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
+    Get-JIMMetaverseObjectProvenance
+```
+
+---
+
 ## Set-JIMMetaverseObjectPassword
 
 Sets a Metaverse Object's password, on the Connected System Objects you name or on every Connected System configured for Password Synchronisation.
