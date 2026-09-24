@@ -541,7 +541,10 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
                     existingStep.Name = stepRequest.Name;
                     existingStep.ExecutionMode = stepRequest.ExecutionMode;
                     existingStep.StepType = stepRequest.StepType;
-                    existingStep.ContinueOnFailure = stepRequest.ContinueOnFailure;
+                    // TODO(#1787 stage 2): apply the legacy write rule (and onFailure) rather than this literal mapping.
+                    existingStep.OnFailure = stepRequest.ContinueOnFailure
+                        ? ScheduleStepFailureBehaviour.Continue
+                        : ScheduleStepFailureBehaviour.FollowSchedule;
                     existingStep.Timeout = stepRequest.TimeoutSeconds.HasValue
                         ? TimeSpan.FromSeconds(stepRequest.TimeoutSeconds.Value)
                         : null;

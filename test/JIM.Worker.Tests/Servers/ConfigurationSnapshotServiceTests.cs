@@ -681,11 +681,12 @@ public class ConfigurationSnapshotServiceTests
             IntervalWindowEnd = "18:00",
             DaysOfWeek = "1,2,3,4,5",
             RunTimes = "09:00,12:00",
-            CronExpression = "0 6 * * 1-5"
+            CronExpression = "0 6 * * 1-5",
+            OnStepFailure = ScheduleFailureBehaviour.Continue
         };
         // Added out of StepIndex order to prove the snapshot orders by StepIndex.
         schedule.Steps.Add(new ScheduleStep { Id = stepBId, StepIndex = 1, StepType = ScheduleStepType.PowerShell, ScriptPath = "/x.ps1", ExecutionMode = StepExecutionMode.ParallelWithPrevious });
-        schedule.Steps.Add(new ScheduleStep { Id = stepAId, StepIndex = 0, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 3, RunProfileId = 7 });
+        schedule.Steps.Add(new ScheduleStep { Id = stepAId, StepIndex = 0, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 3, RunProfileId = 7, OnFailure = ScheduleStepFailureBehaviour.Stop });
 
         var snapshot = _service.CreateSnapshot(schedule, HashKey);
 
@@ -709,6 +710,36 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(firstStep.ItemId, Is.Null, "a Guid-keyed item does not use the integer ItemId");
         Assert.That(Child(firstStep, "connectedSystemId")!.Value, Is.EqualTo("3"));
         Assert.That(steps.Children![1].ItemGuidId, Is.EqualTo(stepBId));
+    }
+
+    [Test]
+    public void CreateSnapshot_Schedule_CapturesTheScheduleAndStepFailureBehaviour()
+    {
+        // #1787: the Schedule's "When a step fails" and each step's "When this step fails" appear in change history,
+        // replacing the step's former "Continue on failure" entry.
+        var followingStepId = Guid.NewGuid();
+        var stoppingStepId = Guid.NewGuid();
+        var schedule = new Schedule { Id = Guid.NewGuid(), Name = "Nightly HR sync", OnStepFailure = ScheduleFailureBehaviour.Continue };
+        schedule.Steps.Add(new ScheduleStep { Id = followingStepId, StepIndex = 0, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 3, RunProfileId = 7 });
+        schedule.Steps.Add(new ScheduleStep { Id = stoppingStepId, StepIndex = 1, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 3, RunProfileId = 8, OnFailure = ScheduleStepFailureBehaviour.Stop });
+
+        var snapshot = _service.CreateSnapshot(schedule, HashKey);
+
+        var onStepFailure = Child(snapshot.Root, "onStepFailure")!;
+        var steps = Child(snapshot.Root, "steps")!.Children!;
+        var followingStep = steps.Single(s => s.ItemGuidId == followingStepId);
+        var stoppingStep = steps.Single(s => s.ItemGuidId == stoppingStepId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(onStepFailure.Value, Is.EqualTo("Continue"));
+            Assert.That(onStepFailure.Label, Is.EqualTo("When a step fails"));
+            Assert.That(Child(followingStep, "onFailure")!.Value, Is.EqualTo("FollowSchedule"),
+                "the default is recorded too, so a change to or from it diffs");
+            Assert.That(Child(followingStep, "onFailure")!.DisplayValue, Is.EqualTo("Follow Schedule"));
+            Assert.That(Child(stoppingStep, "onFailure")!.Value, Is.EqualTo("Stop"));
+            Assert.That(Child(stoppingStep, "onFailure")!.Label, Is.EqualTo("When this step fails"));
+            Assert.That(Child(stoppingStep, "continueOnFailure"), Is.Null, "the former boolean entry is gone");
+        }
     }
 
     [Test]

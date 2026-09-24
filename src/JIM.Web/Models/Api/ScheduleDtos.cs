@@ -372,7 +372,8 @@ public class ScheduleStepDto
             Name = step.Name,
             ExecutionMode = step.ExecutionMode,
             StepType = step.StepType,
-            ContinueOnFailure = step.ContinueOnFailure,
+            // TODO(#1787 stage 2): replace with onFailure plus the effective continueOnFailure and failureBehaviourSource.
+            ContinueOnFailure = ScheduleFailureHandling.ContinuesOnFailure(step, step.Schedule),
             TimeoutSeconds = step.Timeout.HasValue ? (int)step.Timeout.Value.TotalSeconds : null,
             // RunProfile
             ConnectedSystemId = step.ConnectedSystemId,
@@ -403,7 +404,8 @@ public class ScheduleStepDto
             Name = Name,
             ExecutionMode = ExecutionMode,
             StepType = StepType,
-            ContinueOnFailure = ContinueOnFailure,
+            // TODO(#1787 stage 2): apply the legacy write rule (and onFailure) rather than this literal mapping.
+            OnFailure = ContinueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule,
             Timeout = TimeoutSeconds.HasValue ? TimeSpan.FromSeconds(TimeoutSeconds.Value) : null,
             // RunProfile
             ConnectedSystemId = ConnectedSystemId,

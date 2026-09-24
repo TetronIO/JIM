@@ -242,8 +242,11 @@
 
                                 <MudDivider Class="my-2" />
 
-                                <MudSwitch @bind-Value="_editingStep.ContinueOnFailure" Color="Color.Warning"
-                                           Label="@(_editingStep.ContinueOnFailure ? "Continue schedule if this step fails" : "Stop schedule if this step fails")" />
+                                @* TODO(#1787 stage 2): replace this switch with the three-way "When this step fails" select. *@
+                                <MudSwitch T="bool" Value="@(_editingStep.OnFailure == ScheduleStepFailureBehaviour.Continue)"
+                                           ValueChanged="@((bool continueOnFailure) => _editingStep.OnFailure = continueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule)"
+                                           Color="Color.Warning"
+                                           Label="@(_editingStep.OnFailure == ScheduleStepFailureBehaviour.Continue ? "Continue schedule if this step fails" : "Stop schedule if this step fails")" />
 
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                                     <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
@@ -966,7 +969,7 @@
                             dbStep.StepIndex = inMemoryStep.StepIndex;
                             dbStep.StepType = inMemoryStep.StepType;
                             dbStep.ExecutionMode = inMemoryStep.ExecutionMode;
-                            dbStep.ContinueOnFailure = inMemoryStep.ContinueOnFailure;
+                            dbStep.OnFailure = inMemoryStep.OnFailure;
                             dbStep.Timeout = inMemoryStep.Timeout;
                             dbStep.ConnectedSystemId = inMemoryStep.ConnectedSystemId;
                             dbStep.RunProfileId = inMemoryStep.RunProfileId;
@@ -1135,7 +1138,7 @@
             Name = step.Name,
             StepType = step.StepType,
             ExecutionMode = step.ExecutionMode,
-            ContinueOnFailure = step.ContinueOnFailure,
+            OnFailure = step.OnFailure,
             Timeout = step.Timeout,
             StepIndex = step.StepIndex,
             Created = step.Created,

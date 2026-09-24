@@ -508,7 +508,9 @@ public class SchedulerServer
                         : null,
                     ActivityId = activity?.Id,
                     ActivityStatus = activity?.Status,
-                    ContinueOnFailure = step.ContinueOnFailure
+                    // The effective behaviour, from the step's own setting or its Schedule's (#1787), and where it comes from.
+                    ContinueOnFailure = ScheduleFailureHandling.ContinuesOnFailure(step, execution.Schedule),
+                    FailureBehaviourSource = ScheduleFailureHandling.Source(step)
                 });
             }
         }
@@ -627,10 +629,11 @@ public class SchedulerServer
     /// </summary>
     /// <remarks>
     /// A step JIM refuses to queue (its Connected System is being deleted, say) gets a Failed Activity saying why. If
-    /// the step is set to continue on failure it is skipped and the rest of the Schedule runs without it. Otherwise
-    /// the start stops: the steps already queued are cancelled, the execution is marked Failed with the reason, and the
-    /// error is thrown to the caller, which reports it (the Scheduler's due-schedule loop logs it; the Run endpoint
-    /// returns it). An unexpected error takes the same stopping path whatever the step's setting, and is rethrown as
+    /// the step continues on failure (its own setting, or its Schedule's when it follows the Schedule; #1787) it is
+    /// skipped and the rest of the Schedule runs without it, and the execution ends Complete With Error rather than
+    /// Complete. Otherwise the start stops: the steps already queued are cancelled, the execution is marked Failed with
+    /// the reason, and the error is thrown to the caller, which reports it (the Scheduler's due-schedule loop logs it;
+    /// the Run endpoint returns it). An unexpected error takes the same stopping path whatever the step's setting, and is rethrown as
     /// it is. Nothing runs in either case.
     /// </remarks>
     /// <param name="schedule">The schedule to execute (must include Steps).</param>
@@ -694,7 +697,8 @@ public class SchedulerServer
 
         int? firstStepIndexWithTasks = null;
         var tasksQueued = 0;
-        var stepsSkipped = 0;
+        // The steps that could not be queued but continue on failure, with the Failed Activity recorded for each.
+        var skippedSteps = new List<(ScheduleStep Step, Activity? Activity)>();
 
         foreach (var stepIndex in distinctStepIndices)
         {
@@ -742,11 +746,11 @@ public class SchedulerServer
 
                 var failedActivity = await RecordStepNotQueuedAsync(execution, step, workerTask, refusal);
 
-                if (step.ContinueOnFailure)
+                if (ScheduleFailureHandling.ContinuesOnFailure(step, schedule))
                 {
-                    Log.Warning("StartScheduleExecutionAsync: Step {StepId} of execution {ExecutionId} could not be queued ({Reason}). It is set to continue on failure, so the rest of the Schedule will run without it.",
-                        step.Id, execution.Id, refusal);
-                    stepsSkipped++;
+                    Log.Warning("StartScheduleExecutionAsync: Step {StepId} of execution {ExecutionId} could not be queued ({Reason}). It is set to continue on failure (from the {Source}), so the rest of the Schedule will run without it.",
+                        step.Id, execution.Id, refusal, ScheduleFailureHandling.Source(step));
+                    skippedSteps.Add((step, failedActivity));
                     continue;
                 }
 
@@ -760,7 +764,7 @@ public class SchedulerServer
 
         try
         {
-            await ReleaseFirstStepGroupAsync(execution, firstStepIndexWithTasks);
+            await ReleaseFirstStepGroupAsync(execution, firstStepIndexWithTasks, skippedSteps);
         }
         catch (Exception ex)
         {
@@ -769,7 +773,7 @@ public class SchedulerServer
         }
 
         Log.Information("StartScheduleExecutionAsync: Execution {ExecutionId} of schedule {ScheduleId} ({ScheduleName}): {TasksQueued} task(s) queued, {StepsSkipped} step(s) that could not be queued skipped, status {Status}.",
-            execution.Id, schedule.Id, schedule.Name, tasksQueued, stepsSkipped, execution.Status);
+            execution.Id, schedule.Id, schedule.Name, tasksQueued, skippedSteps.Count, execution.Status);
 
         return execution;
     }
@@ -860,7 +864,8 @@ public class SchedulerServer
 
     /// <summary>
     /// Decides what happens once every task in a step group has finished (#1768): stop the Schedule, move on to the
-    /// next step group, or complete the execution. The one implementation, shared by the Worker's advancement
+    /// next step group, or complete the execution: Complete when every step succeeded, Complete With Error when any step
+    /// failed and was allowed to continue (#1787). The one implementation, shared by the Worker's advancement
     /// (TaskingServer.TryAdvanceScheduleExecutionAsync) and the Scheduler's safety net
     /// (<see cref="CheckAndAdvanceExecutionAsync"/>), so the two can never reach different conclusions about the same
     /// execution.
@@ -876,7 +881,7 @@ public class SchedulerServer
     /// <returns>True if the execution is still in progress; false if it stopped, completed, or had already finished.</returns>
     internal async Task<bool> ConcludeStepGroupAsync(ScheduleExecution execution, int stepIndex, IReadOnlyCollection<Activity> activitiesForStep)
     {
-        var stopReason = GetReasonToStop(execution.Schedule?.Steps ?? [], stepIndex, activitiesForStep);
+        var stopReason = GetReasonToStop(execution.Schedule, stepIndex, activitiesForStep);
         if (stopReason != null)
         {
             Log.Warning("ConcludeStepGroupAsync: Execution {ExecutionId} stops at step {StepIndex}: {Reason}",
@@ -905,10 +910,28 @@ public class SchedulerServer
         var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(execution.Id);
         if (!nextStepIndex.HasValue)
         {
+            // A step that failed and stopped the Schedule has already taken the Failed path above, so any failure found
+            // here, in this or an earlier step group, is one that was allowed to let the Schedule continue.
+            var failedActivities = (await Application.Repository.Activity.GetFailedScheduleExecutionActivitiesAsync(execution.Id))
+                .Where(IsFailedStepOutcome)
+                .ToList();
+            var finalStatus = failedActivities.Count > 0 ? ScheduleExecutionStatus.CompleteWithError : ScheduleExecutionStatus.Complete;
+            var continuedFailures = failedActivities.Count > 0
+                ? DescribeContinuedFailures(failedActivities.Select(a => (a.ScheduleStepIndex ?? stepIndex, FindStep(execution.Schedule, a), (Activity?)a)))
+                : null;
+
             if (await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
-                    execution, [ScheduleExecutionStatus.InProgress], ScheduleExecutionStatus.Complete, null))
+                    execution, [ScheduleExecutionStatus.InProgress], finalStatus, continuedFailures))
             {
-                Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} completed. All steps done.", execution.Id);
+                if (finalStatus == ScheduleExecutionStatus.CompleteWithError)
+                {
+                    Log.Warning("ConcludeStepGroupAsync: Execution {ExecutionId} completed with error. All steps done; {FailedCount} failed step outcome(s) were set to let the Schedule continue: {Message}",
+                        execution.Id, failedActivities.Count, continuedFailures);
+                }
+                else
+                {
+                    Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} completed. All steps done.", execution.Id);
+                }
             }
             else
             {
@@ -935,19 +958,20 @@ public class SchedulerServer
     /// when the Schedule carries on.
     /// </summary>
     /// <remarks>
-    /// The failing step's own setting decides (#1768): the Schedule stops if any step that FAILED is set to stop it
-    /// when it fails. A sibling that succeeded has no say, whatever its setting. Each failed Activity identifies its
+    /// The failing step's effective behaviour decides (#1768, #1787): its own setting, or its Schedule's when it follows
+    /// the Schedule, resolved by <see cref="ScheduleFailureHandling"/>. The Schedule stops if any step that FAILED stops
+    /// it when it fails. A sibling that succeeded has no say, whatever its setting. Each failed Activity identifies its
     /// step by ScheduleStepId. Where one cannot (it was recorded before steps were identified, or its step has since
     /// been deleted), the group is judged by the older, stricter rule, failing safe: it stops if any step at that
-    /// position is set to stop the Schedule, or if the position no longer has any steps at all.
+    /// position stops the Schedule, or if the position no longer has any steps at all.
     /// </remarks>
-    private static string? GetReasonToStop(IReadOnlyCollection<ScheduleStep> scheduleSteps, int stepIndex, IReadOnlyCollection<Activity> activitiesForStep)
+    private static string? GetReasonToStop(Schedule? schedule, int stepIndex, IReadOnlyCollection<Activity> activitiesForStep)
     {
         var failed = activitiesForStep.Where(IsFailedStepOutcome).ToList();
         if (failed.Count == 0)
             return null;
 
-        var stepsAtIndex = scheduleSteps.Where(s => s.StepIndex == stepIndex).ToList();
+        var stepsAtIndex = (schedule?.Steps ?? []).Where(s => s.StepIndex == stepIndex).ToList();
         var failedSteps = failed
             .Select(activity => (Activity: activity, Step: activity.ScheduleStepId is { } stepId
                 ? stepsAtIndex.FirstOrDefault(s => s.Id == stepId)
@@ -956,13 +980,13 @@ public class SchedulerServer
 
         if (stepsAtIndex.Count == 0 || failedSteps.Any(f => f.Step == null))
         {
-            if (stepsAtIndex.Count > 0 && stepsAtIndex.All(s => s.ContinueOnFailure))
+            if (stepsAtIndex.Count > 0 && stepsAtIndex.All(s => ScheduleFailureHandling.ContinuesOnFailure(s, schedule)))
                 return null;
 
             return $"{StepSubject(stepIndex, failedSteps.Select(f => StepDisplayName(f.Step, f.Activity)))} failed, so the remaining steps did not run.";
         }
 
-        var stopping = failedSteps.Where(f => !f.Step!.ContinueOnFailure).ToList();
+        var stopping = failedSteps.Where(f => !ScheduleFailureHandling.ContinuesOnFailure(f.Step!, schedule)).ToList();
         if (stopping.Count == 0)
             return null;
 
@@ -973,11 +997,64 @@ public class SchedulerServer
     }
 
     /// <summary>
-    /// Whether an Activity records a step that did not succeed, for Continue On Failure: it failed outright, completed
-    /// with errors, or was cancelled.
+    /// Whether an Activity records a step that did not succeed, for failure handling: it failed outright, completed with
+    /// errors, or was cancelled (<see cref="ScheduleFailureHandling.FailedStepOutcomes"/>).
     /// </summary>
-    private static bool IsFailedStepOutcome(Activity activity) => activity.Status is
-        ActivityStatus.FailedWithError or ActivityStatus.CompleteWithError or ActivityStatus.Cancelled;
+    private static bool IsFailedStepOutcome(Activity activity) => ScheduleFailureHandling.IsFailedStepOutcome(activity.Status);
+
+    /// <summary>
+    /// The step an Activity was recorded for, where it names one that still exists.
+    /// </summary>
+    private static ScheduleStep? FindStep(Schedule? schedule, Activity activity) =>
+        activity.ScheduleStepId is { } stepId ? schedule?.Steps.FirstOrDefault(s => s.Id == stepId) : null;
+
+    /// <summary>
+    /// Why an execution that reached its end is Complete With Error (#1787), naming each failed step in step order:
+    /// "The Schedule finished, but step 3, Active Directory - Export, failed. It is set to let the Schedule continue.",
+    /// or for several step groups, "The Schedule finished, but steps 2 and 3 (HR - Full Synchronisation; Active
+    /// Directory - Export) failed. They are set to let the Schedule continue.". Steps are named as the stop messages name
+    /// them, and numbered 1-based, as the portal shows them.
+    /// </summary>
+    private static string DescribeContinuedFailures(IEnumerable<(int StepIndex, ScheduleStep? Step, Activity? Activity)> failures)
+    {
+        var failureList = failures.ToList();
+        var byStepIndex = failureList
+            .GroupBy(f => f.StepIndex)
+            .OrderBy(g => g.Key)
+            .Select(g => (StepIndex: g.Key, Names: g.Select(f => StepDisplayName(f.Step, f.Activity))
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!)
+                .Distinct()
+                .ToList()))
+            .ToList();
+
+        // One step or several: a parallel group can fail more than once at the same position.
+        var failedStepCount = failureList
+            .Select(f => f.Step?.Id ?? f.Activity?.ScheduleStepId ?? f.Activity?.Id)
+            .Distinct()
+            .Count();
+        var setting = failedStepCount == 1
+            ? "It is set to let the Schedule continue."
+            : "They are set to let the Schedule continue.";
+
+        if (byStepIndex.Count == 1)
+        {
+            var only = byStepIndex[0];
+            return $"The Schedule finished, but {LowerFirst(StepSubject(only.StepIndex, only.Names))} failed. {setting}";
+        }
+
+        var numbers = JoinNames(byStepIndex.Select(g => (g.StepIndex + 1).ToString()).ToList());
+        var names = byStepIndex.All(g => g.Names.Count == 0)
+            ? string.Empty
+            : $" ({string.Join("; ", byStepIndex.Select(g => g.Names.Count > 0 ? JoinNames(g.Names) : $"step {g.StepIndex + 1}"))})";
+        return $"The Schedule finished, but steps {numbers}{names} failed. {setting}";
+    }
+
+    /// <summary>
+    /// A sentence-initial subject such as "Step 3" for use mid-sentence.
+    /// </summary>
+    private static string LowerFirst(string text) =>
+        string.IsNullOrEmpty(text) ? text : char.ToLowerInvariant(text[0]) + text[1..];
 
     /// <summary>
     /// Cancels a running or queued schedule execution.
@@ -1277,7 +1354,6 @@ public class SchedulerServer
         workerTask.ScheduleExecutionId = execution.Id;
         workerTask.ScheduleStepIndex = step.StepIndex;
         workerTask.ScheduleStepId = step.Id;
-        workerTask.ContinueOnFailure = step.ContinueOnFailure;
         // Use parallel execution if this step runs with others at the same index
         workerTask.ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential;
         return workerTask;
@@ -1324,10 +1400,18 @@ public class SchedulerServer
 
     /// <summary>
     /// Finishes a start once every step has been queued: releases the first step group with anything to run, or, where
-    /// there is nothing at all to run, completes the execution. If the execution is no longer Queued (someone cancelled
-    /// it while it was starting), it is left as it is and the steps queued since are removed.
+    /// there is nothing at all to run, completes the execution: Complete With Error if any step could not be queued and
+    /// was skipped (#1787), Complete otherwise. If the execution is no longer Queued (someone cancelled it while it was
+    /// starting), it is left as it is and the steps queued since are removed.
     /// </summary>
-    private async Task ReleaseFirstStepGroupAsync(ScheduleExecution execution, int? firstStepIndexWithTasks)
+    /// <param name="execution">The execution being started.</param>
+    /// <param name="firstStepIndexWithTasks">The first step group that queued anything, or null if none did.</param>
+    /// <param name="skippedSteps">The steps that could not be queued but continue on failure, each with the Failed
+    /// Activity recorded for it (null where that could not be recorded).</param>
+    private async Task ReleaseFirstStepGroupAsync(
+        ScheduleExecution execution,
+        int? firstStepIndexWithTasks,
+        IReadOnlyCollection<(ScheduleStep Step, Activity? Activity)> skippedSteps)
     {
         bool tookEffect;
         if (firstStepIndexWithTasks is { } firstStepIndex)
@@ -1342,13 +1426,18 @@ public class SchedulerServer
         else
         {
             // Nothing to run: every step was of a type that queues nothing, or could not be queued and was set to
-            // continue. There is nothing for the Worker to advance through, so the execution ends here.
+            // continue. There is nothing for the Worker to advance through, so the execution ends here. A skipped step
+            // has a Failed Activity, so the run is not a clean one.
+            var finalStatus = skippedSteps.Count > 0 ? ScheduleExecutionStatus.CompleteWithError : ScheduleExecutionStatus.Complete;
+            var continuedFailures = skippedSteps.Count > 0
+                ? DescribeContinuedFailures(skippedSteps.Select(s => (s.Step.StepIndex, (ScheduleStep?)s.Step, s.Activity)))
+                : null;
             tookEffect = await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
-                execution, [ScheduleExecutionStatus.Queued], ScheduleExecutionStatus.Complete, null);
+                execution, [ScheduleExecutionStatus.Queued], finalStatus, continuedFailures);
             if (tookEffect)
             {
-                Log.Information("ReleaseFirstStepGroupAsync: Execution {ExecutionId} had no step with anything to run, so it is complete.",
-                    execution.Id);
+                Log.Information("ReleaseFirstStepGroupAsync: Execution {ExecutionId} had no step with anything to run, so it is {Status}; {SkippedCount} step(s) could not be queued and were skipped.",
+                    execution.Id, finalStatus, skippedSteps.Count);
             }
         }
 
@@ -1480,9 +1569,10 @@ public class SchedulerServer
     /// <summary>
     /// Derives the failure-safe watermark for a Temporal Scope Reconciliation sweep (issue #892): the start time
     /// of the previous successfully completed execution of the same schedule. Because a failed sweep never reaches
-    /// Completed status, its window is re-covered by the next sweep rather than silently skipped. Returns null when
-    /// there is no prior completed execution (the first, bootstrap sweep, which considers every transitioned object
-    /// once).
+    /// Complete status, its window is re-covered by the next sweep rather than silently skipped. Complete With Error
+    /// (#1787) deliberately does not count either, although it is finished everywhere else: a run that carried on past a
+    /// failed step may have missed part of its window. Returns null when there is no prior completed execution (the
+    /// first, bootstrap sweep, which considers every transitioned object once).
     /// </summary>
     /// <param name="currentExecutionId">The in-progress execution running the sweep.</param>
     public async Task<DateTime?> GetTemporalScopeReconciliationWatermarkAsync(Guid currentExecutionId)

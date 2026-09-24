@@ -95,10 +95,11 @@ public class ScheduleStep : IAuditable
     public string? SqlScriptPath { get; set; }
 
     /// <summary>
-    /// Whether to continue the schedule if this step fails.
-    /// If false (default), schedule execution stops on failure.
+    /// What this step does to the Schedule when it fails ("When this step fails"; #1787): follow the Schedule's own
+    /// setting (the default), stop it, or let it continue. Resolve the effective behaviour with
+    /// <see cref="ScheduleFailureHandling.ContinuesOnFailure"/>, read at the moment of each decision, never here.
     /// </summary>
-    public bool ContinueOnFailure { get; set; }
+    public ScheduleStepFailureBehaviour OnFailure { get; set; } = ScheduleStepFailureBehaviour.FollowSchedule;
 
     /// <summary>
     /// Optional timeout for this step. If null, uses the default timeout.

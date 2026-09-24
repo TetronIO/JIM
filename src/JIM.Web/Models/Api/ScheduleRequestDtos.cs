@@ -311,7 +311,8 @@ public class ScheduleStepRequest
             Name = Name,
             ExecutionMode = ExecutionMode,
             StepType = StepType,
-            ContinueOnFailure = ContinueOnFailure,
+            // TODO(#1787 stage 2): apply the legacy write rule (and onFailure) rather than this literal mapping.
+            OnFailure = ContinueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule,
             Timeout = TimeoutSeconds.HasValue ? TimeSpan.FromSeconds(TimeoutSeconds.Value) : null,
             // RunProfile
             ConnectedSystemId = ConnectedSystemId,

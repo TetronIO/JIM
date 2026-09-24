@@ -657,6 +657,9 @@ public class SchedulingRepository : ISchedulingRepository
 
     public async Task<ScheduleExecution?> GetLastCompletedScheduleExecutionAsync(Guid scheduleId, DateTime beforeStartedAt)
     {
+        // Complete only, deliberately: Complete With Error (#1787) is finished everywhere else, but a run that carried on
+        // past a failed step may have missed part of its window, so it must not move the Temporal Scope Reconciliation
+        // watermark forward. The next clean run's watermark then covers that window again.
         return await Repository.Database.ScheduleExecutions
             .Where(e => e.ScheduleId == scheduleId &&
                         e.Status == ScheduleExecutionStatus.Complete &&

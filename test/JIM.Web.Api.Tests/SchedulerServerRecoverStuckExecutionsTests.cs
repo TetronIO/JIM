@@ -52,6 +52,9 @@ public class SchedulerServerRecoverStuckExecutionsTests
         _mockSchedulingRepository.EmulateConditionalTransitions();
 
         _activeExecutions = new List<ScheduleExecution>();
+        // No step of these executions failed, unless a test says otherwise; a run that reaches its end is Complete.
+        _mockActivityRepository.Setup(r => r.GetFailedScheduleExecutionActivitiesAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(new List<Activity>());
         _mockSchedulingRepository.Setup(r => r.GetActiveScheduleExecutionsAsync()).ReturnsAsync(() => _activeExecutions);
         _mockTaskingRepository.Setup(r => r.DeleteWaitingTasksForExecutionAsync(It.IsAny<Guid>(), It.IsAny<string>())).ReturnsAsync(0);
     }

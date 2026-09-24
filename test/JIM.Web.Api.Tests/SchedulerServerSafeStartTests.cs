@@ -290,7 +290,7 @@ public class SchedulerServerSafeStartTests
     }
 
     [Test]
-    public async Task StartScheduleExecutionAsync_NoStepCanBeQueuedAndAllContinue_CompletesTheExecutionAsync()
+    public async Task StartScheduleExecutionAsync_NoStepCanBeQueuedAndAllContinue_CompletesTheExecutionWithErrorAsync()
     {
         var schedule = CreateSchedule(
             Step(0, DeletingConnectedSystemId, continueOnFailure: true),
@@ -302,11 +302,72 @@ public class SchedulerServerSafeStartTests
         {
             Assert.That(_createdTasks, Is.Empty);
             Assert.That(_events.Any(e => e.StartsWith("start:")), Is.False, "there is nothing to release");
-            Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.Complete),
-                "with nothing left to run the execution ends straight away rather than waiting for the safety net");
+            Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.CompleteWithError),
+                "with nothing left to run the execution ends straight away rather than waiting for the safety net, and " +
+                "the steps skipped because they could not be queued make it Complete With Error, not Complete (#1787)");
+            Assert.That(execution.ErrorMessage, Is.EqualTo(
+                "The Schedule finished, but steps 1 and 2 (System 2 - Full Import; System 2 - Full Import) failed. " +
+                "They are set to let the Schedule continue."));
             Assert.That(execution.CompletedAt, Is.Not.Null);
             Assert.That(_createdActivities.Count(a => a.Status == ActivityStatus.FailedWithError), Is.EqualTo(2));
         }
+    }
+
+    [Test]
+    public async Task StartScheduleExecutionAsync_NothingToRunAndNothingSkipped_CompletesTheExecutionAsync()
+    {
+        // A step type that queues nothing is passed over, not failed, so the run is clean.
+        var schedule = CreateSchedule(new ScheduleStep
+        {
+            Id = Guid.NewGuid(),
+            StepIndex = 0,
+            StepType = ScheduleStepType.PowerShell,
+            Name = "Not yet implemented"
+        });
+
+        var execution = await _application.Scheduler.StartScheduleExecutionAsync(schedule, ActivityInitiatorType.System, null, "Test");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.Complete));
+            Assert.That(execution.ErrorMessage, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task StartScheduleExecutionAsync_StepCannotBeQueuedAndFollowsAContinuingSchedule_SkipsItAndTheRestRunsAsync()
+    {
+        var schedule = CreateSchedule(
+            Step(0, HealthyConnectedSystemId),
+            Step(1, DeletingConnectedSystemId),
+            Step(2, HealthyConnectedSystemId));
+        schedule.OnStepFailure = ScheduleFailureBehaviour.Continue;
+
+        var execution = await _application.Scheduler.StartScheduleExecutionAsync(schedule, ActivityInitiatorType.System, null, "Test");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_createdTasks.Select(t => t.ScheduleStepIndex), Is.EqualTo(new int?[] { 0, 2 }),
+                "the step follows the Schedule, which continues, so it is skipped rather than stopping the start");
+            Assert.That(_events.Last(), Is.EqualTo("start:0"));
+            Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
+            Assert.That(_createdActivities.Single(a => a.ScheduleStepIndex == 1).Status, Is.EqualTo(ActivityStatus.FailedWithError));
+        }
+    }
+
+    [Test]
+    public void StartScheduleExecutionAsync_StepCannotBeQueuedAndOverridesAContinuingScheduleToStop_TheStartFailsAsync()
+    {
+        var schedule = CreateSchedule(
+            Step(0, HealthyConnectedSystemId),
+            Step(1, DeletingConnectedSystemId));
+        schedule.OnStepFailure = ScheduleFailureBehaviour.Continue;
+        schedule.Steps[1].OnFailure = ScheduleStepFailureBehaviour.Stop;
+
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _application.Scheduler.StartScheduleExecutionAsync(schedule, ActivityInitiatorType.System, null, "Test"));
+
+        Assert.That(_createdExecution!.Status, Is.EqualTo(ScheduleExecutionStatus.Failed));
     }
 
     [Test]
@@ -397,7 +458,8 @@ public class SchedulerServerSafeStartTests
         StepType = ScheduleStepType.RunProfile,
         ConnectedSystemId = connectedSystemId,
         RunProfileId = connectedSystemId * 100,
-        ContinueOnFailure = continueOnFailure
+        // A step set to continue overrides the Schedule; otherwise it follows the Schedule, which stops (the default).
+        OnFailure = continueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule
     };
 
     private static Schedule CreateSchedule(params ScheduleStep[] steps)
