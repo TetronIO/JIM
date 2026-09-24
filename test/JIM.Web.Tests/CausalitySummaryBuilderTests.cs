@@ -23,6 +23,7 @@ public class CausalitySummaryBuilderTests
         {
             SummarySegment.Text text => text.Value,
             SummarySegment.Entity entity => entity.Label,
+            SummarySegment.LiteralValue literalValue => literalValue.Value,
             _ => string.Empty
         }));
 
@@ -256,6 +257,119 @@ public class CausalitySummaryBuilderTests
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(RenderSentence(summary.Segments), Does.Contain("its scheduled deletion was cancelled"));
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242): a generated value's clause sits after the attribute flow clause and
+    /// before the queued export clause, and the value itself renders as a distinct
+    /// <see cref="SummarySegment.LiteralValue"/> segment rather than plain text.
+    /// </summary>
+    [Test]
+    public void Build_JoinShapeWithGeneratedValue_NamesTheAttributeAndValueBetweenFlowAndExportClauses()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var joined = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: joined, ordinal: 0, detailCount: 5);
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
+            parent: joined, ordinal: 1, detailMessage: "Account Name: jallen42");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+            "it was joined to the Metaverse Object Liam Allen, 5 attributes flowed to it, " +
+            "and Account Name was generated as jallen42."));
+
+        var valueSegment = summary.Segments.OfType<SummarySegment.LiteralValue>().Single();
+        Assert.That(valueSegment.Value, Is.EqualTo("jallen42"));
+    }
+
+    [Test]
+    public void Build_JoinShapeWithAdoptedValue_NamesTheExistingAttributeAndValue()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var joined = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted,
+            parent: joined, ordinal: 0, detailMessage: "Employee Number: 40021");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+            "it was joined to the Metaverse Object Liam Allen, and the existing Employee Number 40021 was adopted."));
+    }
+
+    /// <summary>
+    /// A missing or malformed DetailMessage (legacy data, or a caller that never populated it) must not crash
+    /// or render a blank attribute name or value; it falls back to the generic sentence.
+    /// </summary>
+    [Test]
+    public void Build_JoinShapeWithMalformedGeneratedValueDetail_FallsBackToGenericWording()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var joined = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
+            parent: joined, ordinal: 0, detailMessage: null);
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted,
+            parent: joined, ordinal: 1, detailMessage: "not the expected shape");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+        var sentence = RenderSentence(summary.Segments);
+
+        Assert.That(sentence, Does.Contain("a value was generated"));
+        Assert.That(sentence, Does.Contain("an existing value was adopted"));
+        Assert.That(summary.Segments.OfType<SummarySegment.LiteralValue>(), Is.Empty);
+    }
+
+    /// <summary>
+    /// Two generated attributes are two clauses of the sentence, joined by the sentence's one list rule: ", " between
+    /// clauses and ", and " before the last, never a second "and".
+    /// </summary>
+    [Test]
+    public void Build_JoinShapeWithTwoGeneratedValues_JoinsThemWithTheListConjunction()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var joined = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
+            parent: joined, ordinal: 0, detailMessage: "Account Name: jallen42");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
+            parent: joined, ordinal: 1, detailMessage: "Employee Number: 40021");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        // Each generated attribute is a clause of the sentence in its own right, so the sentence's list rule
+        // applies once: ", " between clauses and ", and " only before the last. Joining the generated items
+        // into one clause first produced "..., and Account Name was generated as ..., and Employee Number ...".
+        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+            "it was joined to the Metaverse Object Liam Allen, Account Name was generated as jallen42, " +
+            "and Employee Number was generated as 40021."));
+    }
+
+    /// <summary>
+    /// An item whose root is AttributeFlow rather than Projected/Joined (an already-joined object's delta
+    /// sync, with no join/project event of its own) falls to the generic fallback shape, not the joiner
+    /// shape; the generated-value clause still lands after the attribute flow label.
+    /// </summary>
+    [Test]
+    public void Build_AttributeFlowRootWithGeneratedValue_PlacesTheClauseAfterTheAttributeFlowLabel()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var attributeFlow = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: null, ordinal: 0, detailCount: 1);
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
+            parent: attributeFlow, ordinal: 0, detailMessage: "Account Name: jallen42");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+            "Attributes flowed, and Account Name was generated as jallen42."));
     }
 
     /// <summary>

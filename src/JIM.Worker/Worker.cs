@@ -69,6 +69,16 @@ public class Worker : BackgroundService
     private List<TaskTask> CurrentTasks { get; } = new();
     private readonly object _currentTasksLock = new();
 
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package G): one reservation set for the worker's whole
+    /// process lifetime, handed to every <see cref="SyncFullSyncTaskProcessor"/> and
+    /// <see cref="SyncDeltaSyncTaskProcessor"/> this worker constructs, so two schedule steps racing in
+    /// parallel can never both claim the same generated candidate before either has written it to the database
+    /// (plan decision 13). Each run releases its own claims in a <c>finally</c> at the end of
+    /// <c>PerformFullSyncAsync</c> / <c>PerformDeltaSyncAsync</c>; this set itself outlives every individual run.
+    /// </summary>
+    private readonly JIM.Application.UniqueValues.UniqueValueReservationSet _uniqueValueReservations = new();
+
     public Worker(IJimApplicationFactory jimFactory, IConnectorFactory connectorFactory, IDbContextFactory<JIM.PostgresData.JimDbContext> dbContextFactory)
     {
         _jimFactory = jimFactory;
@@ -374,7 +384,7 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.FullSynchronisation:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter);
+                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
                                                             // Stranded-value sweep (#1549): runs only when an earlier Connector Space clear armed
@@ -401,7 +411,7 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter);
+                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter, _uniqueValueReservations);
                                                             await syncDeltaSyncTaskProcessor.PerformDeltaSyncAsync();
                                                             break;
                                                         }

@@ -85,6 +85,93 @@ public class SyncRepositoryGeneratedValueTests
 
     #endregion
 
+    #region GetGeneratedValueAssignmentValuesInUseAsync
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_EmptyInput_ReturnsEmptyAsync()
+    {
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, [], null);
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public void GetGeneratedValueAssignmentValuesInUseAsync_NeitherIdGiven_ThrowsArgumentException()
+    {
+        Assert.That(async () => await _repo.GetGeneratedValueAssignmentValuesInUseAsync(null, null, ["a"], null), Throws.ArgumentException);
+    }
+
+    [Test]
+    public void GetGeneratedValueAssignmentValuesInUseAsync_BothIdsGiven_ThrowsArgumentException()
+    {
+        Assert.That(async () => await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, 2, ["a"], null), Throws.ArgumentException);
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ScopedByAttributeNotByGeneration_FindsAssignmentsFromAnyGenerationAsync()
+    {
+        // Decision 3: two different generation rows can target the same attribute; the gate must see both.
+        var a = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: Guid.NewGuid(), value: "joe.bloggs");
+        a.SyncRuleMappingGenerationId = 10;
+        var b = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: Guid.NewGuid(), value: "jane.doe");
+        b.SyncRuleMappingGenerationId = 20;
+        _repo.SeedGeneratedValueAssignment(a);
+        _repo.SeedGeneratedValueAssignment(b);
+
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, ["joe.bloggs", "jane.doe", "unused"], null);
+
+        Assert.That(result, Is.EquivalentTo(new[] { "joe.bloggs", "jane.doe" }));
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_CaseInsensitiveAsync()
+    {
+        var assignment = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: Guid.NewGuid(), value: "Joe.Bloggs");
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, ["joe.bloggs"], null);
+
+        Assert.That(result, Is.EquivalentTo(new[] { "joe.bloggs" }).Using<string>((x, y) => string.Equals(x, y, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ExcludedObjectsOwnValue_IsNotReportedTakenAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var assignment = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: mvoId, value: "joe.bloggs");
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, ["joe.bloggs"], mvoId);
+
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ConnectedSystemMode_ExcludesTheRequestingCsoAsync()
+    {
+        var csoId = Guid.NewGuid();
+        var assignment = new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObjectId = csoId,
+            ConnectedSystemObjectTypeAttributeId = 3,
+            Value = "abc123",
+            NormalisedValue = "abc123",
+            SyncRuleMappingGenerationId = 1
+        };
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var excluded = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(null, 3, ["abc123"], csoId);
+        var notExcluded = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(null, 3, ["abc123"], Guid.NewGuid());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(excluded, Is.Empty);
+            Assert.That(notExcluded, Is.EquivalentTo(new[] { "abc123" }));
+        }
+    }
+
+    #endregion
+
     #region Assignments
 
     [Test]

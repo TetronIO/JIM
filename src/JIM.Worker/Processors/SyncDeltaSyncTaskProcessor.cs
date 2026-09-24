@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -31,12 +32,27 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource,
-        ActivityPhaseReporter? phaseReporter = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter)
+        ActivityPhaseReporter? phaseReporter = null,
+        UniqueValueReservationSet? uniqueValueReservations = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations)
     {
     }
 
     public async Task PerformDeltaSyncAsync()
+    {
+        try
+        {
+            await PerformDeltaSyncCoreAsync();
+        }
+        finally
+        {
+            // Unique Value Generation (#242, Phase 2 work package G): release this run's claims whatever
+            // happened (success, failure or cancellation); see SyncFullSyncTaskProcessor for the full rationale.
+            _uniqueValueReservations.ReleaseAll(_activity.Id);
+        }
+    }
+
+    private async Task PerformDeltaSyncCoreAsync()
     {
         using var syncSpan = Diagnostics.Sync.StartSpan("DeltaSync");
         syncSpan.SetTag("connectedSystemId", _connectedSystem.Id);
@@ -128,6 +144,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(preloadedSyncRules: allSyncRules);
         }
 
+        // Unique Value Generation (#242, Phase 2 work package G) per-run setup; see SyncFullSyncTaskProcessor
+        // for the full rationale. A no-op, costing nothing further this run, with no generated import mapping.
+        await PrepareUniqueValueGenerationAsync(activeSyncRules);
+
         // Load settings once at start of sync
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
         _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
@@ -166,6 +186,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // onto the same canonical instance as this navigation, rather than two distinct loads of the
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
+
+            // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
+            // run has no generated mappings.
+            await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
             // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -225,6 +249,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // See SyncFullSyncTaskProcessor for design notes on why progress updates
                 // cannot be decoupled from batch persistence boundaries.
                 await PersistPendingMetaverseObjectsAsync();
+
+                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
+                // assignments, then delete whatever lifecycle reconciliation decided no longer belongs. See
+                // SyncFullSyncTaskProcessor for the full rationale; both are no-ops with no generated mappings.
+                await CommitGeneratedValueAssignmentsAsync();
+                await FlushGeneratedValueAssignmentDeletionsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);

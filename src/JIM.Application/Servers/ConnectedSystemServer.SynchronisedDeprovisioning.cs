@@ -391,6 +391,15 @@ public partial class ConnectedSystemServer
         // Step 4: stage the recall/re-election Pending Exports with the same delete-then-create pattern the
         // sync flush uses. This is what makes export staging idempotent on resume: re-evaluating an object
         // processed just before a crash replaces its target's previous staging rather than duplicating it.
+        // Unique Value Generation (#242, Phase 2 work package H fix): this reconciliation pass has no
+        // run-scoped Unique Value Generation service to resolve a generated export mapping's marked change
+        // through (unlike the sync worker's own flush), and export evaluation's conservative relevance check
+        // means a generated mapping's marker is staged on ANY pass touching the object. Strip it rather than
+        // throw (an earlier revision threw here, which would fail deprovisioning outright): the generating
+        // Connected System's own next synchronisation resolves it normally and reasserts the value (FR 10,
+        // Sticky). See StripUnresolvedGeneratedExportMarkers (ConnectedSystemServer.SyncRuleDeletionRecall.cs).
+        StripUnresolvedGeneratedExportMarkers(stagedPendingExports, nameof(ProcessDeprovisioningBatchAsync));
+
         if (stagedPendingExports.Count > 0)
         {
             var targetCsoIds = stagedPendingExports

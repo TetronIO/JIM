@@ -107,6 +107,34 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    public async Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        if (normalisedValues.Count == 0)
+            return [];
+
+        var attributeColumn = metaverseAttributeId.HasValue ? "MetaverseAttributeId" : "ConnectedSystemObjectTypeAttributeId";
+        var objectColumn = metaverseAttributeId.HasValue ? "MetaverseObjectId" : "ConnectedSystemObjectId";
+        var attributeId = metaverseAttributeId ?? connectedSystemObjectTypeAttributeId!.Value;
+
+        // IS DISTINCT FROM is what lets one static query handle both cases: a null excludingObjectId (no
+        // exclusion; the object column, always populated on a live assignment, is distinct from NULL on every
+        // row) and a real one (excluded only from the one row that matches it).
+        var sql = $@"SELECT ""NormalisedValue"" AS ""Value""
+                    FROM ""GeneratedValueAssignments""
+                    WHERE ""{attributeColumn}"" = {{0}} AND ""NormalisedValue"" = ANY({{1}}) AND (""{objectColumn}"" IS DISTINCT FROM {{2}})";
+
+        var rows = await _context.Database.SqlQueryRaw<string>(
+            sql,
+            attributeId,
+            normalisedValues.ToArray(),
+            BulkSqlHelpers.NullableParam(excludingObjectId, NpgsqlTypes.NpgsqlDbType.Uuid)).ToListAsync();
+
+        return rows.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <inheritdoc />
     public async Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
     {
         if (assignments.Count == 0)
@@ -120,6 +148,14 @@ public partial class SyncRepository
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" } pgEx)
         {
+            // Detach every entity this call added: a failed SaveChangesAsync does not untrack them (EF leaves a
+            // failed insert's entries in the Added state), so without this, the next unrelated SaveChangesAsync
+            // on the same context (the worker's page-flush context lives for the whole run) would re-attempt
+            // exactly the same failed INSERT and throw again, and a caller's one-at-a-time retry of this same
+            // batch would resend every entity, not just the one(s) that actually lost the race.
+            foreach (var assignment in assignments)
+                _context.Entry(assignment).State = EntityState.Detached;
+
             // Decision 13's losing-run rule: the cross-assignment unique index on (attribute, NormalisedValue)
             // is what makes uniqueness hold across concurrent runs and pages, and this is what its loser sees.
             // The caller is expected to recognise this exception and draw the next candidate, not treat it as an

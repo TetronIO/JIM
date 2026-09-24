@@ -50,6 +50,10 @@
                     <span class="hl">@entity.Label</span>
                 }
             }
+            else if (segment is SummarySegment.LiteralValue literalValue)
+            {
+                <span class="jim-code-inline">@literalValue.Value</span>
+            }
         }
     </div>
     @if (Summary.Pills.Count > 0)

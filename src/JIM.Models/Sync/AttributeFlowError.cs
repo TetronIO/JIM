@@ -22,7 +22,14 @@ public enum AttributeFlowErrorKind
     /// An Expression read an attribute the object has no value for, and the mapping's Missing Input Behaviour is
     /// <c>FailMapping</c>.
     /// </summary>
-    ExpressionMissingInput
+    ExpressionMissingInput,
+
+    /// <summary>
+    /// A generated mapping's (Unique Value Generation, #242) base expression evaluated to an array or other
+    /// multi-valued result. A generated value's base must be a single text value, since a uniqueness token is
+    /// appended to exactly one candidate; nothing is recorded for the attribute this pass.
+    /// </summary>
+    GeneratedBaseNotSingleValue
 }
 
 /// <summary>
@@ -58,8 +65,9 @@ public class AttributeFlowError
     public int ValueCount { get; set; }
 
     /// <summary>
-    /// The Expression that was not evaluated. Only populated for
-    /// <see cref="AttributeFlowErrorKind.ExpressionMissingInput"/>.
+    /// The Expression that was not evaluated, or (for <see cref="AttributeFlowErrorKind.GeneratedBaseNotSingleValue"/>)
+    /// that produced more than one value. Only populated for <see cref="AttributeFlowErrorKind.ExpressionMissingInput"/>
+    /// and <see cref="AttributeFlowErrorKind.GeneratedBaseNotSingleValue"/>.
     /// </summary>
     public string? Expression { get; set; }
 

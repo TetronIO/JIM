@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -32,12 +33,28 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource,
-        ActivityPhaseReporter? phaseReporter = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter)
+        ActivityPhaseReporter? phaseReporter = null,
+        UniqueValueReservationSet? uniqueValueReservations = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations)
     {
     }
 
     public async Task PerformFullSyncAsync()
+    {
+        try
+        {
+            await PerformFullSyncCoreAsync();
+        }
+        finally
+        {
+            // Unique Value Generation (#242, Phase 2 work package G): release this run's claims on the
+            // process-wide reservation set whatever happened (success, failure or cancellation), so a value
+            // this run proposed but never committed is not held against every other run for ever.
+            _uniqueValueReservations.ReleaseAll(_activity.Id);
+        }
+    }
+
+    private async Task PerformFullSyncCoreAsync()
     {
         using var syncSpan = Diagnostics.Sync.StartSpan("FullSync");
         syncSpan.SetTag("connectedSystemId", _connectedSystem.Id);
@@ -117,6 +134,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(preloadedSyncRules: allSyncRules);
         }
 
+        // Unique Value Generation (#242, Phase 2 work package G) per-run setup: after the export evaluation
+        // cache (its participating-targets precompute reads ExportRulesByMvoTypeId), before the page loop.
+        // A no-op, costing nothing further this run, when activeSyncRules carries no generated import mapping.
+        await PrepareUniqueValueGenerationAsync(activeSyncRules);
+
         // Load settings once at start of sync
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
         _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
@@ -191,6 +213,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // onto the same canonical instance as this navigation, rather than two distinct loads of the
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
+
+            // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
+            // run has no generated mappings.
+            await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
             // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -289,6 +315,13 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // are properly tracked, and only persist at page boundaries to batch database writes.
                 // Progress updates at finer granularity would require a separate DbContext instance.
                 await PersistPendingMetaverseObjectsAsync();
+
+                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
+                // assignments now the objects have real ids, then delete whatever the page's lifecycle
+                // reconciliation decided no longer belongs. Both are no-ops for a run with no generated
+                // mappings, or a page with nothing to commit/delete.
+                await CommitGeneratedValueAssignmentsAsync();
+                await FlushGeneratedValueAssignmentDeletionsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);

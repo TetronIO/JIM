@@ -1440,6 +1440,24 @@ public interface ISyncRepository
     Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId);
 
     /// <summary>
+    /// Which of the given normalised (lower-cased) values a live <see cref="GeneratedValueAssignment"/> already
+    /// holds for the given attribute: the fifth gate ("other objects' live assignments for the attribute", plan
+    /// "The service") and the adopt-before-generate conflict check, both targeted reads over the filtered unique
+    /// indexes (<c>IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique</c> and its Connected
+    /// System counterpart) rather than a scan of every assignment a generation has ever produced. Exactly one
+    /// of <paramref name="metaverseAttributeId"/> and <paramref name="connectedSystemObjectTypeAttributeId"/>
+    /// must be given (both set or neither set throws <see cref="ArgumentException"/>), matching the attribute
+    /// the caller's mode targets, never the <c>SyncRuleMappingGeneration</c> that produced the request: two
+    /// different generation rows targeting the same attribute (plan decision 3) must not be able to issue the
+    /// same value to two different objects, which scoping this by generation instead of by attribute would miss.
+    /// A row whose object (the <c>MetaverseObjectId</c> or <c>ConnectedSystemObjectId</c> for the mode) is
+    /// <paramref name="excludingObjectId"/> is not counted as held, the same self-exclusion every other gate
+    /// gives the requesting object. Callers must pass values already lower-cased, matching every other gate's
+    /// convention. Returns an empty set for an empty <paramref name="normalisedValues"/> without querying.
+    /// </summary>
+    Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId);
+
+    /// <summary>
     /// Creates one or more <see cref="GeneratedValueAssignment"/> rows. A concurrent insert that collides on the
     /// cross-assignment unique index on (attribute, normalised value) (plan decision 13) surfaces as
     /// <see cref="JIM.Models.Exceptions.GeneratedValueConflictException"/>, so the losing side of the race can

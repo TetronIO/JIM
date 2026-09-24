@@ -5,6 +5,7 @@ using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Staging;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -34,6 +35,21 @@ public class ExportEvaluationServer
     /// zero-dependency by design, so constructed inline as <see cref="ExportExecutionServer"/> already does.
     /// </summary>
     private readonly ISyncEngine _syncEngine = new SyncEngine();
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H): this preview session's own dry-run service and
+    /// options, built lazily on first need (<see cref="EnsurePreviewUniqueValueGenerationServiceBuilt"/>). Used
+    /// only by <see cref="BuildStagingPreviewEntryAsync"/>, which every outbound preview entry point
+    /// (<see cref="EvaluateOutboundPreviewAsync"/>, <see cref="EvaluateOutboundPreviewForMaterialisedMvosAsync"/>)
+    /// funnels through; a real (non-preview) evaluation never touches these fields. Scoped to this
+    /// <see cref="ExportEvaluationServer"/> instance, which <c>SyncPreviewServer</c> constructs fresh per preview
+    /// call and reuses for every Metaverse Object that call previews, so two objects previewed together that
+    /// would collide on the same candidate are shown colliding, as a real run's process-wide reservation set
+    /// would see them; nothing here survives past the preview call, and <see cref="UniqueValueResolveOptions.DryRun"/>
+    /// means it writes nothing regardless.
+    /// </summary>
+    private UniqueValueGenerationServer? _previewUniqueValueGenerationServer;
+    private UniqueValueResolveOptions? _previewUniqueValueResolveOptions;
 
     internal ExportEvaluationServer(JimApplication application, ISyncRepository syncRepo)
     {
@@ -1992,6 +2008,12 @@ public class ExportEvaluationServer
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
+        // Unique Value Generation (#242, Phase 2 work package H) integrity guard: this overload has no
+        // run-scoped Unique Value Generation service to resolve a generated export mapping's marked change
+        // through (unlike the batched, deferSave-aware overload the sync worker uses), so fail fast rather
+        // than silently persist a change with a blank value (Synchronisation Integrity).
+        ThrowIfPendingExportHasUnresolvedGeneration(pendingExport, nameof(CreateOrUpdatePendingExportAsync));
+
         await SyncRepo.CreatePendingExportAsync(pendingExport);
 
         Log.Information("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes",
@@ -2104,6 +2126,10 @@ public class ExportEvaluationServer
             CreatedAt = DateTime.UtcNow,
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
+
+        // Unique Value Generation (#242, Phase 2 work package H) integrity guard: see the non-cached overload
+        // above for the rationale.
+        ThrowIfPendingExportHasUnresolvedGeneration(pendingExport, nameof(CreateOrUpdatePendingExportAsync));
 
         // Save immediately - batching causes memory pressure with large datasets (5000+ objects)
         // which leads to worse performance than individual saves due to GC overhead
@@ -2570,6 +2596,13 @@ public class ExportEvaluationServer
         // Save immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
         {
+            // Unique Value Generation (#242, Phase 2 work package H) integrity guard: the sync worker (the
+            // only caller with a run-scoped Unique Value Generation service to resolve a marked change
+            // through) always passes deferSave: true and resolves before FlushPendingExportOperationsAsync
+            // persists; an immediate save here has nothing to resolve it, so fail fast rather than silently
+            // persist a change with a blank value (Synchronisation Integrity).
+            ThrowIfPendingExportHasUnresolvedGeneration(pendingExport, nameof(CreateOrUpdatePendingExportWithNoNetChangeAsync));
+
             using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("SavePendingExport"))
             {
                 await SyncRepo.CreatePendingExportAsync(pendingExport);
@@ -3001,6 +3034,13 @@ public class ExportEvaluationServer
                 existingCso: effectiveExistingCso, csoAttributeCache: cache.CsoAttributeValues,
                 out noNetChangeSkipped, ExpressionEvaluator,
                 noNetChangeSkipped: noNetChangeSkippedChanges);
+
+            // Unique Value Generation (#242, Phase 2 work package H): a generated export mapping stages a
+            // marked, unresolved change (decision 6: the engine performs no I/O). The preview never writes, so
+            // resolve it here, through this session's own dry-run service, rather than leaving it to a
+            // persistence-time resolver that a preview never reaches.
+            if (attributeChanges.Exists(c => c.PendingGeneration != null))
+                await ResolvePreviewGeneratedExportValuesAsync(effectiveChangeType.Value, effectiveExistingCso, cache, attributeChanges);
         }
 
         return new OutboundPreviewEntry
@@ -3017,6 +3057,115 @@ public class ExportEvaluationServer
             AttributeChanges = attributeChanges,
             NoNetChangeSkippedCount = noNetChangeSkipped,
             NoNetChangeSkippedChanges = noNetChangeSkippedChanges
+        };
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H): resolves every marked change
+    /// <paramref name="attributeChanges"/> carries through this preview session's own dry-run
+    /// <see cref="UniqueValueGenerationServer"/> (<see cref="EnsurePreviewUniqueValueGenerationServiceBuilt"/>),
+    /// so the preview shows the candidate value without writing anything. A change whose outcome is not
+    /// immediately displayable (<see cref="GenerationOutcomeKind.Waiting"/>, or any failure kind) is removed
+    /// from <paramref name="attributeChanges"/> rather than shown with no value, mirroring how a real run drops
+    /// it.
+    /// </summary>
+    private async Task ResolvePreviewGeneratedExportValuesAsync(
+        PendingExportChangeType changeType,
+        ConnectedSystemObject? existingCso,
+        ExportEvaluationCache cache,
+        List<PendingExportAttributeValueChange> attributeChanges)
+    {
+        var marked = attributeChanges.Where(c => c.PendingGeneration != null).ToList();
+        if (marked.Count == 0)
+            return;
+
+        EnsurePreviewUniqueValueGenerationServiceBuilt();
+        var generationServer = _previewUniqueValueGenerationServer!;
+        var resolveOptions = _previewUniqueValueResolveOptions!;
+
+        var requests = new List<GenerationRequest>(marked.Count);
+        foreach (var change in marked)
+        {
+            string? adoptableValue = null;
+            if (!change.PendingGeneration!.BaseUnavailable && changeType != PendingExportChangeType.Create && existingCso != null)
+            {
+                var existingValue = cache.CsoAttributeValues[(existingCso.Id, change.AttributeId)].FirstOrDefault();
+                adoptableValue = existingValue == null ? null : RenderPreviewComparableExportValue(change.Attribute.Type, existingValue);
+            }
+
+            requests.Add(new GenerationRequest
+            {
+                Mode = GeneratedValueMode.Export,
+                ConnectedSystemObjectId = existingCso?.Id,
+                ConnectedSystemObjectTypeAttributeId = change.AttributeId,
+                Generation = change.PendingGeneration.Mapping.Generation!,
+                TargetType = change.Attribute.Type,
+                AttributeName = change.Attribute.Name,
+                BaseValue = change.PendingGeneration.BaseValue,
+                AdoptableValue = adoptableValue,
+                StickyOnly = change.PendingGeneration.BaseUnavailable,
+                CallerState = change
+            });
+        }
+
+        var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+
+        for (var i = 0; i < outcomes.Count; i++)
+        {
+            var outcome = outcomes[i];
+            var change = marked[i];
+
+            switch (outcome.Kind)
+            {
+                case GenerationOutcomeKind.Generated:
+                case GenerationOutcomeKind.Adopted:
+                case GenerationOutcomeKind.Sticky:
+                    GeneratedExportValueWriter.Apply(change, outcome.Value, outcome.NumericValue);
+                    break;
+
+                default:
+                    // Waiting, and every failure kind (Exhausted, NoBaseValue, WidthExceeded,
+                    // AdoptionConflict): nothing resolvable to show, so the preview omits the attribute rather
+                    // than displaying a blank or stale marker.
+                    attributeChanges.Remove(change);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lazily builds this preview session's own <see cref="UniqueValueGenerationServer"/> and
+    /// <see cref="UniqueValueResolveOptions"/> (<see cref="UniqueValueResolveOptions.DryRun"/> set), on first
+    /// need. A preview session with no generated export mapping in scope never calls this.
+    /// </summary>
+    private void EnsurePreviewUniqueValueGenerationServiceBuilt()
+    {
+        if (_previewUniqueValueGenerationServer != null)
+            return;
+
+        _previewUniqueValueGenerationServer = new UniqueValueGenerationServer(SyncRepo);
+        _previewUniqueValueResolveOptions = new UniqueValueResolveOptions
+        {
+            DryRun = true,
+            Reservations = new UniqueValueReservationSet(),
+            ReservationOwnerId = Guid.NewGuid()
+        };
+    }
+
+    /// <summary>
+    /// The preview-side counterpart of <c>SyncTaskProcessorBase.RenderComparableExportValue</c>: renders a
+    /// Connected System Object attribute value as the text an export-mode generation candidate compares
+    /// against. A Number or LongNumber target holds its value in
+    /// <see cref="ConnectedSystemObjectAttributeValue.IntValue"/> / <see cref="ConnectedSystemObjectAttributeValue.LongValue"/>,
+    /// never <see cref="ConnectedSystemObjectAttributeValue.StringValue"/>.
+    /// </summary>
+    private static string? RenderPreviewComparableExportValue(AttributeDataType targetType, ConnectedSystemObjectAttributeValue value)
+    {
+        return targetType switch
+        {
+            AttributeDataType.Number => value.IntValue?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            AttributeDataType.LongNumber => value.LongValue?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _ => value.StringValue
         };
     }
 
@@ -3050,5 +3199,26 @@ public class ExportEvaluationServer
                 mvo.Id, exportRule.ConnectedSystemId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H) integrity guard: throws if
+    /// <paramref name="pendingExport"/> carries an attribute value change whose generated value marker was
+    /// never resolved. Called immediately before every persistence point in this class that has no run-scoped
+    /// Unique Value Generation service available to resolve one through (the sync worker's own deferSave-aware
+    /// flush is the one caller that does have one, and resolves before persisting; see
+    /// <c>SyncTaskProcessorBase.ResolveExportGeneratedValuesAsync</c> and its own integrity guard in
+    /// <c>FlushPendingExportOperationsAsync</c>).
+    /// </summary>
+    private static void ThrowIfPendingExportHasUnresolvedGeneration(PendingExport pendingExport, string callerName)
+    {
+        var leftover = pendingExport.AttributeValueChanges.FirstOrDefault(change => change.PendingGeneration != null);
+        if (leftover == null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Pending Export attribute change {leftover.Id} still has an unresolved generated value marker for attribute " +
+            $"{leftover.AttributeId}. {callerName} has no Unique Value Generation service to resolve it through; " +
+            "persisting now would silently drop the value.");
     }
 }

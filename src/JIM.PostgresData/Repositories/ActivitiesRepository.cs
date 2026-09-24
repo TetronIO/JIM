@@ -1752,6 +1752,8 @@ public class ActivityRepository : IActivityRepository
         int totalDriftCorrections;
         int totalProvisioned;
         int totalMvoDeleted;
+        int totalGeneratedValues;
+        int totalGeneratedValuesAdopted;
 
         if (hasOutcomes)
         {
@@ -1781,6 +1783,11 @@ public class ActivityRepository : IActivityRepository
             totalDriftCorrections = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
             totalProvisioned = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
             totalMvoDeleted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+
+            // Unique Value Generation (#242): outcome-only concepts, like Provisioned above; no
+            // ObjectChangeType equivalent exists for the legacy fallback below.
+            totalGeneratedValues = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
+            totalGeneratedValuesAdopted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted);
         }
         else
         {
@@ -1810,6 +1817,10 @@ public class ActivityRepository : IActivityRepository
             totalDriftCorrections = ChangeTypeCount(ObjectChangeType.DriftCorrection);
 
             totalProvisioned = 0; // Provisioned is an outcome-only concept; no ObjectChangeType equivalent
+
+            // Unique Value Generation (#242): likewise outcome-only concepts, predating this graph's legacy path.
+            totalGeneratedValues = 0;
+            totalGeneratedValuesAdopted = 0;
         }
 
         // --- Stats that always come from RPEIs ---
@@ -1828,6 +1839,13 @@ public class ActivityRepository : IActivityRepository
         // Retrying and Failed are derived from error type counts
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed, out var totalPendingExportsRetrying);
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed, out var totalPendingExportsFailed);
+
+        // Unique Value Generation (#242): counted from RPEI error types the same way, always per-RPEI
+        // regardless of hasOutcomes.
+        var totalGeneratedValueFailures =
+            errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted) +
+            errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded) +
+            errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved);
 
         // NoChange stats (always from RPEIs — no outcome equivalent)
         var totalNoChanges = ChangeTypeCount(ObjectChangeType.NoChange);
@@ -1860,6 +1878,9 @@ public class ActivityRepository : IActivityRepository
             TotalDriftCorrections = totalDriftCorrections,
             TotalProvisioned = totalProvisioned,
             TotalMvoDeleted = totalMvoDeleted,
+            TotalGeneratedValues = totalGeneratedValues,
+            TotalGeneratedValuesAdopted = totalGeneratedValuesAdopted,
+            TotalGeneratedValueFailures = totalGeneratedValueFailures,
 
             // Direct creation stats
             TotalCreated = totalCreated,
