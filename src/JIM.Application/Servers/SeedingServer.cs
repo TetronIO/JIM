@@ -623,6 +623,8 @@ internal class SeedingServer
             IntervalUnit = ScheduleIntervalUnit.Hours,
             DaysOfWeek = "0,1,2,3,4,5,6",
             CronExpression = "0 * * * *",
+            // Built-in Schedules stop when a step fails, and their steps follow the Schedule (#1787); JIM manages both.
+            OnStepFailure = ScheduleFailureBehaviour.Stop,
             CreatedByType = ActivityInitiatorType.System,
             CreatedByName = "System",
             Steps = new List<ScheduleStep>
@@ -633,7 +635,7 @@ internal class SeedingServer
                     Name = "Reconcile Temporal Scope",
                     StepType = ScheduleStepType.TemporalScopeReconciliation,
                     ExecutionMode = StepExecutionMode.Sequential,
-                    ContinueOnFailure = false,
+                    OnFailure = ScheduleStepFailureBehaviour.FollowSchedule,
                     CreatedByType = ActivityInitiatorType.System,
                     CreatedByName = "System"
                 }
@@ -657,6 +659,7 @@ internal class SeedingServer
             PatternType = SchedulePatternType.SpecificTimes,
             DaysOfWeek = "0,1,2,3,4,5,6",
             CronExpression = "30 2 * * *",
+            OnStepFailure = ScheduleFailureBehaviour.Stop,
             CreatedByType = ActivityInitiatorType.System,
             CreatedByName = "System",
             Steps = new List<ScheduleStep>
@@ -667,7 +670,7 @@ internal class SeedingServer
                     Name = "Clean Up Expired History",
                     StepType = ScheduleStepType.HistoryRetentionCleanup,
                     ExecutionMode = StepExecutionMode.Sequential,
-                    ContinueOnFailure = false,
+                    OnFailure = ScheduleStepFailureBehaviour.FollowSchedule,
                     CreatedByType = ActivityInitiatorType.System,
                     CreatedByName = "System"
                 }

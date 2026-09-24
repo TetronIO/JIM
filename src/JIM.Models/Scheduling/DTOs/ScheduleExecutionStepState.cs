@@ -103,10 +103,16 @@ public class ScheduleExecutionStepState
     public ActivityStatus? ActivityStatus { get; set; }
 
     /// <summary>
-    /// Whether the execution was configured to carry on past this step if it failed. Explains why an execution
-    /// continued after a failure.
+    /// Whether the execution carries on past this step if it fails: its effective behaviour (#1787), resolved by
+    /// <see cref="ScheduleFailureHandling.ContinuesOnFailure"/> from the step's own setting or its Schedule's. Explains
+    /// why an execution continued after a failure.
     /// </summary>
     public bool ContinueOnFailure { get; set; }
+
+    /// <summary>
+    /// Where <see cref="ContinueOnFailure"/> comes from: the step's own setting, or its Schedule's (#1787).
+    /// </summary>
+    public ScheduleFailureBehaviourSource FailureBehaviourSource { get; set; }
 
     /// <summary>
     /// How long the step took, once it has both started and finished.

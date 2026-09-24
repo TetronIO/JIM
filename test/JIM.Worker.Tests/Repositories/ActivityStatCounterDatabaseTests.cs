@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.TestSupport;
 using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -86,15 +87,7 @@ public class ActivityStatCounterDatabaseTests
     [SetUp]
     public async Task SetUp()
     {
-        await using var ctx = NewContext();
-        await ctx.Database.ExecuteSqlRawAsync(@"
-            DO $$
-            DECLARE r RECORD;
-            BEGIN
-                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '__EFMigrationsHistory') LOOP
-                    EXECUTE 'TRUNCATE TABLE ""' || r.tablename || '"" RESTART IDENTITY CASCADE';
-                END LOOP;
-            END $$;");
+        await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
     private static string EnumKey<T>(T value) where T : Enum =>

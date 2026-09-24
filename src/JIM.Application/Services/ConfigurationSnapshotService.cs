@@ -637,6 +637,7 @@ public class ConfigurationSnapshotService
         Add(children, "daysOfWeek", schedule.DaysOfWeek, "Days of week");
         Add(children, "runTimes", schedule.RunTimes, "Run times");
         Add(children, "cronExpression", schedule.CronExpression, "Cron expression");
+        AddEnum(children, "onStepFailure", schedule.OnStepFailure, "When a step fails");
         children.Add(BuildScheduleSteps(schedule.Steps, hashKey));
 
         return new ConfigurationSnapshot
@@ -658,7 +659,7 @@ public class ConfigurationSnapshotService
             Add(children, "name", step.Name, "Name");
             AddEnum(children, "stepType", step.StepType, "Step type");
             AddEnum(children, "executionMode", step.ExecutionMode, "Execution mode");
-            Add(children, "continueOnFailure", Render(step.ContinueOnFailure), "Continue on failure");
+            AddEnum(children, "onFailure", step.OnFailure, "When this step fails");
             Add(children, "timeout", Render(step.Timeout), "Timeout");
             AddReference(children, "connectedSystemId", step.ConnectedSystemId, null, "Connected System");
             AddReference(children, "runProfileId", step.RunProfileId, null, "Run Profile");

@@ -76,7 +76,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Metaverse](metaverse.md) | 20 | Query objects, set passwords, manage schema types and attributes, set Attribute Priority, and review pending deletions |
 | [Password Synchronisation](password-synchronisation.md) | 3 | List, retry, and cancel queued password changes |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
-| [Schedules](schedules.md) | 11 | Automate synchronisation workflows with scheduled execution |
+| [Schedules](schedules.md) | 12 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
 | [Activities](activities.md) | 3 | Monitor operation history, statistics, and execution items |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |

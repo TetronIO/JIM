@@ -120,6 +120,7 @@ function Get-JIMSchedule {
                         'LastExecutionStatus'
                         'LastExecutionCurrentStepIndex'
                         'LastExecutionTotalSteps'
+                        'LastExecutionFailedStepIndices'
                         'LastExecutionCompletedAt'
                         'LastExecutionErrorMessage'
                     )

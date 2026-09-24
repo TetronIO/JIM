@@ -33,8 +33,16 @@ function Add-JIMScheduleStep {
         If specified, runs this step in parallel with the previous step.
         Otherwise, waits for the previous step to complete.
 
+    .PARAMETER OnFailure
+        What the step does to the Schedule when it fails:
+        - FollowSchedule (the default): whatever the Schedule is set to do (its OnStepFailure)
+        - Stop: stop the Schedule, even if the Schedule is set to continue
+        - Continue: carry on with the remaining steps, even if the Schedule is set to stop
+        Cannot be used with -ContinueOnFailure.
+
     .PARAMETER ContinueOnFailure
-        If specified, the schedule continues even if this step fails.
+        Shorthand for -OnFailure Continue: the Schedule carries on if this step fails, whatever the Schedule is set
+        to do. Cannot be used with -OnFailure.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Schedule's change history.
@@ -62,10 +70,16 @@ function Add-JIMScheduleStep {
 
         Adds two import steps that run in parallel.
 
+    .EXAMPLE
+        Add-JIMScheduleStep -ScheduleId "12345678-..." -StepType RunProfile -ConnectedSystemName "Active Directory" -RunProfileName "Export" -OnFailure Stop
+
+        Adds an export step that stops the Schedule if it fails, even when the Schedule is set to continue.
+
     .LINK
         Get-JIMSchedule
         New-JIMSchedule
         Remove-JIMScheduleStep
+        Set-JIMScheduleStep
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
@@ -92,6 +106,10 @@ function Add-JIMScheduleStep {
 
         [switch]$Parallel,
 
+        [Parameter()]
+        [ValidateSet('FollowSchedule', 'Stop', 'Continue')]
+        [string]$OnFailure,
+
         [switch]$ContinueOnFailure,
 
         [Parameter()]
@@ -102,6 +120,24 @@ function Add-JIMScheduleStep {
     )
 
     process {
+        # -ContinueOnFailure is shorthand for -OnFailure Continue; both at once is ambiguous (which wins?), so refuse it
+        # before anything is sent rather than silently preferring one.
+        if ($PSBoundParameters.ContainsKey('OnFailure') -and $PSBoundParameters.ContainsKey('ContinueOnFailure')) {
+            $PSCmdlet.ThrowTerminatingError([System.Management.Automation.ErrorRecord]::new(
+                [System.ArgumentException]::new('Specify either -OnFailure or -ContinueOnFailure, not both. -ContinueOnFailure is shorthand for -OnFailure Continue.'),
+                'ConflictingFailureParameters',
+                [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                $null))
+        }
+
+        $newStepOnFailure = if ($PSBoundParameters.ContainsKey('OnFailure')) {
+            $OnFailure
+        } elseif ($ContinueOnFailure) {
+            'Continue'
+        } else {
+            'FollowSchedule'
+        }
+
         # Check connection first
         if (-not $script:JIMConnection) {
             Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
@@ -156,36 +192,22 @@ function Add-JIMScheduleStep {
                 }
 
                 # Build the new step. Enum values must be sent as names, not numbers: the API
-                # rejects numeric enum values on request DTOs (#1060).
+                # rejects numeric enum values on request DTOs (#1060). The failure setting goes as
+                # onFailure, never continueOnFailure, so no legacy mapping applies (#1787).
                 $newStep = @{
                     stepIndex = [int]$newStepIndex
                     stepType = $StepType
                     executionMode = if ($Parallel) { 'ParallelWithPrevious' } else { 'Sequential' }
-                    continueOnFailure = [bool]$ContinueOnFailure
+                    onFailure = $newStepOnFailure
                     connectedSystemId = [int]$ConnectedSystemId
                     runProfileId = [int]$RunProfileId
                 }
 
-                # Convert existing steps to proper format for API
+                # Send the existing steps back as they are, their ids and failure settings included
+                # (ConvertTo-JIMScheduleStepRequest), so adding a step changes no other step.
                 $convertedSteps = @()
                 foreach ($step in $existingSteps) {
-                    $convertedSteps += @{
-                        id = $step.id
-                        stepIndex = [int]$step.stepIndex
-                        # Pass enum values through verbatim: the API returns and accepts enum
-                        # names (#1060); coercing unrecognised values to a numeric default both
-                        # fails validation and silently rewrites step types.
-                        stepType = $step.stepType
-                        executionMode = $step.executionMode
-                        continueOnFailure = [bool]$step.continueOnFailure
-                        connectedSystemId = if ($step.connectedSystemId) { [int]$step.connectedSystemId } else { $null }
-                        runProfileId = if ($step.runProfileId) { [int]$step.runProfileId } else { $null }
-                        name = $step.name
-                        scriptPath = $step.scriptPath
-                        arguments = $step.arguments
-                        executablePath = $step.executablePath
-                        workingDirectory = $step.workingDirectory
-                    }
+                    $convertedSteps += ConvertTo-JIMScheduleStepRequest -Step $step
                 }
 
                 # Build update body with existing steps plus new one

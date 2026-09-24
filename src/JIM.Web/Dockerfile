@@ -6,10 +6,6 @@
 # See https://aka.ms/containerfastmode to understand how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 ARG VERSION=dev
-# OPENAPI_STAGE selects the source for the final image: defaults to openapi-gen
-# (which generates the static OpenAPI doc); pass --build-arg OPENAPI_STAGE=publish
-# to skip the expensive generation step in local dev builds.
-ARG OPENAPI_STAGE=openapi-gen
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94 AS base
 ARG VERSION
@@ -121,15 +117,12 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 # The app starts, generates the schema from controller metadata, writes the
 # JSON file into the publish output, and exits.
 #
-# This stage is expensive (full publish output COPY + .NET cold start) and the
-# publish layer cache is invalidated on every build by VERSION_SUFFIX, so a
-# build arg lets local dev builds bypass it. CI/release builds always run it
-# (OPENAPI_STAGE defaults to openapi-gen). Local dev builds can pass
-# --build-arg OPENAPI_STAGE=publish to skip; run jim-openapi-generate to
-# refresh the static doc on disk when API surface changes.
-#
-# The output is written under /app/publish so that the final stage can pull
-# from either openapi-gen or publish using the same path.
+# Every build runs this stage: local (jim-build), integration, CI and release alike, so an
+# image that builds anywhere is one that can be released. Local and integration builds used
+# to skip it through an OPENAPI_STAGE build argument, when generation took minutes; it now
+# takes seconds (COPY 1.8 s and generation 2.0 s on a CI runner, #1798), and the skip only
+# meant a local build proved less than a release build. jim-openapi-generate still refreshes
+# the static document on disk when the API surface changes.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94 AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
@@ -156,14 +149,10 @@ ENV DOTNET_gcServer=0 \
     JIM_DB_PASSWORD=placeholder
 RUN dotnet JIM.Web.dll
 
-# Final stage - copy from either openapi-gen (default) or publish (when the
-# expensive doc-generation step is bypassed). Both stages expose the app
-# under /app/publish so the COPY path is identical.
-FROM ${OPENAPI_STAGE} AS final-source
-
+# Final stage - the published app with its generated OpenAPI document.
 FROM base AS final
 WORKDIR /app
-COPY --from=final-source /app/publish .
+COPY --from=openapi-gen /app/publish .
 # Third-party licence texts the image is bound to carry (the Oracle managed driver in particular);
 # see third-party-notices/README.md.
 COPY ["third-party-notices/", "./third-party-notices/"]

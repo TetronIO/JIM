@@ -75,12 +75,4 @@ public abstract class WorkerTask
 	/// foreign key, so editing or deleting a Schedule never has to wait on a queued task.
 	/// </summary>
 	public Guid? ScheduleStepId { get; set; }
-
-	/// <summary>
-	/// Whether the schedule should continue if this step fails.
-	/// Copied from ScheduleStep.ContinueOnFailure at queue time so the check works
-	/// even if the schedule is modified mid-execution.
-	/// Only relevant for tasks that are part of a schedule execution.
-	/// </summary>
-	public bool ContinueOnFailure { get; set; }
 }
