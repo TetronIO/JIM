@@ -3357,6 +3357,14 @@ public class ExportEvaluationTests
         public int PerObjectMatchCallCount { get; private set; }
         public int BatchCandidateQueryCallCount { get; private set; }
 
+        /// <summary>
+        /// Every value passed to <see cref="GetExportMatchCandidateIdsAsync"/> across every call, so tests
+        /// can assert on exactly what the prefetch queried for, independent of
+        /// <see cref="ExportEvaluationCache.ExportMatchCandidates"/>'s own lifecycle (the worker clears it
+        /// back to null once the page's evaluation loop finishes, so it cannot be inspected afterwards).
+        /// </summary>
+        public List<object> CapturedValues { get; } = [];
+
         public override Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
             MetaverseObject metaverseObject,
             ConnectedSystem connectedSystem,
@@ -3376,6 +3384,7 @@ public class ExportEvaluationTests
             IReadOnlyCollection<object> values)
         {
             BatchCandidateQueryCallCount++;
+            CapturedValues.AddRange(values);
             return base.GetExportMatchCandidateIdsAsync(connectedSystemId, connectedSystemObjectTypeId, connectedSystemAttributeName, dataType, caseSensitive, values);
         }
     }
@@ -3828,6 +3837,9 @@ public class ExportEvaluationTests
         public void QueuePendingExportEvaluation(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
             => _pendingExportEvaluations.Add((mvo, changedAttributes, null));
 
+        public void QueuePendingMvoDeletion(MetaverseObject mvo)
+            => _pendingMvoDeletions.Add((mvo, []));
+
         public Task RunEvaluatePendingExportsAsync() => EvaluatePendingExportsAsync();
     }
 
@@ -3891,6 +3903,108 @@ public class ExportEvaluationTests
         Assert.ThrowsAsync<InvalidOperationException>(async () => await processor.RunEvaluatePendingExportsAsync());
         Assert.That(processor.Cache!.ExportMatchCandidates, Is.Null,
             "Even when evaluation throws, page-scoped export-matching candidates must be cleared before the exception propagates");
+    }
+
+    /// <summary>
+    /// The worker call that actually delivers the speed-up: a real page, run through the real
+    /// <see cref="SyncFullSyncTaskProcessor.EvaluatePendingExportsAsync"/>, with two Metaverse Objects that
+    /// both reach <see cref="OutboundStagingOutcome.ProvisionNewCso"/> against the same Object Matching
+    /// Rule. One resolves to a value a seeded Connected System Object holds (joins); the other resolves to
+    /// a value nothing holds (provisions). Both must be answered from a single page-wide batch query, and
+    /// neither may fall back to the per-object query.
+    /// </summary>
+    [Test]
+    public async Task EvaluatePendingExportsAsync_PageReachesProvisionNewCsoWithMatchingRule_PrefetchesOncePerPageAndNeverCallsPerObjectQueryAsync()
+    {
+        // Arrange
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (joiningMvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture(employeeIdValue: "EMP001");
+        var (provisioningMvo, _, _, _, _, _) = ArrangePrefetchFixture(employeeIdValue: "EMP002");
+        localSyncRepo.SeedMetaverseObject(joiningMvo);
+        localSyncRepo.SeedMetaverseObject(provisioningMvo);
+
+        // Only EMP001 has a candidate; EMP002 has none. Both values share the same rule, Connected System,
+        // Connected System Object Type and attribute, so a correct prefetch groups them into one query.
+        var cso = SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+
+        var cache = BuildPrefetchCache(joiningMvo.Type!, exportRule, [targetSystem.Id]);
+        var runProfile = ConnectedSystemRunProfilesData.Single(rp => rp.Name == "Dummy Target System Export");
+        var processor = new TestableSyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(localJim), localSyncRepo, targetSystem, runProfile, ActivitiesData.First(), new CancellationTokenSource())
+        {
+            Cache = cache
+        };
+        processor.QueuePendingExportEvaluation(joiningMvo, joiningMvo.AttributeValues.ToList());
+        processor.QueuePendingExportEvaluation(provisioningMvo, provisioningMvo.AttributeValues.ToList());
+
+        // Act
+        await processor.RunEvaluatePendingExportsAsync();
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(joiningMvo.Id), "The Metaverse Object whose value matched should have joined the seeded CSO");
+            Assert.That(countingRepo.BatchCandidateQueryCallCount, Is.EqualTo(1),
+                "The page's export matching should be answered by one batch query covering both Metaverse Objects, not one per object");
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(0),
+                "Neither Metaverse Object should fall back to the per-object matching query");
+        }
+    }
+
+    /// <summary>
+    /// A page's own deletion queue must not leak into what the prefetch queries for: a Metaverse Object
+    /// queued via <see cref="SyncTaskProcessorBase.EvaluatePendingExportsAsync"/>'s pending-deletion set is
+    /// already skipped for evaluation, and this pins that its value is also never sent to
+    /// <see cref="ISyncRepository.GetExportMatchCandidateIdsAsync"/>. Asserted on the values the batch
+    /// query actually received, not on <see cref="ExportEvaluationCache.ExportMatchCandidates"/> after the
+    /// call: the worker's own finally block clears that back to null once the page's evaluation loop
+    /// finishes, so it carries no information by the time a test could inspect it.
+    /// </summary>
+    [Test]
+    public async Task EvaluatePendingExportsAsync_MvoPendingImmediateDeletion_ExcludedFromPrefetchValuesAsync()
+    {
+        // Arrange
+        var countingRepo = new CountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), syncRules: SyncRulesData, repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var (survivingMvo, targetSystem, targetUserType, csEmployeeIdAttr, _, exportRule) = ArrangePrefetchFixture(employeeIdValue: "EMP001");
+        var (doomedMvo, _, _, _, _, _) = ArrangePrefetchFixture(employeeIdValue: "EMP999");
+        localSyncRepo.SeedMetaverseObject(survivingMvo);
+        localSyncRepo.SeedMetaverseObject(doomedMvo);
+
+        // A candidate exists for the doomed Metaverse Object's own value. Both Metaverse Objects resolve
+        // the same rule, Connected System, Connected System Object Type and attribute, so if the doomed
+        // one's value leaked into the prefetch despite the deletion queue, it would land in the very same
+        // batch query as the surviving one's value, and CapturedValues would show it.
+        SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP999");
+
+        var cache = BuildPrefetchCache(survivingMvo.Type!, exportRule, [targetSystem.Id]);
+        var runProfile = ConnectedSystemRunProfilesData.Single(rp => rp.Name == "Dummy Target System Export");
+        var processor = new TestableSyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(localJim), localSyncRepo, targetSystem, runProfile, ActivitiesData.First(), new CancellationTokenSource())
+        {
+            Cache = cache
+        };
+        processor.QueuePendingExportEvaluation(survivingMvo, survivingMvo.AttributeValues.ToList());
+        processor.QueuePendingExportEvaluation(doomedMvo, doomedMvo.AttributeValues.ToList());
+        processor.QueuePendingMvoDeletion(doomedMvo);
+
+        // Act
+        await processor.RunEvaluatePendingExportsAsync();
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(countingRepo.CapturedValues, Does.Contain("EMP001"),
+                "The surviving Metaverse Object's value should still reach the batch query");
+            Assert.That(countingRepo.CapturedValues, Does.Not.Contain("EMP999"),
+                "A Metaverse Object pending immediate deletion must be excluded from the prefetch's queried values");
+            Assert.That(countingRepo.PerObjectMatchCallCount, Is.EqualTo(0));
+        }
     }
 
     #endregion

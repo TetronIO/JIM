@@ -3757,24 +3757,30 @@ public abstract class SyncTaskProcessorBase
             await _syncServer.PrefetchExportMatchCandidatesForPageAsync(_exportEvaluationCache, mvosForPrefetch);
         }
 
-        var skippedCount = 0;
+        // Metaverse Objects pending immediate deletion are logged and counted up front, in a loop with no
+        // guard: FlushPendingMvoDeletionsAsync creates their Delete exports separately, so evaluating them
+        // here would be spurious.
+        var skippedEvaluations = _pendingExportEvaluations
+            .Where(x => pendingDeletionMvoIds != null && pendingDeletionMvoIds.Contains(x.Mvo.Id))
+            .ToList();
+
+        foreach (var (mvo, _, _) in skippedEvaluations)
+        {
+            Log.Debug("EvaluatePendingExportsAsync: Skipping export evaluation for MVO {MvoId}; " +
+                "queued for immediate deletion, Delete exports will be created by FlushPendingMvoDeletionsAsync",
+                mvo.Id);
+        }
+
+        var skippedCount = skippedEvaluations.Count;
 
         // Page-scoped export-matching candidates must never leak into any other evaluation path (recall,
         // cross-page reference pass, drift, deprovisioning, preview all keep the per-object query), so the
         // cache is cleared however the loop below ends, including on an unhandled exception.
         try
         {
-            foreach (var (mvo, changedAttributes, removedAttributes) in _pendingExportEvaluations)
+            foreach (var (mvo, changedAttributes, removedAttributes) in _pendingExportEvaluations
+                .Where(x => pendingDeletionMvoIds == null || !pendingDeletionMvoIds.Contains(x.Mvo.Id)))
             {
-                if (pendingDeletionMvoIds != null && pendingDeletionMvoIds.Contains(mvo.Id))
-                {
-                    Log.Debug("EvaluatePendingExportsAsync: Skipping export evaluation for MVO {MvoId} — " +
-                        "queued for immediate deletion, Delete exports will be created by FlushPendingMvoDeletionsAsync",
-                        mvo.Id);
-                    skippedCount++;
-                    continue;
-                }
-
                 using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
                     .SetTag("mvoId", mvo.Id)
                     .SetTag("changedAttributeCount", changedAttributes.Count))
