@@ -85,6 +85,11 @@ public class ScheduleHeader
     public string? IntervalWindowEnd { get; set; }
 
     /// <summary>
+    /// What the Schedule does when a step fails, for steps that follow the Schedule (#1787).
+    /// </summary>
+    public ScheduleFailureBehaviour OnStepFailure { get; set; }
+
+    /// <summary>
     /// When the Schedule is next due to run (UTC).
     /// </summary>
     public DateTime? NextRunTime { get; set; }
