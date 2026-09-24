@@ -690,7 +690,7 @@ try {
         # Enable the disabled Locker Code mapping now that the join above is committed, then run one
         # more cycle so it resolves for the first time.
         Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.LockerCodeMappingId -Enabled $true | Out-Null
-        Invoke-Cycle -Config $config | Out-Null
+        Invoke-Cycle -Config $config -FirstRun | Out-Null  # a configuration change needs a Full Synchronisation to reach unchanged objects
 
         $adoptedLockerCodeValue = Get-MvoAttributeValue -MvoId $adoptedMvo.id -AttributeName "Locker Code"
         Add-TestResult -Name "Locker Code adopted the brownfield office value ('$officeValue'), not a fresh 'LOCKER' candidate" -Passed ($adoptedLockerCodeValue -eq $officeValue) `
@@ -764,8 +764,8 @@ try {
 
         $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Full Import (Failure arrange)"
-        $failureSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $failureSync.activityId -Name "HR CSV Delta Sync (Call Sign exhaustion)" -AllowWarnings
+        $failureSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $failureSync.activityId -Name "HR CSV Full Synchronisation (Call Sign exhaustion)" -AllowWarnings
 
         $items = @(Get-JIMActivity -Id $failureSync.activityId -ExecutionItems)
         $exhausted = @($items | Where-Object { $_.errorType -eq 'GeneratedValueExhausted' })
@@ -864,7 +864,7 @@ try {
             $psMapping = New-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -TargetMetaverseAttributeId $psAttr.id -Generate -TokenKind Random -RandomFormat Hex -RandomLength 6
         }
 
-        Invoke-Cycle -Config $config | Out-Null
+        Invoke-Cycle -Config $config -FirstRun | Out-Null  # new mappings reach unchanged objects only through a Full Synchronisation
 
         $population = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes @("Access Code REST", "Access Code PS") -All)
         $restBad = @($population | Where-Object { $_.attributes.'Access Code REST' -notmatch '^[0-9a-f]{6}$' })
