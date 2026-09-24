@@ -23,7 +23,7 @@
     else if (Provenance != null)
     {
         <MvoContributionBar Provenance="Provenance" ObjectTypeName="@ObjectTypeName"
-                             ActiveFilterKey="ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged" />
+                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged" />
     }
 
     <div class="jim-inspect-layout">
@@ -122,8 +122,8 @@
                                         </td>
                                         @if (GroupBy != "source")
                                         {
-                                            <td class="jim-one-line">
-                                                <span @onclick:stopPropagation="true">@RenderSourceCell(group.AttributeId)</span>
+                                            <td>
+                                                <div class="jim-inspect-source-cell" @onclick:stopPropagation="true">@RenderSourceCell(group.AttributeId)</div>
                                             </td>
                                         }
                                         <td class="jim-attr-type">

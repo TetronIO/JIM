@@ -25,7 +25,7 @@ else if (Origin.Kind == ValueOriginKind.SynchronisationRule)
     else if (!string.IsNullOrEmpty(Origin.SyncRuleName))
     {
         <span class="mud-text-secondary">·</span>
-        <MudLink Href="@SyncRuleHref">@Origin.SyncRuleName</MudLink>
+        <MudLink Href="@SyncRuleHref" Class="jim-value-origin-rule" title="@Origin.SyncRuleName">@Origin.SyncRuleName</MudLink>
     }
     @if (Origin.AssertsNoValue)
     {
@@ -42,7 +42,7 @@ else if (Origin.Kind == ValueOriginKind.GeneratedByJim)
         @if (!string.IsNullOrEmpty(Origin.SyncRuleName))
         {
             <span class="mud-text-secondary">·</span>
-            <MudLink Href="@SyncRuleHref">@Origin.SyncRuleName</MudLink>
+            <MudLink Href="@SyncRuleHref" Class="jim-value-origin-rule" title="@Origin.SyncRuleName">@Origin.SyncRuleName</MudLink>
         }
     }
     @if (Origin.Corrected)

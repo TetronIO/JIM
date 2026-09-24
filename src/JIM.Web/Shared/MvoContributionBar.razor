@@ -97,30 +97,28 @@
     };
 
     /// <summary>
-    /// A theme colour token for a source group, cycling through a fixed palette so every theme stays legible;
-    /// "not recorded" and "several sources" always take the same neutral, disabled-text token rather than a
-    /// palette colour, since neither names a real source.
+    /// A theme colour token for a source group. A Connected System keeps one colour on every object and across
+    /// restarts, chosen from its id (never from a string hash: <c>string.GetHashCode()</c> is randomised per
+    /// process). Values JIM generated take the primary colour and values a person set the secondary one, so those
+    /// two never share a colour with a system. "Not recorded" and "several sources" take the same neutral,
+    /// disabled-text token, since neither names a real source.
     /// </summary>
-    private static readonly string[] PaletteTokens =
+    private static readonly string[] SystemPaletteTokens =
     [
-        "--mud-palette-primary",
-        "--mud-palette-secondary",
-        "--mud-palette-tertiary",
         "--mud-palette-info",
+        "--mud-palette-tertiary",
         "--mud-palette-success",
         "--mud-palette-warning"
     ];
 
     private const string NeutralToken = "--mud-palette-text-disabled";
 
-    private string ColourFor(ValueOriginGrouping.Group group)
+    private static string ColourFor(ValueOriginGrouping.Group group) => group.Kind switch
     {
-        if (group.Kind == null || group.Kind == ValueOriginKind.NotRecorded)
-            return NeutralToken;
-
-        // Stable across renders and independent of sort order: derived from the group's own key rather than
-        // its position in the list, so a filter click (which does not change the groups) never recolours them.
-        var index = Math.Abs(group.Key.GetHashCode()) % PaletteTokens.Length;
-        return PaletteTokens[index];
-    }
+        ValueOriginKind.GeneratedByJim => "--mud-palette-primary",
+        ValueOriginKind.SetByPerson => "--mud-palette-secondary",
+        ValueOriginKind.SynchronisationRule when group.ConnectedSystemId is { } systemId =>
+            SystemPaletteTokens[Math.Abs(systemId % SystemPaletteTokens.Length)],
+        _ => NeutralToken
+    };
 }

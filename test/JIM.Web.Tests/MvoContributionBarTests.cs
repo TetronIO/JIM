@@ -42,6 +42,46 @@ public class MvoContributionBarTests : JimComponentTestContext
     };
 
     [Test]
+    public void ContributionBar_SameConnectedSystemThroughTwoRules_SharesOneColourDistinctFromAnotherSystem()
+    {
+        // Colours follow the Connected System, deterministically: string.GetHashCode() is randomised per process,
+        // so a hash-derived colour changed on every restart and could differ between web instances (#399).
+        var hrSecondRule = HrOrigin with { SyncRuleId = 11, SyncRuleName = "HR Contractors Import" };
+        var provenance = new MetaverseObjectProvenance
+        {
+            Attributes = [Attribute(1, HrOrigin), Attribute(2, hrSecondRule), Attribute(3, AdOrigin)]
+        };
+
+        var cut = Render<MvoContributionBar>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        var swatches = cut.FindAll(".jim-contribution-legend-swatch").Select(s => s.GetAttribute("style")).ToList();
+        var labels = cut.FindAll("button[aria-pressed]").Select(b => b.TextContent).ToList();
+        var hr = swatches[labels.FindIndex(l => l.Contains("HR Import"))];
+        var hrContractors = swatches[labels.FindIndex(l => l.Contains("HR Contractors Import"))];
+        var ad = swatches[labels.FindIndex(l => l.Contains("AD"))];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hrContractors, Is.EqualTo(hr));
+            Assert.That(ad, Is.Not.EqualTo(hr));
+        }
+    }
+
+    [Test]
+    public void ContributionBar_GeneratedByJim_TakesThePrimaryColour()
+    {
+        var generated = new ValueOrigin { Kind = ValueOriginKind.GeneratedByJim, ConnectedSystemId = 1, ConnectedSystemName = "HR", SyncRuleId = 10, SyncRuleName = "HR Import" };
+        var provenance = new MetaverseObjectProvenance { Attributes = [Attribute(1, generated), Attribute(2, AdOrigin)] };
+
+        var cut = Render<MvoContributionBar>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        Assert.That(cut.Markup, Does.Contain("var(--mud-palette-primary)"));
+    }
+
+    [Test]
     public void ContributionBar_AllAttributesFromOneSource_CollapsesToOneSentence()
     {
         var provenance = new MetaverseObjectProvenance

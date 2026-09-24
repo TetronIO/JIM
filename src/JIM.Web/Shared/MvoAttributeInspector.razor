@@ -56,7 +56,7 @@
             }
         }
 
-        <div class="jim-one-line mt-2">
+        <div class="jim-inspector-sentence mt-2">
             @{ var primaryOrigin = Provenance.CurrentValues.FirstOrDefault()?.Origin ?? ValueOrigin.NotRecorded; }
             @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded)
             {
@@ -76,7 +76,6 @@
                 }
                 @if (Provenance.LastSet != null)
                 {
-                    <span>,</span>
                     <MudTooltip Text="@Provenance.LastSet.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         <span class="mud-text-secondary">@Provenance.LastSet.ChangeTime.ToLocalTime().ToRelativeTime()</span>
                     </MudTooltip>
@@ -107,7 +106,7 @@
                 <MudLink Href="@($"/admin/sync-rules/{source.SyncRuleId}")">@source.SyncRuleName</MudLink>
                 @if (source.CandidateValues.Count > 0)
                 {
-                    <span class="jim-text-code jim-one-line" style="max-width: 12rem;">@string.Join(", ", source.CandidateValues)</span>
+                    <span class="jim-text-code jim-inspector-candidate">@string.Join(", ", source.CandidateValues)</span>
                 }
                 <MudSpacer />
                 <MudTooltip Text="@(source.Note ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top">
@@ -144,7 +143,7 @@
                             <span class="mud-text-secondary" style="text-decoration: line-through; margin-left: 6px;">@entry.PreviousValue</span>
                         }
                     </span>
-                    <div class="jim-one-line mud-text-secondary">
+                    <div class="jim-inspector-meta mud-text-secondary">
                         <MudTooltip Text="@entry.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                             <span>@entry.Change.ChangeTime.ToLocalTime().ToRelativeTime()</span>
                         </MudTooltip>

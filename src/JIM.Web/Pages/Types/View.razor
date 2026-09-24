@@ -73,8 +73,8 @@
                 <MvoDetailsTable MetaverseObject="MetaverseObject" ObjectTypeName="@(MetaverseObjectType?.Name ?? "object")"
                                  AttributeValueTotalCounts="_attributeValueTotalCounts"
                                  Provenance="_mvoProvenance" ProvenanceLoading="_provenanceLoading"
-                                 GroupBy="_inspectGroupBy" OnGroupByChanged="OnInspectGroupByChangedAsync"
-                                 ContributionFilterKey="_contributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
+                                 GroupBy="@_inspectGroupBy" OnGroupByChanged="OnInspectGroupByChangedAsync"
+                                 ContributionFilterKey="@_contributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
                                  SelectedAttributeId="_selectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
                                  SelectedAttributeProvenance="_selectedAttributeProvenance" AttributeInspectorLoading="_attributeInspectorLoading"
                                  OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync" />

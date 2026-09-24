@@ -248,6 +248,26 @@ public class MvoDetailsTableTests : JimComponentTestContext
         }
     }
 
+    [Test]
+    public void DetailsTable_ContributionFilterActive_PassesTheFilterKeyValueToTheContributionBar()
+    {
+        // Regression: a string parameter bound without @ passes the literal field name, not its value, so the
+        // bar's legend never showed the active filter as pressed. Found by runtime verification, not bUnit (#399).
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Office", "London"));
+        var provenance = BuildProvenance(
+            (1, "Job Title", HrOrigin),
+            (2, "Office", ValueOrigin.NotRecorded));
+        var filterKey = ValueOriginGrouping.KeyFor(provenance.Attributes[0]);
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ContributionFilterKey, filterKey));
+
+        Assert.That(cut.FindComponent<MvoContributionBar>().Instance.ActiveFilterKey, Is.EqualTo(filterKey));
+    }
+
     private static MetaverseObjectAttributeValue MvaValue(string value) => new()
     {
         Id = Guid.NewGuid(),

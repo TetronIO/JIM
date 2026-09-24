@@ -1122,6 +1122,30 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     gap: 12px;
 }
 
+/* The origin sentence and each history entry's meta line wrap within the panel rather than clipping: they carry
+   links (the Connected System Object, the Activity) that an ellipsis would hide. */
+.jim-inspector-sentence {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    line-height: 1.8;
+}
+
+.jim-inspector-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+}
+
+/* A source's candidate value takes the row's remaining width and wraps, so it is never cut short while the
+   panel has room. */
+.jim-inspector-candidate {
+    flex: 1 1 8rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .jim-inspector-history-entry {
     border-left: 2px solid var(--mud-palette-divider);
     padding-left: 10px;
@@ -1137,6 +1161,21 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     gap: 6px;
     white-space: nowrap;
     max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Only the Synchronisation Rule's name gives way when space runs short (its full name stays on the link's
+   title); the Connected System chip and any modifier keep their size. */
+.jim-value-origin-chip > * {
+    flex-shrink: 0;
+}
+
+.jim-value-origin-chip > .jim-value-origin-rule {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* !important is required so the monospace font and size win over MudBlazor's
@@ -2173,6 +2212,16 @@ html[lang] .jim-attribute-table.mud-table-hover tbody tr.jim-inspect-row-selecte
 .jim-attr-name-button:focus-visible {
     outline: 2px solid var(--mud-palette-primary);
     outline-offset: 2px;
+}
+
+/* The Source column is capped so a long Connected System or rule name cannot squeeze the Value column into a
+   character-per-line stack while the inspector narrows the table; the value keeps a readable minimum width. */
+.jim-inspect-source-cell {
+    max-width: 20rem;
+}
+
+html[lang] .jim-attribute-table td.jim-attr-value {
+    min-width: 10rem;
 }
 
 .jim-inspect-group-header td {
