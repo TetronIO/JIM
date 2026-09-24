@@ -220,6 +220,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ScheduleId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ScheduleStepId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 
@@ -4008,6 +4011,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ScheduleExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ScheduleStepId")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("ScheduleStepIndex")

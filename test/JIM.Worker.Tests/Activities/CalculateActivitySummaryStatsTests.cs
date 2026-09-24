@@ -582,10 +582,27 @@ public class CalculateActivitySummaryStatsTests
     #region Outcome-Based Stats — RPEI-Only Types
 
     [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_RetainedJoinOutcome_CountsAsRetainedJoinNotAttributeFlow()
+    {
+        // Arrange - a retained join flows nothing (#1649); its own outcome must not reach the Attribute Flow total
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.OutOfScopeRetainJoin,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin)));
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.TotalOutOfScopeRetainJoin, Is.EqualTo(1));
+            Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0));
+        }
+    }
+
+    [Test]
     public void CalculateActivitySummaryStats_WithOutcomes_RpeiOnlyTypes_StillCountedFromRpeis()
     {
-        // Arrange - OutOfScopeRetainJoin and Created have no outcome equivalents
-        // and must always be counted from RPEIs, even when other RPEIs have outcomes
+        // Arrange - Created has no outcome equivalent, and OutOfScopeRetainJoin items recorded before #1649 carry
+        // none either; both must always be counted from RPEIs, even when other RPEIs have outcomes
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
             // RPEI with outcomes (triggers outcome-based path)

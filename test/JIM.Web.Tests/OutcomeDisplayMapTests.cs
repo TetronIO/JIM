@@ -76,7 +76,8 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, "Value generated", CausalityTone.Primary, Icons.Material.Filled.Fingerprint),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted", CausalityTone.Info, Icons.Material.Filled.MoveToInbox),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired", CausalityTone.Warning, Icons.Material.Filled.Archive),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, "Value corrected", CausalityTone.Warning, Icons.Material.Filled.PublishedWithChanges)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRemediated, "Value corrected", CausalityTone.Warning, Icons.Material.Filled.PublishedWithChanges),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, "Left scope, join kept", CausalityTone.Info, Icons.Material.Filled.FilterAlt)
     ];
 
     /// <summary>

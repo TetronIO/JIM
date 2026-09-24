@@ -45,7 +45,16 @@ A `stepIndex` orders steps; multiple steps with the same index run in parallel.
 
 ### Continue on failure
 
-Set per step. By default, a failing step halts the schedule. Turn this on for steps where downstream work should proceed regardless (for example, an optional reporting step that shouldn't block the rest of the run).
+Set per step. By default, a failing step halts the schedule: the steps after it do not run, and each one says why. Turn this on for steps where downstream work should proceed regardless (for example, an optional reporting step that shouldn't block the rest of the run).
+
+The setting also covers a step that JIM cannot queue when the schedule starts, for example because its Connected System is being deleted, or its Run Profile targets a partition that is no longer selected. JIM queues every step before any of them runs, so:
+
+- **With Continue on failure off (the default)**, the schedule does not start at all. No step runs, the execution is marked **Failed** with a message naming the step and why it could not be queued, and the steps already queued show as **Cancelled** with the reason "Not run: the Schedule could not start."
+- **With Continue on failure on**, that step is recorded as **Failed** with the reason ("Could not be queued: ...") and the rest of the schedule runs without it.
+
+Where steps run in parallel, only a step that actually failed decides: the schedule stops if a failed step is set to stop it, and carries on if every failed step is set to continue, whatever its parallel steps that succeeded are set to.
+
+Nothing is lost when a schedule stops or cannot start: the steps that did not run are simply attempted again on its next run, and a cron schedule stays on its timetable rather than retrying every few seconds. Fix the cause before the next scheduled run (for example, remove the step for a Connected System that is being deleted, or select the partition its Run Profile targets again), or run the schedule manually once it is fixed.
 
 ## Executions
 
@@ -69,10 +78,19 @@ Selecting an execution opens a view of that single run:
 - Steps that share a step index are shown as a group, because they ran in parallel.
 - A link from each step to the [Activity](activities.md) that produced it, where the per-object detail and any error live.
 - The error that stopped the run, where one did, together with whether **Continue on failure** was set on the step that failed.
+- For a step that could not be queued when the schedule started, the reason, under the step's name.
 
-Steps after a hard failure are shown as **not run**, rather than pending: the run has stopped, and they never will.
+A step that was waiting its turn when the run stopped shows as **Cancelled**, with the reason beneath its name, so you can tell why without cross-referencing the rest of the run:
 
-An execution that is still in progress refreshes as it goes, and can be cancelled from this view.
+- "Not run: an earlier step stopped the Schedule." An earlier step failed, and it was set to stop the schedule when it fails.
+- "Not run: the Schedule could not start." A step could not be queued, so none of the schedule ran.
+- "Not run: the Schedule Execution was cancelled." Someone cancelled the run before this step's turn came.
+
+A step that was already running when the run was cancelled shows as **Cancelled** with no reason, because it did run. A step the run never reached at all shows as **Pending**.
+
+An execution that is still in progress refreshes as it goes, and can be cancelled from this view, including while it is still starting (shown as **Queued**). A cancellation always stands: a step that finishes after you cancel the run does not change how it ended, and nothing further is started. Starting a schedule normally takes seconds; if a run is still **Queued** five minutes later (most likely because a JIM service stopped part-way through starting it), JIM marks it **Failed** with the message "The Schedule did not finish starting, most likely because a JIM service stopped part-way through. No steps ran."
+
+The same reasons are available to automation: each step returned by `Get-JIMScheduleExecution -Id` and the Schedule Execution REST endpoint carries a `CancellationReason`. See the [Schedules cmdlets](../powershell/schedules.md#get-jimscheduleexecution) for the field-by-field description.
 
 ### Watching one run
 

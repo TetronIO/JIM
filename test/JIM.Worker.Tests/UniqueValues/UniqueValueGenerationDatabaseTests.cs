@@ -10,6 +10,7 @@ using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.UniqueValues;
@@ -49,6 +50,7 @@ public class UniqueValueGenerationDatabaseTests
     private JimDbContext NewContext() => new(new DbContextOptionsBuilder<JimDbContext>()
         .UseNpgsql(_connectionString)
         .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+        .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
         .Options);
 
     private static SyncRepository NewSyncRepository(JimDbContext ctx) => new(new PostgresDataRepository(ctx));

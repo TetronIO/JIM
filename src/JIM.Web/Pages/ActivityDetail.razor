@@ -1569,6 +1569,9 @@
         if (s.TotalGeneratedValues > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, s.TotalGeneratedValues);
         if (s.TotalGeneratedValuesAdopted > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, s.TotalGeneratedValuesAdopted);
         if (s.TotalDisconnections > 0 || s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections + s.TotalDisconnectedOutOfScope);
+        // Retained joins (#1649): counted from the items' change type, which the filter also matches, so the chip
+        // finds items recorded before the outcome type existed as well as those recorded since.
+        if (s.TotalOutOfScopeRetainJoin > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, s.TotalOutOfScopeRetainJoin);
         if (s.TotalDriftCorrections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, s.TotalDriftCorrections);
 
         // Outbound sync outcomes

@@ -30,6 +30,8 @@ When an object falls out of scope of every import Synchronisation Rule with Scop
 2. **Deletion Rule**: the Metaverse Object's type is put to its [Deletion Rule](metaverse.md#deletion-behaviour). Depending on the rule and whether other Connected System Objects still keep it joined, the Metaverse Object would be deleted immediately, scheduled for deletion after its grace period, or kept exactly as it stands (for example, because another system still holds a connector, or the type's rule is Manual).
 3. **Downstream deprovisioning**: if the Metaverse Object would be deleted, every other Connected System Object still joined to it is evaluated in turn. One with a matching export Synchronisation Rule would be deprovisioned (deleted from its target system, or merely disconnected, per that rule's Deprovisioning Action); one with **no** matching export rule at all is disconnected and left in place, because there is nothing to tell it to do otherwise.
 
+When the rule's Out-of-Scope Action keeps the join instead, there is no cascade: the preview shows a single node, **Would leave scope and keep its Metaverse Object join**, naming the rule and the Metaverse Object, with nothing beneath it, exactly as the run would record it.
+
 !!! note "A scheduled deletion stages nothing yet"
 
     When the Deletion Rule's outcome is a *scheduled* deletion (a grace period applies), nothing downstream is evaluated: no target account is deprovisioned until the grace period actually elapses and the deletion happens for real. The preview reflects that: you see the Metaverse Object would be scheduled for deletion, and nothing more, which is exactly what a real synchronisation would do too.

@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Repositories;
@@ -52,6 +53,7 @@ public class MetaverseObjectJoinedConnectedSystemObjectsDatabaseTests
     private JimDbContext NewContext() => new(new DbContextOptionsBuilder<JimDbContext>()
         .UseNpgsql(_connectionString)
         .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+        .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
         .Options);
 
     private sealed record Seeded(

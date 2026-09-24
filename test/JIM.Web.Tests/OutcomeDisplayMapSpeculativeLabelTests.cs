@@ -28,6 +28,7 @@ public class OutcomeDisplayMapSpeculativeLabelTests
         ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
         ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled,
         ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+        ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
         ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
         ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
         ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,

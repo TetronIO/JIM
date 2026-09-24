@@ -1267,12 +1267,18 @@ public class ActivityRepository : IActivityRepository
             // Pre-compute the "<OutcomeType>:" tokens client-side. Embedding ot.ToString() inside the
             // predicate makes EF Core try (and fail) to translate object.ToString() to SQL; hoisting it
             // out yields captured constant strings that translate to OutcomeSummary LIKE '%token%'.
-            var outcomeTokens = outcomeTypeFilter.Select(ot => ot + ":").ToList();
+            var outcomeTypes = outcomeTypeFilter.ToList();
+            var outcomeTokens = outcomeTypes.Select(ot => ot + ":").ToList();
+
+            // A retained join recorded before #1649 carries a stray AttributeFlow root, so its OutcomeSummary never
+            // names OutOfScopeRetainJoin. The Activity's retained-join count comes from the items' change type, so
+            // match that too, or the filter chip would promise rows it cannot show.
+            var includeRetainedJoins = outcomeTypes.Contains(ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin);
             if (outcomeTokens.Count > 0)
             {
                 query = query.Where(a =>
-                    a.OutcomeSummary != null &&
-                    outcomeTokens.Any(token => a.OutcomeSummary.Contains(token)));
+                    (a.OutcomeSummary != null && outcomeTokens.Any(token => a.OutcomeSummary.Contains(token))) ||
+                    (includeRetainedJoins && a.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin));
             }
         }
 
@@ -1817,7 +1823,10 @@ public class ActivityRepository : IActivityRepository
             totalGeneratedValuesAdopted = 0;
         }
 
-        // --- Stats that always come from RPEIs (no outcome type equivalent) ---
+        // --- Stats that always come from RPEIs ---
+        // Created has no outcome type equivalent; OutOfScopeRetainJoin has had one since #1649, but items recorded
+        // before then carry a stray AttributeFlow root instead, so the item's own change type is the only count
+        // that is right for every Activity.
         var totalOutOfScopeRetainJoin = ChangeTypeCount(ObjectChangeType.OutOfScopeRetainJoin);
         var totalCreated = ChangeTypeCount(ObjectChangeType.Created);
 

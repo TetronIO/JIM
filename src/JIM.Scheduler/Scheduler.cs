@@ -8,7 +8,6 @@ using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Operations;
-using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
 using JIM.Utilities;
 using Serilog;
@@ -143,7 +142,8 @@ public class Scheduler : BackgroundService
                 await jim.Scheduler.UpdateNextRunTimesAsync();
 
                 // Step 3: Safety net - recover stuck executions where the worker completed a task
-                // but crashed before TryAdvanceScheduleExecutionAsync could run
+                // but crashed before TryAdvanceScheduleExecutionAsync could run, and fail any execution left
+                // Queued part-way through starting (#1768)
                 await RecoverStuckExecutionsAsync(jim);
 
                 // Step 4: Crash recovery safety net - detect and recover stale worker tasks
@@ -252,61 +252,16 @@ public class Scheduler : BackgroundService
     }
 
     /// <summary>
-    /// Safety net for schedule execution advancement. Normally the worker drives step transitions
-    /// via TryAdvanceScheduleExecutionAsync after completing each task. This method catches the
-    /// edge case where the worker crashes after deleting a completed task but before the advancement
-    /// logic runs. It detects InProgress executions that have no Queued or Processing tasks and
-    /// re-runs the advancement logic.
+    /// Safety net for Schedule Executions: concludes an InProgress execution the Worker lost track of (it completed a
+    /// task but stopped before advancing), and fails one left Queued part-way through starting for longer than any start
+    /// takes (#1768). The logic lives in SchedulerServer.RecoverStuckExecutionsAsync, where it is unit tested; this only
+    /// keeps a failure from ending the polling cycle.
     /// </summary>
     private static async Task RecoverStuckExecutionsAsync(JimApplication jim)
     {
         try
         {
-            var activeExecutions = await jim.Scheduler.GetActiveExecutionsAsync();
-
-            foreach (var execution in activeExecutions)
-            {
-                try
-                {
-                    if (execution.Status != ScheduleExecutionStatus.InProgress)
-                        continue;
-
-                    // Check if there are any active (Queued/Processing) tasks for this execution
-                    var allTasks = await jim.Tasking.GetWorkerTasksByScheduleExecutionAsync(execution.Id);
-                    var hasActiveTasks = allTasks.Any(t =>
-                        t.Status == WorkerTaskStatus.Queued || t.Status == WorkerTaskStatus.Processing);
-
-                    if (hasActiveTasks)
-                        continue; // Normal operation — worker is handling it
-
-                    // No active tasks. Check if there are WaitingForPreviousStep tasks that should have been advanced.
-                    var hasWaitingTasks = allTasks.Any(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
-
-                    if (hasWaitingTasks)
-                    {
-                        // Execution has waiting tasks but no active tasks — worker likely crashed
-                        // after completing a step but before TryAdvanceScheduleExecutionAsync ran.
-                        // Use CheckAndAdvanceExecutionAsync as the recovery mechanism.
-                        Log.Warning("RecoverStuckExecutionsAsync: Execution {ExecutionId} for schedule {ScheduleName} has no active tasks but {WaitingCount} waiting tasks. Running safety-net advancement.",
-                            execution.Id, execution.ScheduleName, allTasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep));
-
-                        await jim.Scheduler.CheckAndAdvanceExecutionAsync(execution);
-                    }
-                    else if (allTasks.Count == 0)
-                    {
-                        // No tasks at all — the execution should have been marked complete.
-                        // Use CheckAndAdvanceExecutionAsync which handles this case.
-                        Log.Warning("RecoverStuckExecutionsAsync: Execution {ExecutionId} for schedule {ScheduleName} has no tasks at all. Running safety-net completion.",
-                            execution.Id, execution.ScheduleName);
-
-                        await jim.Scheduler.CheckAndAdvanceExecutionAsync(execution);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "RecoverStuckExecutionsAsync: Error processing execution {ExecutionId}", execution.Id);
-                }
-            }
+            await jim.Scheduler.RecoverStuckExecutionsAsync();
         }
         catch (Exception ex)
         {

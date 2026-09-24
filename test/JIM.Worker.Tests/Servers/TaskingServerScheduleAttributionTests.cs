@@ -92,6 +92,27 @@ public class TaskingServerScheduleAttributionTests
     }
 
     [Test]
+    public async Task CreateWorkerTaskAsync_ScheduledTask_CopiesTheScheduleStepIdOntoTheActivityAsync()
+    {
+        // Parallel steps share a step index, so the step id is what tells their Activities apart when the
+        // scheduler decides whether a failed step stops the Schedule (#1768).
+        var executionId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(executionId))
+            .ReturnsAsync(new ScheduleExecution { Id = executionId, ScheduleId = Guid.NewGuid(), ScheduleName = "Nightly Sync" });
+
+        var task = TemporalScopeReconciliationWorkerTask.ForSystem("Scheduler");
+        task.ScheduleExecutionId = executionId;
+        task.ScheduleStepIndex = 1;
+        task.ScheduleStepId = stepId;
+
+        await _application.Tasking.CreateWorkerTaskAsync(task);
+
+        Assert.That(_createdActivities, Has.Count.EqualTo(1));
+        Assert.That(_createdActivities[0].ScheduleStepId, Is.EqualTo(stepId));
+    }
+
+    [Test]
     public async Task CreateWorkerTaskAsync_UnscheduledTask_LeavesTheScheduleAttributionNullAsync()
     {
         var task = TemporalScopeReconciliationWorkerTask.ForSystem("Scheduler");

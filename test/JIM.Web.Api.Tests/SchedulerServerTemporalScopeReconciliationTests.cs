@@ -44,6 +44,7 @@ public class SchedulerServerTemporalScopeReconciliationTests
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepository.Object);
 
         _application = new JimApplication(_mockRepository.Object);
+        _mockSchedulingRepository.EmulateConditionalTransitions();
 
         _capturedTasks = new List<WorkerTask>();
         _mockTaskingRepository.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()))
@@ -91,9 +92,12 @@ public class SchedulerServerTemporalScopeReconciliationTests
         Assert.That(_capturedTasks, Has.Count.EqualTo(1));
         var task = _capturedTasks.Single();
         Assert.That(task, Is.InstanceOf<TemporalScopeReconciliationWorkerTask>());
-        Assert.That(task.Status, Is.EqualTo(WorkerTaskStatus.Queued));
+        // Queued as waiting, then released once the whole Schedule has been queued (#1768).
+        Assert.That(task.Status, Is.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
         Assert.That(task.ScheduleStepIndex, Is.EqualTo(0));
         Assert.That(task.ScheduleExecutionId, Is.EqualTo(execution!.Id));
+        Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
+        _mockSchedulingRepository.Verify(r => r.TryStartScheduleExecutionAsync(execution, 0), Times.Once);
     }
 
     [Test]

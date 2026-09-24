@@ -579,11 +579,29 @@
             return;
         }
 
-        var execution = await jim.Scheduler.StartScheduleExecutionAsync(
-            scheduleWithSteps,
-            ActivityInitiatorType.User,
-            user.Id,
-            user.NameOrId);
+        ScheduleExecution? execution;
+        try
+        {
+            execution = await jim.Scheduler.StartScheduleExecutionAsync(
+                scheduleWithSteps,
+                ActivityInitiatorType.User,
+                user.Id,
+                user.NameOrId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A step JIM refused to queue: the message is written for administrators, and the Failed execution
+            // it names is now in the list.
+            Snackbar.Add(ex.Message, Severity.Error);
+            await RefreshSchedulesAsync();
+            return;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Schedule '{header.Name}' could not start. Open its latest execution for the reason.", Severity.Error);
+            await RefreshSchedulesAsync();
+            return;
+        }
 
         if (execution != null)
         {

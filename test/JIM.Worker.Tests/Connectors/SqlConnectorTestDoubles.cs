@@ -6,6 +6,7 @@ using JIM.Connectors.Sql.Providers;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Utilities;
+using Microsoft.Data.SqlClient;
 using NUnit.Framework;
 using Serilog.Core;
 using Serilog.Events;
@@ -186,11 +187,18 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     protected override char CloseQuote => ']';
 
-    public override DbParameter CreateParameter(string parameterName, object? value)
+    public override DbParameter CreateParameter(string parameterName, object? value, SqlColumnType? columnType = null)
     {
         SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
-        return new FakeDbParameter { ParameterName = parameterName, Value = value ?? DBNull.Value };
+        return new FakeDbParameter { ParameterName = parameterName, Value = value ?? DBNull.Value, ColumnType = columnType };
     }
+
+    /// <summary>
+    /// Microsoft SQL Server's answer, which this stand-in otherwise speaks: a DateTime's binding depends
+    /// on the column it meets. Asking here is what makes an import read the column types it compares
+    /// against, so every date-valued test exercises that path.
+    /// </summary>
+    public override bool NeedsColumnTypeToBind(object? value) => value is DateTime;
 
     /// <summary>
     /// Nothing to bind where the key comes back as a result set, and an output parameter where it comes
@@ -579,6 +587,96 @@ internal sealed class FakeDriverNumber
 }
 
 /// <summary>
+/// A value held in a Microsoft SQL Server legacy <c>datetime</c> column, together with the comparison
+/// rules the server applies to one. An ordinary <see cref="DateTime"/> in a row stands for a column
+/// whose values survive every conversion unchanged; this stands for the one that does not (#1451).
+/// </summary>
+/// <remarks>
+/// <para>
+/// datetime stores the time of day in 1/300-second ticks. Three renderings of one stored value
+/// disagree, each measured against SQL Server 2022 with Microsoft.Data.SqlClient 7.1.0:
+/// </para>
+/// <list type="bullet">
+/// <item>SqlClient hands it back rounded to the millisecond: one tick reads as .003, two as .007.</item>
+/// <item>Compared with a datetime2 parameter, the server converts the column rather than the
+/// parameter, and from compatibility level 130 exactly: one tick is .0033333, two are .0066667.</item>
+/// <item>Compared with a parameter bound as datetime, the parameter is rounded onto the same grid and
+/// the two meet exactly.</item>
+/// </list>
+/// <para>
+/// So a value read out of the column and bound back as datetime2 is not equal to the row it came from,
+/// which is the whole defect. How a parameter binds is asked of the real
+/// <see cref="SqlServerProvider"/> rather than restated here, so the Connector's tests exercise the
+/// dialect's actual rule end to end.
+/// </para>
+/// </remarks>
+internal sealed class FakeSqlServerDateTime : IComparable
+{
+    private const double SqlTicksPerMillisecond = 0.3;
+
+    private readonly DateTime _date;
+    private readonly int _sqlTicks;
+
+    private FakeSqlServerDateTime(DateTime date, int sqlTicks)
+    {
+        _date = date;
+        _sqlTicks = sqlTicks;
+    }
+
+    /// <summary>
+    /// A value as the column stores it: rounded onto the 1/300-second grid, the way both the server
+    /// and SqlClient round a value into a datetime.
+    /// </summary>
+    internal static FakeSqlServerDateTime Stored(DateTime value)
+    {
+        var sqlTicks = (int)(value.TimeOfDay.Ticks / (double)TimeSpan.TicksPerMillisecond * SqlTicksPerMillisecond + 0.5);
+        return new FakeSqlServerDateTime(value.Date, sqlTicks);
+    }
+
+    /// <summary>
+    /// What a parameter compares as: on the grid where the real dialect binds it as datetime, and as
+    /// the value itself (a datetime2) otherwise.
+    /// </summary>
+    internal static object? AsBound(FakeDbParameter parameter)
+    {
+        var value = parameter.Value == DBNull.Value ? null : parameter.Value;
+
+        if (value is not DateTime dateTime)
+            return value;
+
+        var binding = (SqlParameter)new SqlServerProvider().CreateParameter(parameter.ParameterName, dateTime, parameter.ColumnType);
+        return binding.SqlDbType == SqlDbType.DateTime ? Stored(dateTime) : dateTime;
+    }
+
+    /// <summary>
+    /// What <see cref="DbDataReader.GetValue"/> answers with: SqlClient's rendering, rounded to the
+    /// millisecond.
+    /// </summary>
+    internal DateTime ReadValue() =>
+        DateTime.SpecifyKind(_date.AddMilliseconds((long)(_sqlTicks / SqlTicksPerMillisecond + 0.5)), DateTimeKind.Unspecified);
+
+    /// <summary>
+    /// What the server compares the column as against a datetime2 parameter: the exact conversion.
+    /// </summary>
+    private DateTime ExactValue => _date.AddTicks((long)Math.Round(_sqlTicks * (TimeSpan.TicksPerSecond / 300d), MidpointRounding.AwayFromZero));
+
+    /// <summary>
+    /// Compares a column value with another column value (on the grid), or with a parameter bound as
+    /// datetime2 (by the exact conversion).
+    /// </summary>
+    internal int CompareTo(object? other) => other switch
+    {
+        FakeSqlServerDateTime stored => (_date, _sqlTicks).CompareTo((stored._date, stored._sqlTicks)),
+        DateTime dateTime => ExactValue.CompareTo(dateTime),
+        _ => throw new ArgumentException($"A datetime column cannot be compared with a {other?.GetType().Name ?? "null"}.", nameof(other))
+    };
+
+    int IComparable.CompareTo(object? obj) => CompareTo(obj);
+
+    public override string ToString() => ReadValue().ToString("O", CultureInfo.InvariantCulture);
+}
+
+/// <summary>
 /// A table or view holding rows, as an import reads it.
 /// </summary>
 internal sealed record FakeSqlDataTable(string? SchemaName, string ObjectName, string[] Columns, List<object?[]> Rows)
@@ -741,7 +839,10 @@ internal sealed class FakeDbCommand : DbCommand
                 throw new FakeDbException($"This stand-in database has nothing to read a maximum from for: {CommandText}");
 
             var ordinal = dataTable.IndexOf(maxColumn.Groups["column"].Value);
-            return dataTable.Rows.Count == 0 ? null : dataTable.Rows.Max(row => row[ordinal]);
+            var highest = dataTable.Rows.Count == 0 ? null : dataTable.Rows.Max(row => row[ordinal]);
+
+            // Answered the way the driver renders the column, as a real aggregate is.
+            return highest is FakeSqlServerDateTime stored ? stored.ReadValue() : highest;
         }
 
         return _provider.ConnectivityTestResult;
@@ -755,11 +856,14 @@ internal sealed class FakeDbCommand : DbCommand
     {
         _provider.ExecutedCommandTexts.Add(CommandText);
 
-        var parameters = Enumerable.Range(0, DbParameterCollection.Count)
-            .Select(index => DbParameterCollection[index])
-            .ToDictionary(parameter => parameter.ParameterName, parameter => parameter.Value == DBNull.Value ? null : parameter.Value, StringComparer.OrdinalIgnoreCase);
+        var bound = Enumerable.Range(0, DbParameterCollection.Count)
+            .Select(index => (FakeDbParameter)DbParameterCollection[index])
+            .ToList();
 
-        _provider.ExecutedCommands.Add(new FakeExecutedCommand(CommandText, parameters, Transaction as FakeDbTransaction));
+        var parameters = bound.ToDictionary(parameter => parameter.ParameterName, parameter => parameter.Value == DBNull.Value ? null : parameter.Value, StringComparer.OrdinalIgnoreCase);
+        var columnTypes = bound.ToDictionary(parameter => parameter.ParameterName, parameter => parameter.ColumnType, StringComparer.OrdinalIgnoreCase);
+
+        _provider.ExecutedCommands.Add(new FakeExecutedCommand(CommandText, parameters, Transaction as FakeDbTransaction, columnTypes));
 
         if (_provider.FailWhenCommandTextContains is { } failureMarker && CommandText.Contains(failureMarker, StringComparison.Ordinal))
             throw new FakeDbException($"The stand-in database refused: {CommandText}");
@@ -953,14 +1057,17 @@ internal sealed class FakeDbCommand : DbCommand
             .Select(index => DbParameterCollection[index])
             .Where(parameter => parameter.ParameterName.StartsWith(prefix, StringComparison.Ordinal))
             .OrderBy(parameter => parameter.ParameterName, StringComparer.Ordinal)
-            .Select(parameter => parameter.Value == DBNull.Value ? null : parameter.Value)];
+            .Select(parameter => FakeSqlServerDateTime.AsBound((FakeDbParameter)parameter))];
     }
 
+    /// <summary>
+    /// A bound value as the database compares it, which for a date and time depends on the type the
+    /// dialect bound it as; see <see cref="FakeSqlServerDateTime"/>.
+    /// </summary>
     private object? BoundValue(string parameterName)
     {
         var index = DbParameterCollection.IndexOf(parameterName);
-        var value = index < 0 ? null : DbParameterCollection[index].Value;
-        return value == DBNull.Value ? null : value;
+        return index < 0 ? null : FakeSqlServerDateTime.AsBound((FakeDbParameter)DbParameterCollection[index]);
     }
 
     private static int CompareAnchors(object?[] row, int[] anchorOrdinals, IReadOnlyList<object?> lastAnchor)
@@ -992,6 +1099,13 @@ internal sealed class FakeDbCommand : DbCommand
 
         if (left == null || right == null)
             return left == null && right == null ? 0 : left == null ? -1 : 1;
+
+        // A legacy datetime column compares by SQL Server's rules, which depend on what it meets.
+        if (left is FakeSqlServerDateTime leftStored)
+            return leftStored.CompareTo(right);
+
+        if (right is FakeSqlServerDateTime rightStored)
+            return -rightStored.CompareTo(left);
 
         // A numeric anchor read back out of a pagination token need not return as the CLR type the row
         // holds (an int column's boundary parses back as an int, a decimal one as a decimal), so numbers
@@ -1141,10 +1255,12 @@ internal sealed class FakeRelatedChangePredicate
 /// <param name="CommandText">The statement, exactly as the Connector generated it.</param>
 /// <param name="Parameters">The bound values, by parameter name. A value that reached the database any other way is a value interpolated into the statement.</param>
 /// <param name="Transaction">The transaction the statement ran in, or null where it ran outside one.</param>
+/// <param name="ColumnTypes">The column type the Connector said each bound value meets, by parameter name; null where it said nothing.</param>
 internal sealed record FakeExecutedCommand(
     string CommandText,
     IReadOnlyDictionary<string, object?> Parameters,
-    FakeDbTransaction? Transaction);
+    FakeDbTransaction? Transaction,
+    IReadOnlyDictionary<string, SqlColumnType?> ColumnTypes);
 
 /// <summary>
 /// A transaction that records what became of it, so an export test can tell a committed object from a
@@ -1248,6 +1364,13 @@ internal sealed class FakeDbParameter : DbParameter
     public override bool SourceColumnNullMapping { get; set; }
 
     public override object? Value { get; set; }
+
+    /// <summary>
+    /// The declared type of the column the Connector said this value meets, or null where it said
+    /// nothing. What a real dialect would bind the value as follows from it; see
+    /// <see cref="FakeSqlServerDateTime"/>.
+    /// </summary>
+    internal SqlColumnType? ColumnType { get; init; }
 
     public override void ResetDbType()
     {
@@ -1374,6 +1497,7 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
     {
         null => DBNull.Value,
         FakeDriverNumber number => number.ReadValue(),
+        FakeSqlServerDateTime stored => stored.ReadValue(),
         var value => value
     };
 
@@ -1421,6 +1545,7 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
     public override Type GetFieldType(int ordinal) => Cell(ordinal) switch
     {
         FakeDriverNumber number => number.FieldType,
+        FakeSqlServerDateTime => typeof(DateTime),
         null => typeof(DBNull),
         var value => value.GetType()
     };

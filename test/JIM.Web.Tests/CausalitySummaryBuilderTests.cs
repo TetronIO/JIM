@@ -372,6 +372,42 @@ public class CausalitySummaryBuilderTests
             "Attributes flowed, and Account Name was generated as jallen42."));
     }
 
+    /// <summary>
+    /// #1649: an object that left scope under RemainJoined kept its join, so the sentence says both halves
+    /// rather than falling back to the bare outcome label.
+    /// </summary>
+    [Test]
+    public void Build_RetainedJoinShape_NamesTheRuleAndTheMetaverseObjectKept()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen",
+            syncRuleId: 5, syncRuleName: "Yellowstone People - Inbound");
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+                "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
+                "it left the scope of Synchronisation Rule Yellowstone People - Inbound and kept its join to the Metaverse Object Liam Allen."));
+            Assert.That(summary.Pills.Select(p => p.Label), Is.EqualTo(new[] { "Left scope, join kept" }));
+        }
+    }
+
+    [Test]
+    public void Build_LegacyRetainedJoinWithoutAttribution_FallsBackToUnnamedRuleAndMetaverseObject()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+            parent: null, ordinal: 0);
+
+        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(RenderSentence(summary.Segments), Does.EndWith(
+            ": it left the scope of its Synchronisation Rule and kept its Metaverse Object join."));
+    }
+
     [Test]
     public void Build_LegacyLeaverWithoutAttribution_FallsBackToUnnamedRuleAndMetaverseObject()
     {

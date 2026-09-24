@@ -166,6 +166,11 @@ public static class CausalityTableModelBuilder
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.Scope, null, ownVia, ownSyncRuleId),
 
+            // The same scope exit with the join kept (#1649); its Outcome label ("Left scope, join kept") says
+            // which, so it shares the Scope kind and the scoping rule's own attribution.
+            ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin => Row(
+                causalityEvent, objectKey, CausalityTableChangeKind.Scope, null, ownVia, ownSyncRuleId),
+
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.Projection, null, ownVia, ownSyncRuleId),
 

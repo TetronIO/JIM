@@ -559,9 +559,11 @@ public class SyncPreviewServer
             // object dies, deprovisions every downstream joined Connected System Object. Mirror that so the
             // preview's tree matches what the run would record (SyncTaskProcessorBase.HandleCsoOutOfScopeAsync
             // is the reference). An object that is not joined has nothing to cascade; RemainJoined keeps the
-            // join intact, so nothing downstream changes either.
+            // join intact, so nothing downstream changes, and the tree states only the retained join (#1649).
             if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect)
                 await BuildOutOfScopeCascadeAsync(result, cso, importRules, context);
+            else if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.RemainJoined)
+                await BuildRetainedJoinRootAsync(result, cso, importRules, context);
 
             return result;
         }
@@ -916,6 +918,39 @@ public class SyncPreviewServer
 
         var joinedCsosByMvo = await context.GuardedRepository.GetConnectedSystemObjectsForMvoDeletionAsync([mvoId]);
         return joinedCsosByMvo.GetValueOrDefault(mvoId) ?? [];
+    }
+
+    /// <summary>
+    /// The retained join (#1649): a JOINED object whose out-of-scope action is RemainJoined keeps its Metaverse
+    /// Object join, so the real run records a single OutOfScopeRetainJoin root attributed to the scoping rule and
+    /// nothing beneath it (nothing flows, nothing is recalled, nothing downstream changes). Mirrored here so the
+    /// preview's tree has the same shape as the one the run records.
+    /// </summary>
+    /// <param name="result">The preview result to add the root to. The object's
+    /// <see cref="SyncPreviewMessageCode.OutOfScope"/> warning has already been added by the caller.</param>
+    /// <param name="cso">The Connected System Object falling out of scope. Must be joined
+    /// (<see cref="ConnectedSystemObject.MetaverseObjectId"/> set); the caller checks this before calling.</param>
+    /// <param name="importRules">The applicable import Synchronisation Rules, for the scoping rule attribution:
+    /// the same first-applicable rule the real run attributes the retained join to.</param>
+    /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    private static async Task BuildRetainedJoinRootAsync(
+        SyncPreviewResult result,
+        ConnectedSystemObject cso,
+        List<SyncRule> importRules,
+        CsoPreviewContext context)
+    {
+        var mvoId = cso.MetaverseObjectId!.Value;
+        var joinedMvo = (await context.GuardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([mvoId])).SingleOrDefault();
+        var scopingSyncRule = importRules.FirstOrDefault(sr => sr.ObjectScopingCriteriaGroups.Count > 0);
+
+        result.OutcomeTree.Add(new SyncOutcomeNode
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+            TargetEntityId = mvoId,
+            TargetEntityDescription = ObjectNaming.FirstPresent(joinedMvo?.Name),
+            SyncRuleId = scopingSyncRule?.Id,
+            SyncRuleName = scopingSyncRule?.Name
+        });
     }
 
     /// <summary>
