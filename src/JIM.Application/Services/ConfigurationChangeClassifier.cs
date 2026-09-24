@@ -504,6 +504,13 @@ public static class ConfigurationChangeClassifier
         if (ServiceSettingKeys.TryGetValue(objectKey, out var settingClass))
             return settingClass;
 
+        // Every feature flag (#1781) classifies as Class C, rather than needing an entry per key: a flag is by
+        // definition a reversible, default-off switch for a not-yet-final capability, so toggling one carries no
+        // more weight than any other operational setting. Unlike the hand-maintained table above, this scales with
+        // FeatureFlagCatalogue automatically, so a newly added flag is never silently unclassified.
+        if (FeatureFlagCatalogue.All.Any(flag => flag.Key == objectKey))
+            return C;
+
         throw new InvalidOperationException(
             $"Service Setting '{objectKey}' has no classification. Add it to " +
             $"{nameof(ConfigurationChangeClassifier)} and to engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md. " +

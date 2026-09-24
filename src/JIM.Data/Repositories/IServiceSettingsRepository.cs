@@ -22,6 +22,13 @@ public interface IServiceSettingsRepository
     public Task<bool> SettingExistsAsync(string key);
 
     /// <summary>
+    /// Permanently removes a setting. Used by the seeding pass to converge the
+    /// <see cref="ServiceSettingCategory.FeatureFlags"/> category onto the current <c>FeatureFlagCatalogue</c>: a
+    /// flag deleted from the catalogue leaves nothing behind. A no-op if the key does not exist.
+    /// </summary>
+    public Task DeleteSettingAsync(string key);
+
+    /// <summary>
     /// Returns the existing setting for the given key, or atomically creates it from <paramref name="setting"/> and
     /// returns it. Safe against a concurrent first-use race: if another caller inserts the same key first, the
     /// persisted winner is returned rather than throwing. Used for lazily-generated singletons such as the

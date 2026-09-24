@@ -15,4 +15,12 @@
     <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- InMemoryServiceSettingsRepository (#1781): a minimal fake of IServiceSettingsRepository so a test can
+         construct a JimApplication/FeatureFlagServer with flags on without mocking the whole ServiceSettings
+         audit path. See test/CLAUDE.md > "Tests run with flags on". -->
+    <ProjectReference Include="..\..\src\JIM.Data\JIM.Data.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Models\JIM.Models.csproj" />
+  </ItemGroup>
+
 </Project>

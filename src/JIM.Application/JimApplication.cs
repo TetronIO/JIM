@@ -71,6 +71,11 @@ public class JimApplication : IDisposable
     public DriftDetectionService DriftDetection { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
+
+    /// <summary>
+    /// JIM's homegrown feature-flag mechanism (#1781), built on the Service Settings store.
+    /// </summary>
+    public FeatureFlagServer FeatureFlags { get; }
     public InitialPasswordServer InitialPasswords { get; }
 
     /// <summary>
@@ -207,6 +212,7 @@ public class JimApplication : IDisposable
         SecurityAudit = new SecurityAuditServer(this);
         Seeding = new SeedingServer(this);
         ServiceSettings = new ServiceSettingsServer(this);
+        FeatureFlags = new FeatureFlagServer(this);
         System = new SystemServer(this);
         SystemHealth = new SystemHealthServer(this);
         Tasking = new TaskingServer(this);
