@@ -341,6 +341,8 @@ The Service Setting snapshot's structural nodes are Class C (see the object-type
 | `ProgressUpdateInterval` | C | Portal refresh cadence. |
 | `ServiceName` | C | Instance branding. |
 
+**Feature flags (#1781) are Class C as a category, not one row per key.** Every key in `FeatureFlagCatalogue` classifies as Class C without an entry above: a flag is by definition a reversible, default-off switch for a not-yet-final capability, so toggling one is never more consequential than any other operational setting. This is a deliberate exception to "there is no default class"; it exists so a newly catalogued flag is never silently unclassified for having been forgotten here.
+
 > `PartitionValidationMode` is the one Service Setting worth revisiting. It is Class B because it does not itself remove anything, but it removes a guard that exists to prevent a destructive outcome. If the preview framework later shows administrators reaching for it without understanding the consequence, promote it to Class A.
 
 ## Creation and deletion

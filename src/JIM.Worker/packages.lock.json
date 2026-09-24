@@ -606,10 +606,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.5, )",
-          "JIM.Connectors": "[0.15.0, )",
-          "JIM.Data": "[0.15.0, )",
-          "JIM.Models": "[0.15.0, )",
-          "JIM.Utilities": "[0.15.0, )",
+          "JIM.Connectors": "[0.15.0-dev.20260924.887, )",
+          "JIM.Data": "[0.15.0-dev.20260924.887, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.12, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.12, )",
           "NCrontab": "[3.4.0, )",
@@ -621,9 +621,9 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.15.0, )",
-          "JIM.Scim": "[0.15.0, )",
-          "JIM.Utilities": "[0.15.0, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Scim": "[0.15.0-dev.20260924.887, )",
+          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
           "Microsoft.Data.SqlClient": "[7.1.0, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.301, )",
           "System.DirectoryServices.Protocols": "[10.0.12, )"
@@ -632,7 +632,7 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0, )"
+          "JIM.Models": "[0.15.0-dev.20260924.887, )"
         }
       },
       "jim.models": {
@@ -645,9 +645,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.15.0, )",
-          "JIM.Models": "[0.15.0, )",
-          "JIM.Utilities": "[0.15.0, )",
+          "JIM.Data": "[0.15.0-dev.20260924.887, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -656,14 +656,14 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0, )",
-          "JIM.Utilities": "[0.15.0, )"
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Utilities": "[0.15.0-dev.20260924.887, )"
         }
       },
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
           "Serilog": "[4.4.0, )"
         }
       }

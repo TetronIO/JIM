@@ -53,6 +53,10 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 }
 ```
 
+## Tests run with flags on
+
+Feature-flagged behaviour (#1781) is tested as though the feature had shipped, not against the flag-off default. Construct the flag server's backing settings store with the flags under test enabled via `JIM.TestSupport.InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()`: `repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled())` before constructing the `JimApplication`. See `engineering/DEVELOPER_GUIDE.md` > "Feature Flags" for the full lifecycle.
+
 ## Blazor component tests (bUnit)
 
 `test/JIM.Web.Tests/` renders JIM.Web's Razor components with [bUnit](https://bunit.dev) and asserts on them from NUnit (alongside its plain NUnit tests for causality display logic). Component rendering tests exist because some UI defects are only expressible at component level: the `PrefilledFormValidator` bug (the parent's `OnAfterRenderAsync` running before `MudForm`'s, so the initial validation result was overwritten) is a lifecycle-ordering fault that no plain unit test can reach.

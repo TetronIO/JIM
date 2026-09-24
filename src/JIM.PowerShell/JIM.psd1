@@ -248,6 +248,11 @@
         'Set-JIMServiceSetting',
         'Reset-JIMServiceSetting',
 
+        # Feature Flags
+        'Get-JIMFeature',
+        'Enable-JIMFeature',
+        'Disable-JIMFeature',
+
         # System
         'Get-JIMHealth',
         'Get-JIMServiceHealth',

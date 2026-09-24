@@ -40,6 +40,12 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     The authentication activity JIM records in its Activity log: interactive sign-in success and failure, and API key authentication failure, with its retention and SIEM integration.
 
+-   **[Preview Features](preview-features.md)**
+
+    ---
+
+    What a Preview feature is, where to turn one on, and what to expect from a feature that is still being rolled out.
+
 -   **[Configuration Reference](configuration.md)**
 
     ---

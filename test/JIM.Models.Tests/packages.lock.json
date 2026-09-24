@@ -203,6 +203,12 @@
         "resolved": "4.4.0",
         "contentHash": "ZC6Le3rr4TVJJjS4KsQAesxeF1EhW9qcZmmG7eP5Y2G3+gTGkJEUXkq4+tZNPtyp05I0wWOxnIjwtxFweJsObw=="
       },
+      "jim.data": {
+        "type": "Project",
+        "dependencies": {
+          "JIM.Models": "[0.15.0-dev.20260924.887, )"
+        }
+      },
       "jim.models": {
         "type": "Project",
         "dependencies": {
@@ -213,6 +219,8 @@
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
+          "JIM.Data": "[0.15.0-dev.20260924.887, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
           "NUnit": "[4.6.1, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -220,7 +228,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0, )",
+          "JIM.Models": "[0.15.0-dev.20260924.887, )",
           "Serilog": "[4.4.0, )"
         }
       }
