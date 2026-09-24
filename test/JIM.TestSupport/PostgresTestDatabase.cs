@@ -47,4 +47,30 @@ public static class PostgresTestDatabase
         await using var command = new NpgsqlCommand(ResetSql, connection);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// How long a <c>CREATE DATABASE</c> or <c>DROP DATABASE</c> may take before the command gives up. Npgsql's
+    /// default is 30 seconds, which is not enough on a database that keeps its durability settings.
+    /// </summary>
+    /// <remarks>
+    /// Both statements force an immediate checkpoint, flushing everything written since the last one. CI's
+    /// throwaway database runs with <c>fsync</c> off, so that is near-instant there. The devcontainer's does not:
+    /// straight after the rest of the tier has run, one checkpoint took 56 seconds to write about 2,400 buffers,
+    /// and every test in the fixture that issued it failed in its one-time setup without running.
+    /// </remarks>
+    public const int DatabaseCreateDropTimeoutSeconds = 120;
+
+    /// <summary>
+    /// Runs a <c>CREATE DATABASE</c> or <c>DROP DATABASE</c> statement on the given (administrative) connection,
+    /// allowing for the checkpoint it forces (see <see cref="DatabaseCreateDropTimeoutSeconds"/>). Neither
+    /// statement can be parameterised or run inside a transaction, so the database name must be a constant the
+    /// caller controls, never input.
+    /// </summary>
+    public static async Task ExecuteDatabaseCreateDropAsync(string adminConnectionString, string sql, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(adminConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection) { CommandTimeout = DatabaseCreateDropTimeoutSeconds };
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 }

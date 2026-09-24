@@ -42,15 +42,15 @@ public class PostgresTestDatabaseResetTests
         _scratchConnectionString = $"Host={host};Port={port};Database={ScratchDatabaseName};Username={user};Password={pass}";
 
         // WITH (FORCE) terminates any connection a previous aborted run left behind.
-        await ExecuteAsync(_adminConnectionString, $"DROP DATABASE IF EXISTS {ScratchDatabaseName} WITH (FORCE)");
-        await ExecuteAsync(_adminConnectionString, $"CREATE DATABASE {ScratchDatabaseName}");
+        await PostgresTestDatabase.ExecuteDatabaseCreateDropAsync(_adminConnectionString, $"DROP DATABASE IF EXISTS {ScratchDatabaseName} WITH (FORCE)");
+        await PostgresTestDatabase.ExecuteDatabaseCreateDropAsync(_adminConnectionString, $"CREATE DATABASE {ScratchDatabaseName}");
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDownAsync()
     {
         if (_adminConnectionString != null)
-            await ExecuteAsync(_adminConnectionString, $"DROP DATABASE IF EXISTS {ScratchDatabaseName} WITH (FORCE)");
+            await PostgresTestDatabase.ExecuteDatabaseCreateDropAsync(_adminConnectionString, $"DROP DATABASE IF EXISTS {ScratchDatabaseName} WITH (FORCE)");
     }
 
     [SetUp]
