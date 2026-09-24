@@ -2144,20 +2144,35 @@ html[lang] .jim-schema-change-table td {
     max-width: 22rem;
 }
 
-/* A real, keyboard-focusable row: tabindex + role="button" on the <tr> (JIM.Web/CLAUDE.md's "one line per
-   row" governs virtualised grids; this is an ordinary table, but the click affordance still needs to look and
-   behave like one). */
+/* The row's own click is a mouse convenience only (see the markup comment beside it); the attribute-name
+   button below is the real, keyboard-accessible control, so the row itself needs no tabindex or role. */
 .jim-inspect-row {
     cursor: pointer;
 }
 
-.jim-inspect-row:focus-visible {
-    outline: 2px solid var(--mud-palette-primary);
-    outline-offset: -2px;
-}
-
 html[lang] .jim-attribute-table.mud-table-hover tbody tr.jim-inspect-row-selected > td {
     background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+}
+
+/* The attribute name is the row's real, keyboard-accessible open-inspector control (a plain <button>, since a
+   <tr> containing links cannot itself be role="button"), styled to read as text rather than as a button. */
+.jim-attr-name-button {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.jim-attr-name-button:hover {
+    text-decoration: underline;
+}
+
+.jim-attr-name-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 .jim-inspect-group-header td {

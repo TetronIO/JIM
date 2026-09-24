@@ -2,10 +2,17 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Bunit;
+using JIM.Application;
+using JIM.Application.Interfaces;
+using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Utility;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -18,6 +25,27 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class MvoDetailsTableTests : JimComponentTestContext
 {
+    private Mock<IMetaverseRepository> _metaverse = null!;
+
+    /// <summary>
+    /// Registers a fake application factory so a multi-valued attribute over the inline threshold can render
+    /// its <see cref="MvoMvaTable"/> fallback, which injects <c>IJimApplicationFactory</c> for its own window
+    /// reads (pattern: <c>MvoMvaTableTests</c>). Every other test in this fixture ignores it.
+    /// </summary>
+    protected override void ConfigureAdditionalServices()
+    {
+        var repository = new Mock<IRepository>();
+        _metaverse = new Mock<IMetaverseRepository>();
+        repository.Setup(r => r.Metaverse).Returns(_metaverse.Object);
+
+        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
+    }
+
+    private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
+    {
+        public JimApplication Create() => new(repository);
+    }
+
     private static MetaverseObjectAttributeValue TextValue(int attributeId, string name, string value) => new()
     {
         Id = Guid.NewGuid(),
@@ -83,6 +111,61 @@ public class MvoDetailsTableTests : JimComponentTestContext
         cut.Find("tr.jim-inspect-row").Click();
 
         Assert.That(selected, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void DetailsTable_AttributeNameButton_ClickedRaisesOnAttributeSelected()
+    {
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+        int? selected = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
+
+        cut.Find("button.jim-attr-name-button").Click();
+
+        Assert.That(selected, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void DetailsTable_AttributeNameButton_AriaExpandedReflectsWhetherItsInspectorIsOpen()
+    {
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+
+        var closedCut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User"));
+        var openCut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.SelectedAttributeId, 7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(closedCut.Find("button.jim-attr-name-button").GetAttribute("aria-expanded"), Is.EqualTo("false"));
+            Assert.That(openCut.Find("button.jim-attr-name-button").GetAttribute("aria-expanded"), Is.EqualTo("true"));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_LinkInSourceCellClicked_DoesNotAlsoOpenTheInspector()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+        var provenance = BuildProvenance((1, "Job Title", HrOrigin));
+        int? selected = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
+
+        // The Synchronisation Rule link inside the Source cell's origin chip.
+        cut.Find("tr.jim-inspect-row a[href^='/admin/sync-rules/']").Click();
+
+        Assert.That(selected, Is.Null, "a link inside the row must not also open the inspector");
     }
 
     [Test]
@@ -165,30 +248,21 @@ public class MvoDetailsTableTests : JimComponentTestContext
         }
     }
 
-    [Test]
-    public void DetailsTable_MultiValuedAttribute_RendersACompactCountRatherThanExpandingEveryValue()
+    private static MetaverseObjectAttributeValue MvaValue(string value) => new()
     {
-        var mvo = BuildObject(
-            new MetaverseObjectAttributeValue
-            {
-                Id = Guid.NewGuid(),
-                Attribute = new MetaverseAttribute
-                {
-                    Id = 3, Name = "Other Mobiles", Type = AttributeDataType.Text,
-                    AttributePlurality = AttributePlurality.MultiValued
-                },
-                StringValue = "+44 1"
-            },
-            new MetaverseObjectAttributeValue
-            {
-                Id = Guid.NewGuid(),
-                Attribute = new MetaverseAttribute
-                {
-                    Id = 3, Name = "Other Mobiles", Type = AttributeDataType.Text,
-                    AttributePlurality = AttributePlurality.MultiValued
-                },
-                StringValue = "+44 2"
-            });
+        Id = Guid.NewGuid(),
+        Attribute = new MetaverseAttribute
+        {
+            Id = 3, Name = "Other Mobiles", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued
+        },
+        StringValue = value
+    };
+
+    [Test]
+    public void DetailsTable_MultiValuedAttributeWithinInlineThreshold_RendersTheStackedExpandedList()
+    {
+        var mvo = BuildObject(MvaValue("+44 1"), MvaValue("+44 2"));
 
         var cut = Render<MvoDetailsTable>(p => p
             .Add(c => c.MetaverseObject, mvo)
@@ -196,8 +270,31 @@ public class MvoDetailsTableTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Markup, Does.Contain("2 values"));
-            Assert.That(cut.Markup, Does.Not.Contain("+44 1"));
+            Assert.That(cut.FindAll(".jim-attr-expanded-item"), Has.Count.EqualTo(2));
+            Assert.That(cut.Markup, Does.Contain("+44 1"));
+            Assert.That(cut.Markup, Does.Contain("+44 2"));
+            Assert.That(cut.HasComponent<MvoMvaTable>(), Is.False);
+        }
+    }
+
+    [Test]
+    public void DetailsTable_MultiValuedAttributeAboveInlineThreshold_RendersMvoMvaTable()
+    {
+        var values = Enumerable.Range(0, 11).Select(i => MvaValue($"+44 {i}")).ToArray();
+        var mvo = BuildObject(values);
+        _metaverse
+            .Setup(r => r.GetAttributeValuesRangeAsync(mvo.Id, "Other Mobiles",
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync(new RangeResultSet<MetaverseObjectAttributeValue> { Results = values.ToList(), TotalResults = 11 });
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.HasComponent<MvoMvaTable>(), Is.True);
+            Assert.That(cut.FindAll(".jim-attr-expanded-item"), Is.Empty);
         }
     }
 

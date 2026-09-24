@@ -102,21 +102,28 @@
                                 {
                                     var group = row.Group;
                                     var isSelected = SelectedAttributeId.HasValue && SelectedAttributeId.Value == group.AttributeId;
+                                    @* The row's @onclick is a mouse convenience only; the real, keyboard-accessible
+                                       affordance is the attribute-name button below (a <tr> containing links
+                                       cannot itself be a button, and nested interactive content inside role="button"
+                                       is invalid). The Value and Source cells can carry their own links (a
+                                       reference value, the Source chip's Connected System / Synchronisation Rule),
+                                       so their content stops the click reaching this row's convenience handler. *@
                                     <tr @key="group.AttributeName"
                                         class="jim-inspect-row @(group.Values.Count > 1 ? "jim-attr-row-mva" : "") @(isSelected ? "jim-inspect-row-selected" : "")"
-                                        tabindex="0" role="button" aria-pressed="@(isSelected ? "true" : "false")"
-                                        @onclick="@(() => SelectAttributeAsync(group.AttributeId))"
-                                        @onkeydown="@(e => OnRowKeyDownAsync(e, group.AttributeId))">
+                                        @onclick="@(() => SelectAttributeAsync(group.AttributeId))">
                                         <td class="jim-attr-name">
-                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
+                                            <button type="button" class="jim-attr-name-button mud-text-secondary"
+                                                    aria-expanded="@(isSelected ? "true" : "false")"
+                                                    @onclick="@(() => SelectAttributeAsync(group.AttributeId))"
+                                                    @onclick:stopPropagation="true">@group.AttributeName</button>
                                         </td>
-                                        <td class="jim-attr-value jim-one-line">
-                                            @RenderValueCell(group)
+                                        <td class="jim-attr-value">
+                                            <span @onclick:stopPropagation="true">@RenderValueCell(group)</span>
                                         </td>
                                         @if (GroupBy != "source")
                                         {
                                             <td class="jim-one-line">
-                                                @RenderSourceCell(group.AttributeId)
+                                                <span @onclick:stopPropagation="true">@RenderSourceCell(group.AttributeId)</span>
                                             </td>
                                         }
                                         <td class="jim-attr-type">
@@ -201,6 +208,8 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
         {
+            @* Local capture: CodeQL does not read the HasValue guard above as establishing null-state
+               for a dereference in markup (JIM.Web/CLAUDE.md, "Nullable dereference in Razor"). *@
             var boolValue = attributeValue.BoolValue.Value;
             <BooleanValue Value="@boolValue" />
         }
@@ -275,6 +284,9 @@
     [Parameter]
     public EventCallback OnOpenInTimeline { get; set; }
 
+    /// <summary>Maximum number of multi-valued attribute values to show inline before falling back to <see cref="MvoMvaTable"/>.</summary>
+    private const int MvaInlineThreshold = 10;
+
     private bool _dense;
     private bool _preferencesLoaded;
 
@@ -309,18 +321,13 @@
         await OnAttributeSelected.InvokeAsync(attributeId);
     }
 
-    private async Task OnRowKeyDownAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, int attributeId)
-    {
-        if (e.Key is "Enter" or " ")
-            await SelectAttributeAsync(attributeId);
-    }
-
     private record MvoAttributeTableGroup(
         int AttributeId,
         string AttributeName,
         List<MetaverseObjectAttributeValue> Values,
         bool IsMultiValued,
-        int TotalCount);
+        int TotalCount,
+        bool IsReference);
 
     /// <summary>
     /// One row the table renders: either an attribute row (<see cref="Group"/> set) or a group header (Source or
@@ -352,12 +359,14 @@
             {
                 var values = g.ToList();
                 var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
+                var isReference = values.Any(v => v.ReferenceValue != null);
                 return new MvoAttributeTableGroup(
                     g.First().Attribute.Id,
                     g.Key,
                     values,
                     g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                    totalCount);
+                    totalCount,
+                    isReference);
             })
             .ToList();
     }
@@ -436,15 +445,28 @@
         {
             <EmptyValue />
         }
-        else if (!group.IsMultiValued)
+        else if (group.Values.Count == 1)
         {
             @RenderValue(group.Values[0])
         }
+        else if (group.TotalCount <= MvaInlineThreshold)
+        {
+            <div class="jim-attr-expanded">
+                @foreach (var val in group.Values)
+                {
+                    <div class="jim-attr-expanded-item">
+                        @RenderValue(val)
+                    </div>
+                }
+            </div>
+        }
         else
         {
-            // Every cell renders to one line (JIM.Web/CLAUDE.md): the full value set belongs to the attribute
-            // inspector (the row is clickable to open it), not to a stacked or nested table in this cell.
-            <span class="mud-text-secondary">@group.TotalCount.ToString("N0") values</span>
+            <MvoMvaTable @key="group.AttributeName"
+                         AttributeName="@group.AttributeName"
+                         MetaverseObjectId="@MetaverseObject.Id"
+                         IsReferenceAttribute="@group.IsReference"
+                         Dense="@_dense" />
         }
     };
 
