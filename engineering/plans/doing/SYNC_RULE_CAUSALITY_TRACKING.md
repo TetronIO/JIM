@@ -112,7 +112,7 @@ No other schema change is needed for the Connected System origin. The generated 
 - Attribute inspector side panel
 - bUnit tests for the origin chip rendering of each origin kind
 
-### Phase 4: Other surfaces
+### Phase 4: Other surfaces ✅
 
 - Origin chips on the Changes tab attribute rows
 - Value from / Attribute Flow columns on Pending Export detail

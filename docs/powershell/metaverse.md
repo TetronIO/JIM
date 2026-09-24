@@ -889,7 +889,7 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-Force] [-PageSize <int>]
 
 #### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, Synchronisation Rule, Run Profile context, and per-attribute value changes. Each value change carries `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, naming the Synchronisation Rule that contributed that specific value (a single change record can flow attributes from several rules); both are `$null` when the value was not contributed by a rule, or the contributing rule has since been deleted.
+Returns one `PSCustomObject` per change record, including the initiator, Synchronisation Rule, Run Profile context, and per-attribute value changes. Each value change carries `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, naming the Synchronisation Rule that contributed that specific value (a single change record can flow attributes from several rules); both are `$null` when the value was not contributed by a rule. `ContributedBySystemId` and `ContributedBySystemName` name the Connected System that rule belongs to, resolved from the still-live rule; both are `$null` once the contributing rule has since been deleted, even though `ContributedBySyncRuleName`'s snapshot survives.
 
 #### Examples
 

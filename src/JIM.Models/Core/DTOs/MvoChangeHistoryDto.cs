@@ -80,6 +80,12 @@ public class MvoAttributeChangeDto
 
     public AttributePlurality AttributePlurality { get; set; }
 
+    /// <summary>
+    /// The Metaverse Attribute's id, so the Changes tab can link a row into that attribute's Inspect view
+    /// (#399). Null when the attribute definition has since been deleted.
+    /// </summary>
+    public int? AttributeId { get; set; }
+
     public List<MvoValueChangeDto> ValueChanges { get; set; } = new();
 }
 
@@ -121,6 +127,16 @@ public class MvoValueChangeDto
     /// Snapshot of the contributing Synchronisation Rule's name, surviving deletion of the rule.
     /// </summary>
     public string? ContributedBySyncRuleName { get; set; }
+
+    /// <summary>
+    /// The contributing Connected System (#399), resolved from <see cref="ContributedBySyncRuleId"/> through the
+    /// still-live Synchronisation Rule. Null when the rule has since been deleted (the row's rule id is nulled at
+    /// that point, so the system can no longer be resolved); <see cref="ContributedBySyncRuleName"/>'s snapshot
+    /// survives regardless.
+    /// </summary>
+    public int? ContributedBySystemId { get; set; }
+
+    public string? ContributedBySystemName { get; set; }
 
     /// <summary>
     /// Returns the human-readable representation of the value, mirroring the

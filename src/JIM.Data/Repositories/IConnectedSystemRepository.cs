@@ -878,6 +878,20 @@ public interface IConnectedSystemRepository
     Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Gets the export mappings targeting a set of Connected System attributes from a set of Synchronisation
+    /// Rules (#399's Pending Export "Value from" column): resolves, for each attribute value change a Pending
+    /// Export carries, the mapping whose evaluation staged it. Matched in memory by the caller on the exact
+    /// (<see cref="SyncRuleMapping.SyncRuleId"/>, <see cref="SyncRuleMapping.TargetConnectedSystemAttributeId"/>)
+    /// pair, since a mapping is unique per target attribute within a rule. <see cref="SyncRuleMapping.Sources"/>
+    /// (with each source's <see cref="MetaverseAttribute"/>) and <see cref="SyncRuleMapping.Generation"/> are
+    /// eagerly loaded so the caller can classify the source without a further query.
+    /// </summary>
+    /// <param name="syncRuleIds">The staging Synchronisation Rule ids to match.</param>
+    /// <param name="connectedSystemAttributeIds">The target Connected System attribute ids to match.</param>
+    Task<List<SyncRuleMapping>> GetExportSyncRuleMappingsForTargetsAsync(
+        IReadOnlyCollection<int> syncRuleIds, IReadOnlyCollection<int> connectedSystemAttributeIds);
+
+    /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
     /// database, keyed by mapping id (#1199). Deliberately a scalar projection rather than an entity load: a
     /// whole-rule save mutates the tracked rule graph in memory before persisting it, and this is the "before"

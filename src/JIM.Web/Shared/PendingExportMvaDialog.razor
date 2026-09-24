@@ -47,6 +47,25 @@
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn Title="Attribute Flow" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Attribute Flow</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @* Values queued for one multi-valued attribute can each carry their own staging
+                           Synchronisation Rule (#399), so this is per row rather than per attribute. *@
+                        @if (!string.IsNullOrEmpty(context.Item.SyncRuleName))
+                        {
+                            <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@context.Item.SyncRuleName"
+                                        Href="@(context.Item.SyncRuleId.HasValue ? $"/admin/sync-rules/{context.Item.SyncRuleId}" : null)"
+                                        Class="ma-0" />
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn Title="Value" Sortable="false">
                     <HeaderTemplate>
                         <MudText Typo="Typo.button">Value</MudText>

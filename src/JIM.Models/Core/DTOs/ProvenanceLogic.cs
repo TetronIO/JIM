@@ -52,6 +52,35 @@ public static class ProvenanceLogic
     }
 
     /// <summary>
+    /// Resolves the origin of one Metaverse Object change's attribute value (#399: the Changes tab Source column).
+    /// Unlike <see cref="ResolveOrigin"/>, a <c>MetaverseObjectChangeAttributeValue</c> carries no
+    /// <c>ContributedBySystemId</c> column of its own: the Connected System is resolved by the caller from the
+    /// still-live Synchronisation Rule named by <paramref name="contributedBySyncRuleId"/>, so a deleted rule
+    /// always resolves the system to null even though <paramref name="contributedBySyncRuleName"/>'s snapshot
+    /// survives. Returns null when nothing was ever recorded for this value, so the caller can render nothing
+    /// (rather than "Source not recorded") for change rows that pre-date provenance.
+    /// </summary>
+    public static ValueOrigin? ResolveChangeValueOrigin(
+        int? contributedBySyncRuleId,
+        string? contributedBySyncRuleName,
+        int? contributedBySystemId,
+        string? contributedBySystemName)
+    {
+        if (!contributedBySyncRuleId.HasValue && string.IsNullOrEmpty(contributedBySyncRuleName))
+            return null;
+
+        return new ValueOrigin
+        {
+            Kind = ValueOriginKind.SynchronisationRule,
+            ConnectedSystemId = contributedBySystemId,
+            ConnectedSystemName = contributedBySystemName,
+            SyncRuleId = contributedBySyncRuleId,
+            SyncRuleName = contributedBySyncRuleId.HasValue ? contributedBySyncRuleName : null,
+            SyncRuleDeleted = !contributedBySyncRuleId.HasValue
+        };
+    }
+
+    /// <summary>
     /// The state an Attribute Priority source is in before any value has been evaluated for it: null when the
     /// source is joined and of a type worth evaluating (an Attribute or Expression mapping), in which case the
     /// caller evaluates a candidate value and calls <see cref="DetermineUsageState"/> instead.

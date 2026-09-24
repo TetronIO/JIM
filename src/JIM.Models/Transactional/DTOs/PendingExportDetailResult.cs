@@ -25,4 +25,11 @@ public class PendingExportDetailResult
     /// is paged through the attribute-changes endpoint.
     /// </summary>
     public List<PendingExportUnresolvedReference> UnresolvedReferences { get; set; } = new();
+
+    /// <summary>
+    /// Where the value queued for each Connected System attribute originated (#399's "Value from" column), one
+    /// entry per attribute the loaded changes carry. Empty when the Pending Export has no source Metaverse Object
+    /// (a delete); an attribute whose export mapping cannot be resolved has no entry at all.
+    /// </summary>
+    public List<PendingExportValueSource> ValueSources { get; set; } = new();
 }

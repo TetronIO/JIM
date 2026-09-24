@@ -127,6 +127,36 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
                 Assert.That(provider.Markup, Does.Contain("Change Type"));
                 Assert.That(provider.Markup, Does.Contain("Status"));
                 Assert.That(provider.Markup, Does.Contain("Value"));
+                Assert.That(provider.Markup, Does.Contain("Attribute Flow"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Values queued for one multi-valued attribute can each carry their own staging Synchronisation Rule (#399),
+    /// so the Attribute Flow column is per row: a change with a rule names it, and one without renders empty.
+    /// </summary>
+    [Test]
+    public void PendingExportMvaDialog_AttributeFlow_NamesTheStagingSynchronisationRulePerRowAsync()
+    {
+        var changes = BuildChanges(2);
+        changes[0].SyncRuleId = 9;
+        changes[0].SyncRuleName = "HR to AD - Users";
+
+        SetupChanges(changes);
+
+        var provider = ShowDialog(totalCount: 2);
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                var chip = provider.FindComponents<ObjectChip>().SingleOrDefault(c => c.Instance.Kind == ObjectChipKind.SynchronisationRule);
+                Assert.That(chip, Is.Not.Null);
+                var chipInstance = chip!.Instance;
+                Assert.That(chipInstance.Name, Is.EqualTo("HR to AD - Users"));
+                Assert.That(chipInstance.Href, Is.EqualTo("/admin/sync-rules/9"));
+                Assert.That(provider.HasComponent<EmptyValue>(), Is.True, "the row with no staging rule renders the empty value");
             }
         });
     }

@@ -1021,7 +1021,8 @@
             using var jim = JimFactory.Create();
             var (items, totalCount) = await jim.Metaverse.GetMvoChangeHistoryAsync(IdParam, _changeHistoryNextPage, ChangeHistoryPageSize);
             _changeHistoryTotal = totalCount;
-            _changeHistoryRows.AddRange(items.Select(MapDtoToChangeGroup));
+            var typePluralName = MetaverseObjectType?.PluralName;
+            _changeHistoryRows.AddRange(items.Select(dto => MapDtoToChangeGroup(dto, IdParam, typePluralName)));
             _changeHistoryNextPage++;
         }
         finally
@@ -1031,7 +1032,7 @@
         }
     }
 
-    private static ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(MvoChangeHistoryDto dto)
+    private static ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(MvoChangeHistoryDto dto, Guid metaverseObjectId, string? typePluralName)
     {
         return new ChangeHistoryTimeline.ChangeGroup
         {
@@ -1065,7 +1066,16 @@
                         }
                         : null,
                     IsMultiValued = ac.AttributePlurality == AttributePlurality.MultiValued,
-                    AttributeType = ac.AttributeType
+                    AttributeType = ac.AttributeType,
+                    // Origin and the Inspect link (#399): only when the DTO carries a Metaverse attribute id
+                    // (this page) and a resolvable type plural name. Neither is available before the type has
+                    // loaded, in which case the change still renders, just without the Source column's chip/link.
+                    Origin = ProvenanceLogic.ResolveChangeValueOrigin(
+                        vc.ContributedBySyncRuleId, vc.ContributedBySyncRuleName,
+                        vc.ContributedBySystemId, vc.ContributedBySystemName),
+                    AttributeInspectHref = ac.AttributeId.HasValue && !string.IsNullOrEmpty(typePluralName)
+                        ? Utilities.GetMetaverseObjectInspectHref(metaverseObjectId, typePluralName, ac.AttributeId.Value)
+                        : null
                 }))
                 .ToList()
         };

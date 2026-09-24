@@ -1,4 +1,5 @@
 @using JIM.Models.Core
+@using JIM.Models.Core.DTOs
 @using JIM.Models.Enums
 @using JIM.Utilities
 @using JIM.Web.Models
@@ -353,7 +354,35 @@ else
                                                         <MudText Typo="Typo.button">Attribute</MudText>
                                                     </HeaderTemplate>
                                                     <CellTemplate>
-                                                        <MudText Class="mud-text-secondary">@context.Item.AttributeName</MudText>
+                                                        @* Linked into the attribute's Inspect view (#399) wherever the change carries a
+                                                           Metaverse attribute id; plain text everywhere else (no provenance, or the
+                                                           attribute has since been deleted). *@
+                                                        @if (!string.IsNullOrEmpty(context.Item.AttributeInspectHref))
+                                                        {
+                                                            <MudLink Href="@context.Item.AttributeInspectHref">@context.Item.AttributeName</MudLink>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Class="mud-text-secondary">@context.Item.AttributeName</MudText>
+                                                        }
+                                                    </CellTemplate>
+                                                </TemplateColumn>
+                                                <TemplateColumn Title="Source" Sortable="false">
+                                                    <HeaderTemplate>
+                                                        <MudText Typo="Typo.button">Source</MudText>
+                                                    </HeaderTemplate>
+                                                    <CellTemplate>
+                                                        @* No contributor recorded (change rows from before provenance existed, or a
+                                                           caller with no provenance at all) renders nothing rather than "Source not
+                                                           recorded", which would otherwise shout on every pre-provenance row. *@
+                                                        @if (context.Item.Origin is { } origin)
+                                                        {
+                                                            <ValueOriginChip Origin="@origin" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <EmptyValue />
+                                                        }
                                                     </CellTemplate>
                                                 </TemplateColumn>
                                                 <TemplateColumn Title="Type" Sortable="false">
@@ -668,6 +697,22 @@ else
         /// The data type of the attribute (Text, Number, Reference, etc.).
         /// </summary>
         public AttributeDataType AttributeType { get; set; }
+
+        /// <summary>
+        /// Where this value's contributor came from (#399): a Connected System through a Synchronisation Rule, or
+        /// null when no contributor is recorded for this value at all (a change that pre-dates provenance, or a
+        /// caller carrying no provenance data whatsoever, such as Connected System Object change history and
+        /// Deleted Objects). A null <see cref="Origin"/> renders nothing rather than "Source not recorded", so a
+        /// page of pre-provenance history does not shout it on every row.
+        /// </summary>
+        public ValueOrigin? Origin { get; set; }
+
+        /// <summary>
+        /// The Metaverse Object's Inspect view, deep-linked to this attribute's inspector (#399). Null when the
+        /// attribute id or the owning page's type plural name is unavailable (including every caller with no
+        /// provenance of its own).
+        /// </summary>
+        public string? AttributeInspectHref { get; set; }
     }
 
     /// <summary>
@@ -732,6 +777,18 @@ else
         /// The underlying change type for filtering purposes.
         /// </summary>
         public ValueChangeType UnderlyingChangeType { get; set; }
+
+        /// <summary>
+        /// See <see cref="AttributeChange.Origin"/>. For an Update (SVA Remove-then-Add pairing), this is the
+        /// current value's origin (the added row's), matching how <c>ProvenanceLogic.PairAttributeHistory</c>
+        /// attributes a Set entry to the winning value rather than the one it replaced.
+        /// </summary>
+        public ValueOrigin? Origin { get; set; }
+
+        /// <summary>
+        /// See <see cref="AttributeChange.AttributeInspectHref"/>.
+        /// </summary>
+        public string? AttributeInspectHref { get; set; }
     }
 
     /// <summary>
@@ -774,7 +831,11 @@ else
                         NewValue = addChange.ReferenceValue == null ? addChange.Value : null,
                         // For reference updates, store the reference info
                         OldReferenceValue = removeChange.ReferenceValue,
-                        NewReferenceValue = addChange.ReferenceValue
+                        NewReferenceValue = addChange.ReferenceValue,
+                        // The current (winning) value's origin, matching ProvenanceLogic.PairAttributeHistory's
+                        // own Set-pairing rule of attributing to the added row.
+                        Origin = addChange.Origin,
+                        AttributeInspectHref = addChange.AttributeInspectHref
                     });
                 }
                 else
@@ -795,7 +856,9 @@ else
                             IsUpdate = false,
                             UnderlyingChangeType = change.ChangeType,
                             DisplayValue = change.Value,
-                            ReferenceValue = change.ReferenceValue
+                            ReferenceValue = change.ReferenceValue,
+                            Origin = change.Origin,
+                            AttributeInspectHref = change.AttributeInspectHref
                         });
                     }
                 }
@@ -814,7 +877,9 @@ else
                         IsUpdate = false,
                         UnderlyingChangeType = change.ChangeType,
                         DisplayValue = change.Value,
-                        ReferenceValue = change.ReferenceValue
+                        ReferenceValue = change.ReferenceValue,
+                        Origin = change.Origin,
+                        AttributeInspectHref = change.AttributeInspectHref
                     });
                 }
             }

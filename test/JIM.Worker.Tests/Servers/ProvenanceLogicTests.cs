@@ -81,6 +81,62 @@ public class ProvenanceLogicTests
 
     #endregion
 
+    #region ResolveChangeValueOrigin
+
+    [Test]
+    public void ResolveChangeValueOrigin_NothingRecorded_ReturnsNull()
+    {
+        var origin = ProvenanceLogic.ResolveChangeValueOrigin(null, null, null, null);
+
+        Assert.That(origin, Is.Null);
+    }
+
+    [Test]
+    public void ResolveChangeValueOrigin_RuleStillExistsAndSystemResolved_ReturnsSynchronisationRuleOrigin()
+    {
+        var origin = ProvenanceLogic.ResolveChangeValueOrigin(
+            contributedBySyncRuleId: 7,
+            contributedBySyncRuleName: "HR Import",
+            contributedBySystemId: 3,
+            contributedBySystemName: "HR");
+
+        Assert.That(origin, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+            Assert.That(origin.ConnectedSystemId, Is.EqualTo(3));
+            Assert.That(origin.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(origin.SyncRuleId, Is.EqualTo(7));
+            Assert.That(origin.SyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(origin.SyncRuleDeleted, Is.False);
+        }
+    }
+
+    [Test]
+    public void ResolveChangeValueOrigin_RuleSinceDeleted_ReturnsSyncRuleDeletedWithNoSystem()
+    {
+        // The change row's ContributedBySyncRuleId is nulled when the rule is deleted, so the caller can never
+        // resolve a Connected System for it; the name snapshot on the change row survives regardless, but the
+        // chip renders "rule deleted" rather than the stale name (matching ResolveOrigin's live-value semantics).
+        var origin = ProvenanceLogic.ResolveChangeValueOrigin(
+            contributedBySyncRuleId: null,
+            contributedBySyncRuleName: "Facilities Import",
+            contributedBySystemId: null,
+            contributedBySystemName: null);
+
+        Assert.That(origin, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+            Assert.That(origin.ConnectedSystemId, Is.Null);
+            Assert.That(origin.SyncRuleId, Is.Null);
+            Assert.That(origin.SyncRuleName, Is.Null);
+            Assert.That(origin.SyncRuleDeleted, Is.True);
+        }
+    }
+
+    #endregion
+
     #region DetermineFixedState / NoteForFixedState
 
     [Test]

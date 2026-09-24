@@ -6623,6 +6623,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<SyncRuleMapping>> GetExportSyncRuleMappingsForTargetsAsync(
+        IReadOnlyCollection<int> syncRuleIds, IReadOnlyCollection<int> connectedSystemAttributeIds)
+    {
+        if (syncRuleIds.Count == 0 || connectedSystemAttributeIds.Count == 0)
+            return new List<SyncRuleMapping>();
+
+        return await Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.Generation)
+            .Where(m =>
+                syncRuleIds.Contains(m.SyncRuleId) &&
+                m.TargetConnectedSystemAttributeId.HasValue &&
+                connectedSystemAttributeIds.Contains(m.TargetConnectedSystemAttributeId.Value))
+            .ToListAsync();
+    }
+
     /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
     /// database, keyed by mapping id (#1199). AsNoTracking with a scalar projection is load-bearing, not an

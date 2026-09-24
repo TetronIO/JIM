@@ -1637,6 +1637,7 @@ public class MetaverseRepository : IMetaverseRepository
                         AttributeName = ac.AttributeName,
                         AttributeType = ac.AttributeType,
                         AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
+                        AttributeId = ac.Attribute != null ? ac.Attribute.Id : (int?)null,
                         ValueChanges = ac.ValueChanges
                             .Select(vc => new MvoValueChangeDto
                             {
@@ -1667,9 +1668,45 @@ public class MetaverseRepository : IMetaverseRepository
             })
             .ToListAsync();
 
+        await ResolveChangeValueContributingSystemsAsync(items);
+
         span?.SetTag("returned", items.Count);
         span?.SetTag("totalCount", totalCount);
         return (items, totalCount);
+    }
+
+    /// <summary>
+    /// Resolves the contributing Connected System for each value change's Synchronisation Rule snapshot (#399:
+    /// the Changes tab Source column). <see cref="MetaverseObjectChangeAttributeValue"/> retains no
+    /// <c>ContributedBySystemId</c> of its own, so the system is looked up from the still-live rule; a rule the
+    /// change row no longer references (nulled on deletion) resolves to no system, which
+    /// <see cref="Core.DTOs.ProvenanceLogic.ResolveChangeValueOrigin"/> reads as "rule deleted" rather than "no
+    /// contributor". One lookup for the whole page, not one per value.
+    /// </summary>
+    private async Task ResolveChangeValueContributingSystemsAsync(List<MvoChangeHistoryDto> items)
+    {
+        var valueChanges = items
+            .SelectMany(i => i.AttributeChanges)
+            .SelectMany(ac => ac.ValueChanges)
+            .Where(vc => vc.ContributedBySyncRuleId.HasValue)
+            .ToList();
+
+        if (valueChanges.Count == 0)
+            return;
+
+        var ruleIds = valueChanges.Select(vc => vc.ContributedBySyncRuleId!.Value).Distinct().ToList();
+        var ruleSystems = await Repository.Database.SyncRules
+            .AsNoTracking()
+            .Where(r => ruleIds.Contains(r.Id))
+            .Select(r => new { r.Id, r.ConnectedSystemId, ConnectedSystemName = r.ConnectedSystem.Name })
+            .ToDictionaryAsync(x => x.Id, x => (x.ConnectedSystemId, x.ConnectedSystemName));
+
+        foreach (var valueChange in valueChanges.Where(vc => ruleSystems.ContainsKey(vc.ContributedBySyncRuleId!.Value)))
+        {
+            var system = ruleSystems[valueChange.ContributedBySyncRuleId!.Value];
+            valueChange.ContributedBySystemId = system.ConnectedSystemId;
+            valueChange.ContributedBySystemName = system.ConnectedSystemName;
+        }
     }
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)

@@ -492,6 +492,138 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
     }
 
     /// <summary>
+    /// The Changes tab Source column (#399): the contributing Connected System is resolved from the still-live
+    /// Synchronisation Rule, not stored on the change row itself.
+    /// </summary>
+    [Test]
+    public async Task GetMvoChangeHistoryAsync_ValueHasContributingSyncRule_DtoCarriesContributingSystemAsync()
+    {
+        // Arrange
+        var (mvType, attribute, rule) = await SeedMvoTypeAndSyncRuleAsync();
+
+        Guid mvoId;
+        await using (var seed = NewContext())
+        {
+            seed.Attach(mvType);
+            var mvo = new MetaverseObject { Type = mvType, Created = DateTime.UtcNow };
+            seed.Add(mvo);
+            await seed.SaveChangesAsync();
+            mvoId = mvo.Id;
+        }
+
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = new MetaverseObject { Id = mvoId },
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Updated,
+            ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
+        };
+        var attributeChange = new MetaverseObjectChangeAttribute
+        {
+            Attribute = attribute,
+            AttributeName = attribute.Name,
+            AttributeType = attribute.Type,
+            MetaverseObjectChange = change
+        };
+        change.AttributeChanges.Add(attributeChange);
+        attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+            attributeChange, ValueChangeType.Add, "jsmith@example.com")
+        {
+            ContributedBySyncRuleId = rule.Id,
+            ContributedBySyncRuleName = rule.Name
+        });
+
+        await using (var writeCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeCtx);
+            await repository.Sync.PersistPendingMvoChangesAsync([change], []);
+        }
+
+        // Act
+        await using var readCtx = NewContext();
+        var readRepository = new PostgresDataRepository(readCtx);
+        var (items, _) = await readRepository.Metaverse.GetMvoChangeHistoryAsync(mvoId, 1, 10);
+
+        // Assert
+        var valueChange = items.Single().AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueChange.ContributedBySystemId, Is.EqualTo(rule.ConnectedSystemId));
+            Assert.That(valueChange.ContributedBySystemName, Is.Not.Null.And.Not.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Once the contributing Synchronisation Rule is deleted, the change row's rule id is nulled at the database
+    /// level and the Connected System can no longer be resolved from it; the rule name snapshot survives, but the
+    /// system reads null (#399), so <c>ProvenanceLogic.ResolveChangeValueOrigin</c> reads it as "rule deleted".
+    /// </summary>
+    [Test]
+    public async Task GetMvoChangeHistoryAsync_ContributingSyncRuleDeleted_DtoSystemIsNullNameSurvivesAsync()
+    {
+        // Arrange
+        var (mvType, attribute, rule) = await SeedMvoTypeAndSyncRuleAsync();
+
+        Guid mvoId;
+        await using (var seed = NewContext())
+        {
+            seed.Attach(mvType);
+            var mvo = new MetaverseObject { Type = mvType, Created = DateTime.UtcNow };
+            seed.Add(mvo);
+            await seed.SaveChangesAsync();
+            mvoId = mvo.Id;
+        }
+
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = new MetaverseObject { Id = mvoId },
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Updated,
+            ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
+        };
+        var attributeChange = new MetaverseObjectChangeAttribute
+        {
+            Attribute = attribute,
+            AttributeName = attribute.Name,
+            AttributeType = attribute.Type,
+            MetaverseObjectChange = change
+        };
+        change.AttributeChanges.Add(attributeChange);
+        attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+            attributeChange, ValueChangeType.Add, "jsmith@example.com")
+        {
+            ContributedBySyncRuleId = rule.Id,
+            ContributedBySyncRuleName = rule.Name
+        });
+
+        await using (var writeCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeCtx);
+            await repository.Sync.PersistPendingMvoChangesAsync([change], []);
+        }
+
+        await using (var deleteCtx = NewContext())
+        {
+            await deleteCtx.Database.ExecuteSqlInterpolatedAsync($@"DELETE FROM ""SyncRules"" WHERE ""Id"" = {rule.Id}");
+        }
+
+        // Act
+        await using var readCtx = NewContext();
+        var readRepository = new PostgresDataRepository(readCtx);
+        var (items, _) = await readRepository.Metaverse.GetMvoChangeHistoryAsync(mvoId, 1, 10);
+
+        // Assert
+        var valueChange = items.Single().AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueChange.ContributedBySyncRuleId, Is.Null);
+            Assert.That(valueChange.ContributedBySystemId, Is.Null);
+            Assert.That(valueChange.ContributedBySystemName, Is.Null);
+            Assert.That(valueChange.ContributedBySyncRuleName, Is.EqualTo("HR to AD - Users"));
+        }
+    }
+
+    /// <summary>
     /// The read path behind <c>GET .../connector-space/{csoId}/change-history</c> (and
     /// Get-JIMConnectedSystemObjectChangeHistory): the EF projection into <see cref="CsoValueChangeDto"/>
     /// must carry the export rule attribution through.

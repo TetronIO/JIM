@@ -145,6 +145,8 @@ Nothing in the Inspect view changes data: working out what each source would sup
 
 The same information is available through the REST API (`GET /api/v1/metaverse/objects/{id}/provenance`, and `.../attributes/{attributeId}/provenance` for one attribute; see the [interactive API reference](../../api/reference/)) and PowerShell ([`Get-JIMMetaverseObjectProvenance`](../powershell/metaverse.md#get-jimmetaverseobjectprovenance)).
 
+A value's source is not only in the Inspect view: the object's **Changes** tab names each attribute change's source alongside the change itself, and a [Pending Export's detail page](connected-systems.md#pending-exports) shows both where the outbound value came from and which Attribute Flow staged it. Both link back into Inspect so you can jump straight from a change or a queued export to the full picture.
+
 ## Confirming a configuration change
 
 Changing an object type's deletion behaviour, or an attribute's data type or plurality, is confirmed before it saves. Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects eligible for deletion, with no synchronisation run in between; the confirmation says so. See [Configuration changes](configuration-changes.md).

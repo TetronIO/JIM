@@ -12,6 +12,8 @@ using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
@@ -43,13 +45,16 @@ public class PendingExportDetailTests : JimComponentTestContext
     private static readonly Guid PendingExportId = Guid.NewGuid();
 
     private Mock<IConnectedSystemRepository> _connectedSystems = null!;
+    private Mock<IMetaverseRepository> _metaverse = null!;
     private NavigationManager _navigation = null!;
 
     protected override void ConfigureAdditionalServices()
     {
         var repository = new Mock<IRepository>();
         _connectedSystems = new Mock<IConnectedSystemRepository>();
+        _metaverse = new Mock<IMetaverseRepository>();
         repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystems.Object);
+        repository.Setup(r => r.Metaverse).Returns(_metaverse.Object);
 
         _connectedSystems
             .Setup(r => r.GetConnectedSystemHeaderAsync(ConnectedSystemId))
@@ -68,7 +73,8 @@ public class PendingExportDetailTests : JimComponentTestContext
 
     private void SetupChanges(
         List<PendingExportAttributeValueChange> changes,
-        Dictionary<string, int>? totalCounts = null)
+        Dictionary<string, int>? totalCounts = null,
+        MetaverseObject? sourceMetaverseObject = null)
     {
         _connectedSystems
             .Setup(r => r.GetPendingExportDetailAsync(PendingExportId))
@@ -81,12 +87,28 @@ public class PendingExportDetailTests : JimComponentTestContext
                     ConnectedSystem = new ConnectedSystem { Id = ConnectedSystemId, Name = "Directory" },
                     ChangeType = PendingExportChangeType.Update,
                     Status = PendingExportStatus.Pending,
+                    SourceMetaverseObject = sourceMetaverseObject,
+                    SourceMetaverseObjectId = sourceMetaverseObject?.Id,
                     AttributeValueChanges = changes
                 },
                 AttributeChangeTotalCounts = totalCounts ?? changes
                     .GroupBy(c => c.Attribute?.Name ?? $"Attribute {c.AttributeId}")
                     .ToDictionary(g => g.Key, g => g.Count())
             });
+
+        // The "Value from" column is resolved by the real ConnectedSystemServer.GetPendingExportValueSourcesAsync
+        // (not mocked out), so its own repository dependencies get harmless empty defaults here; tests that need a
+        // resolved source configure GetExportSyncRuleMappingsForTargetsAsync and GetMetaverseObjectProvenanceAsync
+        // themselves.
+        _connectedSystems
+            .Setup(r => r.GetExportSyncRuleMappingsForTargetsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new List<SyncRuleMapping>());
+        if (sourceMetaverseObject != null)
+        {
+            _metaverse
+                .Setup(r => r.GetMetaverseObjectProvenanceAsync(sourceMetaverseObject.Id))
+                .ReturnsAsync(new MetaverseObjectProvenance { MetaverseObjectId = sourceMetaverseObject.Id });
+        }
     }
 
     /// <summary>
@@ -348,6 +370,159 @@ public class PendingExportDetailTests : JimComponentTestContext
                 Assert.That(cut.Markup, Does.Contain("No attributes match \"nothing-matches-this\""));
                 Assert.That(cut.Markup, Does.Contain("Clear Search"),
                     "a search that matched nothing has a way out, and the empty state must offer it");
+            }
+        });
+    }
+
+    // ─── Attribute Flow and Value from (#399) ───
+
+    /// <summary>
+    /// The Attribute Flow column names the staging Synchronisation Rule, linked to it, when every value queued
+    /// for the attribute carries the same rule.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_AttributeFlow_NamesTheStagingSynchronisationRuleAsync()
+    {
+        var changes = BuildChanges("department");
+        changes[0].SyncRuleId = 9;
+        changes[0].SyncRuleName = "HR to AD - Users";
+        SetupChanges(changes);
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                var chip = cut.FindComponents<ObjectChip>().SingleOrDefault(c => c.Instance.Kind == ObjectChipKind.SynchronisationRule);
+                Assert.That(chip, Is.Not.Null);
+                var chipInstance = chip!.Instance;
+                Assert.That(chipInstance.Name, Is.EqualTo("HR to AD - Users"));
+                Assert.That(chipInstance.Href, Is.EqualTo("/admin/sync-rules/9"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// A multi-valued attribute whose queued values were staged by different Synchronisation Rules cannot be
+    /// named by just one of them, so the Attribute Flow column says "Several" rather than picking one.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_AttributeFlow_DifferentRulesAcrossValues_ShowsSeveralAsync()
+    {
+        var changes = BuildMultiValuedChanges("member", 2);
+        changes[0].SyncRuleId = 9;
+        changes[0].SyncRuleName = "HR to AD - Users";
+        changes[1].SyncRuleId = 10;
+        changes[1].SyncRuleName = "Facilities to AD - Users";
+        SetupChanges(changes, new Dictionary<string, int> { ["member"] = 2 });
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Several")));
+    }
+
+    /// <summary>
+    /// An expression (or otherwise computed) source renders as the shared expression chip, distinct from a
+    /// plain attribute passthrough. "Value from" is resolved through the real
+    /// <c>ConnectedSystemServer.GetPendingExportValueSourcesAsync</c>, so the test configures the export mapping
+    /// lookup it depends on rather than the resolved column value directly.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_ValueFrom_ComputedSource_ShowsExpressionChipAsync()
+    {
+        var changes = BuildChanges("displayName");
+        changes[0].SyncRuleId = 9;
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Name = "Person", PluralName = "People" } };
+        SetupChanges(changes, sourceMetaverseObject: mvo);
+
+        var mapping = new SyncRuleMapping { Id = 1, SyncRuleId = 9, TargetConnectedSystemAttributeId = changes[0].AttributeId };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"givenName\"] + \" \" + mv[\"surname\"]" });
+        _connectedSystems
+            .Setup(r => r.GetExportSyncRuleMappingsForTargetsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.HasComponent<AttributeChip>(), Is.True);
+                Assert.That(cut.Markup, Does.Contain("givenName"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// A single Metaverse attribute source names that attribute, links into its Inspect view on the source
+    /// Metaverse Object, and shows the origin of its current value.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_ValueFrom_SingleAttributeSource_LinksIntoInspectAndShowsOriginAsync()
+    {
+        var changes = BuildChanges("mail");
+        changes[0].SyncRuleId = 9;
+        var mvo = new MetaverseObject
+        {
+            Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            Type = new MetaverseObjectType { Name = "Person", PluralName = "People" }
+        };
+        SetupChanges(changes, sourceMetaverseObject: mvo);
+
+        var mvAttribute = new MetaverseAttribute { Id = 5, Name = "mail", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        var mapping = new SyncRuleMapping { Id = 1, SyncRuleId = 9, TargetConnectedSystemAttributeId = changes[0].AttributeId };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvAttribute, MetaverseAttributeId = 5 });
+        _connectedSystems
+            .Setup(r => r.GetExportSyncRuleMappingsForTargetsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new List<SyncRuleMapping> { mapping });
+
+        var provenance = new MetaverseObjectProvenance { MetaverseObjectId = mvo.Id };
+        provenance.Attributes.Add(new MetaverseAttributeOriginSummary
+        {
+            AttributeId = 5,
+            AttributeName = "mail",
+            Origins = { new ValueOrigin { Kind = ValueOriginKind.SynchronisationRule, ConnectedSystemId = 3, ConnectedSystemName = "HR", SyncRuleId = 9, SyncRuleName = "HR Import" } }
+        });
+        _metaverse.Setup(r => r.GetMetaverseObjectProvenanceAsync(mvo.Id)).ReturnsAsync(provenance);
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.HasComponent<ValueOriginChip>(), Is.True);
+                var link = cut.FindAll("a").FirstOrDefault(a => a.TextContent == "mail");
+                Assert.That(link, Is.Not.Null);
+                Assert.That(link!.GetAttribute("href"),
+                    Is.EqualTo("/t/people/v/22222222-2222-2222-2222-222222222222?view=inspect&attr=5"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// An attribute whose export mapping cannot be resolved (the staging rule has since been deleted) has no
+    /// entry in <see cref="PendingExportDetailResult.ValueSources"/> at all; the column renders the empty value.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_ValueFrom_NoResolvedSource_RendersEmptyValueAsync()
+    {
+        var changes = BuildChanges("department");
+        changes[0].SyncRuleId = 9;
+        SetupChanges(changes);
+        // No mapping is configured for rule 9 / attribute 1 (SetupChanges' default is an empty list), matching
+        // a staging rule since deleted.
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.HasComponent<EmptyValue>(), Is.True);
+                Assert.That(cut.HasComponent<ValueOriginChip>(), Is.False);
+                Assert.That(cut.HasComponent<AttributeChip>(), Is.False);
             }
         });
     }

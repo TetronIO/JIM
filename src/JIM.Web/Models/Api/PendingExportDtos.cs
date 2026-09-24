@@ -6,6 +6,9 @@ using JIM.Models.Transactional.DTOs;
 
 namespace JIM.Web.Models.Api;
 
+// ValueOriginDto and its FromModel are defined in MetaverseObjectProvenanceDtos.cs and reused here so a value's
+// origin serialises identically wherever it appears over the API.
+
 /// <summary>
 /// API representation of a Pending Export with capped multi-valued attribute changes.
 /// </summary>
@@ -56,6 +59,13 @@ public class PendingExportDetailDto
     /// </summary>
     public List<PendingExportUnresolvedReferenceDto> UnresolvedReferences { get; set; } = new();
 
+    /// <summary>
+    /// Where the value queued for each Connected System attribute originated (#399's "Value from" column), one
+    /// entry per attribute whose export mapping could be resolved. Empty when the Pending Export has no source
+    /// Metaverse Object (a delete).
+    /// </summary>
+    public List<PendingExportValueSourceDto> ValueSources { get; set; } = new();
+
     public static PendingExportDetailDto FromDetailResult(PendingExportDetailResult result)
     {
         var pe = result.PendingExport;
@@ -86,6 +96,9 @@ public class PendingExportDetailDto
                 .ToList(),
             UnresolvedReferences = result.UnresolvedReferences
                 .Select(PendingExportUnresolvedReferenceDto.FromModel)
+                .ToList(),
+            ValueSources = result.ValueSources
+                .Select(PendingExportValueSourceDto.FromModel)
                 .ToList()
         };
 
@@ -224,6 +237,52 @@ public class PendingExportAttributeValueChangeDto
             ExportAttemptCount = entity.ExportAttemptCount,
             SyncRuleId = entity.SyncRuleId,
             SyncRuleName = entity.SyncRuleName
+        };
+    }
+}
+
+/// <summary>
+/// API representation of where the value queued for one Connected System attribute on a Pending Export
+/// originated (#399's "Value from" column).
+/// </summary>
+public class PendingExportValueSourceDto
+{
+    public int ConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// True when the mapping computes the value (an expression, an advanced/chained mapping, or generation).
+    /// <see cref="Expression"/> describes it; the source-attribute and origin fields are null/absent.
+    /// </summary>
+    public bool IsComputed { get; set; }
+
+    /// <summary>The text describing a computed source, when <see cref="IsComputed"/> is true.</summary>
+    public string? Expression { get; set; }
+
+    /// <summary>The single Metaverse attribute the value came from, when <see cref="IsComputed"/> is false.</summary>
+    public int? SourceMetaverseAttributeId { get; set; }
+
+    public string? SourceMetaverseAttributeName { get; set; }
+
+    /// <summary>The origin of the source Metaverse Object's current value, when not computed.</summary>
+    public ValueOriginDto? Origin { get; set; }
+
+    /// <summary>
+    /// True when the source Metaverse attribute's current values came from more than one distinct origin, in
+    /// which case <see cref="Origin"/> is only the first.
+    /// </summary>
+    public bool HasSeveralOrigins { get; set; }
+
+    public static PendingExportValueSourceDto FromModel(PendingExportValueSource model)
+    {
+        return new PendingExportValueSourceDto
+        {
+            ConnectedSystemAttributeId = model.ConnectedSystemAttributeId,
+            IsComputed = model.IsComputed,
+            Expression = model.Expression,
+            SourceMetaverseAttributeId = model.SourceMetaverseAttributeId,
+            SourceMetaverseAttributeName = model.SourceMetaverseAttributeName,
+            Origin = model.IsComputed ? null : ValueOriginDto.FromModel(model.Origin),
+            HasSeveralOrigins = model.HasSeveralOrigins
         };
     }
 }

@@ -473,6 +473,60 @@ public class MetaverseControllerObjectsTests
         Assert.That(response!.Items.Count(), Is.EqualTo(0));
     }
 
+    /// <summary>
+    /// The Changes tab Source column (#399) is carried straight through the REST surface: the endpoint returns
+    /// <see cref="MvoChangeHistoryDto"/> as the repository built it, so the contributing Connected System fields
+    /// added to <see cref="MvoValueChangeDto"/> reach the client without a DTO mapping step of their own.
+    /// </summary>
+    [Test]
+    public async Task GetObjectChangeHistoryAsync_ValueChangeCarriesContributingSystem_ReachesTheResponseUnchangedAsync()
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectHeaderAsync(id))
+            .ReturnsAsync(new MetaverseObjectHeader { Id = id, TypeId = 1, TypeName = "User", TypePluralName = "Users" });
+
+        var dtoRows = new List<MvoChangeHistoryDto>
+        {
+            new MvoChangeHistoryDto
+            {
+                Id = Guid.NewGuid(),
+                ChangeTime = DateTime.UtcNow,
+                AttributeChanges =
+                {
+                    new MvoAttributeChangeDto
+                    {
+                        AttributeName = "mail",
+                        AttributeId = 5,
+                        ValueChanges =
+                        {
+                            new MvoValueChangeDto
+                            {
+                                StringValue = "jsmith@example.com",
+                                ContributedBySyncRuleId = 7,
+                                ContributedBySyncRuleName = "HR Import",
+                                ContributedBySystemId = 3,
+                                ContributedBySystemName = "HR"
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMvoChangeHistoryAsync(id, 1, 50))
+            .ReturnsAsync((dtoRows, 1));
+
+        var result = await _controller.GetObjectChangeHistoryAsync(id, new PaginationRequest { Page = 1, PageSize = 50 }) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<MvoChangeHistoryDto>;
+
+        var valueChange = response!.Items.Single().AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.Items.Single().AttributeChanges.Single().AttributeId, Is.EqualTo(5));
+            Assert.That(valueChange.ContributedBySystemId, Is.EqualTo(3));
+            Assert.That(valueChange.ContributedBySystemName, Is.EqualTo("HR"));
+        }
+    }
+
     #endregion
 
     #region GetObjectAsync tests

@@ -540,6 +540,8 @@ Today only the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#director
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
 
+A Pending Export's detail page names two distinct things about each attribute change, side by side: **Attribute Flow** is the outbound Synchronisation Rule that staged the change, and **Value from** is where the underlying Metaverse value came from (a Connected System through an import Attribute Flow, or a computed expression), linking into that attribute's inspector on the source Metaverse Object. Troubleshooting a wrong exported value usually needs both: which rule sent it, and which source put it on the Metaverse Object in the first place.
+
 ## Configuration changes pending a Full Synchronisation
 
 Most configuration changes do not take effect the moment you save them. Scoping criteria, Attribute Flow, Object
