@@ -910,6 +910,9 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ### Get-JIMGeneratedValue
 
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
 Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
 committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
 its state, and whether it was adopted from an existing accepted value rather than generated. Empty when

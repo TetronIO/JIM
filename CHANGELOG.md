@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ **Generated values:** JIM can now generate a unique value for an Attribute Flow, such as an account name or employee number: a base expression plus a number if taken, a sequence number or a random token. Existing values are adopted and kept. Also via REST and PowerShell. (#242)
-- ✨ Generated sequence numbers come from a forward-only counter per attribute, optionally zero-padded, with a live preview, the counter's state, and **Start again** to return it to its start value. Also via REST and `Restart-JIMGeneratedValues`. (#242)
 - ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
 - ✨ A Schedule run that carried on past a failed step now ends **Complete With Error**, naming the failed steps, instead of a plain Complete, so the portal, PowerShell and monitoring scripts can tell it apart from a clean run. (#1787)

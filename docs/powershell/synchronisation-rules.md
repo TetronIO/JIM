@@ -413,6 +413,9 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
 
 Creates a new Attribute Flow mapping on a Synchronisation Rule. Mappings can be direct Attribute Flows (one or more source attributes to a target) or expression-based transformations.
 
+!!! note "Generated mappings (`-Generate`) are in development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready; everything else on this page works as documented.
+
 ### Syntax
 
 ```powershell
@@ -551,6 +554,9 @@ New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
 
 Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
 
+!!! note "Generated-mapping parameters are in development"
+    `-TokenKind` and the other generated-mapping settings below apply only to a mapping already using **JIM generates it**, a Source Type still in development and not yet available for a new mapping (see `New-JIMSyncRuleMapping`); it is hidden behind a feature flag until it is ready. Everything else on this page works as documented.
+
 ### Syntax
 
 ```powershell
@@ -647,6 +653,9 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -FixedWidth 0
 
 ## Get-JIMGeneratedValueSequence
 
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
 Gets a generated Sequence mapping's counter state (Unique Value Generation, #242): the next number it
 would issue, and how many it has issued so far. Read-only; nothing is allocated or reserved by calling
 this. Only meaningful for a generated mapping whose token kind is Sequence; every other mapping returns a
@@ -691,6 +700,9 @@ Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
 ---
 
 ## Restart-JIMGeneratedValues
+
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
 
 "Start again" (Unique Value Generation, #242). For a generated Sequence mapping, moves the target
 attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;
