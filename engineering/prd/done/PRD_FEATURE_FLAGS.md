@@ -1,6 +1,6 @@
 # Feature Flags
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-24
 - **Author:** Tetron
 - **Issue:** #1781

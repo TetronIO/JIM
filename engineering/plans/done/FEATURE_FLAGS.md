@@ -1,8 +1,8 @@
 # Feature Flags
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1781](https://github.com/TetronIO/JIM/issues/1781)
-- **PRD:** [`../../prd/doing/PRD_FEATURE_FLAGS.md`](../../prd/doing/PRD_FEATURE_FLAGS.md)
+- **PRD:** [`../../prd/done/PRD_FEATURE_FLAGS.md`](../../prd/done/PRD_FEATURE_FLAGS.md)
 
 ## Overview
 
