@@ -21,8 +21,8 @@ namespace JIM.Web.Api.Tests;
 /// <summary>
 /// Tests that the SchedulerServer queues ALL schedule steps upfront when starting an execution. Every task is
 /// created as WaitingForPreviousStep, and once all are queued the first step group is released (#1768), so no
-/// step can run while the Schedule is only part-queued. ContinueOnFailure should be copied from ScheduleStep to
-/// WorkerTask at queue time.
+/// step can run while the Schedule is only part-queued. Failure behaviour is not copied onto the tasks: it is read from
+/// the Schedule at the moment of each decision (#1787).
 /// </summary>
 [TestFixture]
 public class SchedulerServerQueueAllStepsTests
@@ -147,28 +147,6 @@ public class SchedulerServerQueueAllStepsTests
     }
 
     [Test]
-    public async Task StartScheduleExecution_ContinueOnFailure_CopiedToWorkerTaskAsync()
-    {
-        // Arrange: Step 0 has ContinueOnFailure=false, Step 1 has ContinueOnFailure=true
-        var schedule = CreateScheduleWithSteps(
-            new StepConfig(0, 1, 100, ContinueOnFailure: false),
-            new StepConfig(1, 2, 200, ContinueOnFailure: true));
-
-        // Act
-        await _application.Scheduler.StartScheduleExecutionAsync(
-            schedule, ActivityInitiatorType.System, null, "Test");
-
-        // Assert
-        Assert.That(_capturedTasks, Has.Count.EqualTo(2));
-
-        var step0 = _capturedTasks.Single(t => t.ScheduleStepIndex == 0);
-        Assert.That(step0.ContinueOnFailure, Is.False);
-
-        var step1 = _capturedTasks.Single(t => t.ScheduleStepIndex == 1);
-        Assert.That(step1.ContinueOnFailure, Is.True);
-    }
-
-    [Test]
     public async Task StartScheduleExecution_NoSteps_ReturnsNullAsync()
     {
         // Arrange: Schedule with no steps
@@ -237,7 +215,7 @@ public class SchedulerServerQueueAllStepsTests
 
     #region Helper methods
 
-    private record StepConfig(int StepIndex, int ConnectedSystemId, int RunProfileId, bool ContinueOnFailure = false);
+    private record StepConfig(int StepIndex, int ConnectedSystemId, int RunProfileId);
 
     private static Schedule CreateScheduleWithSteps(params StepConfig[] stepConfigs)
     {
@@ -251,7 +229,6 @@ public class SchedulerServerQueueAllStepsTests
             ConnectedSystemId = config.ConnectedSystemId,
             RunProfileId = config.RunProfileId,
             Name = $"Step {index}",
-            ContinueOnFailure = config.ContinueOnFailure,
             ExecutionMode = stepConfigs.Count(s => s.StepIndex == config.StepIndex) > 1
                 ? StepExecutionMode.ParallelWithPrevious
                 : StepExecutionMode.Sequential

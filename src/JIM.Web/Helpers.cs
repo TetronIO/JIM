@@ -388,6 +388,8 @@ public static class Helpers
         return status switch
         {
             ScheduleExecutionStatus.Complete => Color.Success,
+            // Matches ActivityStatus.CompleteWithError: the run finished, but a step failed and was allowed to continue.
+            ScheduleExecutionStatus.CompleteWithError => Color.Tertiary,
             ScheduleExecutionStatus.InProgress => Color.Primary,
             ScheduleExecutionStatus.Failed => Color.Error,
             ScheduleExecutionStatus.Cancelled => Color.Warning,

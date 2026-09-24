@@ -2352,6 +2352,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("NextRunTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("OnStepFailure")
+                        .HasColumnType("integer");
+
                     b.Property<int>("PatternType")
                         .HasColumnType("integer");
 
@@ -2442,9 +2445,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ConnectedSystemId")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("ContinueOnFailure")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
@@ -2477,6 +2477,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Name")
                         .HasColumnType("text");
+
+                    b.Property<int>("OnFailure")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("RunProfileId")
                         .HasColumnType("integer");
@@ -3986,9 +3989,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid>("ActivityId")
                         .HasColumnType("uuid");
-
-                    b.Property<bool>("ContinueOnFailure")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Discriminator")
                         .IsRequired()

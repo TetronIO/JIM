@@ -1,5 +1,5 @@
 # CI workflow - builds, tests, and scans for vulnerabilities
-# Runs on pushes to main and all pull requests
+# Runs on pushes to main and all pull requests, and nightly on main (image jobs only)
 
 name: CI
 
@@ -7,6 +7,20 @@ on:
   push:
     branches: [ "main" ]
   pull_request:  # This will run on ALL pull requests regardless of source/target branch
+  # Nightly, main only (a scheduled run always uses the default branch), and only the image jobs:
+  # discover-base-images, scan-images and their summary. Everything else in this file depends only
+  # on the commit, which a push has already tested. The images also depend on what they pull from
+  # outside at build time (the noble archive through apt-get upgrade, the unpinned curl and
+  # iputils-ping), and that can break or go stale with no commit at all: #1374 was main failing to
+  # build for two days with every check green. apt-pin-check probes the pinned packages daily;
+  # this builds, starts and scans the whole image. It also reports a newly published fix for a
+  # HIGH/CRITICAL CVE within a day instead of on whichever PR happens to run next. Scheduled runs
+  # use GitHub-hosted runners (the runs-on expressions below send only push to the self-hosted
+  # host), and GitHub notifies whoever last edited this cron line when one fails. 00:30 UTC, just
+  # after the APT_REFRESH date turns over, so the day's first build of the apt layer lands in the
+  # cache before the working day's PRs need it.
+  schedule:
+    - cron: '30 0 * * *'
 
 permissions:
   contents: read
@@ -31,6 +45,8 @@ jobs:
     # infrastructure. The org runner group must also allowlist this workflow at
     # refs/heads/main only, so that a fork PR editing this expression still cannot
     # reach the runner. Every job in this file uses the same expression.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
@@ -99,6 +115,8 @@ jobs:
     # minutes (measured in both Debug and Release; it is the schema walk over the model
     # graph, not the build), and it needs nothing the tests produce. Run alongside them
     # it costs no wall clock; appended to them it would add five minutes to every PR.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
@@ -126,6 +144,8 @@ jobs:
     # unset); here they execute, guarding provider-specific and raw-SQL behaviour the
     # EF Core in-memory provider cannot reproduce (the class of bug behind #849/#850).
     # See issue #861. Runs on every PR so a failure blocks the merge.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     services:
@@ -215,6 +235,8 @@ jobs:
     # LDAPTLS_REQCERT must never be set here: it would disable libldap certificate
     # validation for the whole process and turn every refusal case into a false pass,
     # which is the exact defect class this job exists to catch. A guard step asserts it.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
 
     steps:
@@ -298,6 +320,14 @@ jobs:
     # matrix comes from discover-base-images, so adding a new production Dockerfile
     # requires zero changes to this workflow: just add the
     # "# jim-compliance: production-image" directive to the new file.
+    #
+    # Each leg also starts the built image and waits for its startup log line, the smoke
+    # test release.yml runs before it pushes, so an image that builds but cannot start
+    # (a wrong ENTRYPOINT, a missing native library, a runtime the published output does not
+    # match) fails the PR rather than the release.
+    #
+    # Named explicitly so the matrix's startup_log does not leak into the check names.
+    name: scan-images (${{ matrix.dockerfile }}, ${{ matrix.image_name }})
     needs: discover-base-images
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     permissions:
@@ -330,9 +360,10 @@ jobs:
 
     # Same action, pins and cache scope as the release build, so a PR's build warms the
     # cache the release will use and vice versa. The image is loaded into the local
-    # daemon for Trivy to read via --image-src docker; nothing is pushed. OPENAPI_STAGE
-    # skips the JIM.Web OpenAPI generation stage, which costs about five minutes and
-    # contributes nothing to what is scanned; the openapi-document job proves it separately.
+    # daemon for Trivy to read via --image-src docker; nothing is pushed. JIM.Web builds with its
+    # OpenAPI generation stage, as the release does: that stage boots the app inside the image to
+    # write the document, and was otherwise first run at release time (the openapi-document job
+    # generates the document outside the image, with a different base and environment).
     # The base stage's apt-get upgrade has to run against the live noble archive, and served from
     # the cache that layer is replayed as it stood when it last ran (Dockerfile and digest
     # unchanged): the "upgraded" images carried fixes up to two weeks stale and Trivy reported 31
@@ -347,6 +378,7 @@ jobs:
       run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
 
     - name: Build image
+      id: build
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
       with:
         builder: ${{ steps.buildx.outputs.name }}
@@ -356,7 +388,6 @@ jobs:
         tags: ${{ matrix.image_name }}:scan
         build-args: |
           VERSION=scan
-          OPENAPI_STAGE=publish
           APT_REFRESH=${{ steps.apt_refresh.outputs.date }}
         cache-from: type=gha,scope=${{ matrix.image_name }}
         cache-to: type=gha,scope=${{ matrix.image_name }},mode=max
@@ -493,6 +524,53 @@ jobs:
         # next upload rather than sitting orphaned under a category that is
         # never uploaded again. See discover-base-images.ps1.
         category: trivy-image-${{ matrix.image_name }}
+
+    # Start the image just built and wait for the line the service logs first ("Starting JIM.Web" and
+    # so on, from the matrix), as release.yml's smoke test does before it pushes. Dummy database
+    # settings are enough: each service logs that line before it connects, then fails to connect,
+    # which is expected here. Runs whether or not the CVE gate passed, so the two signals stay
+    # independent. The container name is unique per image and run because push runs share one
+    # Docker daemon on the self-hosted host, and the trap removes it however the step ends. The
+    # matrix values reach the script through env, never interpolated into it.
+    - name: Smoke test the image
+      if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+      env:
+        IMAGE: ${{ matrix.image_name }}:scan
+        STARTUP_LOG: ${{ matrix.startup_log }}
+        NAME: smoke-test-${{ matrix.image_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        trap 'docker rm -f "$NAME" > /dev/null 2>&1 || true' EXIT
+        docker run -d --name "$NAME" \
+          -e JIM_DB_HOSTNAME=localhost \
+          -e JIM_DB_NAME=jim \
+          -e JIM_DB_USERNAME=jim \
+          -e JIM_DB_PASSWORD=dummy \
+          -e JIM_LOG_LEVEL=Information \
+          -e JIM_LOG_PATH=/tmp/jim-logs \
+          "$IMAGE" > /dev/null
+
+        # Up to 30 seconds (a cold start on a hosted runner is slower than on the release host),
+        # but no longer than the container lives: one that has exited without the line never will.
+        for _ in $(seq 1 30); do
+          if docker logs "$NAME" 2>&1 | grep -qF "$STARTUP_LOG"; then
+            echo "Startup log found: $STARTUP_LOG"
+            exit 0
+          fi
+          if [ "$(docker inspect --format '{{.State.Running}}' "$NAME")" != "true" ]; then
+            break
+          fi
+          sleep 1
+        done
+
+        # Once more, in case the line landed between the last check and the container exiting.
+        if docker logs "$NAME" 2>&1 | grep -qF "$STARTUP_LOG"; then
+          echo "Startup log found: $STARTUP_LOG"
+          exit 0
+        fi
+
+        echo "::error title=Image did not start::$IMAGE did not log \"$STARTUP_LOG\". Its output follows."
+        docker logs "$NAME" 2>&1 | tail -n 100
+        exit 1
 
   scan-base-images-summary:
     # Stable-name gate for the dynamic scan-images matrix, providing the single

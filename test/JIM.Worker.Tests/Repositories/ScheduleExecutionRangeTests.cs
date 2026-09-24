@@ -12,8 +12,8 @@ namespace JIM.Worker.Tests.Repositories;
 /// Tests the offset/count Schedule Execution range read (<c>GetScheduleExecutionsRangeAsync</c>) that backs the
 /// virtualised (infinite-scroll) Schedule Execution grids: window correctness at absolute offsets, the
 /// skip-the-count contract (a null total, never zero, when the caller already holds the count), the window-size
-/// cap, the sort semantics, and that the optional Schedule filter shared with the paged read applies through the
-/// range entry point too.
+/// cap, the sort semantics, and that the optional Schedule and status filters shared with the paged read apply
+/// through the range entry point too.
 /// </summary>
 [TestFixture]
 public class ScheduleExecutionRangeTests
@@ -210,6 +210,62 @@ public class ScheduleExecutionRangeTests
     }
 
     [Test]
+    public async Task GetScheduleExecutionsAsync_StatusFilter_RestrictsResultsAndTotalAsync()
+    {
+        var schedule = await SeedMixedStatusExecutionsAsync();
+
+        var result = await _repository.Scheduling.GetScheduleExecutionsAsync(
+            schedule.Id, page: 1, pageSize: 20, status: ScheduleExecutionStatus.CompleteWithError);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalResults, Is.EqualTo(2));
+            Assert.That(result.Results, Has.Count.EqualTo(2));
+            Assert.That(result.Results.Select(e => e.Status), Is.All.EqualTo(ScheduleExecutionStatus.CompleteWithError));
+        }
+    }
+
+    [Test]
+    public async Task GetScheduleExecutionsAsync_NoStatusFilter_ReturnsEveryStatusAsync()
+    {
+        var schedule = await SeedMixedStatusExecutionsAsync();
+
+        var result = await _repository.Scheduling.GetScheduleExecutionsAsync(schedule.Id, page: 1, pageSize: 20);
+
+        Assert.That(result.TotalResults, Is.EqualTo(5));
+    }
+
+    [Test]
+    public async Task GetScheduleExecutionsAsync_StatusFilterMatchingNothing_ReturnsEmptyAndZeroTotalAsync()
+    {
+        var schedule = await SeedMixedStatusExecutionsAsync();
+
+        var result = await _repository.Scheduling.GetScheduleExecutionsAsync(
+            schedule.Id, page: 1, pageSize: 20, status: ScheduleExecutionStatus.Paused);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalResults, Is.EqualTo(0));
+            Assert.That(result.Results, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetScheduleExecutionsRangeAsync_StatusFilter_RestrictsWindowAndTotalAsync()
+    {
+        var schedule = await SeedMixedStatusExecutionsAsync();
+
+        var result = await _repository.Scheduling.GetScheduleExecutionsRangeAsync(
+            schedule.Id, offset: 0, count: 10, status: ScheduleExecutionStatus.Failed);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalResults, Is.EqualTo(1));
+            Assert.That(result.Results.Select(e => e.Status), Is.EqualTo(new[] { ScheduleExecutionStatus.Failed }));
+        }
+    }
+
+    [Test]
     public async Task GetScheduleExecutionsRangeAsync_SortByStatus_OrdersByStatusAsync()
     {
         // Seeded in the reverse of the status order (Complete = 2 sorts after Queued = 0), so this test fails
@@ -282,6 +338,22 @@ public class ScheduleExecutionRangeTests
 
         await _dbContext.SaveChangesAsync();
         return schedule.Id;
+    }
+
+    /// <summary>
+    /// Seeds a Schedule with five executions across four statuses: two Complete With Error, one Complete, one
+    /// Failed and one Cancelled. Returns the Schedule.
+    /// </summary>
+    private async Task<Schedule> SeedMixedStatusExecutionsAsync()
+    {
+        var schedule = await SeedScheduleAsync("Mixed Outcomes");
+        AddExecution(schedule, "Mixed Outcomes", BaseTime.AddSeconds(1), ScheduleExecutionStatus.Complete);
+        AddExecution(schedule, "Mixed Outcomes", BaseTime.AddSeconds(2), ScheduleExecutionStatus.CompleteWithError);
+        AddExecution(schedule, "Mixed Outcomes", BaseTime.AddSeconds(3), ScheduleExecutionStatus.Failed);
+        AddExecution(schedule, "Mixed Outcomes", BaseTime.AddSeconds(4), ScheduleExecutionStatus.CompleteWithError);
+        AddExecution(schedule, "Mixed Outcomes", BaseTime.AddSeconds(5), ScheduleExecutionStatus.Cancelled);
+        await _dbContext.SaveChangesAsync();
+        return schedule;
     }
 
     private async Task<Schedule> SeedScheduleAsync(string name)

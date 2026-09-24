@@ -41,6 +41,7 @@ public class ScheduleExecutionStatusWireContractTests
     [TestCase(ScheduleExecutionStatus.Failed, "Failed")]
     [TestCase(ScheduleExecutionStatus.Cancelled, "Cancelled")]
     [TestCase(ScheduleExecutionStatus.Paused, "Paused")]
+    [TestCase(ScheduleExecutionStatus.CompleteWithError, "CompleteWithError")]
     public void ScheduleExecutionDto_SerialisesStatusAsItsExactEnumMemberName(ScheduleExecutionStatus status, string expectedWireValue)
     {
         var dto = new ScheduleExecutionDto { Status = status };

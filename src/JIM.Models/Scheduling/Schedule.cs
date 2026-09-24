@@ -116,6 +116,13 @@ public class Schedule : IAuditable
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
+    /// What the Schedule does when one of its steps fails ("When a step fails"; #1787): stop (the default) or
+    /// continue. Applies to every step set to <see cref="ScheduleStepFailureBehaviour.FollowSchedule"/>, including
+    /// steps added later. Resolve a step's effective behaviour with <see cref="ScheduleFailureHandling"/>, never here.
+    /// </summary>
+    public ScheduleFailureBehaviour OnStepFailure { get; set; } = ScheduleFailureBehaviour.Stop;
+
+    /// <summary>
     /// The steps that make up this schedule, ordered by StepIndex.
     /// </summary>
     public List<ScheduleStep> Steps { get; set; } = new();

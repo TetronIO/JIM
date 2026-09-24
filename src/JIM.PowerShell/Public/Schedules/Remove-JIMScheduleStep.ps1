@@ -102,23 +102,9 @@ function Remove-JIMScheduleStep {
                         $lastOriginalIndex = $step.stepIndex
                     }
 
-                    $renumberedStep = @{
-                        stepIndex = $currentIndex
-                        stepType = $step.stepType
-                        executionMode = $step.executionMode
-                        continueOnFailure = $step.continueOnFailure
-                        connectedSystemId = $step.connectedSystemId
-                        runProfileId = $step.runProfileId
-                    }
-
-                    # Copy optional properties if present
-                    if ($step.name) { $renumberedStep.name = $step.name }
-                    if ($step.scriptPath) { $renumberedStep.scriptPath = $step.scriptPath }
-                    if ($step.arguments) { $renumberedStep.arguments = $step.arguments }
-                    if ($step.executablePath) { $renumberedStep.executablePath = $step.executablePath }
-                    if ($step.workingDirectory) { $renumberedStep.workingDirectory = $step.workingDirectory }
-
-                    $renumberedSteps += $renumberedStep
+                    # Each remaining step goes back with its id and failure setting (ConvertTo-JIMScheduleStepRequest),
+                    # so the API updates it in place rather than deleting and recreating it; only its index changes.
+                    $renumberedSteps += ConvertTo-JIMScheduleStepRequest -Step $step -StepIndex $currentIndex
                 }
 
                 # Build update body

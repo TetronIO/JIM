@@ -163,14 +163,27 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
 
-      # Phase 3 & 4: Build locally first, scan, smoke-test, then push
-      # Today's date is part of the apt upgrade layer's cache key, so the release image carries
-      # what the noble archive holds today rather than what it held when the cached layer was
-      # last built (see the same step on the scan-images job in ci.yml for why a no-cache filter
-      # is not enough). The SDK build stage still comes from the cache.
-      - name: Date the apt upgrade layer
-        id: apt_refresh
-        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      # Phase 3 & 4: Build locally first, scan, smoke-test, then push that same image
+      # Every build argument, assembled once for both builds below. The local build is the one scanned and
+      # smoke-tested; the push build reuses its layers only if it passes exactly the same arguments, because an
+      # argument a RUN reads is part of that layer's cache key. They differed until #1792 (APT_REFRESH reached
+      # only the local build), so each release re-ran apt-get upgrade after testing and shipped an image nobody
+      # had scanned. Today's date is part of the apt upgrade layer's cache key, so the release image carries
+      # what the noble archive holds today rather than what it held when the cached layer was last built (see
+      # the same step on the scan-images job in ci.yml for why a no-cache filter is not enough). The SDK build
+      # stage still comes from the cache. The version goes in via env rather than being interpolated into the
+      # script.
+      - name: Assemble build arguments
+        id: build_args
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          {
+            echo 'list<<BUILD_ARGS'
+            echo "VERSION=$VERSION"
+            echo "APT_REFRESH=$(date -u +%F)"
+            echo 'BUILD_ARGS'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build Docker image (local)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
@@ -181,9 +194,7 @@ jobs:
           load: true
           tags: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.version.outputs.VERSION }}
-            APT_REFRESH=${{ steps.apt_refresh.outputs.date }}
+          build-args: ${{ steps.build_args.outputs.list }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
@@ -240,20 +251,55 @@ jobs:
           docker logs "$NAME"
           exit 1
 
-      # Push the image (after scan and smoke test pass)
-      - name: Push Docker image
+      # Push the image the steps above tested (after scan and smoke test pass). This repeats the local build on the
+      # same builder with the same Dockerfile, labels and arguments, so every layer is served from the cache the
+      # local build has just filled and nothing is rebuilt. It pushes by digest only: no release tag moves until
+      # the next step has shown the pushed layers are the tested ones.
+      - name: Push Docker image (by digest)
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
           file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.version.outputs.VERSION }}
+          build-args: ${{ steps.build_args.outputs.list }}
+          outputs: type=image,name=${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.image }}
+
+      # The pushed image must be the tested image (#1792). This compares filesystem layers (the image's diff IDs),
+      # which are what the scan and the smoke test examined, rather than manifest digests: the push adds a
+      # provenance attestation, so its manifest digest never matches a loaded image's. A layer rebuilt after
+      # testing fails this even when it installed the same packages, because its files carry new timestamps,
+      # which is exactly how v0.15.0's rebuilt apt layer would have shown up.
+      - name: Confirm the pushed image is the tested image
+        env:
+          TESTED: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
+          PUSHED: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker pull --quiet "$PUSHED" > /dev/null
+          tested_layers=$(docker image inspect --format '{{json .RootFS.Layers}}' "$TESTED")
+          pushed_layers=$(docker image inspect --format '{{json .RootFS.Layers}}' "$PUSHED")
+          if [ "$tested_layers" != "$pushed_layers" ]; then
+            echo "::error title=Pushed image is not the tested image::$PUSHED has different layers from the image that was scanned and smoke-tested, so it was rebuilt after testing. No release tag points at it. Check that both builds receive the same build arguments."
+            echo "Tested: $tested_layers"
+            echo "Pushed: $pushed_layers"
+            exit 1
+          fi
+          echo "$PUSHED carries the tested image's $(grep -o 'sha256:' <<< "$tested_layers" | wc -l) layers."
+
+      # Only now do the release tags point at the image. With a single source, imagetools create copies the
+      # manifest unchanged, so every tag resolves to the verified digest that is signed and attested below.
+      - name: Tag the pushed image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          SOURCE: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then args+=(--tag "$tag"); fi
+          done <<< "$TAGS"
+          docker buildx imagetools create "${args[@]}" "$SOURCE"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5  # v3.10.1
