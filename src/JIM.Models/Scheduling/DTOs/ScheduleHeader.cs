@@ -131,6 +131,13 @@ public class ScheduleHeader
     public int? LastExecutionTotalSteps { get; set; }
 
     /// <summary>
+    /// The steps (0-based, ascending) that failed in the most recent execution and were allowed to let the Schedule
+    /// continue (#1787). Populated when that execution is Complete With Error, so the Schedules list can name them;
+    /// empty otherwise.
+    /// </summary>
+    public int[] LastExecutionFailedStepIndices { get; set; } = [];
+
+    /// <summary>
     /// When the most recent execution finished (UTC). Null while it is still running.
     /// </summary>
     public DateTime? LastExecutionCompletedAt { get; set; }
