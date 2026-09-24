@@ -93,6 +93,10 @@
         'Remove-JIMSyncRuleMapping',
         'Set-JIMSyncRuleMapping',
 
+        # Unique Value Generation (#242)
+        'Get-JIMGeneratedValueSequence',
+        'Restart-JIMGeneratedValues',
+
         # Object Matching Rules
         'Get-JIMMatchingRule',
         'New-JIMMatchingRule',
@@ -160,6 +164,7 @@
         'Get-JIMMetaverseObject',
         'Set-JIMMetaverseObjectPassword',
         'Get-JIMMetaverseObjectChangeHistory',
+        'Get-JIMGeneratedValue',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
