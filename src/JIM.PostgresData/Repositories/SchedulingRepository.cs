@@ -171,6 +171,9 @@ public class SchedulingRepository : ISchedulingRepository
         // means "not counted", never "nothing matched".
         int? totalCount = includeTotalCount ? await query.CountAsync() : null;
 
+        // A local array, so the provider translates the membership test to an IN list.
+        var failedOutcomes = ScheduleFailureHandling.FailedStepOutcomes.ToArray();
+
         // The most recent execution is projected via correlated subqueries over the Schedule's executions, ordered by
         // QueuedAt. EF Core renders each of these as a scalar subquery inside the single SELECT that fetches the
         // window ("... ORDER BY s1.QueuedAt DESC LIMIT 1"), so the whole window costs one round trip no matter how
@@ -197,6 +200,7 @@ public class SchedulingRepository : ISchedulingRepository
                 IntervalUnit = s.IntervalUnit,
                 IntervalWindowStart = s.IntervalWindowStart,
                 IntervalWindowEnd = s.IntervalWindowEnd,
+                OnStepFailure = s.OnStepFailure,
                 NextRunTime = s.NextRunTime,
                 LastRunTime = s.LastRunTime,
                 Created = s.Created,
@@ -207,7 +211,24 @@ public class SchedulingRepository : ISchedulingRepository
                 LastExecutionCurrentStepIndex = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (int?)e.CurrentStepIndex).FirstOrDefault(),
                 LastExecutionTotalSteps = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (int?)e.TotalSteps).FirstOrDefault(),
                 LastExecutionCompletedAt = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.CompletedAt).FirstOrDefault(),
-                LastExecutionErrorMessage = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.ErrorMessage).FirstOrDefault()
+                LastExecutionErrorMessage = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.ErrorMessage).FirstOrDefault(),
+                // The steps a Complete With Error run carried on past (#1787), for the list to name. Starts from the newest
+                // execution (one row, from the same backward index scan as above) and only then reaches into Activities,
+                // so PostgreSQL joins that one execution to its Activities through IX_Activities_ScheduleExecutionId
+                // rather than weighing every Activity against it. Empty for any other outcome: a Failed run stopped, and
+                // is described by its current step index.
+                LastExecutionFailedStepIndices = s.Executions
+                    .OrderByDescending(e => e.QueuedAt)
+                    .Take(1)
+                    .Where(e => e.Status == ScheduleExecutionStatus.CompleteWithError)
+                    .SelectMany(e => Repository.Database.Activities
+                        .Where(a => a.ScheduleExecutionId == e.Id &&
+                                    a.ScheduleStepIndex != null &&
+                                    failedOutcomes.Contains(a.Status)))
+                    .Select(a => a.ScheduleStepIndex!.Value)
+                    .Distinct()
+                    .OrderBy(i => i)
+                    .ToArray()
             })
             .ToListAsync();
 
@@ -657,6 +678,9 @@ public class SchedulingRepository : ISchedulingRepository
 
     public async Task<ScheduleExecution?> GetLastCompletedScheduleExecutionAsync(Guid scheduleId, DateTime beforeStartedAt)
     {
+        // Complete only, deliberately: Complete With Error (#1787) is finished everywhere else, but a run that carried on
+        // past a failed step may have missed part of its window, so it must not move the Temporal Scope Reconciliation
+        // watermark forward. The next clean run's watermark then covers that window again.
         return await Repository.Database.ScheduleExecutions
             .Where(e => e.ScheduleId == scheduleId &&
                         e.Status == ScheduleExecutionStatus.Complete &&

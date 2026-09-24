@@ -1,6 +1,6 @@
 # Schedule Execution Lifecycle
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-24, JIM v0.15.0 (unreleased changes)
 
 This diagram shows how schedules are triggered, how step groups are queued and advanced, and how the scheduler and worker collaborate to drive multi-step execution to completion.
 
@@ -9,7 +9,23 @@ JIM seeds two built-in Schedules, converging them on every startup (`SeedingServ
 - **Temporal Scope Reconciliation** (#85): hourly, cron `0 * * * *`; its single step is of type `TemporalScopeReconciliation` and queues a `TemporalScopeReconciliationWorkerTask`.
 - **History Retention Cleanup** (#1118): daily and off-peak, cron `30 2 * * *`; its single step is of type `HistoryRetentionCleanup` and queues a `HistoryRetentionCleanupWorkerTask`, which removes change history, Activities, initial-password records and terminal Pending Password Changes past their retention periods. The Worker reads every retention period from its Service Setting when the task runs, so changing one takes effect on the next pass without the Schedule being touched. This replaces the six-hourly cleanup the Worker used to run during housekeeping.
 
-Both run the same queue-and-advance machinery as any other Schedule; the only difference is the step type they queue (see Step Group Queuing Detail below).
+Both run the same queue-and-advance machinery as any other Schedule; the only difference is the step type they queue (see Step Group Queuing Detail below). Both stop when a step fails, and their steps follow the Schedule; JIM manages that setting, so it cannot be changed from the portal, the REST API or PowerShell (#1787).
+
+## Effective Failure Behaviour
+
+What a failed step does to its Schedule is set in two places (#1787): the Schedule's `OnStepFailure` (`ScheduleFailureBehaviour`: `Stop`, the default, or `Continue`), and each step's `OnFailure` (`ScheduleStepFailureBehaviour`: `FollowSchedule`, the default for new steps, `Stop` or `Continue`). Every decision about a failed step uses the **effective** behaviour, resolved in exactly one place, `ScheduleFailureHandling` (`JIM.Models/Scheduling`):
+
+```mermaid
+flowchart TD
+    Ask([Does the Schedule continue<br/>when this step fails?]) --> Own{Step's OnFailure}
+    Own -->|Continue| Yes([Continues<br/>Source: Step])
+    Own -->|Stop| No([Stops<br/>Source: Step])
+    Own -->|FollowSchedule| Sched{Schedule's<br/>OnStepFailure}
+    Sched -->|Continue| YesS([Continues<br/>Source: Schedule])
+    Sched -->|Stop, or no Schedule loaded| NoS([Stops<br/>Source: Schedule])
+```
+
+`ScheduleFailureHandling.ContinuesOnFailure(step, schedule)` answers the question and `ScheduleFailureHandling.Source(step)` says where the answer comes from. The Scheduler's start refusals, the parallel-group rule, Worker-driven advancement and the recovery sweep all call it at the moment of the decision, reading the Schedule as it stands then, so a change saved mid-run applies to the next failure. The portal's step list, the REST API's effective `continueOnFailure` and `failureBehaviourSource`, and each execution step's `ContinueOnFailure` / `FailureBehaviourSource` read it too; none resolves it independently. A step whose Schedule is not loaded fails safe and stops. `ScheduleFailureHandling.FailedStepOutcomes` is likewise the one definition of what counts as a step failing (an Activity ending `FailedWithError`, `CompleteWithError` or `Cancelled`; warnings do not).
 
 ## Three-Service Collaboration
 
@@ -67,7 +83,7 @@ flowchart TD
 
     Outcome -->|Yes, or the only refusals<br/>were steps set to continue| AnyTasks{Any step<br/>queued a task?}
     AnyTasks -->|Yes| Release[Release atomically, only if still Queued:<br/>Status = InProgress, StartedAt = UtcNow<br/>CurrentStepIndex = first index with tasks<br/>That group's tasks: Waiting --> Queued]
-    AnyTasks -->|No| CompleteNow[Nothing to run:<br/>Status = Complete<br/>only if still Queued]
+    AnyTasks -->|No| CompleteNow[Nothing to run:<br/>Status = Complete, or CompleteWithError<br/>if steps set to continue were refused<br/>only if still Queued]
     Release --> StillQueued{Was it<br/>still Queued?}
     StillQueued -->|Yes| CalcNext
     StillQueued -->|No: cancelled<br/>while starting| CleanUp[Leave the cancellation standing<br/>Cancel the waiting tasks<br/>Not run: the Schedule Execution was cancelled.]
@@ -108,15 +124,15 @@ flowchart TD
     CheckType -->|HistoryRetentionCleanup| CreateRetentionTask[Build HistoryRetentionCleanupWorkerTask<br/>No per-instance configuration]
     CheckType -->|PowerShell<br/>Executable<br/>SqlScript| NotImpl[Log warning:<br/>not yet implemented<br/>Skip step]
 
-    CreateSyncTask --> Common[Status = WaitingForPreviousStep<br/>ExecutionMode: Parallel/Sequential<br/>ContinueOnFailure from step<br/>ScheduleExecutionId, ScheduleStepIndex<br/>ScheduleStepId]
+    CreateSyncTask --> Common[Status = WaitingForPreviousStep<br/>ExecutionMode: Parallel/Sequential<br/>ScheduleExecutionId, ScheduleStepIndex<br/>ScheduleStepId]
     CreateTemporalTask --> Common
     CreateRetentionTask --> Common
     Common --> CreateActivity[TaskingServer.CreateWorkerTaskAsync<br/>Creates Activity with initiator triad,<br/>the producing Schedule's identity<br/>and the step's ScheduleStepId<br/>Associates Activity with WorkerTask]
     CreateActivity --> Created{Task<br/>created?}
     Created -->|Yes| ForEach
     Created -->|No: e.g. the Connected System<br/>is being deleted, or its Run Profile<br/>targets a deselected partition| Refused[Record a Failed Activity for the step<br/>shaped like the one it would have produced<br/>Could not be queued: reason]
-    Refused --> Continue{Step set to<br/>ContinueOnFailure?}
-    Continue -->|Yes| ForEach
+    Refused --> Continue{ScheduleFailureHandling<br/>.ContinuesOnFailure?}
+    Continue -->|Yes, by its effective behaviour| ForEach
     Continue -->|No| StopStart[Stop queuing<br/>The start fails: see above]
     CreateActivity -.->|Unexpected error| StopStart
     NotImpl --> ForEach
@@ -143,13 +159,16 @@ flowchart TD
     IsInProgress -->|No: cancelled or<br/>already finished| Leave([Leave it as it is<br/>Release nothing])
     IsInProgress -->|Yes| CheckFailures[ConcludeStepGroupAsync:<br/>Query Activities for this step<br/>FailedWithError, CompleteWithError<br/>or Cancelled count as failed]
 
-    CheckFailures --> AnyStop{A FAILED step here<br/>is set to stop<br/>the Schedule?}
+    CheckFailures --> AnyStop{A FAILED step here<br/>effectively stops<br/>the Schedule?}
 
     %% --- Happy path ---
     AnyStop -->|No| FindNext[Find next WaitingForPreviousStep<br/>step index]
     FindNext --> HasNext{Next step<br/>exists?}
-    HasNext -->|No| ExecComplete[Status = Complete<br/>CompletedAt = UtcNow<br/>only if still InProgress]
+    HasNext -->|No| AnyFailed{Any failed step<br/>in this execution?<br/>All were set to continue}
+    AnyFailed -->|No| ExecComplete[Status = Complete<br/>CompletedAt = UtcNow<br/>only if still InProgress]
+    AnyFailed -->|Yes| ExecCompleteWithError[Status = CompleteWithError<br/>only if still InProgress<br/>ErrorMessage: The Schedule finished, but<br/>step 3, name, failed. It is set to let<br/>the Schedule continue.]
     ExecComplete --> Done
+    ExecCompleteWithError --> Done
 
     HasNext -->|Yes| Advance[Advance atomically, only if still InProgress<br/>and not already at that step:<br/>CurrentStepIndex = next<br/>That group's tasks: Waiting --> Queued]
     Advance --> WorkerPicksUp([Worker picks up<br/>newly queued tasks<br/>on next poll cycle])
@@ -160,7 +179,9 @@ flowchart TD
     FailExec --> Done
 ```
 
-In a parallel step group, only the steps that failed decide (#1768): the Schedule stops if a step that failed is set to stop it, whatever its successful siblings are set to. Each Activity records the step that produced it (`ScheduleStepId`), which is how a failure is attributed to one sibling rather than another. An Activity that cannot say (recorded before `ScheduleStepId` existed, or whose step has since been deleted) makes the group fall back to the stricter rule it replaced: stop if any step at that position is set to stop the Schedule.
+In a parallel step group, only the steps that failed decide (#1768): the Schedule stops if a step that failed effectively stops it (see Effective Failure Behaviour above), whatever its successful siblings are set to. Each Activity records the step that produced it (`ScheduleStepId`), which is how a failure is attributed to one sibling rather than another. An Activity that cannot say (recorded before `ScheduleStepId` existed, or whose step has since been deleted) makes the group fall back to the stricter rule it replaced: stop if any step at that position is set to stop the Schedule.
+
+When the last step group concludes, the execution ends `CompleteWithError` rather than `Complete` if any Activity of the execution has a failed outcome (#1787). A failure that stopped the Schedule has already taken the Failed path, so any failure found at that point was one allowed to continue; the `ErrorMessage` names each such step. `CompleteWithError` counts as finished everywhere `Complete` does (not active, the Schedules list's last outcome, `LastExecutionStatus`, history filters) with one exception: the Temporal Scope Reconciliation watermark (`GetLastCompletedScheduleExecutionAsync`) moves forward only on a clean `Complete`, so a window a failed step missed is covered again on the next run.
 
 Every change here is conditional on the execution still being `InProgress` when the write lands, so a cancellation that arrives while a step is running stands when that step finishes. The remaining steps are cancelled before the execution is marked Failed, so an interruption between the two leaves an `InProgress` execution the safety net will conclude again, never a Failed one with waiting tasks nothing would remove.
 
@@ -172,7 +193,7 @@ Three safety nets ensure schedules complete even when services crash. The stuck-
 flowchart TD
     subgraph "1. Worker Startup Recovery"
         WS([Worker starts]) --> RecoverAll[RecoverStaleWorkerTasksAsync<br/>TimeSpan.Zero<br/>ALL Processing tasks are<br/>orphaned at startup]
-        RecoverAll --> ReQueue1[Fail associated Activities<br/>Delete the task rows<br/>Stuck-execution recovery then<br/>advances or fails the execution<br/>per ContinueOnFailure]
+        RecoverAll --> ReQueue1[Fail associated Activities<br/>Delete the task rows<br/>Stuck-execution recovery then<br/>advances or fails the execution<br/>per each step's effective behaviour]
     end
 
     subgraph "2. Scheduler: Stuck Execution Recovery"
@@ -205,7 +226,9 @@ stateDiagram-v2
 
     Queued --> InProgress: Every step queued<br/>First step group released atomically
 
-    Queued --> Complete: Nothing to run<br/>Every step skipped or set to continue
+    Queued --> Complete: Nothing to run<br/>No step was refused
+
+    Queued --> CompleteWithError: Nothing to run<br/>Steps set to continue were refused
 
     Queued --> Failed: A step set to stop could not be queued<br/>or the start was abandoned for 5 minutes
 
@@ -213,18 +236,21 @@ stateDiagram-v2
 
     InProgress --> InProgress: Worker completes step<br/>Advances to next step group
 
-    InProgress --> Complete: Last step group completes<br/>No more waiting tasks
+    InProgress --> Complete: Last step group completes<br/>No step failed
 
-    InProgress --> Failed: A failed step is set to stop the Schedule<br/>Remaining steps cancelled
+    InProgress --> CompleteWithError: Last step group completes<br/>A step failed and was set to continue
+
+    InProgress --> Failed: A failed step effectively stops the Schedule<br/>Remaining steps cancelled
 
     InProgress --> Cancelled: User cancels execution<br/>All tasks cancelled
 
     Complete --> [*]
+    CompleteWithError --> [*]
     Failed --> [*]
     Cancelled --> [*]
 ```
 
-A finished execution stays finished (#1768). Every transition out of `Queued` or `InProgress` is a conditional update that only takes effect while the execution is still in the status its writer saw, so whichever of two competing writers (a step finishing, an administrator cancelling, the safety net) reaches the row first decides how the execution ended, and the other changes nothing. Before this, a step that finished after its execution was cancelled overwrote Cancelled with Complete or Failed.
+A finished execution stays finished (#1768). Every transition out of `Queued` or `InProgress` is a conditional update that only takes effect while the execution is still in the status its writer saw, so whichever of two competing writers (a step finishing, an administrator cancelling, the safety net) reaches the row first decides how the execution ended, and the other changes nothing. Before this, a step that finished after its execution was cancelled overwrote Cancelled with Complete or Failed. `CompleteWithError` is terminal in exactly the same way (#1787).
 
 ## Step Display Status
 
@@ -278,7 +304,7 @@ A typical schedule with sequential and parallel steps:
 11. Both confirming imports complete → TryAdvance → no more steps
 12. Execution marked Complete
 
-Had the LDAP Connected System been being deleted when the Schedule started, its Export and Confirming Import steps could not have been queued. With those steps set to stop the Schedule, nothing would run at all: the four tasks already queued would be cancelled and the execution failed with `The Schedule could not start. Step 3, LDAP - Export, could not be queued: ... No steps ran.` With them set to continue, both would get a Failed Activity and the rest of the Schedule would run without them.
+Had the LDAP Connected System been being deleted when the Schedule started, its Export and Confirming Import steps could not have been queued. With those steps set to stop the Schedule, nothing would run at all: the four tasks already queued would be cancelled and the execution failed with `The Schedule could not start. Step 3, LDAP - Export, could not be queued: ... No steps ran.` With them set to continue (on the steps themselves, or by following a Schedule set to continue), both would get a Failed Activity, the rest of the Schedule would run without them, and the execution would end `CompleteWithError` naming both steps.
 
 ## Key Design Decisions
 
@@ -290,6 +316,6 @@ Had the LDAP Connected System been being deleted when the Schedule started, its 
 
 - **Overlap prevention**<br /> The scheduler checks for active executions before starting a new one for the same schedule. This prevents concurrent execution of the same schedule.
 
-- **ContinueOnFailure**<br /> Each step can be configured to continue or halt on failure, including failing to be queued at all. When a step that failed has `ContinueOnFailure = false`, the entire execution stops and remaining waiting tasks are cancelled; a failed step set to continue lets the Schedule carry on, whatever its successful parallel siblings are set to.
+- **Schedule-level failure behaviour with per-step overrides**<br /> The Schedule sets what happens when a step fails, and each step follows it or overrides it (#1787), including when a step fails to be queued at all. The effective behaviour is resolved in one place, `ScheduleFailureHandling`, at the moment of each decision. When a failed step effectively stops the Schedule, the execution stops and remaining waiting tasks are cancelled; a failed step that continues lets the Schedule carry on, whatever its successful parallel siblings are set to, and the execution ends `CompleteWithError` so the failure is never reported as a clean run.
 
 - **A finished execution stays finished**<br /> Starting, advancing, completing, failing and cancelling an execution are all conditional on the status its writer last saw, so no writer can overwrite another's outcome.

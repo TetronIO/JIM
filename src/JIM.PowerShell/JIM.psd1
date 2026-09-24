@@ -129,6 +129,7 @@
         'Disable-JIMSchedule',
         'Start-JIMSchedule',
         'Add-JIMScheduleStep',
+        'Set-JIMScheduleStep',
         'Remove-JIMScheduleStep',
 
         # Schedule Executions

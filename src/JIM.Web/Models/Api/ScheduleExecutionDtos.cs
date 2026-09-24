@@ -75,7 +75,8 @@ public class ScheduleExecutionDto
     public string? InitiatedByName { get; set; }
 
     /// <summary>
-    /// Error message if the execution failed.
+    /// Error message if the execution failed. For a <c>CompleteWithError</c> execution, the message naming each failed
+    /// step it carried on past.
     /// </summary>
     public string? ErrorMessage { get; set; }
 
@@ -238,9 +239,16 @@ public class ScheduleExecutionStepDto
     public string? RunProfileName { get; set; }
 
     /// <summary>
-    /// Whether the execution was configured to carry on past this step if it failed.
+    /// Whether the execution carries on past this step if it fails: the step's EFFECTIVE behaviour, being its own
+    /// setting, or its Schedule's when the step follows the Schedule (#1787).
     /// </summary>
     public bool ContinueOnFailure { get; set; }
+
+    /// <summary>
+    /// Where <c>continueOnFailure</c> comes from: <c>Step</c> when the step has a setting of its own, or
+    /// <c>Schedule</c> when it follows the Schedule.
+    /// </summary>
+    public ScheduleFailureBehaviourSource FailureBehaviourSource { get; set; }
 
     /// <summary>
     /// Why a Cancelled step did not run, for example "Not run: an earlier step stopped the Schedule.". Null for a step
@@ -277,6 +285,7 @@ public class ScheduleExecutionStepDto
             RunProfileId = step.RunProfileId,
             RunProfileName = step.RunProfileName,
             ContinueOnFailure = step.ContinueOnFailure,
+            FailureBehaviourSource = step.FailureBehaviourSource,
             CancellationReason = step.CancellationReason
         };
     }
