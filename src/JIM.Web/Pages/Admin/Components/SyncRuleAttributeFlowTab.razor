@@ -117,9 +117,25 @@
                         <VirtualisedSortHeader Title="Type" Name="type" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">
-                            @context.Item.GetSourceType().ToString().SplitOnCapitalLetters()
-                        </MudChip>
+                        @* Unique Value Generation (#242, Phase 3): a generated mapping's chip reads "Generated" (not
+                           "Generated Mapping", per the approved mockup) and carries a secondary summary of its token
+                           configuration ("Sequence · width 11"); jim-one-line-list keeps the row to one line, with
+                           the chip (not the summary) giving way should the column ever be narrow. *@
+                        @if (context.Item.Generation is { } rowGeneration)
+                        {
+                            <div class="jim-one-line-list">
+                                <span class="jim-one-line-list-value">
+                                    <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">Generated</MudChip>
+                                </span>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueFormHelpers.GetRowSummary(rowGeneration)</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">
+                                @context.Item.GetSourceType().ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        }
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Title="Source" Sortable="false">
@@ -284,14 +300,21 @@
             {
                 <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="min-width: 200px;">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
-                                @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                            @if (MappingIsMvaToSva(attributeFlowRule))
+                        <MudStack Spacing="0">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
+                                    @* Unique Value Generation (#242, Phase 3): "Generated", not "Generated Mapping", per the mockup *@
+                                    @(attributeFlowRule.Generation != null ? "GENERATED" : attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper())</MudText>
+                                @if (MappingIsMvaToSva(attributeFlowRule))
+                                {
+                                    <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
+                                        <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="jim-mva-sva-indicator" />
+                                    </MudTooltip>
+                                }
+                            </MudStack>
+                            @if (attributeFlowRule.Generation is { } cardGeneration)
                             {
-                                <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
-                                    <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="jim-mva-sva-indicator" />
-                                </MudTooltip>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueFormHelpers.GetRowSummary(cardGeneration)</MudText>
                             }
                         </MudStack>
                         <div class="d-flex gap-2" style="flex-shrink: 0;">
@@ -393,6 +416,7 @@
             Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined">
             <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
             <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
+            <MudSelectItem Value="@("Generated")">JIM generates it</MudSelectItem>
         </MudSelect>
 
         @if (_attributeFlowMapping != null && _attributeFlowMappingSource != null && SyncRule.MetaverseObjectType !=
@@ -503,12 +527,84 @@
                         }
                     </div>
                     break;
+
+                case "Generated":
+                {
+                    @* ─── Unique Value Generation (#242, Phase 3): "Assign the value to" comes first, per the
+                       approved mockup's field order, ahead of the base expression the rest of the form builds on. *@
+                    if (SyncRule.Direction == SyncRuleDirection.Import)
+                    {
+                        <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
+                            Label="Assign the value to" Placeholder="Please select the target Metaverse attribute" Required="true"
+                            Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
+                            @foreach (var metaverseAttribute in AvailableTargetMetaverseAttributes())
+                            {
+                                var disabledReason = GeneratedValueFormHelpers.GetGeneratedTargetDisabledReason(metaverseAttribute.Type, metaverseAttribute.AttributePlurality);
+                                <MudSelectItem Disabled="@(disabledReason != null)" Value="@metaverseAttribute">
+                                    <div class="jim-flow-option">
+                                        <span>@metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
+                                            @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                        @if (disabledReason != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@disabledReason</MudText>
+                                        }
+                                    </div>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else if (SyncRule.Direction == SyncRuleDirection.Export)
+                    {
+                        <MudSelect T="ConnectedSystemObjectTypeAttribute" @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute"
+                            Label="Assign the value to" Placeholder="Please select the target Connected System attribute" Required="true"
+                            Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
+                            @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
+                            {
+                                var disabledReason = connectedSystemAttribute.Writability == AttributeWritability.ReadOnly
+                                    ? "This Connected System reports this attribute as read-only."
+                                    : GeneratedValueFormHelpers.GetGeneratedTargetDisabledReason(connectedSystemAttribute.Type, connectedSystemAttribute.AttributePlurality);
+                                <MudSelectItem Disabled="@(disabledReason != null)" Value="@connectedSystemAttribute">
+                                    <div class="jim-flow-option">
+                                        <span>@connectedSystemAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
+                                            @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                        @if (disabledReason != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@disabledReason</MudText>
+                                        }
+                                    </div>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+
+                    var generatedTargetType = SyncRule.Direction == SyncRuleDirection.Import
+                        ? _attributeFlowMapping.TargetMetaverseAttribute?.Type
+                        : _attributeFlowMapping.TargetConnectedSystemAttribute?.Type;
+                    var generatedTargetName = SyncRule.Direction == SyncRuleDirection.Import
+                        ? _attributeFlowMapping.TargetMetaverseAttribute?.Name
+                        : _attributeFlowMapping.TargetConnectedSystemAttribute?.Name;
+
+                    if (generatedTargetType.HasValue)
+                    {
+                        <GeneratedValueOptionsEditor Mapping="_attributeFlowMapping" BaseSource="_attributeFlowMappingSource"
+                            TargetType="generatedTargetType" TargetName="@generatedTargetName" OnChanged="@(() => StateHasChanged())" />
+
+                        @* ─── Enabled (#1485): applies to a generated mapping the same as any other ─── *@
+                        <MudCheckBox T="bool" Dense="true" Class="mt-5" @bind-Value="_attributeFlowMapping.Enabled" Label="Enabled" />
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.
+                        </MudText>
+                    }
+                    break;
+                }
             }
 
-            // user must have chosen the source attribute or entered an expression before being shown the target attribute controls
-            if (_attributeFlowMappingSource.ConnectedSystemAttribute != null ||
-            _attributeFlowMappingSource.MetaverseAttribute != null ||
-            !string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
+            // user must have chosen the source attribute or entered an expression before being shown the target attribute controls;
+            // a generated mapping builds its own target and source controls above (its base expression is optional), so it is excluded here.
+            if (_attributeFlowMappingSourceType != "Generated" &&
+                (_attributeFlowMappingSource.ConnectedSystemAttribute != null ||
+                _attributeFlowMappingSource.MetaverseAttribute != null ||
+                !string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression)))
             {
                 @* ─── Standard Mapping hint (#1122) ─── *@
                 var suggestions = GetStandardMappingSuggestions();
@@ -875,7 +971,12 @@
         // mapping that already sits in the attribute's list from one arriving at it, and the picker below mutates
         // the mapping in place, so the persisted target is unrecoverable from the mapping itself once it changes.
         _originalTargetMetaverseAttributeId = mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId;
-        _attributeFlowMappingSource = mapping.Sources.FirstOrDefault();
+
+        // A generated mapping's base expression is optional (Sequence and Random tokens need none), so a
+        // persisted generated mapping with no base expression has an empty Sources list; a transient source is
+        // created here to hold the (empty) expression text and Missing Input Behaviour, and GeneratedValueOptionsEditor
+        // adds it to Sources once the administrator types one.
+        _attributeFlowMappingSource = mapping.Sources.FirstOrDefault() ?? new SyncRuleMappingSource();
 
         var sourceType = mapping.GetSourceType();
         _attributeFlowMappingSourceType = sourceType switch
@@ -897,12 +998,32 @@
     private void HandleSourceTypeChanged(string newSourceType)
     {
         _attributeFlowMappingSourceType = newSourceType;
-        if (_attributeFlowMappingSource == null) return;
+        if (_attributeFlowMapping == null || _attributeFlowMappingSource == null) return;
 
         // Clear previous source data when switching types
         _attributeFlowMappingSource.ConnectedSystemAttribute = null;
         _attributeFlowMappingSource.MetaverseAttribute = null;
         _attributeFlowMappingSource.Expression = null;
+        _attributeFlowMapping.Sources.Remove(_attributeFlowMappingSource);
+
+        // ─── Unique Value Generation (#242, Phase 3) ───
+        // Selecting "JIM generates it" creates the settings row with model defaults; switching away removes it.
+        // The source is left out of Sources here (a generated mapping's base expression is optional, and an
+        // empty source in the list would otherwise be misread by SyncRuleMappingGenerationValidator as an
+        // attribute source with no value); GeneratedValueOptionsEditor adds it once the expression holds text.
+        if (newSourceType == "Generated")
+        {
+            _attributeFlowMapping.Generation = new SyncRuleMappingGeneration();
+            // "Wait until every input has a value" is the generated-value default; a plain Expression mapping
+            // keeps its own default of "Evaluate anyway".
+            _attributeFlowMappingSource.MissingInputBehaviour = GeneratedValueFormHelpers.DefaultMissingInputBehaviourForGeneratedMapping;
+        }
+        else
+        {
+            _attributeFlowMapping.Generation = null;
+            _attributeFlowMappingSource.MissingInputBehaviour = MissingInputBehaviour.EvaluateAnyway;
+            _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
+        }
     }
 
     /// <summary>
@@ -1280,6 +1401,13 @@
         if (SyncRule.Direction == SyncRuleDirection.Import && _attributeFlowMapping.TargetMetaverseAttribute == null)
             return true;
         if (SyncRule.Direction == SyncRuleDirection.Export && _attributeFlowMapping.TargetConnectedSystemAttribute == null)
+            return true;
+
+        // Unique Value Generation (#242, Phase 3): Save is blocked while SyncRuleMappingGenerationValidator
+        // reports any problem with the generated mapping's settings (target/token combination, separator,
+        // attempt limit, ...); GeneratedValueOptionsEditor shows the same messages inline.
+        if (_attributeFlowMappingSourceType == "Generated" &&
+            SyncRuleMappingGenerationValidator.Validate(_attributeFlowMapping).Count > 0)
             return true;
 
         return false;

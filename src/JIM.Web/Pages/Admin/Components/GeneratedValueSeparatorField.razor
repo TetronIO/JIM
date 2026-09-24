@@ -1,0 +1,75 @@
+@using JIM.Models.Logic
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The generated mapping's separator picker (Unique Value Generation, #242, Phase 3): None, Dot, Hyphen,
+   Underscore or Custom (one to three characters). Its own component because it is offered beside every one of
+   the three uniqueness tokens (see GeneratedValueOptionsEditor.razor), and a RenderFragment cannot be built from
+   a C# lambda in a @code block; a small component is the correct way to share Razor markup across call sites. *@
+
+<MudSelect T="string" Value="_option" ValueChanged="OnOptionChangedAsync" Label="Separator" Variant="Variant.Outlined">
+    <MudSelectItem Value="@("None")">None</MudSelectItem>
+    <MudSelectItem Value="@("Dot")">Dot .</MudSelectItem>
+    <MudSelectItem Value="@("Hyphen")">Hyphen -</MudSelectItem>
+    <MudSelectItem Value="@("Underscore")">Underscore _</MudSelectItem>
+    <MudSelectItem Value="@("Custom")">Custom…</MudSelectItem>
+</MudSelect>
+@if (_option == "Custom")
+{
+    <MudTextField T="string" Value="_customValue" ValueChanged="OnCustomValueChangedAsync"
+        Label="Custom separator" Variant="Variant.Outlined" Immediate="true" Class="mt-2"
+        HelperText="One to three characters; no spaces, no @@" />
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public SyncRuleMappingGeneration Generation { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private string _option = "None";
+    private string? _customValue;
+
+    protected override void OnInitialized()
+    {
+        _option = Generation.Separator switch
+        {
+            null => "None",
+            "." => "Dot",
+            "-" => "Hyphen",
+            "_" => "Underscore",
+            _ => "Custom"
+        };
+        _customValue = _option == "Custom" ? Generation.Separator : null;
+    }
+
+    private async Task OnOptionChangedAsync(string option)
+    {
+        _option = option;
+        Generation.Separator = option switch
+        {
+            "None" => null,
+            "Dot" => ".",
+            "Hyphen" => "-",
+            "Underscore" => "_",
+            "Custom" => _customValue,
+            _ => null
+        };
+        await NotifyChangedAsync();
+    }
+
+    private async Task OnCustomValueChangedAsync(string? value)
+    {
+        _customValue = value;
+        Generation.Separator = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task NotifyChangedAsync()
+    {
+        if (OnChanged.HasDelegate)
+            await OnChanged.InvokeAsync();
+    }
+}
