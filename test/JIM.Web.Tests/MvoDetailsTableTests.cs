@@ -261,6 +261,30 @@ public class MvoDetailsTableTests : JimComponentTestContext
         }
     }
 
+    [TestCase("source", 7)]
+    [TestCase("source", null)]
+    [TestCase("category", 7)]
+    [TestCase("category", null)]
+    public void DetailsTable_GroupHeaderRow_SpansExactlyTheColumnsTheTableHas(string groupBy, int? selectedAttributeId)
+    {
+        // A colspan wider than the header row makes the browser invent empty columns, which render as a dead band
+        // down the right of the table (worst with the inspector open, where the table lays out at fixed widths).
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+        var provenance = BuildProvenance((7, "Job Title", HrOrigin));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.GroupBy, groupBy)
+            .Add(c => c.SelectedAttributeId, selectedAttributeId));
+
+        var headerCount = cut.FindAll("thead th").Count;
+        var span = cut.Find("tr.jim-inspect-group-header td").GetAttribute("colspan");
+
+        Assert.That(span, Is.EqualTo(headerCount.ToString()));
+    }
+
     [Test]
     public void DetailsTable_GroupedByCategory_RendersACategoryHeaderRow()
     {

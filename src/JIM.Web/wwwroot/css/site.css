@@ -2519,12 +2519,10 @@ html[lang] .jim-attribute-table td.jim-attr-value {
     table-layout: fixed;
 }
 
+/* Value takes whatever Attribute and Source leave, so it widens to fill the table when grouping by Source drops
+   the Source column. */
 .jim-inspect-table-narrow th.jim-attr-header-name {
     width: 24%;
-}
-
-.jim-inspect-table-narrow th.jim-attr-header-value {
-    width: 38%;
 }
 
 .jim-inspect-table-narrow th.jim-attr-header-source {

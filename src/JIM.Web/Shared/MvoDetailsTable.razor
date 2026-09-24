@@ -63,7 +63,7 @@
                         @if (rows.Count == 0)
                         {
                             <tr>
-                                <td colspan="5" class="text-center pa-4">
+                                <td colspan="@ColumnCount" class="text-center pa-4">
                                     <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
                                 </td>
                             </tr>
@@ -75,7 +75,7 @@
                                 @if (row.IsHeader)
                                 {
                                     <tr class="jim-inspect-group-header">
-                                        <td colspan="5">
+                                        <td colspan="@ColumnCount">
                                             @if (row.HeaderIcon != null)
                                             {
                                                 <MudIcon Icon="@row.HeaderIcon" Size="Size.Small" Class="me-2" />
@@ -290,6 +290,13 @@
     private bool _preferencesLoaded;
 
     private bool ShowInspector => SelectedAttributeId.HasValue;
+
+    /// <summary>
+    /// How many columns the header renders (Attribute and Value, plus Source unless grouped by it, plus Type and
+    /// Plurality unless the inspector is open). Full-width rows span exactly this many: a wider colspan makes the
+    /// browser invent empty columns, which render as a dead band down the right of the table.
+    /// </summary>
+    private int ColumnCount => 2 + (GroupBy != "source" ? 1 : 0) + (ShowInspector ? 0 : 2);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
