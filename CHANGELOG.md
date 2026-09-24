@@ -14,16 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🔄 **Continue on failure** on a Schedule step now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
+- 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
+- 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
 
 ### Fixed
 
 - 🐛 A Schedule with a step that cannot be queued, for example because its Connected System is being deleted, no longer runs its earlier steps and then reports Complete; it runs nothing, fails naming the step, and each step shows why it did not run. (#1768)
 - 🐛 A Schedule Execution cancelled while a step is running now stays cancelled, instead of being marked Complete or Failed when that step finishes. (#1768)
-- 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
-
-### Fixed
-
 - 🐛 An object that leaves scope but keeps its join is now recorded as **Left scope, join kept**, naming its Synchronisation Rule, rather than as an Attribute Flow that never happened and inflated the Activity's Attribute Flows count. (#1649)
 - 🐛 A Synchronisation Rule or Attribute Flow disabled with a reason (as a schema refresh's "Apply and Disable Dependents" does), or re-enabled afterwards, is now classified in the configuration change history instead of being recorded without a classification. (#1753)
 - 🐛 The SQL Connector now matches Microsoft SQL Server's legacy `datetime` columns exactly, so a Delta Import no longer skips changes sharing a timestamp, stalls on them, or re-reads unchanged rows, and an export keyed on such a column finds its row. (#1451)
