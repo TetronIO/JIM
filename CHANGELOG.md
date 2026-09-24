@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ **Generated values:** JIM can now generate a unique value for an Attribute Flow, such as an account name or employee number: a base expression plus a number if taken, a sequence number or a random token. Existing values are adopted and kept. Also via REST and PowerShell. (#242)
+- ✨ Generated sequence numbers come from a forward-only counter per attribute, optionally zero-padded, with a live preview, the counter's state, and **Start again** to return it to its start value. Also via REST and `Restart-JIMGeneratedValues`. (#242)
+
 ### Changed
 
 - 🔄 **Continue on failure** on a Schedule step now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)

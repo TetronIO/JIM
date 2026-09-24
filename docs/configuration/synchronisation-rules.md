@@ -380,7 +380,7 @@ JIM derives the inputs from the `mv["..."]` and `cs["..."]` accessors in the exp
 
 #### Changing a mapping after it is created
 
-A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, Initial Export Only on an export mapping, and whether the mapping is enabled at all. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
+A mapping's **settings**, meaning how it behaves rather than what it reads and writes, can be changed at any time: Missing Input Behaviour and the expression itself, "Null is a value" and [inbound value processing](#value-processing-inbound) on an import mapping, Initial Export Only on an export mapping, a [generated value](#generated-values)'s settings, and whether the mapping is enabled at all. Use the portal, `PATCH /sync-rules/{id}/mappings/{mappingId}`, or `Set-JIMSyncRuleMapping`.
 
 #### Disabling a single mapping
 
@@ -459,6 +459,46 @@ Two behaviours to be aware of:
 - If several export mappings target the same attribute for an object type, the attribute only becomes unmanaged when **every** such mapping is Initial Export Only; a single normally-managed mapping keeps it managed.
 
 Initial Export Only is your choice about an attribute the Connected System would happily let JIM keep writing. Where the Connected System itself only accepts a value at creation, JIM applies the same create-once behaviour on its own, without the setting: see [Attribute writability](connected-systems.md#attribute-writability).
+
+### Generated values
+
+Some values have no source to copy: an account name that must not clash with anyone else's, an employee number, a badge number, a correlation identifier. For these, choose **JIM generates it** as the mapping's Source Type. JIM builds the value, checks that no one else holds it, assigns it once, and keeps it.
+
+A generated value is a **base expression** plus a **uniqueness token**:
+
+| Uniqueness token | What JIM adds | Example |
+|---|---|---|
+| **Add a number only if the value is already taken** | Nothing, unless the base value is taken; then a number (or letter) suffix | `joe.bloggs`, then `joe.bloggs1`, `joe.bloggs2` |
+| **Always add a sequence number** | The next number from a counter JIM keeps for the target attribute, optionally zero-padded to a fixed width | `00000100456`, or `G-100456` with the base `"G-"` |
+| **Always add a random token** | A GUID, or a short hexadecimal or digit string from a cryptographic source; a clash draws again | `a3f9c2e1` |
+
+The base expression is an ordinary [expression](#expression-mappings), for example `Lower(cs["firstName"]) + "." + Lower(cs["lastName"])`. It is required for "only if taken" and optional for the other two; with no base expression, the value is the number or token on its own. When the base value looks like an email address, the token goes before the `@`. A **Separator** (dot, hyphen, underscore, or up to three characters of your own) can sit between the base value and the token.
+
+**When JIM generates a value.** The editor states the three conditions for the mapping:
+
+1. The Metaverse Object has no value from a higher-priority source, and no Connected System already holds one for it. An existing value held in a Connected System is **adopted**, never replaced, so joining a pre-existing account never renames it.
+2. Every attribute the base expression reads has a value. Generated mappings default to "Wait until every input has a value" (see [Missing Input Behaviour](#missing-input-behaviour)), because a value built from a missing input would be kept for ever.
+3. Then once only. The value is kept even if its inputs later change: a surname change does not rename the account.
+
+**Uniqueness.** Before assigning a value, JIM checks it, ignoring case, against the values already issued in the same run, every Metaverse Object's value for the attribute, and the connector space of every Connected System the attribute is exported to. A value an object already holds is always free for that object.
+
+**Sequences.** The counter belongs to the target attribute, not to the mapping, so removing and re-creating the mapping continues where it left off, and it only moves forward. On first use it starts above the highest numeric value already present for the attribute. The next number is the higher of the counter and **Start at**; raising Start at is how you reserve a range or continue a sequence issued elsewhere, and the editor asks you to confirm the numbers it skips. Lowering it has no effect. With **Pad to a fixed width** on, choose whether a number that outgrows the width stops with an error or is allowed to grow longer. A sequence number is never reused.
+
+**Start again.** The Attribute Flow's **Start again…** action (typed confirmation) returns a sequence's counter to Start at, for example after rebuilding a solution. It changes no existing value and exports nothing; numbers still held by a Metaverse Object are skipped when the counter reaches them. The action is recorded as an Activity.
+
+**Number attributes.** A generated value can target a Text or a Number attribute. A Number attribute accepts only a sequence or a Digits random token, with no base expression, no separator and no padding, because a prefix or leading zeros would make the value text. The editor disables the incompatible choices and says why; the REST API and PowerShell refuse the same configurations with the same reasons.
+
+**Where you see it.**
+
+- The editor's preview shows the first value and the candidates that follow when it is taken, using the sample values entered under "Test this Expression". For a saved rule it also counts the existing Metaverse Objects that would receive a value on the next full synchronisation, and for a sequence it shows the counter's state.
+- A synchronisation's Activity counts **Values Generated** and **Existing Values Adopted**, and each object's summary names the value it was given. A failure (no free value within the attempt limit, or a sequence that outgrew its width) is an ordinary Activity error naming the reason.
+- On the Metaverse Object page, a generated attribute carries a **Generated by JIM** (or **Adopted by JIM**) chip that links to the Synchronisation Rule responsible.
+
+Generated values work on export mappings too: the value is generated for, and kept on, the Connected System Object alone, and never written to the Metaverse. That suits a reference number a target system needs but nothing else uses.
+
+Configure a generated mapping in the Attribute Flow editor, with `New-JIMSyncRuleMapping -Generate` and `Set-JIMSyncRuleMapping` in PowerShell (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)), or with the `generation` object on the REST API's mapping endpoints. The REST API also lists a Metaverse Object's generated values (`GET /metaverse/objects/{id}/generated-values`), reads a sequence's state (`GET /synchronisation/sync-rules/{id}/mappings/{mappingId}/sequence`) and starts a sequence again (`POST /synchronisation/sync-rules/{id}/mappings/{mappingId}/generation/restart`).
+
+In this release, a value a target system rejects as a duplicate is reported as an ordinary export error; changing a generated value by hand is not yet available.
 
 ### Previewing an Attribute Flow change
 
