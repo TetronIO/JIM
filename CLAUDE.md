@@ -285,7 +285,7 @@ git merge origin/main      # then git push (no force needed)
 
 ### Merging via gh CLI
 
-`main` is protected by a ruleset that requires nine status checks to pass before a merge is allowed: `build-and-test`, `database-tests`, `openapi-document`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+`main` is protected by a ruleset that requires eight status checks to pass before a merge is allowed: `build-and-test`, `database-tests`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
 
 Read the list from the ruleset rather than from here if it matters; this line has gone stale before. `gh api repos/TetronIO/JIM/rulesets/12062449 --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'` answers it in one call.
 
