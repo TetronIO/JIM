@@ -33,9 +33,9 @@
         claim it succeeds and every other object's sole attempt finds it already taken and is
         exhausted. Left disabled so it has no effect until the Failure test step enables it
         on-demand against the whole existing population in one synchronisation.
-      - A generated export mapping on the LDAP target's "postalCode" attribute (Random token,
+      - A generated export mapping on the LDAP target's "preferredLanguage" attribute (Random token,
         Digits format, length 6): export-mode generation, keyed on the Connected System Object, the
-        Metaverse untouched. postalCode is part of RFC 4519's organizationalPerson (which both
+        Metaverse untouched. preferredLanguage is part of RFC 4519's organizationalPerson (which both
         inetOrgPerson and Active Directory's user class descend from) and is not used by any other
         Scenario 1 mapping, so it is genuinely spare on both directory types this scenario supports.
       - "Locker Code" (new Metaverse attribute, import mode): an ordinary (non-generated) export
@@ -279,7 +279,7 @@ try {
     }
 
     # Step 5: Select a spare LDAP attribute and create a generated EXPORT mapping on it.
-    Write-TestStep "Step 5" "Creating the generated export mapping (postalCode)"
+    Write-TestStep "Step 5" "Creating the generated export mapping (preferredLanguage)"
 
     $ldapSystemName = $DirectoryConfig.ConnectedSystemName
     $ldapSystem = @(Get-JIMConnectedSystem) | Where-Object { $_.name -eq $ldapSystemName } | Select-Object -First 1
@@ -294,17 +294,17 @@ try {
         throw "Setup failed: LDAP object type '$ldapUserObjectClass' not found on '$ldapSystemName'."
     }
 
-    $postalCodeAttr = $ldapUserType.attributes | Where-Object { $_.name -eq 'postalCode' }
-    if (-not $postalCodeAttr) {
-        throw "Setup failed: LDAP attribute 'postalCode' not found in the schema for '$ldapSystemName' " +
-              "(object type '$ldapUserObjectClass'). postalCode is part of RFC 4519's organizationalPerson " +
+    $preferredLanguageAttr = $ldapUserType.attributes | Where-Object { $_.name -eq 'preferredLanguage' }
+    if (-not $preferredLanguageAttr) {
+        throw "Setup failed: LDAP attribute 'preferredLanguage' not found in the schema for '$ldapSystemName' " +
+              "(object type '$ldapUserObjectClass'). preferredLanguage is part of RFC 4519's organizationalPerson " +
               "and is expected on both OpenLDAP and Active Directory; if the schema genuinely lacks it, " +
               "pick a different spare attribute here and in Invoke-Scenario23-UniqueValueGeneration.ps1's " +
               "Export mode assertions."
     }
-    if (-not $postalCodeAttr.selected) {
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeId $postalCodeAttr.id -Selected $true | Out-Null
-        Write-Host "  ✓ Selected LDAP attribute 'postalCode'" -ForegroundColor Green
+    if (-not $preferredLanguageAttr.selected) {
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeId $preferredLanguageAttr.id -Selected $true | Out-Null
+        Write-Host "  ✓ Selected LDAP attribute 'preferredLanguage'" -ForegroundColor Green
     }
 
     $exportRuleName = "$ldapSystemName Export Users"
@@ -314,17 +314,17 @@ try {
     }
 
     $existingExportMappings = Get-JIMSyncRuleMapping -SyncRuleId $exportRule.id
-    $postalCodeMapping = $existingExportMappings | Where-Object { $_.targetConnectedSystemAttributeId -eq $postalCodeAttr.id }
-    if (-not $postalCodeMapping) {
+    $preferredLanguageMapping = $existingExportMappings | Where-Object { $_.targetConnectedSystemAttributeId -eq $preferredLanguageAttr.id }
+    if (-not $preferredLanguageMapping) {
         # Export-mode generation: the assignment is keyed on the Connected System Object, the
         # Metaverse never touched. Random Digits: no base expression needed.
-        $postalCodeMapping = New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
-            -TargetConnectedSystemAttributeId $postalCodeAttr.id `
+        $preferredLanguageMapping = New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
+            -TargetConnectedSystemAttributeId $preferredLanguageAttr.id `
             -Generate -TokenKind Random -RandomFormat Digits -RandomLength 6
-        Write-Host "  ✓ Generated export mapping created on postalCode (Random, Digits, 6 characters, ID: $($postalCodeMapping.id))" -ForegroundColor Green
+        Write-Host "  ✓ Generated export mapping created on preferredLanguage (Random, Digits, 6 characters, ID: $($preferredLanguageMapping.id))" -ForegroundColor Green
     }
     else {
-        Write-Host "  postalCode export mapping already exists (ID: $($postalCodeMapping.id))" -ForegroundColor Gray
+        Write-Host "  preferredLanguage export mapping already exists (ID: $($preferredLanguageMapping.id))" -ForegroundColor Gray
     }
 
     # Step 6: Select physicalDeliveryOfficeName and create the ORDINARY (non-generated) export
@@ -369,7 +369,7 @@ Write-Host "Staff Number:        Generated (Sequence, EMP-NNNNNN from 1000)" -Fo
 Write-Host "Badge Code:             Generated (Random, Hex, 8 characters)" -ForegroundColor Cyan
 Write-Host "Call Sign:              Generated, disabled (OnlyIfTaken \"CALLSIGN\", AttemptLimit 1)" -ForegroundColor Cyan
 Write-Host "Locker Code:            Generated, disabled (OnlyIfTaken \"LOCKER\"); ordinary export -> physicalDeliveryOfficeName" -ForegroundColor Cyan
-Write-Host "postalCode (export):    Generated (Random, Digits, 6 characters)" -ForegroundColor Cyan
+Write-Host "preferredLanguage (export):    Generated (Random, Digits, 6 characters)" -ForegroundColor Cyan
 Write-Host ""
 
 # Return Scenario 1's configuration plus the ids this scenario's assertions need.
@@ -383,7 +383,7 @@ $config.EmployeeNumberMappingId = $employeeNumberMapping.id
 $config.BadgeCodeMappingId = $badgeCodeMapping.id
 $config.CallSignMappingId = $callSignMapping.id
 $config.LockerCodeMappingId = $lockerCodeMapping.id
-$config.PostalCodeMappingId = $postalCodeMapping.id
-$config.PostalCodeAttributeId = $postalCodeAttr.id
+$config.PostalCodeMappingId = $preferredLanguageMapping.id
+$config.PostalCodeAttributeId = $preferredLanguageAttr.id
 $config.OfficeAttributeId = $officeAttr.id
 return $config

@@ -135,7 +135,7 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | `Populate-OpenLDAP-Scenario22.ps1` | test/integration/ | Seed the Yellowstone suffix with a default `ppolicy` policy, the non-root provisioner JIM binds as, and a probe user (Scenario 22) |
 | `Setup-Scenario22.ps1` | test/integration/ | Configure JIM for Scenario 22 (composes Setup-Scenario1 bound as the provisioner, then enables a Discovered-policy Initial Password) |
 | `Invoke-Scenario22-OpenLdapPasswordPolicy.ps1` | test/integration/scenarios/ | Run Scenario 22 tests (enforcement control, discovered policy values, provisioning with nothing parked, override signal) |
-| `Setup-Scenario23.ps1` | test/integration/ | Configure JIM for Scenario 23 (composes Setup-Scenario1 with `-GenerateAccountName`, adds the Staff Number/Badge Code/Call Sign/Locker Code generated mappings and the postalCode generated export mapping) |
+| `Setup-Scenario23.ps1` | test/integration/ | Configure JIM for Scenario 23 (composes Setup-Scenario1 with `-GenerateAccountName`, adds the Staff Number/Badge Code/Call Sign/Locker Code generated mappings and the preferredLanguage generated export mapping) |
 | `Invoke-Scenario23-UniqueValueGeneration.ps1` | test/integration/scenarios/ | Run Scenario 23 tests (joiners, gates, stability, Sequence, Random, export mode, adopt before generate, Start again, failure, Samba-AD-only collision, surface parity, feature flag) |
 | `Get-HostFingerprint.ps1` | test/integration/ | Capture hardware profile for cross-host performance comparison |
 | `Stream-WorkerLogs.ps1` | test/integration/ | Stream diagnostic logs to Metrics API during test runs (background job) |

@@ -307,7 +307,7 @@ function New-OutOfBandLdapAccount {
         [Parameter(Mandatory=$true)][string]$FirstName,
         [Parameter(Mandatory=$true)][string]$LastName,
         [string]$EmployeeIdValue,
-        [string]$PostalCode,
+        [string]$PreferredLanguage,
         [string]$OfficeName,
         [switch]$OutsideImportScope
     )
@@ -322,7 +322,7 @@ function New-OutOfBandLdapAccount {
             "mail: $AccountName@panoply.local", "userPassword: Password123!"
         )
         if ($EmployeeIdValue) { $lines += "employeeNumber: $EmployeeIdValue" }
-        if ($PostalCode) { $lines += "postalCode: $PostalCode" }
+        if ($PreferredLanguage) { $lines += "preferredLanguage: $PreferredLanguage" }
         if ($OfficeName) { $lines += "physicalDeliveryOfficeName: $OfficeName" }
         $ldif = ($lines -join "`n") + "`n"
 
@@ -343,7 +343,7 @@ function New-OutOfBandLdapAccount {
             "displayName: $displayName", "userPrincipalName: $AccountName@panoply.local"
         )
         if ($EmployeeIdValue) { $lines += "employeeID: $EmployeeIdValue" }
-        if ($PostalCode) { $lines += "postalCode: $PostalCode" }
+        if ($PreferredLanguage) { $lines += "preferredLanguage: $PreferredLanguage" }
         if ($OfficeName) { $lines += "physicalDeliveryOfficeName: $OfficeName" }
         $ldif = ($lines -join "`n") + "`n"
 
@@ -610,27 +610,27 @@ try {
     # Metaverse is never touched (there is no such Metaverse attribute at all).
     # ─────────────────────────────────────────────────────────────────────────────────────
     if ($lastStepIndex -ge $stepOrder.IndexOf("ExportMode")) {
-        Write-TestSection "Test 6: Export mode (postalCode, Random Digits)"
+        Write-TestSection "Test 6: Export mode (preferredLanguage, Random Digits)"
 
         $population = Get-Population
         $sample = @($population | Select-Object -First ([Math]::Min(3, $population.Count)))
-        $badPostalCode = @()
+        $badPreferredLanguage = @()
         foreach ($person in $sample) {
             $ldapUser = Get-LDAPUser -UserIdentifier $person.attributes.'Account Name' -DirectoryConfig $DirectoryConfig
-            $postalCode = if ($ldapUser) { $ldapUser['postalCode'] } else { $null }
-            if ($postalCode -notmatch '^\d{6}$') {
-                $badPostalCode += "$($person.displayName): postalCode='$postalCode'"
+            $preferredLanguage = if ($ldapUser) { $ldapUser['preferredLanguage'] } else { $null }
+            if ($preferredLanguage -notmatch '^\d{6}$') {
+                $badPreferredLanguage += "$($person.displayName): preferredLanguage='$preferredLanguage'"
             }
         }
-        Add-TestResult -Name "Every sampled directory entry carries a 6-digit generated postalCode" -Passed ($badPostalCode.Count -eq 0) `
-            -Detail ($badPostalCode -join '; ')
+        Add-TestResult -Name "Every sampled directory entry carries a 6-digit generated preferredLanguage" -Passed ($badPreferredLanguage.Count -eq 0) `
+            -Detail ($badPreferredLanguage -join '; ')
 
         # Export-mode assignments are keyed on the Connected System Object, never the Metaverse
-        # Object; there is no Metaverse attribute named postalCode at all for a value to appear on.
+        # Object; there is no Metaverse attribute named preferredLanguage at all for a value to appear on.
         $mvAttributes = Get-JIMMetaverseAttribute
-        $postalCodeMvAttr = $mvAttributes | Where-Object { $_.name -eq 'postalCode' -or $_.name -eq 'Postal Code' }
-        Add-TestResult -Name "The Metaverse has no attribute for the export-mode generated value (it never touches the Metaverse)" -Passed ($null -eq $postalCodeMvAttr) `
-            -Detail "Found an unexpected Metaverse attribute: $($postalCodeMvAttr.name)"
+        $preferredLanguageMvAttr = $mvAttributes | Where-Object { $_.name -eq 'preferredLanguage' -or $_.name -eq 'Postal Code' }
+        Add-TestResult -Name "The Metaverse has no attribute for the export-mode generated value (it never touches the Metaverse)" -Passed ($null -eq $preferredLanguageMvAttr) `
+            -Detail "Found an unexpected Metaverse attribute: $($preferredLanguageMvAttr.name)"
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
