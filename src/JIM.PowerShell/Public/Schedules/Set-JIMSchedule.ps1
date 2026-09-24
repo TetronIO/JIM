@@ -52,8 +52,18 @@ function Set-JIMSchedule {
     .PARAMETER CronExpression
         For Custom pattern: The cron expression.
 
+    .PARAMETER OnStepFailure
+        What the Schedule does when a step fails, for every step that follows the Schedule:
+        - Stop: the remaining steps do not run, and the run ends Failed
+        - Continue: the remaining steps run, and a run that carried on past a failure ends CompleteWithError
+        A step with a setting of its own (see Set-JIMScheduleStep) overrides it. Omit to leave the setting unchanged.
+        A built-in Schedule's setting cannot be changed.
+
     .PARAMETER Steps
-        Array of step objects to replace the existing steps.
+        Array of step objects to replace the existing steps. Give each step its failure setting as OnFailure
+        (FollowSchedule, Stop or Continue). A step object that carries OnFailure ignores its ContinueOnFailure, so to
+        change one step's setting, use Set-JIMScheduleStep, or change the step's OnFailure rather than its
+        ContinueOnFailure.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Schedule's change history.
@@ -75,6 +85,11 @@ function Set-JIMSchedule {
         Re-times the schedule and records a reason against its change history.
 
     .EXAMPLE
+        Set-JIMSchedule -Id "12345678-..." -OnStepFailure Continue
+
+        Lets the Schedule carry on past a failed step, for every step that follows the Schedule.
+
+    .EXAMPLE
         Get-JIMSchedule -Id "12345678-..." | Set-JIMSchedule -Description "New description"
 
         Updates a schedule's description using pipeline input.
@@ -83,6 +98,7 @@ function Set-JIMSchedule {
         Get-JIMSchedule
         New-JIMSchedule
         Remove-JIMSchedule
+        Set-JIMScheduleStep
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType([PSCustomObject])]
@@ -130,6 +146,10 @@ function Set-JIMSchedule {
         [string]$CronExpression,
 
         [Parameter()]
+        [ValidateSet('Stop', 'Continue')]
+        [string]$OnStepFailure,
+
+        [Parameter()]
         [array]$Steps,
 
         [Parameter()]
@@ -174,12 +194,13 @@ function Set-JIMSchedule {
                 cronExpression = $existing.cronExpression
             }
 
-            # Include existing steps unless new steps provided
+            # Include existing steps unless new steps provided. Existing steps go back with their ids and failure
+            # settings (ConvertTo-JIMScheduleStepRequest), so changing the Schedule changes none of its steps.
             if ($PSBoundParameters.ContainsKey('Steps')) {
                 $body.steps = $Steps
             }
             elseif ($existing.steps) {
-                $body.steps = $existing.steps
+                $body.steps = @($existing.steps | ConvertTo-JIMScheduleStepRequest)
             }
             else {
                 $body.steps = @()
@@ -222,6 +243,11 @@ function Set-JIMSchedule {
 
             if ($PSBoundParameters.ContainsKey('CronExpression')) {
                 $body.cronExpression = $CronExpression
+            }
+
+            # Only sent when supplied: an absent onStepFailure leaves the stored setting unchanged.
+            if ($OnStepFailure) {
+                $body.onStepFailure = $OnStepFailure
             }
 
             if ($PSBoundParameters.ContainsKey('ChangeReason')) {
