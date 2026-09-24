@@ -453,11 +453,11 @@
             ToStringFunc="@SourceTypeLabel">
             <MudSelectItem Value="@("Attribute")">
                 <div>Attribute</div>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Copies an attribute's value</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Copies a value from a source attribute</MudText>
             </MudSelectItem>
             <MudSelectItem Value="@("Expression")">
                 <div>Expression</div>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Builds the value from attributes with an expression</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Computes a value using an expression</MudText>
             </MudSelectItem>
             @* Unique Value Generation (#242) is gated behind its feature flag while in development: offering the
                option to create new generated configuration only when it is on, while an already-generated mapping
@@ -467,7 +467,7 @@
             {
                 <MudSelectItem Value="@("Generated")">
                     <div>Generated Value</div>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">JIM builds a unique value and keeps it</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Generates a unique, persistent value</MudText>
                 </MudSelectItem>
             }
         </MudSelect>

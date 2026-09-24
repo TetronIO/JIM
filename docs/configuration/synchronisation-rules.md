@@ -465,7 +465,7 @@ Initial Export Only is your choice about an attribute the Connected System would
 !!! note "In development"
     Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
 
-Some values have no source to copy: an account name that must not clash with anyone else's, an employee number, a badge number, a correlation identifier. For these, choose **Generated Value** as the mapping's Source Type. JIM builds the value, checks that no one else holds it, assigns it once, and keeps it.
+Some values have no source to copy: an account name that must not clash with anyone else's, an employee number, a badge number, a correlation identifier. For these, choose **Generated Value** as the mapping's Source Type. JIM generates the value, checks that no one else holds it, and assigns it once; the value then persists and is never regenerated.
 
 A generated value is a **base expression** plus a **uniqueness token**:
 
