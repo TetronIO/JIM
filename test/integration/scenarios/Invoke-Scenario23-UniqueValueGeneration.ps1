@@ -275,7 +275,8 @@ function Assert-AccountNameInvariants {
     foreach ($group in $groups) {
         $base = $group.Name
         $n = $group.Count
-        $expected = @($base) + (1..($n - 1) | ForEach-Object { "$base$_" })
+        $expected = @($base)
+        if ($n -gt 1) { $expected += 1..($n - 1) | ForEach-Object { "$base$_" } }
         $actual = @($group.Group | ForEach-Object { if ($_.attributes.'Account Name') { $_.attributes.'Account Name'.ToLower() } })
         $expectedSorted = ($expected | Sort-Object) -join ','
         $actualSorted = ($actual | Sort-Object) -join ','
