@@ -1,6 +1,6 @@
 # Schedule Failure Handling
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-09-23
 - **Author:** JayVDZ (PRD drafted via Claude Code)
 - **Issue:** [#1787](https://github.com/TetronIO/JIM/issues/1787)
