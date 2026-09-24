@@ -534,7 +534,7 @@
                        approved mockup's field order, ahead of the base expression the rest of the form builds on. *@
                     if (SyncRule.Direction == SyncRuleDirection.Import)
                     {
-                        <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
+                        <MudSelect T="MetaverseAttribute" Value="_attributeFlowMapping.TargetMetaverseAttribute" ValueChanged="OnGeneratedMetaverseTargetChanged"
                             Label="Assign the value to" Placeholder="Please select the target Metaverse attribute" Required="true"
                             Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                             @foreach (var metaverseAttribute in AvailableTargetMetaverseAttributes())
@@ -555,7 +555,7 @@
                     }
                     else if (SyncRule.Direction == SyncRuleDirection.Export)
                     {
-                        <MudSelect T="ConnectedSystemObjectTypeAttribute" @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute"
+                        <MudSelect T="ConnectedSystemObjectTypeAttribute" Value="_attributeFlowMapping.TargetConnectedSystemAttribute" ValueChanged="OnGeneratedConnectedSystemTargetChanged"
                             Label="Assign the value to" Placeholder="Please select the target Connected System attribute" Required="true"
                             Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                             @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
@@ -1024,6 +1024,47 @@
             _attributeFlowMappingSource.MissingInputBehaviour = MissingInputBehaviour.EvaluateAnyway;
             _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
         }
+    }
+
+    /// <summary>
+    /// The generated mapping's Metaverse target picker (import direction). Explicit rather than
+    /// <c>@bind-Value</c> so a target that rules out the currently-chosen uniqueness token (a Number target
+    /// while "Only if taken" is selected) can correct it, rather than leaving the dialog open on a radio that
+    /// is now disabled and a Save button the administrator cannot see a way to enable.
+    /// </summary>
+    private void OnGeneratedMetaverseTargetChanged(MetaverseAttribute? target)
+    {
+        if (_attributeFlowMapping == null)
+            return;
+
+        _attributeFlowMapping.TargetMetaverseAttribute = target;
+        CorrectTokenKindForTargetType(target?.Type);
+    }
+
+    /// <summary>The Connected System sibling of <see cref="OnGeneratedMetaverseTargetChanged"/> (export direction).</summary>
+    private void OnGeneratedConnectedSystemTargetChanged(ConnectedSystemObjectTypeAttribute? target)
+    {
+        if (_attributeFlowMapping == null)
+            return;
+
+        _attributeFlowMapping.TargetConnectedSystemAttribute = target;
+        CorrectTokenKindForTargetType(target?.Type);
+    }
+
+    /// <summary>
+    /// "Only if taken" needs a base expression and is never valid for a Number target
+    /// (<see cref="SyncRuleMappingGenerationValidator"/> rule 4); switching to a Number target while it is
+    /// selected would otherwise leave the dialog showing a disabled radio still selected, and Save blocked with
+    /// no visible way to fix it. Moving to Sequence matches the approved mockup's Number-target frame, which
+    /// shows a sequence number pre-selected rather than an unusable "only if taken".
+    /// </summary>
+    private void CorrectTokenKindForTargetType(AttributeDataType? targetType)
+    {
+        if (_attributeFlowMapping?.Generation is not { TokenKind: GeneratedValueTokenKind.OnlyIfTaken } generation)
+            return;
+
+        if (GeneratedValueFormHelpers.IsNumberTarget(targetType))
+            generation.TokenKind = GeneratedValueTokenKind.Sequence;
     }
 
     /// <summary>

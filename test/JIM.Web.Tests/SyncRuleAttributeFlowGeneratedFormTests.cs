@@ -119,6 +119,17 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
 #pragma warning disable MUD0012
 
     [Test]
+    public async Task SelectingNumberTargetWhileOnlyIfTakenSelected_SwitchesToSequence()
+    {
+        // Only-if-taken is the model default and is picked before any target is chosen; switching to a Number
+        // target must move off it automatically (SyncRuleMappingGenerationValidator rule 4 rejects it), matching
+        // the approved mockup's Number-target frame, which shows a sequence number pre-selected.
+        var (_, _, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Number);
+
+        Assert.That(mapping().Generation!.TokenKind, Is.EqualTo(GeneratedValueTokenKind.Sequence));
+    }
+
+    [Test]
     public async Task NumberTarget_OnlyIfTakenRadioIsDisabled()
     {
         var (provider, _, _) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Number);
