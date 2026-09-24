@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `Get-JIMScheduleExecution -Status` and the REST API's Schedule Execution list now return only executions with the requested status, instead of every execution.
 - 🐛 A Schedule with a step that cannot be queued, for example because its Connected System is being deleted, no longer runs its earlier steps and then reports Complete; it runs nothing, fails naming the step, and each step shows why it did not run. (#1768)
 - 🐛 A Schedule Execution cancelled while a step is running now stays cancelled, instead of being marked Complete or Failed when that step finishes. (#1768)
 - 🐛 An object that leaves scope but keeps its join is now recorded as **Left scope, join kept**, naming its Synchronisation Rule, rather than as an Attribute Flow that never happened and inflated the Activity's Attribute Flows count. (#1649)

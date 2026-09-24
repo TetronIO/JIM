@@ -88,12 +88,24 @@ public interface ISchedulingRepository
 
     Task<List<ScheduleExecution>> GetActiveScheduleExecutionsAsync();
 
+    /// <summary>
+    /// Gets a page of Schedule Executions, optionally narrowed to one Schedule and to one status. The total count
+    /// is taken over the filtered set, so paging works over the matches rather than over every execution.
+    /// </summary>
+    /// <param name="scheduleId">Optional Schedule to narrow to; null lists every Schedule's executions.</param>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="sortBy">Optional sort key: "status", "startedat"/"started", "completedat"/"completed", or
+    /// the queued time (the default).</param>
+    /// <param name="sortDescending">Whether the sort is descending (default: true, newest first).</param>
+    /// <param name="status">Optional status to narrow to; null lists executions of every status.</param>
     Task<PagedResultSet<ScheduleExecution>> GetScheduleExecutionsAsync(
         Guid? scheduleId,
         int page,
         int pageSize,
         string? sortBy = null,
-        bool sortDescending = true);
+        bool sortDescending = true,
+        ScheduleExecutionStatus? status = null);
 
     /// <summary>
     /// Gets a window of Schedule Executions addressed by absolute <paramref name="offset"/> and
@@ -112,6 +124,7 @@ public interface ISchedulingRepository
     /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
     /// holds the total; the returned total is then null rather than zero
     /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    /// <param name="status">Optional status to narrow to; null lists executions of every status.</param>
     Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
         Guid? scheduleId,
         int offset,
@@ -119,7 +132,8 @@ public interface ISchedulingRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true);
+        bool includeTotalCount = true,
+        ScheduleExecutionStatus? status = null);
 
     Task CreateScheduleExecutionAsync(ScheduleExecution execution);
 
