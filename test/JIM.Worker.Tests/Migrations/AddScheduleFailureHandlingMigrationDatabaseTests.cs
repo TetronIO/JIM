@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using JIM.TestSupport;
 using Npgsql;
 
 namespace JIM.Worker.Tests.Migrations;
@@ -142,13 +143,6 @@ public class AddScheduleFailureHandlingMigrationDatabaseTests
         return new JimDbContext(options);
     }
 
-    private async Task ExecuteAdminSqlAsync(string sql)
-    {
-        // CREATE/DROP DATABASE cannot be parameterised or run in a transaction; the name is a constant above, never
-        // input.
-        await using var connection = new NpgsqlConnection(_adminConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
-    }
+    // CREATE/DROP DATABASE cannot be parameterised or run in a transaction; the name is a constant above, never input.
+    private Task ExecuteAdminSqlAsync(string sql) => PostgresTestDatabase.ExecuteDatabaseCreateDropAsync(_adminConnectionString, sql);
 }
