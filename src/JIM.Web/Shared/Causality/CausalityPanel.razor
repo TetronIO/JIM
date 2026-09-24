@@ -3,6 +3,7 @@
 @using JIM.Models.Sync
 @using JIM.Models.Transactional
 @using JIM.Web.Causality
+@using JIM.Web.Models
 @inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -58,14 +59,9 @@
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {
-                    <div class="seg" role="group" aria-label="Causality view">
-                        @foreach (var view in AvailableViews)
-                        {
-                            <button type="button" class="@(view == _view ? "on" : null)"
-                                    aria-pressed="@(view == _view ? "true" : "false")"
-                                    @onclick="() => SelectViewAsync(view)">@GetViewLabel(view)</button>
-                        }
-                    </div>
+                    <SegmentedControl TValue="CausalityView" AriaLabel="Causality view" Value="_view"
+                                      Options="@(AvailableViews.Select(v => new SegmentedOption<CausalityView>(v, GetViewLabel(v))).ToList())"
+                                      ValueChanged="SelectViewAsync" />
                 }
             </Actions>
         </CausalitySummaryBand>

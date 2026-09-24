@@ -130,38 +130,6 @@
     margin-left: auto;
 }
 
-.causality-panel .seg {
-    display: inline-flex;
-    background: var(--cz-inner);
-    border-radius: 9px;
-    padding: 3px;
-    gap: 2px;
-}
-
-.causality-panel .seg button {
-    border: none;
-    background: transparent;
-    color: var(--cz-text-dim);
-    cursor: pointer;
-    padding: 6px 13px;
-    font-size: 0.875rem;
-    font-weight: 550;
-    font-family: inherit;
-    border-radius: 7px;
-    transition: background 0.15s, color 0.15s;
-}
-
-.causality-panel .seg button:hover {
-    color: var(--cz-text);
-}
-
-.causality-panel .seg button.on {
-    background: var(--cz-surface);
-    color: var(--cz-text);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-}
-
-.causality-panel .seg button:focus-visible,
 .causality-panel .tl-expander:focus-visible,
 .causality-panel .filter-chips button:focus-visible,
 .causality-panel .evt-card:focus-visible,

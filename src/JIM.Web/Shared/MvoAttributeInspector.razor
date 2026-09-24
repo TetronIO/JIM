@@ -9,167 +9,231 @@
 @* rendered beside the Inspect table rather than over it (see MvoDetailsTable, which owns the flex layout).    *@
 @* Presentational: takes the already-loaded MetaverseAttributeProvenance and renders it. *@
 
-<MudPaper Outlined="true" Class="pa-4 jim-attribute-inspector">
-    <div class="d-flex justify-space-between align-start">
+<section class="jim-attribute-inspector" aria-label="@Provenance.AttributeName">
+    @* ─── Header ─── *@
+    <header class="jim-inspector-header">
         <div>
             <MudText Typo="Typo.h6">@Provenance.AttributeName</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            <span class="jim-inspector-subtle">
                 @Provenance.AttributeType · @(Provenance.AttributePlurality == AttributePlurality.MultiValued ? "Multi" : "Single")
-            </MudText>
+            </span>
         </div>
         <MudTooltip Text="Close" Arrow="true" Placement="Placement.Top">
-            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => OnClose.InvokeAsync())" />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Close" OnClick="@(() => OnClose.InvokeAsync())" />
         </MudTooltip>
-    </div>
+    </header>
 
-    @* ─── Current value and origin ─── *@
-    <div class="mt-4">
-        @if (Provenance.CurrentValues.Count == 0)
-        {
-            <EmptyValue />
-        }
-        else
-        {
-            @foreach (var value in Provenance.CurrentValues)
+    @* ─── Current value and where it came from ─── *@
+    <div class="jim-inspector-section">
+        <span class="jim-inspector-label">Current value</span>
+        <div class="jim-inspector-value">
+            @if (Provenance.CurrentValues.Count == 0)
             {
-                <div class="jim-text-code mb-1">
-                    @if (string.IsNullOrEmpty(value.DisplayValue))
-                    {
-                        <EmptyValue />
-                    }
-                    else if (value.ReferenceMetaverseObjectId.HasValue)
-                    {
-                        <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@value.ReferenceTypeName" Name="@value.DisplayValue"
-                                    Href="@Utilities.GetMetaverseObjectHref(value.ReferenceMetaverseObjectId.Value, value.ReferenceTypeName ?? string.Empty)" Class="ma-0" />
-                    }
-                    else
-                    {
-                        @value.DisplayValue
-                    }
-                </div>
-            }
-            @if (Provenance.CurrentValueTotalCount > Provenance.CurrentValues.Count)
-            {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    +@((Provenance.CurrentValueTotalCount - Provenance.CurrentValues.Count).ToString("N0")) more
-                </MudText>
-            }
-        }
-
-        <div class="jim-inspector-sentence mt-2">
-            @{ var primaryOrigin = Provenance.CurrentValues.FirstOrDefault()?.Origin ?? ValueOrigin.NotRecorded; }
-            @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded)
-            {
-                <span class="mud-text-disabled">Source not recorded</span>
+                <EmptyValue />
             }
             else
             {
-                <span>Set by</span>
-                <ValueOriginChip Origin="@primaryOrigin" />
-                @if (ContributingConnectedSystemObject != null)
+                @foreach (var value in Provenance.CurrentValues)
                 {
-                    <span>from</span>
-                    <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
-                                TypeName="@ContributingConnectedSystemObject.TypeName"
-                                Name="@ObjectDescription.ChipName(ContributingConnectedSystemObject.DisplayName, ContributingConnectedSystemObject.ExternalId)"
-                                Href="@CsoHref" Class="ma-0" />
+                    <div>
+                        @if (string.IsNullOrEmpty(value.DisplayValue))
+                        {
+                            <EmptyValue />
+                        }
+                        else if (value.ReferenceMetaverseObjectId.HasValue)
+                        {
+                            var referenceId = value.ReferenceMetaverseObjectId.Value;
+                            <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@value.ReferenceTypeName" Name="@value.DisplayValue"
+                                        Href="@Utilities.GetMetaverseObjectHref(referenceId, value.ReferenceTypeName ?? string.Empty)" Class="ma-0" />
+                        }
+                        else
+                        {
+                            @value.DisplayValue
+                        }
+                    </div>
                 }
-                @if (Provenance.LastSet != null)
+                @if (Provenance.CurrentValueTotalCount > Provenance.CurrentValues.Count)
                 {
-                    <MudTooltip Text="@Provenance.LastSet.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        <span class="mud-text-secondary">@Provenance.LastSet.ChangeTime.ToLocalTime().ToRelativeTime()</span>
-                    </MudTooltip>
-                    @if (ActivityHref != null)
-                    {
-                        <span>by</span>
-                        <MudLink Href="@ActivityHref">@(Provenance.LastSet.ActivityDescription ?? "the Activity")</MudLink>
-                    }
+                    <span class="jim-inspector-subtle">
+                        +@((Provenance.CurrentValueTotalCount - Provenance.CurrentValues.Count).ToString("N0")) more
+                    </span>
                 }
             }
         </div>
+
+        @{ var primaryOrigin = Provenance.CurrentValues.FirstOrDefault()?.Origin ?? ValueOrigin.NotRecorded; }
+        @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded && ContributingConnectedSystemObject == null && Provenance.LastSet == null)
+        {
+            <span class="jim-inspector-subtle">Source not recorded</span>
+        }
+        else
+        {
+            <dl class="jim-inspector-facts">
+                @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded)
+                {
+                    <dt>Source</dt>
+                    <dd><span class="jim-inspector-subtle">Source not recorded</span></dd>
+                }
+                @if (primaryOrigin.Kind == ValueOriginKind.GeneratedByJim)
+                {
+                    <dt>Generated by</dt>
+                    <dd>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="ma-0">JIM</MudChip>
+                        @if (primaryOrigin.Corrected)
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">Corrected</MudChip>
+                        }
+                    </dd>
+                }
+                @if (primaryOrigin.Kind == ValueOriginKind.SetByPerson)
+                {
+                    <dt>Set by</dt>
+                    <dd>@primaryOrigin.PersonName</dd>
+                }
+                @if (primaryOrigin.ConnectedSystemId.HasValue)
+                {
+                    var connectedSystemId = primaryOrigin.ConnectedSystemId.Value;
+                    <dt>Connected System</dt>
+                    <dd>
+                        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@primaryOrigin.ConnectedSystemName"
+                                    Href="@($"/admin/connected-systems/{connectedSystemId}")" Class="ma-0" />
+                    </dd>
+                    <dt>Synchronisation Rule</dt>
+                    <dd>
+                        @if (primaryOrigin.SyncRuleId.HasValue)
+                        {
+                            var syncRuleId = primaryOrigin.SyncRuleId.Value;
+                            <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@primaryOrigin.SyncRuleName"
+                                        Href="@($"/admin/sync-rules/{syncRuleId}")" Class="ma-0" />
+                        }
+                        else
+                        {
+                            <span class="jim-inspector-subtle">Deleted since it contributed this value</span>
+                        }
+                    </dd>
+                }
+                @if (primaryOrigin.AssertsNoValue)
+                {
+                    <dt>Asserts</dt>
+                    <dd>No value (Null is a value)</dd>
+                }
+                @if (ContributingConnectedSystemObject != null)
+                {
+                    <dt>From</dt>
+                    <dd>
+                        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
+                                    TypeName="@ContributingConnectedSystemObject.TypeName"
+                                    Name="@ObjectDescription.ChipName(ContributingConnectedSystemObject.DisplayName, ContributingConnectedSystemObject.ExternalId)"
+                                    Href="@CsoHref" Class="ma-0" />
+                    </dd>
+                }
+                @if (Provenance.LastSet != null)
+                {
+                    <dt>Last set</dt>
+                    <dd>
+                        <MudTooltip Text="@Provenance.LastSet.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <span>@Provenance.LastSet.ChangeTime.ToLocalTime().ToRelativeTime()</span>
+                        </MudTooltip>
+                        @if (ActivityHref != null)
+                        {
+                            <span>by</span>
+                            <MudLink Href="@ActivityHref">@(Provenance.LastSet.ActivityDescription ?? "the Activity")</MudLink>
+                        }
+                    </dd>
+                }
+            </dl>
+        }
     </div>
 
     @* ─── Every source, in priority order ─── *@
     @if (Provenance.Sources.Count > 0)
     {
-        <MudDivider Class="my-4" />
-        <MudText Typo="Typo.subtitle1">Every source for this attribute</MudText>
-        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">in priority order</MudText>
-
-        @foreach (var source in Provenance.Sources)
-        {
-            <div class="jim-inspector-source-row d-flex align-center flex-wrap py-1">
-                <span class="mud-text-secondary jim-inspector-source-rank">#@source.Rank</span>
-                <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@source.ConnectedSystemName"
-                            Href="@($"/admin/connected-systems/{source.ConnectedSystemId}")" Class="ma-0" />
-                <span class="mud-text-secondary">·</span>
-                <MudLink Href="@($"/admin/sync-rules/{source.SyncRuleId}")">@source.SyncRuleName</MudLink>
-                @if (source.CandidateValues.Count > 0)
+        <div class="jim-inspector-section">
+            <span class="jim-inspector-label">Every source <em>in priority order</em></span>
+            <ol class="jim-inspector-sources">
+                @foreach (var source in Provenance.Sources)
                 {
-                    <span class="jim-text-code jim-inspector-candidate">@string.Join(", ", source.CandidateValues)</span>
+                    <li @key="source.MappingId" class="jim-inspector-source @(source.State == AttributeSourceState.InUse ? "jim-inspector-source-in-use" : null)">
+                        <span class="jim-inspector-rank" aria-label="@($"Priority {source.Rank}")">@source.Rank</span>
+                        <span class="jim-inspector-source-who">
+                            <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@source.ConnectedSystemName"
+                                        Href="@($"/admin/connected-systems/{source.ConnectedSystemId}")" Class="ma-0" />
+                            <MudLink Href="@($"/admin/sync-rules/{source.SyncRuleId}")" Class="jim-inspector-rule" title="@source.SyncRuleName">@source.SyncRuleName</MudLink>
+                        </span>
+                        <MudTooltip Text="@(source.Note ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top" Class="jim-inspector-state">
+                            <MudChip T="string" Variant="Variant.Text" Color="@StateColour(source.State)" Class="ma-0">@StateLabel(source.State)</MudChip>
+                        </MudTooltip>
+                        <span class="jim-inspector-candidate">
+                            @if (source.CandidateValues.Count > 0)
+                            {
+                                @string.Join(", ", source.CandidateValues)
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </span>
+                    </li>
                 }
-                <MudSpacer />
-                <MudTooltip Text="@(source.Note ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Variant="Variant.Text" Color="@StateColour(source.State)">@StateLabel(source.State)</MudChip>
-                </MudTooltip>
-            </div>
-        }
-
-        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-            Priority is set on the @Provenance.AttributeName attribute.
-            <MudLink Href="@($"/admin/schema/object-types/{Provenance.MetaverseObjectTypeId}")">Change priority</MudLink>
-        </MudText>
+            </ol>
+            <span class="jim-inspector-subtle">
+                Priority is set on the @Provenance.AttributeName attribute.
+                <MudLink Href="@($"/admin/schema/object-types/{Provenance.MetaverseObjectTypeId}")">Change priority</MudLink>
+            </span>
+        </div>
     }
 
     @* ─── History ─── *@
-    <MudDivider Class="my-4" />
-    <MudText Typo="Typo.subtitle1">History of this attribute</MudText>
-
-    @if (Provenance.History.Count == 0)
-    {
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">No changes recorded for this attribute.</MudText>
-    }
-    else
-    {
-        <div class="jim-inspector-history mt-2">
-            @foreach (var entry in Provenance.History)
-            {
-                <div class="jim-inspector-history-entry">
-                    <MudChip T="string" Variant="Variant.Text" Color="@HistoryKindColour(entry.Kind)" Class="ma-0">@entry.Kind</MudChip>
-                    <span class="jim-text-code">
-                        @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { @entry.Value }
+    <div class="jim-inspector-section">
+        <div class="jim-inspector-label-row">
+            <span class="jim-inspector-label">History</span>
+            <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
+        </div>
+        @if (Provenance.History.Count == 0)
+        {
+            <span class="jim-inspector-subtle">No changes recorded for this attribute.</span>
+        }
+        else
+        {
+            <ol class="jim-inspector-rail">
+                @foreach (var entry in Provenance.History)
+                {
+                    <li class="jim-inspector-rail-@entry.Kind.ToString().ToLowerInvariant()">
+                        <div>
+                            <MudChip T="string" Variant="Variant.Text" Color="@HistoryKindColour(entry.Kind)" Class="ma-0">@entry.Kind</MudChip>
+                            <span class="jim-text-code">
+                                @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { @entry.Value }
+                            </span>
+                        </div>
                         @if (entry.Kind == AttributeHistoryChangeKind.Set && !string.IsNullOrEmpty(entry.PreviousValue))
                         {
-                            <span class="mud-text-secondary" style="text-decoration: line-through; margin-left: 6px;">@entry.PreviousValue</span>
+                            <div class="jim-text-code jim-inspector-previous">@entry.PreviousValue</div>
                         }
-                    </span>
-                    <div class="jim-inspector-meta mud-text-secondary">
-                        <MudTooltip Text="@entry.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            <span>@entry.Change.ChangeTime.ToLocalTime().ToRelativeTime()</span>
-                        </MudTooltip>
-                        @{ var activityHref = ActivityHrefFor(entry.Change); }
-                        @if (activityHref != null)
-                        {
-                            <span>·</span>
-                            <MudLink Href="@activityHref">@(entry.Change.ActivityDescription ?? "Activity")</MudLink>
-                        }
-                        @if (!string.IsNullOrEmpty(entry.SyncRuleName))
-                        {
-                            <span>· @entry.SyncRuleName</span>
-                        }
-                    </div>
-                </div>
+                        <div class="jim-inspector-meta">
+                            <MudTooltip Text="@entry.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <span>@entry.Change.ChangeTime.ToLocalTime().ToRelativeTime()</span>
+                            </MudTooltip>
+                            @{ var activityHref = ActivityHrefFor(entry.Change); }
+                            @if (activityHref != null)
+                            {
+                                <span>·</span>
+                                <MudLink Href="@activityHref">@(entry.Change.ActivityDescription ?? "Activity")</MudLink>
+                            }
+                            @if (!string.IsNullOrEmpty(entry.SyncRuleName))
+                            {
+                                <span>· @entry.SyncRuleName</span>
+                            }
+                        </div>
+                    </li>
+                }
+            </ol>
+            @if (Provenance.HistoryTruncated)
+            {
+                <span class="jim-inspector-subtle">Showing the most recent changes only.</span>
             }
-        </div>
-
-        @if (Provenance.HistoryTruncated)
-        {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">Showing the most recent changes only.</MudText>
         }
-    }
-
-    <MudLink Class="mt-2 d-inline-block" OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
-</MudPaper>
+    </div>
+</section>
 
 @code {
     /// <summary>Everything the inspector shows for one attribute on one Metaverse Object.</summary>

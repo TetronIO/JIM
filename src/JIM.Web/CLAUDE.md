@@ -15,6 +15,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | Component | Use for | See |
 |-----------|---------|-----|
 | `<TableDensityToggle @bind-Dense="_dense" />` | The compact/normal row toggle in a table's `ToolBarContent` | "Row density" below |
+| `<SegmentedControl TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive display options (the causality panel's view, the Inspect view's Group by): the quiet slider, not a `MudButtonGroup` | `Shared/SegmentedControl.razor` |
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |

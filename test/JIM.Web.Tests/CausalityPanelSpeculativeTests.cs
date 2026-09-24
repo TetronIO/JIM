@@ -83,7 +83,7 @@ public class CausalityPanelSpeculativeTests
             .Add(c => c.PreviewResult, SimplePreview())
             .Add(c => c.Context, PreviewContext()));
 
-        var buttons = cut.FindAll(".seg button");
+        var buttons = cut.FindAll(".jim-segmented button");
         using (Assert.EnterMultipleScope())
         {
             Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Timeline", "Table" }));
@@ -100,7 +100,7 @@ public class CausalityPanelSpeculativeTests
             .Add(c => c.PreviewResult, SimplePreview())
             .Add(c => c.Context, PreviewContext()));
 
-        cut.FindAll(".seg button").Single(b => b.TextContent.Trim() == "Table").Click();
+        cut.FindAll(".jim-segmented button").Single(b => b.TextContent.Trim() == "Table").Click();
 
         Assert.That(cut.FindAll(".tv"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".tl"), Is.Empty);

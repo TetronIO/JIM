@@ -9,17 +9,17 @@
 @* The bar itself is decorative (aria-hidden); the legend buttons are the accessible control. *@
 
 <div class="jim-contribution-bar-panel">
-    <div class="d-flex align-baseline flex-wrap" style="gap: 8px;">
-        <MudText Typo="Typo.h6">Where this @ObjectTypeName gets its values</MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Provenance.Attributes.Count.ToString("N0") attributes</MudText>
+    <div class="jim-contribution-heading">
+        <span class="jim-contribution-title">Where this @ObjectTypeName gets its values</span>
+        <span class="jim-contribution-count">@Provenance.Attributes.Count.ToString("N0") attributes</span>
     </div>
 
     @{ var groups = ValueOriginGrouping.BuildGroups(Provenance.Attributes); }
     @if (groups.Count <= 1)
     {
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+        <div class="jim-contribution-single">
             All @Provenance.Attributes.Count.ToString("N0") values from @(groups.Count == 1 ? FullSourceLabel(groups[0].Group) : "Source not recorded")
-        </MudText>
+        </div>
     }
     else
     {
@@ -41,7 +41,7 @@
                         @onclick="@(() => ToggleFilterAsync(group.Key))">
                     <span class="jim-contribution-legend-swatch" style="background: var(@ColourFor(group));"></span>
                     <span>@group.Label</span>
-                    <span class="mud-text-secondary">@count.ToString("N0")</span>
+                    <span class="jim-contribution-legend-count">@count.ToString("N0")</span>
                 </button>
             }
         </div>
@@ -99,16 +99,17 @@
     /// <summary>
     /// A theme colour token for a source group. A Connected System keeps one colour on every object and across
     /// restarts, chosen from its id (never from a string hash: <c>string.GetHashCode()</c> is randomised per
-    /// process). Values JIM generated take the primary colour and values a person set the secondary one, so those
-    /// two never share a colour with a system. "Not recorded" and "several sources" take the same neutral,
+    /// process). Ids start at 1, so the first system takes the info colour its Connected System chip glyph already
+    /// wears. Values JIM generated take the primary colour and values a person set the secondary one, so those two
+    /// never share a colour with a system. "Not recorded" and "several sources" take the same neutral,
     /// disabled-text token, since neither names a real source.
     /// </summary>
     private static readonly string[] SystemPaletteTokens =
     [
         "--mud-palette-info",
-        "--mud-palette-tertiary",
         "--mud-palette-success",
-        "--mud-palette-warning"
+        "--mud-palette-warning",
+        "--mud-palette-tertiary"
     ];
 
     private const string NeutralToken = "--mud-palette-text-disabled";
@@ -118,7 +119,7 @@
         ValueOriginKind.GeneratedByJim => "--mud-palette-primary",
         ValueOriginKind.SetByPerson => "--mud-palette-secondary",
         ValueOriginKind.SynchronisationRule when group.ConnectedSystemId is { } systemId =>
-            SystemPaletteTokens[Math.Abs(systemId % SystemPaletteTokens.Length)],
+            SystemPaletteTokens[Math.Abs((systemId - 1) % SystemPaletteTokens.Length)],
         _ => NeutralToken
     };
 }

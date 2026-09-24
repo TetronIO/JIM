@@ -106,11 +106,11 @@ public class CausalityPanelTests
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        var buttons = cut.FindAll(".seg button");
+        var buttons = cut.FindAll(".jim-segmented button");
         Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Lineage", "Timeline", "Table" }));
-        Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
-        Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
-        Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Not.Contain("on"));
+        Assert.That(cut.FindAll(".jim-segmented button")[0].ClassList, Does.Contain("on"));
+        Assert.That(cut.FindAll(".jim-segmented button")[1].ClassList, Does.Not.Contain("on"));
+        Assert.That(cut.FindAll(".jim-segmented button")[2].ClassList, Does.Not.Contain("on"));
     }
 
     [Test]
@@ -118,7 +118,7 @@ public class CausalityPanelTests
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        cut.FindAll(".seg button")[2].Click();
+        cut.FindAll(".jim-segmented button")[2].Click();
 
         Assert.That(cut.FindAll(".tv"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
@@ -130,7 +130,7 @@ public class CausalityPanelTests
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        cut.FindAll(".seg button")[1].Click();
+        cut.FindAll(".jim-segmented button")[1].Click();
 
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
@@ -146,7 +146,7 @@ public class CausalityPanelTests
 
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
-        Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Contain("on"));
+        Assert.That(cut.FindAll(".jim-segmented button")[1].ClassList, Does.Contain("on"));
     }
 
     [Test]
@@ -174,7 +174,7 @@ public class CausalityPanelTests
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".ln-canvas"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
+        Assert.That(cut.FindAll(".jim-segmented button")[0].ClassList, Does.Contain("on"));
         Assert.That(_preferences.CausalityViewWrites, Is.Empty);
         Assert.That(_preferences.StoredCausalityView, Is.EqualTo(stored));
     }
@@ -223,7 +223,7 @@ public class CausalityPanelTests
         cut.Find(".evt-card.clickable").Click();
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
 
-        cut.FindAll(".seg button")[1].Click();
+        cut.FindAll(".jim-segmented button")[1].Click();
 
         Assert.That(cut.FindAll(".drawer"), Is.Empty);
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));

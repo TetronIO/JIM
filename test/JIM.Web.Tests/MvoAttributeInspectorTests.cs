@@ -78,9 +78,13 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
             Assert.That(cut.Markup, Does.Contain("Text"));
             Assert.That(cut.Markup, Does.Contain("Single"));
             Assert.That(cut.Markup, Does.Contain("Engineer"));
-            Assert.That(cut.Markup, Does.Contain("Set by"));
-            Assert.That(cut.HasComponent<ValueOriginChip>(), Is.True);
+            Assert.That(cut.Markup, Does.Contain("Connected System"));
+            Assert.That(cut.Markup, Does.Contain("Synchronisation Rule"));
+            Assert.That(cut.FindComponents<ObjectChip>().Select(c => c.Instance.Kind),
+                Is.SupersetOf(new[] { ObjectChipKind.ConnectedSystem, ObjectChipKind.SynchronisationRule, ObjectChipKind.ConnectedSystemObject }));
+            Assert.That(cut.Markup, Does.Contain("HR Import"));
             Assert.That(cut.Markup, Does.Contain("Priya Shah"));
+            Assert.That(cut.Markup, Does.Contain("Last set"));
             Assert.That(cut.FindAll($"a[href='/activity/item/{provenance.LastSet!.ActivityRunProfileExecutionItemId}']"),
                 Is.Not.Empty);
         }
@@ -149,7 +153,7 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Markup, Does.Contain("Every source for this attribute"));
+            Assert.That(cut.Markup, Does.Contain("Every source"));
             Assert.That(cut.Markup, Does.Contain(label));
             // Earlier tooltips belong to the Close button and the relative-time display; with one source and no
             // history, the state chip's tooltip is the last one in the panel.
@@ -175,10 +179,10 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Markup, Does.Contain("History of this attribute"));
+            Assert.That(cut.Markup, Does.Contain(">History<"));
             Assert.That(cut.Markup, Does.Contain("Senior Engineer"));
             Assert.That(cut.Markup, Does.Contain("Engineer"));
-            Assert.That(cut.Markup, Does.Contain("text-decoration: line-through"));
+            Assert.That(cut.Markup, Does.Contain("jim-inspector-previous"));
         }
     }
 

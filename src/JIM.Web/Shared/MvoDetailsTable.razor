@@ -2,6 +2,7 @@
 @using JIM.Models.Core.DTOs
 @using System.Globalization
 @using Utilities
+@using JIM.Web.Models
 @inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -32,31 +33,27 @@
                 <div class="d-flex align-center flex-wrap pa-2 jim-attribute-table-toolbar" style="gap: 8px;">
                     <TableDensityToggle @bind-Dense="_dense" />
                     <MudText Class="mx-2 mud-text-disabled">|</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Group by:</MudText>
-                    <MudButtonGroup OverrideStyles="false">
-                        <MudButton Variant="@(GroupBy == "none" ? Variant.Filled : Variant.Outlined)"
-                                   Color="Color.Primary" Size="Size.Small"
-                                   OnClick="@(() => ChangeGroupByAsync("none"))">None</MudButton>
-                        <MudButton Variant="@(GroupBy == "source" ? Variant.Filled : Variant.Outlined)"
-                                   Color="Color.Primary" Size="Size.Small"
-                                   OnClick="@(() => ChangeGroupByAsync("source"))">Source</MudButton>
-                        <MudButton Variant="@(GroupBy == "category" ? Variant.Filled : Variant.Outlined)"
-                                   Color="Color.Primary" Size="Size.Small"
-                                   OnClick="@(() => ChangeGroupByAsync("category"))">Category</MudButton>
-                    </MudButtonGroup>
+                    <span class="jim-inspect-toolbar-label">Group by</span>
+                    <SegmentedControl TValue="string" AriaLabel="Group by" Value="@GroupBy" Options="@GroupByOptions"
+                                      ValueChanged="ChangeGroupByAsync" />
                 </div>
-                <MudSimpleTable Hover="true" Dense="@_dense" Elevation="0" Class="jim-attribute-table">
+                @* While the inspector is open the table lays out at fixed proportions, so a long value or origin
+                   clips with an ellipsis inside its column rather than pushing the table past its panel. *@
+                <MudSimpleTable Hover="true" Dense="@_dense" Elevation="0"
+                                Class="@(ShowInspector ? "jim-attribute-table jim-inspect-table-narrow" : "jim-attribute-table")">
                     <thead>
                         <tr>
                             <th class="jim-attr-header-name">Attribute</th>
                             <th class="jim-attr-header-value">Value</th>
                             @if (GroupBy != "source")
                             {
-                                <th>Source</th>
+                                <th class="jim-attr-header-source">Source</th>
                             }
-                            <th class="jim-attr-header-type">Type</th>
+                            @* Type and Plurality give way while the inspector is open: its header states both for
+                               the selected attribute, and the Value column needs the width more. *@
                             @if (!ShowInspector)
                             {
+                                <th class="jim-attr-header-type">Type</th>
                                 <th class="jim-attr-header-plurality">Plurality</th>
                             }
                         </tr>
@@ -89,12 +86,12 @@
                                             }
                                             else
                                             {
-                                                @* Group by Source: the header names the source with the same shared
-                                                   chip everywhere else, so it already carries the Connected System
-                                                   and a link to the Synchronisation Rule; nothing more to add. *@
-                                                <ValueOriginChip Origin="@(row.HeaderOrigin ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="row.HeaderHasSeveralOrigins" />
+                                                @* Group by Source: the header names the source in the same compact
+                                                   form as the Source column it replaces; the inspector, which any
+                                                   row beneath it opens, carries the links. *@
+                                                <ValueOriginChip Origin="@(row.HeaderOrigin ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="row.HeaderHasSeveralOrigins" Compact="true" />
                                             }
-                                            <span class="mud-text-secondary ml-2">@row.HeaderCount attribute@(row.HeaderCount == 1 ? "" : "s")</span>
+                                            <span class="jim-inspect-group-count">@row.HeaderCount attribute@(row.HeaderCount == 1 ? "" : "s")</span>
                                         </td>
                                     </tr>
                                 }
@@ -105,9 +102,10 @@
                                     @* The row's @onclick is a mouse convenience only; the real, keyboard-accessible
                                        affordance is the attribute-name button below (a <tr> containing links
                                        cannot itself be a button, and nested interactive content inside role="button"
-                                       is invalid). The Value and Source cells can carry their own links (a
-                                       reference value, the Source chip's Connected System / Synchronisation Rule),
-                                       so their content stops the click reaching this row's convenience handler. *@
+                                       is invalid). The Value cell can carry its own link (an email address, a
+                                       reference value), so its content stops the click reaching this row's
+                                       convenience handler. The Source cell is linkless (its compact chip leaves
+                                       the links to the inspector), so a click there opens the inspector too. *@
                                     <tr @key="group.AttributeName"
                                         class="jim-inspect-row @(group.Values.Count > 1 ? "jim-attr-row-mva" : "") @(isSelected ? "jim-inspect-row-selected" : "")"
                                         @onclick="@(() => SelectAttributeAsync(group.AttributeId))">
@@ -118,19 +116,20 @@
                                                     @onclick:stopPropagation="true">@group.AttributeName</button>
                                         </td>
                                         <td class="jim-attr-value">
-                                            <span @onclick:stopPropagation="true">@RenderValueCell(group)</span>
+                                            <div class="@(group.Values.Count == 1 ? "jim-inspect-value" : null)" title="@ValueTitle(group)"
+                                                 @onclick:stopPropagation="true">@RenderValueCell(group)</div>
                                         </td>
                                         @if (GroupBy != "source")
                                         {
                                             <td>
-                                                <div class="jim-inspect-source-cell" @onclick:stopPropagation="true">@RenderSourceCell(group.AttributeId)</div>
+                                                <div class="jim-inspect-source-cell">@RenderSourceCell(group.AttributeId)</div>
                                             </td>
                                         }
-                                        <td class="jim-attr-type">
-                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
-                                        </td>
                                         @if (!ShowInspector)
                                         {
+                                            <td class="jim-attr-type">
+                                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
+                                            </td>
                                             <td class="jim-attr-plurality">
                                                 <MudText Typo="Typo.body1" Class="mud-text-secondary">@(group.IsMultiValued ? "Multi" : "Single")</MudText>
                                             </td>
@@ -309,6 +308,32 @@
         }
     }
 
+    private static readonly IReadOnlyList<SegmentedOption<string>> GroupByOptions =
+    [
+        new("none", "None"),
+        new("source", "Source"),
+        new("category", "Category")
+    ];
+
+    /// <summary>
+    /// The full text of a single value, for the title of its one-line cell (which clips a long value with an
+    /// ellipsis). Null for multi-valued attributes and for types that render their own affordance (a date's
+    /// tooltip, a reference's link, a Boolean's label), where there is nothing clipped to reveal.
+    /// </summary>
+    private static string? ValueTitle(MvoAttributeTableGroup group)
+    {
+        if (group.Values.Count != 1)
+            return null;
+
+        var value = group.Values[0];
+        return value.Attribute.Type switch
+        {
+            AttributeDataType.Text => string.IsNullOrWhiteSpace(value.StringValue) ? null : value.StringValue,
+            AttributeDataType.Guid => value.GuidValue?.ToString(),
+            _ => null
+        };
+    }
+
     private async Task ChangeGroupByAsync(string groupBy)
     {
         if (groupBy == GroupBy)
@@ -479,7 +504,7 @@
         else
         {
             var origin = OriginFor(attributeId);
-            <ValueOriginChip Origin="@(origin?.Origins[0] ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="@(origin?.HasSeveralOrigins ?? false)" />
+            <ValueOriginChip Origin="@(origin?.Origins[0] ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="@(origin?.HasSeveralOrigins ?? false)" Compact="true" />
         }
     };
 }

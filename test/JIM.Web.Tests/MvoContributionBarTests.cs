@@ -69,6 +69,27 @@ public class MvoContributionBarTests : JimComponentTestContext
     }
 
     [Test]
+    public void ContributionBar_FirstConnectedSystem_TakesTheInfoColourItsSystemChipWears()
+    {
+        // Connected System ids start at 1, and the Connected System chip's glyph wears the info colour, so the
+        // first system's segment matches the chips beside it in the table rather than a colour of its own.
+        var first = HrOrigin with { ConnectedSystemId = 1 };
+        var second = AdOrigin with { ConnectedSystemId = 2 };
+        var provenance = new MetaverseObjectProvenance { Attributes = [Attribute(1, first), Attribute(2, second)] };
+
+        var cut = Render<MvoContributionBar>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        var swatches = cut.FindAll(".jim-contribution-legend-swatch").Select(s => s.GetAttribute("style")).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(swatches[0], Does.Contain("var(--mud-palette-info)"));
+            Assert.That(swatches[1], Does.Contain("var(--mud-palette-success)"));
+        }
+    }
+
+    [Test]
     public void ContributionBar_GeneratedByJim_TakesThePrimaryColour()
     {
         var generated = new ValueOrigin { Kind = ValueOriginKind.GeneratedByJim, ConnectedSystemId = 1, ConnectedSystemName = "HR", SyncRuleId = 10, SyncRuleName = "HR Import" };
@@ -97,8 +118,8 @@ public class MvoContributionBarTests : JimComponentTestContext
         {
             Assert.That(cut.Markup, Does.Contain("Where this User gets its values"));
             Assert.That(cut.Markup, Does.Contain("3 attributes"));
-            Assert.That(cut.Markup, Does.Contain("All 3 values from HR · HR Import"));
-            Assert.That(cut.HasComponent<MudBlazor.MudText>(), Is.True);
+            Assert.That(cut.Find(".jim-contribution-single").TextContent.Trim(), Is.EqualTo("All 3 values from HR · HR Import"));
+            Assert.That(cut.FindAll(".jim-contribution-bar"), Is.Empty, "one source needs no bar");
             Assert.That(cut.FindAll(".jim-contribution-legend-item"), Is.Empty, "one source needs no legend to filter by");
         }
     }

@@ -1,0 +1,47 @@
+@using JIM.Web.Models
+@typeparam TValue
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The one slider for choosing between a few mutually exclusive options: a recessed track with the chosen option
+   raised on it. It began as the causality panel's view switch and became shared when the Inspect view's Group by
+   needed it (#399), so both read as the same control. Styles: .jim-segmented in site.css. *@
+
+<div class="jim-segmented @Class" role="group" aria-label="@AriaLabel">
+    @foreach (var option in Options)
+    {
+        var isSelected = EqualityComparer<TValue>.Default.Equals(option.Value, Value);
+        <button type="button" class="@(isSelected ? "on" : null)" aria-pressed="@(isSelected ? "true" : "false")"
+                @onclick="() => SelectAsync(option.Value)">@option.Label</button>
+    }
+</div>
+
+@code {
+    /// <summary>The options, in display order.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SegmentedOption<TValue>> Options { get; set; } = [];
+
+    /// <summary>The selected option's value.</summary>
+    [Parameter]
+    public TValue? Value { get; set; }
+
+    /// <summary>Raised with the newly chosen value; not raised when the selected option is clicked again.</summary>
+    [Parameter]
+    public EventCallback<TValue> ValueChanged { get; set; }
+
+    /// <summary>What the group of options chooses, for assistive technology (for example "Group by").</summary>
+    [Parameter, EditorRequired]
+    public string AriaLabel { get; set; } = string.Empty;
+
+    /// <summary>The call site's own geometry (margins); the control's look is not restyled per call site.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private async Task SelectAsync(TValue value)
+    {
+        if (EqualityComparer<TValue>.Default.Equals(value, Value))
+            return;
+        await ValueChanged.InvokeAsync(value);
+    }
+}

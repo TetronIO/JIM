@@ -150,7 +150,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void DetailsTable_LinkInSourceCellClicked_DoesNotAlsoOpenTheInspector()
+    public void DetailsTable_SourceCell_RendersTheCompactOriginWithNoLinksAndOpensTheInspectorWhenClicked()
     {
         var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
         var provenance = BuildProvenance((1, "Job Title", HrOrigin));
@@ -162,14 +162,60 @@ public class MvoDetailsTableTests : JimComponentTestContext
             .Add(c => c.Provenance, provenance)
             .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
 
-        // The Synchronisation Rule link inside the Source cell's origin chip.
-        cut.Find("tr.jim-inspect-row a[href^='/admin/sync-rules/']").Click();
+        var sourceCell = cut.Find(".jim-inspect-source-cell");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindComponent<ValueOriginChip>().Instance.Compact, Is.True);
+            Assert.That(sourceCell.QuerySelectorAll("a"), Is.Empty, "the row's origin leaves its links to the inspector");
+        }
 
-        Assert.That(selected, Is.Null, "a link inside the row must not also open the inspector");
+        sourceCell.Click();
+
+        Assert.That(selected, Is.EqualTo(1), "a click on the linkless Source cell opens the inspector like the rest of the row");
     }
 
     [Test]
-    public void DetailsTable_SelectedAttribute_HighlightsItsRowAndHidesThePluralityColumn()
+    public void DetailsTable_GroupBySegmentedControl_RaisesOnGroupByChangedWithTheChosenOption()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+        string? raised = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.GroupBy, "none")
+            .Add(c => c.OnGroupByChanged, EventCallback.Factory.Create<string>(this, g => raised = g)));
+
+        var control = cut.FindComponent<SegmentedControl<string>>();
+        cut.FindAll(".jim-segmented button").Single(b => b.TextContent.Trim() == "Category").Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(control.Instance.AriaLabel, Is.EqualTo("Group by"));
+            Assert.That(raised, Is.EqualTo("category"));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_SingleTextValue_RendersOnOneClippedLineWithItsFullTextAsTheTitle()
+    {
+        const string longValue = "Principal Software Engineer, Identity and Access Management Platform";
+        var mvo = BuildObject(TextValue(1, "Job Title", longValue));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        var value = cut.Find("td.jim-attr-value > div");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(value.ClassList, Does.Contain("jim-inspect-value"));
+            Assert.That(value.GetAttribute("title"), Is.EqualTo(longValue));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_SelectedAttribute_HighlightsItsRowAndHidesTheTypeAndPluralityColumns()
     {
         var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
 
@@ -182,6 +228,8 @@ public class MvoDetailsTableTests : JimComponentTestContext
         {
             Assert.That(cut.Find("tr.jim-inspect-row").ClassList, Does.Contain("jim-inspect-row-selected"));
             Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Plurality"));
+            Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Type"));
+            Assert.That(cut.FindAll("td.jim-attr-type"), Is.Empty);
         }
     }
 
@@ -201,13 +249,13 @@ public class MvoDetailsTableTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Source"));
-            // The header names the source through the same shared chip every origin uses (a Connected System
-            // chip plus a link to the Synchronisation Rule), not a hand-built label string.
+            // The header names the source through the same shared chip every origin uses, in the compact form of
+            // the Source column it replaces (a Connected System chip plus the Synchronisation Rule as quiet text),
+            // not a hand-built label string.
             var headerChip = headerRow.QuerySelector(".jim-object-chip-name");
             Assert.That(headerChip, Is.Not.Null);
             Assert.That(headerChip!.TextContent, Is.EqualTo("HR"));
-            var ruleLink = headerRow.QuerySelectorAll("a").First(a => a.GetAttribute("href")!.Contains("/sync-rules/"));
-            Assert.That(ruleLink.TextContent, Is.EqualTo("HR Import"));
+            Assert.That(headerRow.QuerySelector(".jim-value-origin-rule")!.TextContent, Is.EqualTo("HR Import"));
             Assert.That(headerRow.TextContent, Does.Contain("2 attributes"));
             Assert.That(cut.FindAll("tr.jim-inspect-row"), Has.Count.EqualTo(2));
         }
