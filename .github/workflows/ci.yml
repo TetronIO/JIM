@@ -143,17 +143,20 @@ jobs:
         # JIM-Bench run) with its own PostgreSQL on the same port at the same moment.
         ports:
           - 5432
-        # Hold the job's steps until PostgreSQL is accepting connections.
+        # Hold the job's steps until PostgreSQL is accepting connections. -U names a role that
+        # exists: without it pg_isready connects as the runner's OS user, and the server logs
+        # 'role "root" does not exist' every ten seconds into the service log this job is
+        # diagnosed from.
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     # The RequiresPostgres fixtures read these to build the connection string and to
     # opt in (JIM_TEST_RESET_DB being set is what flips them from Assert.Ignore to run).
-    # jim_test is a throwaway database: each fixture migrates the schema once and
-    # TRUNCATEs every table between tests.
+    # jim_test is a throwaway database: each fixture migrates the schema once and empties
+    # every table between tests (PostgresTestDatabase.ResetAsync in JIM.TestSupport).
     env:
       JIM_TEST_RESET_HOST: localhost
       JIM_TEST_RESET_USER: postgres
@@ -161,6 +164,23 @@ jobs:
       JIM_TEST_RESET_DB: jim_test
 
     steps:
+    # The database is discarded when the job ends, so durability buys nothing here, and paying
+    # for it made the job hostage to the runner's disk: on slow-disk runners PostgreSQL's
+    # checkpoints took 40 to 50 seconds each and every test ran about 4.5 times slower, the likely
+    # source of the 25 to 39 minute runs. A service container cannot be given server
+    # arguments, so the settings go in through ALTER SYSTEM; all three take effect on reload.
+    # The container id is passed via env rather than interpolated into the script.
+    - name: Relax durability on the throwaway database
+      env:
+        POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+      run: |
+        docker exec "$POSTGRES_CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 \
+          -c "ALTER SYSTEM SET fsync = off" \
+          -c "ALTER SYSTEM SET synchronous_commit = off" \
+          -c "ALTER SYSTEM SET full_page_writes = off" \
+          -c "SELECT pg_reload_conf()"
+        docker exec "$POSTGRES_CONTAINER" psql -U postgres -tA \
+          -c "SELECT name || ' = ' || setting FROM pg_settings WHERE name IN ('fsync', 'synchronous_commit', 'full_page_writes') ORDER BY name"
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     - name: Setup .NET
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
