@@ -1,6 +1,6 @@
 # Unique Value Generation and Collision Remediation
 
-- **Status:** Doing (release 1, Phase 3 in progress: server-side validation, application methods, REST, portal and PowerShell done; only the concept/API docs half of point 5 outstanding)
+- **Status:** Doing (release 1: Phases 1 to 3 done; Phase 3's surfaces are behind the In development Unique Value Generation feature flag; Phase 4 next)
 - **Issue:** [#242](https://github.com/TetronIO/JIM/issues/242)
 - **PRD:** [`../../prd/doing/PRD_UNIQUE_VALUE_GENERATION.md`](../../prd/doing/PRD_UNIQUE_VALUE_GENERATION.md)
 - **Depends on (release 2):** [`../../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
@@ -244,7 +244,7 @@ Each phase is a PR off `main`, TDD throughout, `dotnet build JIM.sln` and `dotne
 8. File the example-data migration follow-up issue: [#1789](https://github.com/TetronIO/JIM/issues/1789).
 9. **Delivered notes (2026-09-23).** Export mode keys the assignment on the Connected System Object and never writes the Metaverse Object; its value is resolved when export evaluation stages the Pending Export and committed after the provisioning object is persisted. Every caller of contributor re-election (the worker's import, out-of-scope and obsoletion paths, Synchronisation Rule deletion recall, Sync Preview) passes a resolver; the server-side recall and deprovisioning paths pass none, so a re-elected generated mapping there waits for the generating system's next synchronisation, and a generated export change they stage is stripped rather than persisted blank. **Known gap:** drift detection skips generated export mappings (its expected value would be the base expression, not the assigned value), so a generated value changed in the target outside JIM is reasserted only when export evaluation next runs for that object; comparing against the assignment belongs with release 4's anchoring work.
 
-#### Phase 3: Configuration and Metaverse Object surfaces (portal, REST, PowerShell)
+#### Phase 3: Configuration and Metaverse Object surfaces (portal, REST, PowerShell) ✅
 
 **Decision (2026-09-24): exclusions deferred to release 3 on every surface.** The engine already honours `SyncRuleMappingGenerationExclusion` (Phase 2), but no surface sets it in release 1, so every participating Connected System is checked. Exclusions arrive with release 3's participating-systems panel, on the portal, REST and PowerShell together, with their "must be a participating system" validation.
 
