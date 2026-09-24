@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Data.Common;
+using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -66,6 +67,7 @@ public class ScheduleHeaderQueryDatabaseTests
     {
         await using var ctx = NewContext();
         await ctx.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM ""Activities"" WHERE ""ScheduleExecutionId"" IS NOT NULL;
             TRUNCATE TABLE ""ScheduleExecutions"", ""ScheduleSteps"", ""Schedules"" RESTART IDENTITY CASCADE;");
         _interceptor.Reset();
     }
@@ -198,6 +200,123 @@ public class ScheduleHeaderQueryDatabaseTests
             Assert.That(header.LastExecutionErrorMessage, Is.Null);
         }
     }
+
+    [Test]
+    public async Task GetScheduleHeadersAsync_LastExecutionCompleteWithError_ProjectsDistinctFailedStepIndicesAgainstRealProviderAsync()
+    {
+        // #1787: the Schedules list names the steps a Complete With Error run carried on past. Only the newest
+        // execution counts, only failed outcomes count (warnings do not), and parallel failures at one index collapse.
+        var schedule = NewSchedule("Nightly HR sync");
+        var older = NewExecution(schedule, ScheduleExecutionStatus.CompleteWithError, new DateTime(2026, 2, 1, 3, 0, 0, DateTimeKind.Utc), 3, 4);
+        var newest = NewExecution(schedule, ScheduleExecutionStatus.CompleteWithError, new DateTime(2026, 2, 2, 3, 0, 0, DateTimeKind.Utc), 3, 4);
+        schedule.Executions.Add(older);
+        schedule.Executions.Add(newest);
+
+        await using (var seedContext = NewContext())
+        {
+            seedContext.Schedules.Add(schedule);
+            seedContext.Activities.AddRange(
+                NewActivity(older.Id, 0, ActivityStatus.FailedWithError),
+                NewActivity(newest.Id, 0, ActivityStatus.Complete),
+                NewActivity(newest.Id, 3, ActivityStatus.FailedWithError),
+                NewActivity(newest.Id, 1, ActivityStatus.CompleteWithError),
+                NewActivity(newest.Id, 3, ActivityStatus.Cancelled),
+                NewActivity(newest.Id, 2, ActivityStatus.CompleteWithWarning));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var result = await repository.Scheduling.GetScheduleHeadersAsync(1, 10);
+
+        var header = result.Results.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.CompleteWithError));
+            Assert.That(header.LastExecutionFailedStepIndices, Is.EqualTo(new[] { 1, 3 }),
+                "distinct and ascending, from the newest execution only, and warnings are not failures");
+        }
+    }
+
+    [Test]
+    public async Task GetScheduleHeadersAsync_LastExecutionFailed_ProjectsNoFailedStepIndicesAgainstRealProviderAsync()
+    {
+        // A run that stopped is Failed, and the list already names where it stopped from the current step index; the
+        // failed step indices are only the ones a Complete With Error run carried on past.
+        var schedule = NewSchedule("Stops on failure");
+        var failed = NewExecution(schedule, ScheduleExecutionStatus.Failed, new DateTime(2026, 2, 2, 3, 0, 0, DateTimeKind.Utc), 1, 4, "Step 2 failed");
+        schedule.Executions.Add(failed);
+
+        await using (var seedContext = NewContext())
+        {
+            seedContext.Schedules.Add(schedule);
+            seedContext.Activities.Add(NewActivity(failed.Id, 1, ActivityStatus.FailedWithError));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var result = await repository.Scheduling.GetScheduleHeadersAsync(1, 10);
+
+        Assert.That(result.Results.Single().LastExecutionFailedStepIndices, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetScheduleHeadersAsync_PageWithCompleteWithErrorRuns_StillCostsOneQueryForThePageAsync()
+    {
+        // The failed step indices must not reintroduce a per-Schedule query: a page where every Schedule's last run
+        // was Complete With Error still costs one count plus one page query.
+        await using (var seedContext = NewContext())
+        {
+            for (var i = 0; i < 10; i++)
+            {
+                var schedule = NewSchedule($"Schedule {i:D3}");
+                schedule.Created = schedule.Created.AddMinutes(i);
+                var execution = NewExecution(schedule, ScheduleExecutionStatus.CompleteWithError, new DateTime(2026, 2, 2, 3, 0, 0, DateTimeKind.Utc), 2, 3);
+                schedule.Executions.Add(execution);
+                seedContext.Schedules.Add(schedule);
+                seedContext.Activities.Add(NewActivity(execution.Id, 1, ActivityStatus.FailedWithError));
+            }
+
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext(countCommands: true);
+        var repository = new PostgresDataRepository(ctx);
+        var result = await repository.Scheduling.GetScheduleHeadersAsync(1, 25);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Results, Has.Count.EqualTo(10));
+            Assert.That(result.Results.Select(h => h.LastExecutionFailedStepIndices), Has.All.EqualTo(new[] { 1 }));
+            Assert.That(_interceptor.CommandCount, Is.EqualTo(2),
+                $"the Schedules list must be one count plus one page query; executed:{Environment.NewLine}{string.Join(Environment.NewLine + "---" + Environment.NewLine, _interceptor.CommandTexts)}");
+        }
+    }
+
+    private static Schedule NewSchedule(string name) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = name,
+        Created = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        IsEnabled = true,
+        TriggerType = ScheduleTriggerType.Manual
+    };
+
+    private static Activity NewActivity(Guid scheduleExecutionId, int stepIndex, ActivityStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+        TargetOperationType = ActivityTargetOperationType.Execute,
+        TargetContext = "Test Connected System",
+        TargetName = "Full Import",
+        InitiatedByType = ActivityInitiatorType.System,
+        InitiatedByName = "System",
+        Created = DateTime.UtcNow,
+        Status = status,
+        ScheduleExecutionId = scheduleExecutionId,
+        ScheduleStepIndex = stepIndex
+    };
 
     /// <summary>
     /// Counts the commands the provider executes, which is how the "one round trip per page" guarantee is asserted.

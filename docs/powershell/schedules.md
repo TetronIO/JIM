@@ -38,18 +38,29 @@ Get-JIMSchedule -Id <Guid> [-IncludeSteps]
 
 One or more schedule objects. The list parameter set returns results in pages of 100.
 
-Alongside the schedule's configuration (`Id`, `Name`, `Description`, `TriggerType`, `PatternType`, `CronExpression`, `IsEnabled`, `LastRunTime`, `NextRunTime`, `StepCount`), each object carries the outcome of the schedule's most recent run:
+Every object carries the Schedule's configuration: `Id`, `Name`, `Description`, `TriggerType`, `PatternType`, `CronExpression`, `IsEnabled`, `LastRunTime`, `NextRunTime`, `StepCount`, and `OnStepFailure`, what the Schedule does when a step fails (`Stop` or `Continue`; see [When a step fails](#when-a-step-fails)).
+
+The list parameter set also carries the outcome of the Schedule's most recent run:
 
 | Property | Type | Description |
 |---|---|---|
 | `LastExecutionId` | `Guid` | The most recent Schedule Execution. Pass it to `Get-JIMScheduleExecution -Id` for the per-step detail. |
-| `LastExecutionStatus` | `String` | How that run ended: `Queued`, `InProgress`, `Complete`, `Failed` or `Cancelled`. |
+| `LastExecutionStatus` | `String` | How that run ended: `Queued`, `InProgress`, `Complete`, `CompleteWithError`, `Failed` or `Cancelled`. `CompleteWithError` means the run reached its end, but one or more steps failed and were set to let the Schedule continue. |
 | `LastExecutionCurrentStepIndex` | `Int32` | The step the run reached, 0-based. Read with `LastExecutionTotalSteps` to see how far a failed run got. |
 | `LastExecutionTotalSteps` | `Int32` | How many steps the run set out to execute. |
+| `LastExecutionFailedStepIndices` | `Int32[]` | For a `CompleteWithError` run, the steps (0-based, each listed once) that failed and let the Schedule continue. Empty for any other outcome. |
 | `LastExecutionCompletedAt` | `DateTime` | When the run finished (UTC). Empty while it is still running. |
-| `LastExecutionErrorMessage` | `String` | The error that stopped the run, where one did. |
+| `LastExecutionErrorMessage` | `String` | The error that stopped the run, where one did; for a `CompleteWithError` run, the message naming each failed step. |
 
-All six are empty for a schedule that has never run. `-IncludeSteps` returns the same fields alongside the steps.
+These are empty for a Schedule that has never run. `-Id` returns the configuration and steps only, with these fields empty; `-IncludeSteps` returns both.
+
+With `-Id` or `-IncludeSteps`, each object also carries `Steps`, one per step (`Id`, `StepIndex`, `Name`, `StepType`, `ExecutionMode`, `ConnectedSystemId`, `RunProfileId`, `TimeoutSeconds`, and the type-specific fields), including how each step behaves when it fails:
+
+| Property | Type | Description |
+|---|---|---|
+| `OnFailure` | `String` | The step's own setting: `FollowSchedule` (the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. |
+| `ContinueOnFailure` | `Boolean` | What the step will actually do if it fails: `True` when the Schedule carries on past it. This is the step's own setting, or the Schedule's when the step follows the Schedule. |
+| `FailureBehaviourSource` | `String` | Where `ContinueOnFailure` comes from: `Step` (the step has a setting of its own) or `Schedule` (it follows the Schedule). |
 
 #### Examples
 
@@ -76,6 +87,17 @@ Get-JIMSchedule |
     Select-Object Name, LastRunTime, LastExecutionCurrentStepIndex, LastExecutionTotalSteps, LastExecutionErrorMessage
 ```
 
+```powershell title="Report the Schedules whose last run carried on past a failed step"
+Get-JIMSchedule |
+    Where-Object { $_.LastExecutionStatus -eq 'CompleteWithError' } |
+    Select-Object Name, LastRunTime, LastExecutionFailedStepIndices, LastExecutionErrorMessage
+```
+
+```powershell title="See how each step of a Schedule behaves when it fails"
+(Get-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890").Steps |
+    Select-Object StepIndex, Name, OnFailure, ContinueOnFailure, FailureBehaviourSource
+```
+
 ---
 
 ### New-JIMSchedule
@@ -99,6 +121,7 @@ New-JIMSchedule [-Name] <String>
     [-IntervalWindowEnd <String>]
     [-CronExpression <String>]
     [-Enabled]
+    [-OnStepFailure <String>]
     [-PassThru]
     [-WhatIf] [-Confirm]
 ```
@@ -119,6 +142,7 @@ New-JIMSchedule [-Name] <String>
 | `IntervalWindowEnd` | `String` | No | | End of the interval window in 24-hour format (e.g. `"18:00"`). |
 | `CronExpression` | `String` | No | | A cron expression for `Custom` pattern or `Cron` trigger type (e.g. `"0 6 * * 1-5"`). |
 | `Enabled` | `Switch` | No | | Enables the schedule immediately upon creation. |
+| `OnStepFailure` | `String` | No | `Stop` | What the Schedule does when a step fails: `Stop` or `Continue`. Steps follow it unless they have a setting of their own. See [When a step fails](#when-a-step-fails). |
 | `PassThru` | `Switch` | No | | Returns the created schedule object. |
 
 #### Output
@@ -163,6 +187,14 @@ New-JIMSchedule "On-Demand Full Sync" `
     -PassThru
 ```
 
+```powershell title="Create a Schedule that carries on past a failed step"
+New-JIMSchedule "Nightly HR sync" `
+    -TriggerType Cron `
+    -PatternType SpecificTimes `
+    -RunTimes "02:00" `
+    -OnStepFailure Continue
+```
+
 ---
 
 ### Set-JIMSchedule
@@ -186,6 +218,7 @@ Set-JIMSchedule -Id <Guid>
     [-IntervalWindowStart <String>]
     [-IntervalWindowEnd <String>]
     [-CronExpression <String>]
+    [-OnStepFailure <String>]
     [-Steps <Object[]>]
     [-PassThru]
     [-WhatIf] [-Confirm]
@@ -207,7 +240,8 @@ Set-JIMSchedule -Id <Guid>
 | `IntervalWindowStart` | `String` | No | No | Updated interval window start time. |
 | `IntervalWindowEnd` | `String` | No | No | Updated interval window end time. |
 | `CronExpression` | `String` | No | No | Updated cron expression. |
-| `Steps` | `Object[]` | No | No | Replaces the entire step list with the provided array. |
+| `OnStepFailure` | `String` | No | No | What the Schedule does when a step fails: `Stop` or `Continue`. Omit to leave it unchanged. A built-in Schedule, such as Temporal Scope Reconciliation, always stops; JIM refuses a change to it. See [When a step fails](#when-a-step-fails). |
+| `Steps` | `Object[]` | No | No | Replaces the entire step list with the provided array. Give each step its failure setting as `OnFailure`: a step object that carries `OnFailure` ignores its `ContinueOnFailure`, so to change one step's setting, use [`Set-JIMScheduleStep`](#set-jimschedulestep) or change the step's `OnFailure`. |
 | `PassThru` | `Switch` | No | No | Returns the updated schedule object. |
 
 #### Output
@@ -231,6 +265,10 @@ Set-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
     -IntervalUnit Minutes `
     -IntervalWindowStart "08:00" `
     -IntervalWindowEnd "17:00"
+```
+
+```powershell title="Let a Schedule carry on past failed steps"
+Set-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -OnStepFailure Continue
 ```
 
 !!! note
@@ -361,7 +399,7 @@ Start-JIMSchedule -Id <Guid> [-Wait] [-Timeout <TimeSpan>] [-PassThru]
 | Parameter | Type | Required | Pipeline | Description |
 |---|---|---|---|---|
 | `Id` | `Guid` | Yes | ByValue, ByPropertyName | The unique identifier of the schedule to trigger. Alias: `ScheduleId`. |
-| `Wait` | `Switch` | No | No | Waits for the execution to complete, polling every 5 seconds with progress output. |
+| `Wait` | `Switch` | No | No | Waits for the Schedule Execution to finish (`Complete`, `CompleteWithError`, `Failed` or `Cancelled`), polling every 5 seconds with progress output. |
 | `Timeout` | `TimeSpan` | No | No | Maximum time to wait when `-Wait` is specified. Default: 30 minutes. |
 | `PassThru` | `Switch` | No | No | Returns the execution object. |
 
@@ -409,7 +447,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
     -ConnectedSystemId <Int32>
     -RunProfileId <Int32>
     [-Parallel]
-    [-ContinueOnFailure]
+    [-OnFailure <String> | -ContinueOnFailure]
     [-PassThru]
 
 # ByName
@@ -418,7 +456,7 @@ Add-JIMScheduleStep -ScheduleId <Guid>
     -ConnectedSystemName <String>
     -RunProfileName <String>
     [-Parallel]
-    [-ContinueOnFailure]
+    [-OnFailure <String> | -ContinueOnFailure]
     [-PassThru]
 ```
 
@@ -433,12 +471,15 @@ Add-JIMScheduleStep -ScheduleId <Guid>
 | `RunProfileId` | `Int32` | Yes | ById | The numeric identifier of the Run Profile to execute. |
 | `RunProfileName` | `String` | Yes | ByName | The name of the Run Profile to execute. |
 | `Parallel` | `Switch` | No | Both | Runs this step in parallel with the previous step. |
-| `ContinueOnFailure` | `Switch` | No | Both | Continues to the next step even if this step fails. |
+| `OnFailure` | `String` | No | Both | What the step does when it fails: `FollowSchedule` (the default; the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. See [When a step fails](#when-a-step-fails). |
+| `ContinueOnFailure` | `Switch` | No | Both | Shorthand for `-OnFailure Continue`. Supplying both `-OnFailure` and `-ContinueOnFailure` is an error, and nothing is changed. |
 | `PassThru` | `Switch` | No | Both | Returns the updated schedule object. |
 
 #### Output
 
 None by default. When `-PassThru` is specified, returns the updated schedule object with the new step included.
+
+Adding a step changes no other step: the existing steps are sent back with their failure settings exactly as they were.
 
 #### Examples
 
@@ -466,6 +507,14 @@ Add-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
     -PassThru
 ```
 
+```powershell title="Add an export step that stops the Schedule if it fails"
+Add-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
+    -StepType RunProfile `
+    -ConnectedSystemName "Active Directory" `
+    -RunProfileName "Export" `
+    -OnFailure Stop
+```
+
 ```powershell title="Build a multi-step schedule"
 $scheduleId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
@@ -486,6 +535,55 @@ Add-JIMScheduleStep -ScheduleId $scheduleId -StepType RunProfile `
 Add-JIMScheduleStep -ScheduleId $scheduleId -StepType RunProfile `
     -ConnectedSystemName "Active Directory" -RunProfileName "Export" `
     -PassThru
+```
+
+---
+
+### Set-JIMScheduleStep
+
+Changes what one step does when it fails, leaving every other step, and the Schedule itself, as they are. To change a step's other settings, send the whole step list through `Set-JIMSchedule -Steps`.
+
+Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the change.
+
+#### Syntax
+
+```powershell
+Set-JIMScheduleStep -ScheduleId <Guid> -StepId <Guid> -OnFailure <String>
+    [-ChangeReason <String>]
+    [-PassThru]
+    [-WhatIf] [-Confirm]
+```
+
+#### Parameters
+
+| Parameter | Type | Required | Pipeline | Description |
+|---|---|---|---|---|
+| `ScheduleId` | `Guid` | Yes | ByPropertyName | The Schedule the step belongs to. Alias: `Id`, so a Schedule piped from `Get-JIMSchedule` binds here. |
+| `StepId` | `Guid` | Yes | No | The step to change: its `Id` in the Schedule's `Steps` (`Get-JIMSchedule -Id`). |
+| `OnFailure` | `String` | Yes | No | What the step does when it fails: `FollowSchedule` (the Schedule's `OnStepFailure` decides), `Stop` or `Continue`. |
+| `ChangeReason` | `String` | No | No | A reason for the change, recorded in the Schedule's change history. |
+| `PassThru` | `Switch` | No | No | Returns the updated Schedule object. |
+
+The steps of a built-in Schedule, such as Temporal Scope Reconciliation, always follow their Schedule; JIM refuses a change to them.
+
+#### Output
+
+None by default. When `-PassThru` is specified, returns the updated Schedule object, in the same shape as `Get-JIMSchedule -Id`.
+
+If the Schedule has no step with that `StepId`, the cmdlet reports an error and changes nothing.
+
+#### Examples
+
+```powershell title="Make one step stop the Schedule, even when the Schedule carries on"
+$schedule = Get-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+$schedule.Steps | Select-Object Id, StepIndex, Name, OnFailure, ContinueOnFailure, FailureBehaviourSource
+Set-JIMScheduleStep -ScheduleId $schedule.Id -StepId $schedule.Steps[2].Id -OnFailure Stop
+```
+
+```powershell title="Return a step to the Schedule's setting, with a reason"
+Get-JIMSchedule -Name "Nightly HR sync" |
+    Set-JIMScheduleStep -StepId "c3d4e5f6-a7b8-9012-cdef-123456789012" -OnFailure FollowSchedule `
+        -ChangeReason "Back to the Schedule's setting (CHG0102)"
 ```
 
 ---
@@ -527,7 +625,25 @@ Remove-JIMScheduleStep -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" `
 ```
 
 !!! note
-    Remaining steps are renumbered after removal. If you remove step 1 from a schedule with steps 0, 1, 2, the former step 2 becomes step 1.
+    Remaining steps are renumbered after removal. If you remove step 1 from a Schedule with steps 0, 1, 2, the former step 2 becomes step 1. Each remaining step keeps its `Id` and its failure setting.
+
+---
+
+## When a step fails
+
+Each Schedule has an `OnStepFailure` setting, `Stop` (the default) or `Continue`, and each step has an `OnFailure` setting that either follows the Schedule (`FollowSchedule`, the default for new steps) or overrides it (`Stop` or `Continue`). JIM reads the setting when the step fails, so a change applies to the next failure, including in a run already under way.
+
+- **The step stops the Schedule**<br /> The remaining steps do not run, and the Schedule Execution ends `Failed`.
+- **The step lets the Schedule continue**<br /> The remaining steps run. When the Schedule Execution reaches its end it is `CompleteWithError`, not `Complete`, and its `ErrorMessage` names each failed step, so a monitoring script can tell it from a clean run.
+
+| To | Use |
+|---|---|
+| Set the Schedule's behaviour | `New-JIMSchedule -OnStepFailure` or `Set-JIMSchedule -OnStepFailure` |
+| Set a new step's behaviour | `Add-JIMScheduleStep -OnFailure` |
+| Change an existing step's behaviour | `Set-JIMScheduleStep -OnFailure` |
+| See what each step will do | `(Get-JIMSchedule -Id <Guid>).Steps`: `OnFailure`, `ContinueOnFailure`, `FailureBehaviourSource` |
+
+What counts as a step failing, and how the settings appear in the portal, are covered in [Schedules](../configuration/schedules.md).
 
 ---
 
@@ -557,12 +673,12 @@ Get-JIMScheduleExecution [-ScheduleId <Guid>] [-InputObject <PSCustomObject>] -A
 | `Id` | `Guid` | Yes | ByPropertyName | ById | The unique identifier of the execution. Alias: `ExecutionId`. |
 | `ScheduleId` | `Guid` | No | ByPropertyName | List, Active | Filters executions to a specific schedule. |
 | `InputObject` | `PSCustomObject` | No | ByValue | List, Active | A Schedule object from the pipeline (e.g. from `Get-JIMSchedule`); its `Id` is used to filter executions, equivalent to specifying `-ScheduleId` directly. |
-| `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Complete`, `Failed`, `Cancelled`. |
+| `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Complete`, `CompleteWithError`, `Failed`, `Cancelled`. |
 | `Active` | `Switch` | Yes | No | Active | Returns only currently active executions (queued or in progress). |
 
 #### Output
 
-One or more schedule execution objects. Every shape carries `StepDisplay`, the step group the execution has reached as one sentence, matching what the portal shows above the Schedule's tasks in **Admin > Operations > Queue**.
+One or more Schedule Execution objects. Every shape carries `Status` (`Queued`, `InProgress`, `Complete`, `CompleteWithError`, `Failed`, `Cancelled` or `Paused`), `ErrorMessage` (what stopped a `Failed` run, or the failed steps a `CompleteWithError` run carried on past), and `StepDisplay`, the step group the execution has reached as one sentence, matching what the portal shows above the Schedule's tasks in **Admin > Operations > Queue**.
 
 `-Id` returns the detail shape, which adds a `Progress` block:
 
@@ -574,6 +690,8 @@ One or more schedule execution objects. Every shape carries `StepDisplay`, the s
 | `Progress.Steps` | One entry per step group, each with its `StepIndex`, `Name`, `Status` (`Pending`, `Running`, `Completed`, `Failed` or `Cancelled`), `IsParallel`, and `TaskStatuses`, every concurrent task's own outcome. |
 | `Steps` | Unchanged: one entry per Schedule Step *row*, naming it and carrying its type, timings, errors (`ErrorMessage`) and Activity id. A step group that runs three Run Profiles concurrently appears here three times and in `Progress.Steps` once. |
 | `Steps.CancellationReason` | Why a `Cancelled` step did not run, such as `Not run: an earlier step stopped the Schedule.`; empty for any other step, including one that was already running when it was cancelled. |
+| `Steps.ContinueOnFailure` | Whether the Schedule Execution carries on past this step if it fails: the step's own setting, or its Schedule's when it follows the Schedule. |
+| `Steps.FailureBehaviourSource` | Where `Steps.ContinueOnFailure` comes from: `Step` or `Schedule`. |
 
 #### Examples
 
@@ -601,6 +719,10 @@ $execution.Steps | Where-Object { $_.CancellationReason } | Select-Object StepIn
 
 ```powershell title="List failed executions for a schedule"
 Get-JIMScheduleExecution -ScheduleId "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Status Failed
+```
+
+```powershell title="List executions that carried on past a failed step"
+Get-JIMScheduleExecution -Status CompleteWithError | Select-Object ScheduleName, CompletedAt, ErrorMessage
 ```
 
 ```powershell title="Show all active executions"

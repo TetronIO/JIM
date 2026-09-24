@@ -847,6 +847,17 @@ public class ActivityRepository : IActivityRepository
             .ToListAsync();
     }
 
+    public async Task<List<Activity>> GetFailedScheduleExecutionActivitiesAsync(Guid scheduleExecutionId)
+    {
+        // A local array, so the provider translates the membership test to an IN list.
+        var failedOutcomes = ScheduleFailureHandling.FailedStepOutcomes.ToArray();
+        return await Repository.Database.Activities
+            .Where(a => a.ScheduleExecutionId == scheduleExecutionId && failedOutcomes.Contains(a.Status))
+            .OrderBy(a => a.ScheduleStepIndex)
+            .ThenBy(a => a.Created)
+            .ToListAsync();
+    }
+
     public async Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds)
     {
         if (scheduleExecutionIds.Count == 0)
