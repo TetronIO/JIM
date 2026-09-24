@@ -769,13 +769,6 @@
             using var jim = JimFactory.Create();
             _mvoProvenance = await jim.Metaverse.GetMetaverseObjectProvenanceAsync(MetaverseObject.Id);
         }
-        catch (NotImplementedException)
-        {
-            // #399's backend work package (application/repository layer) has not landed yet; the Inspect view
-            // still renders, just without source information until it does. Safe to keep once it has: this
-            // catch then never triggers.
-            _mvoProvenance = null;
-        }
         finally
         {
             _provenanceLoading = false;
@@ -799,11 +792,6 @@
         {
             using var jim = JimFactory.Create();
             _selectedAttributeProvenance = await jim.Metaverse.GetMetaverseAttributeProvenanceAsync(MetaverseObject.Id, attributeId);
-        }
-        catch (NotImplementedException)
-        {
-            // See the matching catch in EnsureProvenanceLoadedAsync: #399's backend work package is not in yet.
-            _selectedAttributeProvenance = null;
         }
         finally
         {

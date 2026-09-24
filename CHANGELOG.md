@@ -10,7 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ A Metaverse Object's new **Inspect** view shows where every value comes from, and its attribute inspector explains why a value won: every contributing Synchronisation Rule in priority order with the value each would supply, plus the attribute's history; also via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
-- ✨ A Metaverse Object's value provenance, why an attribute holds the value it does, every Synchronisation Rule that could contribute to it, and its change history, is now queryable via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
 
 ### Changed
 
