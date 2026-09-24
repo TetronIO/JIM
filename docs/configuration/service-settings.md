@@ -32,6 +32,8 @@ Settings are grouped by concern:
 
 The category is mostly a UI grouping; it does not change semantics.
 
+**Feature Flags is a category apart.** JIM's feature flags are stored as Service Settings under the hood, but the settings list, `api/v1/service-settings`, and `Get-JIMServiceSetting`/`Set-JIMServiceSetting`/`Reset-JIMServiceSetting` all exclude and refuse them: a flag changes only through the dedicated feature-flag surfaces, which enforce rules the generic settings surfaces do not know about (a flag's tier, and who is allowed to turn it on). See [Preview features](../administration/preview-features.md).
+
 ## Reverting
 
 Removing the override (resetting the value back to null so the effective value reverts to the default) is a separate operation from updating. It conveys intent (return to default) more clearly than an update with a null body would, and is also useful for backing out a configuration change without needing to remember the original default.

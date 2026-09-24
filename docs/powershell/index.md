@@ -81,6 +81,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
+| [Feature Flags](feature-flags.md) | 3 | View and toggle Preview features |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
 | [Previews](previews.md) | 6 | Preview a configuration change before saving it, and preview what synchronising one object would do |

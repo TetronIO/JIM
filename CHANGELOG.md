@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
 - ✨ A Schedule run that carried on past a failed step now ends **Complete With Error**, naming the failed steps, instead of a plain Complete, so the portal, PowerShell and monitoring scripts can tell it apart from a clean run. (#1787)
 

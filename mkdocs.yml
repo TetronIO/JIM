@@ -130,6 +130,7 @@ nav:
           - Keycloak: administration/sso-setup/keycloak.md
       - Security Headers: administration/security-headers.md
       - Security Audit Events: administration/security-audit-events.md
+      - Preview Features: administration/preview-features.md
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
       - Backup & Disaster Recovery: administration/backup-recovery.md
@@ -162,6 +163,7 @@ nav:
       - API Keys: powershell/api-keys.md
       - Certificates: powershell/certificates.md
       - Service Settings: powershell/service-settings.md
+      - Feature Flags: powershell/feature-flags.md
       - Security: powershell/security.md
       - History: powershell/history.md
       - Previews: powershell/previews.md
