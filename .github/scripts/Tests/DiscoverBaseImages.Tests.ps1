@@ -143,6 +143,17 @@ Describe 'discover-base-images.ps1 digest-pinning policy' {
         $outcome.Output | Should -Match 'POLICY VIOLATION'
     }
 
+    It 'fails when a production Dockerfile takes its FROM image from a build argument' {
+        # A build argument can name any image, pinned or not, so the policy cannot vouch for it. JIM.Web's
+        # Dockerfile used to switch stages this way (FROM ${OPENAPI_STAGE}), and the script exempted the form
+        # for it; that switch is gone, so the exemption would only be a way round the pin.
+        $dockerfile = (New-ProductionDockerfile $script:Aspnet $script:Sdk) + "`nARG BASE_IMAGE`nFROM `${BASE_IMAGE} AS extra"
+        $outcome = Invoke-Discovery @{ 'src/JIM.Web/Dockerfile' = $dockerfile }
+
+        $outcome.ExitCode | Should -Be 1
+        $outcome.Output | Should -Match 'POLICY VIOLATION'
+    }
+
     It 'fails when no production Dockerfile is found at all' {
         $outcome = Invoke-Discovery @{
             '.devcontainer/Dockerfile' = "FROM mcr.microsoft.com/devcontainers/dotnet:10.0"
