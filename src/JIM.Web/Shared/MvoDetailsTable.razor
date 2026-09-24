@@ -1,7 +1,10 @@
+@using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Transactional
 @using System.Globalization
 @using Utilities
 @inject IUserPreferenceService PreferenceService
+@inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -45,6 +48,13 @@
                                 @if (group.Values.Count == 1)
                                 {
                                     @RenderValue(group.Values[0])
+                                    @* Unique Value Generation (#242, Phase 3, Work Package D2): a generated value only
+                                       ever targets a single-valued attribute, so the provenance chip only ever needs
+                                       to consider this branch (approved mockup screen 04). *@
+                                    @if (_committedGeneratedAssignmentsByAttribute.TryGetValue(group.AttributeName, out var assignment))
+                                    {
+                                        <GeneratedValueProvenanceChip Assignment="assignment" Class="ml-2" />
+                                    }
                                 }
                                 else if (group.TotalCount <= MvaInlineThreshold)
                                 {
@@ -169,6 +179,28 @@
 
     private bool _dense;
     private bool _preferencesLoaded;
+
+    /// <summary>
+    /// Committed generated-value assignments for the loaded Metaverse Object (Unique Value Generation, #242,
+    /// Phase 3, Work Package D2), keyed by attribute name. Proposed assignments are excluded: a placeholder held
+    /// while a synchronisation run is still in progress is not yet a fact about the object worth showing.
+    /// Loaded once per Metaverse Object, not per row (<see cref="OnParametersSetAsync"/> guards on the id).
+    /// </summary>
+    private Dictionary<string, GeneratedValueAssignmentHeader> _committedGeneratedAssignmentsByAttribute = new();
+    private Guid? _loadedGeneratedAssignmentsForMvoId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (MetaverseObject == null || MetaverseObject.Id == _loadedGeneratedAssignmentsForMvoId)
+            return;
+
+        using var jim = JimFactory.Create();
+        var assignments = await jim.UniqueValues.GetAssignmentsForMetaverseObjectAsync(MetaverseObject.Id);
+        _committedGeneratedAssignmentsByAttribute = assignments
+            .Where(a => a.State == GeneratedValueAssignmentState.Committed)
+            .ToDictionary(a => a.AttributeName);
+        _loadedGeneratedAssignmentsForMvoId = MetaverseObject.Id;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
