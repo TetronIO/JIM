@@ -51,7 +51,7 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 
 ### Network Requirements
 
-JIM's services communicate internally over a Docker bridge network (`jim-network`). The only port that needs to be exposed externally is the web/API port on `jim.web` (container port `80`).
+JIM's services communicate internally over a Docker bridge network (`jim-network`). The only port that needs to be exposed externally is the web/API port on `jim.web` (container port `8080`).
 
 | Direction | Port                                               | Purpose                                        |
 |-----------|----------------------------------------------------|-------------------------------------------------|
@@ -169,7 +169,6 @@ jim-release-X.Y.Z/
 |   +-- postgres-18.tar       # PostgreSQL image (if included)
 +-- compose/
 |   +-- docker-compose.yml
-|   +-- docker-compose.override.yml
 |   +-- docker-compose.production.yml
 |   +-- .env.example
 +-- powershell/
@@ -221,10 +220,7 @@ docker load -i docker-images/postgres-18.tar
 
 **Option A: Use the bundled PostgreSQL container** (simpler, suitable for smaller deployments)
 
-```bash
-# Start with bundled database
-docker compose --profile with-db up -d
-```
+No preparation is needed; the container starts with the rest of JIM in Step 7.
 
 **Option B: Use an external PostgreSQL server** (recommended for production)
 
@@ -238,11 +234,7 @@ docker compose --profile with-db up -d
 
 2. Update `.env` with your database connection details (see [Configuration Reference](configuration.md))
 
-3. Start JIM without the database profile:
-
-    ```bash
-    docker compose up -d
-    ```
+3. Leave out `--profile with-db` when you start JIM in Step 7.
 
 ### Step 4: Configure Environment
 
@@ -288,17 +280,24 @@ If you need to integrate with an external system that writes to a fixed network 
 
 ```bash
 # With bundled PostgreSQL
-docker compose --profile with-db up -d
+docker compose -f docker-compose.yml -f docker-compose.production.yml \
+  --profile with-db up -d
 
 # With external PostgreSQL
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
-# Check all services are running
-docker compose ps
+# Check all services are running (drop --profile with-db for external PostgreSQL)
+docker compose -f docker-compose.yml -f docker-compose.production.yml \
+  --profile with-db ps
 
 # View logs
-docker compose logs -f
+docker compose -f docker-compose.yml -f docker-compose.production.yml logs -f
 ```
+
+The production file publishes the web UI on host port `5200`; see [Port Mapping](#port-mapping) to change it.
+
+!!! warning "Always name the compose files"
+    Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone and silently adds any `docker-compose.override.yml` it finds in the directory. Release bundles up to and including 0.15.0 shipped a development `docker-compose.override.yml` (Development mode, a demo Keycloak with `admin`/`admin`, PostgreSQL published on port 5432); delete it from your compose directory if it is there.
 
 ### Step 8: Verify Startup
 
@@ -327,7 +326,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 
 ## TLS and Reverse Proxy
 
-The JIM containers serve HTTP on port 80 internally. For production, place a reverse proxy in front to handle TLS termination.
+The JIM containers serve HTTP on port 8080 internally. For production, place a reverse proxy in front to handle TLS termination.
 
 !!! important
     Blazor Server uses WebSockets (SignalR). Your reverse proxy **must** support WebSocket connections, or the UI will fall back to long polling with degraded performance.
@@ -360,23 +359,22 @@ server {
 
 ### Port Mapping
 
-The base `docker-compose.yml` does not expose ports externally. You need to add a port mapping. Create a `docker-compose.ports.yml` override:
-
-```yaml
-services:
-  jim.web:
-    ports:
-      - "5200:80"
-```
-
-Then include it in your compose command:
+`jim.web` listens on port `8080` inside its container. `docker-compose.production.yml` publishes it on host port `5200` on every interface. To change the host port, set `JIM_WEB_PORT` in `.env`:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml \
-  -f docker-compose.ports.yml --profile with-db up -d
+JIM_WEB_PORT=8000
 ```
 
-Alternatively, add the `ports` mapping directly to `docker-compose.production.yml` after downloading it.
+When the reverse proxy runs on the same host, bind JIM to the loopback interface so it is reachable only through the proxy:
+
+```bash
+JIM_WEB_PORT=127.0.0.1:5200
+```
+
+The base `docker-compose.yml` publishes no ports, so a deployment that leaves out `docker-compose.production.yml` is not reachable from the host.
+
+!!! note "Upgrading from 0.15.0 or earlier"
+    Earlier production files published no port, so you may have added a `ports` mapping of your own. Remove it and set `JIM_WEB_PORT` instead: Docker Compose combines port mappings from every file, so a mapping on another host port would publish JIM on both. Any mapping must target container port `8080`.
 
 ---
 
