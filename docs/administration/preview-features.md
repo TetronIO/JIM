@@ -14,9 +14,9 @@ A feature stops being a Preview feature once JIM considers its behaviour settled
 
 ## Turning a Preview feature on
 
-Preview features live in the **Preview features** card on the [Service Settings](../configuration/service-settings.md) page in the admin portal. The card is always there, even when JIM currently has no Preview features to offer, so you know where to look once one arrives. Each entry shows the feature's name, a short description of what it does, a switch to turn it on or off, and, once you have changed it, when and by whom.
+Preview features are ordinary rows on the [Service Settings](../configuration/service-settings.md) page in the admin portal, under the **Preview Features** category, alongside JIM's other settings. Each row shows the feature's name (carrying a small **Preview** chip), a description, its current value (on or off) and, once you have changed it, when and by whom. Edit and revert it exactly as you would any other setting: use the pencil action to turn it on or off, and the revert action to turn it back off. Use the toolbar's **Show preview features only** checkbox to filter the table down to just these rows.
 
-Wherever a Preview feature's own controls appear elsewhere in the portal (a button, a tab, a new field), they carry a small **Preview** label, so you always know when you are looking at a feature that is still being rolled out.
+Wherever a Preview feature's own controls appear elsewhere in the portal (a button, a tab, a new field), they carry the same small **Preview** chip, so you always know when you are looking at a feature that is still being rolled out.
 
 You can also manage Preview features from PowerShell or the REST API:
 
@@ -27,7 +27,7 @@ Turning a Preview feature on or off is recorded in its [configuration change his
 
 ## In development features
 
-Some feature flags exist purely for JIM's own development and its integration test harness, and are never shown to administrators, including in the Preview features card in a production deployment. If you see a reference to an "in development" flag in JIM's release notes or issue tracker, it is not something you can or need to turn on yourself; it becomes a Preview feature, or ships outright, when it is ready.
+Some feature flags exist purely for JIM's own development and its integration test harness, and are never shown to administrators: their Service Settings row never appears in a production deployment, whatever category you filter to. If you see a reference to an "in development" flag in JIM's release notes or issue tracker, it is not something you can or need to turn on yourself; it becomes a Preview feature, or ships outright, when it is ready.
 
 ## See also
 
