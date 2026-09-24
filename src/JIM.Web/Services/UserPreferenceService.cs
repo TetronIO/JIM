@@ -127,6 +127,18 @@ public interface IUserPreferenceService
     Task SetCausalityViewAsync(string view);
 
     /// <summary>
+    /// Gets the user's preferred grouping for the Metaverse Object Inspect view's attribute table (#399).
+    /// </summary>
+    /// <returns>"none", "source" or "category"; null if no preference (default to "none").</returns>
+    Task<string?> GetMvoInspectGroupByAsync();
+
+    /// <summary>
+    /// Sets the user's preferred grouping for the Inspect view's attribute table.
+    /// </summary>
+    /// <param name="groupBy">"none", "source" or "category".</param>
+    Task SetMvoInspectGroupByAsync(string groupBy);
+
+    /// <summary>
     /// Gets whether the user has collapsed the Service Health panel on the Operations page.
     /// </summary>
     /// <returns>True if collapsed, false if expanded, null if no preference (default to expanded).</returns>
@@ -149,6 +161,7 @@ public class UserPreferenceService : IUserPreferenceService
     private const string DarkModeKey = "darkMode";
     private const string DrawerPinnedKey = "drawerPinned";
     private const string MvoDetailViewModeKey = "mvoDetailViewMode";
+    private const string MvoInspectGroupByKey = "mvoInspectGroupBy";
     private const string TableDenseKey = "tableDense";
     private const string CausalityViewKey = "causalityView";
     private const string ServiceHealthCollapsedKey = "serviceHealthCollapsed";
@@ -425,6 +438,52 @@ public class UserPreferenceService : IUserPreferenceService
         try
         {
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", MvoDetailViewModeKey, viewMode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <summary>
+    /// Valid Inspect view "Group by" values.
+    /// </summary>
+    private static readonly string[] ValidMvoInspectGroupByValues = ["none", "source", "category"];
+
+    /// <inheritdoc />
+    public async Task<string?> GetMvoInspectGroupByAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", MvoInspectGroupByKey);
+            if (value != null && ValidMvoInspectGroupByValues.Contains(value))
+                return value;
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetMvoInspectGroupByAsync(string groupBy)
+    {
+        if (!ValidMvoInspectGroupByValues.Contains(groupBy))
+            return;
+
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", MvoInspectGroupByKey, groupBy);
         }
         catch (JSDisconnectedException)
         {

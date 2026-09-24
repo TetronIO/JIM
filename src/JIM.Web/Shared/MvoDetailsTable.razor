@@ -1,4 +1,5 @@
 @using JIM.Models.Core
+@using JIM.Models.Core.DTOs
 @using System.Globalization
 @using Utilities
 @inject IUserPreferenceService PreferenceService
@@ -6,91 +7,161 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
+@* The Inspect view (#399, formerly "Table"): attributes with their source and history, one line per row.  *@
+@* Presentational: the provenance for the object and for an opened attribute are loaded by the host        *@
+@* (Pages/Types/View.razor) and handed down, so this renders from parameters alone and is bUnit-testable    *@
+@* without the application layer. *@
+
 @if (MetaverseObject != null)
 {
-    <MudPaper Class="pa-0" Outlined="true">
-        <div class="d-flex justify-start pa-2 jim-attribute-table-toolbar">
-            <TableDensityToggle @bind-Dense="_dense" />
+    @if (ProvenanceLoading && Provenance == null)
+    {
+        <div class="d-flex justify-center pa-4">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
         </div>
-        <MudSimpleTable Hover="true" Dense="@_dense" Elevation="0" Class="jim-attribute-table">
-            <thead>
-                <tr>
-                    <th class="jim-attr-header-name">Attribute</th>
-                    <th class="jim-attr-header-value">Value</th>
-                    <th class="jim-attr-header-type">Type</th>
-                    <th class="jim-attr-header-plurality">Plurality</th>
-                </tr>
-            </thead>
-            <tbody>
-                @{
-                    var groupedAttributes = GetGroupedAttributes();
-                }
-                @if (!groupedAttributes.Any())
-                {
-                    <tr>
-                        <td colspan="4" class="text-center pa-4">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
-                        </td>
-                    </tr>
-                }
-                else
-                {
-                    @foreach (var group in groupedAttributes)
-                    {
-                        <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
-                            <td class="jim-attr-name">
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
-                            </td>
-                            <td class="jim-attr-value">
-                                @if (group.Values.Count == 1)
-                                {
-                                    @RenderValue(group.Values[0])
-                                }
-                                else if (group.TotalCount <= MvaInlineThreshold)
-                                {
-                                    <div class="jim-attr-expanded">
-                                        @foreach (var val in group.Values)
-                                        {
-                                            <div class="jim-attr-expanded-item">
-                                                @RenderValue(val)
-                                            </div>
-                                        }
-                                    </div>
-                                }
-                                else
-                                {
-                                    <MvoMvaTable @key="group.AttributeName"
-                                                 AttributeName="@group.AttributeName"
-                                                 MetaverseObjectId="@MetaverseObject.Id"
-                                                 IsReferenceAttribute="@group.IsReference"
-                                                 Dense="@_dense" />
-                                }
-                            </td>
-                            <td class="jim-attr-type">
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
-                            </td>
-                            <td class="jim-attr-plurality">
-                                @if (group.IsMultiValued)
-                                {
-                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Multi</MudText>
-                                }
-                                else
-                                {
-                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Single</MudText>
-                                }
-                            </td>
+    }
+    else if (Provenance != null)
+    {
+        <MvoContributionBar Provenance="Provenance" ObjectTypeName="@ObjectTypeName"
+                             ActiveFilterKey="ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged" />
+    }
+
+    <div class="jim-inspect-layout">
+        <div class="jim-inspect-main">
+            <MudPaper Class="pa-0" Outlined="true">
+                <div class="d-flex align-center flex-wrap pa-2 jim-attribute-table-toolbar" style="gap: 8px;">
+                    <TableDensityToggle @bind-Dense="_dense" />
+                    <MudText Class="mx-2 mud-text-disabled">|</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Group by:</MudText>
+                    <MudButtonGroup OverrideStyles="false">
+                        <MudButton Variant="@(GroupBy == "none" ? Variant.Filled : Variant.Outlined)"
+                                   Color="Color.Primary" Size="Size.Small"
+                                   OnClick="@(() => ChangeGroupByAsync("none"))">None</MudButton>
+                        <MudButton Variant="@(GroupBy == "source" ? Variant.Filled : Variant.Outlined)"
+                                   Color="Color.Primary" Size="Size.Small"
+                                   OnClick="@(() => ChangeGroupByAsync("source"))">Source</MudButton>
+                        <MudButton Variant="@(GroupBy == "category" ? Variant.Filled : Variant.Outlined)"
+                                   Color="Color.Primary" Size="Size.Small"
+                                   OnClick="@(() => ChangeGroupByAsync("category"))">Category</MudButton>
+                    </MudButtonGroup>
+                </div>
+                <MudSimpleTable Hover="true" Dense="@_dense" Elevation="0" Class="jim-attribute-table">
+                    <thead>
+                        <tr>
+                            <th class="jim-attr-header-name">Attribute</th>
+                            <th class="jim-attr-header-value">Value</th>
+                            @if (GroupBy != "source")
+                            {
+                                <th>Source</th>
+                            }
+                            <th class="jim-attr-header-type">Type</th>
+                            @if (!ShowInspector)
+                            {
+                                <th class="jim-attr-header-plurality">Plurality</th>
+                            }
                         </tr>
-                    }
+                    </thead>
+                    <tbody>
+                        @{ var rows = GetVisibleRows(); }
+                        @if (rows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" class="text-center pa-4">
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in rows)
+                            {
+                                @if (row.IsHeader)
+                                {
+                                    <tr class="jim-inspect-group-header">
+                                        <td colspan="5">
+                                            @if (row.HeaderIcon != null)
+                                            {
+                                                <MudIcon Icon="@row.HeaderIcon" Size="Size.Small" Class="me-2" />
+                                            }
+                                            @if (row.HeaderLabel != null)
+                                            {
+                                                <span>@row.HeaderLabel</span>
+                                            }
+                                            else
+                                            {
+                                                @* Group by Source: the header names the source with the same shared
+                                                   chip everywhere else, so it already carries the Connected System
+                                                   and a link to the Synchronisation Rule; nothing more to add. *@
+                                                <ValueOriginChip Origin="@(row.HeaderOrigin ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="row.HeaderHasSeveralOrigins" />
+                                            }
+                                            <span class="mud-text-secondary ml-2">@row.HeaderCount attribute@(row.HeaderCount == 1 ? "" : "s")</span>
+                                        </td>
+                                    </tr>
+                                }
+                                else if (row.Group != null)
+                                {
+                                    var group = row.Group;
+                                    var isSelected = SelectedAttributeId.HasValue && SelectedAttributeId.Value == group.AttributeId;
+                                    <tr @key="group.AttributeName"
+                                        class="jim-inspect-row @(group.Values.Count > 1 ? "jim-attr-row-mva" : "") @(isSelected ? "jim-inspect-row-selected" : "")"
+                                        tabindex="0" role="button" aria-pressed="@(isSelected ? "true" : "false")"
+                                        @onclick="@(() => SelectAttributeAsync(group.AttributeId))"
+                                        @onkeydown="@(e => OnRowKeyDownAsync(e, group.AttributeId))">
+                                        <td class="jim-attr-name">
+                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
+                                        </td>
+                                        <td class="jim-attr-value jim-one-line">
+                                            @RenderValueCell(group)
+                                        </td>
+                                        @if (GroupBy != "source")
+                                        {
+                                            <td class="jim-one-line">
+                                                @RenderSourceCell(group.AttributeId)
+                                            </td>
+                                        }
+                                        <td class="jim-attr-type">
+                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
+                                        </td>
+                                        @if (!ShowInspector)
+                                        {
+                                            <td class="jim-attr-plurality">
+                                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@(group.IsMultiValued ? "Multi" : "Single")</MudText>
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            }
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </div>
+
+        @if (ShowInspector)
+        {
+            <div class="jim-inspect-side">
+                @if (AttributeInspectorLoading && SelectedAttributeProvenance == null)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 d-flex justify-center">
+                        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                    </MudPaper>
                 }
-            </tbody>
-        </MudSimpleTable>
-    </MudPaper>
+                else if (SelectedAttributeProvenance != null)
+                {
+                    <MvoAttributeInspector Provenance="SelectedAttributeProvenance" OnClose="OnCloseInspector" OnOpenInTimeline="OnOpenInTimeline" />
+                }
+            </div>
+        }
+    </div>
 }
 
-@* ─── Render Fragments ─── *@
+@code {
+    // ─── Render Fragments ───
+    // RenderValue lives here (a @code method), not in a markup @{ } block: it is called both from markup
+    // (RenderValueCell) and, indirectly, needs to be reachable from that method, and a local function declared
+    // inside the component's BuildRenderTree (a markup @{ } block) is not visible to an ordinary @code method.
 
-@{
-    RenderFragment RenderValue(MetaverseObjectAttributeValue attributeValue) => __builder =>
+    private RenderFragment RenderValue(MetaverseObjectAttributeValue attributeValue) => __builder =>
     {
         if (attributeValue.Attribute.Type == AttributeDataType.Text)
         {
@@ -117,9 +188,10 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
         {
-            <MudTooltip Text="@attributeValue.DateTimeValue.Value.ToString("O")">
+            var dateTimeValue = attributeValue.DateTimeValue.Value;
+            <MudTooltip Text="@dateTimeValue.ToString("O")" Arrow="true" Placement="Placement.Top">
                 <ChildContent>
-                    @attributeValue.DateTimeValue.Value.ToFriendlyDate()
+                    @dateTimeValue.ToFriendlyDate()
                 </ChildContent>
             </MudTooltip>
         }
@@ -129,8 +201,6 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
         {
-            @* Local capture: CodeQL does not read the HasValue guard above as establishing null-state
-               for a dereference in markup (JIM.Web/CLAUDE.md, "Nullable dereference in Razor"). *@
             var boolValue = attributeValue.BoolValue.Value;
             <BooleanValue Value="@boolValue" />
         }
@@ -145,30 +215,70 @@
                 @(attributeValue.ReferenceValue.NameOrId ?? attributeValue.ReferenceValue.Id.ToString())
             </MudLink>
         }
+        else
+        {
+            <EmptyValue />
+        }
     };
-}
 
-@code {
-    /// <summary>
-    /// The Metaverse Object whose attributes to display in table format.
-    /// </summary>
-    [Parameter]
+    /// <summary>The Metaverse Object whose attributes to display.</summary>
+    [Parameter, EditorRequired]
     public MetaverseObject MetaverseObject { get; set; } = null!;
 
-    /// <summary>
-    /// Per-attribute total value counts from the capped load.
-    /// Used to show accurate totals when MVA values are capped.
-    /// </summary>
+    /// <summary>The Metaverse Object Type's name, passed through to the contribution bar's heading.</summary>
+    [Parameter]
+    public string ObjectTypeName { get; set; } = "object";
+
+    /// <summary>Per-attribute total value counts from the capped load.</summary>
     [Parameter]
     public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
 
-    /// <summary>
-    /// Maximum number of multi-valued attribute values to show inline before truncating.
-    /// </summary>
-    private const int MvaInlineThreshold = 10;
+    /// <summary>The object's attribute origins (#399), loaded by the host when this view is shown. Null while loading.</summary>
+    [Parameter]
+    public MetaverseObjectProvenance? Provenance { get; set; }
+
+    /// <summary>Whether the host is loading <see cref="Provenance"/>.</summary>
+    [Parameter]
+    public bool ProvenanceLoading { get; set; }
+
+    /// <summary>"none", "source" or "category".</summary>
+    [Parameter]
+    public string GroupBy { get; set; } = "none";
+
+    [Parameter]
+    public EventCallback<string> OnGroupByChanged { get; set; }
+
+    /// <summary>The active source filter's group key (from the contribution bar's legend), or null.</summary>
+    [Parameter]
+    public string? ContributionFilterKey { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> OnContributionFilterChanged { get; set; }
+
+    /// <summary>The attribute id whose inspector is open, or null.</summary>
+    [Parameter]
+    public int? SelectedAttributeId { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnAttributeSelected { get; set; }
+
+    /// <summary>The opened attribute's full provenance (#399), loaded by the host. Null while loading or when none is open.</summary>
+    [Parameter]
+    public MetaverseAttributeProvenance? SelectedAttributeProvenance { get; set; }
+
+    [Parameter]
+    public bool AttributeInspectorLoading { get; set; }
+
+    [Parameter]
+    public EventCallback OnCloseInspector { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpenInTimeline { get; set; }
 
     private bool _dense;
     private bool _preferencesLoaded;
+
+    private bool ShowInspector => SelectedAttributeId.HasValue;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -187,17 +297,53 @@
         }
     }
 
+    private async Task ChangeGroupByAsync(string groupBy)
+    {
+        if (groupBy == GroupBy)
+            return;
+        await OnGroupByChanged.InvokeAsync(groupBy);
+    }
+
+    private async Task SelectAttributeAsync(int attributeId)
+    {
+        await OnAttributeSelected.InvokeAsync(attributeId);
+    }
+
+    private async Task OnRowKeyDownAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, int attributeId)
+    {
+        if (e.Key is "Enter" or " ")
+            await SelectAttributeAsync(attributeId);
+    }
+
     private record MvoAttributeTableGroup(
+        int AttributeId,
         string AttributeName,
         List<MetaverseObjectAttributeValue> Values,
         bool IsMultiValued,
-        int TotalCount,
-        bool IsReference);
+        int TotalCount);
+
+    /// <summary>
+    /// One row the table renders: either an attribute row (<see cref="Group"/> set) or a group header (Source or
+    /// Category grouping). A category header carries <see cref="HeaderLabel"/>/<see cref="HeaderIcon"/>; a source
+    /// header instead carries the group's <see cref="HeaderOrigin"/>, rendered through the same
+    /// <c>ValueOriginChip</c> every other origin uses, so the header names the Connected System and links the
+    /// Synchronisation Rule without a second copy of that rendering.
+    /// </summary>
+    private sealed record TableRow(
+        MvoAttributeTableGroup? Group,
+        string? HeaderLabel = null,
+        string? HeaderIcon = null,
+        int HeaderCount = 0,
+        ValueOrigin? HeaderOrigin = null,
+        bool HeaderHasSeveralOrigins = false)
+    {
+        public bool IsHeader => Group == null;
+    }
 
     private List<MvoAttributeTableGroup> GetGroupedAttributes()
     {
         if (MetaverseObject?.AttributeValues == null)
-            return new List<MvoAttributeTableGroup>();
+            return [];
 
         return MetaverseObject.AttributeValues
             .GroupBy(v => v.Attribute.Name)
@@ -206,15 +352,112 @@
             {
                 var values = g.ToList();
                 var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
-                var isReference = values.Any(v => v.ReferenceValue != null);
                 return new MvoAttributeTableGroup(
+                    g.First().Attribute.Id,
                     g.Key,
                     values,
                     g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                    totalCount,
-                    isReference);
+                    totalCount);
             })
             .ToList();
     }
 
+    /// <summary>The origin summary for one attribute, or null when none was recorded for it (provenance not loaded, or not returned).</summary>
+    private MetaverseAttributeOriginSummary? OriginFor(int attributeId) =>
+        Provenance?.Attributes.FirstOrDefault(a => a.AttributeId == attributeId);
+
+    /// <summary>
+    /// The rows to render for the current Group by mode and source filter: a flat, ordered list under "None", a
+    /// header row per category under "Category", or a header row per source under "Source" (which also drops
+    /// the Source column, since the header already states it).
+    /// </summary>
+    private List<TableRow> GetVisibleRows()
+    {
+        var groups = GetGroupedAttributes();
+
+        if (ContributionFilterKey != null && Provenance != null)
+        {
+            groups = groups
+                .Where(g => OriginFor(g.AttributeId) is { } origin && ValueOriginGrouping.KeyFor(origin) == ContributionFilterKey)
+                .ToList();
+        }
+
+        if (GroupBy == "category")
+        {
+            var byCategory = groups.ToLookup(g => AttributeCategories.GetCategory(g.AttributeName));
+            var rows = new List<TableRow>();
+            foreach (var category in AttributeCategories.CategoryOrder.Where(c => byCategory[c].Any()))
+            {
+                var inCategory = byCategory[category].ToList();
+                rows.Add(new TableRow(null, category, AttributeCategories.GetIcon(category), inCategory.Count));
+                rows.AddRange(inCategory.Select(g => new TableRow(g)));
+            }
+            return rows;
+        }
+
+        if (GroupBy == "source" && Provenance != null)
+        {
+            // Pair each attribute group with its origin summary (falling back to "not recorded" when the
+            // provenance load returned nothing for it), so both the grouping key and the header's chip come
+            // from the same source data rather than being reconstructed from a label string.
+            var withOrigin = groups
+                .Select(g => (Group: g, Origin: OriginFor(g.AttributeId) ?? new MetaverseAttributeOriginSummary
+                {
+                    AttributeId = g.AttributeId,
+                    AttributeName = g.AttributeName,
+                    Origins = [ValueOrigin.NotRecorded]
+                }))
+                .ToList();
+
+            var orderedGroups = ValueOriginGrouping.BuildGroups(withOrigin.Select(x => x.Origin).ToList());
+            var byKey = withOrigin.ToLookup(x => ValueOriginGrouping.KeyFor(x.Origin));
+
+            var rows = new List<TableRow>();
+            foreach (var (sourceGroup, count) in orderedGroups)
+            {
+                // Every group BuildGroups returns above came from this same withOrigin list, so its key always
+                // has at least one member here; no empty-group guard is needed.
+                var members = byKey[sourceGroup.Key].ToList();
+                var sample = members[0].Origin;
+                rows.Add(new TableRow(null, HeaderCount: count,
+                    HeaderOrigin: sample.HasSeveralOrigins ? null : sample.Origins[0],
+                    HeaderHasSeveralOrigins: sample.HasSeveralOrigins));
+                rows.AddRange(members.OrderBy(m => m.Group.AttributeName).Select(m => new TableRow(m.Group)));
+            }
+            return rows;
+        }
+
+        return groups.Select(g => new TableRow(g)).ToList();
+    }
+
+    private RenderFragment RenderValueCell(MvoAttributeTableGroup group) => __builder =>
+    {
+        if (group.Values.Count == 0)
+        {
+            <EmptyValue />
+        }
+        else if (!group.IsMultiValued)
+        {
+            @RenderValue(group.Values[0])
+        }
+        else
+        {
+            // Every cell renders to one line (JIM.Web/CLAUDE.md): the full value set belongs to the attribute
+            // inspector (the row is clickable to open it), not to a stacked or nested table in this cell.
+            <span class="mud-text-secondary">@group.TotalCount.ToString("N0") values</span>
+        }
+    };
+
+    private RenderFragment RenderSourceCell(int attributeId) => __builder =>
+    {
+        if (ProvenanceLoading && Provenance == null)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+        }
+        else
+        {
+            var origin = OriginFor(attributeId);
+            <ValueOriginChip Origin="@(origin?.Origins[0] ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="@(origin?.HasSeveralOrigins ?? false)" />
+        }
+    };
 }

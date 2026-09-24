@@ -57,10 +57,12 @@
                                Color="Color.Primary" Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.Tab"
                                OnClick="@(() => OnDetailViewModeChangedAsync("tabs"))">Tabs</MudButton>
-                    <MudButton Variant="@(_detailViewMode == "table" ? Variant.Filled : Variant.Outlined)"
-                               Color="Color.Primary" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.ViewList"
-                               OnClick="@(() => OnDetailViewModeChangedAsync("table"))">Table</MudButton>
+                    <MudTooltip Text="Attributes with their sources and history" Arrow="true" Placement="Placement.Top">
+                        <MudButton Variant="@(_detailViewMode == "table" ? Variant.Filled : Variant.Outlined)"
+                                   Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.ViewList"
+                                   OnClick="@(() => OnDetailViewModeChangedAsync("table"))">Inspect</MudButton>
+                    </MudTooltip>
                 </MudButtonGroup>
             }
         </Header>
@@ -68,7 +70,14 @@
         <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
             @if (_detailViewMode == "table")
             {
-                <MvoDetailsTable MetaverseObject="MetaverseObject" AttributeValueTotalCounts="_attributeValueTotalCounts" />
+                <MvoDetailsTable MetaverseObject="MetaverseObject" ObjectTypeName="@(MetaverseObjectType?.Name ?? "object")"
+                                 AttributeValueTotalCounts="_attributeValueTotalCounts"
+                                 Provenance="_mvoProvenance" ProvenanceLoading="_provenanceLoading"
+                                 GroupBy="_inspectGroupBy" OnGroupByChanged="OnInspectGroupByChangedAsync"
+                                 ContributionFilterKey="_contributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
+                                 SelectedAttributeId="_selectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
+                                 SelectedAttributeProvenance="_selectedAttributeProvenance" AttributeInspectorLoading="_attributeInspectorLoading"
+                                 OnCloseInspector="OnCloseInspectorAsync" OnOpenInTimeline="OpenAttributeInTimelineAsync" />
             }
             else if (_detailViewMode == "tabs")
             {
@@ -562,9 +571,24 @@
     private bool _changeHistoryLoading;
     private readonly List<ChangeHistoryTimeline.ChangeGroup> _changeHistoryRows = new();
 
+    // Inspect view state (#399): the object's attribute provenance, its Group by choice, the active source
+    // filter (from the contribution bar's legend) and the currently opened attribute's own provenance. Loaded
+    // by this page (the Inspect table's host) rather than by MvoDetailsTable itself, so that component stays a
+    // presentational renderer of parameters, testable in bUnit without the application layer.
+    private MetaverseObjectProvenance? _mvoProvenance;
+    private bool _provenanceLoading;
+    private Guid? _provenanceLoadedForId;
+    private string _inspectGroupBy = "none";
+    private string? _contributionFilterKey;
+    private int? _selectedAttributeId;
+    private MetaverseAttributeProvenance? _selectedAttributeProvenance;
+    private bool _attributeInspectorLoading;
+
     protected override async Task OnParametersSetAsync()
     {
-        // If ?c= is present, force tabs view (overrides saved preference)
+        // If ?c= is present, force tabs view (overrides saved preference); ?view=inspect does the same for
+        // Inspect, checked after so it wins when a link carries both (it never should, but a link is only ever
+        // written by JIM's own code, per the Inspect discoverability links in #399).
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         if (query["c"] != null)
@@ -585,6 +609,30 @@
                 // JS interop not yet available; keep default
             }
         }
+        if (query["view"] == "inspect")
+            _detailViewMode = "table";
+
+        // ?group=none|source|category deep-links the Inspect view's grouping; otherwise fall back to the
+        // saved preference, defaulting to "none".
+        var groupParam = query["group"];
+        if (groupParam is "none" or "source" or "category")
+        {
+            _inspectGroupBy = groupParam;
+        }
+        else
+        {
+            try
+            {
+                _inspectGroupBy = await UserPreferences.GetMvoInspectGroupByAsync() ?? "none";
+            }
+            catch (InvalidOperationException)
+            {
+                // JS interop not yet available; keep default
+            }
+        }
+
+        // ?attr={attributeId} opens that attribute's inspector once the object has loaded, below.
+        int? pendingInspectAttributeId = int.TryParse(query["attr"], out var parsedAttributeId) ? parsedAttributeId : null;
 
         using var jim = JimFactory.Create();
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
@@ -603,10 +651,22 @@
             return;
         }
 
+        var previousObjectId = MetaverseObject?.Id;
         MetaverseObject = detailResult.MetaverseObject;
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
         _changeCount = detailResult.ChangeCount;
         _connectorCount = detailResult.ConnectorCount;
+
+        // A navigation from one person to another reuses this component (#399): the Inspect view's provenance
+        // and open attribute belong to the previous object and must not be shown against this one.
+        if (previousObjectId != MetaverseObject.Id)
+        {
+            _mvoProvenance = null;
+            _provenanceLoadedForId = null;
+            _contributionFilterKey = null;
+            _selectedAttributeId = null;
+            _selectedAttributeProvenance = null;
+        }
 
         // A navigation from one person to another reuses this component, so the Password tab's data is forgotten
         // here and read again on its next activation; the badge is re-read below with the rest of the page.
@@ -641,6 +701,14 @@
                 new(MetaverseObjectType.PluralName, href: $"/t/{MetaverseObjectType.PluralName.ToLower()}"),
                 new(MetaverseObjectType.Name, href: null, disabled: true)
             };
+
+        // Load the Inspect view's provenance only when it is actually shown (#399); Form and Tabs never need it.
+        if (_detailViewMode == "table")
+        {
+            await EnsureProvenanceLoadedAsync();
+            if (pendingInspectAttributeId.HasValue)
+                await OpenAttributeInspectorAsync(pendingInspectAttributeId.Value);
+        }
     }
 
     private async Task OnDetailViewModeChangedAsync(string mode)
@@ -648,20 +716,163 @@
         _detailViewMode = mode;
         await UserPreferences.SetMvoDetailViewModeAsync(_detailViewMode);
 
-        // Clean up the ?cat= query parameter when leaving tabs view
-        if (mode != "tabs")
+        if (mode == "table")
         {
-            var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-            if (query["c"] != null)
-            {
-                query.Remove("c");
-                var baseUri = uri.GetLeftPart(UriPartial.Path);
-                var qs = query.ToString();
-                var newUrl = string.IsNullOrEmpty(qs) ? baseUri : $"{baseUri}?{qs}";
-                NavManager.NavigateTo(newUrl, new NavigationOptions { ReplaceHistoryEntry = true });
-            }
+            await EnsureProvenanceLoadedAsync();
         }
+        else
+        {
+            // Leaving Inspect: its state belongs to that view only, so a later switch back starts clean rather
+            // than reopening whatever attribute or filter happened to be active last time.
+            _selectedAttributeId = null;
+            _selectedAttributeProvenance = null;
+            _contributionFilterKey = null;
+        }
+
+        // Clean up the one-shot ?c=/?view= entry triggers, and, once Inspect is left, its ?attr=/?group= state.
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var changed = false;
+        if (mode != "tabs" && query["c"] != null)
+        {
+            query.Remove("c");
+            changed = true;
+        }
+        if (query["view"] != null)
+        {
+            query.Remove("view");
+            changed = true;
+        }
+        if (mode != "table")
+        {
+            if (query["attr"] != null) { query.Remove("attr"); changed = true; }
+            if (query["group"] != null) { query.Remove("group"); changed = true; }
+        }
+        if (changed)
+            NavigateReplacingQuery(uri, query);
+    }
+
+    /// <summary>
+    /// Loads this Metaverse Object's attribute provenance (#399) once per object, for the Inspect view's
+    /// contribution bar and Source column. A no-op once already loaded (or loading) for the current object.
+    /// </summary>
+    private async Task EnsureProvenanceLoadedAsync()
+    {
+        if (MetaverseObject == null || _provenanceLoadedForId == MetaverseObject.Id)
+            return;
+
+        _provenanceLoadedForId = MetaverseObject.Id;
+        _provenanceLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            _mvoProvenance = await jim.Metaverse.GetMetaverseObjectProvenanceAsync(MetaverseObject.Id);
+        }
+        catch (NotImplementedException)
+        {
+            // #399's backend work package (application/repository layer) has not landed yet; the Inspect view
+            // still renders, just without source information until it does. Safe to keep once it has: this
+            // catch then never triggers.
+            _mvoProvenance = null;
+        }
+        finally
+        {
+            _provenanceLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Loads one attribute's full provenance (#399) for the attribute inspector side panel, opening it.
+    /// </summary>
+    private async Task OpenAttributeInspectorAsync(int attributeId)
+    {
+        if (MetaverseObject == null)
+            return;
+
+        _selectedAttributeId = attributeId;
+        _selectedAttributeProvenance = null;
+        _attributeInspectorLoading = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            _selectedAttributeProvenance = await jim.Metaverse.GetMetaverseAttributeProvenanceAsync(MetaverseObject.Id, attributeId);
+        }
+        catch (NotImplementedException)
+        {
+            // See the matching catch in EnsureProvenanceLoadedAsync: #399's backend work package is not in yet.
+            _selectedAttributeProvenance = null;
+        }
+        finally
+        {
+            _attributeInspectorLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnAttributeSelectedAsync(int attributeId)
+    {
+        await OpenAttributeInspectorAsync(attributeId);
+        UpdateQueryString(("attr", attributeId.ToString()));
+    }
+
+    private Task OnCloseInspectorAsync()
+    {
+        _selectedAttributeId = null;
+        _selectedAttributeProvenance = null;
+        UpdateQueryString(("attr", null));
+        return Task.CompletedTask;
+    }
+
+    private async Task OnInspectGroupByChangedAsync(string groupBy)
+    {
+        _inspectGroupBy = groupBy;
+        await UserPreferences.SetMvoInspectGroupByAsync(groupBy);
+        UpdateQueryString(("group", groupBy == "none" ? null : groupBy));
+    }
+
+    private Task OnContributionFilterChangedAsync(string? key)
+    {
+        _contributionFilterKey = key;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// "Open in Timeline" from the attribute inspector: closes it and switches to the Changes tab, reusing the
+    /// same lazy-load path a manual click on that tab uses. It does not filter the Timeline to the attribute;
+    /// <c>ChangeHistoryTimeline</c> owns its own search box for that (#399 leaves that component alone).
+    /// </summary>
+    private async Task OpenAttributeInTimelineAsync()
+    {
+        _selectedAttributeId = null;
+        _selectedAttributeProvenance = null;
+        UpdateQueryString(("attr", null));
+        await OnActiveTabIndexChangedAsync(1);
+    }
+
+    /// <summary>Applies one or more query-string changes (null value removes the key) via a history-replacing navigation.</summary>
+    private void UpdateQueryString(params (string Key, string? Value)[] updates)
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        foreach (var (key, value) in updates)
+        {
+            if (value == null)
+                query.Remove(key);
+            else
+                query[key] = value;
+        }
+        NavigateReplacingQuery(uri, query);
+    }
+
+    private void NavigateReplacingQuery(Uri uri, System.Collections.Specialized.NameValueCollection query)
+    {
+        var baseUri = uri.GetLeftPart(UriPartial.Path);
+        var qs = query.ToString();
+        var newUrl = string.IsNullOrEmpty(qs) ? baseUri : $"{baseUri}?{qs}";
+        NavManager.NavigateTo(newUrl, new NavigationOptions { ReplaceHistoryEntry = true });
     }
 
     private string GetChangeBadge()

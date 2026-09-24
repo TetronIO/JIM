@@ -47,6 +47,21 @@ public sealed class FakeUserPreferenceService : IUserPreferenceService
 
     public Task SetMvoDetailViewModeAsync(string viewMode) => Task.CompletedTask;
 
+    /// <summary>The Inspect view "Group by" value returned by <see cref="GetMvoInspectGroupByAsync"/>.</summary>
+    public string? StoredMvoInspectGroupBy { get; set; }
+
+    /// <summary>Every value passed to <see cref="SetMvoInspectGroupByAsync"/>, in call order.</summary>
+    public List<string> MvoInspectGroupByWrites { get; } = [];
+
+    public Task<string?> GetMvoInspectGroupByAsync() => Task.FromResult(StoredMvoInspectGroupBy);
+
+    public Task SetMvoInspectGroupByAsync(string groupBy)
+    {
+        MvoInspectGroupByWrites.Add(groupBy);
+        StoredMvoInspectGroupBy = groupBy;
+        return Task.CompletedTask;
+    }
+
     public Task<bool?> GetTableDenseAsync() => Task.FromResult<bool?>(null);
 
     public Task SetTableDenseAsync(bool isDense) => Task.CompletedTask;
