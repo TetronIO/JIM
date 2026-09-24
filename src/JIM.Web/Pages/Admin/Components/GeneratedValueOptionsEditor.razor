@@ -1,4 +1,3 @@
-@using System.Globalization
 @using JIM.Application.Expressions
 @using JIM.Models.Core
 @using JIM.Models.Expressions
@@ -16,7 +15,7 @@
 {
     <MudTextField T="string" Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync"
         Label="Base expression" Disabled="IsNumberTarget"
-        Placeholder="e.g. Lower(cs[&quot;firstName&quot;]) + &quot;.&quot; + Lower(cs[&quot;lastName&quot;])"
+        Placeholder="@(IsNumberTarget ? null : "e.g. Lower(cs[\"firstName\"]) + \".\" + Lower(cs[\"lastName\"])")"
         Class="mt-5" Variant="Variant.Outlined" Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Immediate="true"
         HelperText="@BaseExpressionHelperText" />
 
@@ -125,15 +124,23 @@
                 </MudRadioGroup>
             }
 
-            <MudSwitch T="bool" Value="true" Disabled="true" Color="Color.Primary" Class="mt-4" Label="Never reuse a value" />
+            @* Read-only, not a disabled switch: a disabled switch reads as greyed-out/off, and this is always
+               on for a sequence token, never a choice to make here. *@
+            <div class="d-flex align-center mt-4">
+                <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Class="mud-text-secondary mr-2" />
+                <MudText Typo="Typo.body1">Never reuse a value</MudText>
+            </div>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 Always on for sequence numbers: the counter only moves forward.
             </MudText>
             break;
 
         case GeneratedValueTokenKind.Random:
+            @* Format, Length and Separator sit on one row of three, matching Only-if-taken's Style/Start
+               at/Separator row and Sequence's Start at/Increment/Separator row. GUID has no Length, but the
+               slot stays in place (empty) so the grid, and the hint directly under it, never move. *@
             <MudGrid Spacing="3" Class="mt-1">
-                <MudItem xs="12" sm="6">
+                <MudItem xs="12" sm="4">
                     <MudSelect T="GeneratedValueRandomFormat" Value="generation.RandomFormat" ValueChanged="OnRandomFormatChangedAsync"
                         Label="Format" Variant="Variant.Outlined">
                         <MudSelectItem Value="GeneratedValueRandomFormat.Guid" Disabled="IsNumberTarget">
@@ -147,17 +154,17 @@
                         </MudSelectItem>
                     </MudSelect>
                 </MudItem>
-                @if (generation.RandomFormat != GeneratedValueRandomFormat.Guid)
-                {
-                    <MudItem xs="12" sm="6">
+                <MudItem xs="12" sm="4">
+                    @if (generation.RandomFormat != GeneratedValueRandomFormat.Guid)
+                    {
                         <MudNumericField T="int" Value="generation.RandomLength ?? DefaultRandomLength"
                             ValueChanged="OnRandomLengthChangedAsync" Label="Length" Min="1" Max="64"
                             Variant="Variant.Outlined" Immediate="true" />
-                    </MudItem>
-                }
+                    }
+                </MudItem>
                 @if (ShowSeparator)
                 {
-                    <MudItem xs="12" sm="6">
+                    <MudItem xs="12" sm="4">
                         <GeneratedValueSeparatorField Generation="generation" OnChanged="NotifyChangedAsync" />
                     </MudItem>
                 }
@@ -184,7 +191,11 @@
                 <MudText Typo="Typo.body2">2. Every attribute the base expression reads has a value:</MudText>
                 @foreach (var input in BaseExpressionInputs)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@input.Accessor</MudChip>
+                    @* The attribute name alone, per the approved mockup; the full accessor (which side of the
+                       Metaverse it reads from) is available on hover rather than crowding the chip. *@
+                    <MudTooltip Text="@input.Accessor" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@input.AttributeName</MudChip>
+                    </MudTooltip>
                 }
             </div>
             <MudText Typo="Typo.body2" Class="mt-2">
@@ -353,7 +364,7 @@
     private async Task OnPaddingToggledAsync(bool padded)
     {
         var generation = Mapping.Generation!;
-        generation.FixedWidth = padded ? Math.Max(1, generation.SequenceStart.ToString(CultureInfo.InvariantCulture).Length) : null;
+        generation.FixedWidth = padded ? GeneratedValueFormHelpers.GetDefaultFixedWidth(generation.SequenceStart) : null;
         await NotifyChangedAsync();
     }
 

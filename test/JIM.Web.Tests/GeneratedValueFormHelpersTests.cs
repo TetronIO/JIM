@@ -64,7 +64,7 @@ public class GeneratedValueFormHelpersTests
     }
 
     [Test]
-    public void GetRowSummary_OnlyIfTakenNumber_ReturnsExpected()
+    public void GetTokenPillText_OnlyIfTakenNumberWithBaseExpression_ReturnsExpected()
     {
         var generation = new SyncRuleMappingGeneration
         {
@@ -72,11 +72,11 @@ public class GeneratedValueFormHelpersTests
             SuffixStyle = GeneratedValueSuffixStyle.Number
         };
 
-        Assert.That(GeneratedValueFormHelpers.GetRowSummary(generation), Is.EqualTo("Only if taken · number"));
+        Assert.That(GeneratedValueFormHelpers.GetTokenPillText(generation, hasBaseExpression: true), Is.EqualTo("+ number if taken"));
     }
 
     [Test]
-    public void GetRowSummary_OnlyIfTakenLetter_ReturnsExpected()
+    public void GetTokenPillText_OnlyIfTakenLetterWithBaseExpression_ReturnsExpected()
     {
         var generation = new SyncRuleMappingGeneration
         {
@@ -84,37 +84,52 @@ public class GeneratedValueFormHelpersTests
             SuffixStyle = GeneratedValueSuffixStyle.Letter
         };
 
-        Assert.That(GeneratedValueFormHelpers.GetRowSummary(generation), Is.EqualTo("Only if taken · letter"));
+        Assert.That(GeneratedValueFormHelpers.GetTokenPillText(generation, hasBaseExpression: true), Is.EqualTo("+ letter if taken"));
     }
 
     [Test]
-    public void GetRowSummary_SequenceWithFixedWidth_ReturnsExpected()
+    public void GetTokenPillText_SequenceNoBaseExpressionNoWidth_ReturnsFromStartOnly()
     {
         var generation = new SyncRuleMappingGeneration
         {
             TokenKind = GeneratedValueTokenKind.Sequence,
-            FixedWidth = 11
-        };
-
-        Assert.That(GeneratedValueFormHelpers.GetRowSummary(generation), Is.EqualTo("Sequence · width 11"));
-    }
-
-    [Test]
-    public void GetRowSummary_SequenceWithoutFixedWidth_ReturnsBareLabel()
-    {
-        var generation = new SyncRuleMappingGeneration
-        {
-            TokenKind = GeneratedValueTokenKind.Sequence,
+            SequenceStart = 1,
             FixedWidth = null
         };
 
-        Assert.That(GeneratedValueFormHelpers.GetRowSummary(generation), Is.EqualTo("Sequence"));
+        Assert.That(GeneratedValueFormHelpers.GetTokenPillText(generation, hasBaseExpression: false), Is.EqualTo("Sequence from 1"));
     }
 
-    [TestCase(GeneratedValueRandomFormat.Guid, null, "Random · GUID")]
-    [TestCase(GeneratedValueRandomFormat.Hex, 8, "Random · hex 8")]
-    [TestCase(GeneratedValueRandomFormat.Digits, 6, "Random · digits 6")]
-    public void GetRowSummary_RandomFormats_ReturnExpected(GeneratedValueRandomFormat format, int? length, string expected)
+    [Test]
+    public void GetTokenPillText_SequenceNoBaseExpressionWithWidth_ReturnsExpected()
+    {
+        var generation = new SyncRuleMappingGeneration
+        {
+            TokenKind = GeneratedValueTokenKind.Sequence,
+            SequenceStart = 100456,
+            FixedWidth = 11
+        };
+
+        Assert.That(GeneratedValueFormHelpers.GetTokenPillText(generation, hasBaseExpression: false), Is.EqualTo("Sequence from 100456 · width 11"));
+    }
+
+    [Test]
+    public void GetTokenPillText_SequenceWithBaseExpression_IsPrefixed()
+    {
+        var generation = new SyncRuleMappingGeneration
+        {
+            TokenKind = GeneratedValueTokenKind.Sequence,
+            SequenceStart = 1,
+            FixedWidth = null
+        };
+
+        Assert.That(GeneratedValueFormHelpers.GetTokenPillText(generation, hasBaseExpression: true), Is.EqualTo("+ Sequence from 1"));
+    }
+
+    [TestCase(GeneratedValueRandomFormat.Guid, null, "Random GUID")]
+    [TestCase(GeneratedValueRandomFormat.Hex, 8, "Random hex · 8")]
+    [TestCase(GeneratedValueRandomFormat.Digits, 6, "Random digits · 6")]
+    public void GetTokenPillText_RandomFormatsNoBaseExpression_ReturnExpected(GeneratedValueRandomFormat format, int? length, string expected)
     {
         var generation = new SyncRuleMappingGeneration
         {
@@ -123,7 +138,30 @@ public class GeneratedValueFormHelpersTests
             RandomLength = length
         };
 
-        Assert.That(GeneratedValueFormHelpers.GetRowSummary(generation), Is.EqualTo(expected));
+        Assert.That(GeneratedValueFormHelpers.GetTokenPillText(generation, hasBaseExpression: false), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void GetTokenPillText_RandomWithBaseExpression_IsPrefixed()
+    {
+        var generation = new SyncRuleMappingGeneration
+        {
+            TokenKind = GeneratedValueTokenKind.Random,
+            RandomFormat = GeneratedValueRandomFormat.Hex,
+            RandomLength = 8
+        };
+
+        Assert.That(GeneratedValueFormHelpers.GetTokenPillText(generation, hasBaseExpression: true), Is.EqualTo("+ Random hex · 8"));
+    }
+
+    [TestCase(1L, 6)]
+    [TestCase(100456L, 6)]
+    [TestCase(1234567L, 7)]
+    [TestCase(-5L, 6)]
+    [TestCase(0L, 6)]
+    public void GetDefaultFixedWidth_ReturnsLargerOfSixOrStartDigitCount(long sequenceStart, int expected)
+    {
+        Assert.That(GeneratedValueFormHelpers.GetDefaultFixedWidth(sequenceStart), Is.EqualTo(expected));
     }
 
     [TestCase(500, "500")]

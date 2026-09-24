@@ -117,25 +117,9 @@
                         <VirtualisedSortHeader Title="Type" Name="type" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        @* Unique Value Generation (#242, Phase 3): a generated mapping's chip reads "Generated" (not
-                           "Generated Mapping", per the approved mockup) and carries a secondary summary of its token
-                           configuration ("Sequence · width 11"); jim-one-line-list keeps the row to one line, with
-                           the chip (not the summary) giving way should the column ever be narrow. *@
-                        @if (context.Item.Generation is { } rowGeneration)
-                        {
-                            <div class="jim-one-line-list">
-                                <span class="jim-one-line-list-value">
-                                    <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">Generated</MudChip>
-                                </span>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueFormHelpers.GetRowSummary(rowGeneration)</MudText>
-                            </div>
-                        }
-                        else
-                        {
-                            <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">
-                                @context.Item.GetSourceType().ToString().SplitOnCapitalLetters()
-                            </MudChip>
-                        }
+                        <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">
+                            @(context.Item.Generation != null ? "Generated" : context.Item.GetSourceType().ToString().SplitOnCapitalLetters())
+                        </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Title="Source" Sortable="false">
@@ -143,30 +127,53 @@
                         <VirtualisedSortHeader Title="Source" Name="source" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        @* A row in a virtualised grid is one line, and a flow can join several sources, so the
-                           first is shown and the rest open in a dialog drawn with the same chips. *@
-                        <OverflowList TItem="SyncRuleMappingSource" Items="@context.Item.Sources.OrderBy(q => q.Order).ToList()" Title="Sources">
-                            <ItemTemplate Context="source">
-                                @if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
+                        @* Unique Value Generation (#242, Phase 3): a generated mapping carries at most one source
+                           (its base expression), so it never needs OverflowList's overflow handling; the base
+                           expression pill (if any) is followed by a token pill naming the uniqueness token, so
+                           there is never a bare "-" (Sequence/Random with no base expression show the token pill
+                           alone) or a dangling arrow (the card view puts the same pill after the arrow). *@
+                        @if (context.Item.Generation is { } rowGeneration)
+                        {
+                            var rowExpression = context.Item.Sources.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression))?.Expression;
+                            <div class="jim-one-line-list">
+                                @if (rowExpression != null)
                                 {
-                                    var connectedSystemSource = source.ConnectedSystemAttribute;
-                                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
-                                                   Name="@connectedSystemSource.Name"
-                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemSource.Type, connectedSystemSource.AttributePlurality)" />
+                                    <span class="jim-one-line-list-value">
+                                        <AttributeChip Kind="AttributeChipKind.Expression" Expression="@rowExpression" />
+                                    </span>
                                 }
-                                else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
-                                {
-                                    var metaverseSource = source.MetaverseAttribute;
-                                    <AttributeChip Kind="AttributeChipKind.Metaverse"
-                                                   Name="@metaverseSource.Name"
-                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseSource.Type, metaverseSource.AttributePlurality)" />
-                                }
-                                else if (!string.IsNullOrWhiteSpace(source.Expression))
-                                {
-                                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
-                                }
-                            </ItemTemplate>
-                        </OverflowList>
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small">
+                                    @GeneratedValueFormHelpers.GetTokenPillText(rowGeneration, rowExpression != null)
+                                </MudChip>
+                            </div>
+                        }
+                        else
+                        {
+                            @* A row in a virtualised grid is one line, and a flow can join several sources, so the
+                               first is shown and the rest open in a dialog drawn with the same chips. *@
+                            <OverflowList TItem="SyncRuleMappingSource" Items="@context.Item.Sources.OrderBy(q => q.Order).ToList()" Title="Sources">
+                                <ItemTemplate Context="source">
+                                    @if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
+                                    {
+                                        var connectedSystemSource = source.ConnectedSystemAttribute;
+                                        <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                                       Name="@connectedSystemSource.Name"
+                                                       Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemSource.Type, connectedSystemSource.AttributePlurality)" />
+                                    }
+                                    else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
+                                    {
+                                        var metaverseSource = source.MetaverseAttribute;
+                                        <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                                       Name="@metaverseSource.Name"
+                                                       Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseSource.Type, metaverseSource.AttributePlurality)" />
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(source.Expression))
+                                    {
+                                        <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
+                                    }
+                                </ItemTemplate>
+                            </OverflowList>
+                        }
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false">
@@ -300,21 +307,15 @@
             {
                 <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="min-width: 200px;">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
-                        <MudStack Spacing="0">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
-                                    @* Unique Value Generation (#242, Phase 3): "Generated", not "Generated Mapping", per the mockup *@
-                                    @(attributeFlowRule.Generation != null ? "GENERATED" : attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper())</MudText>
-                                @if (MappingIsMvaToSva(attributeFlowRule))
-                                {
-                                    <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
-                                        <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="jim-mva-sva-indicator" />
-                                    </MudTooltip>
-                                }
-                            </MudStack>
-                            @if (attributeFlowRule.Generation is { } cardGeneration)
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
+                                @* Unique Value Generation (#242, Phase 3): "Generated", not "Generated Mapping", per the mockup *@
+                                @(attributeFlowRule.Generation != null ? "GENERATED" : attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper())</MudText>
+                            @if (MappingIsMvaToSva(attributeFlowRule))
                             {
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueFormHelpers.GetRowSummary(cardGeneration)</MudText>
+                                <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
+                                    <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="jim-mva-sva-indicator" />
+                                </MudTooltip>
                             }
                         </MudStack>
                         <div class="d-flex gap-2" style="flex-shrink: 0;">
@@ -351,6 +352,15 @@
 
                                 <!-- some thought needs to be given to how we handle specifying constant values -->
                             }
+                            @* Unique Value Generation (#242, Phase 3): the token pill fills the space after the
+                               arrow that would otherwise dangle empty for a Sequence or Random token with no
+                               base expression; with one, it reads as a continuation of the expression chip above. *@
+                            @if (attributeFlowRule.Generation is { } importCardGeneration)
+                            {
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small">
+                                    @GeneratedValueFormHelpers.GetTokenPillText(importCardGeneration, attributeFlowRule.Sources.Any(s => !string.IsNullOrWhiteSpace(s.Expression)))
+                                </MudChip>
+                            }
                         </div>
                     }
                     else if (SyncRule.Direction == SyncRuleDirection.Export)
@@ -370,6 +380,14 @@
                                 }
 
                                 <!-- some thought needs to be given to how we handle specifying constant values -->
+                            }
+                            @* Unique Value Generation (#242, Phase 3): the export-mode sibling of the import
+                               branch's token pill above, on the same (source) side of the arrow. *@
+                            @if (attributeFlowRule.Generation is { } exportCardGeneration)
+                            {
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small">
+                                    @GeneratedValueFormHelpers.GetTokenPillText(exportCardGeneration, attributeFlowRule.Sources.Any(s => !string.IsNullOrWhiteSpace(s.Expression)))
+                                </MudChip>
                             }
 
                             <MudText Class="mud-text-secondary mx-1">→</MudText>

@@ -11,7 +11,7 @@ namespace JIM.Web;
 
 /// <summary>
 /// Pure display logic for the "JIM generates it" Attribute Flow form (Unique Value Generation, #242, Phase 3):
-/// the row summary line, the "room remaining" hint for fixed-width sequences, and the value-space and
+/// the row's token pill text, the "room remaining" hint for fixed-width sequences, and the value-space and
 /// clash-likelihood hints on the Random token's format menu. Kept free of Blazor/MudBlazor so it is directly
 /// unit-testable; see <c>GeneratedValueFormHelpersTests</c>.
 /// </summary>
@@ -55,30 +55,52 @@ public static class GeneratedValueFormHelpers
     }
 
     /// <summary>
-    /// The row's secondary summary line under its "Generated" chip (Phase 3 point 8), e.g. "Sequence · width 11",
-    /// "Only if taken · number", "Random · hex 8". No sequence state (next number, assigned/retired counts) yet:
-    /// that arrives with the generation engine (Phase 2) and its state surfaces (a later work package).
+    /// The row's token pill text, shown in the Source position after the base expression pill (if any): "+
+    /// number if taken", "Sequence from 100456 · width 11", "Random hex · 8". No sequence state (next number,
+    /// assigned/retired counts) yet: that arrives with the generation engine (Phase 2) and its state surfaces
+    /// (a later work package).
     /// </summary>
-    public static string GetRowSummary(SyncRuleMappingGeneration generation)
+    /// <param name="generation">The generated mapping's settings.</param>
+    /// <param name="hasBaseExpression">
+    /// Whether the row also carries a base expression pill; when true the token pill is prefixed "+ " to read
+    /// as an addition to that pill, and stands alone with no prefix when there is no base expression.
+    /// </param>
+    public static string GetTokenPillText(SyncRuleMappingGeneration generation, bool hasBaseExpression)
     {
-        return generation.TokenKind switch
+        var label = generation.TokenKind switch
         {
             GeneratedValueTokenKind.OnlyIfTaken =>
-                $"Only if taken · {(generation.SuffixStyle == GeneratedValueSuffixStyle.Letter ? "letter" : "number")}",
+                $"{(generation.SuffixStyle == GeneratedValueSuffixStyle.Letter ? "letter" : "number")} if taken",
 
-            GeneratedValueTokenKind.Sequence =>
-                generation.FixedWidth.HasValue ? $"Sequence · width {generation.FixedWidth.Value}" : "Sequence",
+            GeneratedValueTokenKind.Sequence => generation.FixedWidth.HasValue
+                ? $"Sequence from {generation.SequenceStart.ToString(CultureInfo.InvariantCulture)} · width {generation.FixedWidth.Value.ToString(CultureInfo.InvariantCulture)}"
+                : $"Sequence from {generation.SequenceStart.ToString(CultureInfo.InvariantCulture)}",
 
             GeneratedValueTokenKind.Random => generation.RandomFormat switch
             {
-                GeneratedValueRandomFormat.Guid => "Random · GUID",
-                GeneratedValueRandomFormat.Hex => $"Random · hex {generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"}",
-                GeneratedValueRandomFormat.Digits => $"Random · digits {generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"}",
+                GeneratedValueRandomFormat.Guid => "Random GUID",
+                GeneratedValueRandomFormat.Hex => $"Random hex · {generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"}",
+                GeneratedValueRandomFormat.Digits => $"Random digits · {generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"}",
                 _ => "Random"
             },
 
             _ => string.Empty
         };
+
+        return hasBaseExpression ? $"+ {label}" : label;
+    }
+
+    /// <summary>
+    /// The default Width a Sequence token's "Pad to a fixed width" switch fills in when first turned on:
+    /// whichever is larger of 6 (a sensible starting point; "Room for 8 more numbers" at width 1 is useless)
+    /// or the digit count of the current Start at value, so an administrator who has already set a large start
+    /// value is not handed a width that value cannot fit (the existing "must be at least as wide as the
+    /// sequence start value" validation reason covers Start at growing past this default afterwards).
+    /// </summary>
+    public static int GetDefaultFixedWidth(long sequenceStart)
+    {
+        var startDigits = Math.Abs(sequenceStart).ToString(CultureInfo.InvariantCulture).Length;
+        return Math.Max(6, startDigits);
     }
 
     /// <summary>
