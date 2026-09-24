@@ -185,7 +185,11 @@ public abstract class SyncTaskProcessorBase
     // flush. Those entries must not INSERT a second parent row (the unique constraint
     // IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId forbids it) — they are
     // persisted via PersistPendingMvoChangeAttributesAsync (children only) instead.
-    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ObjectChangeType ChangeType, ActivityRunProfileExecutionItem Rpei, Guid? ExistingMvoChangeId)> _pendingMvoChanges = [];
+    // SyncRuleId/SyncRuleName record the projecting Synchronisation Rule (#399) for a Projected
+    // change, so the resulting MetaverseObjectChange records which rule caused the projection.
+    // Null for every other ChangeType; only the scalar id/name are carried here, never the
+    // SyncRule navigation itself, since this context must not attach a rule graph.
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ObjectChangeType ChangeType, ActivityRunProfileExecutionItem Rpei, Guid? ExistingMvoChangeId, int? SyncRuleId, string? SyncRuleName)> _pendingMvoChanges = [];
 
     // MVO change records created by CreatePendingMvoChangeObjectsAsync, awaiting explicit persistence
     // via FlushPendingMvoChangesAsync before ClearChangeTracker discards them.
@@ -598,7 +602,7 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
                     {
                         _pendingMvoChanges.Add((changeResult.DisconnectedMvo, changeResult.RecalledAttributeAdditions ?? [],
-                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei, null));
+                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei, null, null, null));
 
                         // Defensive parity with the new-RPEI branch below: surface genuine scope-exit clears as a
                         // NoContributor outcome when this RPEI already carries an outcome tree to attach to.
@@ -665,7 +669,7 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
                     {
                         _pendingMvoChanges.Add((changeResult.DisconnectedMvo, changeResult.RecalledAttributeAdditions ?? [],
-                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, runProfileExecutionItem, null));
+                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, runProfileExecutionItem, null, null, null));
                     }
 
                     // Build sync outcome for RPEIs not already covered by ProcessMetaverseObjectChangesAsync
@@ -1007,7 +1011,7 @@ public abstract class SyncTaskProcessorBase
         foreach (var (cso, executionItem) in result.CsoDeletions)
             _obsoleteCsosToDelete.Add((cso, executionItem));
         if (result.MvoAttributeChange is { } mvoChange)
-            _pendingMvoChanges.Add((mvoChange.Mvo, mvoChange.Additions, mvoChange.Removals, mvoChange.ChangeType, mvoChange.ExecutionItem, null));
+            _pendingMvoChanges.Add((mvoChange.Mvo, mvoChange.Additions, mvoChange.Removals, mvoChange.ChangeType, mvoChange.ExecutionItem, null, null, null));
         // ProcessMvoDeletionRuleAsync (invoked earlier inside the core, via the
         // processMvoDeletionRuleAsync delegate) may already have queued this same MVO instance for its
         // grace-period deletion markers, ahead of the attribute-recall change staged here.
@@ -1575,7 +1579,12 @@ public abstract class SyncTaskProcessorBase
                     rpei.AttributeFlowCount = attributesAdded + attributesRemoved;
                 }
 
-                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei, null));
+                // Record the projecting Synchronisation Rule (#399) on a Projected change only; every
+                // other change type has no single attributable rule at this point.
+                var projectingSyncRuleId = changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null;
+                var projectingSyncRuleName = changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null;
+                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei, null,
+                    projectingSyncRuleId, projectingSyncRuleName));
 
                 // Build sync outcome tree on the RPEI
                 if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -2394,7 +2403,7 @@ public abstract class SyncTaskProcessorBase
                     {
                         // No existing entry - create new one (reference-only change scenario)
                         // Use AttributeFlow since this is just attribute changes on an existing MVO
-                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList, ObjectChangeType.AttributeFlow, rpei, null));
+                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList, ObjectChangeType.AttributeFlow, rpei, null, null, null));
                     }
                 }
 
@@ -2706,7 +2715,7 @@ public abstract class SyncTaskProcessorBase
                     // children under the existing parent rather than attempting to create a
                     // new parent row (which would violate the unique-per-RPEI constraint).
                     _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,
-                        ObjectChangeType.AttributeFlow, rpei, existingMvoChangeId));
+                        ObjectChangeType.AttributeFlow, rpei, existingMvoChangeId, null, null));
 
                     // Apply changes to MVO
                     ApplyPendingMetaverseObjectAttributeChanges(mvo);
@@ -4081,7 +4090,7 @@ public abstract class SyncTaskProcessorBase
             .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
             .Select(av => av.ContributedBySyncRuleId!.Value));
 
-        foreach (var (mvo, additions, removals, changeType, rpei, existingMvoChangeId) in _pendingMvoChanges)
+        foreach (var (mvo, additions, removals, changeType, rpei, existingMvoChangeId, syncRuleId, syncRuleName) in _pendingMvoChanges)
         {
             // For cross-page merges, reuse the existing parent MvoChange id so the
             // attribute children FK-link to it. The parent row already exists in the
@@ -4098,7 +4107,12 @@ public abstract class SyncTaskProcessorBase
                 InitiatedById = _activity.InitiatedById,
                 InitiatedByName = _activity.InitiatedByName,
                 // Link to RPEI for additional context (optional - RPEI may be cleaned up)
-                ActivityRunProfileExecutionItem = rpei
+                ActivityRunProfileExecutionItem = rpei,
+                // The projecting Synchronisation Rule (#399), scalar id/name only: never the SyncRule
+                // navigation, so this tracking context does not attach a rule graph. Null for every
+                // change type other than Projected.
+                SyncRuleId = syncRuleId,
+                SyncRuleName = syncRuleName
             };
 
             // Create attribute change records for additions
