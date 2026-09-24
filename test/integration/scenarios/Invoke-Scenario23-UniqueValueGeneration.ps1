@@ -82,6 +82,7 @@ $ErrorActionPreference = "Stop"
 $ConfirmPreference = 'None'
 
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
+. "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Primary
