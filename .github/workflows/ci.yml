@@ -107,14 +107,15 @@ jobs:
     #
     # It is a required check because the alternative was demonstrated: #1238 shipped a
     # cycle between ConnectedSystemObjectType and its tags, every check passed, and no
-    # release image could be built until it was found by hand days later. Local builds do
-    # not cover it either, deliberately: jim-build passes OPENAPI_STAGE=publish to skip
-    # the stage because it costs minutes.
+    # release image could be built until it was found by hand days later. The jim-web
+    # scan-images leg now builds the in-image stage on every PR as well (#1798), and local
+    # and integration builds run it too, so this job is no longer the only guard; it stays
+    # because it is a named required check and is the quickest to diagnose from.
     #
-    # Its own job rather than a step in build-and-test: generation alone takes about five
-    # minutes (measured in both Debug and Release; it is the schema walk over the model
-    # graph, not the build), and it needs nothing the tests produce. Run alongside them
-    # it costs no wall clock; appended to them it would add five minutes to every PR.
+    # Its own job rather than a step in build-and-test, so it runs alongside the tests
+    # rather than after them. Generation used to take about five minutes, which is why it
+    # was split out; it now takes 10 to 15 seconds after the build (September 2026 runs),
+    # and the job's time is almost all that build.
     # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
     if: github.event_name != 'schedule'
     runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
