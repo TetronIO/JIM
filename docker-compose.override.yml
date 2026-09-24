@@ -64,10 +64,6 @@ services:
   # logging_collector + jsonlog writes structured JSON logs to the shared log volume for the Logs UI
   jim.database:
     shm_size: ${JIM_DB_SHM_SIZE:-512mb}
-    environment:
-      # Plain C predates the C.UTF-8 default in docker-compose.yml and creates a SQL_ASCII
-      # cluster. It only takes effect when jim-db-volume is first initialised.
-      - LANG=C
     volumes:
       - jim-logs-volume:/var/log/jim
     entrypoint: ["/bin/bash", "-c", "mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database && exec docker-entrypoint.sh \"$$@\"", "--"]

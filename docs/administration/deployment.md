@@ -297,7 +297,7 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml logs -f
 The production file publishes the web UI on host port `5200`; see [Port Mapping](#port-mapping) to change it.
 
 !!! warning "Always name the compose files"
-    Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone and silently adds any `docker-compose.override.yml` it finds in the directory. Release bundles up to and including 0.15.0 shipped a development `docker-compose.override.yml` (Development mode, a demo Keycloak with `admin`/`admin`, PostgreSQL published on port 5432); delete it from your compose directory if it is there.
+    Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone, which leaves out the production settings, and silently adds any `docker-compose.override.yml` it finds in the directory.
 
 ### Step 8: Verify Startup
 
@@ -373,8 +373,8 @@ JIM_WEB_PORT=127.0.0.1:5200
 
 The base `docker-compose.yml` publishes no ports, so a deployment that leaves out `docker-compose.production.yml` is not reachable from the host.
 
-!!! note "Upgrading from 0.15.0 or earlier"
-    Earlier production files published no port, so you may have added a `ports` mapping of your own. Remove it and set `JIM_WEB_PORT` instead: Docker Compose combines port mappings from every file, so a mapping on another host port would publish JIM on both. Any mapping must target container port `8080`.
+!!! note "Use `JIM_WEB_PORT` rather than a `ports` override"
+    Docker Compose combines port mappings from every file, so a `ports` entry in an override of your own adds a second mapping instead of replacing the default one.
 
 ---
 

@@ -98,7 +98,7 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
     docker load -i docker-images/jim-scheduler.tar
     ```
 
-4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables. If your deployed directory contains a `docker-compose.override.yml` from a bundle up to and including 0.15.0, delete it: it holds development-only settings that Docker Compose applies automatically.
+4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables.
 
 5. **Pin the new version** in `.env` (`JIM_VERSION=0.14.0`) and start the services, using the same `-f` files and `--profile` flags you deployed with:
 
