@@ -175,6 +175,7 @@ function Add-HrCsvJoiner {
     }
     $csv += [PSCustomObject]$row
     $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+    Copy-CsvToConnectorFiles -SourcePath $csvPath
 }
 
 function Invoke-Cycle {
@@ -529,6 +530,7 @@ try {
 
         $moverRow.lastName = "$($mover.LastName)-Renamed"
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
 
         Invoke-Cycle -Config $config | Out-Null
 
