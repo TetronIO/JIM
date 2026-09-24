@@ -80,6 +80,13 @@ public class ScheduleDto
     public bool IsEnabled { get; set; }
 
     /// <summary>
+    /// What the Schedule does when a step fails, for every step that follows the Schedule: <c>Stop</c> ends the run
+    /// (Failed); <c>Continue</c> runs the remaining steps, and a run that carried on past a failure ends
+    /// <c>CompleteWithError</c>. A step with a setting of its own (a step's <c>onFailure</c>) overrides it.
+    /// </summary>
+    public ScheduleFailureBehaviour OnStepFailure { get; set; }
+
+    /// <summary>
     /// When the schedule last ran (UTC).
     /// </summary>
     public DateTime? LastRunTime { get; set; }
@@ -132,6 +139,13 @@ public class ScheduleDto
     public int? LastExecutionTotalSteps { get; set; }
 
     /// <summary>
+    /// The steps (0-based, ascending, each listed once) that failed in the most recent Schedule Execution and let it
+    /// carry on, when that execution is <c>CompleteWithError</c>; empty for any other outcome. Null on every endpoint
+    /// except the list, which alone populates the last-execution fields.
+    /// </summary>
+    public int[]? LastExecutionFailedStepIndices { get; set; }
+
+    /// <summary>
     /// When the most recent Schedule Execution finished (UTC). Null while it is still running, when the Schedule has
     /// never run, and on the endpoints listed on <see cref="LastExecutionId"/> that do not populate the
     /// last-execution fields.
@@ -139,7 +153,8 @@ public class ScheduleDto
     public DateTime? LastExecutionCompletedAt { get; set; }
 
     /// <summary>
-    /// The error reported by the most recent Schedule Execution, if it failed. Null when the run succeeded, when the
+    /// The error reported by the most recent Schedule Execution, if it failed, or the message naming each failed step
+    /// when it is <c>CompleteWithError</c>. Null when the run succeeded, when the
     /// Schedule has never run, and on the endpoints listed on <see cref="LastExecutionId"/> that do not populate the
     /// last-execution fields.
     /// </summary>
@@ -166,6 +181,7 @@ public class ScheduleDto
             IntervalWindowStart = schedule.IntervalWindowStart,
             IntervalWindowEnd = schedule.IntervalWindowEnd,
             IsEnabled = schedule.IsEnabled,
+            OnStepFailure = schedule.OnStepFailure,
             LastRunTime = schedule.LastRunTime,
             NextRunTime = schedule.NextRunTime,
             StepCount = schedule.Steps?.Count ?? 0,
@@ -196,6 +212,7 @@ public class ScheduleDto
             IntervalWindowStart = header.IntervalWindowStart,
             IntervalWindowEnd = header.IntervalWindowEnd,
             IsEnabled = header.IsEnabled,
+            OnStepFailure = header.OnStepFailure,
             LastRunTime = header.LastRunTime,
             NextRunTime = header.NextRunTime,
             StepCount = header.StepCount,
@@ -205,6 +222,7 @@ public class ScheduleDto
             LastExecutionStatus = header.LastExecutionStatus,
             LastExecutionCurrentStepIndex = header.LastExecutionCurrentStepIndex,
             LastExecutionTotalSteps = header.LastExecutionTotalSteps,
+            LastExecutionFailedStepIndices = header.LastExecutionFailedStepIndices,
             LastExecutionCompletedAt = header.LastExecutionCompletedAt,
             LastExecutionErrorMessage = header.LastExecutionErrorMessage
         };
@@ -242,6 +260,7 @@ public class ScheduleDetailDto : ScheduleDto
             IntervalWindowStart = schedule.IntervalWindowStart,
             IntervalWindowEnd = schedule.IntervalWindowEnd,
             IsEnabled = schedule.IsEnabled,
+            OnStepFailure = schedule.OnStepFailure,
             LastRunTime = schedule.LastRunTime,
             NextRunTime = schedule.NextRunTime,
             StepCount = schedule.Steps?.Count ?? 0,
@@ -249,7 +268,7 @@ public class ScheduleDetailDto : ScheduleDto
             LastUpdated = schedule.LastUpdated,
             Steps = schedule.Steps?
                 .OrderBy(s => s.StepIndex)
-                .Select(ScheduleStepDto.FromEntity)
+                .Select(step => ScheduleStepDto.FromEntity(step, schedule))
                 .ToList() ?? new()
         };
         return dto;
@@ -291,9 +310,23 @@ public class ScheduleStepDto
     public ScheduleStepType StepType { get; set; }
 
     /// <summary>
-    /// Whether to continue the schedule if this step fails.
+    /// This step's own failure setting: <c>FollowSchedule</c> (the Schedule's <c>onStepFailure</c> decides),
+    /// <c>Stop</c> or <c>Continue</c>. Send this back to preserve the setting exactly.
+    /// </summary>
+    public ScheduleStepFailureBehaviour OnFailure { get; set; }
+
+    /// <summary>
+    /// Whether the Schedule carries on when this step fails: its EFFECTIVE behaviour, being <c>onFailure</c>, or
+    /// the Schedule's <c>onStepFailure</c> when the step follows the Schedule. Kept for existing clients; see
+    /// <c>failureBehaviourSource</c> for where the value comes from.
     /// </summary>
     public bool ContinueOnFailure { get; set; }
+
+    /// <summary>
+    /// Where <c>continueOnFailure</c> comes from: <c>Step</c> when the step has a setting of its own, or
+    /// <c>Schedule</c> when it follows the Schedule.
+    /// </summary>
+    public ScheduleFailureBehaviourSource FailureBehaviourSource { get; set; }
 
     /// <summary>
     /// Optional timeout for this step in seconds.
@@ -363,7 +396,10 @@ public class ScheduleStepDto
     /// <summary>
     /// Creates a DTO from a ScheduleStep entity.
     /// </summary>
-    public static ScheduleStepDto FromEntity(ScheduleStep step)
+    /// <param name="step">The step.</param>
+    /// <param name="schedule">The step's Schedule, passed explicitly rather than read from the step's navigation, which
+    /// may not be loaded; its setting decides the effective behaviour of a step that follows it.</param>
+    public static ScheduleStepDto FromEntity(ScheduleStep step, Schedule schedule)
     {
         return new ScheduleStepDto
         {
@@ -372,8 +408,9 @@ public class ScheduleStepDto
             Name = step.Name,
             ExecutionMode = step.ExecutionMode,
             StepType = step.StepType,
-            // TODO(#1787 stage 2): replace with onFailure plus the effective continueOnFailure and failureBehaviourSource.
-            ContinueOnFailure = ScheduleFailureHandling.ContinuesOnFailure(step, step.Schedule),
+            OnFailure = step.OnFailure,
+            ContinueOnFailure = ScheduleFailureHandling.ContinuesOnFailure(step, schedule),
+            FailureBehaviourSource = ScheduleFailureHandling.Source(step),
             TimeoutSeconds = step.Timeout.HasValue ? (int)step.Timeout.Value.TotalSeconds : null,
             // RunProfile
             ConnectedSystemId = step.ConnectedSystemId,
@@ -388,38 +425,6 @@ public class ScheduleStepDto
             // SqlScript
             SqlConnectionString = step.SqlConnectionString,
             SqlScriptPath = step.SqlScriptPath
-        };
-    }
-
-    /// <summary>
-    /// Converts this DTO to a ScheduleStep entity.
-    /// </summary>
-    public ScheduleStep ToEntity(Guid scheduleId)
-    {
-        return new ScheduleStep
-        {
-            Id = Id == Guid.Empty ? Guid.NewGuid() : Id,
-            ScheduleId = scheduleId,
-            StepIndex = StepIndex,
-            Name = Name,
-            ExecutionMode = ExecutionMode,
-            StepType = StepType,
-            // TODO(#1787 stage 2): apply the legacy write rule (and onFailure) rather than this literal mapping.
-            OnFailure = ContinueOnFailure ? ScheduleStepFailureBehaviour.Continue : ScheduleStepFailureBehaviour.FollowSchedule,
-            Timeout = TimeoutSeconds.HasValue ? TimeSpan.FromSeconds(TimeoutSeconds.Value) : null,
-            // RunProfile
-            ConnectedSystemId = ConnectedSystemId,
-            RunProfileId = RunProfileId,
-            // PowerShell
-            ScriptPath = ScriptPath,
-            // Executable
-            ExecutablePath = ExecutablePath,
-            WorkingDirectory = WorkingDirectory,
-            // Shared
-            Arguments = Arguments,
-            // SqlScript
-            SqlConnectionString = SqlConnectionString,
-            SqlScriptPath = SqlScriptPath
         };
     }
 }
