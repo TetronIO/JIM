@@ -14,15 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🔄 **Continue on failure** on a Schedule step now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
-- 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
-
-### Fixed
-
-- 🐛 A Schedule with a step that cannot be queued, for example because its Connected System is being deleted, no longer runs its earlier steps and then reports Complete; it runs nothing, fails naming the step, and each step shows why it did not run. (#1768)
-- 🐛 A Schedule Execution cancelled while a step is running now stays cancelled, instead of being marked Complete or Failed when that step finishes. (#1768)
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
+- 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
 
 ### Fixed
 
