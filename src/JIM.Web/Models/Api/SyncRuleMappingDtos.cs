@@ -67,6 +67,12 @@ public class SyncRuleMappingDto
 
     public List<SyncRuleMappingSourceDto> Sources { get; set; } = new();
 
+    /// <summary>
+    /// The mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3). Null unless
+    /// <see cref="SourceType"/> is <c>GeneratedMapping</c>.
+    /// </summary>
+    public SyncRuleMappingGenerationDto? Generation { get; set; }
+
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
     {
         return new SyncRuleMappingDto
@@ -85,9 +91,155 @@ public class SyncRuleMappingDto
             InitialExportOnly = entity.InitialExportOnly,
             Enabled = entity.Enabled,
             DisabledReason = entity.DisabledReason,
-            Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList()
+            Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList(),
+            Generation = entity.Generation == null ? null : SyncRuleMappingGenerationDto.FromEntity(entity.Generation)
         };
     }
+}
+
+/// <summary>
+/// API representation of a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3).
+/// Exclusions and Collision Remediation are deliberately absent: exclusions are a release 4 surface and Collision
+/// Remediation is a release 4 feature, so neither is exposed by any surface yet.
+/// </summary>
+public class SyncRuleMappingGenerationDto
+{
+    public GeneratedValueTokenKind TokenKind { get; set; }
+    public GeneratedValueSuffixStyle SuffixStyle { get; set; }
+    public int SuffixStart { get; set; }
+    public long SequenceStart { get; set; }
+    public int SequenceIncrement { get; set; }
+    public int? FixedWidth { get; set; }
+    public GeneratedValueWidthOverflowBehaviour OnWidthExceeded { get; set; }
+    public GeneratedValueRandomFormat RandomFormat { get; set; }
+    public int? RandomLength { get; set; }
+    public string? Separator { get; set; }
+    public int AttemptLimit { get; set; }
+    public bool NeverReuse { get; set; }
+
+    /// <summary>
+    /// Present only on the response to a create or settings-update call that raised the target attribute's
+    /// sequence counter because <see cref="SequenceStart"/> stood above its current position (plan decision 3).
+    /// Null on every ordinary read.
+    /// </summary>
+    public SequenceSkippedAheadDto? SequenceSkippedAhead { get; set; }
+
+    public static SyncRuleMappingGenerationDto FromEntity(SyncRuleMappingGeneration entity) => new()
+    {
+        TokenKind = entity.TokenKind,
+        SuffixStyle = entity.SuffixStyle,
+        SuffixStart = entity.SuffixStart,
+        SequenceStart = entity.SequenceStart,
+        SequenceIncrement = entity.SequenceIncrement,
+        FixedWidth = entity.FixedWidth,
+        OnWidthExceeded = entity.OnWidthExceeded,
+        RandomFormat = entity.RandomFormat,
+        RandomLength = entity.RandomLength,
+        Separator = entity.Separator,
+        AttemptLimit = entity.AttemptLimit,
+        NeverReuse = entity.NeverReuse,
+        SequenceSkippedAhead = entity.SequenceSkippedAhead == null
+            ? null
+            : new SequenceSkippedAheadDto { From = entity.SequenceSkippedAhead.From, To = entity.SequenceSkippedAhead.To }
+    };
+}
+
+/// <summary>
+/// Reports that a save moved a generated Sequence mapping's target attribute counter forward (plan decision 3).
+/// </summary>
+public class SequenceSkippedAheadDto
+{
+    public long From { get; set; }
+    public long To { get; set; }
+}
+
+/// <summary>
+/// Request DTO for a generated mapping's uniqueness token settings, on creation (Unique Value Generation, #242,
+/// Phase 3). Server-side validation (<see cref="SyncRuleMappingGenerationValidator"/>) decides what combination
+/// of these is actually valid for a given target attribute and token kind; this DTO only carries the values
+/// through.
+/// </summary>
+public class CreateSyncRuleMappingGenerationRequest
+{
+    public GeneratedValueTokenKind TokenKind { get; set; }
+    public GeneratedValueSuffixStyle SuffixStyle { get; set; } = GeneratedValueSuffixStyle.Number;
+    public int SuffixStart { get; set; } = 1;
+    public long SequenceStart { get; set; } = 1;
+    public int SequenceIncrement { get; set; } = 1;
+    public int? FixedWidth { get; set; }
+    public GeneratedValueWidthOverflowBehaviour OnWidthExceeded { get; set; } = GeneratedValueWidthOverflowBehaviour.StopAndReport;
+    public GeneratedValueRandomFormat RandomFormat { get; set; } = GeneratedValueRandomFormat.Guid;
+    public int? RandomLength { get; set; }
+    public string? Separator { get; set; }
+    public int AttemptLimit { get; set; } = 1000;
+    public bool NeverReuse { get; set; } = true;
+
+    public SyncRuleMappingGeneration ToEntity() => new()
+    {
+        TokenKind = TokenKind,
+        SuffixStyle = SuffixStyle,
+        SuffixStart = SuffixStart,
+        SequenceStart = SequenceStart,
+        SequenceIncrement = SequenceIncrement,
+        FixedWidth = FixedWidth,
+        OnWidthExceeded = OnWidthExceeded,
+        RandomFormat = RandomFormat,
+        RandomLength = RandomLength,
+        Separator = Separator,
+        AttemptLimit = AttemptLimit,
+        NeverReuse = NeverReuse
+    };
+}
+
+/// <summary>
+/// Request DTO for changing an existing generated mapping's uniqueness token settings (Unique Value Generation,
+/// #242, Phase 3). Every field is optional and an omitted one leaves the mapping's current value alone, matching
+/// <see cref="UpdateSyncRuleMappingRequest"/>'s own convention. Applying this to a mapping that is not currently
+/// a generated mapping is refused; turning one into the other is not supported here (delete and create).
+/// </summary>
+public class UpdateSyncRuleMappingGenerationRequest
+{
+    public GeneratedValueTokenKind? TokenKind { get; set; }
+    public GeneratedValueSuffixStyle? SuffixStyle { get; set; }
+    public int? SuffixStart { get; set; }
+
+    /// <summary>
+    /// Raising this above the target attribute's counter moves the counter forward at save time (plan decision
+    /// 3); the response's <see cref="SyncRuleMappingGenerationDto.SequenceSkippedAhead"/> reports the move. A
+    /// lower or equal value has no effect.
+    /// </summary>
+    public long? SequenceStart { get; set; }
+
+    public int? SequenceIncrement { get; set; }
+
+    /// <summary><c>0</c> clears the fixed width; a positive value sets it; omitted (null) leaves it unchanged.</summary>
+    public int? FixedWidth { get; set; }
+
+    public GeneratedValueWidthOverflowBehaviour? OnWidthExceeded { get; set; }
+    public GeneratedValueRandomFormat? RandomFormat { get; set; }
+    public int? RandomLength { get; set; }
+
+    /// <summary>An empty or whitespace-only string clears the stored separator; omitted (null) leaves it unchanged.</summary>
+    public string? Separator { get; set; }
+
+    public int? AttemptLimit { get; set; }
+    public bool? NeverReuse { get; set; }
+
+    public SyncRuleMappingGenerationSettingsUpdate ToSettingsUpdate() => new()
+    {
+        TokenKind = TokenKind,
+        SuffixStyle = SuffixStyle,
+        SuffixStart = SuffixStart,
+        SequenceStart = SequenceStart,
+        SequenceIncrement = SequenceIncrement,
+        FixedWidth = FixedWidth,
+        OnWidthExceeded = OnWidthExceeded,
+        RandomFormat = RandomFormat,
+        RandomLength = RandomLength,
+        Separator = Separator,
+        AttemptLimit = AttemptLimit,
+        NeverReuse = NeverReuse
+    };
 }
 
 /// <summary>
@@ -142,6 +294,12 @@ public class UpdateSyncRuleMappingRequest
     public bool? Enabled { get; set; }
 
     /// <summary>
+    /// Changes to a generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3).
+    /// Refused for a mapping that is not currently a generated mapping.
+    /// </summary>
+    public UpdateSyncRuleMappingGenerationRequest? Generation { get; set; }
+
+    /// <summary>
     /// Converts the request into the settings change the application layer understands.
     /// </summary>
     public SyncRuleMappingSettingsUpdate ToSettingsUpdate()
@@ -154,7 +312,8 @@ public class UpdateSyncRuleMappingRequest
             InboundValueProcessing = InboundValueProcessing,
             CaseNormalisation = CaseNormalisation,
             InitialExportOnly = InitialExportOnly,
-            Enabled = Enabled
+            Enabled = Enabled,
+            Generation = Generation?.ToSettingsUpdate()
         };
     }
 }
@@ -259,6 +418,14 @@ public class CreateSyncRuleMappingRequest
     /// </summary>
     [Required]
     public List<CreateSyncRuleMappingSourceRequest> Sources { get; set; } = new();
+
+    /// <summary>
+    /// Makes this "JIM generates it" (Unique Value Generation, #242, Phase 3): the mapping's value is its base
+    /// expression (read from <see cref="Sources"/>, optional for Sequence and Random tokens) plus a uniqueness
+    /// token. Omit for an ordinary attribute or Expression mapping. Allowed on both import and export rules;
+    /// direction gating follows the same rule as <see cref="InitialExportOnly"/>.
+    /// </summary>
+    public CreateSyncRuleMappingGenerationRequest? Generation { get; set; }
 }
 
 /// <summary>
