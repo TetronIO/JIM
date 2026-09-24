@@ -74,7 +74,7 @@ public partial class ConnectedSystemServer
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
-            TargetOperationType = ActivityTargetOperationType.Reset,
+            TargetOperationType = ActivityTargetOperationType.RestartGeneratedValues,
             Message = result.CounterFrom.HasValue
                 ? $"Started the {targetName} counter again: moved from {result.CounterFrom} to {result.CounterTo}."
                 : $"\"Start again\" was requested for {targetName}, but its counter had not issued any numbers yet, so nothing moved."

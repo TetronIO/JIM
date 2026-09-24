@@ -94,5 +94,14 @@ public enum ActivityTargetOperationType
     /// <see cref="ActivityTargetType.ConnectedSystem"/>. Distinct from <see cref="Delete"/> so the audit
     /// trail shows which deletion mode ran (the PRD's auditability requirement).
     /// </summary>
-    Deprovision = 18
+    Deprovision = 18,
+
+    /// <summary>
+    /// "Start again" on a generated mapping (Unique Value Generation, #242): moves a generated Sequence
+    /// mapping's target attribute counter back to the mapping's configured start value. Used with
+    /// <see cref="ActivityTargetType.SynchronisationRule"/>. Distinct from <see cref="Reset"/>, which is
+    /// reserved for a system-wide factory reset; conflating the two would make a per-mapping counter move
+    /// indistinguishable, in the Activity list, from wiping the whole system.
+    /// </summary>
+    RestartGeneratedValues = 19
 }
