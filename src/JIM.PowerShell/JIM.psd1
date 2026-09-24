@@ -93,6 +93,10 @@
         'Remove-JIMSyncRuleMapping',
         'Set-JIMSyncRuleMapping',
 
+        # Unique Value Generation (#242)
+        'Get-JIMGeneratedValueSequence',
+        'Restart-JIMGeneratedValues',
+
         # Object Matching Rules
         'Get-JIMMatchingRule',
         'New-JIMMatchingRule',
