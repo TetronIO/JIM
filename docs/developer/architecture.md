@@ -126,7 +126,7 @@ JIM runs as a set of Docker services:
 
 | Service | Description |
 |---------|-------------|
-| **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Listens on port 80 in-container; reached at `http://localhost:5200` in the development Docker stack (HTTPS is terminated by a reverse proxy in production). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment, backed by a build-time OpenAPI document for instant loading. |
+| **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Listens on port 8080 in-container; reached at `http://localhost:5200` in the development Docker stack (HTTPS is terminated by a reverse proxy in production). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment, backed by a build-time OpenAPI document for instant loading. |
 | **jim.worker** | Background task processor. Polls the task queue, processes sync/import/export operations. Uses `ISyncEngine`/`ISyncRepository` separation for testability. Also hosts the Password Delivery Service, which delivers queued password changes independently of the task queue. |
 | **jim.scheduler** | Schedule management. Reacts to task completion instantly via PostgreSQL notifications, with a 30-second polling cycle as the fallback. Detects parallel step groups and queues them for concurrent worker dispatch. |
 | **jim.database** | PostgreSQL 18 database. |

@@ -100,10 +100,11 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 
 4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables.
 
-5. **Pin the new version** in `.env` (`JIM_VERSION=0.14.0`) and start the services:
+5. **Pin the new version** in `.env` (`JIM_VERSION=0.14.0`) and start the services, using the same `-f` files and `--profile` flags you deployed with:
 
     ```bash
-    docker compose up -d
+    docker compose -f docker-compose.yml -f docker-compose.production.yml \
+      --profile with-db up -d
     ```
 
 6. **Verify**, per [Verifying the upgrade](#verifying) below.

@@ -2,7 +2,6 @@ services:
   jim.web:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
       - JIM_INFRASTRUCTURE_API_KEY=${JIM_INFRASTRUCTURE_API_KEY:-}
@@ -29,7 +28,7 @@ services:
       # LDAPTLS_REQCERT. Trust each directory's CA through the JIM certificate store
       # (Settings > Certificates, or the Add-JIMCertificate cmdlet) instead.
     ports:
-      - "5200:80"
+      - "5200:8080"
     depends_on:
       jim.keycloak:
         condition: service_healthy
@@ -65,9 +64,6 @@ services:
   # logging_collector + jsonlog writes structured JSON logs to the shared log volume for the Logs UI
   jim.database:
     shm_size: ${JIM_DB_SHM_SIZE:-512mb}
-    environment:
-      # Override LANG from .env - PostgreSQL doesn't have en_GB.UTF-8 locale installed
-      - LANG=C
     volumes:
       - jim-logs-volume:/var/log/jim
     entrypoint: ["/bin/bash", "-c", "mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database && exec docker-entrypoint.sh \"$$@\"", "--"]
