@@ -824,12 +824,16 @@ public class SyncPreviewServer
                 // Adopt before generate (FR 30, import mode; product-owner decision): the Metaverse Object's
                 // own current effective value, mirroring the worker's ResolvePendingGeneratedValuesAsync
                 // exactly - never a joined Connected System Object's value, so no guarded repository read is
-                // needed here at all any more.
+                // needed here at all any more. CurrentMetaverseValue mirrors the worker's own stale-Sticky read
+                // too (bug fix, #242, Scenario 23 integration run): read regardless of StickyOnly or of whether
+                // a known assignment exists, since ResolveAsync itself decides whether a Sticky match is stale.
                 string? adoptableValue = null;
-                if (workingMvo.Id != Guid.Empty && !p.BaseUnavailable
-                    && !context.UniqueValueResolveOptions.HasKnownMetaverseAssignment(workingMvo.Id, p.AttributeId))
+                string? currentMetaverseValue = null;
+                if (workingMvo.Id != Guid.Empty)
                 {
-                    adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, p.Mapping.SyncRuleId);
+                    currentMetaverseValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, generatingSyncRuleId: null);
+                    if (!p.BaseUnavailable)
+                        adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, p.Mapping.SyncRuleId);
                 }
 
                 requests.Add(new GenerationRequest
@@ -842,6 +846,7 @@ public class SyncPreviewServer
                     AttributeName = p.Mapping.TargetMetaverseAttribute!.Name,
                     BaseValue = p.BaseValue,
                     AdoptableValue = adoptableValue,
+                    CurrentMetaverseValue = currentMetaverseValue,
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
                     StickyOnly = p.BaseUnavailable
                 });
@@ -854,6 +859,11 @@ public class SyncPreviewServer
                 var outcome = outcomes[i];
                 var request = pending[i];
 
+                // outcome.StaleAssignmentId (bug fix, #242, Scenario 23) is deliberately not acted on here: it
+                // names an assignment the real run would delete through its page-flush deletion flush, but a
+                // preview never persists anything, so there is nothing for this dry run to delete either. The
+                // outcome's Kind already reflects the stale match being treated as absent, which is what the
+                // preview needs to show.
                 switch (outcome.Kind)
                 {
                     case GenerationOutcomeKind.Generated:

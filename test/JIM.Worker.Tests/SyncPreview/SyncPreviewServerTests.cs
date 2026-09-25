@@ -1372,6 +1372,75 @@ public class SyncPreviewServerTests
     }
 
     /// <summary>
+    /// The Sync Preview mirror of <c>UniqueValueGenerationWorkflowTests.FullSync_StaleStickyAssignmentSupersededThenWithdrawn_
+    /// AdoptsTheOtherRulesValueAndReplacesTheAssignmentAsync</c> (bug fix, #242, Scenario 23 integration run): a
+    /// live Sticky assignment ("stale.value") exists for the mapping, but a higher-priority contributor has
+    /// since taken the attribute over and left a DIFFERENT value ("jsmith", provenance a different rule) on the
+    /// object. The preview must show that other value adopted, never the stale assignment reasserted, exactly
+    /// as the worker's real run would. The preview writes nothing either way (dry run), so what distinguishes
+    /// the fix is which value would flow, not what gets persisted.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_LiveAssignmentNoLongerMatchesTheObjectsCurrentValue_ShowsItAdoptedNotReassertedAsync()
+    {
+        var (cso, importRule, mvEmployeeIdAttr, mapping) = ArrangeGeneratedInboundFixture();
+
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = mvEmployeeIdAttr,
+            AttributeId = mvEmployeeIdAttr.Id,
+            StringValue = "jsmith",
+            ContributedBySyncRuleId = importRule.Id + 1000 // a DIFFERENT rule's provenance, never the generating rule's own
+        });
+        SyncRepo.SeedMetaverseObject(mvo);
+        cso.MetaverseObjectId = mvo.Id;
+        cso.MetaverseObject = mvo;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+
+        // A live Sticky assignment left over from an earlier pass, before the object's current, higher-priority
+        // contributor took the attribute over: its value no longer describes the object.
+        SyncRepo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = mvo.Id,
+            MetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Value = "stale.value",
+            NormalisedValue = "stale.value",
+            State = GeneratedValueAssignmentState.Proposed,
+            SyncRuleMappingGenerationId = mapping.Generation!.Id,
+            Created = DateTime.UtcNow,
+            LastUpdated = DateTime.UtcNow
+        });
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id && c.Value == "stale.value"), Is.False,
+                "the stale assignment must never be reasserted over the object's current value");
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id && c.Value == "E123"), Is.False,
+                "the object's own current value must be adopted, not freshly generated");
+            Assert.That(result.HasBlockingErrors, Is.False);
+            Assert.That(result.Warnings, Is.Empty, "adoption must succeed cleanly, not surface a GeneratedValueWouldFail warning");
+        }
+
+        // Zero side effects: the preview never deletes the stale assignment either (that is the real run's
+        // page-flush job); only the value it would show changes.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1), "a preview must write nothing new");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("stale.value"), "a preview must not delete anything either");
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "a preview must not change the existing join");
+        }
+    }
+
+    /// <summary>
     /// A generation that would fail in the real run (here, Exhausted: a one-attempt budget and the exact
     /// candidate already taken by another object) must not simply show nothing in the preview; it must
     /// surface as a warning, mirroring the error the real run would record on the object.

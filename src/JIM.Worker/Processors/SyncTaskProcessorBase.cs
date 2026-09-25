@@ -2063,13 +2063,18 @@ public abstract class SyncTaskProcessorBase
                 // holds for the target attribute, never a joined Connected System Object's value (product-owner
                 // decision: connector-space adoption sat outside the Attribute Flow priority model and has been
                 // removed; see GeneratedValueParticipation's class summary). Only for a persisted object, not
-                // StickyOnly, and only when the run cache holds no assignment for it yet - a known assignment
-                // resolves as Sticky regardless.
+                // StickyOnly. CurrentMetaverseValue is read regardless of StickyOnly and of whether a known
+                // assignment exists (bug fix, #242, Scenario 23 integration run): ResolveAsync needs the
+                // object's raw current value, from whichever rule holds it, to tell a live Sticky assignment
+                // apart from one that no longer describes the object; a known assignment is therefore no longer
+                // a reason to skip this read, since it might turn out to be exactly the stale one.
                 string? adoptableValue = null;
-                if (mvo.Id != Guid.Empty && !pending.BaseUnavailable
-                    && !resolveOptions.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
+                string? currentMetaverseValue = null;
+                if (mvo.Id != Guid.Empty)
                 {
-                    adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, pending.AttributeId, pending.Mapping.SyncRuleId);
+                    currentMetaverseValue = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, pending.AttributeId, generatingSyncRuleId: null);
+                    if (!pending.BaseUnavailable)
+                        adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, pending.AttributeId, pending.Mapping.SyncRuleId);
                 }
 
                 requests.Add(new GenerationRequest
@@ -2082,6 +2087,7 @@ public abstract class SyncTaskProcessorBase
                     AttributeName = targetAttribute.Name,
                     BaseValue = pending.BaseValue,
                     AdoptableValue = adoptableValue,
+                    CurrentMetaverseValue = currentMetaverseValue,
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
                     StickyOnly = pending.BaseUnavailable,
                     CallerState = mvo
@@ -2094,6 +2100,15 @@ public abstract class SyncTaskProcessorBase
             {
                 var outcome = outcomes[i];
                 var pending = pendingValues[i];
+
+                // Bug fix (#242, Scenario 23 integration run): ResolveAsync found a live Sticky assignment that
+                // no longer described this object and treated it as absent instead of reasserting it; whatever
+                // outcome.Kind ended up being, the stale assignment itself must still be removed so the
+                // database agrees with the object. Queued here, applied by the existing deletion flush
+                // (FlushGeneratedValueAssignmentDeletionsAsync), exactly like ReconcileGeneratedValueAssignmentLifecycle's
+                // own queued deletions.
+                if (outcome.StaleAssignmentId.HasValue)
+                    _pendingGeneratedValueAssignmentDeletions.Add(outcome.StaleAssignmentId.Value);
 
                 switch (outcome.Kind)
                 {
@@ -2233,8 +2248,14 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package G) page-flush commit: call immediately after
-    /// <see cref="PersistPendingMetaverseObjectsAsync"/>, once the page's Metaverse Objects have real ids.
-    /// Persists this page's <c>Generated</c>/<c>Adopted</c> assignments and clears the page-scoped list.
+    /// <see cref="PersistPendingMetaverseObjectsAsync"/>, once the page's Metaverse Objects have real ids, AND
+    /// after <see cref="FlushGeneratedValueAssignmentDeletionsAsync"/> (bug fix, #242, Scenario 23: a stale
+    /// Sticky assignment replaced this same pass by a fresh Adopted/Generated one shares its (object, attribute)
+    /// key with the row being deleted; the real database's partial unique index over that pair rejects this
+    /// call's INSERT if the stale row has not been removed first, and the in-memory test double does not
+    /// reproduce that constraint, so a wrong call order would pass every unit test and fail only against
+    /// Postgres). Persists this page's <c>Generated</c>/<c>Adopted</c> assignments and clears the page-scoped
+    /// list.
     /// <para>
     /// A loser (the cross-assignment unique index caught a losing-run collision, plan decision 13: another
     /// object was issued the identical value at the same moment) is self-healing, not a fault this page must
@@ -2281,9 +2302,13 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package G) page-flush deletion: deletes every assignment id
     /// <see cref="ReconcileGeneratedValueAssignmentLifecycle"/> queued this page (retirement, where it applies,
-    /// is not this feature's concern: release 2's retired values register writes it separately) and drops them
-    /// from the run cache in the same call, then clears the page-scoped list. Call after
-    /// <see cref="PersistPendingMetaverseObjectsAsync"/> and <see cref="CommitGeneratedValueAssignmentsAsync"/>.
+    /// is not this feature's concern: release 2's retired values register writes it separately), plus every
+    /// stale assignment <see cref="ResolvePendingGeneratedValuesAsync"/> found and queued (bug fix, #242,
+    /// Scenario 23), and drops them from the run cache in the same call, then clears the page-scoped list. Call
+    /// after <see cref="PersistPendingMetaverseObjectsAsync"/> but BEFORE
+    /// <see cref="CommitGeneratedValueAssignmentsAsync"/>: a stale assignment being deleted here can share its
+    /// (object, attribute) key with a fresh Adopted/Generated assignment that call is about to insert for the
+    /// same request, and the database's partial unique index over that pair only allows one live row at a time.
     /// </summary>
     protected async Task FlushGeneratedValueAssignmentDeletionsAsync()
     {
@@ -3640,11 +3665,12 @@ public abstract class SyncTaskProcessorBase
                 await PersistPendingMetaverseObjectsAsync();
 
                 // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
-                // flush sequence. In practice always a no-op here: this pass is reference-attributes-only
-                // (onlyReferenceAttributes: true), and a generated mapping never targets a Reference attribute,
-                // so nothing this pass resolves or reconciles ever has anything queued to commit or delete.
-                await CommitGeneratedValueAssignmentsAsync();
+                // flush sequence, deletions before commit (#242 Scenario 23 bug fix). In practice always a
+                // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
+                // generated mapping never targets a Reference attribute, so nothing this pass resolves or
+                // reconciles ever has anything queued to commit or delete.
                 await FlushGeneratedValueAssignmentDeletionsAsync();
+                await CommitGeneratedValueAssignmentsAsync();
 
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
                 EvaluateQueuedDrift();

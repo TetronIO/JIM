@@ -250,11 +250,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // cannot be decoupled from batch persistence boundaries.
                 await PersistPendingMetaverseObjectsAsync();
 
-                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
-                // assignments, then delete whatever lifecycle reconciliation decided no longer belongs. See
-                // SyncFullSyncTaskProcessor for the full rationale; both are no-ops with no generated mappings.
-                await CommitGeneratedValueAssignmentsAsync();
+                // Unique Value Generation (#242, Phase 2 work package G): delete whatever lifecycle
+                // reconciliation (or a stale Sticky match, #242 Scenario 23 bug fix) decided no longer belongs,
+                // THEN commit this page's generated/adopted assignments. See SyncFullSyncTaskProcessor for the
+                // full rationale for the order; both are no-ops with no generated mappings.
                 await FlushGeneratedValueAssignmentDeletionsAsync();
+                await CommitGeneratedValueAssignmentsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);

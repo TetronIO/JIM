@@ -79,6 +79,23 @@ public sealed record GenerationRequest
     public string? AdoptableValue { get; init; }
 
     /// <summary>
+    /// Import mode only (bug fix, #242, Scenario 23 integration run): the Metaverse Object's own current
+    /// effective value for the target attribute, from WHICHEVER rule contributed it - unlike
+    /// <see cref="AdoptableValue"/>, this is read with no <c>generatingSyncRuleId</c> exclusion
+    /// (<see cref="GeneratedValueParticipation.FindMetaverseOwnValue"/> passed <c>null</c>), so it can equal a
+    /// value this same generating mapping wrote earlier. <see cref="UniqueValueGenerationServer.ResolveAsync"/>
+    /// uses it to decide whether a live Sticky assignment still describes the object: a higher-priority
+    /// contributor can take the attribute over, leave a value behind that no longer matches the assignment, and
+    /// then withdraw again without the generating system's own run ever having synchronised in between to
+    /// notice (only a run of the GENERATING system's own rules reconciles a stale assignment, at page flush).
+    /// Reasserting the old assignment in that state would silently overwrite a genuine, currently-held value
+    /// with a stale one. Null or empty when the object holds no value (or only a null marker) for the
+    /// attribute, which is what makes <c>ResolveAsync</c> fall back to today's FR 10 reassert-if-cleared
+    /// behaviour instead: a stale check needs something to compare the assignment against.
+    /// </summary>
+    public string? CurrentMetaverseValue { get; init; }
+
+    /// <summary>
     /// Import mode only: the Connected System Object Type attribute ids that export mappings flow this
     /// Metaverse attribute to (export mappings already excluded by the generation's own
     /// <see cref="SyncRuleMappingGenerationExclusion"/> list). Checked by the connector space gate. Empty for
