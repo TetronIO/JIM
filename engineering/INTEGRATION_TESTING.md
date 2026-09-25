@@ -1291,7 +1291,7 @@ Samba AD and OpenLDAP.
 
 #### Scenario 23: Unique Value Generation
 
-**Status**: implemented for release 1 of [#242](https://github.com/TetronIO/JIM/issues/242). Verified green on OpenLDAP (53 assertions, Micro). The feature is behind the In development `Features.UniqueValueGeneration` flag; `Setup-Scenario1.ps1 -GenerateAccountName` enables it.
+**Status**: implemented for release 1 of [#242](https://github.com/TetronIO/JIM/issues/242). Verified green on OpenLDAP and Samba AD (54 assertions each, Micro). The feature is behind the In development `Features.UniqueValueGeneration` flag; `Setup-Scenario1.ps1 -GenerateAccountName` enables it.
 
 **Purpose**: prove generated values end to end against a real directory: the HR feed carries no IT-owned columns (`Generate-TestCSV.ps1 -OmitItOwnedAttributes`) and JIM generates the Account Name instead, plus a sequence (Staff Number), a random token (Badge Code) and an export-mode value on the directory (`preferredLanguage`). The unit and database tiers cover the service in isolation; this is the only coverage of generation interacting with joins, Attribute Priority, drift detection and a directory's own uniqueness.
 
