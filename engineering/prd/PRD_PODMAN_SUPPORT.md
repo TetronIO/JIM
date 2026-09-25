@@ -4,6 +4,7 @@
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
+- **Plan:** [PODMAN_SUPPORT.md](../plans/PODMAN_SUPPORT.md)
 
 ## Problem Statement
 
@@ -65,13 +66,15 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 **Start-up behaviour (runtime-neutral)**
 
 11. Every JIM service must tolerate its dependencies being unavailable at start-up, rather than relying on the supervisor to order start-up by health. A pod starts all its containers at once. Specifically, the Worker must wait for PostgreSQL with a bounded retry and a clear log line per attempt, instead of exiting. `jim.web` and `jim.scheduler` already wait for the Worker's readiness.
-12. The worker and scheduler heartbeat health checks must move from shell one-liners in `docker-compose.yml` into scripts inside the images. The one-liners are full of `%` and `$`, which systemd and Quadlet treat as specifiers, and one definition in the image then serves both runtimes.
+12. *Withdrawn during planning (plan decision D8).* This required moving the Worker and Scheduler heartbeat health checks into scripts inside the images, because systemd treats `%` and `$` as specifiers. In the chosen pod-file design the probes live in YAML that systemd never parses, and testing confirmed they reach Podman unaltered.
 
 **Remote access**
 
 13. The Podman path must support browser access from other machines, which requires HTTPS. In Production mode JIM's sign-in correlation cookies are `Secure` by design (`src/JIM.Web/Program.cs`), so over plain HTTP from a server name the browser drops them and sign-in loops. (Browsers treat `localhost` as secure, which hides this in local testing.) Both of these must be supported and documented:
     - JIM serving HTTPS itself from a certificate file, through Kestrel's certificate settings.
     - A TLS-terminating reverse proxy in front of JIM, as the Docker documentation already describes.
+
+    Planning went further (plan D4): JIM serves HTTPS by default on both runtimes, with the organisation's certificate or one the installer creates, and a reverse proxy remains supported.
 
 **Installation, upgrade and backup**
 
@@ -110,7 +113,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 **Given**: a Fedora or RHEL host with Podman but no Docker
 **When**: the administrator runs `setup.sh`
-**Then**: the script detects Podman, asks the same configuration questions as on Docker, installs and starts the Podman definition, and prints JIM's address, instead of stopping with "Docker is required"
+**Then**: the script detects Podman, asks the same configuration questions as on Docker, installs and starts the Podman definition (rootless under a dedicated `jim` account by default, per plan D5), and prints JIM's address, instead of stopping with "Docker is required"
 
 ### Scenario 3: Reboot
 
@@ -154,10 +157,11 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 | Area | Impact |
 |------|--------|
-| Deployment files | New `deploy/podman/` (pod file, `.kube` unit, configuration and secret templates); `docker-compose.yml` image names and health checks |
-| `deploy/setup.sh` | Runtime detection and a Podman install branch |
-| Worker | Start-up retry while PostgreSQL is unavailable (`src/JIM.Worker/Worker.cs`, which calls `InitialiseDatabaseAsync` once today) |
-| Images | Health-check scripts in the Worker and Scheduler images; possibly Web |
+| Deployment files | New `deploy/podman/` (pod files, `.kube` units, configuration and secret templates); `docker-compose.yml` image names; the production compose file serves HTTPS (plan D4) |
+| `deploy/setup.sh` | Runtime detection, a Podman install branch that creates the rootless `jim` account (plan D5), and a certificate step for both runtimes |
+| Worker, Web, Scheduler | Start-up wait while PostgreSQL is unavailable (`src/JIM.Worker/Worker.cs` calls `InitialiseDatabaseAsync` once today, and JIM.Web crashes) |
+| JIM.Web | HTTPS by default; health endpoints exempt from HTTPS redirection |
+| Images | None (requirement 12 withdrawn, plan D8) |
 | Release | `scripts/Build-ReleaseBundle.ps1` ships the Podman files and matches the new PostgreSQL image reference |
 | CI | New boot check for both deployment paths in `.github/workflows/ci.yml` |
 | Database, API, UI | None |
@@ -166,7 +170,8 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 | Doc | Change |
 |------|--------|
-| `docs/administration/deployment.md` | Docker and Podman variants of every install path; HTTPS requirement for remote access; Podman prerequisites and supported versions |
+| `docs/administration/deployment.md` | Docker and Podman variants of every install path; HTTPS by default, certificates and renewal, and reverse proxies; rootless operation; Podman prerequisites and supported versions |
+| `docs/administration/deploying-with-ansible.md` (new) | Deploying with Red Hat's podman system role (plan D12) |
 | `docs/getting-started/prerequisites.md`, quick start | Podman as a supported runtime |
 | `docs/administration/configuration.md` | How the same settings are supplied on Podman; secrets handling |
 | `docs/administration/upgrading.md` | Podman upgrade and rollback procedure |
@@ -180,6 +185,8 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 - #1805 (merged): `jim.web` pinned to port 8080 and the bundled database initialised with `C.UTF-8`. Both are prerequisites; port 80 cannot be bound by a non-root, capability-free process under Podman.
 
 ## Open Questions
+
+*All seven are answered by decisions D1 to D7 in the [implementation plan](../plans/PODMAN_SUPPORT.md#decisions).*
 
 1. **Secrets mechanism:** Podman secrets (`podman secret create`) referenced from the pod file, a Kubernetes `Secret` document played alongside it, or a generated file with restricted permissions?
 2. **Configuration supply:** a Kubernetes `ConfigMap` passed with `podman kube play --configmap` (and Quadlet `ConfigMap=`), or `setup.sh` generating it from the `.env` an administrator already knows?
@@ -196,7 +203,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 - [ ] All image references fully qualified; the release bundle builds with the new PostgreSQL reference
 - [ ] Worker waits for PostgreSQL at start-up with a bounded retry and logged attempts, covered by tests
 - [ ] Worker `SYS_ADMIN` and `DAC_READ_SEARCH` removed, or their use documented if one is found
-- [ ] Heartbeat health checks run from scripts inside the images; the Docker stack stays healthy
+- [ ] Every JIM service (Web and Scheduler as well as Worker) waits for an unreachable database instead of exiting (requirement 12's criterion withdrawn; see plan D8)
 
 ### Phase 2: Podman path
 
