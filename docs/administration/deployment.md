@@ -142,7 +142,7 @@ curl -fsSL -o docker-compose.yml \
 curl -fsSL -o docker-compose.production.yml \
   https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.production.yml
 curl -fsSL -o .env \
-  https://github.com/TetronIO/JIM/releases/latest/download/.env.example
+  https://github.com/TetronIO/JIM/releases/latest/download/default.env.example
 
 # Edit .env -- configure SSO and database settings (see Configuration Reference)
 

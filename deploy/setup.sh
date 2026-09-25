@@ -272,9 +272,10 @@ download_files() {
         || fatal "Failed to download docker-compose.production.yml"
     success "Downloaded docker-compose.production.yml"
 
-    curl -fsSL -o "${install_dir}/.env" "${base_url}/.env.example" \
-        || fatal "Failed to download .env.example"
-    success "Downloaded .env (from .env.example)"
+    # Published as default.env.example: GitHub renames an asset whose name starts with a dot.
+    curl -fsSL -o "${install_dir}/.env" "${base_url}/default.env.example" \
+        || fatal "Failed to download default.env.example"
+    success "Downloaded .env (from default.env.example)"
 }
 
 # --- Configure database ---

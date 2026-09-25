@@ -91,7 +91,7 @@ git push origin main --tags
 8. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
 9. **Verify the release**: Once complete, verify:
-   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`)
+   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, and `.env.example` published as `default.env.example`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
 

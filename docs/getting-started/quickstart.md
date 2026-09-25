@@ -55,7 +55,7 @@ mkdir jim && cd jim
 # Download compose files and environment template
 curl -fsSL -o docker-compose.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.yml
 curl -fsSL -o docker-compose.production.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.production.yml
-curl -fsSL -o .env https://github.com/TetronIO/JIM/releases/latest/download/.env.example
+curl -fsSL -o .env https://github.com/TetronIO/JIM/releases/latest/download/default.env.example
 
 # Configure - edit .env with your SSO settings (see SSO Setup Guide)
 # Set DOCKER_REGISTRY=ghcr.io/tetronio/ and JIM_VERSION to the latest release version
