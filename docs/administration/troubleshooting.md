@@ -31,6 +31,19 @@ curl https://your-jim-url/api/v1/auth/config
 
 The `clientId` in the response must be the client that has the loopback redirect URI registered at your identity provider.
 
+### Sign-in loops between JIM and the identity provider
+
+You sign in, the browser goes back and forth between JIM and the identity provider, and you land on a page titled **Sign-in could not complete**. JIM also logs a warning beginning `Sign-in stopped`. (Earlier versions of JIM kept going back and forth indefinitely.)
+
+**What it means.** When sign-in starts, JIM sets two short-lived cookies and checks for them when the identity provider sends the browser back. Outside Development mode these cookies are marked `Secure`, and browsers only accept `Secure` cookies over HTTPS, or over plain HTTP to `localhost`. When the cookies do not come back, JIM restarts the sign-in once, which recovers a one-off loss (cookies cleared mid-sign-in, or the Back button onto the sign-in callback). If the cookies are lost again, restarting cannot help, so JIM stops and shows this page instead.
+
+**How to fix.**
+
+- **JIM is reached over plain HTTP from another machine**, for example `http://jim01:5200`. This is the usual cause, and JIM stops straight away without restarting. Browser access from other machines requires HTTPS: put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy). Plain HTTP only works from a browser on the JIM host itself, at `http://localhost:5200`.
+- **TLS terminates at a reverse proxy that JIM does not trust.** The address bar shows `https://`, but JIM only sees the proxy's plain HTTP connection. Set `JIM_TRUSTED_PROXIES` to the proxy's address so JIM reads the `X-Forwarded-Proto` header the proxy sends; see the [Configuration Reference](configuration.md).
+- **The browser is blocking cookies for JIM's address**, or a proxy is removing `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site and make sure the proxy passes them through unchanged.
+- **Safari over `http://localhost` outside Development mode.** Unlike other browsers, Safari does not treat `localhost` as secure, so it refuses the cookies. Use HTTPS, or another browser for local testing.
+
 ## Known noisy log lines
 
 Some messages in the container logs look alarming but are expected and harmless. They are documented here so operators can confirm at a glance that nothing is actually wrong.

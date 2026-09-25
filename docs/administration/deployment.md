@@ -318,7 +318,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 
 ### Step 9: Access JIM
 
-1. **Open your browser** to `https://jim.your-domain.local` (or `http://localhost:5200` if no TLS)
+1. **Open your browser** to `https://jim.your-domain.local` (or `http://localhost:5200` from a browser on the JIM host itself; any other machine needs HTTPS, see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
 2. **Log in** with your SSO credentials
 3. **Verify access** - the initial admin user (configured via `JIM_SSO_INITIAL_ADMIN`) will have full access
 
@@ -327,6 +327,9 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 ## TLS and Reverse Proxy
 
 The JIM containers serve HTTP on port 8080 internally. For production, place a reverse proxy in front to handle TLS termination.
+
+!!! warning "Browser access from other machines requires HTTPS"
+    Outside Development mode, JIM's sign-in cookies are marked `Secure`, and browsers only keep `Secure` cookies over HTTPS or over plain HTTP to `localhost`. A browser on another machine reaching JIM at `http://<server>:5200` therefore cannot sign in: JIM stops with a **Sign-in could not complete** page rather than loop between itself and the identity provider. Serve JIM over HTTPS and, because TLS terminates at the proxy, set `JIM_TRUSTED_PROXIES` to the proxy's address so JIM can see that the original connection was secure. See [Sign-in loops between JIM and the identity provider](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider).
 
 !!! important
     Blazor Server uses WebSockets (SignalR). Your reverse proxy **must** support WebSocket connections, or the UI will fall back to long polling with degraded performance.
