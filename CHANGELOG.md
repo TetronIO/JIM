@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 The air-gapped release bundle no longer ships development settings (a demo Keycloak with `admin`/`admin`, PostgreSQL open on port 5432) that `docker compose` applied automatically when run without `-f`.
 - 🐛 Case-insensitive Object Matching Rules treated `_` and `%` as wildcards, so `j_smith` could match `jxsmith` and join the wrong object, on inbound joins and export matching alike; they now require an exact case-insensitive match.
 - 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
-- 🐛 Deleting a Pending Export no longer leaves its attribute changes behind in the database, where they accumulated indefinitely. Upgrading removes any left over by earlier versions. (#1818)
+- 🐛 Deleting a Pending Export no longer leaves its attribute changes behind in the database, where they accumulated indefinitely. (#1818)
 
 ### Performance
 
