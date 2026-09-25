@@ -69,8 +69,12 @@ public sealed record GenerationRequest
     public string? BaseValue { get; init; }
 
     /// <summary>
-    /// A value a participating target already holds for this object and attribute, if the caller found one
-    /// (adopt before generate, FR 30). Null or empty when there is nothing to adopt.
+    /// A value the caller found already sitting on the object for this attribute, if any (adopt before
+    /// generate, FR 30). Import mode only, sourced from the Metaverse Object's own held value
+    /// (<see cref="GeneratedValueParticipation.FindMetaverseOwnValue"/>): a joined Connected System Object's
+    /// value is never a source here (product-owner decision; connector-space adoption sat outside the
+    /// Attribute Flow priority model and has been removed). Export mode never sets this; with no assignment,
+    /// generation always runs. Null or empty when there is nothing to adopt.
     /// </summary>
     public string? AdoptableValue { get; init; }
 

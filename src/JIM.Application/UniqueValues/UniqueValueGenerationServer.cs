@@ -833,10 +833,10 @@ public sealed class UniqueValueGenerationServer
     /// target attribute's counter back (or forward; the direction is whatever the flow's configured
     /// <see cref="SyncRuleMappingGeneration.SequenceStart"/> calls for) to that start value. Existing values and
     /// assignments are left untouched, deliberately: there is no recall here (#1537's recall stages removal
-    /// exports that would strip connector-space values this release's "adopt before generate" is built to keep;
-    /// plan "The service"). For every other token kind, and for a Sequence mapping whose counter has never been
-    /// seeded, this is a documented no-op. <paramref name="mapping"/>'s <see cref="SyncRuleMapping.Id"/> is
-    /// recorded as the mover on the counter, for the same audit reason a save-time raise records it.
+    /// exports, which would rename or strip an already-exported value out from under a live account; plan "The
+    /// service"). For every other token kind, and for a Sequence mapping whose counter has never been seeded,
+    /// this is a documented no-op. <paramref name="mapping"/>'s <see cref="SyncRuleMapping.Id"/> is recorded as
+    /// the mover on the counter, for the same audit reason a save-time raise records it.
     /// </summary>
     public async Task<GeneratedValueRestartResult> RestartAsync(SyncRuleMapping mapping)
     {

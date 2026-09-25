@@ -1207,15 +1207,15 @@ public class SyncPreviewServerTests
     }
 
     /// <summary>
-    /// Adopt-before-generate participation (work package J): the previewed CSO joins an already-persisted
-    /// Metaverse Object that is ALSO joined, via a participating export target (Dummy Target System), to a
-    /// Connected System Object that already holds a value for the generated attribute. The preview must
-    /// compute the same participating targets and adoptable value the worker would (through the shared
-    /// <c>GeneratedValueParticipation</c> helper), so it shows the existing value adopted rather than a
-    /// fresh candidate, and writes nothing.
+    /// Formerly <c>PreviewSyncForCsoAsync_ParticipatingTargetAlreadyHoldsAValue_ShowsItAdoptedAsync</c>: before
+    /// the product-owner decision to remove connector-space adoption, a participating export target's own
+    /// value (here Dummy Target System, joined via the same Metaverse Object, with NO import Attribute Flow
+    /// reading it back) was adopted. That read is gone (#242): the preview must compute the same fresh
+    /// candidate the worker's real run would (through the shared <c>GeneratedValueParticipation</c> helper),
+    /// never the target's own value, and write nothing.
     /// </summary>
     [Test]
-    public async Task PreviewSyncForCsoAsync_ParticipatingTargetAlreadyHoldsAValue_ShowsItAdoptedAsync()
+    public async Task PreviewSyncForCsoAsync_ParticipatingTargetAlreadyHoldsAValueButNoImportFlow_ShowsItGeneratedAsync()
     {
         // Arrange - a generated mapping (base expression cs["EMPLOYEE_ID"] = "E123") on a JOIN (not a
         // projection), so the working Metaverse Object is already persisted when generation resolves.
@@ -1288,12 +1288,13 @@ public class SyncPreviewServerTests
         // Act
         var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
 
-        // Assert - the existing target value is adopted, not the freshly evaluated base "E123"
+        // Assert - the freshly evaluated base "E123" is generated; the target's own "jsmith" is never read
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
-                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "jsmith"), Is.True,
-                "the participating target's existing value must be adopted, not a fresh candidate generated");
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "E123"), Is.True,
+                "generation must never read a participating target's own value");
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c => c.Value == "jsmith"), Is.False);
             Assert.That(result.HasBlockingErrors, Is.False);
         }
 
@@ -1304,15 +1305,68 @@ public class SyncPreviewServerTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(generatedNode, Is.Not.Null);
-            Assert.That(generatedNode!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted),
-                "adoption must be recorded, not a fresh generation");
-            Assert.That(generatedNode.DetailMessage, Is.EqualTo($"{mvEmployeeIdAttr.Name}: jsmith"));
+            Assert.That(generatedNode!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned),
+                "a fresh generation must be recorded, never adoption");
+            Assert.That(generatedNode.DetailMessage, Is.EqualTo($"{mvEmployeeIdAttr.Name}: E123"));
         }
 
         // Zero side effects: nothing written.
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty);
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "a preview must not change the existing join");
+        }
+    }
+
+    /// <summary>
+    /// The new adoption source at the Sync Preview level, matching the worker's own behaviour (#242,
+    /// product-owner decision): the Metaverse Object's own current value, left behind when a higher-priority
+    /// contributor withdraws (here simulated directly by seeding the value with a DIFFERENT rule's provenance,
+    /// rather than driving a full withdrawal sequence). The preview must show it adopted, through the same
+    /// <c>GeneratedValueParticipation.FindMetaverseOwnValue</c> read the worker's
+    /// <c>ResolvePendingGeneratedValuesAsync</c> uses, and write nothing.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_MetaverseObjectAlreadyHoldsAValueFromAnotherRule_ShowsItAdoptedAsync()
+    {
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture();
+
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = mvEmployeeIdAttr,
+            AttributeId = mvEmployeeIdAttr.Id,
+            StringValue = "jsmith",
+            ContributedBySyncRuleId = importRule.Id + 1000 // a DIFFERENT rule's provenance, never the generating rule's own
+        });
+        SyncRepo.SeedMetaverseObject(mvo);
+        cso.MetaverseObjectId = mvo.Id;
+        cso.MetaverseObject = mvo;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "jsmith"), Is.False,
+                "the value is already on the object; adoption is not staged as an addition to a blank attribute");
+            Assert.That(result.HasBlockingErrors, Is.False);
+        }
+
+        // No outcome node is asserted here (mirrors the worker's own equivalent test in
+        // UniqueValueGenerationWorkflowTests): the adopted value is identical to what the object already
+        // holds, so nothing is added or removed and the wider outcome tree has nothing to build around. What
+        // matters is that resolution completed cleanly - no failure warning - and wrote nothing.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Warnings, Is.Empty, "adoption must succeed cleanly, not surface a GeneratedValueWouldFail warning");
+            Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "a preview must write nothing");
             Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "a preview must not change the existing join");
         }
     }

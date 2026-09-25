@@ -785,12 +785,12 @@ public class SyncPreviewServer
     /// <see cref="MetaverseObject.PendingGeneratedValues"/>, mirroring the worker's own
     /// <c>SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync</c>.
     /// <para>
-    /// Adopt-before-generate's participating targets and adoptable value (Phase 2 work package J) are computed
-    /// exactly as the worker computes them, through the shared <see cref="GeneratedValueParticipation"/> helper:
-    /// export rules come from <paramref name="context"/>'s own outbound evaluation cache (the same source the
-    /// preview already uses for outbound evaluation), and the adoptable-value read goes through
-    /// <paramref name="context"/>'s read-only guarded repository. A preview of an object already joined to a
-    /// participating target that holds a value therefore shows it adopted, exactly as the real run would.
+    /// Adopt-before-generate's adoptable value (product-owner decision: the source changed from a joined
+    /// Connected System Object's value to the Metaverse Object's own value) is computed exactly as the worker
+    /// computes it, through the shared <see cref="GeneratedValueParticipation.FindMetaverseOwnValue"/>: pure,
+    /// synchronous, and read straight off <paramref name="workingMvo"/>, so this needs no repository access at
+    /// all. Participating targets (still connector-space) come from <paramref name="context"/>'s own outbound
+    /// evaluation cache and continue to feed only the generation-time collision gate, not adoption.
     /// </para>
     /// </summary>
     /// <param name="result">The preview result to add a <see cref="SyncPreviewMessageCode.GeneratedValueWouldFail"/>
@@ -821,12 +821,15 @@ public class SyncPreviewServer
                 var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(p.Mapping, exportRules);
                 var connectorSpaceAttributeIds = participatingTargets.Select(t => t.AttributeId).Distinct().ToList();
 
+                // Adopt before generate (FR 30, import mode; product-owner decision): the Metaverse Object's
+                // own current effective value, mirroring the worker's ResolvePendingGeneratedValuesAsync
+                // exactly - never a joined Connected System Object's value, so no guarded repository read is
+                // needed here at all any more.
                 string? adoptableValue = null;
-                if (workingMvo.Id != Guid.Empty && !p.BaseUnavailable && connectorSpaceAttributeIds.Count > 0
+                if (workingMvo.Id != Guid.Empty && !p.BaseUnavailable
                     && !context.UniqueValueResolveOptions.HasKnownMetaverseAssignment(workingMvo.Id, p.AttributeId))
                 {
-                    adoptableValue = await GeneratedValueParticipation.FindAdoptableValueAsync(
-                        context.GuardedRepository, workingMvo.Id, participatingTargets);
+                    adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, p.Mapping.SyncRuleId);
                 }
 
                 requests.Add(new GenerationRequest

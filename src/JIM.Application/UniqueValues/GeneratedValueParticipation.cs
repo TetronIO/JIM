@@ -1,19 +1,29 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using JIM.Data.Repositories;
+using System.Globalization;
+using JIM.Models.Core;
 using JIM.Models.Logic;
-using JIM.Models.Staging;
 
 namespace JIM.Application.UniqueValues;
 
 /// <summary>
-/// Adopt-before-generate's shared reads (Unique Value Generation, #242, Phase 2 work package J): which
-/// export targets participate in a generated mapping's adoption check, and what value (if any) those
-/// targets already hold. Extracted from the worker's own copies (<c>SyncTaskProcessorBase</c>) so the
-/// worker's real synchronisation and Sync Preview's read-only evaluation share one implementation with
-/// identical semantics, rather than Sync Preview reimplementing (or, as before this fix, simply omitting)
-/// the adoption check.
+/// Adopt-before-generate's shared reads (Unique Value Generation, #242, Phase 2 work package J; adoption
+/// source changed by product-owner decision after the Phase 2 release). Extracted from the worker's own
+/// copies (<c>SyncTaskProcessorBase</c>) so the worker's real synchronisation and Sync Preview's read-only
+/// evaluation share one implementation with identical semantics, rather than Sync Preview reimplementing (or,
+/// as before the original extraction, simply omitting) the adoption check.
+/// <para>
+/// "Adopt before generate" as originally shipped read a value from the object's joined Connected System
+/// Objects even when no import Attribute Flow from that system existed: a precedence rule outside JIM's
+/// Attribute Flow priority model. That connector-space read (<c>ComputeParticipatingTargets</c>'s former
+/// sibling <c>FindAdoptableValueAsync</c>) has been removed; an administrator who wants an existing target
+/// account's value kept adds an import Attribute Flow from that target at higher priority instead, and
+/// generation (which only runs when no higher-priority contribution supplies a value) then never runs for
+/// that object. <see cref="ComputeParticipatingTargets"/> itself is unaffected: its participating-target list
+/// still feeds the connector-space collision GATE (avoiding a freshly generated value that collides with a
+/// value an export target already holds), which is a different concern from adoption.
+/// </para>
 /// </summary>
 public static class GeneratedValueParticipation
 {
@@ -54,63 +64,59 @@ public static class GeneratedValueParticipation
     }
 
     /// <summary>
-    /// Adopt before generate's value lookup (FR 30): the first non-empty value <paramref name="metaverseObjectId"/>'s
-    /// joined Connected System Objects already hold, among <paramref name="targets"/>, in ascending Connected
-    /// System id order. Costs two batched queries against <paramref name="repository"/> (never one per target,
-    /// and never any query when <paramref name="targets"/> is empty); read-only throughout, so Sync Preview can
-    /// call it over a <see cref="ReadOnlySyncRepositoryGuard"/> exactly as the worker calls it over its real
-    /// repository.
+    /// Adopt before generate's value lookup (FR 30, import mode; source changed by product-owner decision):
+    /// the Metaverse Object's own current effective value for <paramref name="attributeId"/>, if it holds a
+    /// non-empty one contributed by a rule OTHER than <paramref name="generatingSyncRuleId"/>. "Effective"
+    /// mirrors <c>SyncEngine.GetEffectiveAttributeValues</c>: a persisted row not already staged for removal
+    /// this pass. This is deliberately never a joined Connected System Object's value (see the class summary);
+    /// the only way the Metaverse Object holds a value here at all, contributed by a DIFFERENT rule, is a
+    /// higher-priority contributor that withdrew and left it behind for the priority model's take-over to hand
+    /// to the next contributor (<c>ProcessGeneratedMapping</c> never stages an addition for its own winning
+    /// attribute, and <c>TakeOverProvenance</c> never stages a removal, so a value still present and not
+    /// pending removal here can only be a genuine hand-over, never a value this same pass is in the process of
+    /// clearing for real).
+    /// <para>
+    /// <paramref name="generatingSyncRuleId"/> excludes the generating mapping's OWN prior output
+    /// (<c>ApplyGeneratedValue</c> stamps a generated value's provenance with the generating rule's own id): a
+    /// value this same mapping generated in an earlier pass whose commit then lost the cross-run collision
+    /// race (<c>UniqueValueGenerationServer.CommitAssignmentsAsync</c>'s loser handling) is left on the object
+    /// with no assignment of its own, and self-healing means that object must draw a fresh candidate next
+    /// time, never "adopt" its own abandoned attempt. Passing null (only ever from a caller with no persisted
+    /// mapping, such as a unit test) disables this exclusion.
+    /// </para>
+    /// <para>
+    /// Pure and synchronous: unlike the removed connector-space read, the value (if any) is already loaded on
+    /// <paramref name="mvo"/>, so this costs no repository call, and Sync Preview needs no guarded repository
+    /// access to call it.
+    /// </para>
     /// </summary>
-    public static async Task<string?> FindAdoptableValueAsync(
-        ISyncRepository repository, Guid metaverseObjectId, IReadOnlyList<(int ConnectedSystemId, int AttributeId)> targets)
+    public static string? FindMetaverseOwnValue(MetaverseObject mvo, int attributeId, int? generatingSyncRuleId)
     {
-        if (targets.Count == 0)
-            return null;
+        var current = mvo.AttributeValues.FirstOrDefault(av =>
+            av.AttributeId == attributeId
+            && !mvo.PendingAttributeValueRemovals.Contains(av)
+            && (!generatingSyncRuleId.HasValue || av.ContributedBySyncRuleId != generatingSyncRuleId.Value));
 
-        var targetSystemIds = targets.Select(t => t.ConnectedSystemId).Distinct().ToList();
-        var csoLookup = await repository.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync([metaverseObjectId], targetSystemIds);
-        if (csoLookup.Count == 0)
-            return null;
-
-        var joined = targets
-            .Where(t => csoLookup.ContainsKey((metaverseObjectId, t.ConnectedSystemId)))
-            .OrderBy(t => t.ConnectedSystemId)
-            .ToList();
-        if (joined.Count == 0)
-            return null;
-
-        var csoIds = joined.Select(t => csoLookup[(metaverseObjectId, t.ConnectedSystemId)].Id).Distinct().ToList();
-        var attributeValues = await repository.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
-
-        foreach (var (connectedSystemId, attributeId) in joined)
-        {
-            var cso = csoLookup[(metaverseObjectId, connectedSystemId)];
-            var value = attributeValues.FirstOrDefault(v => v.ConnectedSystemObject.Id == cso.Id && v.AttributeId == attributeId);
-            var rendered = value == null ? null : RenderAdoptableConnectedSystemValue(value);
-            if (!string.IsNullOrEmpty(rendered))
-                return rendered;
-        }
-
-        return null;
+        return current == null ? null : RenderMetaverseValue(current);
     }
 
     /// <summary>
-    /// Renders a Connected System Object attribute value as the text an adopt-before-generate candidate
-    /// needs: a Number or LongNumber participating target holds its value in
-    /// <see cref="ConnectedSystemObjectAttributeValue.IntValue"/>/<see cref="ConnectedSystemObjectAttributeValue.LongValue"/>,
-    /// never <see cref="ConnectedSystemObjectAttributeValue.StringValue"/>, so reading only
-    /// <c>StringValue</c> would mean a numeric target never adopted. The caller's own numeric parsing
-    /// renders this string back to a number, invariant, for a Number/LongNumber target when building the
-    /// outcome.
+    /// Renders a Metaverse Object attribute value as the text an adopt-before-generate candidate needs: a
+    /// Number or LongNumber target holds its value in
+    /// <see cref="MetaverseObjectAttributeValue.IntValue"/>/<see cref="MetaverseObjectAttributeValue.LongValue"/>,
+    /// never <see cref="MetaverseObjectAttributeValue.StringValue"/>, so reading only <c>StringValue</c> would
+    /// mean a numeric target never adopted. Also the correct answer for an asserted-null marker row (every
+    /// value column null): there is nothing to adopt, so this returns null exactly as it would for a genuinely
+    /// absent row.
     /// </summary>
-    private static string? RenderAdoptableConnectedSystemValue(ConnectedSystemObjectAttributeValue value)
+    private static string? RenderMetaverseValue(MetaverseObjectAttributeValue value)
     {
         if (!string.IsNullOrEmpty(value.StringValue))
             return value.StringValue;
         if (value.IntValue.HasValue)
-            return value.IntValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return value.IntValue.Value.ToString(CultureInfo.InvariantCulture);
         if (value.LongValue.HasValue)
-            return value.LongValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return value.LongValue.Value.ToString(CultureInfo.InvariantCulture);
         return null;
     }
 }

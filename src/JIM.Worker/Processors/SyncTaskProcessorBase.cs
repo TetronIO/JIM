@@ -2059,14 +2059,17 @@ public abstract class SyncTaskProcessorBase
                     .Distinct()
                     .ToList();
 
-                // Adoptable value (FR 30): only for a persisted object, not StickyOnly, with participating
-                // targets, and only when the run cache holds no assignment for it yet — a known assignment
-                // resolves as Sticky regardless, so the query below would be wasted work.
+                // Adopt before generate (FR 30, import mode): the value the Metaverse Object itself already
+                // holds for the target attribute, never a joined Connected System Object's value (product-owner
+                // decision: connector-space adoption sat outside the Attribute Flow priority model and has been
+                // removed; see GeneratedValueParticipation's class summary). Only for a persisted object, not
+                // StickyOnly, and only when the run cache holds no assignment for it yet - a known assignment
+                // resolves as Sticky regardless.
                 string? adoptableValue = null;
-                if (mvo.Id != Guid.Empty && !pending.BaseUnavailable && connectorSpaceAttributeIds.Count > 0
+                if (mvo.Id != Guid.Empty && !pending.BaseUnavailable
                     && !resolveOptions.HasKnownMetaverseAssignment(mvo.Id, pending.AttributeId))
                 {
-                    adoptableValue = await GeneratedValueParticipation.FindAdoptableValueAsync(_syncRepo, mvo.Id, participatingTargets);
+                    adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, pending.AttributeId, pending.Mapping.SyncRuleId);
                 }
 
                 requests.Add(new GenerationRequest
@@ -2299,10 +2302,21 @@ public abstract class SyncTaskProcessorBase
     /// <see cref="EnsureUniqueValueGenerationServiceBuilt"/>, exactly as the import side's
     /// <see cref="ResolvePendingGeneratedValuesAsync"/> does, so a run whose own rules carry no generated export
     /// mapping never builds the service or queries an assignment for one.
+    /// <para>
+    /// Scans <see cref="ExportEvaluationResult.MergedExistingPendingExports"/> as well as
+    /// <see cref="ExportEvaluationResult.PendingExports"/> (bug found by Scenario 23 at runtime, not part of
+    /// #242's original scope): when this evaluation merged its changes into a Pending Export already staged
+    /// earlier in the page (typically drift detection's own corrective export for the same Connected System
+    /// Object), the merged-into row is reported there, not in <c>PendingExports</c> - it already belongs to
+    /// <see cref="_pendingExportsToCreate"/> and must never be queued a second time. Before this fix, a
+    /// generated export mapping's change that landed there via a merge was invisible to this method, so its
+    /// marker survived into <see cref="FlushPendingExportOperationsAsync"/>'s integrity guard and threw.
+    /// </para>
     /// </summary>
     private async Task ResolveExportGeneratedValuesAsync(MetaverseObject mvo, ExportEvaluationResult result)
     {
         var marked = result.PendingExports
+            .Concat(result.MergedExistingPendingExports)
             .SelectMany(pe => pe.AttributeValueChanges, (pe, change) => (PendingExport: pe, Change: change))
             .Where(x => x.Change.PendingGeneration != null)
             .ToList();
@@ -2317,30 +2331,19 @@ public abstract class SyncTaskProcessorBase
         var requests = new List<GenerationRequest>(marked.Count);
         foreach (var (pendingExport, change) in marked)
         {
-            // Adopt before generate (FR 30, export mode): the value the Connected System Object already holds
-            // for this attribute, if any - never checked for a Create (a brand new provisioning object holds
-            // nothing yet) or while the base is unavailable (StickyOnly below answers only the sticky check).
-            string? adoptableValue = null;
-            if (!change.PendingGeneration!.BaseUnavailable
-                && pendingExport.ChangeType != PendingExportChangeType.Create
-                && pendingExport.ConnectedSystemObjectId.HasValue
-                && _exportEvaluationCache != null)
-            {
-                var existingValue = _exportEvaluationCache.CsoAttributeValues[(pendingExport.ConnectedSystemObjectId.Value, change.AttributeId)]
-                    .FirstOrDefault();
-                adoptableValue = existingValue == null ? null : RenderComparableExportValue(existingValue.Attribute?.Type ?? change.Attribute.Type, existingValue);
-            }
-
+            // Adoption removed (FR 30, export mode; product-owner decision): a joined Connected System Object's
+            // existing value is never read here any more. With no assignment, JIM generates and exports, exactly
+            // like any export Attribute Flow overwriting a target value; AdoptableValue is left null so
+            // ResolveAsync only ever considers Sticky then generation for an export-mode request.
             requests.Add(new GenerationRequest
             {
                 Mode = GeneratedValueMode.Export,
                 ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId,
                 ConnectedSystemObjectTypeAttributeId = change.AttributeId,
-                Generation = change.PendingGeneration.Mapping.Generation!,
+                Generation = change.PendingGeneration!.Mapping.Generation!,
                 TargetType = change.Attribute.Type,
                 AttributeName = change.Attribute.Name,
                 BaseValue = change.PendingGeneration.BaseValue,
-                AdoptableValue = adoptableValue,
                 StickyOnly = change.PendingGeneration.BaseUnavailable,
                 // The Pending Export itself: its Connected System Object id is already known at resolve time
                 // (unlike a Metaverse Object's, since a Connected System Object's id is a client-generated GUID
@@ -2365,14 +2368,16 @@ public abstract class SyncTaskProcessorBase
                     RecordExportGeneratedValueOutcome(mvo.Id, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, change.Attribute.Name, outcome.Value!);
                     break;
 
-                case GenerationOutcomeKind.Adopted:
                 case GenerationOutcomeKind.Sticky:
                 {
-                    // Both mean the value is JIM-owned; the only question is whether the Connected System
-                    // Object already holds it. Adopted's candidate is drawn from that very value (built above),
-                    // so it always matches on first sight; Sticky's is the existing assignment's value, which
-                    // can legitimately differ if something changed the target directly since the assignment was
-                    // made - in which case the export must reassert it (FR 10), not treat it as a no-op.
+                    // The value is JIM-owned; the only question is whether the Connected System Object already
+                    // holds it. The candidate is the existing assignment's value, which can legitimately differ
+                    // from what the target currently holds if something changed the target directly since the
+                    // assignment was made - in which case the export must reassert it (FR 10), not treat it as
+                    // a no-op. Adoption (comparing against the target's OWN current value, adopting it as the
+                    // assignment) has been removed for export mode (product-owner decision): with no assignment,
+                    // JIM generates and exports, exactly like any export Attribute Flow overwriting a target
+                    // value, so this case never runs for a request with no prior assignment.
                     string? currentText = null;
                     if (pendingExport.ConnectedSystemObjectId.HasValue && _exportEvaluationCache != null)
                     {
@@ -2380,12 +2385,6 @@ public abstract class SyncTaskProcessorBase
                             .FirstOrDefault();
                         if (existingValue != null)
                             currentText = RenderComparableExportValue(change.Attribute.Type, existingValue);
-                    }
-
-                    if (outcome.Kind == GenerationOutcomeKind.Adopted)
-                    {
-                        _pendingExportGeneratedValueAssignmentsToCommit.Add(outcome);
-                        RecordExportGeneratedValueOutcome(mvo.Id, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, change.Attribute.Name, outcome.Value!);
                     }
 
                     if (currentText != null && string.Equals(currentText, outcome.Value, StringComparison.Ordinal))
@@ -2422,6 +2421,16 @@ public abstract class SyncTaskProcessorBase
         // is the correct outcome for a failure (mirrors the empty-Update discard CreateOrUpdatePendingExportAsync
         // already applies before batching; this is the flush-time equivalent for changes emptied by resolution).
         result.PendingExports.RemoveAll(pe => pe.AttributeValueChanges.Count == 0 && pe.ChangeType != PendingExportChangeType.Create);
+
+        // The merged-into case's equivalent (only reachable when a merge's entire content was the generated
+        // change and it failed to resolve, leaving the already-staged Pending Export with nothing at all): it
+        // was never added to result.PendingExports (it already belongs to _pendingExportsToCreate), so it must
+        // be removed from there directly instead.
+        foreach (var mergedPendingExport in result.MergedExistingPendingExports
+            .Where(pe => pe.AttributeValueChanges.Count == 0 && pe.ChangeType != PendingExportChangeType.Create))
+        {
+            _pendingExportsToCreate.Remove(mergedPendingExport);
+        }
     }
 
     /// <summary>
