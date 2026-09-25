@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - ⚡ Synchronisation no longer queries the database once per object to look for an existing target object before provisioning; it checks once per page, speeding up large initial synchronisations.
+- ⚡ Large imports do much less database work: new objects are no longer looked up one at a time, the object type's schema is no longer reloaded for every object, and checking that provisioned objects were created no longer loads each one in full.
+- ⚡ Synchronisation starts and writes faster: it loads only the Pending Exports it can act on, skips a redundant lookup when provisioning, and writes each page of objects, Pending Exports and Activity results in bulk.
 
 ## [0.15.0] - 2026-09-23
 
