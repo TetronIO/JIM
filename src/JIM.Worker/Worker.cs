@@ -1740,11 +1740,14 @@ public class Worker : BackgroundService
         // DbUpdateException (the SaveChanges path) or as a provider DbException such as Npgsql's
         // PostgresException (the raw bulk-SQL path used on the sync hot path): the raw statement
         // bypasses the change tracker, but the tracked join/attribute changes it was flushing are
-        // still pending, so the next SaveChanges re-issues them and throws again. Record the failure
+        // still pending, so the next SaveChanges re-issues them and throws again. It applies equally
+        // to a SyncPersistenceException, the sync processors' wrapper for a page that failed part-way
+        // through persisting, whatever its inner cause (an integrity guard throws before any database
+        // call, and the page's entities are still pending all the same). Record the failure
         // via a fresh context straight away instead of fighting the poisoned one. If the fresh context
         // fails too (for example the database is down), fall through to the in-context attempts as a
         // long shot before declaring the activity stuck.
-        if (originalException is DbUpdateException or System.Data.Common.DbException &&
+        if (ShouldFailOnFreshContextFirst(originalException) &&
             await TryFailActivityOnFreshContextAsync(activity, originalException, context))
             return;
 
@@ -1793,6 +1796,14 @@ public class Worker : BackgroundService
             }
         }
     }
+
+    /// <summary>
+    /// Whether a failure leaves the run's own DbContext unfit to record it, so the Activity must be failed through a
+    /// fresh context first rather than after two doomed attempts on the poisoned one (see
+    /// <see cref="SafeFailActivityAsync"/>).
+    /// </summary>
+    internal static bool ShouldFailOnFreshContextFirst(Exception exception) =>
+        exception is DbUpdateException or System.Data.Common.DbException or SyncPersistenceException;
 
     /// <summary>
     /// Attempts to mark an Activity as failed using a freshly created JimApplication (and therefore a fresh
