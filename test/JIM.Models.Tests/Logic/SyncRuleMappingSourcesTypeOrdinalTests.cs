@@ -32,7 +32,7 @@ public class SyncRuleMappingSourcesTypeOrdinalTests
         [SyncRuleMappingSourcesType.ExpressionMapping] = 2,
         [SyncRuleMappingSourcesType.AdvancedMapping] = 3,
 
-        // Unique Value Generation (#242): "JIM generates it" as a mapping source type.
+        // Unique Value Generation (#242): "Generated Value" as a mapping source type.
         [SyncRuleMappingSourcesType.GeneratedMapping] = 4
     };
 

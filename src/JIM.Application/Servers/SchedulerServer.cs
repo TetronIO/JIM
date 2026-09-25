@@ -349,22 +349,26 @@ public class SchedulerServer
     }
 
     /// <summary>
-    /// Gets a paginated list of Schedule Executions, optionally filtered by schedule.
+    /// Gets a paginated list of Schedule Executions, optionally filtered by schedule and by status. The total
+    /// count is taken over the filtered set.
     /// </summary>
     /// <param name="scheduleId">Optional filter by schedule ID.</param>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
     /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
+    /// <param name="status">Optional filter by status; null returns executions of every status.</param>
     /// <returns>A paged result set of Schedule Executions.</returns>
     public async Task<PagedResultSet<ScheduleExecution>> GetScheduleExecutionsAsync(
         Guid? scheduleId,
         int page,
         int pageSize,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        ScheduleExecutionStatus? status = null)
     {
-        return await Application.Repository.Scheduling.GetScheduleExecutionsAsync(scheduleId, page, pageSize, sortBy, sortDescending);
+        return await Application.Repository.Scheduling.GetScheduleExecutionsAsync(
+            scheduleId, page, pageSize, sortBy, sortDescending, status);
     }
 
     /// <summary>
@@ -382,6 +386,7 @@ public class SchedulerServer
     /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
     /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    /// <param name="status">Optional filter by status; null returns executions of every status.</param>
     public async Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
         Guid? scheduleId,
         int offset,
@@ -389,10 +394,11 @@ public class SchedulerServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool includeTotalCount = true)
+        bool includeTotalCount = true,
+        ScheduleExecutionStatus? status = null)
     {
         return await Application.Repository.Scheduling.GetScheduleExecutionsRangeAsync(
-            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount, status);
     }
 
     /// <summary>
@@ -464,13 +470,15 @@ public class SchedulerServer
 
             foreach (var step in stepsAtIndex)
             {
-                // Parallel steps share a step index, so the Connected System is what tells their Activities apart.
-                // Where an index holds a single step, fall back to whatever is there: steps that are not Run
-                // Profile steps carry no Connected System to match on.
-                var activity = stepActivities?.FirstOrDefault(a => a.ConnectedSystemId == step.ConnectedSystemId)
-                               ?? (stepsAtIndex.Count == 1 ? stepActivities?.FirstOrDefault() : null);
-                var task = stepTasks?.FirstOrDefault(t => t is SynchronisationWorkerTask swt && swt.ConnectedSystemId == step.ConnectedSystemId)
-                           ?? (stepsAtIndex.Count == 1 ? stepTasks?.FirstOrDefault() : null);
+                // Parallel steps share a step index. Each Activity and Worker Task records the step it belongs to
+                // (#1768), which tells them apart even when two parallel steps run against the same Connected System.
+                // Records made before that was recorded carry no step, so those fall back to the Connected System, and
+                // where an index holds a single step, to whatever is there: steps that are not Run Profile steps carry
+                // no Connected System to match on.
+                var activity = stepActivities?.FirstOrDefault(a => a.ScheduleStepId == step.Id)
+                               ?? MatchUnidentified(stepActivities, a => a.ScheduleStepId, a => a.ConnectedSystemId, step, stepsAtIndex.Count);
+                var task = stepTasks?.FirstOrDefault(t => t.ScheduleStepId == step.Id)
+                           ?? MatchUnidentified(stepTasks, t => t.ScheduleStepId, t => (t as SynchronisationWorkerTask)?.ConnectedSystemId, step, stepsAtIndex.Count);
 
                 string? connectedSystemName = null;
                 string? runProfileName = null;
@@ -499,14 +507,42 @@ public class SchedulerServer
                         ? activity.Executed + (activity.TotalActivityTime ?? TimeSpan.Zero)
                         : null,
                     ErrorMessage = activity?.ErrorMessage,
+                    // Only the reasons JIM writes when it cancels a step that had not started. A step cancelled while
+                    // running did run, and its message is whatever progress it last reported.
+                    CancellationReason = activity is { Status: ActivityStatus.Cancelled } && ScheduleStepNotRunReasons.IsNotRunReason(activity.Message)
+                        ? activity.Message
+                        : null,
                     ActivityId = activity?.Id,
                     ActivityStatus = activity?.Status,
-                    ContinueOnFailure = step.ContinueOnFailure
+                    // The effective behaviour, from the step's own setting or its Schedule's (#1787), and where it comes from.
+                    ContinueOnFailure = ScheduleFailureHandling.ContinuesOnFailure(step, execution.Schedule),
+                    FailureBehaviourSource = ScheduleFailureHandling.Source(step)
                 });
             }
         }
 
         return detail;
+    }
+
+    /// <summary>
+    /// The fallback match for a step's Activity or Worker Task when none records the step itself: those recorded before
+    /// steps were identified. Matched on the Connected System, or, where the step index holds a single step, taken as
+    /// whatever is there. Only records that identify no step are considered, so one belonging to a sibling is never
+    /// borrowed.
+    /// </summary>
+    private static T? MatchUnidentified<T>(
+        List<T>? candidates,
+        Func<T, Guid?> stepIdOf,
+        Func<T, int?> connectedSystemIdOf,
+        ScheduleStep step,
+        int stepsAtIndex) where T : class
+    {
+        var unidentified = candidates?.Where(c => stepIdOf(c) == null).ToList();
+        if (unidentified == null || unidentified.Count == 0)
+            return null;
+
+        return unidentified.FirstOrDefault(c => connectedSystemIdOf(c) == step.ConnectedSystemId)
+               ?? (stepsAtIndex == 1 ? unidentified[0] : null);
     }
 
     /// <summary>
@@ -583,16 +619,36 @@ public class SchedulerServer
     }
 
     /// <summary>
-    /// Starts execution of a schedule. Creates a ScheduleExecution record and queues ALL steps upfront.
-    /// Step 0 tasks are set to Queued (ready to run). All subsequent step tasks are set to
-    /// WaitingForPreviousStep (visible on the queue but blocked until the worker advances them).
-    /// The worker drives step advancement via TryAdvanceScheduleExecutionAsync.
+    /// How long a Schedule Execution may stay Queued before the Scheduler's safety net treats its start as abandoned
+    /// (#1768). Starting a Schedule only queues a Worker Task per step, which takes seconds; an execution still Queued
+    /// after this long was left part-way through starting, most likely by a JIM service stopping.
     /// </summary>
+    public static readonly TimeSpan StaleStartThreshold = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Starts execution of a schedule (#1768). Creates the Schedule Execution as Queued and queues a Worker Task for
+    /// every step as WaitingForPreviousStep, so nothing is runnable, and neither the Worker nor the Scheduler's safety
+    /// net acts on the execution, while it is only part-started. Once every step has been queued, the execution is
+    /// switched to InProgress and its first step group released, atomically and only if it is still Queued, so a
+    /// cancellation made during the start stands. From then on the Worker drives step advancement via
+    /// TaskingServer.TryAdvanceScheduleExecutionAsync.
+    /// </summary>
+    /// <remarks>
+    /// A step JIM refuses to queue (its Connected System is being deleted, say) gets a Failed Activity saying why. If
+    /// the step continues on failure (its own setting, or its Schedule's when it follows the Schedule; #1787) it is
+    /// skipped and the rest of the Schedule runs without it, and the execution ends Complete With Error rather than
+    /// Complete. Otherwise the start stops: the steps already queued are cancelled, the execution is marked Failed with
+    /// the reason, and the error is thrown to the caller, which reports it (the Scheduler's due-schedule loop logs it;
+    /// the Run endpoint returns it). An unexpected error takes the same stopping path whatever the step's setting, and is rethrown as
+    /// it is. Nothing runs in either case.
+    /// </remarks>
     /// <param name="schedule">The schedule to execute (must include Steps).</param>
     /// <param name="initiatorType">The type of principal initiating the execution.</param>
     /// <param name="initiatorId">The ID of the principal initiating the execution.</param>
     /// <param name="initiatorName">The name of the principal at time of execution.</param>
     /// <returns>The created ScheduleExecution, or null if the schedule has no steps.</returns>
+    /// <exception cref="InvalidOperationException">A step set to stop the Schedule could not be queued. The message is
+    /// the reason recorded on the execution.</exception>
     public async Task<ScheduleExecution?> StartScheduleExecutionAsync(
         Schedule schedule,
         ActivityInitiatorType initiatorType,
@@ -606,62 +662,124 @@ public class SchedulerServer
             return null;
         }
 
-        // Get the distinct step indices so we know which is step 0 and which are subsequent
         var distinctStepIndices = schedule.Steps
             .Select(s => s.StepIndex)
             .Distinct()
             .OrderBy(i => i)
             .ToList();
 
-        Log.Information("StartScheduleExecutionAsync: Starting execution of schedule {ScheduleId} ({ScheduleName}) with {StepCount} steps across {GroupCount} step groups. Queueing all steps upfront.",
+        Log.Information("StartScheduleExecutionAsync: Starting execution of schedule {ScheduleId} ({ScheduleName}) with {StepCount} steps across {GroupCount} step groups.",
             schedule.Id, schedule.Name, schedule.Steps.Count, distinctStepIndices.Count);
 
-        // Create the execution record
         var execution = new ScheduleExecution
         {
             ScheduleId = schedule.Id,
             ScheduleName = schedule.Name,
-            Status = ScheduleExecutionStatus.InProgress,
-            CurrentStepIndex = 0,
+            // Held at Queued until every step has been queued; see the summary. It gets a start time when its first
+            // step group is released, not before.
+            Status = ScheduleExecutionStatus.Queued,
+            CurrentStepIndex = distinctStepIndices[0],
             // Step groups, not step rows: CurrentStepIndex advances one group at a time, and the two are
             // read together as "step X of Y". Steps sharing a StepIndex are one position, not several.
             TotalSteps = distinctStepIndices.Count,
-            StartedAt = DateTime.UtcNow,
             InitiatedByType = initiatorType,
             InitiatedById = initiatorId,
             InitiatedByName = initiatorName
         };
         await Application.Repository.Scheduling.CreateScheduleExecutionAsync(execution);
 
+        // From here on, anything that goes wrong is recorded on the execution before it is rethrown, so it never sits
+        // Queued (or worse, half-started) with no explanation.
         try
         {
-            // Update schedule's last run time
             schedule.LastRunTime = DateTime.UtcNow;
             await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
-
-            // Queue ALL step groups upfront
-            var firstStepIndex = distinctStepIndices[0];
-            foreach (var stepIndex in distinctStepIndices)
-            {
-                // First step group is Queued (ready to run), all others are WaitingForPreviousStep
-                var initialStatus = stepIndex == firstStepIndex
-                    ? WorkerTaskStatus.Queued
-                    : WorkerTaskStatus.WaitingForPreviousStep;
-
-                await QueueStepGroupAsync(execution, schedule.Steps, stepIndex, initialStatus, initiatorType, initiatorId, initiatorName);
-            }
         }
         catch (Exception ex)
         {
-            // Once the execution record exists, a start that fails must leave it Failed with the reason, never
-            // In Progress: the stuck-execution safety net would otherwise find it with no tasks and mark it
-            // Complete, reporting a run that never happened as a success.
-            await FailExecutionThatCouldNotStartAsync(execution, ex);
+            await FailStartAsync(execution, $"The Schedule could not start: {AsClause(ex.Message)}. No steps ran.");
             throw;
         }
 
-        Log.Information("StartScheduleExecutionAsync: All {StepCount} steps queued for execution {ExecutionId}. Step group 0 is Queued, remaining groups are WaitingForPreviousStep.",
-            schedule.Steps.Count, execution.Id);
+        int? firstStepIndexWithTasks = null;
+        var tasksQueued = 0;
+        // The steps that could not be queued but continue on failure, with the Failed Activity recorded for each.
+        var skippedSteps = new List<(ScheduleStep Step, Activity? Activity)>();
+
+        foreach (var stepIndex in distinctStepIndices)
+        {
+            var stepsAtIndex = schedule.Steps.Where(s => s.StepIndex == stepIndex).ToList();
+            var isParallelGroup = stepsAtIndex.Count > 1;
+            if (isParallelGroup)
+            {
+                Log.Information("StartScheduleExecutionAsync: Step index {StepIndex} is a parallel group with {Count} steps for execution {ExecutionId}.",
+                    stepIndex, stepsAtIndex.Count, execution.Id);
+            }
+
+            foreach (var step in stepsAtIndex)
+            {
+                var workerTask = BuildWorkerTask(execution, step, isParallelGroup, initiatorType, initiatorId, initiatorName);
+                if (workerTask == null)
+                {
+                    Log.Warning("StartScheduleExecutionAsync: Step type {StepType} is not yet implemented. Skipping step {StepId} of execution {ExecutionId}.",
+                        step.StepType, step.Id, execution.Id);
+                    continue;
+                }
+
+                string? refusal;
+                try
+                {
+                    refusal = await TryQueueWorkerTaskAsync(step, workerTask);
+                }
+                catch (Exception ex)
+                {
+                    // Continue On Failure covers a step JIM refuses to queue, not an unexpected error such as the
+                    // database becoming unavailable part-way through, which stops the start whatever the setting.
+                    Log.Error(ex, "StartScheduleExecutionAsync: Unexpected error queuing step {StepId} of execution {ExecutionId}. The Schedule will not start.",
+                        step.Id, execution.Id);
+                    var stepActivity = await RecordStepNotQueuedAsync(execution, step, workerTask, ex.Message);
+                    await FailStartAsync(execution, DescribeStartFailure(step, stepActivity, ex.Message));
+                    throw;
+                }
+
+                if (refusal == null)
+                {
+                    // Step indices are visited in ascending order, so the first one to queue anything is the first to run.
+                    firstStepIndexWithTasks ??= stepIndex;
+                    tasksQueued++;
+                    continue;
+                }
+
+                var failedActivity = await RecordStepNotQueuedAsync(execution, step, workerTask, refusal);
+
+                if (ScheduleFailureHandling.ContinuesOnFailure(step, schedule))
+                {
+                    Log.Warning("StartScheduleExecutionAsync: Step {StepId} of execution {ExecutionId} could not be queued ({Reason}). It is set to continue on failure (from the {Source}), so the rest of the Schedule will run without it.",
+                        step.Id, execution.Id, refusal, ScheduleFailureHandling.Source(step));
+                    skippedSteps.Add((step, failedActivity));
+                    continue;
+                }
+
+                var message = DescribeStartFailure(step, failedActivity, refusal);
+                Log.Warning("StartScheduleExecutionAsync: Step {StepId} of execution {ExecutionId} could not be queued ({Reason}) and is set to stop the Schedule. The Schedule will not start.",
+                    step.Id, execution.Id, refusal);
+                await FailStartAsync(execution, message);
+                throw new InvalidOperationException(message);
+            }
+        }
+
+        try
+        {
+            await ReleaseFirstStepGroupAsync(execution, firstStepIndexWithTasks, skippedSteps);
+        }
+        catch (Exception ex)
+        {
+            await FailStartAsync(execution, $"The Schedule could not start: {AsClause(ex.Message)}. No steps ran.");
+            throw;
+        }
+
+        Log.Information("StartScheduleExecutionAsync: Execution {ExecutionId} of schedule {ScheduleId} ({ScheduleName}): {TasksQueued} task(s) queued, {StepsSkipped} step(s) that could not be queued skipped, status {Status}.",
+            execution.Id, schedule.Id, schedule.Name, tasksQueued, skippedSteps.Count, execution.Status);
 
         return execution;
     }
@@ -742,87 +860,218 @@ public class SchedulerServer
             return true; // Still in progress
         }
 
-        // All activities are in a terminal state. Check for failures.
-        var anyFailed = activitiesForStep.Any(a =>
-            a.Status == ActivityStatus.FailedWithError ||
-            a.Status == ActivityStatus.CompleteWithError ||
-            a.Status == ActivityStatus.Cancelled);
+        // Every Activity has finished: the step group is over, so decide what happens next exactly as the Worker would
+        // have, had it not stopped before it could.
+        Log.Information("CheckAndAdvanceExecutionAsync: Safety net concluding step {StepIndex} of execution {ExecutionId}.",
+            currentStepIndex, execution.Id);
 
-        Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} completed. AnyFailed: {AnyFailed}",
-            execution.Id, currentStepIndex, anyFailed);
+        return await ConcludeStepGroupAsync(freshExecution, currentStepIndex, activitiesForStep);
+    }
 
-        // Check if any failed and ContinueOnFailure is false
-        if (anyFailed)
+    /// <summary>
+    /// Decides what happens once every task in a step group has finished (#1768): stop the Schedule, move on to the
+    /// next step group, or complete the execution: Complete when every step succeeded, Complete With Error when any step
+    /// failed and was allowed to continue (#1787). The one implementation, shared by the Worker's advancement
+    /// (TaskingServer.TryAdvanceScheduleExecutionAsync) and the Scheduler's safety net
+    /// (<see cref="CheckAndAdvanceExecutionAsync"/>), so the two can never reach different conclusions about the same
+    /// execution.
+    /// </summary>
+    /// <remarks>
+    /// The caller must have loaded the execution with its Schedule and Steps and confirmed it was InProgress. Every
+    /// change made here is conditional on it still being InProgress when the write lands, so a cancellation (or a
+    /// competing conclusion) that arrives in between stands: a finished execution stays finished.
+    /// </remarks>
+    /// <param name="execution">The execution, with its Schedule and Steps loaded.</param>
+    /// <param name="stepIndex">The step group that has just finished.</param>
+    /// <param name="activitiesForStep">The Activities recorded for that step group.</param>
+    /// <returns>True if the execution is still in progress; false if it stopped, completed, or had already finished.</returns>
+    internal async Task<bool> ConcludeStepGroupAsync(ScheduleExecution execution, int stepIndex, IReadOnlyCollection<Activity> activitiesForStep)
+    {
+        var stopReason = GetReasonToStop(execution.Schedule, stepIndex, activitiesForStep);
+        if (stopReason != null)
         {
-            // Check ALL steps at this index (parallel steps share the same index),
-            // not just the first one. Fail if ANY step has ContinueOnFailure = false.
-            var stepsAtIndex = freshExecution.Schedule.Steps
-                .Where(s => s.StepIndex == currentStepIndex).ToList();
+            Log.Warning("ConcludeStepGroupAsync: Execution {ExecutionId} stops at step {StepIndex}: {Reason}",
+                execution.Id, stepIndex, stopReason);
 
-            if (stepsAtIndex.Count == 0 || stepsAtIndex.Any(s => !s.ContinueOnFailure))
+            // Cancel the remaining steps before marking the execution Failed, so an interruption between the two leaves
+            // an InProgress execution the safety net will conclude again, never a Failed one with waiting tasks that
+            // nothing would ever remove. A failure here is thrown, leaving exactly that retryable state.
+            var cancelled = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(
+                execution.Id, ScheduleStepNotRunReasons.EarlierStepStoppedSchedule);
+            if (cancelled > 0)
             {
-                var failedStepNames = stepsAtIndex
-                    .Where(s => !s.ContinueOnFailure)
-                    .Select(s => string.IsNullOrEmpty(s.Name) ? $"Step {s.StepIndex}" : s.Name)
-                    .ToList();
-
-                var stepDescription = failedStepNames.Count > 0
-                    ? string.Join(", ", failedStepNames)
-                    : $"Step index {currentStepIndex}";
-
-                Log.Warning("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} failed at step {StepIndex} ({StepNames}) due to activity failure.",
-                    execution.Id, currentStepIndex, stepDescription);
-
-                freshExecution.Status = ScheduleExecutionStatus.Failed;
-                freshExecution.CompletedAt = DateTime.UtcNow;
-                freshExecution.ErrorMessage = $"Step '{stepDescription}' failed and ContinueOnFailure is false.";
-                await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
-
-                // Clean up remaining WaitingForPreviousStep tasks
-                var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id);
-                if (deletedCount > 0)
-                {
-                    Log.Information("CheckAndAdvanceExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",
-                        deletedCount, execution.Id);
-                }
-
-                return false;
+                Log.Information("ConcludeStepGroupAsync: Cancelled {Count} remaining step task(s) of execution {ExecutionId}.",
+                    cancelled, execution.Id);
             }
-        }
 
-        // Find the next waiting step group (all steps are queued upfront as WaitingForPreviousStep)
-        var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(execution.Id);
+            if (!await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                    execution, [ScheduleExecutionStatus.InProgress], ScheduleExecutionStatus.Failed, stopReason))
+            {
+                Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} had already finished, so it is left as it is.", execution.Id);
+            }
 
-        if (!nextStepIndex.HasValue)
-        {
-            // No more waiting steps - execution complete
-            Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} completed successfully.", execution.Id);
-
-            freshExecution.Status = ScheduleExecutionStatus.Complete;
-            freshExecution.CompletedAt = DateTime.UtcNow;
-            await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
             return false;
         }
 
-        // Advance to next step group by transitioning WaitingForPreviousStep -> Queued
-        Log.Information("CheckAndAdvanceExecutionAsync: Safety net advancing execution {ExecutionId} to step {StepIndex}",
-            execution.Id, nextStepIndex.Value);
+        var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(execution.Id);
+        if (!nextStepIndex.HasValue)
+        {
+            // A step that failed and stopped the Schedule has already taken the Failed path above, so any failure found
+            // here, in this or an earlier step group, is one that was allowed to let the Schedule continue.
+            var failedActivities = (await Application.Repository.Activity.GetFailedScheduleExecutionActivitiesAsync(execution.Id))
+                .Where(IsFailedStepOutcome)
+                .ToList();
+            var finalStatus = failedActivities.Count > 0 ? ScheduleExecutionStatus.CompleteWithError : ScheduleExecutionStatus.Complete;
+            var continuedFailures = failedActivities.Count > 0
+                ? DescribeContinuedFailures(failedActivities.Select(a => (a.ScheduleStepIndex ?? stepIndex, FindStep(execution.Schedule, a), (Activity?)a)))
+                : null;
 
-        freshExecution.CurrentStepIndex = nextStepIndex.Value;
-        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
+            if (await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                    execution, [ScheduleExecutionStatus.InProgress], finalStatus, continuedFailures))
+            {
+                if (finalStatus == ScheduleExecutionStatus.CompleteWithError)
+                {
+                    Log.Warning("ConcludeStepGroupAsync: Execution {ExecutionId} completed with error. All steps done; {FailedCount} failed step outcome(s) were set to let the Schedule continue: {Message}",
+                        execution.Id, failedActivities.Count, continuedFailures);
+                }
+                else
+                {
+                    Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} completed. All steps done.", execution.Id);
+                }
+            }
+            else
+            {
+                Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} had already finished, so it is left as it is.", execution.Id);
+            }
 
-        var transitioned = await Application.Repository.Tasking.TransitionStepToQueuedAsync(execution.Id, nextStepIndex.Value);
-        Log.Information("CheckAndAdvanceExecutionAsync: Transitioned {Count} tasks to Queued for execution {ExecutionId} step {StepIndex}",
-            transitioned, execution.Id, nextStepIndex.Value);
+            return false;
+        }
 
+        if (!await Application.Repository.Scheduling.TryAdvanceScheduleExecutionAsync(execution, nextStepIndex.Value))
+        {
+            Log.Information("ConcludeStepGroupAsync: Execution {ExecutionId} was not advanced to step {StepIndex}: it had already finished, or had already been advanced.",
+                execution.Id, nextStepIndex.Value);
+            return false;
+        }
+
+        Log.Information("ConcludeStepGroupAsync: Advanced execution {ExecutionId} from step {CompletedStep} to step {NextStep}.",
+            execution.Id, stepIndex, nextStepIndex.Value);
         return true;
     }
+
+    /// <summary>
+    /// Whether a finished step group stops the Schedule, and if so, why, in words an administrator can act on; null
+    /// when the Schedule carries on.
+    /// </summary>
+    /// <remarks>
+    /// The failing step's effective behaviour decides (#1768, #1787): its own setting, or its Schedule's when it follows
+    /// the Schedule, resolved by <see cref="ScheduleFailureHandling"/>. The Schedule stops if any step that FAILED stops
+    /// it when it fails. A sibling that succeeded has no say, whatever its setting. Each failed Activity identifies its
+    /// step by ScheduleStepId. Where one cannot (it was recorded before steps were identified, or its step has since
+    /// been deleted), the group is judged by the older, stricter rule, failing safe: it stops if any step at that
+    /// position stops the Schedule, or if the position no longer has any steps at all.
+    /// </remarks>
+    private static string? GetReasonToStop(Schedule? schedule, int stepIndex, IReadOnlyCollection<Activity> activitiesForStep)
+    {
+        var failed = activitiesForStep.Where(IsFailedStepOutcome).ToList();
+        if (failed.Count == 0)
+            return null;
+
+        var stepsAtIndex = (schedule?.Steps ?? []).Where(s => s.StepIndex == stepIndex).ToList();
+        var failedSteps = failed
+            .Select(activity => (Activity: activity, Step: activity.ScheduleStepId is { } stepId
+                ? stepsAtIndex.FirstOrDefault(s => s.Id == stepId)
+                : null))
+            .ToList();
+
+        if (stepsAtIndex.Count == 0 || failedSteps.Any(f => f.Step == null))
+        {
+            if (stepsAtIndex.Count > 0 && stepsAtIndex.All(s => ScheduleFailureHandling.ContinuesOnFailure(s, schedule)))
+                return null;
+
+            return $"{StepSubject(stepIndex, failedSteps.Select(f => StepDisplayName(f.Step, f.Activity)))} failed, so the remaining steps did not run.";
+        }
+
+        var stopping = failedSteps.Where(f => !ScheduleFailureHandling.ContinuesOnFailure(f.Step!, schedule)).ToList();
+        if (stopping.Count == 0)
+            return null;
+
+        var setting = stopping.Select(f => f.Step!.Id).Distinct().Count() == 1
+            ? "It is set to stop the Schedule when it fails"
+            : "They are set to stop the Schedule when they fail";
+        return $"{StepSubject(stepIndex, stopping.Select(f => StepDisplayName(f.Step, f.Activity)))} failed. {setting}, so the remaining steps did not run.";
+    }
+
+    /// <summary>
+    /// Whether an Activity records a step that did not succeed, for failure handling: it failed outright, completed with
+    /// errors, or was cancelled (<see cref="ScheduleFailureHandling.FailedStepOutcomes"/>).
+    /// </summary>
+    private static bool IsFailedStepOutcome(Activity activity) => ScheduleFailureHandling.IsFailedStepOutcome(activity.Status);
+
+    /// <summary>
+    /// The step an Activity was recorded for, where it names one that still exists.
+    /// </summary>
+    private static ScheduleStep? FindStep(Schedule? schedule, Activity activity) =>
+        activity.ScheduleStepId is { } stepId ? schedule?.Steps.FirstOrDefault(s => s.Id == stepId) : null;
+
+    /// <summary>
+    /// Why an execution that reached its end is Complete With Error (#1787), naming each failed step in step order:
+    /// "The Schedule finished, but step 3, Active Directory - Export, failed. It is set to let the Schedule continue.",
+    /// or for several step groups, "The Schedule finished, but steps 2 and 3 (HR - Full Synchronisation; Active
+    /// Directory - Export) failed. They are set to let the Schedule continue.". Steps are named as the stop messages name
+    /// them, and numbered 1-based, as the portal shows them.
+    /// </summary>
+    private static string DescribeContinuedFailures(IEnumerable<(int StepIndex, ScheduleStep? Step, Activity? Activity)> failures)
+    {
+        var failureList = failures.ToList();
+        var byStepIndex = failureList
+            .GroupBy(f => f.StepIndex)
+            .OrderBy(g => g.Key)
+            .Select(g => (StepIndex: g.Key, Names: g.Select(f => StepDisplayName(f.Step, f.Activity))
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!)
+                .Distinct()
+                .ToList()))
+            .ToList();
+
+        // One step or several: a parallel group can fail more than once at the same position.
+        var failedStepCount = failureList
+            .Select(f => f.Step?.Id ?? f.Activity?.ScheduleStepId ?? f.Activity?.Id)
+            .Distinct()
+            .Count();
+        var setting = failedStepCount == 1
+            ? "It is set to let the Schedule continue."
+            : "They are set to let the Schedule continue.";
+
+        if (byStepIndex.Count == 1)
+        {
+            var only = byStepIndex[0];
+            return $"The Schedule finished, but {LowerFirst(StepSubject(only.StepIndex, only.Names))} failed. {setting}";
+        }
+
+        var numbers = JoinNames(byStepIndex.Select(g => (g.StepIndex + 1).ToString()).ToList());
+        var names = byStepIndex.All(g => g.Names.Count == 0)
+            ? string.Empty
+            : $" ({string.Join("; ", byStepIndex.Select(g => g.Names.Count > 0 ? JoinNames(g.Names) : $"step {g.StepIndex + 1}"))})";
+        return $"The Schedule finished, but steps {numbers}{names} failed. {setting}";
+    }
+
+    /// <summary>
+    /// A sentence-initial subject such as "Step 3" for use mid-sentence.
+    /// </summary>
+    private static string LowerFirst(string text) =>
+        string.IsNullOrEmpty(text) ? text : char.ToLowerInvariant(text[0]) + text[1..];
 
     /// <summary>
     /// Cancels a running or queued schedule execution.
     /// Sets the execution status to Cancelled, cancels all task activities,
     /// and deletes all tasks regardless of their current status.
     /// </summary>
+    /// <remarks>
+    /// The cancellation is written conditionally (#1768): it only takes effect while the execution is still Queued or
+    /// InProgress, so an execution that finished between being read and being cancelled stays exactly as it finished.
+    /// Steps that had not started record why they did not run.
+    /// </remarks>
     /// <returns>True if the execution was cancelled, false if it was not in a cancellable state.</returns>
     public async Task<bool> CancelScheduleExecutionAsync(Guid executionId)
     {
@@ -841,12 +1090,18 @@ public class SchedulerServer
             return false;
         }
 
-        execution.Status = ScheduleExecutionStatus.Cancelled;
-        execution.CompletedAt = DateTime.UtcNow;
-        execution.ErrorMessage = "Cancelled by user";
-        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+        if (!await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                execution,
+                [ScheduleExecutionStatus.Queued, ScheduleExecutionStatus.InProgress],
+                ScheduleExecutionStatus.Cancelled,
+                "Cancelled by user"))
+        {
+            Log.Warning("CancelScheduleExecutionAsync: Execution {ExecutionId} finished before it could be cancelled, so it is left as it finished.",
+                executionId);
+            return false;
+        }
 
-        // Cancel all tasks — processing tasks are signalled for graceful cancellation,
+        // Cancel all tasks: processing tasks are signalled for graceful cancellation,
         // queued/waiting tasks are cancelled and removed immediately.
         var tasks = await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(executionId);
         var immediatelyCancelled = 0;
@@ -855,7 +1110,7 @@ public class SchedulerServer
         {
             if (task.Status == WorkerTaskStatus.Processing)
             {
-                // Task is actively being processed by the worker — signal it for cancellation.
+                // Task is actively being processed by the worker; signal it for cancellation.
                 task.Status = WorkerTaskStatus.CancellationRequested;
                 await Application.Repository.Tasking.UpdateWorkerTaskAsync(task);
                 signalledForCancellation++;
@@ -863,15 +1118,129 @@ public class SchedulerServer
             else
             {
                 if (task.Activity != null)
+                {
+                    // A step that never started says why it did not run. One already being cancelled did run, so its
+                    // Activity keeps whatever it last reported.
+                    if (task.Status is WorkerTaskStatus.Queued or WorkerTaskStatus.WaitingForPreviousStep)
+                        task.Activity.Message = ScheduleStepNotRunReasons.ExecutionCancelled;
+
                     await Application.Activities.CancelActivityAsync(task.Activity);
+                }
 
                 await Application.Repository.Tasking.DeleteWorkerTaskAsync(task);
                 immediatelyCancelled++;
             }
         }
 
-        Log.Information("CancelScheduleExecutionAsync: Cancelled execution {ExecutionId} — {ImmediateCount} tasks cancelled immediately, {SignalledCount} processing tasks signalled for cancellation",
+        Log.Information("CancelScheduleExecutionAsync: Cancelled execution {ExecutionId}: {ImmediateCount} tasks cancelled immediately, {SignalledCount} processing tasks signalled for cancellation",
             executionId, immediatelyCancelled, signalledForCancellation);
+        return true;
+    }
+
+    /// <summary>
+    /// The Scheduler's safety net over active Schedule Executions, run once per polling cycle. Normally the Worker drives
+    /// step transitions (TaskingServer.TryAdvanceScheduleExecutionAsync) as each task completes; this catches what it
+    /// cannot:
+    /// <list type="bullet">
+    /// <item>An InProgress execution with nothing Queued or Processing, most likely because the Worker stopped after
+    /// completing a task but before advancing: it is concluded exactly as the Worker would have concluded it.</item>
+    /// <item>A Queued execution left part-way through starting (#1768), most likely because a JIM service stopped
+    /// mid-start. A Queued execution is still starting, and is never advanced or completed here; only once it has been
+    /// Queued for longer than <see cref="StaleStartThreshold"/> are its waiting steps cancelled and the execution
+    /// failed. Only this safety net does that.</item>
+    /// </list>
+    /// </summary>
+    /// <remarks>
+    /// Each execution is handled in isolation: a failure with one is logged and the rest are still recovered.
+    /// </remarks>
+    public async Task RecoverStuckExecutionsAsync()
+    {
+        var activeExecutions = await GetActiveExecutionsAsync();
+        int abandonedStarts = 0, concluded = 0, errors = 0;
+
+        foreach (var execution in activeExecutions)
+        {
+            try
+            {
+                switch (execution.Status)
+                {
+                    case ScheduleExecutionStatus.Queued when DateTime.UtcNow - execution.QueuedAt > StaleStartThreshold:
+                        if (await FailAbandonedStartAsync(execution))
+                            abandonedStarts++;
+                        break;
+
+                    case ScheduleExecutionStatus.InProgress:
+                        if (await ConcludeIfNothingIsRunningAsync(execution))
+                            concluded++;
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                errors++;
+                Log.Error(ex, "RecoverStuckExecutionsAsync: Error recovering execution {ExecutionId} of schedule {ScheduleName}. It will be tried again next cycle.",
+                    execution.Id, execution.ScheduleName);
+            }
+        }
+
+        if (abandonedStarts > 0 || concluded > 0 || errors > 0)
+        {
+            Log.Information("RecoverStuckExecutionsAsync: {ActiveCount} active execution(s): {AbandonedStarts} abandoned start(s) failed, {Concluded} stuck execution(s) concluded, {Errors} error(s).",
+                activeExecutions.Count, abandonedStarts, concluded, errors);
+        }
+    }
+
+    /// <summary>
+    /// Fails an execution that never finished starting: cancels its waiting steps, saying the Schedule could not start,
+    /// then marks it Failed if it is still Queued. The steps are removed first, and a failure to remove them is thrown,
+    /// so the execution is only ever failed once nothing is left waiting; otherwise it stays Queued and is tried again
+    /// next cycle.
+    /// </summary>
+    /// <returns>True if the execution was failed.</returns>
+    private async Task<bool> FailAbandonedStartAsync(ScheduleExecution execution)
+    {
+        Log.Warning("FailAbandonedStartAsync: Execution {ExecutionId} of schedule {ScheduleName} has been Queued since {QueuedAt}, longer than any start takes. Failing it.",
+            execution.Id, execution.ScheduleName, execution.QueuedAt);
+
+        await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id, ScheduleStepNotRunReasons.ScheduleCouldNotStart);
+
+        return await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+            execution,
+            [ScheduleExecutionStatus.Queued],
+            ScheduleExecutionStatus.Failed,
+            "The Schedule did not finish starting, most likely because a JIM service stopped part-way through. No steps ran.");
+    }
+
+    /// <summary>
+    /// Concludes an InProgress execution the Worker has lost track of: one with no Queued or Processing task, but with
+    /// steps still waiting (the Worker stopped before advancing) or no tasks at all (the last step finished but the
+    /// execution was never completed).
+    /// </summary>
+    /// <returns>True if the safety net acted on the execution.</returns>
+    private async Task<bool> ConcludeIfNothingIsRunningAsync(ScheduleExecution execution)
+    {
+        var allTasks = await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(execution.Id);
+        if (allTasks.Any(t => t.Status is WorkerTaskStatus.Queued or WorkerTaskStatus.Processing))
+            return false; // Normal operation: the Worker is handling it.
+
+        var waitingCount = allTasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
+        if (waitingCount > 0)
+        {
+            Log.Warning("ConcludeIfNothingIsRunningAsync: Execution {ExecutionId} for schedule {ScheduleName} has no active tasks but {WaitingCount} waiting tasks. Running safety-net advancement.",
+                execution.Id, execution.ScheduleName, waitingCount);
+        }
+        else if (allTasks.Count == 0)
+        {
+            Log.Warning("ConcludeIfNothingIsRunningAsync: Execution {ExecutionId} for schedule {ScheduleName} has no tasks at all. Running safety-net completion.",
+                execution.Id, execution.ScheduleName);
+        }
+        else
+        {
+            // Only tasks already being cancelled remain; the Worker finishes those.
+            return false;
+        }
+
+        await CheckAndAdvanceExecutionAsync(execution);
         return true;
     }
 
@@ -950,233 +1319,266 @@ public class SchedulerServer
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Queues all steps at a given step index (a "step group" that runs in parallel).
+    /// Builds the Worker Task that runs a Schedule Step, waiting for the execution to release it. Returns null for step
+    /// types that are not yet implemented, which queue nothing.
     /// </summary>
-    private async Task QueueStepGroupAsync(
+    private static WorkerTask? BuildWorkerTask(
         ScheduleExecution execution,
-        List<ScheduleStep> allSteps,
-        int stepIndex,
-        WorkerTaskStatus initialStatus,
+        ScheduleStep step,
+        bool isParallelGroup,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
     {
-        // Get all steps at this index (could be multiple if ParallelWithPrevious)
-        var stepsAtIndex = allSteps.Where(s => s.StepIndex == stepIndex).ToList();
-        var isParallelGroup = stepsAtIndex.Count > 1;
-
-        if (isParallelGroup)
+        WorkerTask? workerTask = step.StepType switch
         {
-            Log.Information("QueueStepGroupAsync: Step index {StepIndex} is a parallel group with {Count} steps for execution {ExecutionId} (status: {InitialStatus})",
-                stepIndex, stepsAtIndex.Count, execution.Id, initialStatus);
+            // A Run Profile step missing its Connected System or Run Profile is refused before anything is queued (see
+            // TryQueueWorkerTaskAsync); zero stands in only so the refusal can still be recorded against the step.
+            ScheduleStepType.RunProfile => new SynchronisationWorkerTask
+            {
+                ConnectedSystemId = step.ConnectedSystemId ?? 0,
+                ConnectedSystemRunProfileId = step.RunProfileId ?? 0
+            },
+            // Temporal Scope Reconciliation (issue #892) carries no per-step configuration; the worker derives its
+            // watermark from the schedule's execution history at run time.
+            ScheduleStepType.TemporalScopeReconciliation => new TemporalScopeReconciliationWorkerTask(),
+            // History Retention Cleanup (issue #1118) carries none either; the worker reads every retention period from
+            // its Service Setting at run time, so changing one takes effect on the next pass.
+            ScheduleStepType.HistoryRetentionCleanup => new HistoryRetentionCleanupWorkerTask(),
+            _ => null
+        };
+
+        if (workerTask == null)
+            return null;
+
+        // Every step starts out waiting, including the first: nothing is runnable until the whole Schedule has been
+        // queued and the execution releases its first step group.
+        workerTask.Status = WorkerTaskStatus.WaitingForPreviousStep;
+        workerTask.InitiatedByType = initiatorType;
+        workerTask.InitiatedById = initiatorId;
+        workerTask.InitiatedByName = initiatorName;
+        workerTask.ScheduleExecutionId = execution.Id;
+        workerTask.ScheduleStepIndex = step.StepIndex;
+        workerTask.ScheduleStepId = step.Id;
+        // Use parallel execution if this step runs with others at the same index
+        workerTask.ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential;
+        return workerTask;
+    }
+
+    /// <summary>
+    /// Queues a step's Worker Task. Returns null once it is queued, or the reason JIM refused to queue it (its
+    /// Connected System is being deleted, its partition configuration is incomplete, and so on), which Continue On
+    /// Failure applies to. Anything unexpected is thrown.
+    /// </summary>
+    private async Task<string?> TryQueueWorkerTaskAsync(ScheduleStep step, WorkerTask workerTask)
+    {
+        if (step.StepType == ScheduleStepType.RunProfile && (!step.ConnectedSystemId.HasValue || !step.RunProfileId.HasValue))
+            return "The step has no Connected System or Run Profile set.";
+
+        var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+            return string.IsNullOrWhiteSpace(result.ErrorMessage) ? "JIM refused to queue the step." : result.ErrorMessage;
+
+        Log.Debug("TryQueueWorkerTaskAsync: Created worker task {TaskId} for step {StepId} of execution {ExecutionId}",
+            result.WorkerTaskId, step.Id, workerTask.ScheduleExecutionId);
+        return null;
+    }
+
+    /// <summary>
+    /// Records a Failed Activity for a step that could not be queued, so its row on the Schedule Execution says why. A
+    /// failure to record it is logged rather than thrown: the start's outcome must still be recorded on the execution,
+    /// and the caller must still see the error that explains it.
+    /// </summary>
+    /// <returns>The Activity recorded, or null if it could not be.</returns>
+    private async Task<Activity?> RecordStepNotQueuedAsync(ScheduleExecution execution, ScheduleStep step, WorkerTask workerTask, string reason)
+    {
+        try
+        {
+            return await Application.Tasking.RecordWorkerTaskNotQueuedAsync(workerTask, $"Could not be queued: {AsSentence(reason)}");
         }
-
-        foreach (var step in stepsAtIndex)
+        catch (Exception ex)
         {
-            try
-            {
-                await QueueStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "QueueStepGroupAsync: Failed to queue step {StepId} ({StepName}) for execution {ExecutionId}",
-                    step.Id, step.Name, execution.Id);
-
-                // If we can't queue a step, the execution fails. StartScheduleExecutionAsync records that; the step's
-                // name is given here, where it is known, so the recorded reason says which step could not be queued.
-                execution.ErrorMessage = $"Failed to queue step '{step.Name}': {ex.Message}";
-                throw;
-            }
+            Log.Error(ex, "RecordStepNotQueuedAsync: Could not record step {StepId} of execution {ExecutionId} as not queued.",
+                step.Id, execution.Id);
+            return null;
         }
     }
 
     /// <summary>
-    /// Records a Schedule Execution whose start failed part-way as Failed, with the reason. Uses the reason already
-    /// set on the execution (the step that could not be queued) when there is one. A failure to save this is logged
-    /// rather than thrown, so the caller rethrows the original error, which is the one that explains what happened.
+    /// Finishes a start once every step has been queued: releases the first step group with anything to run, or, where
+    /// there is nothing at all to run, completes the execution: Complete With Error if any step could not be queued and
+    /// was skipped (#1787), Complete otherwise. If the execution is no longer Queued (someone cancelled it while it was
+    /// starting), it is left as it is and the steps queued since are removed.
     /// </summary>
-    private async Task FailExecutionThatCouldNotStartAsync(ScheduleExecution execution, Exception cause)
+    /// <param name="execution">The execution being started.</param>
+    /// <param name="firstStepIndexWithTasks">The first step group that queued anything, or null if none did.</param>
+    /// <param name="skippedSteps">The steps that could not be queued but continue on failure, each with the Failed
+    /// Activity recorded for it (null where that could not be recorded).</param>
+    private async Task ReleaseFirstStepGroupAsync(
+        ScheduleExecution execution,
+        int? firstStepIndexWithTasks,
+        IReadOnlyCollection<(ScheduleStep Step, Activity? Activity)> skippedSteps)
     {
-        execution.Status = ScheduleExecutionStatus.Failed;
-        execution.CompletedAt = DateTime.UtcNow;
-        execution.ErrorMessage ??= $"The Schedule could not be started: {cause.Message}";
+        bool tookEffect;
+        if (firstStepIndexWithTasks is { } firstStepIndex)
+        {
+            tookEffect = await Application.Repository.Scheduling.TryStartScheduleExecutionAsync(execution, firstStepIndex);
+            if (tookEffect)
+            {
+                Log.Information("ReleaseFirstStepGroupAsync: Execution {ExecutionId} started; step group {StepIndex} released.",
+                    execution.Id, firstStepIndex);
+            }
+        }
+        else
+        {
+            // Nothing to run: every step was of a type that queues nothing, or could not be queued and was set to
+            // continue. There is nothing for the Worker to advance through, so the execution ends here. A skipped step
+            // has a Failed Activity, so the run is not a clean one.
+            var finalStatus = skippedSteps.Count > 0 ? ScheduleExecutionStatus.CompleteWithError : ScheduleExecutionStatus.Complete;
+            var continuedFailures = skippedSteps.Count > 0
+                ? DescribeContinuedFailures(skippedSteps.Select(s => (s.Step.StepIndex, (ScheduleStep?)s.Step, s.Activity)))
+                : null;
+            tookEffect = await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                execution, [ScheduleExecutionStatus.Queued], finalStatus, continuedFailures);
+            if (tookEffect)
+            {
+                Log.Information("ReleaseFirstStepGroupAsync: Execution {ExecutionId} had no step with anything to run, so it is {Status}; {SkippedCount} step(s) could not be queued and were skipped.",
+                    execution.Id, finalStatus, skippedSteps.Count);
+            }
+        }
+
+        if (tookEffect)
+            return;
+
+        var current = await Application.Repository.Scheduling.GetScheduleExecutionAsync(execution.Id);
+        Log.Warning("ReleaseFirstStepGroupAsync: Execution {ExecutionId} was no longer Queued (status {Status}) when its steps had been queued, so nothing was released.",
+            execution.Id, current?.Status);
+
+        await TryCancelWaitingStepsAsync(execution, current?.Status == ScheduleExecutionStatus.Cancelled
+            ? ScheduleStepNotRunReasons.ExecutionCancelled
+            : ScheduleStepNotRunReasons.ScheduleCouldNotStart);
+    }
+
+    /// <summary>
+    /// Records a start that could not finish (#1768): cancels the steps already queued, saying the Schedule could not
+    /// start, then marks the execution Failed with the reason, provided it is still Queued (a cancellation made in the
+    /// meantime stands). Nothing is thrown from here; the caller rethrows the error that explains what happened.
+    /// </summary>
+    /// <remarks>
+    /// In that order, and the second step only if the first succeeds, so an interruption can only ever leave a Queued
+    /// execution for the Scheduler's stale-start safety net to finish off (see <see cref="StaleStartThreshold"/>),
+    /// never a Failed one whose waiting tasks nothing will ever remove.
+    /// </remarks>
+    private async Task FailStartAsync(ScheduleExecution execution, string message)
+    {
+        if (!await TryCancelWaitingStepsAsync(execution, ScheduleStepNotRunReasons.ScheduleCouldNotStart))
+            return;
 
         try
         {
-            await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+            if (!await Application.Repository.Scheduling.TryFinishScheduleExecutionAsync(
+                    execution, [ScheduleExecutionStatus.Queued], ScheduleExecutionStatus.Failed, message))
+            {
+                Log.Warning("FailStartAsync: Execution {ExecutionId} of schedule {ScheduleId} ({ScheduleName}) was no longer Queued, most likely cancelled while starting, so it is left as it is.",
+                    execution.Id, execution.ScheduleId, execution.ScheduleName);
+            }
         }
-        catch (Exception saveEx)
+        catch (Exception ex)
         {
-            Log.Error(saveEx, "FailExecutionThatCouldNotStartAsync: Could not record execution {ExecutionId} of schedule {ScheduleId} ({ScheduleName}) as Failed after its start failed.",
-                execution.Id, execution.ScheduleId, execution.ScheduleName);
-        }
-    }
-
-    /// <summary>
-    /// Queues a single schedule step by creating the appropriate WorkerTask.
-    /// </summary>
-    private async Task QueueStepAsync(
-        ScheduleExecution execution,
-        ScheduleStep step,
-        bool isParallelGroup,
-        WorkerTaskStatus initialStatus,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
-    {
-        Log.Information("QueueStepAsync: Queueing step {StepId} ({StepName}) type {StepType} mode {ExecutionMode} status {InitialStatus} for execution {ExecutionId}",
-            step.Id, step.Name, step.StepType, isParallelGroup ? "Parallel" : "Sequential", initialStatus, execution.Id);
-
-        switch (step.StepType)
-        {
-            case ScheduleStepType.RunProfile:
-                await QueueRunProfileStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
-                break;
-
-            case ScheduleStepType.TemporalScopeReconciliation:
-                await QueueTemporalScopeReconciliationStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
-                break;
-
-            case ScheduleStepType.HistoryRetentionCleanup:
-                await QueueHistoryRetentionCleanupStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
-                break;
-
-            case ScheduleStepType.PowerShell:
-            case ScheduleStepType.Executable:
-            case ScheduleStepType.SqlScript:
-                // These step types will be implemented post-MVP
-                Log.Warning("QueueStepAsync: Step type {StepType} is not yet implemented. Skipping step {StepId}.",
-                    step.StepType, step.Id);
-                break;
-
-            default:
-                Log.Warning("QueueStepAsync: Unknown step type {StepType} for step {StepId}.", step.StepType, step.Id);
-                break;
+            Log.Error(ex, "FailStartAsync: Could not record execution {ExecutionId} of schedule {ScheduleId} ({ScheduleName}) as Failed after its start failed. The Scheduler will fail it once it has been Queued for {Threshold}.",
+                execution.Id, execution.ScheduleId, execution.ScheduleName, StaleStartThreshold);
         }
     }
 
     /// <summary>
-    /// Queues a RunProfile step by creating a SynchronisationWorkerTask.
+    /// Removes an execution's waiting steps, recording why each did not run, logging rather than throwing any failure.
     /// </summary>
-    private async Task QueueRunProfileStepAsync(
-        ScheduleExecution execution,
-        ScheduleStep step,
-        bool isParallelGroup,
-        WorkerTaskStatus initialStatus,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
+    /// <returns>True if the waiting steps were removed; false if that failed.</returns>
+    private async Task<bool> TryCancelWaitingStepsAsync(ScheduleExecution execution, string reason)
     {
-        // Validate RunProfile configuration
-        if (!step.ConnectedSystemId.HasValue || !step.RunProfileId.HasValue)
+        try
         {
-            throw new InvalidOperationException($"Invalid RunProfile configuration for step {step.Id}. ConnectedSystemId and RunProfileId are required.");
+            var cancelled = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id, reason);
+            if (cancelled > 0)
+            {
+                Log.Information("TryCancelWaitingStepsAsync: Cancelled {Count} waiting task(s) of execution {ExecutionId}: {Reason}",
+                    cancelled, execution.Id, reason);
+            }
+
+            return true;
         }
-
-        // Create the worker task
-        var workerTask = new SynchronisationWorkerTask
+        catch (Exception ex)
         {
-            ConnectedSystemId = step.ConnectedSystemId.Value,
-            ConnectedSystemRunProfileId = step.RunProfileId.Value,
-            Status = initialStatus,
-            InitiatedByType = initiatorType,
-            InitiatedById = initiatorId,
-            InitiatedByName = initiatorName,
-            ScheduleExecutionId = execution.Id,
-            ScheduleStepIndex = step.StepIndex,
-            ContinueOnFailure = step.ContinueOnFailure,
-            // Use parallel execution if this step runs with others at the same index
-            ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
-        };
-
-        var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
-        if (!result.Success)
-        {
-            throw new InvalidOperationException($"Failed to create worker task for step {step.Id}: {result.ErrorMessage}");
+            Log.Error(ex, "TryCancelWaitingStepsAsync: Could not cancel the waiting tasks of execution {ExecutionId}. The Scheduler will finish cleaning up once it has been Queued for {Threshold}.",
+                execution.Id, StaleStartThreshold);
+            return false;
         }
-
-        Log.Debug("QueueRunProfileStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
-            result.WorkerTaskId, step.Id, initialStatus);
     }
 
     /// <summary>
-    /// Queues a Temporal Scope Reconciliation step (issue #892) by creating a TemporalScopeReconciliationWorkerTask.
-    /// The task carries no per-step configuration; the worker derives its watermark from the schedule's execution
-    /// history at run time.
+    /// The reason a start failed at a step, as recorded on the execution: which step, what it runs, and why.
     /// </summary>
-    private async Task QueueTemporalScopeReconciliationStepAsync(
-        ScheduleExecution execution,
-        ScheduleStep step,
-        bool isParallelGroup,
-        WorkerTaskStatus initialStatus,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
+    private static string DescribeStartFailure(ScheduleStep step, Activity? stepActivity, string reason) =>
+        $"The Schedule could not start. {StepSubject(step.StepIndex, [StepDisplayName(step, stepActivity)])} could not be queued: {AsClause(reason)}. No steps ran.";
+
+    /// <summary>
+    /// "Step 3" on its own, or "Step 3, Active Directory - Full Import," when there are names to give, ready to be
+    /// followed by a verb. Step numbers are 1-based, as the portal shows them.
+    /// </summary>
+    private static string StepSubject(int stepIndex, IEnumerable<string?> names)
     {
-        var workerTask = new TemporalScopeReconciliationWorkerTask
-        {
-            Status = initialStatus,
-            InitiatedByType = initiatorType,
-            InitiatedById = initiatorId,
-            InitiatedByName = initiatorName,
-            ScheduleExecutionId = execution.Id,
-            ScheduleStepIndex = step.StepIndex,
-            ContinueOnFailure = step.ContinueOnFailure,
-            ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
-        };
-
-        var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
-        if (!result.Success)
-        {
-            throw new InvalidOperationException($"Failed to create worker task for step {step.Id}: {result.ErrorMessage}");
-        }
-
-        Log.Debug("QueueTemporalScopeReconciliationStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
-            result.WorkerTaskId, step.Id, initialStatus);
+        var knownNames = names.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct().ToList();
+        return knownNames.Count == 0
+            ? $"Step {stepIndex + 1}"
+            : $"Step {stepIndex + 1}, {JoinNames(knownNames)},";
     }
 
     /// <summary>
-    /// Queues a History Retention Cleanup step (issue #1118) by creating a HistoryRetentionCleanupWorkerTask.
-    /// The task carries no per-step configuration; the worker reads every retention period from its Service
-    /// Setting at run time, so changing one takes effect on the next pass without the Schedule being touched.
+    /// "A", "A and B", or "A, B and C".
     /// </summary>
-    private async Task QueueHistoryRetentionCleanupStepAsync(
-        ScheduleExecution execution,
-        ScheduleStep step,
-        bool isParallelGroup,
-        WorkerTaskStatus initialStatus,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
+    private static string JoinNames(IReadOnlyList<string> names) => names.Count switch
     {
-        var workerTask = new HistoryRetentionCleanupWorkerTask
-        {
-            Status = initialStatus,
-            InitiatedByType = initiatorType,
-            InitiatedById = initiatorId,
-            InitiatedByName = initiatorName,
-            ScheduleExecutionId = execution.Id,
-            ScheduleStepIndex = step.StepIndex,
-            ContinueOnFailure = step.ContinueOnFailure,
-            ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
-        };
+        1 => names[0],
+        _ => $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}"
+    };
 
-        var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
-        if (!result.Success)
+    /// <summary>
+    /// What to call a step in a message. Run Profile steps store no name of their own, so they are named the way the
+    /// Operations queue names their task ("Connected System - Run Profile"), from the Activity they produced; other
+    /// steps use their stored name. Null when there is nothing to call it beyond its number.
+    /// </summary>
+    private static string? StepDisplayName(ScheduleStep? step, Activity? activity)
+    {
+        if (activity is { TargetName.Length: > 0 } && (step == null || step.StepType == ScheduleStepType.RunProfile))
         {
-            throw new InvalidOperationException($"Failed to create worker task for step {step.Id}: {result.ErrorMessage}");
+            return string.IsNullOrEmpty(activity.TargetContext)
+                ? activity.TargetName
+                : $"{activity.TargetContext} - {activity.TargetName}";
         }
 
-        Log.Debug("QueueHistoryRetentionCleanupStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
-            result.WorkerTaskId, step.Id, initialStatus);
+        if (!string.IsNullOrWhiteSpace(step?.Name))
+            return step.Name;
+
+        return string.IsNullOrEmpty(activity?.TargetName) ? null : activity.TargetName;
     }
+
+    /// <summary>
+    /// A reason as a clause to be embedded in a longer sentence: trimmed, without its closing full stop.
+    /// </summary>
+    private static string AsClause(string reason) => reason.Trim().TrimEnd('.');
+
+    /// <summary>
+    /// A reason as a sentence of its own: trimmed, and ending with a full stop.
+    /// </summary>
+    private static string AsSentence(string reason) => $"{AsClause(reason)}.";
 
     /// <summary>
     /// Derives the failure-safe watermark for a Temporal Scope Reconciliation sweep (issue #892): the start time
     /// of the previous successfully completed execution of the same schedule. Because a failed sweep never reaches
-    /// Completed status, its window is re-covered by the next sweep rather than silently skipped. Returns null when
-    /// there is no prior completed execution (the first, bootstrap sweep, which considers every transitioned object
-    /// once).
+    /// Complete status, its window is re-covered by the next sweep rather than silently skipped. Complete With Error
+    /// (#1787) deliberately does not count either, although it is finished everywhere else: a run that carried on past a
+    /// failed step may have missed part of its window. Returns null when there is no prior completed execution (the
+    /// first, bootstrap sweep, which considers every transitioned object once).
     /// </summary>
     /// <param name="currentExecutionId">The in-progress execution running the sweep.</param>
     public async Task<DateTime?> GetTemporalScopeReconciliationWatermarkAsync(Guid currentExecutionId)

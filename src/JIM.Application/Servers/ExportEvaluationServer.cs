@@ -5,6 +5,7 @@ using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Staging;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -34,6 +35,21 @@ public class ExportEvaluationServer
     /// zero-dependency by design, so constructed inline as <see cref="ExportExecutionServer"/> already does.
     /// </summary>
     private readonly ISyncEngine _syncEngine = new SyncEngine();
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H): this preview session's own dry-run service and
+    /// options, built lazily on first need (<see cref="EnsurePreviewUniqueValueGenerationServiceBuilt"/>). Used
+    /// only by <see cref="BuildStagingPreviewEntryAsync"/>, which every outbound preview entry point
+    /// (<see cref="EvaluateOutboundPreviewAsync"/>, <see cref="EvaluateOutboundPreviewForMaterialisedMvosAsync"/>)
+    /// funnels through; a real (non-preview) evaluation never touches these fields. Scoped to this
+    /// <see cref="ExportEvaluationServer"/> instance, which <c>SyncPreviewServer</c> constructs fresh per preview
+    /// call and reuses for every Metaverse Object that call previews, so two objects previewed together that
+    /// would collide on the same candidate are shown colliding, as a real run's process-wide reservation set
+    /// would see them; nothing here survives past the preview call, and <see cref="UniqueValueResolveOptions.DryRun"/>
+    /// means it writes nothing regardless.
+    /// </summary>
+    private UniqueValueGenerationServer? _previewUniqueValueGenerationServer;
+    private UniqueValueResolveOptions? _previewUniqueValueResolveOptions;
 
     internal ExportEvaluationServer(JimApplication application, ISyncRepository syncRepo)
     {
@@ -127,6 +143,110 @@ public class ExportEvaluationServer
 
         Log.Verbose("RefreshExportEvaluationCacheForPageAsync: Loaded {CsoCount} CSOs with attribute values for {MvoCount} MVOs across {SystemCount} target systems",
             cache.CsoLookup.Count, mvoIdList.Count, cache.TargetSystemIds.Count);
+    }
+
+    /// <summary>
+    /// Prefetches export-matching candidates for a whole page of Metaverse Objects in one batch query
+    /// per distinct (Connected System, Connected System Object Type, Object Matching Rule, attribute,
+    /// data type, case sensitivity) combination on the page, instead of the one-database-round-trip-per-object
+    /// cost <see cref="AttemptExportMatchingAsync"/> otherwise pays for every
+    /// <see cref="OutboundStagingOutcome.ProvisionNewCso"/> verdict. Always starts from a fresh
+    /// <see cref="ExportMatchCandidates"/>: candidates left over from a previous page must never be reused.
+    /// <para>
+    /// This is an optimisation only. The eligibility filter below mirrors exactly when
+    /// <c>SyncEngine.ExportStaging.DecideOutboundStaging</c> reaches
+    /// <see cref="OutboundStagingOutcome.ProvisionNewCso"/> (no existing Connected System Object for the
+    /// pair, and the rule's Connected System is a genuine target with provisioning enabled). A pair the
+    /// prefetch does not cover simply falls back to the correct, if slower,
+    /// <see cref="ObjectMatchingServer.FindMatchingConnectedSystemObjectAsync"/>, so under-covering here is
+    /// safe and over-covering is impossible by construction.
+    /// </para>
+    /// <para>
+    /// Deliberately uncaught: per the Synchronisation Integrity rule that a hard failure beats continuing
+    /// on unknown state, a failed prefetch must fail the page loudly rather than silently leaving every
+    /// object on it to fall back to provisioning duplicates.
+    /// </para>
+    /// </summary>
+    /// <param name="cache">The export evaluation cache to populate.
+    /// <see cref="ExportEvaluationCache.ExportRulesByMvoTypeId"/>, <see cref="ExportEvaluationCache.TargetSystemIds"/>
+    /// and <see cref="ExportEvaluationCache.CsoLookup"/> must already reflect the current page.</param>
+    /// <param name="metaverseObjects">The page's Metaverse Objects to prefetch export-matching candidates for.</param>
+    public async Task PrefetchExportMatchCandidatesForPageAsync(
+        ExportEvaluationCache cache,
+        IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    {
+        var candidates = new ExportMatchCandidates();
+        cache.ExportMatchCandidates = candidates;
+
+        using var span = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("PrefetchExportMatchCandidates");
+        span.SetTag("mvoCount", metaverseObjects.Count);
+
+        var groups = new Dictionary<
+            (int ConnectedSystemId, int ConnectedSystemObjectTypeId, int ObjectMatchingRuleId, string AttributeName, AttributeDataType DataType, bool CaseSensitive),
+            HashSet<object>>();
+
+        var coveredPairCount = 0;
+
+        var mvoRulePairs = metaverseObjects
+            .Where(mvo => mvo.Id != Guid.Empty && mvo.Type != null)
+            .Select(mvo => (Mvo: mvo, Rules: cache.ExportRulesByMvoTypeId.GetValueOrDefault(mvo.Type!.Id)))
+            .Where(pair => pair.Rules != null);
+
+        foreach (var (mvo, rulesForType) in mvoRulePairs)
+        {
+            var eligibleRules = rulesForType!.Where(exportRule =>
+                cache.TargetSystemIds.Contains(exportRule.ConnectedSystemId) &&
+                exportRule.ProvisionToConnectedSystem == true &&
+                !cache.CsoLookup.ContainsKey((mvo.Id, exportRule.ConnectedSystemId)));
+
+            foreach (var exportRule in eligibleRules)
+            {
+                candidates.MarkCovered(mvo.Id, exportRule.Id);
+                coveredPairCount++;
+
+                var resolvedForRule = _syncEngine.SelectExportMatchingRules(exportRule)
+                    .Select(matchingRule => (MatchingRule: matchingRule, Resolved: ExportMatchingValue.Resolve(mvo, matchingRule)))
+                    .Where(x => x.Resolved.Outcome == ExportMatchingOutcome.Resolved);
+
+                foreach (var (matchingRule, resolved) in resolvedForRule)
+                {
+                    var key = (exportRule.ConnectedSystemId, exportRule.ConnectedSystemObjectType.Id, matchingRule.Id,
+                        resolved.ConnectedSystemAttributeName!, resolved.DataType, resolved.CaseSensitive);
+
+                    if (!groups.TryGetValue(key, out var values))
+                    {
+                        values = [];
+                        groups[key] = values;
+                    }
+
+                    values.Add(resolved.Value!);
+                }
+            }
+        }
+
+        var queryCount = 0;
+        var candidateCount = 0;
+
+        foreach (var (key, values) in groups)
+        {
+            var results = await SyncRepo.GetExportMatchCandidateIdsAsync(
+                key.ConnectedSystemId, key.ConnectedSystemObjectTypeId, key.AttributeName, key.DataType, key.CaseSensitive, values);
+            queryCount++;
+
+            foreach (var (value, connectedSystemObjectId) in results)
+            {
+                candidates.AddCandidate(key.ObjectMatchingRuleId, value, connectedSystemObjectId);
+                candidateCount++;
+            }
+        }
+
+        span.SetTag("coveredPairCount", coveredPairCount);
+        span.SetTag("queryCount", queryCount);
+        span.SetTag("candidateCount", candidateCount);
+        span.SetSuccess();
+
+        Log.Debug("PrefetchExportMatchCandidatesForPageAsync: {MvoCount} Metaverse Object(s), {CoveredCount} covered (Metaverse Object, export rule) pair(s), {QueryCount} batch queries, {CandidateCount} candidate(s) found",
+            metaverseObjects.Count, coveredPairCount, queryCount, candidateCount);
     }
 
     /// <summary>
@@ -1004,10 +1124,13 @@ public class ExportEvaluationServer
         }
 
         // Lean fetch (issue #986): this method only reads ChangeType/Id/Status off the existing
-        // Pending Export and passes it to DeletePendingExportAsync, which needs AttributeValueChanges
-        // loaded for EF-tracked child-row disposal. The heavy fetch also loaded the CSO's and source
-        // Metaverse Object's full attribute value graphs, which for a large group CSO (group
-        // deprovisioning) runs into the hundreds of thousands of rows, none of them read here.
+        // Pending Export. AttributeValueChanges is still loaded here (see the lightweight query's own
+        // remarks: needed by GetAttributeChangeMergeKey for single-vs-multi-valued dedup elsewhere on this
+        // path), not because DeletePendingExportAsync below requires it: it now deletes child rows via raw
+        // SQL keyed on PendingExportId directly, so it works whether or not this navigation is populated
+        // (#1818). The heavy fetch also loaded the CSO's and source Metaverse Object's full attribute value
+        // graphs, which for a large group CSO (group deprovisioning) runs into the hundreds of thousands of
+        // rows, none of them read here.
         var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
 
         // The definitive decision, now that the existing Pending Export is known: the engine owns the
@@ -1992,6 +2115,12 @@ public class ExportEvaluationServer
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
+        // Unique Value Generation (#242, Phase 2 work package H) integrity guard: this overload has no
+        // run-scoped Unique Value Generation service to resolve a generated export mapping's marked change
+        // through (unlike the batched, deferSave-aware overload the sync worker uses), so fail fast rather
+        // than silently persist a change with a blank value (Synchronisation Integrity).
+        ThrowIfPendingExportHasUnresolvedGeneration(pendingExport, nameof(CreateOrUpdatePendingExportAsync));
+
         await SyncRepo.CreatePendingExportAsync(pendingExport);
 
         Log.Information("CreateOrUpdatePendingExportAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} to system {SystemName} with {AttrCount} attribute changes",
@@ -2104,6 +2233,10 @@ public class ExportEvaluationServer
             CreatedAt = DateTime.UtcNow,
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
+
+        // Unique Value Generation (#242, Phase 2 work package H) integrity guard: see the non-cached overload
+        // above for the rationale.
+        ThrowIfPendingExportHasUnresolvedGeneration(pendingExport, nameof(CreateOrUpdatePendingExportAsync));
 
         // Save immediately - batching causes memory pressure with large datasets (5000+ objects)
         // which leads to worse performance than individual saves due to GC overhead
@@ -2262,7 +2395,7 @@ public class ExportEvaluationServer
                 ConnectedSystemObject? matchedCso = null;
                 using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("ExportMatching"))
                 {
-                    matchedCso = await AttemptExportMatchingAsync(mvo, exportRule);
+                    matchedCso = await AttemptExportMatchingAsync(mvo, exportRule, cache);
                 }
 
                 if (matchedCso != null)
@@ -2273,11 +2406,18 @@ public class ExportEvaluationServer
                     // at write time, so only one caller wins the join; on failure, fall through to
                     // provisioning below by clearing matchedCso.
                     var dateJoined = DateTime.UtcNow;
-                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCso.Id, mvo.Id, dateJoined);
+                    var matchedCsoId = matchedCso.Id;
+                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCsoId, mvo.Id, dateJoined);
+
+                    // Whether the claim won or lost, this Connected System Object must not be offered to
+                    // any other Metaverse Object evaluated later on this page: a win means it is now
+                    // joined, a loss means another Metaverse Object has already claimed it.
+                    cache.ExportMatchCandidates?.Remove(matchedCsoId);
+
                     if (!claimed)
                     {
                         Log.Warning("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found Connected System Object {CsoId} for Metaverse Object {MvoId} in system {SystemId}, but another Metaverse Object claimed it first; falling back to provisioning",
-                            matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
+                            matchedCsoId, mvo.Id, exportRule.ConnectedSystemId);
                         matchedCso = null;
                     }
                     else
@@ -2415,7 +2555,11 @@ public class ExportEvaluationServer
         // If found, delete the old PE and return a new merged PE for batch creation - UNLESS it is a
         // Create that has already been sent and is awaiting confirmation (see the append branch below),
         // which must never be deleted and replaced.
-        if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
+        // Skipped entirely when createdNewCso is true: csoForExport was minted moments ago by
+        // CreatePendingProvisioningCsoAsync with a fresh Guid.NewGuid(), so no persisted Pending Export
+        // can possibly reference it yet. Without this guard the lookup always returns null - profiling
+        // recorded 100,098 such no-op lookups on one run - and the database round trip is pure waste.
+        if (!createdNewCso && csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
 
@@ -2498,8 +2642,10 @@ public class ExportEvaluationServer
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not superseded by export eval (see
                 // SelectSurvivingDriftChanges).
-                // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
-                // child entities, making the tracked instances unusable for a new PE.
+                // Clone drift-only changes with new IDs: DeletePendingExportAsync below deletes the old
+                // child rows via raw SQL and then detaches their tracked instances from the change tracker
+                // (DetachPendingExportGraphs; #1818), so dbPendingExport.AttributeValueChanges no longer
+                // holds live, attachable entities by the time the new PE is built.
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges)
                     .Select(avc => new PendingExportAttributeValueChange
                     {
@@ -2570,6 +2716,13 @@ public class ExportEvaluationServer
         // Save immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
         {
+            // Unique Value Generation (#242, Phase 2 work package H) integrity guard: the sync worker (the
+            // only caller with a run-scoped Unique Value Generation service to resolve a marked change
+            // through) always passes deferSave: true and resolves before FlushPendingExportOperationsAsync
+            // persists; an immediate save here has nothing to resolve it, so fail fast rather than silently
+            // persist a change with a blank value (Synchronisation Integrity).
+            ThrowIfPendingExportHasUnresolvedGeneration(pendingExport, nameof(CreateOrUpdatePendingExportWithNoNetChangeAsync));
+
             using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("SavePendingExport"))
             {
                 await SyncRepo.CreatePendingExportAsync(pendingExport);
@@ -3001,6 +3154,13 @@ public class ExportEvaluationServer
                 existingCso: effectiveExistingCso, csoAttributeCache: cache.CsoAttributeValues,
                 out noNetChangeSkipped, ExpressionEvaluator,
                 noNetChangeSkipped: noNetChangeSkippedChanges);
+
+            // Unique Value Generation (#242, Phase 2 work package H): a generated export mapping stages a
+            // marked, unresolved change (decision 6: the engine performs no I/O). The preview never writes, so
+            // resolve it here, through this session's own dry-run service, rather than leaving it to a
+            // persistence-time resolver that a preview never reaches.
+            if (attributeChanges.Exists(c => c.PendingGeneration != null))
+                await ResolvePreviewGeneratedExportValuesAsync(effectiveChangeType.Value, effectiveExistingCso, cache, attributeChanges);
         }
 
         return new OutboundPreviewEntry
@@ -3020,13 +3180,129 @@ public class ExportEvaluationServer
         };
     }
 
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H): resolves every marked change
+    /// <paramref name="attributeChanges"/> carries through this preview session's own dry-run
+    /// <see cref="UniqueValueGenerationServer"/> (<see cref="EnsurePreviewUniqueValueGenerationServiceBuilt"/>),
+    /// so the preview shows the candidate value without writing anything. A change whose outcome is not
+    /// immediately displayable (<see cref="GenerationOutcomeKind.Waiting"/>, or any failure kind) is removed
+    /// from <paramref name="attributeChanges"/> rather than shown with no value, mirroring how a real run drops
+    /// it.
+    /// </summary>
+    private async Task ResolvePreviewGeneratedExportValuesAsync(
+        PendingExportChangeType changeType,
+        ConnectedSystemObject? existingCso,
+        ExportEvaluationCache cache,
+        List<PendingExportAttributeValueChange> attributeChanges)
+    {
+        var marked = attributeChanges.Where(c => c.PendingGeneration != null).ToList();
+        if (marked.Count == 0)
+            return;
+
+        EnsurePreviewUniqueValueGenerationServiceBuilt();
+        var generationServer = _previewUniqueValueGenerationServer!;
+        var resolveOptions = _previewUniqueValueResolveOptions!;
+
+        var requests = new List<GenerationRequest>(marked.Count);
+        foreach (var change in marked)
+        {
+            string? adoptableValue = null;
+            if (!change.PendingGeneration!.BaseUnavailable && changeType != PendingExportChangeType.Create && existingCso != null)
+            {
+                var existingValue = cache.CsoAttributeValues[(existingCso.Id, change.AttributeId)].FirstOrDefault();
+                adoptableValue = existingValue == null ? null : RenderPreviewComparableExportValue(change.Attribute.Type, existingValue);
+            }
+
+            requests.Add(new GenerationRequest
+            {
+                Mode = GeneratedValueMode.Export,
+                ConnectedSystemObjectId = existingCso?.Id,
+                ConnectedSystemObjectTypeAttributeId = change.AttributeId,
+                Generation = change.PendingGeneration.Mapping.Generation!,
+                TargetType = change.Attribute.Type,
+                AttributeName = change.Attribute.Name,
+                BaseValue = change.PendingGeneration.BaseValue,
+                AdoptableValue = adoptableValue,
+                StickyOnly = change.PendingGeneration.BaseUnavailable,
+                CallerState = change
+            });
+        }
+
+        var outcomes = await generationServer.ResolveAsync(requests, resolveOptions);
+
+        for (var i = 0; i < outcomes.Count; i++)
+        {
+            var outcome = outcomes[i];
+            var change = marked[i];
+
+            switch (outcome.Kind)
+            {
+                case GenerationOutcomeKind.Generated:
+                case GenerationOutcomeKind.Adopted:
+                case GenerationOutcomeKind.Sticky:
+                    GeneratedExportValueWriter.Apply(change, outcome.Value, outcome.NumericValue);
+                    break;
+
+                default:
+                    // Waiting, and every failure kind (Exhausted, NoBaseValue, WidthExceeded,
+                    // AdoptionConflict): nothing resolvable to show, so the preview omits the attribute rather
+                    // than displaying a blank or stale marker.
+                    attributeChanges.Remove(change);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lazily builds this preview session's own <see cref="UniqueValueGenerationServer"/> and
+    /// <see cref="UniqueValueResolveOptions"/> (<see cref="UniqueValueResolveOptions.DryRun"/> set), on first
+    /// need. A preview session with no generated export mapping in scope never calls this.
+    /// </summary>
+    private void EnsurePreviewUniqueValueGenerationServiceBuilt()
+    {
+        if (_previewUniqueValueGenerationServer != null)
+            return;
+
+        _previewUniqueValueGenerationServer = new UniqueValueGenerationServer(SyncRepo);
+        _previewUniqueValueResolveOptions = new UniqueValueResolveOptions
+        {
+            DryRun = true,
+            Reservations = new UniqueValueReservationSet(),
+            ReservationOwnerId = Guid.NewGuid()
+        };
+    }
+
+    /// <summary>
+    /// The preview-side counterpart of <c>SyncTaskProcessorBase.RenderComparableExportValue</c>: renders a
+    /// Connected System Object attribute value as the text an export-mode generation candidate compares
+    /// against. A Number or LongNumber target holds its value in
+    /// <see cref="ConnectedSystemObjectAttributeValue.IntValue"/> / <see cref="ConnectedSystemObjectAttributeValue.LongValue"/>,
+    /// never <see cref="ConnectedSystemObjectAttributeValue.StringValue"/>.
+    /// </summary>
+    private static string? RenderPreviewComparableExportValue(AttributeDataType targetType, ConnectedSystemObjectAttributeValue value)
+    {
+        return targetType switch
+        {
+            AttributeDataType.Number => value.IntValue?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            AttributeDataType.LongNumber => value.LongValue?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _ => value.StringValue
+        };
+    }
+
     #endregion
 
     /// <summary>
     /// Attempts to find an existing CSO in the target system that matches the MVO using Object Matching Rules.
     /// This prevents provisioning duplicates when the object already exists in the target.
     /// </summary>
-    private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule)
+    /// <param name="mvo">The Metaverse Object about to be provisioned.</param>
+    /// <param name="exportRule">The export Synchronisation Rule under evaluation.</param>
+    /// <param name="cache">The run's export evaluation cache. When its
+    /// <see cref="ExportEvaluationCache.ExportMatchCandidates"/> covers this (Metaverse Object, export
+    /// Synchronisation Rule) pair (<see cref="ExportMatchCandidates.IsCovered"/>), the lookup is answered
+    /// entirely from the page's prefetched candidates instead of a per-object database query. Null (the
+    /// Sync Preview caller's default) always uses the per-object path.</param>
+    private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule, ExportEvaluationCache? cache = null)
     {
         // Which rules to try, and in what order, is the pure engine's verdict (#288 extraction); an empty
         // answer (no rules configured, or the mode unreadable because a navigation is not loaded) means
@@ -3038,6 +3314,15 @@ public class ExportEvaluationServer
 
         try
         {
+            if (cache?.ExportMatchCandidates is { } candidates && candidates.IsCovered(mvo.Id, exportRule.Id))
+            {
+                return await Application.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+                    mvo,
+                    exportRule.ConnectedSystem,
+                    matchingRules.ToList(),
+                    candidates);
+            }
+
             return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
                 mvo,
                 exportRule.ConnectedSystem,
@@ -3050,5 +3335,26 @@ public class ExportEvaluationServer
                 mvo.Id, exportRule.ConnectedSystemId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package H) integrity guard: throws if
+    /// <paramref name="pendingExport"/> carries an attribute value change whose generated value marker was
+    /// never resolved. Called immediately before every persistence point in this class that has no run-scoped
+    /// Unique Value Generation service available to resolve one through (the sync worker's own deferSave-aware
+    /// flush is the one caller that does have one, and resolves before persisting; see
+    /// <c>SyncTaskProcessorBase.ResolveExportGeneratedValuesAsync</c> and its own integrity guard in
+    /// <c>FlushPendingExportOperationsAsync</c>).
+    /// </summary>
+    private static void ThrowIfPendingExportHasUnresolvedGeneration(PendingExport pendingExport, string callerName)
+    {
+        var leftover = pendingExport.AttributeValueChanges.FirstOrDefault(change => change.PendingGeneration != null);
+        if (leftover == null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Pending Export attribute change {leftover.Id} still has an unresolved generated value marker for attribute " +
+            $"{leftover.AttributeId}. {callerName} has no Unique Value Generation service to resolve it through; " +
+            "persisting now would silently drop the value.");
     }
 }

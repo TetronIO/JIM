@@ -23,6 +23,7 @@ public class CausalitySummaryBuilderSpeculativeTests
         {
             SummarySegment.Text text => text.Value,
             SummarySegment.Entity entity => entity.Label,
+            SummarySegment.LiteralValue literalValue => literalValue.Value,
             _ => string.Empty
         }));
 
@@ -67,6 +68,79 @@ public class CausalitySummaryBuilderSpeculativeTests
         Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
             "A Full Synchronisation on Yellowstone APAC would process person Liam Allen: " +
             "a new Metaverse Object would be projected, and 3 attributes would flow to it."));
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242): the speculative joiner clause uses the conditional mood ("would be
+    /// generated as") in the same position (after the attribute flow clause, before the queued export
+    /// clause) as the recorded joiner shape.
+    /// </summary>
+    [Test]
+    public void Build_SpeculativeJoinerScenarioWithGeneratedValue_UsesConditionalMood()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                    Children =
+                    [
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                            DetailCount = 3,
+                            Ordinal = 0
+                        },
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
+                            DetailMessage = "Account Name: jallen42",
+                            Ordinal = 1
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+        var summary = CausalitySummaryBuilder.Build(model);
+
+        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+            "A Full Synchronisation on Yellowstone APAC would process person Liam Allen: " +
+            "a new Metaverse Object would be projected, 3 attributes would flow to it, " +
+            "and Account Name would be generated as jallen42."));
+    }
+
+    [Test]
+    public void Build_SpeculativeJoinerScenarioWithAdoptedValue_UsesConditionalMood()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                    Children =
+                    [
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted,
+                            DetailMessage = "Employee Number: 40021"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
+        var summary = CausalitySummaryBuilder.Build(model);
+
+        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
+            "A Full Synchronisation on Yellowstone APAC would process person Liam Allen: " +
+            "a new Metaverse Object would be projected, and the existing Employee Number 40021 would be adopted."));
     }
 
     /// <summary>

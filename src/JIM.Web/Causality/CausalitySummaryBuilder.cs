@@ -96,12 +96,25 @@ public static class CausalitySummaryBuilder
     private static void AppendClauses(List<SummarySegment> segments, List<List<SummarySegment>> clauses)
     {
         segments.Add(new SummarySegment.Text(": "));
-        for (var i = 0; i < clauses.Count; i++)
+        segments.AddRange(JoinClauseItems(clauses));
+    }
+
+    /// <summary>
+    /// The sentence's list conjunction rule: items joined by ", ", the last joined by ", and ". Every clause,
+    /// generated-value clauses included (<see cref="BuildGeneratedValueClauses"/>), goes through this once, so a
+    /// sentence never carries a second "and".
+    /// </summary>
+    private static List<SummarySegment> JoinClauseItems(List<List<SummarySegment>> items)
+    {
+        var segments = new List<SummarySegment>();
+        for (var i = 0; i < items.Count; i++)
         {
             if (i > 0)
-                segments.Add(new SummarySegment.Text(i == clauses.Count - 1 ? ", and " : ", "));
-            segments.AddRange(clauses[i]);
+                segments.Add(new SummarySegment.Text(i == items.Count - 1 ? ", and " : ", "));
+            segments.AddRange(items[i]);
         }
+
+        return segments;
     }
 
     /// <summary>
@@ -132,7 +145,7 @@ public static class CausalitySummaryBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled))
             return BuildLeaverClauses(allEvents);
 
-        return BuildGenericFallbackClauses(allEvents);
+        return BuildGenericFallbackClauses(allEvents, isSpeculative: false);
     }
 
     /// <summary>
@@ -163,7 +176,7 @@ public static class CausalitySummaryBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled))
             return BuildSpeculativeLeaverClauses(allEvents);
 
-        return BuildGenericFallbackClauses(allEvents);
+        return BuildGenericFallbackClauses(allEvents, isSpeculative: true);
     }
 
     private static List<List<SummarySegment>> BuildSpeculativeJoinerClauses(IReadOnlyList<CausalityEvent> allEvents)
@@ -194,6 +207,8 @@ public static class CausalitySummaryBuilder
                 ? $"{flowedCount} attribute{(flowedCount == 1 ? string.Empty : "s")} would flow to it"
                 : "attributes would flow to it")]);
         }
+
+        clauses.AddRange(BuildGeneratedValueClauses(allEvents, isSpeculative: true));
 
         var queuedExports = allEvents.Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated).ToList();
         if (queuedExports.Count > 0)
@@ -336,7 +351,7 @@ public static class CausalitySummaryBuilder
         }
 
         if (clauses.Count == 0)
-            return BuildGenericFallbackClauses(allEvents);
+            return BuildGenericFallbackClauses(allEvents, isSpeculative: true);
 
         return clauses;
     }
@@ -374,6 +389,8 @@ public static class CausalitySummaryBuilder
         if (attributeFlowClause != null)
             clauses.Add(attributeFlowClause);
 
+        clauses.AddRange(BuildGeneratedValueClauses(allEvents, isSpeculative: false));
+
         var exportClause = BuildQueuedExportClause(allEvents);
         if (exportClause != null)
             clauses.Add(exportClause);
@@ -405,6 +422,57 @@ public static class CausalitySummaryBuilder
         return flowedCount > 0
             ? [new SummarySegment.Text($"{flowedCount} attribute{(flowedCount == 1 ? string.Empty : "s")} flowed to it")]
             : [new SummarySegment.Text("attributes flowed to it")];
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242): one clause per attribute a value was generated or adopted for on this
+    /// pass ("Account Name was generated as jallen42", "the existing Employee Number 40021 was adopted"), for
+    /// the caller to add to the sentence's clause list. Empty when the item recorded neither outcome type.
+    /// </summary>
+    private static List<List<SummarySegment>> BuildGeneratedValueClauses(IReadOnlyList<CausalityEvent> allEvents, bool isSpeculative)
+    {
+        // One clause per generated attribute, returned for the caller to add to the sentence's own clause list:
+        // joining them into a single clause first would give the sentence two "and"s ("..., and Account Name was
+        // generated as ..., and Badge Number was generated as ...").
+        return allEvents
+            .Where(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
+                or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
+            .Select(e => BuildGeneratedValueItem(e, isSpeculative))
+            .ToList();
+    }
+
+    /// <summary>
+    /// One event's clause within <see cref="BuildGeneratedValueClauses"/>. The attribute name and value come
+    /// from the outcome's DetailMessage (<see cref="GeneratedValueDetailParser"/>); a missing or malformed
+    /// detail (legacy data, or a caller that never populated it) falls back to a generic sentence rather than
+    /// rendering a blank attribute name or value.
+    /// </summary>
+    private static List<SummarySegment> BuildGeneratedValueItem(CausalityEvent causalityEvent, bool isSpeculative)
+    {
+        var detail = GeneratedValueDetailParser.Parse(causalityEvent.DetailMessage);
+
+        if (causalityEvent.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
+        {
+            if (detail.AttributeName == null || detail.Value == null)
+                return [new SummarySegment.Text(isSpeculative ? "an existing value would be adopted" : "an existing value was adopted")];
+
+            return
+            [
+                new SummarySegment.Text($"the existing {detail.AttributeName} "),
+                new SummarySegment.LiteralValue(detail.Value),
+                new SummarySegment.Text(isSpeculative ? " would be adopted" : " was adopted")
+            ];
+        }
+
+        // GeneratedValueAssigned
+        if (detail.AttributeName == null || detail.Value == null)
+            return [new SummarySegment.Text(isSpeculative ? "a value would be generated" : "a value was generated")];
+
+        return
+        [
+            new SummarySegment.Text($"{detail.AttributeName} {(isSpeculative ? "would be generated as" : "was generated as")} "),
+            new SummarySegment.LiteralValue(detail.Value)
+        ];
     }
 
     private static List<SummarySegment>? BuildQueuedExportClause(IReadOnlyList<CausalityEvent> allEvents)
@@ -555,7 +623,7 @@ public static class CausalitySummaryBuilder
         }
 
         if (clauses.Count == 0)
-            return BuildGenericFallbackClauses(allEvents);
+            return BuildGenericFallbackClauses(allEvents, isSpeculative: false);
 
         return clauses;
     }
@@ -607,16 +675,38 @@ public static class CausalitySummaryBuilder
     }
 
     /// <summary>
-    /// The generic fallback: name the distinct root-level outcomes in plain language. Always yields
-    /// a valid sentence for unanticipated shapes.
+    /// The generic fallback: name the distinct root-level outcomes in plain language, in event order. Always
+    /// yields a valid sentence for unanticipated shapes.
+    /// <para>
+    /// Unique Value Generation (#242): a generated-value outcome is excluded from the plain-label pass and
+    /// given the same richer clause the joiner shape uses (<see cref="BuildGeneratedValueClauses"/>), inserted
+    /// directly after an Attribute Flow clause where one is present (or appended, when there is none), so an
+    /// Attribute-Flow-rooted item (an already-joined object whose only change this pass is a generated value)
+    /// reads the same way <see cref="BuildJoinerClauses"/> does.
+    /// </para>
     /// </summary>
-    private static List<List<SummarySegment>> BuildGenericFallbackClauses(IReadOnlyList<CausalityEvent> allEvents)
+    private static List<List<SummarySegment>> BuildGenericFallbackClauses(IReadOnlyList<CausalityEvent> allEvents, bool isSpeculative)
     {
-        return allEvents
-            .Select(e => e.Label)
-            .Distinct()
-            .Select(label => (List<SummarySegment>)[new SummarySegment.Text(label)])
-            .ToList();
+        var clauses = new List<List<SummarySegment>>();
+        var seenLabels = new HashSet<string>();
+        var insertIndex = -1;
+
+        // The filter (not a generated-value outcome, and its label not seen yet) lives in the Where clause so
+        // the loop body is never guard-shaped; seenLabels.Add doubles as the predicate and the dedup record.
+        foreach (var causalityEvent in allEvents.Where(e =>
+            e.OutcomeType is not (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
+                or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
+            && seenLabels.Add(e.Label)))
+        {
+            clauses.Add([new SummarySegment.Text(causalityEvent.Label)]);
+
+            if (causalityEvent.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
+                insertIndex = clauses.Count;
+        }
+
+        clauses.InsertRange(insertIndex >= 0 ? insertIndex : clauses.Count, BuildGeneratedValueClauses(allEvents, isSpeculative));
+
+        return clauses;
     }
 
     /// <summary>

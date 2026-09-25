@@ -118,6 +118,15 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
 
     /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, in one query per object type per page instead of one
+    /// query per unmatched import object. See <c>IConnectedSystemRepository</c> for full parameter
+    /// and matching documentation.
+    /// </summary>
+    Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues);
+
+    /// <summary>
     /// Gets a CSO by secondary external ID searching across all object types.
     /// </summary>
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);
@@ -151,9 +160,9 @@ public interface ISyncRepository
     Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
 
     /// <summary>
-    /// Batch-loads full CSO entity graphs by their IDs in a single query.
-    /// Returns CSOs with Type, Attributes, AttributeValues, and ReferenceValue navigations loaded —
-    /// the same shape as GetConnectedSystemObjectByAttributeAsync but for multiple CSOs at once.
+    /// Batch-loads full CSO entity graphs by their IDs.
+    /// Returns CSOs with Type.Attributes and AttributeValues.Attribute populated (CSOs of the same
+    /// type sharing one Type instance); ReferenceValue navigations are deliberately NOT loaded (#917).
     /// Used as the hydration phase of the import pipeline after the lookup phase identifies which CSOs exist.
     /// </summary>
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
@@ -222,8 +231,28 @@ public interface ISyncRepository
     /// (<see cref="JIM.Application.Interfaces.ISyncEngine.IsExportedCreateUnseenByFullImport"/>): the
     /// caller compares each returned Pending Export's Connected System Object External Id against the
     /// run's own imported set to decide whether the Create was genuinely unseen.
+    /// <para>
+    /// Loads the full graph, so the retry step calls this only for candidates the lean
+    /// <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> projection has already
+    /// decided are genuinely unseen: <paramref name="pendingExportIds"/> narrows this same eligibility
+    /// query to exactly those, rather than re-loading every candidate a second time.
+    /// </para>
     /// </summary>
-    Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    /// <param name="pendingExportIds">When supplied, restricts the result to these Pending Export ids
+    /// (still subject to every other filter above). Null loads every eligible candidate, as before.</param>
+    Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null);
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>:
+    /// identical eligibility (Connected System, Create, Status Exported, Connected System Object not null
+    /// and Pending Provisioning, Object Type, optional partition), but returns only the Pending Export id,
+    /// the Connected System Object id, and the Connected System Object's primary External Id value as
+    /// typed nullable columns - never the full Pending Export / attribute-change / Connected System
+    /// Object / attribute-value graph. A Full Import's unseen exported-Create retry step uses this to
+    /// decide, for every candidate, whether the run saw the object, and only loads the full graph for the
+    /// (usually far smaller, often empty) subset genuinely unseen.
+    /// </summary>
+    Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Loads CSOs by ID for cross-page reference resolution.
@@ -373,6 +402,27 @@ public interface ISyncRepository
         ConnectedSystemObjectType connectedSystemObjectType,
         ObjectMatchingRule objectMatchingRule);
 
+    /// <summary>
+    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
+    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
+    /// type whose named attribute equals one of the given values, in one query per rule per page
+    /// instead of one query per Metaverse Object. See <c>IConnectedSystemRepository</c> for full
+    /// parameter and eligibility documentation.
+    /// </summary>
+    Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
+    /// See <c>IConnectedSystemRepository</c> for full documentation.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId);
+
     #endregion
 
     #region Metaverse Object — Writes
@@ -518,6 +568,18 @@ public interface ISyncRepository
     /// Used at sync start to build the O(1) Pending Export lookup by CSO ID.
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the Pending Exports for a Connected System that are candidates for confirmation evaluation
+    /// at the start of a sync run: Status is neither Pending (not yet exported, nothing to confirm) nor
+    /// Exported (awaiting a confirming import), which <see cref="JIM.Application.Servers.SyncEngine.EvaluatePendingExportConfirmation"/>
+    /// skips unconditionally, and ConnectedSystemObjectId is populated (a null FK cannot be indexed by
+    /// CSO ID for the O(1) lookup this method feeds). Loads only AttributeValueChanges (with their
+    /// Attribute), which is all the confirmation evaluation reads; unlike <see cref="GetPendingExportsAsync"/>,
+    /// the Connected System Object graph is deliberately NOT included, since the sync processors hand
+    /// the confirmation evaluation the Connected System Object being evaluated separately.
+    /// </summary>
+    Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId);
 
     /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
@@ -1440,6 +1502,24 @@ public interface ISyncRepository
     Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId);
 
     /// <summary>
+    /// Which of the given normalised (lower-cased) values a live <see cref="GeneratedValueAssignment"/> already
+    /// holds for the given attribute: the fifth gate ("other objects' live assignments for the attribute", plan
+    /// "The service") and the adopt-before-generate conflict check, both targeted reads over the filtered unique
+    /// indexes (<c>IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique</c> and its Connected
+    /// System counterpart) rather than a scan of every assignment a generation has ever produced. Exactly one
+    /// of <paramref name="metaverseAttributeId"/> and <paramref name="connectedSystemObjectTypeAttributeId"/>
+    /// must be given (both set or neither set throws <see cref="ArgumentException"/>), matching the attribute
+    /// the caller's mode targets, never the <c>SyncRuleMappingGeneration</c> that produced the request: two
+    /// different generation rows targeting the same attribute (plan decision 3) must not be able to issue the
+    /// same value to two different objects, which scoping this by generation instead of by attribute would miss.
+    /// A row whose object (the <c>MetaverseObjectId</c> or <c>ConnectedSystemObjectId</c> for the mode) is
+    /// <paramref name="excludingObjectId"/> is not counted as held, the same self-exclusion every other gate
+    /// gives the requesting object. Callers must pass values already lower-cased, matching every other gate's
+    /// convention. Returns an empty set for an empty <paramref name="normalisedValues"/> without querying.
+    /// </summary>
+    Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId);
+
+    /// <summary>
     /// Creates one or more <see cref="GeneratedValueAssignment"/> rows. A concurrent insert that collides on the
     /// cross-assignment unique index on (attribute, normalised value) (plan decision 13) surfaces as
     /// <see cref="JIM.Models.Exceptions.GeneratedValueConflictException"/>, so the losing side of the race can
@@ -1537,6 +1617,53 @@ public interface ISyncRepository
     /// accurate for display.
     /// </summary>
     Task IncrementGeneratedValueSequenceAssignedCountAsync(int sequenceId, long by);
+
+    /// <summary>
+    /// Raises a counter's <see cref="GeneratedValueSequence.NextValue"/> to <paramref name="newStart"/> when
+    /// that is higher than its current position, stamping <see cref="GeneratedValueSequence.LastMovedAt"/> and
+    /// <see cref="GeneratedValueSequence.LastMovedBySyncRuleMappingId"/> (Unique Value Generation, #242, plan
+    /// decision 3: a generated Sequence mapping's save reports the skip when its configured
+    /// <see cref="Logic.SyncRuleMappingGeneration.SequenceStart"/> is raised above the counter). Never seeds a
+    /// counter that does not exist yet: with nothing to move, there is nothing to report, and the correct seed
+    /// for a first-ever use is decided at generation time (the higher of the flow's start and the attribute's
+    /// highest existing value), which this method deliberately leaves alone.
+    /// </summary>
+    /// <returns>
+    /// The counter's <see cref="GeneratedValueSequence.NextValue"/> before the raise, when a row existed and
+    /// <paramref name="newStart"/> raised it; null when no counter row exists yet, or one exists but
+    /// <paramref name="newStart"/> is at or below its current position (no effect either way).
+    /// </returns>
+    Task<long?> RaiseGeneratedValueSequenceIfHigherAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newStart, int syncRuleMappingId);
+
+    /// <summary>
+    /// Unconditionally sets a counter's <see cref="GeneratedValueSequence.NextValue"/> to <paramref name="newValue"/>,
+    /// in either direction, stamping <see cref="GeneratedValueSequence.LastMovedAt"/> and
+    /// <see cref="GeneratedValueSequence.LastMovedBySyncRuleMappingId"/>: "Start again" (plan "The service",
+    /// <c>StartAgainAsync</c>), which deliberately moves the counter backwards to the flow's configured start
+    /// value. A no-op, reported as no change, when no counter row exists yet for the attribute; "Start again"
+    /// has nothing to restart until the counter has been seeded by a real generation.
+    /// </summary>
+    /// <returns>The counter's <see cref="GeneratedValueSequence.NextValue"/> before the move, or null when no
+    /// counter row exists yet.</returns>
+    Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId);
+
+    /// <summary>
+    /// How many Metaverse Objects of <paramref name="metaverseObjectTypeId"/>, joined to a Connected System
+    /// Object of <paramref name="connectedSystemId"/>, currently hold no value for <paramref name="metaverseAttributeId"/>
+    /// (Unique Value Generation, #242, Phase 3): the count behind a generated import mapping's "N existing
+    /// objects would receive a value on the next full synchronisation" preview line. Works against a mapping
+    /// that has not yet been saved (the ids are supplied directly, not resolved from a persisted mapping), so
+    /// the portal can show this while an administrator is still composing the mapping.
+    /// </summary>
+    Task<int> CountMetaverseObjectsAwaitingGeneratedValueAsync(int metaverseObjectTypeId, int connectedSystemId, int metaverseAttributeId);
+
+    /// <summary>
+    /// The committed generated values <paramref name="metaverseObjectId"/> currently holds, one row per live
+    /// import-mode assignment, denormalised with the attribute, Synchronisation Rule and mapping names a display
+    /// surface needs (Unique Value Generation, #242, Phase 3). An EF projection (a UI read, not a worker hot
+    /// path); empty when the object holds no generated values.
+    /// </summary>
+    Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId);
 
     #endregion
 }

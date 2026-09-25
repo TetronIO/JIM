@@ -8,6 +8,7 @@ using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.PostgresData;
+using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
@@ -56,15 +57,7 @@ public class MetaverseProvenanceDatabaseTests
     [SetUp]
     public async Task SetUp()
     {
-        await using var ctx = NewContext();
-        await ctx.Database.ExecuteSqlRawAsync(@"
-            DO $$
-            DECLARE r RECORD;
-            BEGIN
-                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '__EFMigrationsHistory') LOOP
-                    EXECUTE 'TRUNCATE TABLE ""' || r.tablename || '"" RESTART IDENTITY CASCADE';
-                END LOOP;
-            END $$;");
+        await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
     /// <summary>
@@ -487,8 +480,8 @@ public class MetaverseProvenanceDatabaseTests
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.Id, Is.EqualTo(csoId));
-        Assert.That(result.TypeName, Is.EqualTo("user"));
-        Assert.That(result.ConnectedSystemName, Is.EqualTo(system.Name));
+        Assert.That(result!.TypeName, Is.EqualTo("user"));
+        Assert.That(result!.ConnectedSystemName, Is.EqualTo(system.Name));
     }
 
     [Test]
@@ -518,7 +511,7 @@ public class MetaverseProvenanceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cso2!.AttributeValues.Single().StringValue, Is.EqualTo("Engineering"));
-            Assert.That(cso2.Type.Attributes.Select(a => a.Id), Does.Contain(csAttribute.Id));
+            Assert.That(cso2!.Type.Attributes.Select(a => a.Id), Does.Contain(csAttribute.Id));
         }
     }
 

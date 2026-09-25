@@ -413,6 +413,9 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
 
 Creates a new Attribute Flow mapping on a Synchronisation Rule. Mappings can be direct Attribute Flows (one or more source attributes to a target) or expression-based transformations.
 
+!!! note "Generated mappings (`-Generate`) are in development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready; everything else on this page works as documented.
+
 ### Syntax
 
 ```powershell
@@ -435,6 +438,26 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 New-JIMSyncRuleMapping -SyncRuleId <int>
     -Expression <string>
     -TargetConnectedSystemAttributeId <int>
+
+# Import: generated (Unique Value Generation, #242)
+New-JIMSyncRuleMapping -SyncRuleId <int>
+    -TargetMetaverseAttributeId <int>
+    -Generate
+    [-Expression <string>]
+    [-TokenKind <string>] [-SuffixStyle <string>] [-SuffixStart <int>]
+    [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
+    [-RandomFormat <string>] [-RandomLength <int>]
+    [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
+
+# Export: generated (Unique Value Generation, #242)
+New-JIMSyncRuleMapping -SyncRuleId <int>
+    -TargetConnectedSystemAttributeId <int>
+    -Generate
+    [-Expression <string>]
+    [-TokenKind <string>] [-SuffixStyle <string>] [-SuffixStart <int>]
+    [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
+    [-RandomFormat <string>] [-RandomLength <int>]
+    [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
 ```
 
 ### Parameters
@@ -446,13 +469,26 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 | `TargetConnectedSystemAttributeId` | `int` | Yes (Export sets) | | The Connected System attribute to write to (export direction) |
 | `SourceConnectedSystemAttributeId` | `int[]` | Yes (ImportAttribute set) | | One or more Connected System attribute IDs to read from |
 | `SourceMetaverseAttributeId` | `int[]` | Yes (ExportAttribute set) | | One or more metaverse attribute IDs to read from |
-| `Expression` | `string` | Yes (ImportExpression, ExportExpression sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. |
+| `Expression` | `string` | Yes (ImportExpression, ExportExpression sets); optional (ImportGenerated, ExportGenerated sets) | | A DynamicExpresso expression. Use `mv["Name"]` for metaverse attributes and `cs["Name"]` for Connected System attributes. For a generated mapping this is the base value the uniqueness token is appended to; a Sequence or Random mapping can omit it entirely. |
 | `MissingInputBehaviour` | `string` | No (ImportExpression, ExportExpression sets) | `EvaluateAnyway` | What to do when an attribute the expression reads has no value on the object: `EvaluateAnyway`, `ContributeNoValue`, `FailMapping` or `FailObject`. See [Missing Input Behaviour](../concepts/expressions.md#5-missing-input-behaviour-have-jim-refuse-rather-than-guess). |
 | `Enabled` | `bool` | No | `$true` | Create the mapping disabled with `-Enabled $false`, ready to switch on later with `Set-JIMSyncRuleMapping -Enabled $true`. A disabled Attribute Flow is skipped by synchronisation in both directions. |
+| `Generate` | `switch` | Yes (ImportGenerated, ExportGenerated sets) | | Makes this a "Generated Value" mapping: the mapping's value is its (optional) base expression plus a uniqueness token, instead of an ordinary attribute or Expression mapping. |
+| `TokenKind` | `string` | No | `OnlyIfTaken` | Which uniqueness token to append: `OnlyIfTaken` (try the base value; suffix only if taken; needs `-Expression`), `Sequence` (always append the next counter number, never reused) or `Random` (always append a cryptographic random token). |
+| `SuffixStyle` | `string` | No | `Number` | `OnlyIfTaken` only: `Number` or `Letter` for the collision suffix. |
+| `SuffixStart` | `int` | No | `1` | `OnlyIfTaken` only: the first suffix value tried once the bare base value is taken. |
+| `SequenceStart` | `long` | No | `1` | `Sequence` only: the lowest number this flow will ever issue. If it stands above the target attribute's counter, the save moves the counter forward and warns naming the old and new positions. |
+| `SequenceIncrement` | `int` | No | `1` | `Sequence` only: how much the counter advances per issued number. |
+| `FixedWidth` | `int` | No | (none) | `Sequence` only: zero-pads the number to this many digits. |
+| `OnWidthExceeded` | `string` | No | `StopAndReport` | `Sequence` only, with `-FixedWidth`: `StopAndReport` stops the object with an error; `AllowLonger` lets the number grow past the width. |
+| `RandomFormat` | `string` | No | `Guid` | `Random` only: `Guid`, `Hex` or `Digits`. `-RandomLength` is required for `Hex` and `Digits`, and must be omitted for `Guid`. |
+| `RandomLength` | `int` | No | (none) | `Random` only: the token length in characters. |
+| `Separator` | `string` | No | (none) | The characters between the base value and the token, when both are present. Never valid for a Number target. |
+| `AttemptLimit` | `int` | No | `1000` | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object. |
+| `NeverReuse` | `bool` | No | `$true` | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token, whatever is supplied. |
 
 ### Output
 
-Returns the created mapping object.
+Returns the created mapping object. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` (with `From` and `To`) is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written.
 
 **ShouldProcess impact level:** Medium.
 
@@ -461,6 +497,8 @@ Returns the created mapping object.
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
 - `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
+- **Unique Value Generation (#242).** `-Generate` is available on import and export mappings alike. Exclusions (per-system availability skips) and Collision Remediation are not configurable from any surface in release 1; every participating Connected System is checked. `-ExcludeConnectedSystemId` does not exist yet for the same reason.
+- Every generation setting is optional: an omitted one leaves the server's own default in place (shown in the table above). Send only the settings you want to change.
 
 ### Examples
 
@@ -495,11 +533,29 @@ New-JIMSyncRuleMapping -SyncRuleId 5 `
     -TargetMetaverseAttributeId 7
 ```
 
+```powershell title="Generated import: try 'first.last' bare, suffix only on collision"
+New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 `
+    -Expression 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"])' -Generate
+```
+
+```powershell title="Generated import: a zero-padded Employee Number Sequence with no base expression"
+New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 `
+    -Generate -TokenKind Sequence -SequenceStart 100000 -FixedWidth 6
+```
+
+```powershell title="Generated export: a random hexadecimal token with no base expression"
+New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
+    -Generate -TokenKind Random -RandomFormat Hex -RandomLength 12
+```
+
 ---
 
 ## Set-JIMSyncRuleMapping
 
 Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
+
+!!! note "Generated-mapping parameters are in development"
+    `-TokenKind` and the other generated-mapping settings below apply only to a mapping already using **Generated Value**, a Source Type still in development and not yet available for a new mapping (see `New-JIMSyncRuleMapping`); it is hidden behind a feature flag until it is ready. Everything else on this page works as documented.
 
 ### Syntax
 
@@ -514,6 +570,10 @@ Set-JIMSyncRuleMapping -SyncRuleId <int>
     [-CaseNormalisation <string>]
     [-InitialExportOnly <bool>]
     [-Enabled <bool>]
+    [-TokenKind <string>] [-SuffixStyle <string>] [-SuffixStart <int>]
+    [-SequenceStart <long>] [-SequenceIncrement <int>] [-FixedWidth <int>] [-OnWidthExceeded <string>]
+    [-RandomFormat <string>] [-RandomLength <int>]
+    [-Separator <string>] [-AttemptLimit <int>] [-NeverReuse <bool>]
     [-PassThru]
 
 # From the pipeline
@@ -534,18 +594,30 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 | `CaseNormalisation` | `string` | No | | `None`, `Upper`, `Lower` or `Title`. Import mappings only |
 | `InitialExportOnly` | `bool` | No | | Whether the mapping flows only during the initial provisioning export. Export mappings only |
 | `Enabled` | `bool` | No | | Enables or disables the mapping. A disabled mapping is skipped by synchronisation in both directions; re-enabling clears any recorded disabled reason. Import and export mappings alike |
+| `TokenKind` | `string` | No | | Changes which uniqueness token a generated mapping appends: `OnlyIfTaken`, `Sequence` or `Random`. Generated mappings only |
+| `SuffixStyle` | `string` | No | | `Number` or `Letter`. `OnlyIfTaken` mappings only |
+| `SuffixStart` | `int` | No | | The first suffix value tried once the base value is taken. `OnlyIfTaken` mappings only |
+| `SequenceStart` | `long` | No | | Raising it above the target attribute's counter moves the counter forward at save time and warns naming the old and new positions; a lower or equal value has no effect. `Sequence` mappings only |
+| `SequenceIncrement` | `int` | No | | How much the counter advances per issued number. `Sequence` mappings only |
+| `FixedWidth` | `int` | No | | Zero-pads the number to this many digits. Supply `0` to clear the padding; omit to leave it unchanged. `Sequence` mappings only |
+| `OnWidthExceeded` | `string` | No | | `StopAndReport` or `AllowLonger`. `Sequence` mappings only |
+| `RandomFormat` | `string` | No | | `Guid`, `Hex` or `Digits`. `Random` mappings only |
+| `RandomLength` | `int` | No | | The token length in characters. `Random` mappings only |
+| `Separator` | `string` | No | | The characters between the base value and the token. Supply `''` or `$null` to clear it; omit to leave it unchanged |
+| `AttemptLimit` | `int` | No | | The maximum number of candidates tried, per object per synchronisation run, before generation fails hard for that object |
+| `NeverReuse` | `bool` | No | | Whether a value whose assignment is deleted is retired and never issued again by this flow. Always treated as `$true` for a `Sequence` token |
 | `PassThru` | `switch` | No | `$false` | Returns the updated mapping |
 
 ### Output
 
-Nothing by default; the updated mapping when `-PassThru` is supplied.
+Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written.
 
 **ShouldProcess impact level:** Medium.
 
 ### Notes
 
 - What a mapping **targets**, and whether its source is an attribute or an expression, cannot be changed here. Those revalidate against attribute types and plurality, and for an import mapping they reopen its place in the [Attribute Priority](../concepts/attribute-priority.md) order, so they remain a `Remove-JIMSyncRuleMapping` followed by a `New-JIMSyncRuleMapping`.
-- A setting that does not apply to the mapping is refused rather than ignored: `-NullIsValue` on an export mapping, `-InitialExportOnly` on an import mapping, or any expression setting on a direct Attribute Flow all return an error.
+- A setting that does not apply to the mapping is refused rather than ignored: `-NullIsValue` on an export mapping, `-InitialExportOnly` on an import mapping, or any expression setting on a direct Attribute Flow all return an error. The same applies to a generation setting on a mapping that is not currently a generated mapping; converting a mapping to or from generated is not supported here either (delete and create).
 - A call naming no setting is refused too, rather than reported as a successful update.
 - Attribute Priority is ordered through its own endpoint and is not settable here.
 
@@ -567,6 +639,114 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 8 -Enabled $false
 Get-JIMSyncRuleMapping -SyncRuleId 1 |
     Where-Object { $_.sourceType -eq 'ExpressionMapping' } |
     Set-JIMSyncRuleMapping -SyncRuleId 1 -MissingInputBehaviour FailMapping
+```
+
+```powershell title="Raise a generated Sequence mapping's Sequence Start"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -SequenceStart 500000
+```
+
+```powershell title="Clear a generated Sequence mapping's fixed width"
+Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 12 -FixedWidth 0
+```
+
+---
+
+## Get-JIMGeneratedValueSequence
+
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
+Gets a generated Sequence mapping's counter state (Unique Value Generation, #242): the next number it
+would issue, and how many it has issued so far. Read-only; nothing is allocated or reserved by calling
+this. Only meaningful for a generated mapping whose token kind is Sequence; every other mapping returns a
+"not found" error.
+
+### Syntax
+
+```powershell
+Get-JIMGeneratedValueSequence -SyncRuleId <int> -MappingId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule the mapping belongs to. Accepts pipeline input. Alias: `Id` |
+| `MappingId` | `int` | Yes | | The ID of the mapping |
+
+### Output
+
+One object describing the counter:
+
+| Property | Description |
+|----------|--------------|
+| `AttributeName` | The target attribute the counter belongs to |
+| `NextNumber` | The next number this flow would issue |
+| `NextNumberFormatted` | That number formatted with the mapping's Fixed Width, if any |
+| `NextNumberWidthExceeded` | `true` when the next number no longer fits the configured Fixed Width |
+| `AssignedCount` | How many numbers this flow has issued so far |
+| `IsSeeded` | Whether the counter has been seeded from existing values yet |
+
+### Examples
+
+```powershell title="Check an Employee Number mapping's next number before raising its Sequence Start"
+Get-JIMGeneratedValueSequence -SyncRuleId 1 -MappingId 12
+```
+
+```powershell title="Pipe a Synchronisation Rule straight in"
+Get-JIMSyncRule -Id 1 | Get-JIMGeneratedValueSequence -MappingId 12
+```
+
+---
+
+## Restart-JIMGeneratedValues
+
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
+"Start again" (Unique Value Generation, #242). For a generated Sequence mapping, moves the target
+attribute's counter back to the mapping's configured Sequence Start (the move can go either direction;
+"back" is the common case, but a lower configured start is honoured too). For every other token kind
+(`OnlyIfTaken`, `Random`) this is a documented no-op that still succeeds.
+
+**It changes nothing else.** No existing generated value on any object is changed, nothing is exported,
+and no synchronisation runs as a result of this command. There are no retired values to bring back in
+this release: the retired values register does not exist yet (it ships in release 2), so
+`RetiredValuesForgotten` on the result is always `0`.
+
+### Syntax
+
+```powershell
+Restart-JIMGeneratedValues -SyncRuleId <int> -MappingId <int> [-Confirm] [-WhatIf]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule the mapping belongs to. Accepts pipeline input. Alias: `Id` |
+| `MappingId` | `int` | Yes | | The ID of the mapping |
+
+### Output
+
+One object describing what moved:
+
+| Property | Description |
+|----------|--------------|
+| `RetiredValuesForgotten` | Always `0` in this release; no retired values register exists yet |
+| `CounterFrom` | The counter's position before this call, for a Sequence mapping; `$null` otherwise |
+| `CounterTo` | The counter's position after this call (the mapping's Sequence Start); `$null` otherwise |
+
+**ShouldProcess impact level:** High. This command prompts for confirmation by default.
+
+### Examples
+
+```powershell title="Start a generated Sequence mapping again"
+Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12
+```
+
+```powershell title="Do the same without prompting, for use in a script"
+Restart-JIMGeneratedValues -SyncRuleId 1 -MappingId 12 -Confirm:$false
 ```
 
 ---

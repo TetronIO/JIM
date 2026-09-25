@@ -212,27 +212,22 @@ public partial class MetaverseServer
         if (source?.ConnectedSystemAttributeId == null)
             return new List<string>();
 
-        var csoValues = cso.AttributeValues.Where(av => av.AttributeId == source.ConnectedSystemAttributeId.Value).ToList();
+        var sourceAttributeId = source.ConnectedSystemAttributeId.Value;
+        var csoValues = cso.AttributeValues.Where(av => av.AttributeId == sourceAttributeId).ToList();
 
-        List<string> values;
-        if (targetAttributeType == AttributeDataType.Text)
-        {
-            values = csoValues
+        var values = targetAttributeType == AttributeDataType.Text
+            ? csoValues
                 .Select(v => SyncEngine.ApplyInboundTextProcessing(v.StringValue, mapping.InboundValueProcessing, mapping.CaseNormalisation))
                 .Where(v => v != null)
                 .Select(v => v!)
                 .Distinct(StringComparer.Ordinal)
-                .ToList();
-        }
-        else
-        {
-            values = csoValues
+                .ToList()
+            : csoValues
                 .Select(v => v.ToStringNoName())
                 .Where(v => !string.IsNullOrEmpty(v))
                 .Select(v => v!)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
-        }
 
         return values.Take(cap).ToList();
     }

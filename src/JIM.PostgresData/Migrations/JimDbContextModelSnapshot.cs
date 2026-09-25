@@ -220,6 +220,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ScheduleId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ScheduleStepId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 
@@ -2349,6 +2352,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("NextRunTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("OnStepFailure")
+                        .HasColumnType("integer");
+
                     b.Property<int>("PatternType")
                         .HasColumnType("integer");
 
@@ -2439,9 +2445,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ConnectedSystemId")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("ContinueOnFailure")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
@@ -2474,6 +2477,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Name")
                         .HasColumnType("text");
+
+                    b.Property<int>("OnFailure")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("RunProfileId")
                         .HasColumnType("integer");
@@ -3984,9 +3990,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid>("ActivityId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("ContinueOnFailure")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Discriminator")
                         .IsRequired()
                         .HasMaxLength(55)
@@ -4008,6 +4011,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ScheduleExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ScheduleStepId")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("ScheduleStepIndex")
@@ -5928,7 +5934,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Transactional.PendingExport", null)
                         .WithMany("AttributeValueChanges")
-                        .HasForeignKey("PendingExportId");
+                        .HasForeignKey("PendingExportId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Attribute");
                 });

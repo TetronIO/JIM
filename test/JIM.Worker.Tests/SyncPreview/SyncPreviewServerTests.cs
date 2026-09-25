@@ -244,6 +244,44 @@ public class SyncPreviewServerTests
         return (cso, importRule, mvEmployeeIdAttr);
     }
 
+    /// <summary>
+    /// The generated-mapping counterpart of <see cref="ArrangeInboundFixture"/> (Unique Value Generation,
+    /// #242): the same import Synchronisation Rule and target Metaverse attribute, but with a "JIM generates
+    /// it" mapping (a <see cref="SyncRuleMappingGeneration"/> row, default settings: OnlyIfTaken) whose base
+    /// Expression is <paramref name="baseExpression"/> against the seeded unjoined SOURCE_USER CSO.
+    /// </summary>
+    private (ConnectedSystemObject Cso, SyncRule ImportRule, MetaverseAttribute MvEmployeeIdAttr, SyncRuleMapping Mapping)
+        ArrangeGeneratedInboundFixture(string baseExpression = "cs[\"EMPLOYEE_ID\"]")
+    {
+        var importRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Import Synchronisation Rule 1");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var mvEmployeeIdAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+
+        importRule.MetaverseObjectType = mvUserType;
+        importRule.MetaverseObjectTypeId = mvUserType.Id;
+        importRule.AttributeFlowRules.Clear();
+        var mapping = new SyncRuleMapping
+        {
+            Id = 7202,
+            SyncRule = importRule,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Generation = new SyncRuleMappingGeneration()
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 7202,
+            Order = 1,
+            Expression = baseExpression
+        });
+        importRule.AttributeFlowRules.Add(mapping);
+
+        var cso = ConnectedSystemObjectsData[0];
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        return (cso, importRule, mvEmployeeIdAttr, mapping);
+    }
+
     #endregion
 
     #region PreviewSyncForMvoAsync
@@ -1063,6 +1101,396 @@ public class SyncPreviewServerTests
         Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
             c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "EMP-WINNER"), Is.True,
             "The winning contribution is what the next synchronisation would write");
+    }
+
+    #endregion
+
+    #region Unique Value Generation (#242)
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ProjectingObjectWithGeneratedMapping_ShowsCandidateRecordsOutcomeMakesNoWriteAsync()
+    {
+        // Arrange - a generated mapping (OnlyIfTaken, base expression cs["EMPLOYEE_ID"] = "E123") on a
+        // projecting import Synchronisation Rule.
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture();
+        importRule.ProjectToMetaverse = true;
+        var mvoCountBefore = MetaverseObjectsData.Count;
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - the candidate flows exactly like an ordinary Attribute Flow value would
+        Assert.That(result.Inbound, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound!.WouldProject, Is.True);
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "E123"), Is.True,
+                "The generated candidate must be captured as an inbound attribute change, exactly like an ordinary flow");
+            Assert.That(result.HasBlockingErrors, Is.False);
+        }
+
+        // The outcome tree records a GeneratedValueAssigned child of the Projected root, alongside the
+        // Attribute Flow child, naming the attribute and the candidate value.
+        var root = result.OutcomeTree.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Projected));
+            var generatedNode = root.Children.SingleOrDefault(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
+            Assert.That(generatedNode, Is.Not.Null, "the outcome tree must record the generated value");
+            Assert.That(generatedNode!.DetailMessage, Is.EqualTo($"{mvEmployeeIdAttr.Name}: E123"));
+        }
+
+        // Zero side effects: a preview never writes an assignment or joins/creates anything. The guard
+        // (ReadOnlySyncRepositoryGuard) would throw PreviewWriteAttemptedException if the resolve path ever
+        // reached for one (CreateGeneratedValueAssignmentsAsync is never called here at all, since
+        // CommitAssignmentsAsync is not); this asserts the observable consequence, that nothing changed.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cso.MetaverseObject, Is.Null, "a preview must not join the CSO");
+            Assert.That(cso.MetaverseObjectId, Is.Null);
+            Assert.That(MetaverseObjectsData, Has.Count.EqualTo(mvoCountBefore));
+            Assert.That(PendingExportsData, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Nothing is reserved or written by a dry-run resolve (plan "The service": DryRun releases whatever it
+    /// claims before <c>ResolveAsync</c> returns), so a second, independent preview of the same object sees
+    /// the identical free candidate rather than a collision-suffixed one.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_CalledTwiceInARow_ShowsTheSameCandidateBothTimesAsync()
+    {
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture();
+        importRule.ProjectToMetaverse = true;
+
+        var first = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+        var second = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        var firstValue = first.Inbound!.AttributeFlowChanges.Single(c => c.AttributeId == mvEmployeeIdAttr.Id).Value;
+        var secondValue = second.Inbound!.AttributeFlowChanges.Single(c => c.AttributeId == mvEmployeeIdAttr.Id).Value;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstValue, Is.EqualTo("E123"));
+            Assert.That(secondValue, Is.EqualTo(firstValue), "nothing was reserved or written by the first preview");
+        }
+    }
+
+    /// <summary>
+    /// The flow-errors ternary fix: a generated mapping whose base Expression returns more than one value
+    /// (here, <c>Split</c> producing a <c>string[]</c>, the same array shape
+    /// <see cref="AttributeFlowErrorKind.GeneratedBaseNotSingleValue"/> exists for) gets its own accurate
+    /// message rather than the generic "a required input has no value" one, which described a different
+    /// failure entirely.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_GeneratedBaseExpressionReturnsMultipleValues_ReportsItsOwnMessageAsync()
+    {
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture(baseExpression: "Split(\"a,b\", \",\")");
+        importRule.ProjectToMetaverse = true;
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        Assert.That(result.Errors, Has.Count.EqualTo(1));
+        var error = result.Errors[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(error.Code, Is.EqualTo(SyncPreviewMessageCode.ExpressionEvaluationError));
+            Assert.That(error.AttributeName, Is.EqualTo(mvEmployeeIdAttr.Name));
+            Assert.That(error.Detail, Does.Contain("returned more than one value"));
+            Assert.That(error.Detail, Does.Contain("must produce a single text value, not an array"));
+            Assert.That(error.Detail, Does.Not.Contain("a required input has no value"),
+                "this failure is not a missing-input failure, and must not read like one");
+        }
+    }
+
+    /// <summary>
+    /// Adopt-before-generate participation (work package J): the previewed CSO joins an already-persisted
+    /// Metaverse Object that is ALSO joined, via a participating export target (Dummy Target System), to a
+    /// Connected System Object that already holds a value for the generated attribute. The preview must
+    /// compute the same participating targets and adoptable value the worker would (through the shared
+    /// <c>GeneratedValueParticipation</c> helper), so it shows the existing value adopted rather than a
+    /// fresh candidate, and writes nothing.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ParticipatingTargetAlreadyHoldsAValue_ShowsItAdoptedAsync()
+    {
+        // Arrange - a generated mapping (base expression cs["EMPLOYEE_ID"] = "E123") on a JOIN (not a
+        // projection), so the working Metaverse Object is already persisted when generation resolves.
+        var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture();
+
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        SyncRepo.SeedMetaverseObject(mvo);
+        cso.MetaverseObjectId = mvo.Id;
+        cso.MetaverseObject = mvo;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+
+        // The participating export target: Dummy Target System, enabled export rule with a single-source
+        // mapping reading the SAME generated attribute, already holding "jsmith" for the object the
+        // previewed CSO is joined to.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csTargetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
+        exportRule.AttributeFlowRules.Clear();
+        var employeeIdExportMapping = new SyncRuleMapping
+        {
+            Id = 7601,
+            SyncRule = exportRule,
+            SyncRuleId = exportRule.Id,
+            TargetConnectedSystemAttribute = csTargetEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = csTargetEmployeeIdAttr.Id
+        };
+        employeeIdExportMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 7601,
+            Order = 1,
+            MetaverseAttribute = mvEmployeeIdAttr,
+            MetaverseAttributeId = mvEmployeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdExportMapping);
+
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            MetaverseObject = mvo,
+            JoinType = ConnectedSystemObjectJoinType.Joined
+        };
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = targetCso,
+            Attribute = csTargetEmployeeIdAttr,
+            AttributeId = csTargetEmployeeIdAttr.Id,
+            StringValue = "jsmith"
+        });
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+
+        // Act
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        // Assert - the existing target value is adopted, not the freshly evaluated base "E123"
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "jsmith"), Is.True,
+                "the participating target's existing value must be adopted, not a fresh candidate generated");
+            Assert.That(result.HasBlockingErrors, Is.False);
+        }
+
+        var root = result.OutcomeTree.Single();
+        var generatedNode = root.Children.SingleOrDefault(c =>
+            c.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
+                or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(generatedNode, Is.Not.Null);
+            Assert.That(generatedNode!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted),
+                "adoption must be recorded, not a fresh generation");
+            Assert.That(generatedNode.DetailMessage, Is.EqualTo($"{mvEmployeeIdAttr.Name}: jsmith"));
+        }
+
+        // Zero side effects: nothing written.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty);
+            Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "a preview must not change the existing join");
+        }
+    }
+
+    /// <summary>
+    /// A generation that would fail in the real run (here, Exhausted: a one-attempt budget and the exact
+    /// candidate already taken by another object) must not simply show nothing in the preview; it must
+    /// surface as a warning, mirroring the error the real run would record on the object.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_GeneratedValueWouldBeExhausted_AddsWarningAsync()
+    {
+        var (cso, importRule, mvEmployeeIdAttr, mapping) = ArrangeGeneratedInboundFixture();
+        importRule.ProjectToMetaverse = true;
+        mapping.Generation!.AttemptLimit = 1;
+
+        // Another object already holds the exact base candidate; with a one-attempt budget there is no
+        // room for a suffixed retry, so resolution is exhausted.
+        var takenMvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = MetaverseObjectTypesData.Single(t => t.Name == "User")
+        };
+        takenMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = takenMvo,
+            Attribute = mvEmployeeIdAttr,
+            AttributeId = mvEmployeeIdAttr.Id,
+            StringValue = "E123"
+        });
+        SyncRepo.SeedMetaverseObject(takenMvo);
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id), Is.False,
+                "no candidate was resolved, so nothing should flow for the attribute");
+
+            var warning = result.Warnings.SingleOrDefault(w => w.Code == SyncPreviewMessageCode.GeneratedValueWouldFail);
+            Assert.That(warning, Is.Not.Null, "an exhausted generation must surface as a warning, not silently show nothing");
+            Assert.That(warning!.AttributeName, Is.EqualTo(mvEmployeeIdAttr.Name));
+            Assert.That(warning.Detail, Is.Not.Empty);
+        }
+    }
+
+    #endregion
+
+    #region Out-of-scope cascade re-election with a generated survivor (#242)
+
+    /// <summary>
+    /// The previewed CSO (Dummy Source System) is joined and about to fall out of scope; Dummy Target System
+    /// is joined to the SAME Metaverse Object via a lower-priority GENERATED import mapping. The scope-exit
+    /// cascade's recall must re-elect Dummy Target System's mapping and resolve it through the preview's own
+    /// dry-run resolver, not drop it silently (work package J: the re-election call previously passed no
+    /// resolver at all).
+    /// </summary>
+    private (ConnectedSystemObject Cso, MetaverseObject Mvo, MetaverseAttribute MvEmployeeIdAttr)
+        ArrangeScopeExitGeneratedReElectionFixture()
+    {
+        var (cso, importRule, mvEmployeeIdAttr) = ArrangeInboundFixture();
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var sourceUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER");
+        sourceUserType.RemoveContributedAttributesOnObsoletion = true;
+
+        importRule.MetaverseObjectType = mvUserType;
+        importRule.MetaverseObjectTypeId = mvUserType.Id;
+        var hrMapping = importRule.AttributeFlowRules.Single();
+        hrMapping.SyncRuleId = importRule.Id;
+        hrMapping.Priority = 1;
+
+        // A scoping criterion the previewed CSO fails, forcing the out-of-scope cascade.
+        var scopingGroup = new SyncRuleScopingCriteriaGroup();
+        scopingGroup.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            ConnectedSystemAttribute = sourceUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_TYPE),
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "an employee type this object does not have"
+        });
+        importRule.ObjectScopingCriteriaGroups.Add(scopingGroup);
+
+        // The joined Metaverse Object, holding the previewed CSO's value with its own provenance.
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = mvEmployeeIdAttr,
+            AttributeId = mvEmployeeIdAttr.Id,
+            StringValue = "EMP-HR",
+            ContributedBySystemId = cso.ConnectedSystemId,
+            ContributedBySyncRuleId = importRule.Id
+        });
+        cso.MetaverseObjectId = mvo.Id;
+        cso.MetaverseObject = mvo;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        SyncRepo.SeedMetaverseObject(mvo);
+        // Re-seed: the initial seed (inside ArrangeInboundFixture) ran before MetaverseObjectId was set, so
+        // the repository's by-MVO index needs refreshing for survivor discovery to find this CSO's system.
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        // The surviving Connected System (Dummy Target System): a generated mapping at lower priority,
+        // joined to the same Metaverse Object.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csTargetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var survivorRule = new SyncRule
+        {
+            Id = 7701,
+            Name = "Survivor Import Synchronisation Rule",
+            ConnectedSystemId = targetSystem.Id,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            MetaverseObjectType = mvUserType,
+            MetaverseObjectTypeId = mvUserType.Id,
+            ConnectedSystemObjectType = targetUserType,
+            ConnectedSystemObjectTypeId = targetUserType.Id
+        };
+        var generatedMapping = new SyncRuleMapping
+        {
+            Id = 7702,
+            SyncRule = survivorRule,
+            SyncRuleId = survivorRule.Id,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Priority = 2,
+            Generation = new SyncRuleMappingGeneration()
+        };
+        generatedMapping.Sources.Add(new SyncRuleMappingSource { Id = 7702, Order = 1, Expression = "\"trn-001\"" });
+        survivorRule.AttributeFlowRules.Add(generatedMapping);
+        SyncRulesData.Add(survivorRule);
+        SyncRepo.SeedSyncRule(survivorRule);
+
+        var survivorCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            MetaverseObject = mvo,
+            JoinType = ConnectedSystemObjectJoinType.Joined
+        };
+        survivorCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = survivorCso,
+            Attribute = csTargetEmployeeIdAttr,
+            AttributeId = csTargetEmployeeIdAttr.Id,
+            StringValue = "unused"
+        });
+        SyncRepo.SeedConnectedSystemObject(survivorCso);
+
+        return (cso, mvo, mvEmployeeIdAttr);
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ScopeExitWithSurvivingGeneratedContributor_ShowsGeneratedValueAsync()
+    {
+        var (cso, _, mvEmployeeIdAttr) = ArrangeScopeExitGeneratedReElectionFixture();
+
+        var result = await Jim.SyncPreview.PreviewSyncForCsoAsync(cso.ConnectedSystemId, cso.Id);
+
+        Assert.That(result.Warnings.Any(w => w.Code == SyncPreviewMessageCode.OutOfScope), Is.True);
+
+        var root = result.OutcomeTree.SingleOrDefault(n => n.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+        Assert.That(root, Is.Not.Null, "the cascade must record the disconnection root");
+
+        var generatedNode = root!.Children.SingleOrDefault(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
+        Assert.That(generatedNode, Is.Not.Null, "the re-elected generated mapping must be resolved and shown, not dropped");
+        Assert.That(generatedNode!.DetailMessage, Is.EqualTo($"{mvEmployeeIdAttr.Name}: trn-001"));
+
+        Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "a preview must persist nothing");
     }
 
     #endregion

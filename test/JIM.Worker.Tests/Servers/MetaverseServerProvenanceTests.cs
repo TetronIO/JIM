@@ -123,7 +123,7 @@ public class MetaverseServerProvenanceTests
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.AttributeName, Is.EqualTo("Department"));
-        Assert.That(result.MetaverseObjectTypeId, Is.EqualTo(MetaverseObjectTypeId));
+        Assert.That(result!.MetaverseObjectTypeId, Is.EqualTo(MetaverseObjectTypeId));
     }
 
     #endregion
@@ -155,7 +155,7 @@ public class MetaverseServerProvenanceTests
         var result = await _jim.Metaverse.GetMetaverseAttributeProvenanceAsync(_mvoId, AttributeId);
 
         Assert.That(result!.Sources.Select(s => s.Rank), Is.EqualTo(new[] { 1, 2 }));
-        Assert.That(result.Sources.Select(s => s.MappingId), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(result!.Sources.Select(s => s.MappingId), Is.EqualTo(new[] { 1, 2 }));
     }
 
     [Test]
@@ -366,9 +366,9 @@ public class MetaverseServerProvenanceTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.LastSet, Is.SameAs(change));
-            Assert.That(result.History, Has.Count.EqualTo(1));
-            Assert.That(result.History[0].Kind, Is.EqualTo(AttributeHistoryChangeKind.Added));
-            Assert.That(result.HistoryTruncated, Is.False);
+            Assert.That(result!.History, Has.Count.EqualTo(1));
+            Assert.That(result!.History[0].Kind, Is.EqualTo(AttributeHistoryChangeKind.Added));
+            Assert.That(result!.HistoryTruncated, Is.False);
         }
     }
 

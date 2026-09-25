@@ -521,7 +521,7 @@ public class MetaverseControllerObjectsTests
         var valueChange = response!.Items.Single().AttributeChanges.Single().ValueChanges.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(response.Items.Single().AttributeChanges.Single().AttributeId, Is.EqualTo(5));
+            Assert.That(response!.Items.Single().AttributeChanges.Single().AttributeId, Is.EqualTo(5));
             Assert.That(valueChange.ContributedBySystemId, Is.EqualTo(3));
             Assert.That(valueChange.ContributedBySystemName, Is.EqualTo("HR"));
         }

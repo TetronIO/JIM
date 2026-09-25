@@ -368,7 +368,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
-    public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
+    public virtual Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
         var cso = GetCsosForSystem(connectedSystemId)
@@ -384,6 +384,46 @@ public class SyncRepository : ISyncRepository
         // working set and later have its AttributeValues released. Without cloning, that release
         // would empty the store's own copy too.
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
+    }
+
+    /// <summary>
+    /// Honest in-memory equivalent of the Postgres batch query: same predicate as
+    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (case-sensitive
+    /// <c>StringValue</c> equality against that CSO's own configured secondary external id
+    /// attribute), evaluated for many values at once. Virtual so tests can spy on call counts to
+    /// prove the import pipeline batches this per page instead of calling it per object.
+    /// </summary>
+    /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
+    /// attribute id. The in-memory store has no index to protect, but the parameter's semantics are
+    /// still enforced: combined with the existing <c>SecondaryExternalIdAttributeId</c> check below,
+    /// only a CSO whose own configured secondary attribute equals this value can match (see the
+    /// Postgres implementation for why that is the coherent behaviour, not merely an index aid).
+    /// </param>
+    public virtual Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues)
+    {
+        var results = new List<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>();
+        if (secondaryExternalIdValues.Count == 0)
+            return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
+
+        var valueSet = new HashSet<string>(secondaryExternalIdValues, StringComparer.Ordinal);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            if (cso.TypeId != objectTypeId ||
+                cso.SecondaryExternalIdAttributeId != secondaryExternalIdAttributeId)
+                continue;
+
+            foreach (var av in cso.AttributeValues.Where(av =>
+                av.AttributeId == secondaryExternalIdAttributeId &&
+                av.AttributeId == cso.SecondaryExternalIdAttributeId!.Value &&
+                av.StringValue != null &&
+                valueSet.Contains(av.StringValue)))
+            {
+                results.Add((av.StringValue!, cso.Id, cso.Status));
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
@@ -665,8 +705,51 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(values);
     }
 
-    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    /// <summary>
+    /// Number of times <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/> has
+    /// been called. Lets tests prove the two-phase Full Import unseen exported-Create retry step
+    /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) only promotes candidates to
+    /// this full graph load when the lean Summary-tier projection decided at least one is genuinely
+    /// unseen, and never for a run type or empty run the early guard already excludes.
+    /// </summary>
+    public int GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount { get; private set; }
+
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
     {
+        GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount++;
+
+        var result = _pendingExports.Values
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ChangeType == PendingExportChangeType.Create
+                      && pe.Status == PendingExportStatus.Exported
+                      && pe.ConnectedSystemObject != null
+                      && pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning
+                      && pe.ConnectedSystemObject.TypeId == objectTypeId
+                      && (partitionId == null || pe.ConnectedSystemObject.PartitionId == partitionId)
+                      && (pendingExportIds == null || pendingExportIds.Contains(pe.Id)))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Number of times <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> has been
+    /// called. Lets tests prove the retry step's early exit (not a Full Import, or nothing imported) skips
+    /// every repository query for this Connected System, including the lean projection.
+    /// </summary>
+    public int GetExportedCreatePendingExportRetryCandidateSummariesCallCount { get; private set; }
+
+    /// <summary>
+    /// In-memory equivalent of the PostgreSQL raw-SQL projection: same eligibility as
+    /// <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>, projected down to the
+    /// typed External Id columns. Mirrors <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/>'s
+    /// own value selection (the attribute value whose AttributeId matches the CSO's ExternalIdAttributeId).
+    /// </summary>
+    public Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        GetExportedCreatePendingExportRetryCandidateSummariesCallCount++;
+
         var result = _pendingExports.Values
             .Where(pe => pe.ConnectedSystemId == connectedSystemId
                       && pe.ChangeType == PendingExportChangeType.Create
@@ -675,6 +758,21 @@ public class SyncRepository : ISyncRepository
                       && pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning
                       && pe.ConnectedSystemObject.TypeId == objectTypeId
                       && (partitionId == null || pe.ConnectedSystemObject.PartitionId == partitionId))
+            .Select(pe =>
+            {
+                var cso = pe.ConnectedSystemObject!;
+                var externalIdValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+                return new PendingExportRetryCandidateSummary
+                {
+                    PendingExportId = pe.Id,
+                    ConnectedSystemObjectId = cso.Id,
+                    ExternalIdStringValue = externalIdValue?.StringValue,
+                    ExternalIdIntValue = externalIdValue?.IntValue,
+                    ExternalIdLongValue = externalIdValue?.LongValue,
+                    ExternalIdDecimalValue = externalIdValue?.DecimalValue,
+                    ExternalIdGuidValue = externalIdValue?.GuidValue
+                };
+            })
             .ToList();
         return Task.FromResult(result);
     }
@@ -1164,7 +1262,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(matches.Count == 1 ? matches[0] : null);
     }
 
-    public Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
+    public virtual Task<ConnectedSystemObject?> FindConnectedSystemObjectUsingMatchingRuleAsync(
         MetaverseObject metaverseObject,
         ConnectedSystem connectedSystem,
         ConnectedSystemObjectType connectedSystemObjectType,
@@ -1222,6 +1320,92 @@ public class SyncRepository : ISyncRepository
             .FirstOrDefault(ValueMatches);
 
         return Task.FromResult(match);
+    }
+
+    /// <summary>
+    /// In-memory mirror of the PostgreSQL batch candidate query for a single Object Matching Rule:
+    /// finds every unjoined, Normal-status CSO of the given type whose named attribute equals one of
+    /// the given values. Eligibility mirrors <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>
+    /// exactly; unlike that method, the attribute is identified by name (matching the batch query's
+    /// name-based join), so seeded attribute values must carry their <c>Attribute</c> navigation.
+    /// </summary>
+    public virtual Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values)
+    {
+        if (values.Count == 0)
+            return Task.FromResult<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>>([]);
+
+        if (dataType is not (AttributeDataType.Text or AttributeDataType.Number or AttributeDataType.LongNumber
+            or AttributeDataType.Decimal or AttributeDataType.Guid))
+        {
+            throw new ArgumentException($"Attribute type {dataType} is not supported for export match candidate lookup.", nameof(dataType));
+        }
+
+        // Exact equality either way: case-insensitive uses OrdinalIgnoreCase, never wildcard matching.
+        var textComparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+        var matches = new List<(object Value, Guid ConnectedSystemObjectId)>();
+
+        var eligibleCsos = _csos.Values
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                          cso.TypeId == connectedSystemObjectTypeId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
+
+        foreach (var cso in eligibleCsos)
+        {
+            var candidateAttributeValues = cso.AttributeValues
+                .Where(av => av.Attribute != null && av.Attribute.Name == connectedSystemAttributeName);
+
+            foreach (var av in candidateAttributeValues)
+            {
+                foreach (var value in values)
+                {
+                    var isMatch = dataType switch
+                    {
+                        AttributeDataType.Text => av.StringValue != null && string.Equals(av.StringValue, (string)value, textComparison),
+                        AttributeDataType.Number => av.IntValue.HasValue && av.IntValue.Value == (int)value,
+                        AttributeDataType.LongNumber => av.LongValue.HasValue && av.LongValue.Value == (long)value,
+                        AttributeDataType.Decimal => av.DecimalValue.HasValue && av.DecimalValue.Value == (decimal)value,
+                        AttributeDataType.Guid => av.GuidValue.HasValue && av.GuidValue.Value == (Guid)value,
+                        _ => false
+                    };
+
+                    if (isMatch)
+                        matches.Add((value, cso.Id));
+                }
+            }
+        }
+
+        IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)> ordered = matches
+            .Distinct()
+            .OrderBy(m => m.Value)
+            .ThenBy(m => m.ConnectedSystemObjectId)
+            .ToList();
+
+        return Task.FromResult(ordered);
+    }
+
+    /// <summary>
+    /// In-memory mirror of the PostgreSQL hydration query: returns the CSO if it still exists and is
+    /// still eligible (unjoined and Normal-status), or null otherwise. Same object reference the
+    /// dictionary holds, matching the tracked (not no-tracking) semantics of the PostgreSQL method.
+    /// </summary>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId)
+    {
+        if (_csos.TryGetValue(connectedSystemObjectId, out var cso) &&
+            cso.MetaverseObjectId == null &&
+            cso.Status == ConnectedSystemObjectStatus.Normal)
+        {
+            return Task.FromResult<ConnectedSystemObject?>(cso);
+        }
+
+        return Task.FromResult<ConnectedSystemObject?>(null);
     }
 
     /// <summary>
@@ -1511,6 +1695,21 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
+    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
+    /// ConnectedSystemObjectId is populated.
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
+    {
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                      && pe.Status != PendingExportStatus.Pending
+                      && pe.Status != PendingExportStatus.Exported)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values (#1102).
     /// </summary>
@@ -1643,7 +1842,7 @@ public class SyncRepository : ISyncRepository
     // is already a fully wired-up graph in memory), so the lean merge-fetch variant is behaviourally
     // identical to the heavy one here. The distinction only exists - and is only provable - at the
     // Postgres repository layer, where Include chains genuinely control what gets loaded.
-    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+    public virtual Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
@@ -3484,7 +3683,37 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
+    public Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        if (normalisedValues.Count == 0)
+            return Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        var wanted = new HashSet<string>(normalisedValues, StringComparer.OrdinalIgnoreCase);
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var assignment in _generatedValueAssignments.Values)
+        {
+            var attributeMatches = metaverseAttributeId.HasValue
+                ? assignment.MetaverseAttributeId == metaverseAttributeId
+                : assignment.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId;
+            if (!attributeMatches)
+                continue;
+
+            var objectId = metaverseAttributeId.HasValue ? assignment.MetaverseObjectId : assignment.ConnectedSystemObjectId;
+            if (excludingObjectId.HasValue && objectId == excludingObjectId.Value)
+                continue;
+
+            if (wanted.Contains(assignment.NormalisedValue))
+                taken.Add(assignment.NormalisedValue);
+        }
+
+        return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
+    public virtual Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
     {
         foreach (var assignment in assignments)
         {
@@ -3663,6 +3892,82 @@ public class SyncRepository : ISyncRepository
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<long?> RaiseGeneratedValueSequenceIfHigherAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newStart, int syncRuleMappingId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+        return Task.FromResult(MoveGeneratedValueSequence(metaverseAttributeId, connectedSystemObjectTypeAttributeId, newStart, syncRuleMappingId, onlyIfHigher: true));
+    }
+
+    /// <inheritdoc />
+    public Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+        return Task.FromResult(MoveGeneratedValueSequence(metaverseAttributeId, connectedSystemObjectTypeAttributeId, newValue, syncRuleMappingId, onlyIfHigher: false));
+    }
+
+    /// <summary>
+    /// Mirrors <c>SyncRepository.GeneratedValueOperations.MoveGeneratedValueSequenceAsync</c> in the PostgreSQL
+    /// implementation: a no-op (returns null) when no counter row exists yet, otherwise moves it and returns its
+    /// previous value.
+    /// </summary>
+    private long? MoveGeneratedValueSequence(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId, bool onlyIfHigher)
+    {
+        lock (_generatedValueSequenceLock)
+        {
+            var sequence = _generatedValueSequences.Values.SingleOrDefault(s =>
+                s.MetaverseAttributeId == metaverseAttributeId && s.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+
+            if (sequence == null)
+                return null;
+
+            if (onlyIfHigher && newValue <= sequence.NextValue)
+                return null;
+
+            var previous = sequence.NextValue;
+            sequence.NextValue = newValue;
+            sequence.LastMovedAt = DateTime.UtcNow;
+            sequence.LastMovedBySyncRuleMappingId = syncRuleMappingId;
+            sequence.LastUpdated = DateTime.UtcNow;
+            return previous;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<int> CountMetaverseObjectsAwaitingGeneratedValueAsync(int metaverseObjectTypeId, int connectedSystemId, int metaverseAttributeId)
+    {
+        var count = _mvos.Values.Count(mvo =>
+            mvo.Type.Id == metaverseObjectTypeId &&
+            _csos.Values.Any(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == connectedSystemId) &&
+            mvo.AttributeValues.All(v => v.AttributeId != metaverseAttributeId));
+
+        return Task.FromResult(count);
+    }
+
+    /// <inheritdoc />
+    public Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId)
+    {
+        var headers = _generatedValueAssignments.Values
+            .Where(a => a.MetaverseObjectId == metaverseObjectId)
+            .Select(a => new GeneratedValueAssignmentHeader
+            {
+                AssignmentId = a.Id,
+                MetaverseAttributeId = a.MetaverseAttributeId!.Value,
+                AttributeName = a.MetaverseAttribute?.Name ?? string.Empty,
+                Value = a.Value,
+                TokenKind = a.SyncRuleMappingGeneration?.TokenKind ?? default,
+                SyncRuleId = a.SyncRuleMappingGeneration?.SyncRuleMapping?.SyncRuleId ?? 0,
+                SyncRuleName = a.SyncRuleMappingGeneration?.SyncRuleMapping?.SyncRule?.Name,
+                SyncRuleMappingId = a.SyncRuleMappingGeneration?.SyncRuleMappingId ?? 0,
+                State = a.State,
+                Adopted = a.Adopted,
+                AssignedDate = a.CommittedAt ?? a.Created
+            })
+            .ToList();
+
+        return Task.FromResult(headers);
     }
 
     /// <summary>

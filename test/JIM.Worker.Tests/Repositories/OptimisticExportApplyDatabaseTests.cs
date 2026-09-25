@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
+using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
@@ -57,15 +58,7 @@ public class OptimisticExportApplyDatabaseTests
     [SetUp]
     public async Task SetUp()
     {
-        await using var ctx = NewContext();
-        await ctx.Database.ExecuteSqlRawAsync(@"
-            DO $$
-            DECLARE r RECORD;
-            BEGIN
-                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '__EFMigrationsHistory') LOOP
-                    EXECUTE 'TRUNCATE TABLE ""' || r.tablename || '"" RESTART IDENTITY CASCADE';
-                END LOOP;
-            END $$;");
+        await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
     /// <summary>
@@ -378,9 +371,9 @@ public class OptimisticExportApplyDatabaseTests
 
     /// <summary>
     /// SPEC-1079B RED test 2 (insert path): <c>ResolvedReferenceCsoId</c> must also survive the
-    /// initial multi-row INSERT (<c>CreatePendingExportsAsync</c> -&gt;
-    /// <c>BulkInsertPendingExportAttributeValueChangesRawAsync</c>), covering a change created with
-    /// the id already set (for example a change built fresh from an already-resolved value).
+    /// initial COPY binary import (<c>CreatePendingExportsAsync</c> -&gt;
+    /// <c>BulkInsertPendingExportAttributeValueChangesOnConnectionAsync</c>), covering a change created
+    /// with the id already set (for example a change built fresh from an already-resolved value).
     /// </summary>
     [Test]
     public async Task CreatePendingExportsAsync_PersistsResolvedReferenceCsoId_RoundTripsOnFreshReloadAsync()

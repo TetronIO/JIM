@@ -87,6 +87,12 @@ public class ScheduleExecutionStepState
     public string? ErrorMessage { get; set; }
 
     /// <summary>
+    /// Why a Cancelled step did not run (#1768), such as "Not run: an earlier step stopped the Schedule.". Null for a
+    /// step in any other state, and for one that was already running when it was cancelled, since that step did run.
+    /// </summary>
+    public string? CancellationReason { get; set; }
+
+    /// <summary>
     /// The Activity this step produced, if one exists.
     /// </summary>
     public Guid? ActivityId { get; set; }
@@ -97,10 +103,16 @@ public class ScheduleExecutionStepState
     public ActivityStatus? ActivityStatus { get; set; }
 
     /// <summary>
-    /// Whether the execution was configured to carry on past this step if it failed. Explains why an execution
-    /// continued after a failure.
+    /// Whether the execution carries on past this step if it fails: its effective behaviour (#1787), resolved by
+    /// <see cref="ScheduleFailureHandling.ContinuesOnFailure"/> from the step's own setting or its Schedule's. Explains
+    /// why an execution continued after a failure.
     /// </summary>
     public bool ContinueOnFailure { get; set; }
+
+    /// <summary>
+    /// Where <see cref="ContinueOnFailure"/> comes from: the step's own setting, or its Schedule's (#1787).
+    /// </summary>
+    public ScheduleFailureBehaviourSource FailureBehaviourSource { get; set; }
 
     /// <summary>
     /// How long the step took, once it has both started and finished.

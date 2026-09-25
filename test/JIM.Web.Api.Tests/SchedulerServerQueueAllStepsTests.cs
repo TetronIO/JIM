@@ -19,9 +19,10 @@ using NUnit.Framework;
 namespace JIM.Web.Api.Tests;
 
 /// <summary>
-/// Tests that the SchedulerServer queues ALL schedule steps upfront when starting an execution.
-/// Step 0 tasks should be Queued, all subsequent step tasks should be WaitingForPreviousStep.
-/// ContinueOnFailure should be copied from ScheduleStep to WorkerTask at queue time.
+/// Tests that the SchedulerServer queues ALL schedule steps upfront when starting an execution. Every task is
+/// created as WaitingForPreviousStep, and once all are queued the first step group is released (#1768), so no
+/// step can run while the Schedule is only part-queued. Failure behaviour is not copied onto the tasks: it is read from
+/// the Schedule at the moment of each decision (#1787).
 /// </summary>
 [TestFixture]
 public class SchedulerServerQueueAllStepsTests
@@ -52,6 +53,7 @@ public class SchedulerServerQueueAllStepsTests
         _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepository.Object);
 
         _application = new JimApplication(_mockRepository.Object);
+        _mockSchedulingRepository.EmulateConditionalTransitions();
 
         _capturedTasks = new List<WorkerTask>();
 
@@ -109,22 +111,16 @@ public class SchedulerServerQueueAllStepsTests
             new StepConfig(2, 3, 300));
 
         // Act
-        await _application.Scheduler.StartScheduleExecutionAsync(
+        var execution = await _application.Scheduler.StartScheduleExecutionAsync(
             schedule, ActivityInitiatorType.System, null, "Test");
 
-        // Assert: All 3 tasks created
+        // Assert: All 3 tasks created, every one waiting (none runnable while the Schedule is only part-queued)
         Assert.That(_capturedTasks, Has.Count.EqualTo(3));
+        Assert.That(_capturedTasks.Select(t => t.Status), Is.All.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
 
-        // Step 0: Queued
-        var step0 = _capturedTasks.Single(t => t.ScheduleStepIndex == 0);
-        Assert.That(step0.Status, Is.EqualTo(WorkerTaskStatus.Queued));
-
-        // Steps 1 and 2: WaitingForPreviousStep
-        var step1 = _capturedTasks.Single(t => t.ScheduleStepIndex == 1);
-        Assert.That(step1.Status, Is.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
-
-        var step2 = _capturedTasks.Single(t => t.ScheduleStepIndex == 2);
-        Assert.That(step2.Status, Is.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
+        // Then step group 0 alone is released
+        _mockSchedulingRepository.Verify(r => r.TryStartScheduleExecutionAsync(execution!, 0), Times.Once);
+        _mockSchedulingRepository.Verify(r => r.TryStartScheduleExecutionAsync(It.IsAny<ScheduleExecution>(), It.Is<int>(i => i != 0)), Times.Never);
     }
 
     [Test]
@@ -137,42 +133,17 @@ public class SchedulerServerQueueAllStepsTests
             new StepConfig(1, 3, 300));
 
         // Act
-        await _application.Scheduler.StartScheduleExecutionAsync(
+        var execution = await _application.Scheduler.StartScheduleExecutionAsync(
             schedule, ActivityInitiatorType.System, null, "Test");
 
         // Assert
         Assert.That(_capturedTasks, Has.Count.EqualTo(3));
+        Assert.That(_capturedTasks.Select(t => t.Status), Is.All.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
 
-        // Step 0 group: Both Queued
+        // Step 0 group: both members, released together by the one step-group release
         var step0Tasks = _capturedTasks.Where(t => t.ScheduleStepIndex == 0).ToList();
         Assert.That(step0Tasks, Has.Count.EqualTo(2));
-        Assert.That(step0Tasks.All(t => t.Status == WorkerTaskStatus.Queued), Is.True);
-
-        // Step 1: WaitingForPreviousStep
-        var step1 = _capturedTasks.Single(t => t.ScheduleStepIndex == 1);
-        Assert.That(step1.Status, Is.EqualTo(WorkerTaskStatus.WaitingForPreviousStep));
-    }
-
-    [Test]
-    public async Task StartScheduleExecution_ContinueOnFailure_CopiedToWorkerTaskAsync()
-    {
-        // Arrange: Step 0 has ContinueOnFailure=false, Step 1 has ContinueOnFailure=true
-        var schedule = CreateScheduleWithSteps(
-            new StepConfig(0, 1, 100, ContinueOnFailure: false),
-            new StepConfig(1, 2, 200, ContinueOnFailure: true));
-
-        // Act
-        await _application.Scheduler.StartScheduleExecutionAsync(
-            schedule, ActivityInitiatorType.System, null, "Test");
-
-        // Assert
-        Assert.That(_capturedTasks, Has.Count.EqualTo(2));
-
-        var step0 = _capturedTasks.Single(t => t.ScheduleStepIndex == 0);
-        Assert.That(step0.ContinueOnFailure, Is.False);
-
-        var step1 = _capturedTasks.Single(t => t.ScheduleStepIndex == 1);
-        Assert.That(step1.ContinueOnFailure, Is.True);
+        _mockSchedulingRepository.Verify(r => r.TryStartScheduleExecutionAsync(execution!, 0), Times.Once);
     }
 
     [Test]
@@ -244,7 +215,7 @@ public class SchedulerServerQueueAllStepsTests
 
     #region Helper methods
 
-    private record StepConfig(int StepIndex, int ConnectedSystemId, int RunProfileId, bool ContinueOnFailure = false);
+    private record StepConfig(int StepIndex, int ConnectedSystemId, int RunProfileId);
 
     private static Schedule CreateScheduleWithSteps(params StepConfig[] stepConfigs)
     {
@@ -258,7 +229,6 @@ public class SchedulerServerQueueAllStepsTests
             ConnectedSystemId = config.ConnectedSystemId,
             RunProfileId = config.RunProfileId,
             Name = $"Step {index}",
-            ContinueOnFailure = config.ContinueOnFailure,
             ExecutionMode = stepConfigs.Count(s => s.StepIndex == config.StepIndex) > 1
                 ? StepExecutionMode.ParallelWithPrevious
                 : StepExecutionMode.Sequential

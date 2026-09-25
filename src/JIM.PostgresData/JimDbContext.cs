@@ -694,6 +694,20 @@ public class JimDbContext : DbContext
             .HasForeignKey(pe => pe.ConnectedSystemObjectId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // PendingExport: relationship to its attribute value changes. Cascade, because a change row has no
+        // meaning without the Pending Export it belongs to. Left to convention (an optional FK defaults to
+        // ClientSetNull, i.e. NO ACTION) this relationship let ConnectedSystemRepository.DeletePendingExportAsync
+        // delete the parent while leaving every child row behind as a permanent orphan, since EF's client-side
+        // cascade only nulls tracked children's PendingExportId rather than deleting them (#1818).
+        // PendingExportId itself stays nullable, unchanged by this fix: no write path ever persists a null
+        // value deliberately (every INSERT, raw SQL or EF, sets it from the parent it is created under), and
+        // narrowing it to non-nullable is a separate, larger change this fix does not need to make.
+        modelBuilder.Entity<PendingExport>()
+            .HasMany(pe => pe.AttributeValueChanges)
+            .WithOne()
+            .HasForeignKey(avc => avc.PendingExportId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // PendingExport: the Synchronisation Rule whose provisioning decision produced a Create.
         // SetNull rather than Cascade: deleting a rule must not delete exports already staged for accounts it
         // provisioned. Losing the link simply means the account does not get an initial password, which is the

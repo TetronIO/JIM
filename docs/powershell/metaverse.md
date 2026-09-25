@@ -932,14 +932,14 @@ Get-JIMMetaverseObjectProvenance -Id <guid> -AttributeId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `AttributeName` | `string` | No | | Name of the attribute to get detailed provenance for. Resolved against the object's own attributes (an exact, case-insensitive match). Cannot be used with `-AttributeId`. |
+| `AttributeName` | `string` | No | | Name of the attribute to get detailed provenance for. Resolved against the attributes the object holds a value for (an exact, case-insensitive match); use `-AttributeId` for an attribute with no value. Cannot be used with `-AttributeId`. |
 | `AttributeId` | `int` | No | | Identifier of the attribute to get detailed provenance for. Cannot be used with `-AttributeName`. |
 
 #### Output
 
-With just `-Id`: a `PSCustomObject` with `MetaverseObjectId` and `Attributes` (each with `AttributeId`, `AttributeName` and `Origins`, an array of `{Kind, ConnectedSystemId, ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue}`).
+With just `-Id`: a `PSCustomObject` with `MetaverseObjectId` and `Attributes` (each with `AttributeId`, `AttributeName` and `Origins`, an array of `{Kind, ConnectedSystemId, ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue, Corrected, PersonId, PersonName}`). `Kind` is one of `NotRecorded`, `SynchronisationRule`, `GeneratedByJim` or `SetByPerson`.
 
-With `-AttributeName` or `-AttributeId`: a `PSCustomObject` with `MetaverseObjectId`, `MetaverseObjectTypeId`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `CurrentValues` (each with `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName`, `Origin`), `CurrentValueTotalCount`, `ContributingConnectedSystemObject`, `LastSet` (the Activity that set the current value), `Sources` (each mapping's `Rank`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName`, `IsExpression`, `Expression`, `State`, `CandidateValues`, `Note`), `History` (newest first) and `HistoryTruncated`.
+With `-AttributeName` or `-AttributeId`: a `PSCustomObject` with `MetaverseObjectId`, `MetaverseObjectTypeId`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `CurrentValues` (each with `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName`, `Origin`), `CurrentValueTotalCount`, `ContributingConnectedSystemObject`, `LastSet` (the Activity that set the current value), `Sources` (each mapping's `MappingId`, `Rank`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName`, `IsExpression`, `Expression`, `State`, `CandidateValues`, `Note`; `State` is one of `InUse`, `Outranked`, `NoValue`, `NotJoined`, `Disabled` or `NotEvaluated`), `History` (newest first, up to 50 entries) and `HistoryTruncated`.
 
 #### Examples
 
@@ -959,6 +959,59 @@ Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Att
 ```powershell title="Pipe a Metaverse Object into the cmdlet"
 Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
     Get-JIMMetaverseObjectProvenance
+```
+
+---
+
+### Get-JIMGeneratedValue
+
+!!! note "In development"
+    Generated values are still in development and not yet available. The feature is hidden behind a feature flag until it is ready.
+
+Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
+committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
+its state, and whether it was adopted from an existing accepted value rather than generated. Empty when
+the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
+[Synchronisation Rules](synchronisation-rules.md#new-jimsyncrulemapping).
+
+#### Syntax
+
+```powershell
+Get-JIMGeneratedValue -MetaverseObjectId <guid>
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `MetaverseObjectId` | `guid` | Yes | | The Metaverse Object's ID. Accepts pipeline input by property name. Alias: `Id` |
+
+#### Output
+
+One `PSCustomObject` per generated value:
+
+| Property | Description |
+|----------|--------------|
+| `AssignmentId` | The assignment's own identifier |
+| `MetaverseAttributeId` | The Metaverse Attribute this value was generated for |
+| `AttributeName` | Its name |
+| `Value` | The committed value |
+| `TokenKind` | `OnlyIfTaken`, `Sequence` or `Random` |
+| `SyncRuleId` | The Synchronisation Rule whose generated mapping produced this value |
+| `SyncRuleName` | Its name |
+| `SyncRuleMappingId` | The mapping responsible |
+| `State` | `Proposed`, `Committed`, `Remediated` or `NeedsDecision` |
+| `Adopted` | `true` when the value was adopted from an existing accepted value, not generated |
+| `AssignedDate` | When the assignment was created |
+
+#### Examples
+
+```powershell title="List everything JIM generated for an Identity"
+Get-JIMGeneratedValue -MetaverseObjectId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Pipe a Metaverse Object straight in"
+Get-JIMMetaverseObject -ObjectTypeName "person" -Search "j.smith" | Get-JIMGeneratedValue
 ```
 
 ---

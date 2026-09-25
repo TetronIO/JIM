@@ -623,6 +623,8 @@ internal class SeedingServer
             IntervalUnit = ScheduleIntervalUnit.Hours,
             DaysOfWeek = "0,1,2,3,4,5,6",
             CronExpression = "0 * * * *",
+            // Built-in Schedules stop when a step fails, and their steps follow the Schedule (#1787); JIM manages both.
+            OnStepFailure = ScheduleFailureBehaviour.Stop,
             CreatedByType = ActivityInitiatorType.System,
             CreatedByName = "System",
             Steps = new List<ScheduleStep>
@@ -633,7 +635,7 @@ internal class SeedingServer
                     Name = "Reconcile Temporal Scope",
                     StepType = ScheduleStepType.TemporalScopeReconciliation,
                     ExecutionMode = StepExecutionMode.Sequential,
-                    ContinueOnFailure = false,
+                    OnFailure = ScheduleStepFailureBehaviour.FollowSchedule,
                     CreatedByType = ActivityInitiatorType.System,
                     CreatedByName = "System"
                 }
@@ -657,6 +659,7 @@ internal class SeedingServer
             PatternType = SchedulePatternType.SpecificTimes,
             DaysOfWeek = "0,1,2,3,4,5,6",
             CronExpression = "30 2 * * *",
+            OnStepFailure = ScheduleFailureBehaviour.Stop,
             CreatedByType = ActivityInitiatorType.System,
             CreatedByName = "System",
             Steps = new List<ScheduleStep>
@@ -667,7 +670,7 @@ internal class SeedingServer
                     Name = "Clean Up Expired History",
                     StepType = ScheduleStepType.HistoryRetentionCleanup,
                     ExecutionMode = StepExecutionMode.Sequential,
-                    ContinueOnFailure = false,
+                    OnFailure = ScheduleStepFailureBehaviour.FollowSchedule,
                     CreatedByType = ActivityInitiatorType.System,
                     CreatedByName = "System"
                 }
@@ -1521,6 +1524,34 @@ internal class SeedingServer
             DefaultValue = null,
             IsReadOnly = true
         }, () => Guid.NewGuid().ToString());
+
+        // Feature flags (#1781) - one Service Setting row per FeatureFlagCatalogue entry, default off. Existing
+        // rows (including an administrator's toggle) are left untouched by SeedSettingAsync, which only rewrites
+        // read-only settings; these are never read-only.
+        foreach (var flag in FeatureFlagCatalogue.All)
+        {
+            await SeedSettingAsync(new ServiceSetting
+            {
+                Key = flag.Key,
+                DisplayName = flag.DisplayName,
+                Description = flag.Description,
+                Category = ServiceSettingCategory.FeatureFlags,
+                ValueType = ServiceSettingValueType.Boolean,
+                DefaultValue = "false",
+                IsReadOnly = false
+            });
+        }
+
+        // Prune Feature Flag settings whose key is no longer in the catalogue, so removing a shipped flag leaves
+        // nothing behind (#1781). Not a candidate for the built-in convergence baseline below: a flag carries no
+        // create-time provenance worth recording, and its removal is a deletion, not a change to capture.
+        var catalogueKeys = FeatureFlagCatalogue.All.Select(f => f.Key).ToHashSet();
+        var existingFlagSettings = await Application.ServiceSettings.GetSettingsByCategoryAsync(ServiceSettingCategory.FeatureFlags) ?? [];
+        foreach (var staleFlag in existingFlagSettings.Where(s => !catalogueKeys.Contains(s.Key)))
+        {
+            await Application.ServiceSettings.DeleteSettingAsync(staleFlag.Key);
+            Log.Information("SyncServiceSettingsAsync: Removed feature flag setting '{Key}', which is no longer in FeatureFlagCatalogue.", staleFlag.Key);
+        }
 
         // Record a System-attributed Create Activity and version-1 baseline for each built-in Service Setting created
         // this pass, grouped under the seeding parent, so their factory origin is visible in the change history and

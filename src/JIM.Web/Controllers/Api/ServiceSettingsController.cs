@@ -45,7 +45,14 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
     {
         _logger.LogTrace("Requested all service settings");
         var settings = await _application.ServiceSettings.GetAllSettingsAsync();
-        var dtos = settings.Select(ServiceSettingDto.FromEntity);
+
+        // Feature flags are Service Settings under the hood, but change only through the dedicated feature-flag
+        // surfaces (api/v1/features, FeatureFlagServer, Get/Enable/Disable-JIMFeature), which enforce the
+        // Preview/InDevelopment tier rules. Excluded here rather than filtered by the caller, so this surface
+        // never has to be remembered per consumer.
+        var dtos = settings
+            .Where(s => s.Category != JIM.Models.Core.ServiceSettingCategory.FeatureFlags)
+            .Select(ServiceSettingDto.FromEntity);
         return Ok(dtos);
     }
 
@@ -67,6 +74,11 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
         if (setting == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"Service setting not found: {key}" });
+        }
+
+        if (IsFeatureFlagRefusal(setting, out var refusal))
+        {
+            return refusal;
         }
 
         return Ok(ServiceSettingDto.FromEntity(setting));
@@ -95,6 +107,11 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
         if (setting == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"Service setting not found: {key}" });
+        }
+
+        if (IsFeatureFlagRefusal(setting, out var refusal))
+        {
+            return refusal;
         }
 
         if (setting.IsReadOnly)
@@ -145,6 +162,11 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
             return NotFound(new ApiErrorResponse { Message = $"Service setting not found: {key}" });
         }
 
+        if (IsFeatureFlagRefusal(setting, out var refusal))
+        {
+            return refusal;
+        }
+
         if (setting.IsReadOnly)
         {
             return BadRequest(new ApiErrorResponse { Message = $"Setting '{setting.DisplayName}' is read-only and cannot be reverted" });
@@ -166,6 +188,26 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
         // Re-fetch to return the reverted state
         var reverted = await _application.ServiceSettings.GetSettingAsync(key);
         return Ok(ServiceSettingDto.FromEntity(reverted!));
+    }
+
+    /// <summary>
+    /// Refuses generic access to a Feature Flag setting, directing the caller to the dedicated feature-flag
+    /// surface instead (api/v1/features), which enforces the Preview/InDevelopment tier rules the generic
+    /// setting endpoints do not know about.
+    /// </summary>
+    private static bool IsFeatureFlagRefusal(JIM.Models.Core.ServiceSetting setting, out IActionResult refusal)
+    {
+        if (setting.Category != JIM.Models.Core.ServiceSettingCategory.FeatureFlags)
+        {
+            refusal = null!;
+            return false;
+        }
+
+        refusal = new BadRequestObjectResult(new ApiErrorResponse
+        {
+            Message = $"'{setting.Key}' is a feature flag; use GET/PUT api/v1/features instead of the Service Settings endpoints."
+        });
+        return true;
     }
 
     #region Configuration Change History

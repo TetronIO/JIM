@@ -1700,6 +1700,32 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
+    /// List the generated values a Metaverse Object holds
+    /// </summary>
+    /// <remarks>
+    /// The committed Unique Value Generation assignments (#242) this Metaverse Object currently holds, one per
+    /// generated attribute: the value, which uniqueness token produced it, the Synchronisation Rule and mapping
+    /// responsible, its state, and whether it was adopted from an existing accepted value rather than generated.
+    /// Empty when the object holds no generated values.
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
+    [HttpGet("objects/{id:guid}/generated-values", Name = "GetGeneratedValuesForMetaverseObject")]
+    [ProducesResponseType(typeof(IEnumerable<GeneratedValueAssignmentHeaderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetGeneratedValuesForMetaverseObjectAsync(Guid id)
+    {
+        _logger.LogTrace("Requested generated values for Metaverse Object: {Id}", id);
+
+        var exists = await _application.Metaverse.GetMetaverseObjectHeaderAsync(id);
+        if (exists == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
+
+        var headers = await _application.UniqueValues.GetAssignmentsForMetaverseObjectAsync(id);
+        return Ok(headers.Select(GeneratedValueAssignmentHeaderDto.FromModel));
+    }
+
+    /// <summary>
     /// List Metaverse Objects pending deletion
     /// </summary>
     /// <remarks>

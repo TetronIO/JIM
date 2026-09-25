@@ -23,7 +23,7 @@ Storage scales with the number of identity objects and the frequency of synchron
 
 #### Memory Scaling by Identity Object Count
 
-The worker service loads all objects from a connector into memory during full import processing (CSOs, attribute values, RPEIs, duplicate detection structures). Memory requirements scale linearly with the number of objects in the largest Connected System.
+During a Full Import, the Worker holds every object it imports from a Connected System in memory, together with its attribute values and the Activity's result for each object. Memory requirements therefore scale linearly with the number of objects in the largest Connected System.
 
 These figures are for the **host machine** (or VM) running the Docker stack -- they must cover the operating system, all JIM containers, and the database.
 
@@ -36,13 +36,13 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 | 250,000 -- 500,000 objects  | 48 GB            | 64 GB                |
 
 !!! info "Why large imports need significant memory"
-    During a full import, the worker loads all imported objects with their attributes into memory before the save phase begins (for duplicate detection, deletion detection, and reference resolution). A full import of 100,000 objects with 20 attributes each produces a worker peak working set of approximately 2.3 GB. The database requires an additional 1--2 GB during bulk inserts. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
+    During a Full Import, the Worker holds every imported object and its attributes in memory until it has compared them all (to find duplicates, detect deleted objects, and link objects that refer to each other), and only then saves them. A Full Import of 100,000 objects with 20 attributes each peaks at approximately 2.3 GB of memory in the Worker, and PostgreSQL needs a further 1--2 GB while the results are saved. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
 
 !!! note
-    These requirements apply to the largest single full import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta imports process only changed objects and require significantly less memory.
+    These requirements apply to the largest single Full Import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta Imports process only changed objects and require significantly less memory.
 
 !!! info "Large group memberships drive memory more than object count"
-    A group is loaded with its full member list during processing, so a single large group can dominate the working set: a group with 495,000 members loads 495,000 reference values. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
+    A group is loaded with its full member list during processing, so a single large group can dominate memory use: a group with 495,000 members loads 495,000 member references. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
 
 ### Software Requirements
 
@@ -51,7 +51,7 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 
 ### Network Requirements
 
-JIM's services communicate internally over a Docker bridge network (`jim-network`). The only port that needs to be exposed externally is the web/API port on `jim.web` (container port `80`).
+JIM's services communicate internally over a Docker bridge network (`jim-network`). The only port that needs to be exposed externally is the web/API port on `jim.web` (container port `8080`).
 
 | Direction | Port                                               | Purpose                                        |
 |-----------|----------------------------------------------------|-------------------------------------------------|
@@ -72,7 +72,7 @@ JIM runs as a Docker Compose stack with four services:
 
 | Service            | Description                                                                           |
 |--------------------|---------------------------------------------------------------------------------------|
-| **jim.web**        | Blazor Server UI and REST API (`/api/`)                                               |
+| **jim.web**        | Web portal and REST API (`/api/`)                                                     |
 | **jim.worker**     | Processes import, synchronisation, and export tasks                                   |
 | **jim.scheduler**  | Triggers synchronisation runs on cron or interval schedules                           |
 | **jim.database**   | PostgreSQL 18 (optional bundled container)                                            |
@@ -169,7 +169,6 @@ jim-release-X.Y.Z/
 |   +-- postgres-18.tar       # PostgreSQL image (if included)
 +-- compose/
 |   +-- docker-compose.yml
-|   +-- docker-compose.override.yml
 |   +-- docker-compose.production.yml
 |   +-- .env.example
 +-- powershell/
@@ -189,7 +188,7 @@ Before deploying JIM in an air-gapped environment, ensure you have:
 - **Docker Engine** (20.10+) and **Docker Compose** (v2+) installed
 - **PostgreSQL 18** -- either as a container or external database server
 - A DNS name or IP address for the JIM server
-- TLS certificates if enabling HTTPS (recommended for production)
+- TLS certificates for HTTPS, which browser access from any machine other than the JIM host requires (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
 - An OIDC identity provider accessible from the air-gapped network (e.g. AD FS, Keycloak)
 
 ### Step 1: Transfer and Verify the Bundle
@@ -221,10 +220,7 @@ docker load -i docker-images/postgres-18.tar
 
 **Option A: Use the bundled PostgreSQL container** (simpler, suitable for smaller deployments)
 
-```bash
-# Start with bundled database
-docker compose --profile with-db up -d
-```
+No preparation is needed; the container starts with the rest of JIM in Step 7.
 
 **Option B: Use an external PostgreSQL server** (recommended for production)
 
@@ -238,11 +234,7 @@ docker compose --profile with-db up -d
 
 2. Update `.env` with your database connection details (see [Configuration Reference](configuration.md))
 
-3. Start JIM without the database profile:
-
-    ```bash
-    docker compose up -d
-    ```
+3. Leave out `--profile with-db` when you start JIM in Step 7.
 
 ### Step 4: Configure Environment
 
@@ -288,17 +280,24 @@ If you need to integrate with an external system that writes to a fixed network 
 
 ```bash
 # With bundled PostgreSQL
-docker compose --profile with-db up -d
+docker compose -f docker-compose.yml -f docker-compose.production.yml \
+  --profile with-db up -d
 
 # With external PostgreSQL
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
-# Check all services are running
-docker compose ps
+# Check all services are running (drop --profile with-db for external PostgreSQL)
+docker compose -f docker-compose.yml -f docker-compose.production.yml \
+  --profile with-db ps
 
 # View logs
-docker compose logs -f
+docker compose -f docker-compose.yml -f docker-compose.production.yml logs -f
 ```
+
+The production file publishes the web UI on host port `5200`; see [Port Mapping](#port-mapping) to change it.
+
+!!! warning "Always name the compose files"
+    Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone, which leaves out the production settings, and silently adds any `docker-compose.override.yml` it finds in the directory.
 
 ### Step 8: Verify Startup
 
@@ -319,7 +318,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 
 ### Step 9: Access JIM
 
-1. **Open your browser** to `https://jim.your-domain.local` (or `http://localhost:5200` if no TLS)
+1. **Open your browser** to `https://jim.your-domain.local`. Until TLS is in place, you can sign in only from a browser on the JIM host itself, at `http://localhost:5200`; see [TLS and Reverse Proxy](#tls-and-reverse-proxy)
 2. **Log in** with your SSO credentials
 3. **Verify access** - the initial admin user (configured via `JIM_SSO_INITIAL_ADMIN`) will have full access
 
@@ -327,10 +326,15 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 
 ## TLS and Reverse Proxy
 
-The JIM containers serve HTTP on port 80 internally. For production, place a reverse proxy in front to handle TLS termination.
+The JIM containers serve HTTP on port 8080 internally. For production, place a reverse proxy in front to handle TLS termination.
 
-!!! important
-    Blazor Server uses WebSockets (SignalR). Your reverse proxy **must** support WebSocket connections, or the UI will fall back to long polling with degraded performance.
+!!! warning "Browsers on other machines must use HTTPS"
+    Browser access to JIM from any machine other than the JIM host requires HTTPS. In a production deployment, JIM's sign-in cookies are HTTPS-only, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: the browser loops between JIM and your identity provider (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
+
+    Plain HTTP works only at `http://localhost:5200`, which means from a browser on the JIM host itself. The host's own name or IP address fails even there, and Safari may refuse the cookies on `localhost` too.
+
+!!! important "Pass WebSocket connections through"
+    The JIM portal keeps a live connection to the server over WebSockets. Your reverse proxy **must** pass WebSocket connections through (the `Upgrade` and `Connection` headers in the example below). Without them the portal falls back to a slower connection method and responds sluggishly, and the browser's developer console reports `Failed to connect via WebSockets, using the Long Polling fallback transport`.
 
 ### nginx Example
 
@@ -350,7 +354,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # WebSocket support (required for Blazor Server)
+        # WebSocket support (required for the JIM portal)
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -358,25 +362,52 @@ server {
 }
 ```
 
-### Port Mapping
+### Trusting the Reverse Proxy
 
-The base `docker-compose.yml` does not expose ports externally. You need to add a port mapping. Create a `docker-compose.ports.yml` override:
+When the reverse proxy terminates TLS, every request reaches JIM over plain HTTP. Set `JIM_TRUSTED_PROXIES` in `.env` to the address the proxy connects to JIM from, so that JIM reads the original `https` scheme and the real client IP address from the proxy's `X-Forwarded-Proto` and `X-Forwarded-For` headers. Until you do:
 
-```yaml
-services:
-  jim.web:
-    ports:
-      - "5200:80"
-```
+- Sign-in fails: JIM sends your identity provider an `http://` callback address, which does not match the `https://` one you registered, so the identity provider rejects it with a redirect URI error.
+- JIM refuses every REST API request that carries a password, because it cannot confirm the connection is encrypted.
+- The security audit log and API rate limiting see the proxy's address instead of each client's.
 
-Then include it in your compose command:
+The address to trust depends on where the proxy runs:
+
+- **Proxy on the JIM host, reaching JIM at `localhost:5200`** (as in the example above)<br /> JIM sees the connection arrive from the gateway address of the `jim-network` Docker network, not from `127.0.0.1`. Find it with:
+
+    ```bash
+    docker network inspect jim-network --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+    ```
+
+    Docker assigns this address when it creates the network, so check it again after anything that removes and recreates the network, such as `docker compose down`.
+
+- **Proxy on another machine**<br /> That machine's IP address.
+
+For example:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml \
-  -f docker-compose.ports.yml --profile with-db up -d
+JIM_TRUSTED_PROXIES=172.18.0.1
 ```
 
-Alternatively, add the `ports` mapping directly to `docker-compose.production.yml` after downloading it.
+Then run your `docker compose ... up -d` command again so `jim.web` restarts with the setting. On startup `jim.web` logs `Trusting forwarded headers from 1 known proxy address(es) and 0 known network(s)`, which confirms it read the value. List only your proxy: JIM believes whatever a trusted address tells it about the client's address and scheme. See the [Configuration Reference](configuration.md#reverse-proxy) for the setting's full format.
+
+### Port Mapping
+
+`jim.web` listens on port `8080` inside its container. `docker-compose.production.yml` publishes it on host port `5200` on every interface. To change the host port, set `JIM_WEB_PORT` in `.env`:
+
+```bash
+JIM_WEB_PORT=8000
+```
+
+When the reverse proxy runs on the same host, bind JIM to the loopback interface so it is reachable only through the proxy:
+
+```bash
+JIM_WEB_PORT=127.0.0.1:5200
+```
+
+The base `docker-compose.yml` publishes no ports, so a deployment that leaves out `docker-compose.production.yml` is not reachable from the host.
+
+!!! note "Use `JIM_WEB_PORT` rather than a `ports` override"
+    Docker Compose combines port mappings from every file, so a `ports` entry in an override of your own adds a second mapping instead of replacing the default one.
 
 ---
 
@@ -526,4 +557,3 @@ For air-gapped deployments, also verify:
 - [ ] Encryption key set backed up and included in the offline backup routine (see [Backup & Disaster Recovery](backup-recovery.md))
 - [ ] Initial admin user can log in
 - [ ] Logs are being written to the configured path
-- [ ] Logs are being written to configured path

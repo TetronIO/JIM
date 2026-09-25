@@ -93,6 +93,10 @@
         'Remove-JIMSyncRuleMapping',
         'Set-JIMSyncRuleMapping',
 
+        # Unique Value Generation (#242)
+        'Get-JIMGeneratedValueSequence',
+        'Restart-JIMGeneratedValues',
+
         # Object Matching Rules
         'Get-JIMMatchingRule',
         'New-JIMMatchingRule',
@@ -129,6 +133,7 @@
         'Disable-JIMSchedule',
         'Start-JIMSchedule',
         'Add-JIMScheduleStep',
+        'Set-JIMScheduleStep',
         'Remove-JIMScheduleStep',
 
         # Schedule Executions
@@ -161,6 +166,7 @@
         'Set-JIMMetaverseObjectPassword',
         'Get-JIMMetaverseObjectChangeHistory',
         'Get-JIMMetaverseObjectProvenance',
+        'Get-JIMGeneratedValue',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
@@ -247,6 +253,11 @@
         'Get-JIMServiceSetting',
         'Set-JIMServiceSetting',
         'Reset-JIMServiceSetting',
+
+        # Feature Flags
+        'Get-JIMFeature',
+        'Enable-JIMFeature',
+        'Disable-JIMFeature',
 
         # System
         'Get-JIMHealth',

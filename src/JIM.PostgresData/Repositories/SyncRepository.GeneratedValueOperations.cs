@@ -107,6 +107,34 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    public async Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+
+        if (normalisedValues.Count == 0)
+            return [];
+
+        var attributeColumn = metaverseAttributeId.HasValue ? "MetaverseAttributeId" : "ConnectedSystemObjectTypeAttributeId";
+        var objectColumn = metaverseAttributeId.HasValue ? "MetaverseObjectId" : "ConnectedSystemObjectId";
+        var attributeId = metaverseAttributeId ?? connectedSystemObjectTypeAttributeId!.Value;
+
+        // IS DISTINCT FROM is what lets one static query handle both cases: a null excludingObjectId (no
+        // exclusion; the object column, always populated on a live assignment, is distinct from NULL on every
+        // row) and a real one (excluded only from the one row that matches it).
+        var sql = $@"SELECT ""NormalisedValue"" AS ""Value""
+                    FROM ""GeneratedValueAssignments""
+                    WHERE ""{attributeColumn}"" = {{0}} AND ""NormalisedValue"" = ANY({{1}}) AND (""{objectColumn}"" IS DISTINCT FROM {{2}})";
+
+        var rows = await _context.Database.SqlQueryRaw<string>(
+            sql,
+            attributeId,
+            normalisedValues.ToArray(),
+            BulkSqlHelpers.NullableParam(excludingObjectId, NpgsqlTypes.NpgsqlDbType.Uuid)).ToListAsync();
+
+        return rows.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <inheritdoc />
     public async Task CreateGeneratedValueAssignmentsAsync(IReadOnlyCollection<GeneratedValueAssignment> assignments)
     {
         if (assignments.Count == 0)
@@ -120,6 +148,14 @@ public partial class SyncRepository
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "23505" } pgEx)
         {
+            // Detach every entity this call added: a failed SaveChangesAsync does not untrack them (EF leaves a
+            // failed insert's entries in the Added state), so without this, the next unrelated SaveChangesAsync
+            // on the same context (the worker's page-flush context lives for the whole run) would re-attempt
+            // exactly the same failed INSERT and throw again, and a caller's one-at-a-time retry of this same
+            // batch would resend every entity, not just the one(s) that actually lost the race.
+            foreach (var assignment in assignments)
+                _context.Entry(assignment).State = EntityState.Detached;
+
             // Decision 13's losing-run rule: the cross-assignment unique index on (attribute, NormalisedValue)
             // is what makes uniqueness hold across concurrent runs and pages, and this is what its loser sees.
             // The caller is expected to recognise this exception and draw the next candidate, not treat it as an
@@ -310,6 +346,96 @@ public partial class SyncRepository
         await _context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""GeneratedValueSequences"" SET ""AssignedCount"" = ""AssignedCount"" + {0}, ""LastUpdated"" = now() WHERE ""Id"" = {1}",
             by, sequenceId);
+    }
+
+    /// <inheritdoc />
+    public async Task<long?> RaiseGeneratedValueSequenceIfHigherAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newStart, int syncRuleMappingId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+        return await MoveGeneratedValueSequenceAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, newStart, syncRuleMappingId, onlyIfHigher: true);
+    }
+
+    /// <inheritdoc />
+    public async Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+        return await MoveGeneratedValueSequenceAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, newValue, syncRuleMappingId, onlyIfHigher: false);
+    }
+
+    /// <summary>
+    /// The shared read-then-write behind <see cref="RaiseGeneratedValueSequenceIfHigherAsync"/> and
+    /// <see cref="ResetGeneratedValueSequenceAsync"/>. This is an administrator save-time action, not the
+    /// worker's per-page hot path, so a plain SELECT-then-UPDATE (rather than the atomic
+    /// <c>UPDATE ... RETURNING</c> <see cref="ReserveGeneratedValueSequenceBlockAsync"/> needs to serialise
+    /// concurrent allocations) is an acceptable, far simpler shape; a save that races another save against the
+    /// same counter is administrator error, not a synchronisation integrity concern.
+    /// </summary>
+    private async Task<long?> MoveGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId, bool onlyIfHigher)
+    {
+        var existing = await _context.GeneratedValueSequences
+            .AsNoTracking()
+            .SingleOrDefaultAsync(s =>
+                s.MetaverseAttributeId == metaverseAttributeId &&
+                s.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+
+        if (existing == null)
+            return null;
+
+        if (onlyIfHigher && newValue <= existing.NextValue)
+            return null;
+
+        var column = metaverseAttributeId.HasValue ? "MetaverseAttributeId" : "ConnectedSystemObjectTypeAttributeId";
+        var attributeId = metaverseAttributeId ?? connectedSystemObjectTypeAttributeId!.Value;
+        var guard = onlyIfHigher ? @" AND ""NextValue"" < {0}" : string.Empty;
+
+        // Built into a local first, rather than passed inline: EF1002 flags an interpolated string literal
+        // handed directly to ExecuteSqlRawAsync, even though column/guard here are fixed, non-user-controlled
+        // text (mirrors ReserveGeneratedValueSequenceBlockAsync's insertSql above).
+        var sql = $@"UPDATE ""GeneratedValueSequences""
+               SET ""NextValue"" = {{0}}, ""LastMovedAt"" = now(), ""LastMovedBySyncRuleMappingId"" = {{1}}, ""LastUpdated"" = now()
+               WHERE ""{column}"" = {{2}}{guard}";
+
+        await _context.Database.ExecuteSqlRawAsync(sql, newValue, syncRuleMappingId, attributeId);
+
+        return existing.NextValue;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountMetaverseObjectsAwaitingGeneratedValueAsync(int metaverseObjectTypeId, int connectedSystemId, int metaverseAttributeId)
+    {
+        const string sql = @"SELECT COUNT(DISTINCT mvo.""Id"") AS ""Value""
+                    FROM ""MetaverseObjects"" mvo
+                    JOIN ""ConnectedSystemObjects"" cso ON cso.""MetaverseObjectId"" = mvo.""Id"" AND cso.""ConnectedSystemId"" = {0}
+                    WHERE mvo.""TypeId"" = {1}
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ""MetaverseObjectAttributeValues"" v
+                          WHERE v.""MetaverseObjectId"" = mvo.""Id"" AND v.""AttributeId"" = {2}
+                      )";
+
+        return await _context.Database.SqlQueryRaw<int>(sql, connectedSystemId, metaverseObjectTypeId, metaverseAttributeId).SingleAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId)
+    {
+        return await _context.GeneratedValueAssignments
+            .AsNoTracking()
+            .Where(a => a.MetaverseObjectId == metaverseObjectId)
+            .Select(a => new GeneratedValueAssignmentHeader
+            {
+                AssignmentId = a.Id,
+                MetaverseAttributeId = a.MetaverseAttributeId!.Value,
+                AttributeName = a.MetaverseAttribute!.Name,
+                Value = a.Value,
+                TokenKind = a.SyncRuleMappingGeneration!.TokenKind,
+                SyncRuleId = a.SyncRuleMappingGeneration.SyncRuleMapping!.SyncRuleId,
+                SyncRuleName = a.SyncRuleMappingGeneration.SyncRuleMapping.SyncRule!.Name,
+                SyncRuleMappingId = a.SyncRuleMappingGeneration.SyncRuleMappingId,
+                State = a.State,
+                Adopted = a.Adopted,
+                AssignedDate = a.CommittedAt ?? a.Created
+            })
+            .ToListAsync();
     }
 
     /// <summary>

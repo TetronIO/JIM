@@ -11,6 +11,7 @@
 @inject ICredentialProtectionService CredentialProtection
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavManager
+@inject IWebHostEnvironment HostEnvironment
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -27,7 +28,11 @@
    and the toolbar count) lives in the shared grid. Service Settings are a small configuration list, loaded whole
    once, so the window is sliced from memory rather than becoming a database range read. The Category that used to
    be a collapsible group header is now a sortable column: grouping is computed over the rows a grid is holding,
-   and a virtualised grid holds one window, so a group header would describe the window rather than the list. *@
+   and a virtualised grid holds one window, so a group header would describe the window rather than the list.
+   Feature flags (#1781) are ordinary rows here, under the "Preview Features" category: Preview-tier flags always,
+   In Development-tier flags only on a Development host (see LoadSettingsAsync), so a Production administrator
+   never sees one. Editing and reverting a flag row still go through FeatureFlagServer, which enforces the tier
+   rules; see ShowEditDialog and HandleRevertAsync. *@
 <VirtualisedDataGrid GridClass="mt-2" @ref="_grid" T="ServiceSetting"
                      ContainerId="service-setting-list"
                      DefaultSortBy="category"
@@ -38,7 +43,8 @@
                      RowClassFunc="RowClass">
     <ToolBarExtras>
         <MudCheckBox @bind-Value="_showConfigurableOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show configurable only" Color="Color.Primary" Class="mr-4" />
-        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show overridden only" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
+        <MudCheckBox @bind-Value="_showPreviewFeaturesOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show preview features only" Color="Color.Primary" />
     </ToolBarExtras>
     <Columns>
         <TemplateColumn Title="Category" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
@@ -60,7 +66,35 @@
                    bounded box, so this is the table's fill column: it takes the width the other columns (each
                    kept to one line with .jim-nowrap) do not need, rather than growing to its longest
                    description and pushing the table past the page. *@
-                <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
+                @{
+                    var flagTier = context.Item.Category == ServiceSettingCategory.FeatureFlags
+                        ? Helpers.GetFeatureFlagDefinition(context.Item.Key)?.Tier
+                        : null;
+                }
+                @if (flagTier.HasValue)
+                {
+                    @* The tier chip sits beside the name rather than under it, so the row stays one line. The
+                       text needs its own min-width: 0 wrapper: as a flex child it would otherwise refuse to
+                       shrink below its content's natural width, and OneLineText's ellipsis never gets the
+                       chance to clip. *@
+                    <div class="d-flex align-center gap-2" style="min-width: 0;">
+                        <div style="min-width: 0; flex: 1 1 auto;">
+                            <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
+                        </div>
+                        @if (flagTier == FeatureFlagTier.Preview)
+                        {
+                            <PreviewChip Class="jim-nowrap" />
+                        }
+                        else
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Size="Size.Small" Class="jim-nowrap">In development</MudChip>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
+                }
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
@@ -179,7 +213,7 @@
                              ActionText="Clear Search"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
-        else if (_showConfigurableOnly || _showOverriddenOnly)
+        else if (_showConfigurableOnly || _showOverriddenOnly || _showPreviewFeaturesOnly)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
                              PrimaryText="No Service Settings match the filters"
@@ -200,6 +234,7 @@
     private List<ServiceSetting> _settings = new();
     private bool _showConfigurableOnly;
     private bool _showOverriddenOnly;
+    private bool _showPreviewFeaturesOnly;
     private HashSet<string> _revealedSecrets = new();
     private Dictionary<string, (string? Value, bool Error)> _decryptedCache = new();
     private VirtualisedDataGrid<ServiceSetting>? _grid;
@@ -237,10 +272,19 @@
         await LoadSettingsAsync();
     }
 
+    /// <summary>
+    /// Loads every Service Setting, including feature flag (#1781) rows: Preview-tier flags always, In
+    /// Development-tier flags only on a Development host, so a Production administrator never sees one. See
+    /// <see cref="JIM.Web.Helpers.IsFeatureFlagVisible(string, bool)"/> for the rule.
+    /// </summary>
     private async Task LoadSettingsAsync()
     {
         using var jim = JimFactory.Create();
-        _settings = await jim.ServiceSettings.GetAllSettingsAsync();
+        var includeInDevelopment = HostEnvironment.IsDevelopment();
+
+        _settings = (await jim.ServiceSettings.GetAllSettingsAsync())
+            .Where(s => s.Category != ServiceSettingCategory.FeatureFlags || Helpers.IsFeatureFlagVisible(s.Key, includeInDevelopment))
+            .ToList();
         _decryptedCache.Clear();
         _revealedSecrets.Clear();
     }
@@ -264,7 +308,8 @@
     {
         var settings = _settings
             .Where(s => !_showConfigurableOnly || !s.IsReadOnly)
-            .Where(s => !_showOverriddenOnly || (s.IsOverridden && !s.IsReadOnly));
+            .Where(s => !_showOverriddenOnly || (s.IsOverridden && !s.IsReadOnly))
+            .Where(s => !_showPreviewFeaturesOnly || s.Category == ServiceSettingCategory.FeatureFlags);
 
         if (!string.IsNullOrWhiteSpace(request.SearchText))
         {
@@ -321,6 +366,7 @@
     {
         _showConfigurableOnly = false;
         _showOverriddenOnly = false;
+        _showPreviewFeaturesOnly = false;
         await OnFilterChangedAsync();
     }
 
@@ -341,6 +387,7 @@
             "History" => "History",
             "Security" => "Security",
             "Instance" => "Instance",
+            "FeatureFlags" => "Preview Features",
             _ => categoryString ?? "Unknown"
         };
     }
@@ -446,7 +493,16 @@
                     return;
 
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-                await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user, changeReason);
+
+                // A feature flag (#1781) row writes through FeatureFlagServer, so a change to it always enforces
+                // the tier rules and records the same audit trail the flag's own REST/PowerShell surfaces use.
+                // allowInDevelopment is always safe here: an In Development row is only ever visible in this
+                // table on a Development host (see LoadSettingsAsync).
+                if (setting.Category == ServiceSettingCategory.FeatureFlags)
+                    await jim.FeatureFlags.SetFeatureFlagAsync(setting.Key, bool.Parse(newValue), user, allowInDevelopment: true, changeReason);
+                else
+                    await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user, changeReason);
+
                 await ReloadListAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' updated.", Severity.Success);
             }
@@ -483,7 +539,15 @@
                     return;
 
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-                await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user, changeReason);
+
+                // A feature flag's default is always off, and FeatureFlagServer has no separate "unset" state, so
+                // reverting one means writing false explicitly rather than the null a generic setting's revert
+                // stores. See ShowEditDialog for why allowInDevelopment is always safe here.
+                if (setting.Category == ServiceSettingCategory.FeatureFlags)
+                    await jim.FeatureFlags.SetFeatureFlagAsync(setting.Key, false, user, allowInDevelopment: true, changeReason);
+                else
+                    await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user, changeReason);
+
                 await ReloadListAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' reverted to default.", Severity.Success);
             }

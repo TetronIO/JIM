@@ -70,6 +70,11 @@ public static class ConnectedSystemObjectObsoletionService
     /// <param name="recordPreRecallAttributeSnapshot">Called with the joined Metaverse Object BEFORE the deletion-rule
     /// evaluation and attribute recall run, so the caller can snapshot its attribute values for the deletion change
     /// record should the object be deleted (the caller keeps first-snapshot-wins semantics across objects).</param>
+    /// <param name="resolvePendingGeneratedValues">Threaded straight through to
+    /// <see cref="ContributorReElectionService.ReElectSurvivingContributorsAsync"/>; see that parameter's doc
+    /// comment (Unique Value Generation, #242, Phase 2 work package H fix). Its return value (work package J)
+    /// is recorded as <c>GeneratedValueAssigned</c>/<c>GeneratedValueAdopted</c> children of the disconnection
+    /// root outcome built below, exactly as the worker's own ordinary Attribute Flow path records them.</param>
     /// <returns>The staged outcome of the operation, as data; see <see cref="ConnectedSystemObjectObsoletionResult"/>.</returns>
     public static async Task<ConnectedSystemObjectObsoletionResult> ProcessObsoleteConnectedSystemObjectAsync(
         ConnectedSystemObject connectedSystemObject,
@@ -85,7 +90,8 @@ public static class ConnectedSystemObjectObsoletionService
         Func<ActivityRunProfileExecutionItem> executionItemFactory,
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel syncOutcomeTrackingLevel,
         Func<MetaverseObject, int, IReadOnlyCollection<int>, Task<(MvoDeletionDecision Decision, string? PolicySnapshotJson)>> processMvoDeletionRuleAsync,
-        Action<MetaverseObject> recordPreRecallAttributeSnapshot)
+        Action<MetaverseObject> recordPreRecallAttributeSnapshot,
+        Func<MetaverseObject, Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>>>? resolvePendingGeneratedValues = null)
     {
         var result = new ConnectedSystemObjectObsoletionResult();
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
@@ -204,6 +210,7 @@ public static class ConnectedSystemObjectObsoletionService
         var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
         var recallClearedAttributeCount = 0;
         var preservedNoSourceAttributeCount = 0;
+        var generatedValueOutcomes = new List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>();
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
         {
             // Find all MVO attribute values contributed by this Connected System and mark them for removal
@@ -225,7 +232,7 @@ public static class ConnectedSystemObjectObsoletionService
             // A no-op when attribute priority is inactive or the MVO type is unavailable.
             if (priorityContext != null && mvo.Type != null)
             {
-                await ContributorReElectionService.ReElectSurvivingContributorsAsync(
+                generatedValueOutcomes = await ContributorReElectionService.ReElectSurvivingContributorsAsync(
                     mvo,
                     contributedAttributes,
                     recallScope,
@@ -234,7 +241,8 @@ public static class ConnectedSystemObjectObsoletionService
                     syncRepository,
                     isCsoInScopeForImportRule,
                     objectTypes,
-                    expressionEvaluator);
+                    expressionEvaluator,
+                    resolvePendingGeneratedValues);
             }
 
             // The no-source preservation applies only to disappearances, never to a deliberate deletion of a
@@ -341,6 +349,19 @@ public static class ConnectedSystemObjectObsoletionService
                 targetEntityId: mvoId,
                 targetEntityDescription: mvoDisplayName,
                 detailCount: deletionExecutionItem.AttributeFlowCount);
+
+            // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned or
+            // GeneratedValueAdopted child per resolved attribute, mirroring exactly where the worker's ordinary
+            // Attribute Flow path records them: a child of the root, alongside (not nested inside) the
+            // AttributeFlow child below. Not gated to Detailed mode, since a generated value is as much an
+            // audit signal here as it is in the ordinary path.
+            foreach (var (generatedOutcomeType, attributeName, value) in generatedValueOutcomes)
+            {
+                SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot, generatedOutcomeType,
+                    targetEntityId: mvoId,
+                    targetEntityDescription: mvoDisplayName,
+                    detailMessage: $"{attributeName}: {value}");
+            }
 
             // In Detailed mode, add AttributeFlow child under Disconnected when attributes were recalled.
             if (syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed

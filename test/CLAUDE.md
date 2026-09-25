@@ -53,6 +53,10 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 }
 ```
 
+## Tests run with flags on
+
+Feature-flagged behaviour (#1781) is tested as though the feature had shipped, not against the flag-off default. Construct the flag server's backing settings store with the flags under test enabled via `JIM.TestSupport.InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()`: `repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled())` before constructing the `JimApplication`. See `engineering/DEVELOPER_GUIDE.md` > "Feature Flags" for the full lifecycle.
+
 ## Blazor component tests (bUnit)
 
 `test/JIM.Web.Tests/` renders JIM.Web's Razor components with [bUnit](https://bunit.dev) and asserts on them from NUnit (alongside its plain NUnit tests for causality display logic). Component rendering tests exist because some UI defects are only expressible at component level: the `PrefilledFormValidator` bug (the parent's `OnAfterRenderAsync` running before `MudForm`'s, so the initial validation result was overwritten) is a lifecycle-ordering fault that no plain unit test can reach.
@@ -274,6 +278,16 @@ export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /tmp/egress-cas.pem)
 ```
 
 OpenLDAP is the sensible directory type here; Samba AD images may not be cached. Because the bridge is an environment variable, there is nothing in the working tree to revert and nothing that can leak into a commit.
+
+**When Docker Hub answers `429 Too Many Requests` and retries do not clear it, pull through Google's Docker Hub mirror and retag.** The harness needs `bitnamilegacy/openldap:latest`, `diegogslomp/samba-ad-dc:latest` and `389ds/dirsrv:3.1` (the image builds resolve all three even for an OpenLDAP-only run) plus `busybox:1.37.0` for volume seeding; a `429` on any of them fails the run before a test executes. The runner's end-of-run prune removes them again, so repeat this before each run:
+
+```bash
+for img in bitnamilegacy/openldap:latest diegogslomp/samba-ad-dc:latest 389ds/dirsrv:3.1 library/busybox:1.37.0; do
+  docker pull -q "mirror.gcr.io/$img" && docker tag "mirror.gcr.io/$img" "${img#library/}"
+done
+```
+
+(Verified 2026-09-24: Docker Hub refused every pull for over five minutes while the mirror served all four at once.)
 
 (This section previously prescribed copying the CA bundle into the repo root and hand-editing a `COPY`/`ENV SSL_CERT_FILE` pair into each Dockerfile, with a warning to revert it all before committing. That predates the `EXTRA_CA_CERTS_BASE64` argument and is no longer necessary; the build arg installs the CA properly via `update-ca-certificates` instead of overriding `SSL_CERT_FILE` wholesale.)
 

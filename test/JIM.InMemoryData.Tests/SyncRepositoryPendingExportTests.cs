@@ -264,6 +264,46 @@ public class SyncRepositoryPendingExportTests
         Assert.That(result[0].Id, Is.EqualTo(matchingPe.Id));
     }
 
+    /// <summary>
+    /// <see cref="SyncRepository.GetPendingExportsForConfirmationEvaluationAsync"/> feeds the sync
+    /// processors' upfront Pending Export confirmation load: it must return only the Pending Exports
+    /// for the requested Connected System whose Status is neither Pending nor Exported (both skipped
+    /// unconditionally by <c>SyncEngine.EvaluatePendingExportConfirmation</c>) and whose
+    /// ConnectedSystemObjectId is populated (unindexable otherwise). Verifies against a filter matrix:
+    /// a Pending status row, an Exported status row, a qualifying row with no CSO ID, and a qualifying
+    /// row for another Connected System are all excluded.
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportsForConfirmationEvaluationAsync_ReturnsOnlyNonPendingNonExportedWithACsoForThatSystemAsync()
+    {
+        var csoId = Guid.NewGuid();
+
+        var matchingPe = CreatePe(csoId: csoId);
+        matchingPe.Status = PendingExportStatus.ExportNotConfirmed;
+        _repo.SeedPendingExport(matchingPe);
+
+        var pendingPe = CreatePe(csoId: Guid.NewGuid());
+        pendingPe.Status = PendingExportStatus.Pending;
+        _repo.SeedPendingExport(pendingPe);
+
+        var exportedPe = CreatePe(csoId: Guid.NewGuid());
+        exportedPe.Status = PendingExportStatus.Exported;
+        _repo.SeedPendingExport(exportedPe);
+
+        var noCsoPe = CreatePe(); // ConnectedSystemObjectId left null
+        noCsoPe.Status = PendingExportStatus.ExportNotConfirmed;
+        _repo.SeedPendingExport(noCsoPe);
+
+        var otherSystemPe = CreatePe(csoId: Guid.NewGuid(), connectedSystemId: 2);
+        otherSystemPe.Status = PendingExportStatus.ExportNotConfirmed;
+        _repo.SeedPendingExport(otherSystemPe);
+
+        var result = await _repo.GetPendingExportsForConfirmationEvaluationAsync(CsId);
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Id, Is.EqualTo(matchingPe.Id));
+    }
+
     #region GetExecutableExportCountsByChangeTypeAsync (Run Profile Safeguards, #1618)
 
     [Test]

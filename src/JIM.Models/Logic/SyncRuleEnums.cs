@@ -62,7 +62,7 @@ public enum SyncRuleMappingSourcesType
     AdvancedMapping = 3,
 
     /// <summary>
-    /// "JIM generates it" (#242): the mapping carries a <see cref="SyncRuleMappingGeneration"/> settings row, so
+    /// "Generated Value" (#242): the mapping carries a <see cref="SyncRuleMappingGeneration"/> settings row, so
     /// its value is a base expression (optional for a sequence or random token) plus a uniqueness token, resolved
     /// by the unique value service rather than by evaluating the sources alone. Persisted by ordinal through the
     /// REST API's <c>SourceType</c>; append-only.
@@ -130,4 +130,51 @@ public enum InboundCaseNormalisation
     /// Convert the value to title case: the first letter of each word capitalised.
     /// </summary>
     Title = 3
+}
+
+/// <summary>
+/// The result of resolving an Object Matching Rule's export-matching value from a Metaverse Object
+/// (see <see cref="ExportMatchingValue.Resolve"/>): either a value to match on, or the reason none
+/// could be determined. Shared by the per-object export-matching query and the page-scoped batch
+/// candidate query so both agree on what counts as a resolvable value.
+/// </summary>
+public enum ExportMatchingOutcome
+{
+    /// <summary>
+    /// A value was resolved and export matching can proceed.
+    /// </summary>
+    Resolved = 0,
+
+    /// <summary>
+    /// The Object Matching Rule has no sources; there is nothing to match on.
+    /// </summary>
+    NoSources = 1,
+
+    /// <summary>
+    /// The Object Matching Rule has more than one source; advanced (multi-source) matching is not yet
+    /// supported.
+    /// </summary>
+    MultipleSources = 2,
+
+    /// <summary>
+    /// The rule's source has no Connected System attribute, so export matching has nothing to query
+    /// the connector space on.
+    /// </summary>
+    NoConnectedSystemAttribute = 3,
+
+    /// <summary>
+    /// The rule has no Target Metaverse Attribute, so the Metaverse-side value cannot be determined.
+    /// </summary>
+    NoTargetMetaverseAttribute = 4,
+
+    /// <summary>
+    /// The Metaverse Object has no usable value for the Target Metaverse Attribute: either it holds no
+    /// value for that attribute at all, or the value it does hold is null/empty for its type.
+    /// </summary>
+    NoMetaverseValue = 5,
+
+    /// <summary>
+    /// The Target Metaverse Attribute's data type is not supported for export matching.
+    /// </summary>
+    UnsupportedAttributeType = 6
 }

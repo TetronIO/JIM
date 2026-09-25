@@ -1334,3 +1334,103 @@ Describe 'Get-JIMMetaverseObjectProvenance' {
         It 'Should document its output shape' { $help.returnValues | Out-String | Should -Match 'MetaverseObjectId' }
     }
 }
+
+Describe 'Get-JIMGeneratedValue' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMGeneratedValue
+        }
+
+        It 'Should have a MetaverseObjectId parameter that accepts a Guid' {
+            $command.Parameters['MetaverseObjectId'].ParameterType.Name | Should -Be 'Guid'
+        }
+
+        It 'Should require MetaverseObjectId' {
+            $command.Parameters['MetaverseObjectId'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+                ForEach-Object { $_.Mandatory } | Should -Contain $true
+        }
+
+        It 'Should accept pipeline input by property name' {
+            $command.Parameters['MetaverseObjectId'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+                ForEach-Object { $_.ValueFromPipelineByPropertyName } | Should -Contain $true
+        }
+
+        It 'Should alias MetaverseObjectId to Id, so a Metaverse Object pipes straight in' {
+            $command.Parameters['MetaverseObjectId'].Aliases | Should -Contain 'Id'
+        }
+    }
+
+    Context 'Request composition' {
+
+        It 'Requests the Metaverse Object-scoped generated-values endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $id = [guid]'8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f'
+                Mock Invoke-JIMApi { @() }
+
+                Get-JIMGeneratedValue -MetaverseObjectId $id | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/metaverse/objects/$id/generated-values"
+                }
+            }
+        }
+
+        It 'Emits one object per generated value' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    @(
+                        [PSCustomObject]@{ AssignmentId = [guid]::NewGuid(); AttributeName = 'Account Name'; Value = 'j.smith'; TokenKind = 'OnlyIfTaken' }
+                        [PSCustomObject]@{ AssignmentId = [guid]::NewGuid(); AttributeName = 'Employee Number'; Value = '100042'; TokenKind = 'Sequence' }
+                    )
+                }
+
+                $results = @(Get-JIMGeneratedValue -MetaverseObjectId ([guid]::NewGuid()))
+
+                $results.Count | Should -Be 2
+                $results[0].AttributeName | Should -Be 'Account Name'
+                $results[1].AttributeName | Should -Be 'Employee Number'
+            }
+        }
+
+        It 'Pipes a Metaverse Object straight in via its Id property' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $id = [guid]::NewGuid()
+                Mock Invoke-JIMApi { @() }
+
+                [PSCustomObject]@{ Id = $id } | Get-JIMGeneratedValue | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq "/api/v1/metaverse/objects/$id/generated-values"
+                }
+            }
+        }
+
+        It 'Requires a connection' {
+            InModuleScope JIM {
+                $script:JIMConnection = $null
+                Mock Invoke-JIMApi { @() }
+
+                Get-JIMGeneratedValue -MetaverseObjectId ([guid]::NewGuid()) -ErrorAction SilentlyContinue -ErrorVariable err | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+                $err | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Get-JIMGeneratedValue -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+    }
+}

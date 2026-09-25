@@ -162,6 +162,33 @@ public static class Helpers
     }
 
     /// <summary>
+    /// The catalogue definition for a feature flag's (#1781) Service Setting key, or null when the key does not
+    /// (or no longer) match any <see cref="FeatureFlagCatalogue"/> entry (a stale row not yet pruned by seeding).
+    /// Pure and independently testable, since <see cref="FeatureFlagCatalogue.All"/> is fixed in code.
+    /// </summary>
+    public static FeatureFlagDefinition? GetFeatureFlagDefinition(string flagKey) =>
+        FeatureFlagCatalogue.All.FirstOrDefault(d => d.Key == flagKey);
+
+    /// <summary>
+    /// Whether a feature flag's (#1781) Service Setting row belongs in the Service Settings table: Preview-tier
+    /// flags always, In Development-tier flags only when <paramref name="includeInDevelopment"/> is true (the
+    /// Service Settings page passes <c>IWebHostEnvironment.IsDevelopment()</c>). A key with no catalogue entry
+    /// is never shown.
+    /// </summary>
+    public static bool IsFeatureFlagVisible(string flagKey, bool includeInDevelopment) =>
+        IsFeatureFlagVisible(GetFeatureFlagDefinition(flagKey), includeInDevelopment);
+
+    /// <summary>
+    /// The rule <see cref="IsFeatureFlagVisible(string,bool)"/> implements, taking the definition directly rather
+    /// than a key. Split out as its own overload so it can be exercised against a synthetic
+    /// <see cref="FeatureFlagDefinition"/>: the real <see cref="FeatureFlagCatalogue"/> can carry zero
+    /// Preview-tier entries at a time (it does today), which would otherwise leave "a Preview flag is always
+    /// visible" unprovable against real catalogue data.
+    /// </summary>
+    public static bool IsFeatureFlagVisible(FeatureFlagDefinition? definition, bool includeInDevelopment) =>
+        definition != null && (definition.Tier == FeatureFlagTier.Preview || includeInDevelopment);
+
+    /// <summary>
     /// Extension method that converts a DateTime into the site-wide human-friendly full date/time string
     /// (e.g. "12 Jul 2026 14:30:00"). Unambiguous and culture-independent, unlike the short date/time
     /// formats. Callers are responsible for calling <see cref="DateTime.ToLocalTime"/> first if the value
@@ -388,6 +415,8 @@ public static class Helpers
         return status switch
         {
             ScheduleExecutionStatus.Complete => Color.Success,
+            // Matches ActivityStatus.CompleteWithError: the run finished, but a step failed and was allowed to continue.
+            ScheduleExecutionStatus.CompleteWithError => Color.Tertiary,
             ScheduleExecutionStatus.InProgress => Color.Primary,
             ScheduleExecutionStatus.Failed => Color.Error,
             ScheduleExecutionStatus.Cancelled => Color.Warning,

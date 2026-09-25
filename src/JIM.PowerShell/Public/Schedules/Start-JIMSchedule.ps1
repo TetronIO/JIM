@@ -14,8 +14,8 @@ function Start-JIMSchedule {
         The unique identifier (GUID) of the Schedule to start.
 
     .PARAMETER Wait
-        If specified, waits for the schedule execution to complete and returns
-        the execution result.
+        If specified, waits for the schedule execution to finish (Complete, CompleteWithError, Failed or
+        Cancelled) and returns the execution result.
 
     .PARAMETER Timeout
         Maximum time to wait for completion when -Wait is specified.
@@ -83,7 +83,7 @@ function Start-JIMSchedule {
                 if ($Wait) {
                     $startTime = [DateTime]::UtcNow
                     $pollInterval = 5  # seconds
-                    $terminalStatuses = @('Complete', 'Failed', 'Cancelled')
+                    $terminalStatuses = @('Complete', 'CompleteWithError', 'Failed', 'Cancelled')
 
                     Write-Verbose "Waiting for execution to complete (timeout: $Timeout)..."
 

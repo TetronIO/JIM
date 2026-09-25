@@ -143,6 +143,18 @@
         </MudAlert>
     }
 
+    @* ─── Continued past a failure ─── *@
+    @* The run reached its end, but one or more steps failed and were set to let the Schedule continue (#1787). A
+       warning rather than an error: nothing stopped, but the run was not clean, and the message names the steps. *@
+    @if (_detail.Execution.Status == ScheduleExecutionStatus.CompleteWithError)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-6">
+            <MudText Typo="Typo.body1" Style="white-space: pre-wrap; word-break: break-word;">
+                @ScheduleExecutionDisplay.CompleteWithErrorMessage(_detail.Execution.ErrorMessage)
+            </MudText>
+        </MudAlert>
+    }
+
     @* ─── Steps ─── *@
     @* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
        and the toolbar count) lives in the shared grid; this page holds the execution's steps already, so windows
@@ -193,6 +205,14 @@
                             @context.Item.ErrorMessage
                         </MudText>
                     }
+                    @* Why a step that never started was cancelled. An explanation, not an error, so it reads as
+                       secondary text rather than in the error colour. *@
+                    @if (context.Item.Status == ScheduleExecutionStepStatus.Cancelled && !string.IsNullOrWhiteSpace(context.Item.CancellationReason))
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @context.Item.CancellationReason
+                        </MudText>
+                    }
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn T="ScheduleExecutionStepState" Title="Connected System" Sortable="false">
@@ -223,7 +243,7 @@
                         </MudChip>
                         @if (context.Item.ContinueOnFailure && IsFailedStep(context.Item.Status))
                         {
-                            <MudTooltip Text="This step was configured to let the execution continue after a failure" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@ScheduleFailureBehaviourDisplay.ContinuedAfterFailure(context.Item.FailureBehaviourSource)" Arrow="true" Placement="Placement.Top">
                                 <MudIcon Icon="@Icons.Material.Filled.SkipNext" Class="mud-text-secondary" />
                             </MudTooltip>
                         }

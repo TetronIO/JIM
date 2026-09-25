@@ -284,6 +284,15 @@
     public Color ConfirmButtonColour { get; set; } = Color.Error;
 
     /// <summary>
+    /// Disables the confirm action without treating the change as blocked: unlike <see cref="Blockers"/>, which
+    /// replaces the whole dialog body with "this cannot be done" alerts, this leaves <see cref="LeadingContent"/>
+    /// and every other section rendering normally for a caller stating "there is nothing to do" rather than
+    /// "this cannot be done" (for example, "Start again" when the counter already stands at Start at).
+    /// </summary>
+    [Parameter]
+    public bool DisableConfirm { get; set; }
+
+    /// <summary>
     /// Performs the change. Return true when it succeeded, which closes the dialog; return false to
     /// keep the dialog open so the administrator retains their context and can retry. The caller owns
     /// error reporting; an exception propagates rather than being swallowed here.
@@ -301,7 +310,7 @@
     private bool PhraseSatisfied =>
         !PhraseRequired || string.Equals(_typedPhrase?.Trim(), ConfirmationPhrase, StringComparison.Ordinal);
 
-    private bool CanConfirm => !Loading && !Blocked && !_busy && PhraseSatisfied;
+    private bool CanConfirm => !Loading && !Blocked && !_busy && !DisableConfirm && PhraseSatisfied;
 
     private async Task ConfirmAsync()
     {

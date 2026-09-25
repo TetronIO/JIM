@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -32,12 +33,28 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
         CancellationTokenSource cancellationTokenSource,
-        ActivityPhaseReporter? phaseReporter = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter)
+        ActivityPhaseReporter? phaseReporter = null,
+        UniqueValueReservationSet? uniqueValueReservations = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations)
     {
     }
 
     public async Task PerformFullSyncAsync()
+    {
+        try
+        {
+            await PerformFullSyncCoreAsync();
+        }
+        finally
+        {
+            // Unique Value Generation (#242, Phase 2 work package G): release this run's claims on the
+            // process-wide reservation set whatever happened (success, failure or cancellation), so a value
+            // this run proposed but never committed is not held against every other run for ever.
+            _uniqueValueReservations.ReleaseAll(_activity.Id);
+        }
+    }
+
+    private async Task PerformFullSyncCoreAsync()
     {
         using var syncSpan = Diagnostics.Sync.StartSpan("FullSync");
         syncSpan.SetTag("connectedSystemId", _connectedSystem.Id);
@@ -92,16 +109,20 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // load all Pending Exports once upfront and index by CSO ID for O(1) lookup
-        // this avoids O(n²) behaviour from loading all Pending Exports for every CSO
+        // Load the Pending Exports that confirmation evaluation can actually act on, once upfront, and
+        // index by CSO ID for O(1) lookup. SyncEngine.EvaluatePendingExportConfirmation skips Pending and
+        // Exported statuses unconditionally (the vast majority at scale), so GetPendingExportsForConfirmationEvaluationAsync
+        // filters those out in SQL and never loads the Connected System Object graph GetPendingExportsAsync
+        // loads for every row (35 seconds at 100,000 Connected System Objects). Grouped by the scalar
+        // ConnectedSystemObjectId rather than the ConnectedSystemObject navigation, which this query no
+        // longer loads.
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
         {
-            var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = allPendingExports
-                .Where(pe => pe.ConnectedSystemObject?.Id != null)
-                .GroupBy(pe => pe.ConnectedSystemObject!.Id)
+            var pendingExportsForConfirmation = await _syncRepo.GetPendingExportsForConfirmationEvaluationAsync(_connectedSystem.Id);
+            _pendingExportsByCsoId = pendingExportsForConfirmation
+                .GroupBy(pe => pe.ConnectedSystemObjectId!.Value)
                 .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformFullSyncAsync: Loaded {Count} Pending Exports into lookup dictionary", allPendingExports.Count);
+            Log.Verbose("PerformFullSyncAsync: Loaded {Count} Pending Exports into confirmation lookup dictionary", pendingExportsForConfirmation.Count);
         }
 
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
@@ -116,6 +137,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Object sets, and sharing one would let the recall refresh clobber the main flow's lookups.
             _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(preloadedSyncRules: allSyncRules);
         }
+
+        // Unique Value Generation (#242, Phase 2 work package G) per-run setup: after the export evaluation
+        // cache (its participating-targets precompute reads ExportRulesByMvoTypeId), before the page loop.
+        // A no-op, costing nothing further this run, when activeSyncRules carries no generated import mapping.
+        await PrepareUniqueValueGenerationAsync(activeSyncRules);
 
         // Load settings once at start of sync
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
@@ -191,6 +217,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // onto the same canonical instance as this navigation, rather than two distinct loads of the
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
+
+            // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
+            // run has no generated mappings.
+            await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
             // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -289,6 +319,13 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // are properly tracked, and only persist at page boundaries to batch database writes.
                 // Progress updates at finer granularity would require a separate DbContext instance.
                 await PersistPendingMetaverseObjectsAsync();
+
+                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
+                // assignments now the objects have real ids, then delete whatever the page's lifecycle
+                // reconciliation decided no longer belongs. Both are no-ops for a run with no generated
+                // mappings, or a page with nothing to commit/delete.
+                await CommitGeneratedValueAssignmentsAsync();
+                await FlushGeneratedValueAssignmentDeletionsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);

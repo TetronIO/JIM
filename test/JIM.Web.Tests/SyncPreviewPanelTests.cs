@@ -107,5 +107,55 @@ public class SyncPreviewPanelTests
 
         Assert.That(cut.FindAll("[data-testid='jim-sync-preview-errors']"), Is.Empty);
         Assert.That(cut.FindAll("[data-testid='jim-sync-preview-warnings']"), Is.Empty);
+        Assert.That(cut.FindAll("[data-testid='jim-sync-preview-generated-value-notice']"), Is.Empty);
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242): a preview naming a generated value carries the honesty note that the
+    /// value shown is only the next free one now.
+    /// </summary>
+    [Test]
+    public void Render_PreviewWithGeneratedValue_ShowsGeneratedValueNotice()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree =
+            [
+                new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                    Children =
+                    [
+                        new SyncOutcomeNode
+                        {
+                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
+                            DetailMessage = "Account Name: jallen42"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var cut = _context.Render<SyncPreviewPanel>(ps => ps
+            .Add(c => c.PreviewResult, preview)
+            .Add(c => c.Context, Context()));
+
+        var notice = cut.Find("[data-testid='jim-sync-preview-generated-value-notice']");
+        Assert.That(notice.TextContent, Does.Contain("Generated values shown are the next free value now."));
+    }
+
+    [Test]
+    public void Render_PreviewWithoutGeneratedValue_ShowsNoGeneratedValueNotice()
+    {
+        var preview = new SyncPreviewResult
+        {
+            OutcomeTree = [new SyncOutcomeNode { OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected }]
+        };
+
+        var cut = _context.Render<SyncPreviewPanel>(ps => ps
+            .Add(c => c.PreviewResult, preview)
+            .Add(c => c.Context, Context()));
+
+        Assert.That(cut.FindAll("[data-testid='jim-sync-preview-generated-value-notice']"), Is.Empty);
     }
 }

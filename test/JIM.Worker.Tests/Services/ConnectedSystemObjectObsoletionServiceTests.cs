@@ -249,4 +249,95 @@ public class ConnectedSystemObjectObsoletionServiceTests
             Assert.That(result.CsoDeletions, Is.Empty);
         }
     }
+
+    /// <summary>
+    /// Unique Value Generation (#242, Phase 2 work package J): when the surviving contributor re-elected
+    /// during this object's obsoletion recall carries a GENERATED mapping, the resolver's outcome (generated
+    /// or adopted, attributed to the surviving mapping) must be recorded as a child of the Disconnected root
+    /// outcome, exactly as the worker's ordinary Attribute Flow path records a generated value. Before this
+    /// fix, the resolver ran and the value was applied correctly, but its outcome was discarded: the delegate
+    /// signature carried no way to return it.
+    /// </summary>
+    [Test]
+    public async Task ProcessObsoleteCso_ReElectedGeneratedMapping_RecordsGeneratedValueOutcomeAsync()
+    {
+        var survivorType = new ConnectedSystemObjectType { Id = 3, Name = "survivor", ConnectedSystemId = SurvivingSourceSystemId };
+        var survivorCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = SurvivingSourceSystemId,
+            Type = survivorType,
+            TypeId = survivorType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObject = _mvo,
+            MetaverseObjectId = _mvo.Id
+        };
+        survivorCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = survivorCso,
+            AttributeId = 900,
+            StringValue = "unused"
+        });
+
+        var displayName = _contributedValue.Attribute!;
+        var survivorRule = new SyncRule
+        {
+            Id = 500,
+            ConnectedSystemId = SurvivingSourceSystemId,
+            MetaverseObjectTypeId = _mvo.Type!.Id,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true
+        };
+        var generatedMapping = new SyncRuleMapping
+        {
+            Id = 900,
+            SyncRule = survivorRule,
+            SyncRuleId = survivorRule.Id,
+            TargetMetaverseAttribute = displayName,
+            TargetMetaverseAttributeId = displayName.Id,
+            Generation = new SyncRuleMappingGeneration()
+        };
+        survivorRule.AttributeFlowRules.Add(generatedMapping);
+
+        _syncRepository.Setup(r => r.GetAllSyncRulesAsync(It.IsAny<bool>())).ReturnsAsync([survivorRule]);
+        _syncRepository.Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdAsync(_mvo.Id)).ReturnsAsync([survivorCso]);
+
+        var priorityContext = new AttributePriorityContext([survivorRule], honourNullAssertions: true);
+
+        var result = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
+            _cso,
+            activeSyncRules: [],
+            ContributorRecallScope.ForObsoletingConnectedSystemObject(_cso),
+            priorityContext,
+            new RemainingImportSourceEvaluator(_syncRepository.Object),
+            _syncEngine,
+            _syncRepository.Object,
+            isCsoInScopeForImportRule: (_, _) => true,
+            objectTypes: [_cso.Type, survivorType],
+            _expressionEvaluator.Object,
+            executionItemFactory: () => new ActivityRunProfileExecutionItem(),
+            ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed,
+            (_, _, _) => Task.FromResult((new MvoDeletionDecision { Fate = MvoDeletionFate.NotDeleted }, (string?)null)),
+            _ => { },
+            resolvePendingGeneratedValues: resolvedMvo =>
+            {
+                // Stand-in for the worker's real resolver: clears the marker and reports what it generated,
+                // exactly the contract ResolvePendingGeneratedValuesAsync fulfils.
+                resolvedMvo.PendingGeneratedValues.Clear();
+                return Task.FromResult(new List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>
+                {
+                    (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, displayName.Name, "generated-value")
+                });
+            });
+
+        var rootOutcome = result.ExecutionItems[0].SyncOutcomes.SingleOrDefault(o => o.ParentSyncOutcome == null);
+        Assert.That(rootOutcome, Is.Not.Null, "the disconnection must still build its root outcome");
+
+        var generatedOutcome = rootOutcome!.Children.SingleOrDefault(c =>
+            c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
+        Assert.That(generatedOutcome, Is.Not.Null,
+            "the resolver's outcome must be recorded as a child of the disconnection root, not discarded");
+        Assert.That(generatedOutcome!.DetailMessage, Is.EqualTo($"{displayName.Name}: generated-value"));
+    }
 }

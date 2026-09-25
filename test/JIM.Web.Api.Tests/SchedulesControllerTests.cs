@@ -920,6 +920,374 @@ public class SchedulesControllerTests
 
     #endregion
 
+    #region Failure handling (#1787)
+
+    [Test]
+    public async Task GetAllAsync_MapsOnStepFailureAndFailedStepIndicesOntoTheDtoAsync()
+    {
+        var headers = new List<ScheduleHeader>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Name = "Nightly HR sync",
+                OnStepFailure = ScheduleFailureBehaviour.Continue,
+                LastExecutionStatus = ScheduleExecutionStatus.CompleteWithError,
+                LastExecutionFailedStepIndices = [1, 2]
+            }
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(1, 20, null, null, false))
+            .ReturnsAsync(new PagedResultSet<ScheduleHeader> { Results = headers, TotalResults = 1, CurrentPage = 1, PageSize = 20 });
+
+        var result = await _controller.GetAllAsync() as OkObjectResult;
+        var dto = (result?.Value as PaginatedResponse<ScheduleDto>)!.Items.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.OnStepFailure, Is.EqualTo(ScheduleFailureBehaviour.Continue));
+            Assert.That(dto.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.CompleteWithError));
+            Assert.That(dto.LastExecutionFailedStepIndices, Is.EqualTo(new[] { 1, 2 }));
+        }
+    }
+
+    [Test]
+    public async Task GetByIdAsync_MapsScheduleAndStepFailureBehaviourAsync()
+    {
+        // Each step reports its own setting (onFailure), what it will actually do (continueOnFailure, effective) and
+        // where that comes from. The Schedule is passed to the resolver explicitly: the steps' Schedule navigation is
+        // deliberately left unset here, as it may be on a real load.
+        var id = Guid.NewGuid();
+        var schedule = new Schedule
+        {
+            Id = id,
+            Name = "Nightly HR sync",
+            OnStepFailure = ScheduleFailureBehaviour.Continue,
+            Steps = new List<ScheduleStep>
+            {
+                new() { Id = Guid.NewGuid(), StepIndex = 0, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 1, RunProfileId = 1, OnFailure = ScheduleStepFailureBehaviour.FollowSchedule },
+                new() { Id = Guid.NewGuid(), StepIndex = 1, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 1, RunProfileId = 2, OnFailure = ScheduleStepFailureBehaviour.Stop },
+                new() { Id = Guid.NewGuid(), StepIndex = 2, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 1, RunProfileId = 3, OnFailure = ScheduleStepFailureBehaviour.Continue }
+            }
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id)).ReturnsAsync(schedule);
+
+        var result = await _controller.GetByIdAsync(id) as OkObjectResult;
+        var dto = (result?.Value as ScheduleDetailDto)!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.OnStepFailure, Is.EqualTo(ScheduleFailureBehaviour.Continue));
+            Assert.That(dto.LastExecutionFailedStepIndices, Is.Null, "only the list endpoint populates the last-execution fields");
+
+            Assert.That(dto.Steps[0].OnFailure, Is.EqualTo(ScheduleStepFailureBehaviour.FollowSchedule));
+            Assert.That(dto.Steps[0].ContinueOnFailure, Is.True, "follows a continuing Schedule");
+            Assert.That(dto.Steps[0].FailureBehaviourSource, Is.EqualTo(ScheduleFailureBehaviourSource.Schedule));
+
+            Assert.That(dto.Steps[1].OnFailure, Is.EqualTo(ScheduleStepFailureBehaviour.Stop));
+            Assert.That(dto.Steps[1].ContinueOnFailure, Is.False);
+            Assert.That(dto.Steps[1].FailureBehaviourSource, Is.EqualTo(ScheduleFailureBehaviourSource.Step));
+
+            Assert.That(dto.Steps[2].OnFailure, Is.EqualTo(ScheduleStepFailureBehaviour.Continue));
+            Assert.That(dto.Steps[2].ContinueOnFailure, Is.True);
+            Assert.That(dto.Steps[2].FailureBehaviourSource, Is.EqualTo(ScheduleFailureBehaviourSource.Step));
+        }
+    }
+
+    [TestCase(null, ScheduleFailureBehaviour.Stop)]
+    [TestCase(ScheduleFailureBehaviour.Continue, ScheduleFailureBehaviour.Continue)]
+    [TestCase(ScheduleFailureBehaviour.Stop, ScheduleFailureBehaviour.Stop)]
+    public async Task CreateAsync_OnStepFailure_DefaultsToStopWhenAbsentAsync(ScheduleFailureBehaviour? requested, ScheduleFailureBehaviour expected)
+    {
+        var request = new CreateScheduleRequest
+        {
+            Name = "New Schedule",
+            TriggerType = ScheduleTriggerType.Manual,
+            OnStepFailure = requested,
+            Steps = new List<ScheduleStepRequest>()
+        };
+        Schedule? captured = null;
+        _mockSchedulingRepository.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => captured = s)
+            .Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid id) => new Schedule { Id = id, Name = request.Name, Steps = new List<ScheduleStep>() });
+
+        await _controller.CreateAsync(request);
+
+        Assert.That(captured!.OnStepFailure, Is.EqualTo(expected));
+    }
+
+    [TestCase(true, null, ScheduleStepFailureBehaviour.Continue)]
+    [TestCase(false, null, ScheduleStepFailureBehaviour.FollowSchedule)]
+    [TestCase(null, null, ScheduleStepFailureBehaviour.FollowSchedule)]
+    [TestCase(true, ScheduleStepFailureBehaviour.Stop, ScheduleStepFailureBehaviour.Stop)]
+    public async Task CreateAsync_StepFailureBehaviour_FollowsTheWriteRuleAsync(bool? continueOnFailure, ScheduleStepFailureBehaviour? onFailure, ScheduleStepFailureBehaviour expected)
+    {
+        var request = new CreateScheduleRequest
+        {
+            Name = "New Schedule",
+            TriggerType = ScheduleTriggerType.Manual,
+            Steps = new List<ScheduleStepRequest>
+            {
+                new() { StepIndex = 0, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 1, RunProfileId = 1, ContinueOnFailure = continueOnFailure, OnFailure = onFailure }
+            }
+        };
+        Schedule? captured = null;
+        _mockSchedulingRepository.Setup(r => r.CreateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => captured = s)
+            .Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid id) => new Schedule { Id = id, Name = request.Name, Steps = new List<ScheduleStep>() });
+
+        await _controller.CreateAsync(request);
+
+        Assert.That(captured!.Steps.Single().OnFailure, Is.EqualTo(expected));
+    }
+
+    [TestCase(ScheduleFailureBehaviour.Continue, null, ScheduleFailureBehaviour.Continue)]
+    [TestCase(ScheduleFailureBehaviour.Stop, null, ScheduleFailureBehaviour.Stop)]
+    [TestCase(ScheduleFailureBehaviour.Stop, ScheduleFailureBehaviour.Continue, ScheduleFailureBehaviour.Continue)]
+    [TestCase(ScheduleFailureBehaviour.Continue, ScheduleFailureBehaviour.Stop, ScheduleFailureBehaviour.Stop)]
+    public async Task UpdateAsync_OnStepFailure_LeftUnchangedWhenAbsentAsync(
+        ScheduleFailureBehaviour stored,
+        ScheduleFailureBehaviour? requested,
+        ScheduleFailureBehaviour expected)
+    {
+        var id = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Schedule", OnStepFailure = stored, Steps = new List<ScheduleStep>() };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Schedule",
+            TriggerType = ScheduleTriggerType.Manual,
+            OnStepFailure = requested,
+            Steps = new List<ScheduleStepRequest>()
+        };
+        Schedule? updated = null;
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()))
+            .Callback<Schedule>(s => updated = s)
+            .Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep>());
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id))
+            .ReturnsAsync(new Schedule { Id = id, Name = "Schedule", Steps = new List<ScheduleStep>() });
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(updated!.OnStepFailure, Is.EqualTo(expected));
+    }
+
+    [TestCase(ScheduleFailureBehaviour.Continue, ScheduleStepFailureBehaviour.FollowSchedule, true, ScheduleStepFailureBehaviour.FollowSchedule)]
+    [TestCase(ScheduleFailureBehaviour.Stop, ScheduleStepFailureBehaviour.FollowSchedule, false, ScheduleStepFailureBehaviour.FollowSchedule)]
+    [TestCase(ScheduleFailureBehaviour.Continue, ScheduleStepFailureBehaviour.FollowSchedule, false, ScheduleStepFailureBehaviour.Stop)]
+    [TestCase(ScheduleFailureBehaviour.Stop, ScheduleStepFailureBehaviour.FollowSchedule, true, ScheduleStepFailureBehaviour.Continue)]
+    public async Task UpdateAsync_ExistingStepContinueOnFailure_IsJudgedAgainstItsCurrentEffectiveBehaviourAsync(
+        ScheduleFailureBehaviour storedScheduleSetting,
+        ScheduleStepFailureBehaviour storedStepSetting,
+        bool requestedContinueOnFailure,
+        ScheduleStepFailureBehaviour expected)
+    {
+        // The round-trip pinning correction, end to end: a get-modify-put client echoing continueOnFailure leaves the
+        // step as it was; only asking for the opposite of what it does now changes it.
+        var (id, stepId, savedOnFailure) = SetUpUpdateOfOneExistingStep(storedScheduleSetting, storedStepSetting);
+        var request = UpdateRequestWithOneStep(stepId, requestedContinueOnFailure, onFailure: null, onStepFailure: null);
+
+        await _controller.UpdateAsync(id, request);
+
+        Assert.That(savedOnFailure(), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public async Task UpdateAsync_ScheduleAndStepChangedTogether_JudgesTheStepAgainstTheStoredScheduleSettingAsync()
+    {
+        // The Schedule moves Stop -> Continue in the same request, and the step (following it) is echoed with the
+        // continueOnFailure it read before the update, false. Judged against the stored Stop, false is unchanged, so the
+        // step keeps following the Schedule and now continues; judged against the new Continue it would be pinned to Stop.
+        var (id, stepId, savedOnFailure) = SetUpUpdateOfOneExistingStep(ScheduleFailureBehaviour.Stop, ScheduleStepFailureBehaviour.FollowSchedule);
+        var request = UpdateRequestWithOneStep(stepId, continueOnFailure: false, onFailure: null, onStepFailure: ScheduleFailureBehaviour.Continue);
+
+        await _controller.UpdateAsync(id, request);
+
+        Assert.That(savedOnFailure(), Is.EqualTo(ScheduleStepFailureBehaviour.FollowSchedule));
+    }
+
+    [Test]
+    public async Task UpdateAsync_ExistingStepWithOnFailure_TakesItVerbatimAsync()
+    {
+        var (id, stepId, savedOnFailure) = SetUpUpdateOfOneExistingStep(ScheduleFailureBehaviour.Continue, ScheduleStepFailureBehaviour.Continue);
+        var request = UpdateRequestWithOneStep(stepId, continueOnFailure: true, onFailure: ScheduleStepFailureBehaviour.FollowSchedule, onStepFailure: null);
+
+        await _controller.UpdateAsync(id, request);
+
+        Assert.That(savedOnFailure(), Is.EqualTo(ScheduleStepFailureBehaviour.FollowSchedule));
+    }
+
+    [Test]
+    public async Task UpdateAsync_BuiltInScheduleOnStepFailureChanged_ReturnsBadRequestAsync()
+    {
+        var id = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, OnStepFailure = ScheduleFailureBehaviour.Stop, Steps = new List<ScheduleStep>() };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Temporal Scope Reconciliation",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "0 * * * *",
+            OnStepFailure = ScheduleFailureBehaviour.Continue,
+            Steps = new List<ScheduleStepRequest>()
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep>());
+
+        var result = await _controller.UpdateAsync(id, request) as BadRequestObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That((result!.Value as ApiErrorResponse)?.Message, Does.Contain("cannot be changed"));
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAsync_BuiltInScheduleOnStepFailureUnchanged_ReturnsOkAsync()
+    {
+        // Sending the stored value back is not a change, so a client that round-trips the whole Schedule still works.
+        var id = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, OnStepFailure = ScheduleFailureBehaviour.Stop, Steps = new List<ScheduleStep>() };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Temporal Scope Reconciliation",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "0 * * * *",
+            OnStepFailure = ScheduleFailureBehaviour.Stop,
+            Steps = new List<ScheduleStepRequest>()
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>())).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep>());
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id)).ReturnsAsync(existingSchedule);
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    [TestCase(null, true)]
+    [TestCase(ScheduleStepFailureBehaviour.Continue, null)]
+    [TestCase(ScheduleStepFailureBehaviour.Stop, null)]
+    public async Task UpdateAsync_BuiltInStepFailureBehaviourChanged_ReturnsBadRequestAsync(ScheduleStepFailureBehaviour? onFailure, bool? continueOnFailure)
+    {
+        // A built-in step follows its (Stop) Schedule; giving it a setting of its own, by either field, is a step change.
+        var (id, request) = SetUpBuiltInUpdateWithItsOneStep(onFailure, continueOnFailure);
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Never);
+    }
+
+    [TestCase(null, false)]
+    [TestCase(ScheduleStepFailureBehaviour.FollowSchedule, null)]
+    [TestCase(null, null)]
+    public async Task UpdateAsync_BuiltInStepFailureBehaviourEchoed_ReturnsOkAsync(ScheduleStepFailureBehaviour? onFailure, bool? continueOnFailure)
+    {
+        var (id, request) = SetUpBuiltInUpdateWithItsOneStep(onFailure, continueOnFailure);
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    /// <summary>
+    /// Sets up an update of a built-in Schedule (Stop) whose one step follows it, sending that step back with the given
+    /// failure fields.
+    /// </summary>
+    private (Guid Id, UpdateScheduleRequest Request) SetUpBuiltInUpdateWithItsOneStep(ScheduleStepFailureBehaviour? onFailure, bool? continueOnFailure)
+    {
+        var id = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, Steps = new List<ScheduleStep>() };
+        var existingStep = new ScheduleStep { Id = stepId, ScheduleId = id, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope" };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Temporal Scope Reconciliation",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "0 * * * *",
+            Steps = new List<ScheduleStepRequest>
+            {
+                new() { Id = stepId, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope", OnFailure = onFailure, ContinueOnFailure = continueOnFailure }
+            }
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>())).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep> { existingStep });
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id))
+            .ReturnsAsync(new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, Steps = new List<ScheduleStep> { existingStep } });
+        return (id, request);
+    }
+
+    /// <summary>
+    /// Sets up an update of a user Schedule holding one existing RunProfile step, and returns a reader for the OnFailure
+    /// the controller saved on that step.
+    /// </summary>
+    private (Guid Id, Guid StepId, Func<ScheduleStepFailureBehaviour?> SavedOnFailure) SetUpUpdateOfOneExistingStep(
+        ScheduleFailureBehaviour storedScheduleSetting,
+        ScheduleStepFailureBehaviour storedStepSetting)
+    {
+        var id = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Schedule", OnStepFailure = storedScheduleSetting, Steps = new List<ScheduleStep>() };
+
+        // Separate instances, as the web host's untracked loads give: the list the controller compares against, and the
+        // step it reloads to update.
+        ScheduleStep NewStoredStep() => new()
+        {
+            Id = stepId,
+            ScheduleId = id,
+            StepIndex = 0,
+            StepType = ScheduleStepType.RunProfile,
+            ConnectedSystemId = 1,
+            RunProfileId = 1,
+            OnFailure = storedStepSetting
+        };
+
+        ScheduleStep? saved = null;
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>())).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(() => new List<ScheduleStep> { NewStoredStep() });
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepAsync(stepId)).ReturnsAsync(NewStoredStep);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleStepAsync(It.IsAny<ScheduleStep>()))
+            .Callback<ScheduleStep>(s => saved = s)
+            .Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id))
+            .ReturnsAsync(new Schedule { Id = id, Name = "Schedule", Steps = new List<ScheduleStep>() });
+
+        return (id, stepId, () => saved?.OnFailure);
+    }
+
+    private static UpdateScheduleRequest UpdateRequestWithOneStep(
+        Guid stepId,
+        bool? continueOnFailure,
+        ScheduleStepFailureBehaviour? onFailure,
+        ScheduleFailureBehaviour? onStepFailure) => new()
+    {
+        Name = "Schedule",
+        TriggerType = ScheduleTriggerType.Manual,
+        OnStepFailure = onStepFailure,
+        Steps = new List<ScheduleStepRequest>
+        {
+            new()
+            {
+                Id = stepId,
+                StepIndex = 0,
+                StepType = ScheduleStepType.RunProfile,
+                ConnectedSystemId = 1,
+                RunProfileId = 1,
+                ContinueOnFailure = continueOnFailure,
+                OnFailure = onFailure
+            }
+        }
+    };
+
+    #endregion
+
     #region DeleteAsync tests
 
     [Test]

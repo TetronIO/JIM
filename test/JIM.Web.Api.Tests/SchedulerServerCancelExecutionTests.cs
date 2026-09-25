@@ -48,6 +48,7 @@ public class SchedulerServerCancelExecutionTests
         _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepository.Object);
 
         _application = new JimApplication(_mockRepository.Object);
+        _mockSchedulingRepository.EmulateConditionalTransitions();
     }
 
     [TearDown]
@@ -126,6 +127,60 @@ public class SchedulerServerCancelExecutionTests
         // Assert
         Assert.That(result, Is.False);
         Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.Complete));
+    }
+
+    [Test]
+    public async Task CancelScheduleExecution_FinishedBeforeTheCancellationLanded_ReturnsFalseAndLeavesItFinishedAsync()
+    {
+        // The execution read InProgress, but completed before the cancellation was written. A finished execution
+        // stays finished (#1768): the cancellation must not relabel a run that completed.
+        var executionId = Guid.NewGuid();
+        var execution = new ScheduleExecution { Id = executionId, Status = ScheduleExecutionStatus.InProgress };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(executionId)).ReturnsAsync(execution);
+
+        // By the time the cancellation is written, the stored execution is no longer Queued or InProgress: the
+        // conditional write matches nothing.
+        _mockSchedulingRepository.Setup(r => r.TryFinishScheduleExecutionAsync(execution,
+                It.IsAny<IReadOnlyCollection<ScheduleExecutionStatus>>(), ScheduleExecutionStatus.Cancelled, It.IsAny<string?>()))
+            .ReturnsAsync(false);
+
+        var result = await _application.Scheduler.CancelScheduleExecutionAsync(executionId);
+
+        Assert.That(result, Is.False);
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleExecutionAsync(It.IsAny<ScheduleExecution>()), Times.Never,
+            "an unconditional write would overwrite however the execution actually finished");
+        _mockTaskingRepository.Verify(r => r.GetWorkerTasksByScheduleExecutionAsync(executionId), Times.Never,
+            "nothing of a finished execution is touched");
+    }
+
+    [Test]
+    public async Task CancelScheduleExecution_StepsThatHadNotStarted_SayWhyTheyDidNotRunAsync()
+    {
+        var executionId = Guid.NewGuid();
+        var execution = new ScheduleExecution { Id = executionId, Status = ScheduleExecutionStatus.InProgress };
+        var queuedActivity = new Activity { Id = Guid.NewGuid(), Status = ActivityStatus.InProgress };
+        var waitingActivity = new Activity { Id = Guid.NewGuid(), Status = ActivityStatus.InProgress };
+        var processingActivity = new Activity { Id = Guid.NewGuid(), Status = ActivityStatus.InProgress, Message = "Importing objects" };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(executionId)).ReturnsAsync(execution);
+        _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(executionId))
+            .ReturnsAsync(new List<WorkerTask>
+            {
+                new SynchronisationWorkerTask { Id = Guid.NewGuid(), Status = WorkerTaskStatus.Processing, ScheduleExecutionId = executionId, Activity = processingActivity },
+                new SynchronisationWorkerTask { Id = Guid.NewGuid(), Status = WorkerTaskStatus.Queued, ScheduleExecutionId = executionId, Activity = queuedActivity },
+                new SynchronisationWorkerTask { Id = Guid.NewGuid(), Status = WorkerTaskStatus.WaitingForPreviousStep, ScheduleExecutionId = executionId, Activity = waitingActivity }
+            });
+
+        await _application.Scheduler.CancelScheduleExecutionAsync(executionId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(queuedActivity.Message, Is.EqualTo(ScheduleStepNotRunReasons.ExecutionCancelled));
+            Assert.That(waitingActivity.Message, Is.EqualTo(ScheduleStepNotRunReasons.ExecutionCancelled));
+            Assert.That(processingActivity.Message, Is.EqualTo("Importing objects"),
+                "a step that was already running did run, so it is not labelled as not run");
+        }
     }
 
     [Test]

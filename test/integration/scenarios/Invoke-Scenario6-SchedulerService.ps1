@@ -324,9 +324,9 @@ if ($Step -eq "ManualTrigger" -or $Step -eq "All") {
     while ($elapsed -lt $maxWaitTime) {
         $finalExecution = Get-JIMScheduleExecution -Id $execution.id
 
-        # Status: Queued, InProgress, Complete, Failed, Cancelled (or 0,1,2,3,4)
+        # Status: Queued, InProgress, Complete, CompleteWithError, Failed, Cancelled
         $statusValue = $finalExecution.status
-        $isTerminal = $statusValue -eq "Complete" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
+        $isTerminal = $statusValue -in @("Complete", "CompleteWithError", "Failed", "Cancelled")
         # Also check numeric values if status is returned as int
         if ($statusValue -is [int] -or $statusValue -is [long]) {
             $isTerminal = $statusValue -ge 2
@@ -554,7 +554,7 @@ if ($Step -eq "MultiStep" -or $Step -eq "All") {
         $currentExecution = Get-JIMScheduleExecution -Id $execution.id
 
         $statusValue = $currentExecution.status
-        $isTerminal = $statusValue -eq "Complete" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
+        $isTerminal = $statusValue -in @("Complete", "CompleteWithError", "Failed", "Cancelled")
         if ($statusValue -is [int] -or $statusValue -is [long]) {
             $isTerminal = $statusValue -ge 2
         }
@@ -902,7 +902,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                 $currentExecution = Get-JIMScheduleExecution -Id $execution.id
 
                 $statusValue = $currentExecution.status
-                $isTerminal = $statusValue -eq "Complete" -or $statusValue -eq "Failed" -or $statusValue -eq "Cancelled"
+                $isTerminal = $statusValue -in @("Complete", "CompleteWithError", "Failed", "Cancelled")
                 if ($statusValue -is [int] -or $statusValue -is [long]) {
                     $isTerminal = $statusValue -ge 2
                 }

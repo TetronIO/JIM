@@ -1,5 +1,6 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
+@using JIM.Models.Transactional
 @using System.Globalization
 @using Utilities
 @using JIM.Web.Models
@@ -99,7 +100,7 @@
                                 else if (row.Group != null)
                                 {
                                     var group = row.Group;
-                                    var isSelected = SelectedAttributeId.HasValue && SelectedAttributeId.Value == group.AttributeId;
+                                    var isSelected = SelectedAttributeId == group.AttributeId;
                                     @* The row's @onclick is a mouse convenience only; the real, keyboard-accessible
                                        affordance is the attribute-name button below (a <tr> containing links
                                        cannot itself be a button, and nested interactive content inside role="button"
@@ -245,6 +246,15 @@
     /// <summary>The object's attribute origins (#399), loaded by the host when this view is shown. Null while loading.</summary>
     [Parameter]
     public MetaverseObjectProvenance? Provenance { get; set; }
+
+    /// <summary>
+    /// Generated-value assignments for this Metaverse Object (Unique Value Generation, #242, Phase 3, Work
+    /// Package D2), keyed by attribute name. Loaded by the host with the provenance, like everything else this
+    /// component shows, so it stays a presentational renderer of its parameters.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, GeneratedValueAssignmentHeader> GeneratedValueAssignments { get; set; } =
+        new Dictionary<string, GeneratedValueAssignmentHeader>();
 
     /// <summary>Whether the host is loading <see cref="Provenance"/>.</summary>
     [Parameter]
@@ -504,6 +514,12 @@
         else if (group.Values.Count == 1)
         {
             @RenderValue(group.Values[0])
+            @* Unique Value Generation (#242, Phase 3, Work Package D2): a generated value only ever targets a
+               single-valued attribute, so the provenance chip only ever needs to consider this branch. *@
+            @if (GeneratedValueAssignments.TryGetValue(group.AttributeName, out var assignment))
+            {
+                <GeneratedValueProvenanceChip Assignment="assignment" Class="ml-2" />
+            }
         }
         else if (group.TotalCount <= MvaInlineThreshold)
         {

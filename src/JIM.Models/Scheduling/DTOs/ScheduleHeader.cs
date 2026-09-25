@@ -85,6 +85,11 @@ public class ScheduleHeader
     public string? IntervalWindowEnd { get; set; }
 
     /// <summary>
+    /// What the Schedule does when a step fails, for steps that follow the Schedule (#1787).
+    /// </summary>
+    public ScheduleFailureBehaviour OnStepFailure { get; set; }
+
+    /// <summary>
     /// When the Schedule is next due to run (UTC).
     /// </summary>
     public DateTime? NextRunTime { get; set; }
@@ -129,6 +134,13 @@ public class ScheduleHeader
     /// How many steps the most recent execution set out to run.
     /// </summary>
     public int? LastExecutionTotalSteps { get; set; }
+
+    /// <summary>
+    /// The steps (0-based, ascending) that failed in the most recent execution and were allowed to let the Schedule
+    /// continue (#1787). Populated when that execution is Complete With Error, so the Schedules list can name them;
+    /// empty otherwise.
+    /// </summary>
+    public int[] LastExecutionFailedStepIndices { get; set; } = [];
 
     /// <summary>
     /// When the most recent execution finished (UTC). Null while it is still running.

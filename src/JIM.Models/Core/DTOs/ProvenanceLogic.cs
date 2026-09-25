@@ -137,9 +137,8 @@ public static class ProvenanceLogic
     {
         var entries = new List<AttributeHistoryEntry>();
 
-        foreach (var group in rawEntriesNewestFirst.GroupBy(r => r.ChangeId))
+        foreach (var rows in rawEntriesNewestFirst.GroupBy(r => r.ChangeId).Select(g => g.ToList()))
         {
-            var rows = group.ToList();
             var added = rows.FirstOrDefault(r => r.ValueChangeType == ValueChangeType.Add);
             var removed = rows.FirstOrDefault(r => r.ValueChangeType == ValueChangeType.Remove);
 

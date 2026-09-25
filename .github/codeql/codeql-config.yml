@@ -60,6 +60,13 @@
 #   workflow runs between analysis and upload; it reads this block, so
 #   this file remains the single place a path is excluded.
 #
+#   C# is now built by hand from the projects under src/ only (see the
+#   matrix in codeql.yml) instead of by Autobuild over JIM.sln, so the C#
+#   test projects are no longer built and therefore never extracted: no C#
+#   result can start or sit in them. The filter stays as the enforcement
+#   point for every language regardless, and for any test code a future
+#   build step brings back into the C# build.
+#
 #   The filter also removes a result whose taint SOURCE is in an excluded
 #   path when every one of its code flows starts there. The same fixture
 #   reads above flow from the test into the LDAP Connector's own log calls,

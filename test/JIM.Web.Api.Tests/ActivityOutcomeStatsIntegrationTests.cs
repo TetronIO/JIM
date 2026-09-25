@@ -510,6 +510,59 @@ public class ActivityOutcomeStatsIntegrationTests
 
     #endregion
 
+    #region Test 11: Unique Value Generation stats
+
+    [Test]
+    public async Task GetStats_GeneratedValueOutcomeBased_CountsAssignedAdoptedAndFailuresAsync()
+    {
+        // Arrange: 2 GeneratedValueAssigned outcomes, 1 GeneratedValueAdopted outcome (all children of a
+        // Joined root, mirroring where the worker records them), plus one RPEI per generation failure kind.
+        var activity = await CreateActivityAsync();
+
+        var rpei1 = await CreateRpeiAsync(activity, ObjectChangeType.Joined);
+        var joined = await CreateOutcomeAsync(rpei1, ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+        await CreateOutcomeAsync(rpei1, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, parent: joined, ordinal: 0);
+        await CreateOutcomeAsync(rpei1, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, parent: joined, ordinal: 1);
+
+        var rpei2 = await CreateRpeiAsync(activity, ObjectChangeType.AttributeFlow);
+        var attributeFlow = await CreateOutcomeAsync(rpei2, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+        await CreateOutcomeAsync(rpei2, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, parent: attributeFlow, ordinal: 0);
+
+        await CreateRpeiAsync(activity, ObjectChangeType.AttributeFlow, errorType: ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted);
+        await CreateRpeiAsync(activity, ObjectChangeType.AttributeFlow, errorType: ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded);
+        await CreateRpeiAsync(activity, ObjectChangeType.Updated, errorType: ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved);
+
+        // Act
+        var stats = await _repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+
+        // Assert
+        Assert.That(stats.TotalGeneratedValues, Is.EqualTo(2));
+        Assert.That(stats.TotalGeneratedValuesAdopted, Is.EqualTo(1));
+        Assert.That(stats.TotalGeneratedValueFailures, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task GetStats_LegacyFallback_GeneratedValueStatsAreZeroAsync()
+    {
+        // Arrange: no outcomes; the legacy RPEI-based fallback has no ObjectChangeType equivalent for
+        // Unique Value Generation, exactly like TotalProvisioned in Test 2.
+        var activity = await CreateActivityAsync();
+        await CreateRpeiAsync(activity, ObjectChangeType.Joined);
+
+        // Act
+        var stats = await _repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+
+        // Assert
+        Assert.That(stats.TotalGeneratedValues, Is.EqualTo(0));
+        Assert.That(stats.TotalGeneratedValuesAdopted, Is.EqualTo(0));
+
+        // Failures are always derived from RPEI error types (unconditional), so this stays 0 too, with no
+        // errors seeded.
+        Assert.That(stats.TotalGeneratedValueFailures, Is.EqualTo(0));
+    }
+
+    #endregion
+
     #region Metaverse Object Housekeeping stats
 
     [Test]

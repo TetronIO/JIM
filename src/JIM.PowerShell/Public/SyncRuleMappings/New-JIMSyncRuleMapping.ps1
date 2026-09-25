@@ -81,8 +81,67 @@ function New-JIMSyncRuleMapping {
         reviewed before it starts flowing values; a disabled mapping is skipped in both directions until it
         is re-enabled with Set-JIMSyncRuleMapping -Enabled $true.
 
+    .PARAMETER Generate
+        Makes this a "Generated Value" mapping (Unique Value Generation, #242): the mapping's value is its base
+        expression (optional; supply with -Expression) plus a uniqueness token. Requires either
+        -TargetMetaverseAttributeId (an import mapping) or -TargetConnectedSystemAttributeId (an export
+        mapping). Exclusions and Collision Remediation are not configurable from any surface in this release.
+
+    .PARAMETER TokenKind
+        Which uniqueness token the mapping appends. Omit for OnlyIfTaken (the server default): the base value
+        is tried first, and only suffixed when it is already taken.
+        - OnlyIfTaken: try the base value; append a collision suffix only when needed. Requires -Expression.
+        - Sequence: always append the next number from the target attribute's counter. Never reused.
+        - Random: always append a cryptographically random token (-RandomFormat, -RandomLength).
+
+    .PARAMETER SuffixStyle
+        OnlyIfTaken only: whether the collision suffix is a Number or a Letter. Omit for Number.
+
+    .PARAMETER SuffixStart
+        OnlyIfTaken only: the first suffix value tried once the bare base value is taken. Omit for 1.
+
+    .PARAMETER SequenceStart
+        Sequence only: the lowest number this flow will ever issue. If this stands above the target
+        attribute's counter, the save moves the counter forward to it and the result's
+        Generation.SequenceSkippedAhead reports the move; a warning is written naming the old and new
+        positions. Omit for 1.
+
+    .PARAMETER SequenceIncrement
+        Sequence only: how much the counter advances per issued number. Omit for 1.
+
+    .PARAMETER FixedWidth
+        Sequence only: zero-pads the number to this many digits. Omit for no padding.
+
+    .PARAMETER OnWidthExceeded
+        Sequence only, and only meaningful with -FixedWidth: what happens when a number would no longer fit.
+        StopAndReport (the default) stops the object with an attributed error; AllowLonger lets the number
+        grow past the configured width.
+
+    .PARAMETER RandomFormat
+        Random only: the shape of the token. Guid (the default, a 36-character GUID), Hex (lower-case
+        hexadecimal) or Digits (decimal digits). -RandomLength is required for Hex and Digits.
+
+    .PARAMETER RandomLength
+        Random only: the length of the token in characters. Required for -RandomFormat Hex or Digits; must be
+        omitted for Guid, whose length is fixed.
+
+    .PARAMETER Separator
+        The characters placed between the base value and the token, when both are present. Omit for no
+        separator. Never valid for a Number target.
+
+    .PARAMETER AttemptLimit
+        The maximum number of candidates tried, per object per synchronisation run, before generation fails
+        hard for that object. Omit for 1000.
+
+    .PARAMETER NeverReuse
+        Whether a value whose assignment is deleted is retired and never issued again by this flow. Omit for
+        $true (the server default and recommended setting). Always treated as true for a Sequence token,
+        regardless of what is supplied, because its forward-only counter makes reuse impossible.
+
     .OUTPUTS
-        PSCustomObject representing the created Synchronisation Rule Mapping.
+        PSCustomObject representing the created Synchronisation Rule Mapping. A generated mapping's Generation
+        property carries its uniqueness token settings; Generation.SequenceSkippedAhead is present only when
+        -SequenceStart raised the target attribute's counter on this save.
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10
@@ -135,10 +194,31 @@ function New-JIMSyncRuleMapping {
         Creates the mapping disabled, so it can be ordered and reviewed before it starts flowing values.
         Enable it when ready with Set-JIMSyncRuleMapping -Enabled $true.
 
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 `
+            -Expression 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"])' -Generate
+
+        Creates a generated import mapping: try "first.last" bare, and only if it is already taken append a
+        collision suffix (OnlyIfTaken, the default token kind).
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 12 -Generate -TokenKind Sequence -SequenceStart 100000 -FixedWidth 6
+
+        Creates a generated Employee Number mapping with no base expression: a bare, zero-padded, six-digit
+        Sequence starting at 100000.
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 -Generate -TokenKind Random -RandomFormat Hex -RandomLength 12
+
+        Creates a generated export mapping whose value is a twelve-character random hexadecimal token, with no
+        base expression.
+
     .LINK
         Get-JIMSyncRuleMapping
         Remove-JIMSyncRuleMapping
         Get-JIMSyncRule
+        Get-JIMGeneratedValueSequence
+        Restart-JIMGeneratedValues
         Test-JIMExpression
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
@@ -148,15 +228,19 @@ function New-JIMSyncRuleMapping {
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ImportExpression')]
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ExportAttribute')]
         [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ExportExpression')]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ImportGenerated')]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName, ParameterSetName = 'ExportGenerated')]
         [Alias('Id')]
         [int]$SyncRuleId,
 
         [Parameter(ParameterSetName = 'ImportAttribute')]
         [Parameter(ParameterSetName = 'ImportExpression')]
+        [Parameter(ParameterSetName = 'ImportGenerated')]
         [int]$TargetMetaverseAttributeId,
 
         [Parameter(ParameterSetName = 'ExportAttribute')]
         [Parameter(ParameterSetName = 'ExportExpression')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
         [int]$TargetConnectedSystemAttributeId,
 
         [Parameter(ParameterSetName = 'ImportAttribute')]
@@ -165,8 +249,12 @@ function New-JIMSyncRuleMapping {
         [Parameter(ParameterSetName = 'ExportAttribute')]
         [int[]]$SourceMetaverseAttributeId,
 
+        # The base expression. Mandatory for an ordinary Expression mapping; optional for a generated mapping
+        # (Unique Value Generation, #242), whose Sequence and Random token kinds can stand with no base value.
         [Parameter(ParameterSetName = 'ImportExpression')]
         [Parameter(ParameterSetName = 'ExportExpression')]
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
         [string]$Expression,
 
         # What the Expression does when an attribute it reads has no value on the object being synchronised.
@@ -175,6 +263,65 @@ function New-JIMSyncRuleMapping {
         [Parameter(ParameterSetName = 'ExportExpression')]
         [ValidateSet('EvaluateAnyway', 'ContributeNoValue', 'FailMapping', 'FailObject')]
         [string]$MissingInputBehaviour,
+
+        # "Generated Value" (Unique Value Generation, #242), import and export mappings alike: the mapping's
+        # value is its (optional) base expression plus a uniqueness token, rather than a plain attribute or
+        # Expression mapping.
+        [Parameter(Mandatory, ParameterSetName = 'ImportGenerated')]
+        [Parameter(Mandatory, ParameterSetName = 'ExportGenerated')]
+        [switch]$Generate,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [ValidateSet('OnlyIfTaken', 'Sequence', 'Random')]
+        [string]$TokenKind,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [ValidateSet('Number', 'Letter')]
+        [string]$SuffixStyle,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [int]$SuffixStart,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [long]$SequenceStart,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [int]$SequenceIncrement,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [int]$FixedWidth,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [ValidateSet('StopAndReport', 'AllowLonger')]
+        [string]$OnWidthExceeded,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [ValidateSet('Guid', 'Hex', 'Digits')]
+        [string]$RandomFormat,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [int]$RandomLength,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [string]$Separator,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [int]$AttemptLimit,
+
+        [Parameter(ParameterSetName = 'ImportGenerated')]
+        [Parameter(ParameterSetName = 'ExportGenerated')]
+        [bool]$NeverReuse,
 
         # Inbound value processing (import mappings only). Whitespace-only/empty text values are treated as
         # no value by default; use -PreserveWhitespace to keep them as literal values instead.
@@ -224,6 +371,7 @@ function New-JIMSyncRuleMapping {
         $isImport = $PSBoundParameters.ContainsKey('TargetMetaverseAttributeId')
         $isExport = $PSBoundParameters.ContainsKey('TargetConnectedSystemAttributeId')
         $hasExpression = $PSBoundParameters.ContainsKey('Expression') -and -not [string]::IsNullOrWhiteSpace($Expression)
+        $isGenerated = $PSBoundParameters.ContainsKey('Generate')
 
         if (-not $isImport -and -not $isExport) {
             Write-Error "You must specify either -TargetMetaverseAttributeId (for import) or -TargetConnectedSystemAttributeId (for export)."
@@ -260,6 +408,10 @@ function New-JIMSyncRuleMapping {
                     }
                     $order++
                 }
+            }
+            elseif ($isGenerated) {
+                # A generated mapping's base expression is optional: Sequence and Random token kinds stand
+                # with no base value at all (the server validates this against -TokenKind).
             }
             else {
                 Write-Error "-SourceConnectedSystemAttributeId or -Expression is required for import mappings."
@@ -306,6 +458,10 @@ function New-JIMSyncRuleMapping {
                     $order++
                 }
             }
+            elseif ($isGenerated) {
+                # A generated mapping's base expression is optional: Sequence and Random token kinds stand
+                # with no base value at all (the server validates this against -TokenKind).
+            }
             else {
                 Write-Error "-SourceMetaverseAttributeId or -Expression is required for export mappings."
                 return
@@ -325,6 +481,25 @@ function New-JIMSyncRuleMapping {
             $body.enabled = $Enabled
         }
 
+        # "Generated Value" (Unique Value Generation, #242). Only the settings actually supplied are sent;
+        # every omitted one leaves the server's own default standing (see SyncRuleMappingGeneration).
+        if ($isGenerated) {
+            $generation = @{}
+            if ($PSBoundParameters.ContainsKey('TokenKind')) { $generation.tokenKind = $TokenKind }
+            if ($PSBoundParameters.ContainsKey('SuffixStyle')) { $generation.suffixStyle = $SuffixStyle }
+            if ($PSBoundParameters.ContainsKey('SuffixStart')) { $generation.suffixStart = $SuffixStart }
+            if ($PSBoundParameters.ContainsKey('SequenceStart')) { $generation.sequenceStart = $SequenceStart }
+            if ($PSBoundParameters.ContainsKey('SequenceIncrement')) { $generation.sequenceIncrement = $SequenceIncrement }
+            if ($PSBoundParameters.ContainsKey('FixedWidth')) { $generation.fixedWidth = $FixedWidth }
+            if ($PSBoundParameters.ContainsKey('OnWidthExceeded')) { $generation.onWidthExceeded = $OnWidthExceeded }
+            if ($PSBoundParameters.ContainsKey('RandomFormat')) { $generation.randomFormat = $RandomFormat }
+            if ($PSBoundParameters.ContainsKey('RandomLength')) { $generation.randomLength = $RandomLength }
+            if ($PSBoundParameters.ContainsKey('Separator')) { $generation.separator = $Separator }
+            if ($PSBoundParameters.ContainsKey('AttemptLimit')) { $generation.attemptLimit = $AttemptLimit }
+            if ($PSBoundParameters.ContainsKey('NeverReuse')) { $generation.neverReuse = $NeverReuse }
+            $body.generation = $generation
+        }
+
         if ($PSCmdlet.ShouldProcess("$targetDescription in Synchronisation Rule $SyncRuleId", "Create Mapping")) {
             Write-Verbose "Creating Synchronisation Rule Mapping for Synchronisation Rule: $SyncRuleId"
 
@@ -332,6 +507,13 @@ function New-JIMSyncRuleMapping {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings" -Method 'POST' -Body $body
 
                 Write-Verbose "Created Synchronisation Rule Mapping with ID: $($result.id)"
+
+                # A raised -SequenceStart moves the target attribute's counter forward at save time (plan
+                # decision 3); the response reports it rather than doing it silently.
+                if ($result.Generation.SequenceSkippedAhead) {
+                    $skip = $result.Generation.SequenceSkippedAhead
+                    Write-Warning "Mapping $($result.Id)'s Sequence counter moved from $($skip.From) to $($skip.To) to honour the requested Sequence Start."
+                }
 
                 $result
             }

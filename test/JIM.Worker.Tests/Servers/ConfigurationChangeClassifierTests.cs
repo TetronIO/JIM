@@ -192,6 +192,16 @@ public class ConfigurationChangeClassifierTests
             ConfigurationSnapshotService.ServiceSettingObjectType, "value"));
     }
 
+    [Test]
+    public void ClassifyKey_FeatureFlagValue_IsCosmeticWithoutAPerKeyEntry()
+    {
+        // Feature flags (#1781) classify as a category, not one hand-added row per catalogue entry.
+        var result = ConfigurationChangeClassifier.ClassifyKey(
+            ConfigurationSnapshotService.ServiceSettingObjectType, "value", FeatureFlagCatalogue.UniqueValueGeneration.Key);
+
+        Assert.That(result, Is.EqualTo(ConfigurationChangeClass.Cosmetic));
+    }
+
     #endregion
 
     #region No default class

@@ -126,7 +126,7 @@ Exempt from rule 1: deliberately narrow, single-purpose statements that set call
 **Worker Hot Path - Raw SQL Over EF Projection:**
 - For queries on the synchronisation hot path (per-page flushes, cross-page resolution, export evaluation, change-record persistence), default to raw Npgsql (`NpgsqlCommand` + `DbDataReader`, or `BeginBinaryImportAsync` for COPY) rather than EF Core - even `AsNoTracking()` projection.
 - Measured on a cross-page MvoChange-id lookup (113 RPEIs): EF projection 7 ms vs raw SQL 2 ms (~3.5x faster). The gap widens with row count because EF materialisation cost scales harder than the query itself.
-- EF projection is still appropriate for UI reads and infrequent operations. For **bulk worker paths**, mirror the existing `BulkInsertRpeisRawAsync` / `BulkUpdateRpeiFieldsRawAsync` / `BulkInsertMvoChangesRawAsync` patterns - they exist for a reason.
+- EF projection is still appropriate for UI reads and infrequent operations. For **bulk worker paths**, mirror the existing `BulkInsertRpeisOnConnectionAsync` / `BulkUpdateRpeiFieldsRawAsync` / `BulkInsertMvoChangesRawAsync` patterns - they exist for a reason.
 - When adding a new **Summary**-tier method (see Entity Retrieval Naming Taxonomy below), implement as raw SQL into a DTO, not EF projection into an anonymous type.
 
 **Raw SQL Writes Must Fix Up or Detach Tracked Instances:**
@@ -337,9 +337,9 @@ Two invariants here are enforced only by remembering them, and both have been mi
 ./scripts/Generate-OpenApiDoc.ps1 -NoBuild -OutputPath /tmp/openapi-v1.json
 ```
 
-(`jim-openapi-generate` in the devcontainer. About 90 seconds against an already-built solution.)
+(`jim-openapi-generate` in the devcontainer. A few seconds against an already-built solution: 5 to 7 s, measured September 2026.)
 
-The generator walks the property graph of every response type. Where a cycle runs through a type that does not get its own entry in `components/schemas`, the type is inlined and re-expanded rather than referenced, until the walk hits System.Text.Json's 256-level depth limit and fails the whole document. No document means no `jim.web` image and no release, and nothing else catches it: `dotnet build` is clean, every unit test passes, and the only failing check is `openapi-document`, which takes about five minutes in CI. This has now shipped twice, both times through a new child entity holding a reference back to its parent: #1238 via `ConnectedSystemObjectTypeTag`, then #1277 via `ConnectedSystemObjectTypeExtension`.
+The generator walks the property graph of every response type. Where a cycle runs through a type that does not get its own entry in `components/schemas`, the type is inlined and re-expanded rather than referenced, until the walk hits System.Text.Json's 256-level depth limit and fails the whole document. No document means no `jim.web` image and no release, and nothing else catches it: `dotnet build` is clean, every unit test passes, and the only failing check is the `jim-web` leg of `scan-images` (reported through the required `scan-base-images-summary`), which builds the generation stage into the image; since the `OPENAPI_STAGE` skip was removed, a local `jim-build` fails too. This has now shipped twice, both times through a new child entity holding a reference back to its parent: #1238 via `ConnectedSystemObjectTypeTag`, then #1277 via `ConnectedSystemObjectTypeExtension`.
 
 - **A back-reference on a child entity gets `[JsonIgnore]`.** If a type is only ever reached as an element of its parent's collection, the navigation pointing back at that parent (or at any other type carrying the same collection) is never serialised; callers have the foreign key. Both of the above were fixed exactly this way.
 - **Do not reason about it from "does this introduce a cycle".** Plenty of cycles are fine: `ConnectedSystem` and `ConnectedSystemObjectType` point at each other and always have, because both are registered as components and so resolve to a `$ref`. Whether a given cycle survives depends on which types the generator decides to register, which is its own internal policy.

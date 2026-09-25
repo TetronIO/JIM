@@ -85,6 +85,93 @@ public class SyncRepositoryGeneratedValueTests
 
     #endregion
 
+    #region GetGeneratedValueAssignmentValuesInUseAsync
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_EmptyInput_ReturnsEmptyAsync()
+    {
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, [], null);
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public void GetGeneratedValueAssignmentValuesInUseAsync_NeitherIdGiven_ThrowsArgumentException()
+    {
+        Assert.That(async () => await _repo.GetGeneratedValueAssignmentValuesInUseAsync(null, null, ["a"], null), Throws.ArgumentException);
+    }
+
+    [Test]
+    public void GetGeneratedValueAssignmentValuesInUseAsync_BothIdsGiven_ThrowsArgumentException()
+    {
+        Assert.That(async () => await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, 2, ["a"], null), Throws.ArgumentException);
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ScopedByAttributeNotByGeneration_FindsAssignmentsFromAnyGenerationAsync()
+    {
+        // Decision 3: two different generation rows can target the same attribute; the gate must see both.
+        var a = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: Guid.NewGuid(), value: "joe.bloggs");
+        a.SyncRuleMappingGenerationId = 10;
+        var b = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: Guid.NewGuid(), value: "jane.doe");
+        b.SyncRuleMappingGenerationId = 20;
+        _repo.SeedGeneratedValueAssignment(a);
+        _repo.SeedGeneratedValueAssignment(b);
+
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, ["joe.bloggs", "jane.doe", "unused"], null);
+
+        Assert.That(result, Is.EquivalentTo(new[] { "joe.bloggs", "jane.doe" }));
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_CaseInsensitiveAsync()
+    {
+        var assignment = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: Guid.NewGuid(), value: "Joe.Bloggs");
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, ["joe.bloggs"], null);
+
+        Assert.That(result, Is.EquivalentTo(new[] { "joe.bloggs" }).Using<string>((x, y) => string.Equals(x, y, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ExcludedObjectsOwnValue_IsNotReportedTakenAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var assignment = NewMetaverseAssignment(metaverseAttributeId: 1, mvoId: mvoId, value: "joe.bloggs");
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var result = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(1, null, ["joe.bloggs"], mvoId);
+
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentValuesInUseAsync_ConnectedSystemMode_ExcludesTheRequestingCsoAsync()
+    {
+        var csoId = Guid.NewGuid();
+        var assignment = new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObjectId = csoId,
+            ConnectedSystemObjectTypeAttributeId = 3,
+            Value = "abc123",
+            NormalisedValue = "abc123",
+            SyncRuleMappingGenerationId = 1
+        };
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var excluded = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(null, 3, ["abc123"], csoId);
+        var notExcluded = await _repo.GetGeneratedValueAssignmentValuesInUseAsync(null, 3, ["abc123"], Guid.NewGuid());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(excluded, Is.Empty);
+            Assert.That(notExcluded, Is.EquivalentTo(new[] { "abc123" }));
+        }
+    }
+
+    #endregion
+
     #region Assignments
 
     [Test]
@@ -314,6 +401,149 @@ public class SyncRepositoryGeneratedValueTests
         Assert.That(updated?.AssignedCount, Is.EqualTo(3));
     }
 
+    [Test]
+    public async Task RaiseGeneratedValueSequenceIfHigherAsync_NoCounterYet_ReturnsNullAndCreatesNothingAsync()
+    {
+        var result = await _repo.RaiseGeneratedValueSequenceIfHigherAsync(1, null, newStart: 500, syncRuleMappingId: 7);
+
+        Assert.That(result, Is.Null);
+        Assert.That(await _repo.GetGeneratedValueSequenceAsync(1, null), Is.Null,
+            "A save-time raise must never seed a counter that has never been used; that is the generation attempt's job.");
+    }
+
+    [Test]
+    public async Task RaiseGeneratedValueSequenceIfHigherAsync_HigherThanCurrent_MovesTheCounterAndReturnsThePreviousValueAsync()
+    {
+        await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 1, count: 5, increment: 1);
+
+        var result = await _repo.RaiseGeneratedValueSequenceIfHigherAsync(1, null, newStart: 500, syncRuleMappingId: 7);
+
+        Assert.That(result, Is.EqualTo(6));
+        var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sequence?.NextValue, Is.EqualTo(500));
+            Assert.That(sequence?.LastMovedBySyncRuleMappingId, Is.EqualTo(7));
+            Assert.That(sequence?.LastMovedAt, Is.Not.Null);
+        }
+    }
+
+    [Test]
+    public async Task RaiseGeneratedValueSequenceIfHigherAsync_LowerOrEqualToCurrent_HasNoEffectAsync()
+    {
+        await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 1, increment: 1);
+        // The counter now stands at 101.
+
+        var result = await _repo.RaiseGeneratedValueSequenceIfHigherAsync(1, null, newStart: 50, syncRuleMappingId: 7);
+
+        Assert.That(result, Is.Null);
+        var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
+        Assert.That(sequence?.NextValue, Is.EqualTo(101));
+    }
+
+    [Test]
+    public async Task ResetGeneratedValueSequenceAsync_NoCounterYet_ReturnsNullAsync()
+    {
+        var result = await _repo.ResetGeneratedValueSequenceAsync(1, null, newValue: 1, syncRuleMappingId: 7);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task ResetGeneratedValueSequenceAsync_MovesTheCounterBackwardsAsync()
+    {
+        await _repo.ReserveGeneratedValueSequenceBlockAsync(1, null, floor: 100, count: 50, increment: 1);
+        // The counter now stands at 150; "Start again" moves it BACK to the flow's start value.
+
+        var result = await _repo.ResetGeneratedValueSequenceAsync(1, null, newValue: 1, syncRuleMappingId: 7);
+
+        Assert.That(result, Is.EqualTo(150));
+        var sequence = await _repo.GetGeneratedValueSequenceAsync(1, null);
+        Assert.That(sequence?.NextValue, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    #region CountMetaverseObjectsAwaitingGeneratedValueAsync
+
+    [Test]
+    public async Task CountMetaverseObjectsAwaitingGeneratedValueAsync_ObjectWithNoValue_IsCountedAsync()
+    {
+        var mvoId = SeedMvoOfTypeJoinedToConnectedSystem(metaverseObjectTypeId: 1, connectedSystemId: 2);
+
+        var count = await _repo.CountMetaverseObjectsAwaitingGeneratedValueAsync(metaverseObjectTypeId: 1, connectedSystemId: 2, metaverseAttributeId: 9);
+
+        Assert.That(count, Is.EqualTo(1));
+        Assert.That(mvoId, Is.Not.EqualTo(Guid.Empty));
+    }
+
+    [Test]
+    public async Task CountMetaverseObjectsAwaitingGeneratedValueAsync_ObjectAlreadyHoldingTheAttribute_IsNotCountedAsync()
+    {
+        SeedMvoOfTypeJoinedToConnectedSystem(metaverseObjectTypeId: 1, connectedSystemId: 2, existingAttributeId: 9);
+
+        var count = await _repo.CountMetaverseObjectsAwaitingGeneratedValueAsync(metaverseObjectTypeId: 1, connectedSystemId: 2, metaverseAttributeId: 9);
+
+        Assert.That(count, Is.Zero);
+    }
+
+    [Test]
+    public async Task CountMetaverseObjectsAwaitingGeneratedValueAsync_ObjectNotJoinedToTheConnectedSystem_IsNotCountedAsync()
+    {
+        SeedMvoOfTypeJoinedToConnectedSystem(metaverseObjectTypeId: 1, connectedSystemId: 3);
+
+        var count = await _repo.CountMetaverseObjectsAwaitingGeneratedValueAsync(metaverseObjectTypeId: 1, connectedSystemId: 2, metaverseAttributeId: 9);
+
+        Assert.That(count, Is.Zero);
+    }
+
+    [Test]
+    public async Task CountMetaverseObjectsAwaitingGeneratedValueAsync_ObjectOfAnotherType_IsNotCountedAsync()
+    {
+        SeedMvoOfTypeJoinedToConnectedSystem(metaverseObjectTypeId: 4, connectedSystemId: 2);
+
+        var count = await _repo.CountMetaverseObjectsAwaitingGeneratedValueAsync(metaverseObjectTypeId: 1, connectedSystemId: 2, metaverseAttributeId: 9);
+
+        Assert.That(count, Is.Zero);
+    }
+
+    #endregion
+
+    #region GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync_NoAssignments_ReturnsEmptyAsync()
+    {
+        var result = await _repo.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid.NewGuid());
+
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync_LiveAssignment_IsReturnedAsync()
+    {
+        var mvoId = Guid.NewGuid();
+        var assignment = NewMetaverseAssignment(metaverseAttributeId: 5, mvoId, "alice.smith1");
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var result = await _repo.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(mvoId);
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].AssignmentId, Is.EqualTo(assignment.Id));
+        Assert.That(result[0].Value, Is.EqualTo("alice.smith1"));
+    }
+
+    [Test]
+    public async Task GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync_AnotherObjectsAssignment_IsExcludedAsync()
+    {
+        var assignment = NewMetaverseAssignment(metaverseAttributeId: 5, Guid.NewGuid(), "alice.smith1");
+        _repo.SeedGeneratedValueAssignment(assignment);
+
+        var result = await _repo.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid.NewGuid());
+
+        Assert.That(result, Is.Empty);
+    }
+
     #endregion
 
     #region Helpers
@@ -379,6 +609,33 @@ public class SyncRepositoryGeneratedValueTests
         };
         _repo.SeedConnectedSystemObject(cso);
         return cso.Id;
+    }
+
+    /// <summary>
+    /// Seeds a Metaverse Object of <paramref name="metaverseObjectTypeId"/> joined to a Connected System Object
+    /// of <paramref name="connectedSystemId"/>, optionally already holding a value for
+    /// <paramref name="existingAttributeId"/> (a Text value, so it counts as "holds no value" only when omitted).
+    /// </summary>
+    private Guid SeedMvoOfTypeJoinedToConnectedSystem(int metaverseObjectTypeId, int connectedSystemId, int? existingAttributeId = null)
+    {
+        var mvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = metaverseObjectTypeId, Name = "Type" + metaverseObjectTypeId }
+        };
+        if (existingAttributeId.HasValue)
+            mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = existingAttributeId.Value, StringValue = "already-set" });
+        _repo.SeedMetaverseObject(mvo);
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = mvo.Id,
+            ConnectedSystemId = connectedSystemId
+        };
+        _repo.SeedConnectedSystemObject(cso);
+
+        return mvo.Id;
     }
 
     #endregion

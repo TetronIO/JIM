@@ -38,9 +38,13 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     /// <param name="pageSize">The number of items per page.</param>
     /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
+    /// <param name="status">Optional filter by status, given by name: Queued, InProgress, Complete, CompleteWithError, Failed, Cancelled or Paused. The total count is taken over the filtered set. An unknown name is rejected with a 400.</param>
     /// <returns>A paginated list of Schedule Executions.</returns>
+    /// <response code="200">The requested page of Schedule Executions.</response>
+    /// <response code="400">An unrecognised status or other unparseable query value.</response>
     [HttpGet(Name = "GetScheduleExecutions")]
     [ProducesResponseType(typeof(PaginatedResponse<ScheduleExecutionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAllAsync(
@@ -48,13 +52,14 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? sortBy = null,
-        [FromQuery] bool sortDescending = true)
+        [FromQuery] bool sortDescending = true,
+        [FromQuery] ScheduleExecutionStatus? status = null)
     {
-        _logger.LogTrace("Requested schedule executions page {Page}, size {PageSize}, scheduleId {ScheduleId}",
-            (int)page, (int)pageSize, scheduleId?.ToString());
+        _logger.LogTrace("Requested schedule executions page {Page}, size {PageSize}, scheduleId {ScheduleId}, status {Status}",
+            (int)page, (int)pageSize, scheduleId?.ToString(), status);
 
         var result = await _application.Scheduler.GetScheduleExecutionsAsync(
-            scheduleId, page, pageSize, sortBy, sortDescending);
+            scheduleId, page, pageSize, sortBy, sortDescending, status);
 
         var dtos = result.Results.Select(ScheduleExecutionDto.FromEntity).ToList();
 

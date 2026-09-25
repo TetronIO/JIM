@@ -427,6 +427,15 @@ public class Activity
     public int? ScheduleStepIndex { get; set; }
 
     /// <summary>
+    /// The Schedule Step that produced this activity, when a Schedule produced it. Parallel steps share a
+    /// <see cref="ScheduleStepIndex"/>, so this is what says which of them an activity belongs to; the scheduler
+    /// uses it to apply the failing step's own Continue On Failure setting (#1768). A plain scalar with no foreign
+    /// key, like <see cref="ScheduledByScheduleId"/>: steps are edited and deleted freely, and this is a permanent
+    /// audit record. Null for activities no Schedule produced, and for those recorded before the column existed.
+    /// </summary>
+    public Guid? ScheduleStepId { get; set; }
+
+    /// <summary>
     /// If a Schedule produced this activity, the Schedule's id is recorded here. This is a denormalised copy taken
     /// when the activity is created, deliberately carrying no foreign key or navigation: Schedule -> ScheduleExecution
     /// cascades on delete, so resolving the Schedule through the execution at query time would silently blank the

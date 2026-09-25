@@ -27,6 +27,13 @@ namespace JIM.Worker.Tests.Processors;
 /// Exported). Invokes the private method directly via reflection, the same pattern as
 /// <see cref="DeselectedObjectTypeDeletionDetectionTests"/>, so the fixture drives production code
 /// rather than reimplementing its object-type/partition scoping here.
+/// <para>
+/// The step is two-phase (a lean per-candidate projection decides "was this seen?", and only the
+/// genuinely unseen subset is loaded as a full graph and mutated), so several tests below also assert on
+/// <see cref="SyncRepository.GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount"/> and
+/// <see cref="SyncRepository.GetExportedCreatePendingExportRetryCandidateSummariesCallCount"/>: the whole
+/// point of the two-phase design is that the expensive full-graph load is skipped whenever it can be.
+/// </para>
 /// </summary>
 [TestFixture]
 public class UnconfirmedExportedCreateRetryTests
@@ -61,6 +68,14 @@ public class UnconfirmedExportedCreateRetryTests
 
         Assert.That(repo.ConnectedSystemObjects[csoId].Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
             "the CSO's own status is untouched by this step - only the Pending Export retries");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(repo.GetExportedCreatePendingExportRetryCandidateSummariesCallCount, Is.EqualTo(1),
+                "one lean projection call per selected Object Type");
+            Assert.That(repo.GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount, Is.EqualTo(1),
+                "the single unseen candidate is promoted to exactly one full-graph load");
+        }
     }
 
     [Test]
@@ -80,6 +95,9 @@ public class UnconfirmedExportedCreateRetryTests
                 "unchanged: a Delta Import must never trigger this retry");
             var attrChange = pendingExport.AttributeValueChanges.Single(ac => ac.Id == attrChangeId);
             Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(repo.GetExportedCreatePendingExportRetryCandidateSummariesCallCount, Is.EqualTo(0),
+                "the early exit must skip every repository query for a run type that can never retry anything");
+            Assert.That(repo.GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount, Is.EqualTo(0));
         }
     }
 
@@ -107,6 +125,10 @@ public class UnconfirmedExportedCreateRetryTests
                 "unchanged: the object was seen this run, so it is not a retry candidate");
             var attrChange = pendingExport.AttributeValueChanges.Single(ac => ac.Id == attrChangeId);
             Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(repo.GetExportedCreatePendingExportRetryCandidateSummariesCallCount, Is.EqualTo(1),
+                "the lean projection still runs once to decide the candidate was seen");
+            Assert.That(repo.GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount, Is.EqualTo(0),
+                "every candidate was seen, so the expensive full-graph load must never be called");
         }
     }
 
@@ -125,7 +147,64 @@ public class UnconfirmedExportedCreateRetryTests
             Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Exported));
             var attrChange = pendingExport.AttributeValueChanges.Single(ac => ac.Id == attrChangeId);
             Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(repo.GetExportedCreatePendingExportRetryCandidateSummariesCallCount, Is.EqualTo(0),
+                "the early exit must skip every repository query when nothing was imported this run");
+            Assert.That(repo.GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount, Is.EqualTo(0));
         }
+    }
+
+    [Test]
+    public async Task RetryUnconfirmedExportedCreates_MixOfSeenAndUnseenCandidates_OnlyUnseenAreMarkedForRetryAsync()
+    {
+        // Two candidates of the same Object Type: one whose External Id this run reported, one it did
+        // not. Only the unseen one may be retried; the seen one, and its RPEI, must be untouched.
+        var (processor, repo,
+            seenCsoId, seenPendingExportId, seenAttrChangeId,
+            unseenCsoId, unseenPendingExportId, unseenAttrChangeId) = BuildTwoCandidateFixture();
+
+        var seenImportAttribute = new ConnectedSystemImportObjectAttribute { Name = "id", Type = AttributeDataType.Text };
+        seenImportAttribute.StringValues.Add(ExternalIdValue);
+        var externalIdsImported = new List<ExternalIdPair>
+        {
+            new() { ConnectedSystemObjectTypeId = ObjectTypeId, ConnectedSystemImportObjectAttribute = seenImportAttribute }
+        };
+
+        await InvokeRetryStepAsync(processor, externalIdsImported, totalObjectsImported: 2);
+
+        var seenExport = repo.PendingExports[seenPendingExportId];
+        var unseenExport = repo.PendingExports[unseenPendingExportId];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(seenExport.Status, Is.EqualTo(PendingExportStatus.Exported),
+                "the seen candidate must be left exactly as it was");
+            Assert.That(seenExport.AttributeValueChanges.Single(ac => ac.Id == seenAttrChangeId).Status,
+                Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+
+            Assert.That(unseenExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(unseenExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed),
+                "the unseen candidate must be marked for retry");
+            Assert.That(unseenExport.AttributeValueChanges.Single(ac => ac.Id == unseenAttrChangeId).Status,
+                Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
+
+            Assert.That(repo.ConnectedSystemObjects[seenCsoId].Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning));
+            Assert.That(repo.ConnectedSystemObjects[unseenCsoId].Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning));
+        }
+
+        // Same RPEI shape as the single-candidate retry case, and only for the unseen candidate: the seen
+        // one must generate no RPEI at all.
+        var rpeis = GetPrivateActivityRunProfileExecutionItems(processor);
+        Assert.That(rpeis, Has.Count.EqualTo(1), "only the unseen candidate gets a retry RPEI");
+        var rpei = rpeis[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rpei.ConnectedSystemObjectId, Is.EqualTo(unseenCsoId));
+            Assert.That(rpei.ObjectChangeType, Is.EqualTo(ObjectChangeType.Updated));
+            Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed));
+        }
+
+        Assert.That(repo.GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount, Is.EqualTo(1),
+            "exactly one chunked full-graph load, scoped to the single unseen candidate");
     }
 
     /// <summary>
@@ -243,5 +322,143 @@ public class UnconfirmedExportedCreateRetryTests
             cancellationTokenSource);
 
         return (processor, repository, cso.Id, pendingExport.Id, attrChangeId);
+    }
+
+    /// <summary>
+    /// Reads the processor's private RPEI accumulator (<c>_activityRunProfileExecutionItems</c>) via
+    /// reflection, the same rationale as <see cref="InvokeRetryStepAsync"/>: the field is genuinely
+    /// private production state (RPEIs are flushed incrementally, never exposed on the processor), and
+    /// reflection lets the fixture assert on it without changing production code just to make it testable.
+    /// </summary>
+    private static List<ActivityRunProfileExecutionItem> GetPrivateActivityRunProfileExecutionItems(SyncImportTaskProcessor processor)
+    {
+        const string fieldName = "_activityRunProfileExecutionItems";
+        var field = typeof(SyncImportTaskProcessor).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"SyncImportTaskProcessor.{fieldName} was not found. Update this fixture if it has been renamed.");
+
+        return (List<ActivityRunProfileExecutionItem>)field.GetValue(processor)!;
+    }
+
+    /// <summary>
+    /// Second External Id value for <see cref="BuildTwoCandidateFixture"/>'s second (unseen) candidate;
+    /// distinct from <see cref="ExternalIdValue"/>, which this run's imported set names as seen.
+    /// </summary>
+    private const string SecondExternalIdValue = "EMP0002";
+
+    /// <summary>
+    /// Two exported Create candidates of the same Object Type, so a single retry step invocation can be
+    /// proven to treat them independently: one whose External Id (<see cref="ExternalIdValue"/>) the test
+    /// then reports as imported (the "seen" candidate), and one whose External Id
+    /// (<see cref="SecondExternalIdValue"/>) it never reports (the "unseen" candidate).
+    /// </summary>
+    private static (
+        SyncImportTaskProcessor Processor, SyncRepository Repo,
+        Guid SeenCsoId, Guid SeenPendingExportId, Guid SeenAttrChangeId,
+        Guid UnseenCsoId, Guid UnseenPendingExportId, Guid UnseenAttrChangeId) BuildTwoCandidateFixture()
+    {
+        var repository = new SyncRepository();
+
+        (Guid CsoId, Guid PendingExportId, Guid AttrChangeId) SeedCandidate(string externalIdValue)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = ConnectedSystemId,
+                TypeId = ObjectTypeId,
+                ExternalIdAttributeId = ExternalIdAttributeId,
+                Status = ConnectedSystemObjectStatus.PendingProvisioning,
+                Created = DateTime.UtcNow,
+                AttributeValues =
+                [
+                    new ConnectedSystemObjectAttributeValue
+                    {
+                        Id = Guid.NewGuid(),
+                        AttributeId = ExternalIdAttributeId,
+                        StringValue = externalIdValue
+                    }
+                ]
+            };
+            repository.SeedConnectedSystemObject(cso);
+
+            var attrChangeId = Guid.NewGuid();
+            var pendingExport = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = ConnectedSystemId,
+                ConnectedSystemObjectId = cso.Id,
+                ConnectedSystemObject = cso,
+                ChangeType = PendingExportChangeType.Create,
+                Status = PendingExportStatus.Exported,
+                AttributeValueChanges =
+                [
+                    new PendingExportAttributeValueChange
+                    {
+                        Id = attrChangeId,
+                        AttributeId = DisplayNameAttributeId,
+                        ChangeType = PendingExportAttributeChangeType.Add,
+                        Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                        StringValue = "Not Yet Confirmed"
+                    }
+                ]
+            };
+            repository.SeedPendingExport(pendingExport);
+
+            return (cso.Id, pendingExport.Id, attrChangeId);
+        }
+
+        var seen = SeedCandidate(ExternalIdValue);
+        var unseen = SeedCandidate(SecondExternalIdValue);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = ConnectedSystemId,
+            Name = "Yellowstone",
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = ObjectTypeId,
+                    Name = "User",
+                    ConnectedSystemId = ConnectedSystemId,
+                    Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = ExternalIdAttributeId,
+                            Name = "id",
+                            Type = AttributeDataType.Text,
+                            IsExternalId = true,
+                            Selected = true
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Name = "Full Import",
+            RunType = ConnectedSystemRunType.FullImport,
+            ConnectedSystemId = ConnectedSystemId
+        };
+
+        var workerTask = TestUtilities.CreateTestWorkerTask(new Activity(), initiatedBy: null);
+        var cancellationTokenSource = new CancellationTokenSource();
+
+        var processor = new SyncImportTaskProcessor(
+            null!,
+            repository,
+            null!,
+            new SyncEngine(),
+            new MockFileConnector(),
+            connectedSystem,
+            runProfile,
+            workerTask,
+            cancellationTokenSource);
+
+        return (processor, repository,
+            seen.CsoId, seen.PendingExportId, seen.AttrChangeId,
+            unseen.CsoId, unseen.PendingExportId, unseen.AttrChangeId);
     }
 }

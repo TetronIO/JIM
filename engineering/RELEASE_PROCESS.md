@@ -509,6 +509,7 @@ If you need to retract the release:
 1. **Build/test failures**: Check the workflow logs for specific errors
 2. **PSGallery publish fails**: Verify `PSGALLERY_API_KEY` secret is set correctly
 3. **Docker push fails**: Ensure `GITHUB_TOKEN` has `packages: write` permission
+4. **"Pushed image is not the tested image"**: the push build rebuilt a layer instead of reusing the one that was scanned and smoke-tested, so the pushed image is not what was tested. `build-containers` pushes each image by digest and moves the release tags only after this check passes, so no tag points at the rejected image and nothing is signed. The usual cause is the two builds receiving different build arguments (#1792): both must take `steps.build_args.outputs.list`. Re-running the failed jobs will not help: a re-run replays `release.yml` as it stood at the tag. Fix the workflow on `main` and tag the release again on the fixed commit
 
 ### Runner Acquisition Timeout
 

@@ -10,6 +10,11 @@ services:
       - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
       - JIM_LOG_PATH=/var/log/jim
       - JIM_LOG_REQUESTS=true
+      # Pin the listening port so the healthcheck below and every published port mapping agree.
+      # 8080 is the .NET base image's own default, and being above 1024 it binds as the non-root
+      # 'app' user with no capabilities on any container runtime. Set here rather than in .env so
+      # a stray ASPNETCORE_URLS in .env cannot move the port out from under the healthcheck.
+      - ASPNETCORE_URLS=http://+:8080
     volumes:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
@@ -31,11 +36,6 @@ services:
         HTTP_PROXY: ${JIM_BUILD_HTTP_PROXY:-}
         HTTPS_PROXY: ${JIM_BUILD_HTTPS_PROXY:-}
         NO_PROXY: ${JIM_BUILD_NO_PROXY:-}
-        # Local dev builds set OPENAPI_STAGE=publish to skip the expensive
-        # openapi-gen step. CI/release builds leave it unset so the default
-        # (openapi-gen) bakes a fresh OpenAPI doc into the image. Run
-        # jim-openapi-generate to refresh the static doc on disk.
-        OPENAPI_STAGE: ${OPENAPI_STAGE:-openapi-gen}
     depends_on:
       jim.database:
         condition: service_healthy
@@ -43,7 +43,7 @@ services:
       jim.worker:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/api/v1/health/ready"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -170,6 +170,13 @@ services:
       - jim-logs-volume:/var/log/jim
     env_file: .env
     environment:
+      # .env sets LANG=en_GB.UTF-8 for the JIM services, but the postgres image does not ship that
+      # locale, so initdb would fail on first start with "invalid locale settings". C.UTF-8 is built
+      # into the image and gives a UTF8-encoded cluster with code-point ordering, which is stable
+      # across glibc upgrades. (Plain C would work too, but creates a SQL_ASCII cluster that stores
+      # unvalidated bytes.) LANG is only read when the cluster is first created; changing it has no
+      # effect on an existing jim-db-volume.
+      - LANG=C.UTF-8
       # Postgres uses different var names
       - POSTGRES_DB=${JIM_DB_NAME}
       - POSTGRES_USER=${JIM_DB_USERNAME}

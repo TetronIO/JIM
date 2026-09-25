@@ -124,7 +124,8 @@
             </CellTemplate>
         </TemplateColumn>
         @* When it last ran is only half the story: a Schedule failing every night looks identical to a healthy
-           one without its outcome. A failed run also says which step it stopped on. Its own column, rather than
+           one without its outcome. A failed run also says which step it stopped on, and a run that continued past
+           failures (Complete With Error) names the steps that failed. Its own column, rather than
            sharing the Last Run cell, because a virtualised row is a fixed height and a stacked chip is clipped
            on exactly the rows that have run. *@
         <TemplateColumn T="ScheduleHeader" Title="Outcome" Sortable="false">
@@ -138,7 +139,7 @@
                     var lastExecutionStatus = schedule.LastExecutionStatus.Value;
                     <MudChip T="string" Variant="Variant.Text" Class="ma-0"
                              Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(lastExecutionStatus)">
-                        @GetLastOutcomeLabel(schedule)
+                        @ScheduleExecutionDisplay.LastOutcomeLabel(schedule)
                     </MudChip>
                 }
                 else
@@ -458,31 +459,6 @@
         return execution.CompletedAt.HasValue ? execution.CompletedAt.Value - startedAt : DateTime.UtcNow - startedAt;
     }
 
-    /// <summary>
-    /// The label for the last execution's outcome chip. A failed run names the step it stopped on, which saves the
-    /// administrator a click through to the Schedule Execution; the stored step index is 0-based and is shown
-    /// 1-based, clamped to the total in case the execution failed after advancing past its last step.
-    /// </summary>
-    private static string GetLastOutcomeLabel(ScheduleHeader header)
-    {
-        if (!header.LastExecutionStatus.HasValue)
-            return string.Empty;
-
-        var status = header.LastExecutionStatus.Value;
-        if (status != ScheduleExecutionStatus.Failed)
-            return status.ToString().SplitOnCapitalLetters();
-
-        if (!header.LastExecutionCurrentStepIndex.HasValue || !header.LastExecutionTotalSteps.HasValue)
-            return "Failed";
-
-        var totalSteps = header.LastExecutionTotalSteps.Value;
-        if (totalSteps < 1)
-            return "Failed";
-
-        var stepNumber = Math.Min(header.LastExecutionCurrentStepIndex.Value + 1, totalSteps);
-        return $"Failed on step {stepNumber}";
-    }
-
     private async Task HandleRowClicked(ScheduleHeader header)
     {
         await OpenScheduleEditorAsync(header.Id);
@@ -579,11 +555,29 @@
             return;
         }
 
-        var execution = await jim.Scheduler.StartScheduleExecutionAsync(
-            scheduleWithSteps,
-            ActivityInitiatorType.User,
-            user.Id,
-            user.NameOrId);
+        ScheduleExecution? execution;
+        try
+        {
+            execution = await jim.Scheduler.StartScheduleExecutionAsync(
+                scheduleWithSteps,
+                ActivityInitiatorType.User,
+                user.Id,
+                user.NameOrId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A step JIM refused to queue: the message is written for administrators, and the Failed execution
+            // it names is now in the list.
+            Snackbar.Add(ex.Message, Severity.Error);
+            await RefreshSchedulesAsync();
+            return;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add($"Schedule '{header.Name}' could not start. Open its latest execution for the reason.", Severity.Error);
+            await RefreshSchedulesAsync();
+            return;
+        }
 
         if (execution != null)
         {

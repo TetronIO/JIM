@@ -8,6 +8,7 @@ using JIM.Data;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.TestSupport;
 using JIM.Web.Pages.Admin.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -33,7 +34,12 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
         // Neither loader the dialog runs on opening reaches the application layer for the rule built here: the
         // Standard Mapping hints need a Connected System id, and the contributor counts an import rule. The
         // factory still has to be resolvable for the component to construct.
-        _jim = new JimApplication(new Mock<IRepository>().Object);
+        var repo = new Mock<IRepository>();
+        // Unique Value Generation is gated behind its feature flag (#242, Phase 3.5); these tests are about the
+        // pickers' rendering, not the flag itself, so run with it enabled (test/CLAUDE.md > "Tests run with
+        // flags on"). The gate's own visibility behaviour is covered by SyncRuleAttributeFlowTabFeatureFlagTests.
+        repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        _jim = new JimApplication(repo.Object);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
     }
 

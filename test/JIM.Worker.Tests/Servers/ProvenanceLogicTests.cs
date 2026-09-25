@@ -23,7 +23,7 @@ public class ProvenanceLogicTests
     {
         var origin = ProvenanceLogic.ResolveOrigin(null, null, assertsNoValue: false, connectedSystemName: null, syncRuleName: null);
 
-        Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.NotRecorded));
+        Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.NotRecorded));
         Assert.That(origin.AssertsNoValue, Is.False);
     }
 
@@ -32,7 +32,7 @@ public class ProvenanceLogicTests
     {
         var origin = ProvenanceLogic.ResolveOrigin(null, null, assertsNoValue: true, connectedSystemName: null, syncRuleName: null);
 
-        Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.NotRecorded));
+        Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.NotRecorded));
         Assert.That(origin.AssertsNoValue, Is.True);
     }
 
@@ -43,12 +43,12 @@ public class ProvenanceLogicTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
-            Assert.That(origin.ConnectedSystemId, Is.EqualTo(3));
-            Assert.That(origin.ConnectedSystemName, Is.EqualTo("HR"));
-            Assert.That(origin.SyncRuleId, Is.EqualTo(7));
-            Assert.That(origin.SyncRuleName, Is.EqualTo("HR Import"));
-            Assert.That(origin.SyncRuleDeleted, Is.False);
+            Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+            Assert.That(origin!.ConnectedSystemId, Is.EqualTo(3));
+            Assert.That(origin!.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(origin!.SyncRuleId, Is.EqualTo(7));
+            Assert.That(origin!.SyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(origin!.SyncRuleDeleted, Is.False);
             Assert.That(origin.AssertsNoValue, Is.False);
         }
     }
@@ -62,12 +62,12 @@ public class ProvenanceLogicTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
-            Assert.That(origin.ConnectedSystemId, Is.EqualTo(3));
-            Assert.That(origin.ConnectedSystemName, Is.EqualTo("Facilities"));
-            Assert.That(origin.SyncRuleId, Is.Null);
-            Assert.That(origin.SyncRuleName, Is.Null);
-            Assert.That(origin.SyncRuleDeleted, Is.True);
+            Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+            Assert.That(origin!.ConnectedSystemId, Is.EqualTo(3));
+            Assert.That(origin!.ConnectedSystemName, Is.EqualTo("Facilities"));
+            Assert.That(origin!.SyncRuleId, Is.Null);
+            Assert.That(origin!.SyncRuleName, Is.Null);
+            Assert.That(origin!.SyncRuleDeleted, Is.True);
         }
     }
 
@@ -104,11 +104,11 @@ public class ProvenanceLogicTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
-            Assert.That(origin.ConnectedSystemId, Is.EqualTo(3));
-            Assert.That(origin.ConnectedSystemName, Is.EqualTo("HR"));
-            Assert.That(origin.SyncRuleId, Is.EqualTo(7));
-            Assert.That(origin.SyncRuleName, Is.EqualTo("HR Import"));
-            Assert.That(origin.SyncRuleDeleted, Is.False);
+            Assert.That(origin!.ConnectedSystemId, Is.EqualTo(3));
+            Assert.That(origin!.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(origin!.SyncRuleId, Is.EqualTo(7));
+            Assert.That(origin!.SyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(origin!.SyncRuleDeleted, Is.False);
         }
     }
 
@@ -128,10 +128,10 @@ public class ProvenanceLogicTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
-            Assert.That(origin.ConnectedSystemId, Is.Null);
-            Assert.That(origin.SyncRuleId, Is.Null);
-            Assert.That(origin.SyncRuleName, Is.Null);
-            Assert.That(origin.SyncRuleDeleted, Is.True);
+            Assert.That(origin!.ConnectedSystemId, Is.Null);
+            Assert.That(origin!.SyncRuleId, Is.Null);
+            Assert.That(origin!.SyncRuleName, Is.Null);
+            Assert.That(origin!.SyncRuleDeleted, Is.True);
         }
     }
 

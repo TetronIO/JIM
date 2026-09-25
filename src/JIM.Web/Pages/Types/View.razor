@@ -73,6 +73,7 @@
                 <MvoDetailsTable MetaverseObject="MetaverseObject" ObjectTypeName="@(MetaverseObjectType?.Name ?? "object")"
                                  AttributeValueTotalCounts="_attributeValueTotalCounts"
                                  Provenance="_mvoProvenance" ProvenanceLoading="_provenanceLoading"
+                                 GeneratedValueAssignments="_generatedValueAssignments"
                                  GroupBy="@_inspectGroupBy" OnGroupByChanged="OnInspectGroupByChangedAsync"
                                  ContributionFilterKey="@_contributionFilterKey" OnContributionFilterChanged="OnContributionFilterChangedAsync"
                                  SelectedAttributeId="_selectedAttributeId" OnAttributeSelected="OnAttributeSelectedAsync"
@@ -576,6 +577,7 @@
     // by this page (the Inspect table's host) rather than by MvoDetailsTable itself, so that component stays a
     // presentational renderer of parameters, testable in bUnit without the application layer.
     private MetaverseObjectProvenance? _mvoProvenance;
+    private Dictionary<string, GeneratedValueAssignmentHeader> _generatedValueAssignments = new();
     private bool _provenanceLoading;
     private Guid? _provenanceLoadedForId;
     private string _inspectGroupBy = "none";
@@ -662,6 +664,7 @@
         if (previousObjectId != MetaverseObject.Id)
         {
             _mvoProvenance = null;
+            _generatedValueAssignments = new();
             _provenanceLoadedForId = null;
             _contributionFilterKey = null;
             _selectedAttributeId = null;
@@ -754,7 +757,8 @@
 
     /// <summary>
     /// Loads this Metaverse Object's attribute provenance (#399) once per object, for the Inspect view's
-    /// contribution bar and Source column. A no-op once already loaded (or loading) for the current object.
+    /// contribution bar and Source column, with its generated-value assignments (#242) for the table's value
+    /// cells. A no-op once already loaded (or loading) for the current object.
     /// </summary>
     private async Task EnsureProvenanceLoadedAsync()
     {
@@ -768,6 +772,9 @@
         {
             using var jim = JimFactory.Create();
             _mvoProvenance = await jim.Metaverse.GetMetaverseObjectProvenanceAsync(MetaverseObject.Id);
+            // Generated values (#242) mark their attribute's value in the same table, so they load with it.
+            _generatedValueAssignments = GeneratedValuePreviewHelpers.IndexAssignmentsByAttribute(
+                await jim.UniqueValues.GetAssignmentsForMetaverseObjectAsync(MetaverseObject.Id));
         }
         finally
         {

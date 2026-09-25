@@ -50,6 +50,9 @@ public class ScheduleExecutionsControllerTests
         _application = new JimApplication(_mockRepository.Object);
         _controller = new ScheduleExecutionsController(_mockLogger.Object, _application);
 
+        // Cancelling writes the execution through the conditional transition (#1768); emulate it against the instance.
+        _mockSchedulingRepository.EmulateConditionalTransitions();
+
         // Set up a default HTTP context with a user
         var claims = new List<Claim>
         {
@@ -77,7 +80,7 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync();
@@ -95,7 +98,7 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync() as OkObjectResult;
@@ -122,7 +125,7 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync() as OkObjectResult;
@@ -144,12 +147,12 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true, null))
             .ReturnsAsync(pagedResult);
 
         await _controller.GetAllAsync(scheduleId: scheduleId);
 
-        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true), Times.Once);
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(scheduleId, 1, 20, null, true, null), Times.Once);
     }
 
     [Test]
@@ -162,12 +165,52 @@ public class ScheduleExecutionsControllerTests
             CurrentPage = 2,
             PageSize = 10
         };
-        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false, null))
             .ReturnsAsync(pagedResult);
 
         await _controller.GetAllAsync(page: 2, pageSize: 10, sortBy: "queuedAt", sortDescending: false);
 
-        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false), Times.Once);
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(null, 2, 10, "queuedAt", false, null), Times.Once);
+    }
+
+    [Test]
+    public async Task GetAllAsync_WithStatusFilter_PassesStatusToRepositoryAsync()
+    {
+        // The status filter used to be accepted by Get-JIMScheduleExecution and silently dropped here, so every
+        // status came back whatever was asked for.
+        var pagedResult = new PagedResultSet<ScheduleExecution>
+        {
+            Results = new List<ScheduleExecution>(),
+            TotalResults = 0,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(
+                null, 1, 20, null, true, ScheduleExecutionStatus.CompleteWithError))
+            .ReturnsAsync(pagedResult);
+
+        await _controller.GetAllAsync(status: ScheduleExecutionStatus.CompleteWithError);
+
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(
+            null, 1, 20, null, true, ScheduleExecutionStatus.CompleteWithError), Times.Once);
+    }
+
+    [Test]
+    public async Task GetAllAsync_WithoutStatusFilter_PassesNullStatusToRepositoryAsync()
+    {
+        var pagedResult = new PagedResultSet<ScheduleExecution>
+        {
+            Results = new List<ScheduleExecution>(),
+            TotalResults = 0,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null))
+            .ReturnsAsync(pagedResult);
+
+        await _controller.GetAllAsync();
+
+        _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionsAsync(null, 1, 20, null, true, null), Times.Once);
     }
 
     #endregion
@@ -442,6 +485,57 @@ public class ScheduleExecutionsControllerTests
     }
 
     [Test]
+    public async Task GetByIdAsync_StepCancelledBeforeItRan_IncludesTheReasonAsync()
+    {
+        // Read parity with the portal (#1768): the REST API says why a cancelled step did not run.
+        var id = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
+
+        var execution = new ScheduleExecution
+        {
+            Id = id,
+            ScheduleId = scheduleId,
+            Status = ScheduleExecutionStatus.Failed,
+            TotalSteps = 2,
+            CurrentStepIndex = 0,
+            Schedule = new Schedule
+            {
+                Id = scheduleId,
+                Name = "Test Schedule",
+                Steps = new List<ScheduleStep>
+                {
+                    new() { StepIndex = 0, Name = "Import", StepType = ScheduleStepType.RunProfile },
+                    new() { StepIndex = 1, Name = "Export", StepType = ScheduleStepType.RunProfile }
+                }
+            }
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionWithScheduleAsync(id))
+            .ReturnsAsync(execution);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(scheduleId))
+            .ReturnsAsync(execution.Schedule.Steps);
+        _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(id))
+            .ReturnsAsync(new List<WorkerTask>());
+        _mockActivityRepository.Setup(r => r.GetActivitiesByScheduleExecutionAsync(id))
+            .ReturnsAsync(new List<Activity>
+            {
+                new() { Id = Guid.NewGuid(), Status = ActivityStatus.FailedWithError, ErrorMessage = "Import failed", ScheduleExecutionId = id, ScheduleStepIndex = 0 },
+                new() { Id = Guid.NewGuid(), Status = ActivityStatus.Cancelled, Message = ScheduleStepNotRunReasons.EarlierStepStoppedSchedule, ScheduleExecutionId = id, ScheduleStepIndex = 1 }
+            });
+
+        var result = await _controller.GetByIdAsync(id) as OkObjectResult;
+        var dto = result?.Value as ScheduleExecutionDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.Steps[1].Status, Is.EqualTo("Cancelled"));
+            Assert.That(dto.Steps[1].CancellationReason, Is.EqualTo(ScheduleStepNotRunReasons.EarlierStepStoppedSchedule));
+            Assert.That(dto.Steps[0].CancellationReason, Is.Null);
+        }
+    }
+
+    [Test]
     public async Task GetByIdAsync_ActiveWorkerTask_ShowsProcessingStatusAsync()
     {
         var id = Guid.NewGuid();
@@ -637,12 +731,8 @@ public class ScheduleExecutionsControllerTests
             Status = ScheduleExecutionStatus.Queued
         };
 
-        ScheduleExecution? updatedExecution = null;
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(id))
             .ReturnsAsync(execution);
-        _mockSchedulingRepository.Setup(r => r.UpdateScheduleExecutionAsync(It.IsAny<ScheduleExecution>()))
-            .Callback<ScheduleExecution>(e => updatedExecution = e)
-            .Returns(Task.CompletedTask);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(id))
             .ReturnsAsync(new List<WorkerTask>());
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionWithScheduleAsync(id))
@@ -650,10 +740,10 @@ public class ScheduleExecutionsControllerTests
 
         await _controller.CancelAsync(id);
 
-        Assert.That(updatedExecution, Is.Not.Null);
-        Assert.That(updatedExecution!.Status, Is.EqualTo(ScheduleExecutionStatus.Cancelled));
-        Assert.That(updatedExecution.ErrorMessage, Is.EqualTo("Cancelled by user"));
-        Assert.That(updatedExecution.CompletedAt, Is.Not.Null);
+        // Written through the conditional transition, which the fixture applies to the instance it was given.
+        Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.Cancelled));
+        Assert.That(execution.ErrorMessage, Is.EqualTo("Cancelled by user"));
+        Assert.That(execution.CompletedAt, Is.Not.Null);
     }
 
     [Test]

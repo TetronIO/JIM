@@ -13,6 +13,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.PostgresData;
+using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
@@ -68,15 +69,7 @@ public class SystemResetDatabaseTests
     {
         // Clean slate: truncate every table (including built-ins and the migration-managed singleton)
         // so each test seeds and asserts in isolation.
-        await using var ctx = NewContext();
-        await ctx.Database.ExecuteSqlRawAsync(@"
-            DO $$
-            DECLARE r RECORD;
-            BEGIN
-                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '__EFMigrationsHistory') LOOP
-                    EXECUTE 'TRUNCATE TABLE ""' || r.tablename || '"" RESTART IDENTITY CASCADE';
-                END LOOP;
-            END $$;");
+        await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
     /// <summary>

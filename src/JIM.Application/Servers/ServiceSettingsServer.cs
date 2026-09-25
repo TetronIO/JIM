@@ -605,6 +605,16 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Permanently removes a setting. Used by the seeding pass to prune Feature Flag settings that have been
+        /// removed from the catalogue (#1781); no audit trail is recorded, matching the seeding pass's other
+        /// repository-direct writes.
+        /// </summary>
+        internal async Task DeleteSettingAsync(string key)
+        {
+            await Application.Repository.ServiceSettings.DeleteSettingAsync(key);
+        }
+
+        /// <summary>
         /// Creates or updates a setting (used during seeding).
         /// </summary>
         internal async Task CreateOrUpdateSettingAsync(ServiceSetting setting)

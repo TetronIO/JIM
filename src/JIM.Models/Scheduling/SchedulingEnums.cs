@@ -153,7 +153,54 @@ public enum ScheduleExecutionStatus
     /// <summary>
     /// Execution is paused and can be resumed.
     /// </summary>
-    Paused = 5
+    Paused = 5,
+
+    /// <summary>
+    /// Execution finished, but at least one step failed and was allowed to let the Schedule continue (#1787). Named to
+    /// match <c>ActivityStatus.CompleteWithError</c>, for the same reason <see cref="Complete"/> matches
+    /// <c>ActivityStatus.Complete</c>. Finished, like <see cref="Complete"/>, everywhere except the Temporal Scope
+    /// Reconciliation watermark, which only a clean run may move forward.
+    /// </summary>
+    CompleteWithError = 6
+}
+
+/// <summary>
+/// What a Schedule does when one of its steps fails (#1787). Each step can follow this or override it; see
+/// <see cref="ScheduleStepFailureBehaviour"/>, and <see cref="ScheduleFailureHandling"/> for how the two combine.
+/// </summary>
+public enum ScheduleFailureBehaviour
+{
+    /// <summary>
+    /// Stop the Schedule: the remaining steps do not run, and the execution ends Failed. The default.
+    /// </summary>
+    Stop = 0,
+
+    /// <summary>
+    /// Continue the Schedule: the remaining steps still run, and the execution ends Complete With Error.
+    /// </summary>
+    Continue = 1
+}
+
+/// <summary>
+/// What a failed step does to its Schedule (#1787): follow the Schedule's own setting, or override it.
+/// </summary>
+public enum ScheduleStepFailureBehaviour
+{
+    /// <summary>
+    /// Do whatever the Schedule is set to do when a step fails (<see cref="Schedule.OnStepFailure"/>). The default,
+    /// so a Schedule set to continue also covers steps added to it later.
+    /// </summary>
+    FollowSchedule = 0,
+
+    /// <summary>
+    /// Stop the Schedule when this step fails, whatever the Schedule's own setting.
+    /// </summary>
+    Stop = 1,
+
+    /// <summary>
+    /// Let the Schedule continue when this step fails, whatever the Schedule's own setting.
+    /// </summary>
+    Continue = 2
 }
 
 /// <summary>

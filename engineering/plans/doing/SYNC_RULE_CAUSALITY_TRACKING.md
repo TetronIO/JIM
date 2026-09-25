@@ -57,8 +57,8 @@ Every value has exactly one origin, rendered in three forms (a row chip, an insp
 ### Where it appears
 
 - **Inspect view only.** The Metaverse Object page's Details view switch becomes **Form | Tabs | Inspect**. "Table" is renamed "Inspect" (the label only; the stored preference value stays `table` so saved preferences survive). Form and Tabs are unchanged and show no source information. When RBAC lands, Inspect becomes an administrator-only view.
-- **Contribution bar** at the top of Inspect, headed "Where this {Object Type name} gets its values" (worded to avoid a possessive, so it reads correctly for any type name). A segmented bar shows each source's share of the object's attributes; its legend doubles as the source filter.
-- **Source column** in Inspect, aligned, one line per row.
+- **Contribution bar** at the top of Inspect, in its own panel, headed "Where this {Object Type name} gets its values" (worded to avoid a possessive, so it reads correctly for any type name). A segmented bar shows each source's share of the object's attributes; the key beneath it doubles as the source filter.
+- **Source column** in Inspect, aligned, one line per row: a swatch in the source's bar colour and the key's label for it, so rows read against the key. The same swatch names Group by Source headers and the inspector's list of every source; the one pill-weight statement of a source (Connected System and Synchronisation Rule as one pill, each half linked) is the inspector's Current value.
 - **Group by: None · Source · Category**, a labelled toolbar control. Grouped by Source, the Source column drops away because the group header states it. Remembered per user like table density, and carried in the URL.
 - **Attribute inspector.** Clicking a row opens a side panel beside the table (not a modal over it, so the Source column stays visible and an administrator can step through attributes). It shows:
   1. The current value and its origin sentence: system, rule, the contributing Connected System Object, and when and by which Activity it was set.
@@ -92,19 +92,19 @@ No other schema change is needed for the Connected System origin. The generated 
 
 ## Implementation Phases
 
-### Phase 1: Origin model and projection attribution
+### Phase 1: Origin model and projection attribution ✅
 
 - Origin model in `JIM.Models` covering all seven origins, with the generated and person variants present but fed only once #242 and #614 land
 - Populate `MetaverseObjectChange.SyncRuleId` / `SyncRuleName` on projection, with a `RequiresPostgres` round-trip test
 - Tests first
 
-### Phase 2: Queries and API
+### Phase 2: Queries and API ✅
 
 - Application-layer methods for the four inspector queries above, respecting the retrieval taxonomy
 - REST endpoint and DTOs; PowerShell cmdlet and Pester tests
-- Performance check against a large object (many attributes, long history)
+- Performance check against a large object (many attributes, long history). Measured 2026-09-25 on the sandbox stack with 5,000 changes to one attribute of one object and 205,000 to that attribute overall: the whole-object summary answers in about 11 ms warm, one attribute's full provenance in about 50 ms warm, and the history stops at its 50-entry cap and says so.
 
-### Phase 3: Inspect view
+### Phase 3: Inspect view ✅
 
 - Rename Table to Inspect (label only)
 - Contribution bar, Source column, source filter, Group by control (persisted, in the URL)

@@ -70,10 +70,9 @@ public abstract class WorkerTask
 	public int? ScheduleStepIndex { get; set; }
 
 	/// <summary>
-	/// Whether the schedule should continue if this step fails.
-	/// Copied from ScheduleStep.ContinueOnFailure at queue time so the check works
-	/// even if the schedule is modified mid-execution.
-	/// Only relevant for tasks that are part of a schedule execution.
+	/// The Schedule Step this task runs, when it is part of a schedule execution. Copied onto the task's Activity,
+	/// where it tells parallel steps (which share a <see cref="ScheduleStepIndex"/>) apart. A plain scalar with no
+	/// foreign key, so editing or deleting a Schedule never has to wait on a queued task.
 	/// </summary>
-	public bool ContinueOnFailure { get; set; }
+	public Guid? ScheduleStepId { get; set; }
 }

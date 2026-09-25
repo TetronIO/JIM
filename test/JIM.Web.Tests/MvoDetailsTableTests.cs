@@ -8,6 +8,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
@@ -202,6 +203,30 @@ public class MvoDetailsTableTests : JimComponentTestContext
         {
             Assert.That(control.Instance.AriaLabel, Is.EqualTo("Group by"));
             Assert.That(raised, Is.EqualTo("category"));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_GeneratedValueAssignment_RendersTheGeneratedValueChipBesideThatValue()
+    {
+        // Unique Value Generation (#242): the host hands the assignments in, so the table needs no application
+        // layer of its own to mark a generated value.
+        var mvo = BuildObject(TextValue(1, "Account Name", "jsmith"), TextValue(2, "Job Title", "Engineer"));
+        var assignments = new Dictionary<string, GeneratedValueAssignmentHeader>
+        {
+            ["Account Name"] = new() { AttributeName = "Account Name", Value = "jsmith", SyncRuleId = 5, SyncRuleName = "HR Import" }
+        };
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.GeneratedValueAssignments, assignments));
+
+        var chips = cut.FindComponents<GeneratedValueProvenanceChip>();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chips, Has.Count.EqualTo(1));
+            Assert.That(chips[0].Instance.Assignment.AttributeName, Is.EqualTo("Account Name"));
         }
     }
 

@@ -9,19 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ A Metaverse Object's new **Inspect** view shows where every value comes from, and its attribute inspector explains why a value won: every contributing Synchronisation Rule in priority order with the value each would supply, plus the attribute's history; also via REST and `Get-JIMMetaverseObjectProvenance`. The same origin now appears on the Changes tab and, on a Pending Export's detail page, alongside the outbound Attribute Flow that staged the change, each linking back into Inspect. (#399)
+- ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
+- ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
+- ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
+- ✨ A Schedule run that carried on past a failed step now ends **Complete With Error**, naming the failed steps, instead of a plain Complete, so the portal, PowerShell and monitoring scripts can tell it apart from a clean run. (#1787)
 
 ### Changed
 
+- 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
+- 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
 
 ### Fixed
 
+- 🐛 `Get-JIMScheduleExecution -Status` and the REST API's Schedule Execution list now return only executions with the requested status, instead of every execution.
+- 🐛 A Schedule with a step that cannot be queued, for example because its Connected System is being deleted, no longer runs its earlier steps and then reports Complete; it runs nothing, fails naming the step, and each step shows why it did not run. (#1768)
+- 🐛 A Schedule Execution cancelled while a step is running now stays cancelled, instead of being marked Complete or Failed when that step finishes. (#1768)
 - 🐛 An object that leaves scope but keeps its join is now recorded as **Left scope, join kept**, naming its Synchronisation Rule, rather than as an Attribute Flow that never happened and inflated the Activity's Attribute Flows count. (#1649)
 - 🐛 A Synchronisation Rule or Attribute Flow disabled with a reason (as a schema refresh's "Apply and Disable Dependents" does), or re-enabled afterwards, is now classified in the configuration change history instead of being recorded without a classification. (#1753)
 - 🐛 The SQL Connector now matches Microsoft SQL Server's legacy `datetime` columns exactly, so a Delta Import no longer skips changes sharing a timestamp, stalls on them, or re-reads unchanged rows, and an export keyed on such a column finds its row. (#1451)
 - 🐛 Reordering an attribute's priority straight after deleting a contributing Synchronisation Rule no longer fails while its values are being recalled: the rule drops to the bottom and may be left out. A refused order now names what is missing. (#1597)
 - 🐛 On Oracle Database, a Delta Import reading a `TIMESTAMP WITH TIME ZONE` watermark or change-log column no longer skips or re-reads changes when the Connected System's Database Time Zone is not UTC. (#1783)
+- 🐛 A new deployment using the bundled PostgreSQL container now starts, instead of failing to create its database because of the `LANG` setting in `.env`.
+- 🐛 A production deployment is now reachable at the address the setup script gives, and the `jim.web` container reports healthy instead of unhealthy.
+- 🐛 The air-gapped release bundle no longer ships development settings (a demo Keycloak with `admin`/`admin`, PostgreSQL open on port 5432) that `docker compose` applied automatically when run without `-f`.
+- 🐛 Case-insensitive Object Matching Rules treated `_` and `%` as wildcards, so `j_smith` could match `jxsmith` and join the wrong object, on inbound joins and export matching alike; they now require an exact case-insensitive match.
+- 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
+- 🐛 Deleting a Pending Export no longer leaves its attribute changes behind in the database, where they accumulated indefinitely. (#1818)
+
+### Performance
+
+- ⚡ Synchronisation no longer queries the database once per object to look for an existing target object before provisioning; it checks once per page, speeding up large initial synchronisations.
+- ⚡ Large imports do much less database work: new objects are no longer looked up one at a time, the object type's schema is no longer reloaded for every object, and checking that provisioned objects were created no longer loads each one in full.
+- ⚡ Synchronisation starts and writes faster: it loads only the Pending Exports it can act on, skips a redundant lookup when provisioning, and writes each page of objects, Pending Exports and Activity results in bulk.
 
 ## [0.15.0] - 2026-09-23
 
