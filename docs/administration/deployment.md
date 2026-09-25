@@ -188,7 +188,7 @@ Before deploying JIM in an air-gapped environment, ensure you have:
 - **Docker Engine** (20.10+) and **Docker Compose** (v2+) installed
 - **PostgreSQL 18** -- either as a container or external database server
 - A DNS name or IP address for the JIM server
-- TLS certificates if enabling HTTPS (recommended for production)
+- TLS certificates for HTTPS, which browser access from any machine other than the JIM host requires (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
 - An OIDC identity provider accessible from the air-gapped network (e.g. AD FS, Keycloak)
 
 ### Step 1: Transfer and Verify the Bundle
@@ -318,7 +318,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 
 ### Step 9: Access JIM
 
-1. **Open your browser** to `https://jim.your-domain.local` (or `http://localhost:5200` if no TLS)
+1. **Open your browser** to `https://jim.your-domain.local`. Until TLS is in place, you can sign in only from a browser on the JIM host itself, at `http://localhost:5200`; see [TLS and Reverse Proxy](#tls-and-reverse-proxy)
 2. **Log in** with your SSO credentials
 3. **Verify access** - the initial admin user (configured via `JIM_SSO_INITIAL_ADMIN`) will have full access
 
@@ -327,6 +327,11 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 ## TLS and Reverse Proxy
 
 The JIM containers serve HTTP on port 8080 internally. For production, place a reverse proxy in front to handle TLS termination.
+
+!!! warning "Browsers on other machines must use HTTPS"
+    Browser access to JIM from any machine other than the JIM host requires HTTPS. In a production deployment, JIM's sign-in cookies are HTTPS-only, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: the browser loops between JIM and your identity provider (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
+
+    Plain HTTP works only at `http://localhost:5200`, which means from a browser on the JIM host itself. The host's own name or IP address fails even there, and Safari may refuse the cookies on `localhost` too.
 
 !!! important
     Blazor Server uses WebSockets (SignalR). Your reverse proxy **must** support WebSocket connections, or the UI will fall back to long polling with degraded performance.
