@@ -260,10 +260,12 @@ public class MvoDetailsTableTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Source"));
-            // The header names the source with the same system-and-rule pill as the Source column it replaces,
-            // not a hand-built label string.
-            Assert.That(headerRow.QuerySelectorAll(".jim-system-rule-chip .jim-object-chip-name").Select(n => n.TextContent),
-                Is.EqualTo(new[] { "HR", "HR Import" }));
+            // The header names the source exactly as the Source column it replaces does (the bar's swatch and
+            // legend label), with the rule beside it, rather than a hand-built label string.
+            Assert.That(headerRow.QuerySelector(".jim-source-dot"), Is.Not.Null);
+            Assert.That(headerRow.QuerySelector(".jim-source-dot-name")!.TextContent, Is.EqualTo("HR"));
+            Assert.That(headerRow.QuerySelector(".jim-source-dot-rule")!.TextContent, Is.EqualTo("HR Import"));
+            Assert.That(headerRow.QuerySelectorAll(".jim-system-rule-chip"), Is.Empty, "headers use the swatch, not the pill");
             Assert.That(headerRow.TextContent, Does.Contain("2 attributes"));
             Assert.That(cut.FindAll("tr.jim-inspect-row"), Has.Count.EqualTo(2));
         }

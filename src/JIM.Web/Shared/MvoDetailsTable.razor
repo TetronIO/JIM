@@ -86,10 +86,11 @@
                                             }
                                             else
                                             {
-                                                @* Group by Source: the header names the source in the same compact
-                                                   form as the Source column it replaces; the inspector, which any
-                                                   row beneath it opens, carries the links. *@
-                                                <ValueOriginChip Origin="@(row.HeaderOrigin ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="row.HeaderHasSeveralOrigins" Compact="true" />
+                                                @* Group by Source: the header names the source exactly as the Source
+                                                   column it replaces does (the bar's swatch and legend label), with
+                                                   the rule beside it; the inspector, which any row beneath it
+                                                   opens, carries the links. *@
+                                                <SourceDot Group="@(row.HeaderSource!)" ShowRule="true" />
                                             }
                                             <span class="jim-inspect-group-count">@row.HeaderCount attribute@(row.HeaderCount == 1 ? "" : "s")</span>
                                         </td>
@@ -364,17 +365,15 @@
     /// <summary>
     /// One row the table renders: either an attribute row (<see cref="Group"/> set) or a group header (Source or
     /// Category grouping). A category header carries <see cref="HeaderLabel"/>/<see cref="HeaderIcon"/>; a source
-    /// header instead carries the group's <see cref="HeaderOrigin"/>, rendered through the same
-    /// <c>ValueOriginChip</c> every other origin uses, so the header names the Connected System and links the
-    /// Synchronisation Rule without a second copy of that rendering.
+    /// header instead carries the contribution bar's own group for the source (<see cref="HeaderSource"/>), so it
+    /// is labelled and coloured exactly as the bar's key labels and colours it.
     /// </summary>
     private sealed record TableRow(
         MvoAttributeTableGroup? Group,
         string? HeaderLabel = null,
         string? HeaderIcon = null,
         int HeaderCount = 0,
-        ValueOrigin? HeaderOrigin = null,
-        bool HeaderHasSeveralOrigins = false)
+        ValueOriginGrouping.Group? HeaderSource = null)
     {
         public bool IsHeader => Group == null;
     }
@@ -487,10 +486,7 @@
                 // Every group BuildGroups returns above came from this same withOrigin list, so its key always
                 // has at least one member here; no empty-group guard is needed.
                 var members = byKey[sourceGroup.Key].ToList();
-                var sample = members[0].Origin;
-                rows.Add(new TableRow(null, HeaderCount: count,
-                    HeaderOrigin: sample.HasSeveralOrigins ? null : sample.Origins[0],
-                    HeaderHasSeveralOrigins: sample.HasSeveralOrigins));
+                rows.Add(new TableRow(null, HeaderCount: count, HeaderSource: sourceGroup));
                 rows.AddRange(members.OrderBy(m => m.Group.AttributeName).Select(m => new TableRow(m.Group)));
             }
             return rows;
