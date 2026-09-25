@@ -113,7 +113,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 11: filter to cells using a single operator
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority" -Step BaselineResolution  # Scenario 14: BaselineResolution, RecallReElection, IdenticalValueHandOver, WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion (OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario22-OpenLdapPasswordPolicy" -Step Discovery  # Scenario 22 (cumulative): Discovery, Provision, Override (OpenLDAP only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario23-UniqueValueGeneration" -Step Brownfield  # Scenario 23 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, Collision, SurfaceParity, FeatureFlag
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario23-UniqueValueGeneration" -Step Brownfield  # Scenario 23 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
@@ -1309,13 +1309,14 @@ Samba AD and OpenLDAP.
 | 7b Withdrawal | Withdrawing that flow hands the attribute back to the generated flow, which adopts the values already held; nothing is renamed |
 | 8 Start again | Counter back to the configured Start; survivors keep their numbers; no collisions; the REST route answers too |
 | 9 Failure | An attempt limit of 1 on a constant base: one object wins, the rest fail with `GeneratedValueExhausted`, nothing partial written |
-| 10 Collision | Samba AD only: an account outside JIM's import scope already holds the value; the export fails as an ordinary export error (no probing until release 3) |
-| 11 Surface parity | A mapping configured through raw REST and one through PowerShell behave identically |
-| 12 Feature flag | With the flag off, creating a generated mapping is refused with a 400 and existing mappings keep generating |
+| 10 Surface parity | A mapping configured through raw REST and one through PowerShell behave identically |
+| 11 Feature flag | With the flag off, creating a generated mapping is refused with a 400 and existing mappings keep generating |
+
+**Not covered here: a target-side collision.** In release 1 a value the target already holds (outside JIM's view) is an ordinary export error, which is existing export behaviour, not generation. It gets integration coverage with release 4's Collision Remediation, which reworks that path. It also needs a harness change first: the LDAP Connector logs a rejected object at Error level, and the runner's end-of-run log scan fails a run on any Error line with no way to mark one as intended, so no scenario can yet include a deliberate export failure.
 
 **What this scenario found.** Its first runs surfaced four defects the unit tiers could not: connector-space adoption renaming a live brownfield account (removed in favour of Attribute Priority, PRD FR 30 revised); a generated export change merged into a drift-staged Pending Export being left unresolved and failing the page; a stale assignment reasserted after a higher-priority flow was withdrawn, renaming the account back; and a deliberate feature-disabled refusal logged as an unhandled Error.
 
-**Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 1 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, Collision, SurfaceParity, FeatureFlag.
+**Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 1 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag.
 
 ### Phase 2 - Database Scenarios
 
@@ -2348,7 +2349,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 20 | ✅ Complete | Password Synchronisation, outbound half: held while switched off, delivered when switched on, coalescing, parked-change retry (Samba AD or OpenLDAP) (#1119) |
 | Scenario 21 | ✅ Complete | Run Profile safeguards: export limits (Max creates, updates, deletes) and Full Import deletion-detection limits (#1618) |
 | Scenario 22 | ✅ Complete | OpenLDAP password policy discovery: enforcement negative control, discovered values, non-root provisioning with nothing parked, override signal (OpenLDAP only) (#1702) |
-| Scenario 23 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, target-side collision (Samba AD), surface parity, feature flag (#242) |
+| Scenario 23 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity, feature flag (#242) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 16 going green) and performance baselines |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 

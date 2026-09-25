@@ -12,8 +12,10 @@
     by Attribute Priority (and the generated flow adopting the values Metaverse Objects already hold
     when that higher-priority flow is withdrawn), sticky assignments across re-runs, and Start again. Release 1 does NOT include
     probing, the retired values register, Collision Remediation or Needs Decision (those ship in
-    releases 2 to 4); a target-side collision in this release is an ordinary export error naming the
-    value and the system, which the SambaAD-only Collision step asserts directly.
+    releases 2 to 4). A target-side collision in this release is an ordinary export error, which is
+    existing export behaviour rather than generation; it gets integration coverage with release 4's
+    Collision Remediation, which reworks that path (and needs the harness to accept an intended export
+    error, which its end-of-run log scan does not today).
 
     The provisioning substrate is Scenario 1's, composed via Setup-Scenario23.ps1 (which itself calls
     Setup-Scenario1.ps1 -GenerateAccountName), with the HR CSV generated via Get-OrGenerate-TestCSV.ps1
@@ -23,10 +25,7 @@
 
     Steps are CUMULATIVE, like Scenario 22's: a named step runs everything up to and including itself,
     because most steps depend on the population state earlier steps leave behind (Joiners' baseline,
-    Gates' intra-batch joiners, the Sequence/Random values every object already carries). The one
-    exception is Collision, which only asserts anything under Samba AD; under OpenLDAP it prints a
-    clear skip message and does nothing (a CSV target cannot reject a duplicate, and OpenLDAP has no
-    directory-wide unique-value constraint this harness configures).
+    Gates' intra-batch joiners, the Sequence/Random values every object already carries).
 
 .PARAMETER Step
     Which part to execute (cumulative: a named step runs everything up to and including itself).
@@ -52,7 +51,7 @@
 .PARAMETER DirectoryConfig
     Directory configuration hashtable. Defaults to Get-DirectoryConfig -DirectoryType OpenLDAP. Samba
     AD is fully supported (pass -DirectoryConfig (Get-DirectoryConfig -DirectoryType SambaAD -Instance
-    Primary)) and is required for the Collision step to assert anything.
+    Primary)).
 
 .EXAMPLE
     ./Invoke-Scenario23-UniqueValueGeneration.ps1 -ApiKey "jim_..." -Template Micro
@@ -63,7 +62,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "Collision", "SurfaceParity", "FeatureFlag", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -306,7 +305,7 @@ function New-OutOfBandLdapAccount {
     <#
     .SYNOPSIS
         Creates a directory account directly against OpenLDAP or Samba AD, never through JIM, for the
-        Brownfield and (Samba AD only) Collision test steps. Returns the account's DN.
+        Brownfield test step. Returns the account's DN.
     .DESCRIPTION
         OpenLDAP: a plain ldapadd over the configured bind. Samba AD: ldbadd routed through the running
         server (never direct sam.ldb file access, which races the server's own writes; see Scenario 5's
@@ -318,8 +317,7 @@ function New-OutOfBandLdapAccount {
         [Parameter(Mandatory=$true)][string]$FirstName,
         [Parameter(Mandatory=$true)][string]$LastName,
         [string]$EmployeeIdValue,
-        [string]$PreferredLanguage,
-        [switch]$OutsideImportScope
+        [string]$PreferredLanguage
     )
 
     $displayName = "$FirstName $LastName"
@@ -344,7 +342,7 @@ function New-OutOfBandLdapAccount {
         return $dn
     }
     else {
-        $containerDn = if ($OutsideImportScope) { "CN=Users,$($DirectoryConfig.BaseDN)" } else { "OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" }
+        $containerDn = "OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
         $dn = "CN=$displayName,$containerDn"
         $lines = @(
             "dn: $dn", "objectClass: top", "objectClass: person", "objectClass: organizationalPerson", "objectClass: user",
@@ -431,7 +429,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "Collision", "SurfaceParity", "FeatureFlag")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "SurfaceParity", "FeatureFlag")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -825,57 +823,11 @@ try {
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
-    # Collision (Samba AD only): a target-side collision the local gates cannot see is an
-    # ordinary export error naming the value and the system (release 1 has no probing and no
-    # classification of the rejection; that lands in releases 3 and 4).
-    # ─────────────────────────────────────────────────────────────────────────────────────
-    if ($lastStepIndex -ge $stepOrder.IndexOf("Collision")) {
-        Write-TestSection "Test 10: Target-side collision (Samba AD only)"
-
-        if ($DirectoryConfig.DirectoryType -ne "SambaAD") {
-            Write-Host "  Skipped: this step needs a directory-wide unique-value constraint (a CSV target cannot" -ForegroundColor Yellow
-            Write-Host "  reject a duplicate, and OpenLDAP has no such constraint configured in this harness)." -ForegroundColor Yellow
-            Write-Host "  Re-run with -DirectoryConfig (Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary) to exercise it." -ForegroundColor Yellow
-        }
-        else {
-            $collisionName = "thaddeus.okonkwo"
-            $dn = New-OutOfBandLdapAccount -AccountName $collisionName -FirstName "Thaddeus" -LastName "Okonkwo" -OutsideImportScope
-            Write-Host "  Created out-of-band account outside JIM's import scope: $dn" -ForegroundColor Gray
-
-            Add-HrCsvJoiner -EmployeeId "EMP900040" -FirstName "Thaddeus" -LastName "Okonkwo"
-            $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Full Import (Collision arrange)"
-            $collisionSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $collisionSync.activityId -Name "HR CSV Delta Sync (Collision arrange)"
-
-            $collisionMvo = @(Get-JIMMetaverseObject -AttributeName "Employee ID" -AttributeValue "EMP900040" -Attributes @("Account Name")) | Select-Object -First 1
-            Assert-NotNull -Value $collisionMvo -Message "Thaddeus Okonkwo's Metaverse Object was projected"
-            Add-TestResult -Name "The local gates did not see the out-of-scope brownfield account (release 1 has no probing)" -Passed ($collisionMvo.attributes.'Account Name' -eq $collisionName) `
-                -Detail "Expected '$collisionName' (generated free, since the brownfield account is outside JIM's import scope), got '$($collisionMvo.attributes.'Account Name')'"
-
-            # The export to the directory now collides for real: Samba AD enforces sAMAccountName
-            # uniqueness domain-wide, regardless of OU.
-            $export = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $export.activityId -Name "Directory Export (Collision)" -AllowWarnings
-
-            $pendingExports = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -All)
-            $collisionPendingExport = $pendingExports | Where-Object { $_.sourceMetaverseObjectDisplayName -match 'Thaddeus Okonkwo' } | Select-Object -First 1
-            Add-TestResult -Name "An ordinary export error was recorded, naming a failure (release 1: no UniqueValueAlreadyInUse classification yet)" `
-                -Passed ($null -ne $collisionPendingExport -and $collisionPendingExport.errorCount -gt 0 -and -not [string]::IsNullOrWhiteSpace($collisionPendingExport.lastErrorMessage)) `
-                -Detail "Pending export: $($collisionPendingExport | ConvertTo-Json -Compress)"
-
-            if ($collisionPendingExport -and $collisionPendingExport.lastErrorMessage) {
-                Write-Host "  Export error message: $($collisionPendingExport.lastErrorMessage)" -ForegroundColor Gray
-            }
-        }
-    }
-
-    # ─────────────────────────────────────────────────────────────────────────────────────
     # Surface parity: the same shape of mapping configured via raw REST and via PowerShell
     # produces identical (same-shaped) generated behaviour.
     # ─────────────────────────────────────────────────────────────────────────────────────
     if ($lastStepIndex -ge $stepOrder.IndexOf("SurfaceParity")) {
-        Write-TestSection "Test 11: Surface parity (raw REST vs PowerShell)"
+        Write-TestSection "Test 10: Surface parity (raw REST vs PowerShell)"
 
         $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
         $restAttr = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq "Access Code REST" }
@@ -931,7 +883,7 @@ try {
     # mappings keep generating.
     # ─────────────────────────────────────────────────────────────────────────────────────
     if ($lastStepIndex -ge $stepOrder.IndexOf("FeatureFlag")) {
-        Write-TestSection "Test 12: Feature flag (Features.UniqueValueGeneration)"
+        Write-TestSection "Test 11: Feature flag (Features.UniqueValueGeneration)"
 
         Disable-JIMFeature -Name "Features.UniqueValueGeneration" | Out-Null
 
