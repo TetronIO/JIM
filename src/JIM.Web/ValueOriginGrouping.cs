@@ -98,4 +98,37 @@ public static class ValueOriginGrouping
         return new Group(key, origin.Kind, label, origin.ConnectedSystemId, origin.ConnectedSystemName,
             origin.SyncRuleId, origin.SyncRuleName, origin.SyncRuleDeleted);
     }
+
+    /// <summary>
+    /// The theme colour token for a Connected System. Each system keeps one colour on every object and across
+    /// restarts, chosen from its id (never from a string hash: <c>string.GetHashCode()</c> is randomised per
+    /// process). Ids start at 1, so the first system takes the info colour its Connected System chip glyph
+    /// already wears.
+    /// </summary>
+    public static string ColourTokenForConnectedSystem(int connectedSystemId) =>
+        SystemPaletteTokens[Math.Abs((connectedSystemId - 1) % SystemPaletteTokens.Length)];
+
+    /// <summary>
+    /// The theme colour token for a source group: its Connected System's colour, except that values JIM generated
+    /// take the primary colour and values a person set the secondary one, so those two never share a colour with a
+    /// system. "Not recorded" and "several sources" take the same neutral token, since neither names a real
+    /// source. The contribution bar, its legend and every source dot read their colour from here.
+    /// </summary>
+    public static string ColourTokenFor(Group group) => group.Kind switch
+    {
+        ValueOriginKind.GeneratedByJim => "--mud-palette-primary",
+        ValueOriginKind.SetByPerson => "--mud-palette-secondary",
+        ValueOriginKind.SynchronisationRule when group.ConnectedSystemId is { } systemId => ColourTokenForConnectedSystem(systemId),
+        _ => NeutralToken
+    };
+
+    private static readonly string[] SystemPaletteTokens =
+    [
+        "--mud-palette-info",
+        "--mud-palette-success",
+        "--mud-palette-warning",
+        "--mud-palette-tertiary"
+    ];
+
+    private const string NeutralToken = "--mud-palette-text-disabled";
 }

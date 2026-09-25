@@ -80,10 +80,12 @@ public class MvoDetailsTableTests : JimComponentTestContext
     };
 
     [Test]
-    public void DetailsTable_WithProvenance_RendersASourceColumnWithTheOriginChip()
+    public void DetailsTable_WithProvenance_RendersASourceColumnNamingEachSourceWithTheBarsDotAndLabel()
     {
-        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
-        var provenance = BuildProvenance((1, "Job Title", HrOrigin));
+        // Two sources, so the contribution bar draws a legend to compare the rows' dots against.
+        var directory = HrOrigin with { ConnectedSystemId = 2, ConnectedSystemName = "Directory", SyncRuleId = 6, SyncRuleName = "Directory Import" };
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Email", "e@example.com"));
+        var provenance = BuildProvenance((1, "Job Title", HrOrigin), (2, "Email", directory));
 
         var cut = Render<MvoDetailsTable>(p => p
             .Add(c => c.MetaverseObject, mvo)
@@ -92,8 +94,15 @@ public class MvoDetailsTableTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.HasComponent<ValueOriginChip>(), Is.True);
             Assert.That(cut.Find("th:nth-child(3)").TextContent, Is.EqualTo("Source"));
+            // The same group, label and colour the contribution bar's legend uses, so a row can be read against it.
+            var legend = cut.FindAll(".jim-contribution-legend-item")
+                .ToDictionary(b => b.QuerySelector("span:nth-child(2)")!.TextContent, b => b.QuerySelector(".jim-contribution-legend-swatch")!.GetAttribute("style"));
+            var hrRow = cut.FindAll("tr.jim-inspect-row").Single(r => r.TextContent.Contains("Job Title"));
+            Assert.That(hrRow.QuerySelector(".jim-source-dot")!.GetAttribute("style"), Is.EqualTo(legend["HR"]));
+            Assert.That(hrRow.QuerySelector(".jim-source-dot-name")!.TextContent, Is.EqualTo("HR"));
+            Assert.That(hrRow.QuerySelector(".jim-source-dot-rule")!.TextContent, Is.EqualTo("HR Import"),
+                "with the inspector closed there is room to name the rule");
         }
     }
 
@@ -150,7 +159,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void DetailsTable_SourceCell_RendersTheCompactOriginWithNoLinksAndOpensTheInspectorWhenClicked()
+    public void DetailsTable_SourceCell_HasNoLinksAndOpensTheInspectorWhenClicked()
     {
         var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
         var provenance = BuildProvenance((1, "Job Title", HrOrigin));
@@ -165,8 +174,8 @@ public class MvoDetailsTableTests : JimComponentTestContext
         var sourceCell = cut.Find(".jim-inspect-source-cell");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.FindComponent<ValueOriginChip>().Instance.Compact, Is.True);
-            Assert.That(sourceCell.QuerySelectorAll("a"), Is.Empty, "the row's origin leaves its links to the inspector");
+            Assert.That(sourceCell.QuerySelector(".jim-source-dot"), Is.Not.Null);
+            Assert.That(sourceCell.QuerySelectorAll("a"), Is.Empty, "the row's source leaves its links to the inspector");
         }
 
         sourceCell.Click();
@@ -222,6 +231,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
         var cut = Render<MvoDetailsTable>(p => p
             .Add(c => c.MetaverseObject, mvo)
             .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, BuildProvenance((7, "Job Title", HrOrigin)))
             .Add(c => c.SelectedAttributeId, 7));
 
         using (Assert.EnterMultipleScope())
@@ -230,6 +240,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
             Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Plurality"));
             Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Type"));
             Assert.That(cut.FindAll("td.jim-attr-type"), Is.Empty);
+            Assert.That(cut.FindAll(".jim-source-dot-rule"), Is.Empty, "the narrowed Source column names the system only");
         }
     }
 

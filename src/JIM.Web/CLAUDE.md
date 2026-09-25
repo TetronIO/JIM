@@ -35,6 +35,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
 | `<ObjectChip Kind="@k" TypeName="@t" Name="@n" Href="@url" />` | Any reference to a Connected System Object, Metaverse Object, Connected System, Synchronisation Rule, Pending Export, Deletion Record or Run Profile: the site's one object chip | "Object chips" below |
 | `<SystemRuleChip ConnectedSystemName="@cs" SyncRuleName="@sr" ConnectedSystemHref="@a" SyncRuleHref="@b" />` | A Connected System and the Synchronisation Rule something came through, as one pill (`[CS] system [SR] rule`), each half linking on its own. Prefer it to a CS chip and an SR chip side by side | `Shared/SystemRuleChip.razor` |
+| `<SourceDot Group="@g" ShowRule="@b" />` | Naming a source quietly where many rows name sources at once: a dot in the contribution bar's colour for it and its legend label. Colours come from `ValueOriginGrouping.ColourTokenFor`, never chosen at the call site | `Shared/SourceDot.razor` |
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |

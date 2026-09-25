@@ -1028,6 +1028,51 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     text-overflow: ellipsis;
 }
 
+/* ─── Source dot (SourceDot.razor, #399) ─── */
+
+/* A source named quietly: the bar's colour as a dot, the legend label, then optionally the rule as secondary text.
+   One line; the rule gives way first, then the label. */
+.jim-source-dot-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.jim-source-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: none;
+}
+
+/* The label holds its width and the rule gives way, so a long rule name never clips a short system name. The
+   cap stops an unusually long label taking the whole cell; past it, the label clips too. */
+.jim-source-dot-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex-shrink: 0;
+    max-width: 70%;
+}
+
+.jim-source-dot-label:not(:has(.jim-source-dot-rule)) .jim-source-dot-name {
+    flex-shrink: 1;
+    max-width: none;
+}
+
+.jim-source-dot-rule {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex-shrink: 2;
+}
+
 /* ─── System and rule chip (SystemRuleChip.razor, #399) ─── */
 
 /* One pill naming a route: [CS] system [SR] rule. The SR glyph separates the two halves, so no dot or divider is
@@ -1307,20 +1352,17 @@ a.jim-system-rule-chip-part:focus-visible {
     background: color-mix(in srgb, var(--mud-palette-success) 7%, transparent);
 }
 
+/* The rank is a plain number: the dot beside it carries the colour, and two filled circles side by side read
+   as noise. The source in use takes the success colour, matching its row's tint. */
 .jim-inspector-rank {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-size: 0.75rem;
-    font-weight: 700;
-    background: var(--jim-inner-surface, var(--mud-palette-background-grey));
+    min-width: 22px;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
     color: var(--mud-palette-text-secondary);
 }
 
 .jim-inspector-source-in-use .jim-inspector-rank {
-    background: color-mix(in srgb, var(--mud-palette-success) 18%, transparent);
     color: var(--jim-chip-text-success, var(--mud-palette-success));
 }
 
@@ -1329,6 +1371,40 @@ a.jim-system-rule-chip-part:focus-visible {
     align-items: center;
     gap: 8px;
     min-width: 0;
+    white-space: nowrap;
+}
+
+/* Quiet links: text-coloured until hovered, so the list reads as a ranking rather than as a set of objects. The
+   system's name holds its width; the rule's gives way. */
+.jim-inspector-source-system,
+.jim-inspector-source-rule {
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.jim-inspector-source-system {
+    color: var(--mud-palette-text-primary);
+    font-weight: 500;
+    flex-shrink: 0;
+    max-width: 60%;
+}
+
+.jim-inspector-source-rule {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+}
+
+.jim-inspector-source-system:hover,
+.jim-inspector-source-rule:hover {
+    text-decoration: underline;
+}
+
+.jim-inspector-source-system:focus-visible,
+.jim-inspector-source-rule:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 .jim-inspector-state {
@@ -2527,7 +2603,7 @@ html[lang] .jim-attribute-table tbody tr.jim-inspect-row-selected .jim-attr-name
 /* The Source column is capped so a long Connected System or rule name cannot squeeze the Value column into a
    character-per-line stack while the inspector narrows the table; the value keeps a readable minimum width. */
 .jim-inspect-source-cell {
-    max-width: 24rem;
+    max-width: 28rem;
 }
 
 html[lang] .jim-attribute-table td.jim-attr-value {
@@ -2563,11 +2639,11 @@ html[lang] .jim-attribute-table td.jim-attr-value {
 /* Value takes whatever Attribute and Source leave, so it widens to fill the table when grouping by Source drops
    the Source column. */
 .jim-inspect-table-narrow th.jim-attr-header-name {
-    width: 24%;
+    width: 26%;
 }
 
 .jim-inspect-table-narrow th.jim-attr-header-source {
-    width: 38%;
+    width: 26%;
 }
 
 .jim-inspect-table-narrow .jim-inspect-value,

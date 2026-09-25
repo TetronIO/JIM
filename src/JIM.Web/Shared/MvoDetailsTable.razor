@@ -407,6 +407,34 @@
     private MetaverseAttributeOriginSummary? OriginFor(int attributeId) =>
         Provenance?.Attributes.FirstOrDefault(a => a.AttributeId == attributeId);
 
+    private MetaverseObjectProvenance? _sourceGroupsProvenance;
+    private Dictionary<string, ValueOriginGrouping.Group> _sourceGroupsByKey = new();
+
+    /// <summary>
+    /// The source group an attribute belongs to, exactly as the contribution bar groups and labels it, so a row's
+    /// dot and label always match the bar's legend. Groups are built once per provenance load.
+    /// </summary>
+    private ValueOriginGrouping.Group SourceGroupFor(int attributeId)
+    {
+        if (!ReferenceEquals(_sourceGroupsProvenance, Provenance))
+        {
+            _sourceGroupsProvenance = Provenance;
+            _sourceGroupsByKey = Provenance == null
+                ? new Dictionary<string, ValueOriginGrouping.Group>()
+                : ValueOriginGrouping.BuildGroups(Provenance.Attributes).ToDictionary(g => g.Group.Key, g => g.Group);
+        }
+
+        var summary = OriginFor(attributeId) ?? new MetaverseAttributeOriginSummary
+        {
+            AttributeId = attributeId,
+            AttributeName = string.Empty,
+            Origins = [ValueOrigin.NotRecorded]
+        };
+        return _sourceGroupsByKey.TryGetValue(ValueOriginGrouping.KeyFor(summary), out var group)
+            ? group
+            : ValueOriginGrouping.BuildGroups([summary])[0].Group;
+    }
+
     /// <summary>
     /// The rows to render for the current Group by mode and source filter: a flat, ordered list under "None", a
     /// header row per category under "Category", or a header row per source under "Source" (which also drops
@@ -510,8 +538,9 @@
         }
         else
         {
-            var origin = OriginFor(attributeId);
-            <ValueOriginChip Origin="@(origin?.Origins[0] ?? ValueOrigin.NotRecorded)" HasSeveralOrigins="@(origin?.HasSeveralOrigins ?? false)" Compact="true" />
+            @* A dot in the source's bar colour and its legend label: many rows name sources at once, so a column
+               of pills would compete with the values. The rule reads beside it only while there is room. *@
+            <SourceDot Group="@SourceGroupFor(attributeId)" ShowRule="@(!ShowInspector)" />
         }
     };
 }

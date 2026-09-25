@@ -92,24 +92,16 @@
                 }
                 @if (primaryOrigin.ConnectedSystemId.HasValue)
                 {
+                    @* One row, one pill: the Connected System and the Synchronisation Rule the value came through. This is
+                       the panel's one pill-weight statement of the source; the list below it names sources quietly. *@
                     var connectedSystemId = primaryOrigin.ConnectedSystemId.Value;
-                    <dt>Connected System</dt>
+                    var syncRuleHref = primaryOrigin.SyncRuleId is { } syncRuleId ? $"/admin/sync-rules/{syncRuleId}" : null;
+                    <dt>Source</dt>
                     <dd>
-                        <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@primaryOrigin.ConnectedSystemName"
-                                    Href="@($"/admin/connected-systems/{connectedSystemId}")" Class="ma-0" />
-                    </dd>
-                    <dt>Synchronisation Rule</dt>
-                    <dd>
-                        @if (primaryOrigin.SyncRuleId.HasValue)
-                        {
-                            var syncRuleId = primaryOrigin.SyncRuleId.Value;
-                            <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@primaryOrigin.SyncRuleName"
-                                        Href="@($"/admin/sync-rules/{syncRuleId}")" Class="ma-0" />
-                        }
-                        else
-                        {
-                            <span class="jim-inspector-subtle">Deleted since it contributed this value</span>
-                        }
+                        <SystemRuleChip ConnectedSystemName="@primaryOrigin.ConnectedSystemName"
+                                        ConnectedSystemHref="@($"/admin/connected-systems/{connectedSystemId}")"
+                                        SyncRuleName="@primaryOrigin.SyncRuleName" SyncRuleHref="@syncRuleHref"
+                                        SyncRuleDeleted="@(!primaryOrigin.SyncRuleId.HasValue)" />
                     </dd>
                 }
                 @if (primaryOrigin.AssertsNoValue)
@@ -155,10 +147,12 @@
                 {
                     <li @key="source.MappingId" class="jim-inspector-source @(source.State == AttributeSourceState.InUse ? "jim-inspector-source-in-use" : null)">
                         <span class="jim-inspector-rank" aria-label="@($"Priority {source.Rank}")">@source.Rank</span>
+                        @* Named quietly (a dot in the system's bar colour, then text links), so the pill above stays the
+                           panel's one strong statement of where the value came from. *@
                         <span class="jim-inspector-source-who">
-                            <SystemRuleChip ConnectedSystemName="@source.ConnectedSystemName"
-                                            ConnectedSystemHref="@($"/admin/connected-systems/{source.ConnectedSystemId}")"
-                                            SyncRuleName="@source.SyncRuleName" SyncRuleHref="@($"/admin/sync-rules/{source.SyncRuleId}")" />
+                            <span class="jim-source-dot" style="background: var(@ValueOriginGrouping.ColourTokenForConnectedSystem(source.ConnectedSystemId));" aria-hidden="true"></span>
+                            <a class="jim-inspector-source-system" href="@($"/admin/connected-systems/{source.ConnectedSystemId}")">@source.ConnectedSystemName</a>
+                            <a class="jim-inspector-source-rule" href="@($"/admin/sync-rules/{source.SyncRuleId}")" title="@source.SyncRuleName">@source.SyncRuleName</a>
                         </span>
                         <MudTooltip Text="@(source.Note ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top" Class="jim-inspector-state">
                             <MudChip T="string" Variant="Variant.Text" Color="@StateColour(source.State)" Class="ma-0">@StateLabel(source.State)</MudChip>

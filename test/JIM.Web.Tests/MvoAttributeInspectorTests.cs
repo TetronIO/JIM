@@ -78,11 +78,16 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
             Assert.That(cut.Markup, Does.Contain("Text"));
             Assert.That(cut.Markup, Does.Contain("Single"));
             Assert.That(cut.Markup, Does.Contain("Engineer"));
-            Assert.That(cut.Markup, Does.Contain("Connected System"));
-            Assert.That(cut.Markup, Does.Contain("Synchronisation Rule"));
-            Assert.That(cut.FindComponents<ObjectChip>().Select(c => c.Instance.Kind),
-                Is.SupersetOf(new[] { ObjectChipKind.ConnectedSystem, ObjectChipKind.SynchronisationRule, ObjectChipKind.ConnectedSystemObject }));
-            Assert.That(cut.Markup, Does.Contain("HR Import"));
+            // The Connected System and Synchronisation Rule share one "Source" row and one pill, the panel's only
+            // pill-weight statement of the source; the list of every source names them quietly.
+            var facts = cut.Find(".jim-inspector-facts");
+            Assert.That(facts.QuerySelectorAll("dt").Select(d => d.TextContent), Does.Contain("Source"));
+            Assert.That(facts.QuerySelectorAll("dt").Select(d => d.TextContent), Does.Not.Contain("Connected System"));
+            var pill = cut.FindComponent<SystemRuleChip>().Instance;
+            Assert.That(pill.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(pill.SyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(cut.FindComponents<SystemRuleChip>(), Has.Count.EqualTo(1), "every-source rows use dots, not pills");
+            Assert.That(cut.FindComponents<ObjectChip>().Select(c => c.Instance.Kind), Does.Contain(ObjectChipKind.ConnectedSystemObject));
             Assert.That(cut.Markup, Does.Contain("Priya Shah"));
             Assert.That(cut.Markup, Does.Contain("Last set"));
             Assert.That(cut.FindAll($"a[href='/activity/item/{provenance.LastSet!.ActivityRunProfileExecutionItemId}']"),
