@@ -1695,21 +1695,6 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
-    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
-    /// ConnectedSystemObjectId is populated.
-    /// </summary>
-    public virtual Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
-    {
-        var result = GetPendingExportsForSystem(connectedSystemId)
-            .Where(pe => pe.ConnectedSystemObjectId.HasValue
-                      && pe.Status != PendingExportStatus.Pending
-                      && pe.Status != PendingExportStatus.Exported)
-            .ToList();
-        return Task.FromResult(result);
-    }
-
-    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values (#1102).
     /// </summary>
@@ -2773,6 +2758,21 @@ public class SyncRepository : ISyncRepository
             _pendingExports[pe.Id] = pe;
         }
         return Task.CompletedTask;
+    }
+
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+    {
+        var recovered = 0;
+        foreach (var pe in _pendingExports.Values.Where(pe => pe.Status == PendingExportStatus.Executing))
+        {
+            var somethingAlreadySent = pe.AttributeValueChanges.Any(ac =>
+                ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+
+            pe.Status = somethingAlreadySent ? PendingExportStatus.Exported : PendingExportStatus.Pending;
+            recovered++;
+        }
+        return Task.FromResult(recovered);
     }
 
     // Virtual for test-support subclasses: the parallel export batch path re-loads Pending

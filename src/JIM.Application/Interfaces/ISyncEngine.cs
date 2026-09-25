@@ -106,17 +106,6 @@ public interface ISyncEngine
     void ApplyGeneratedValue(MetaverseObject mvo, PendingGeneratedValue pending, string? textValue, long? numericValue);
 
     /// <summary>
-    /// Evaluates whether Pending Exports have been confirmed by a CSO's current attribute state.
-    /// Confirmed exports are marked for deletion; partially confirmed exports are updated.
-    /// </summary>
-    /// <param name="cso">The CSO whose current attributes to check against Pending Exports.</param>
-    /// <param name="pendingExportsByCsoId">Pre-loaded Pending Exports keyed by CSO ID.</param>
-    /// <returns>A result indicating which Pending Exports to delete or update.</returns>
-    PendingExportConfirmationResult EvaluatePendingExportConfirmation(
-        ConnectedSystemObject cso,
-        Dictionary<Guid, List<PendingExport>>? pendingExportsByCsoId);
-
-    /// <summary>
     /// Evaluates the MVO deletion rule after a CSO is disconnected.
     /// Pure decision only — the orchestrator is responsible for persisting
     /// (queuing immediate deletion or setting LastConnectorDisconnectedDate).

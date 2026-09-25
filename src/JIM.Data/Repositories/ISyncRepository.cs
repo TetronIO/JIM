@@ -570,18 +570,6 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Gets the Pending Exports for a Connected System that are candidates for confirmation evaluation
-    /// at the start of a sync run: Status is neither Pending (not yet exported, nothing to confirm) nor
-    /// Exported (awaiting a confirming import), which <see cref="JIM.Application.Servers.SyncEngine.EvaluatePendingExportConfirmation"/>
-    /// skips unconditionally, and ConnectedSystemObjectId is populated (a null FK cannot be indexed by
-    /// CSO ID for the O(1) lookup this method feeds). Loads only AttributeValueChanges (with their
-    /// Attribute), which is all the confirmation evaluation reads; unlike <see cref="GetPendingExportsAsync"/>,
-    /// the Connected System Object graph is deliberately NOT included, since the sync processors hand
-    /// the confirmation evaluation the Connected System Object being evaluated separately.
-    /// </summary>
-    Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId);
-
-    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values.
     /// The predicate is evaluated in SQL (backed by a partial index on
@@ -1445,6 +1433,21 @@ public interface ISyncRepository
     /// Uses raw SQL in production for efficiency.
     /// </summary>
     Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in
+    /// one set-based statement. Called once at Worker startup, alongside <c>RecoverStaleWorkerTasksAsync</c>:
+    /// at startup nothing can genuinely be exporting, the same single-worker assumption that recovery already
+    /// makes. Without this, an Executing row is picked up by neither <see cref="GetExecutableExportsAsync"/>
+    /// (Pending, Exported, ExportNotConfirmed only) nor import reconciliation (which now deliberately excludes
+    /// Executing, since it is meant to be under a connector's control), so it would otherwise be stranded forever.
+    /// A Pending Export moves to Exported when any of its attribute changes already carries
+    /// ExportedPendingConfirmation or ExportedNotConfirmed (something was already sent, so the next confirming
+    /// import reconciles it rather than the export being re-sent), or to Pending when nothing has been sent yet
+    /// (the next export run retries it). ErrorCount is left untouched either way.
+    /// </summary>
+    /// <returns>The number of Pending Exports recovered.</returns>
+    Task<int> RecoverStrandedExecutingPendingExportsAsync();
 
     /// <summary>
     /// Reloads Pending Exports by their IDs with full object graph.

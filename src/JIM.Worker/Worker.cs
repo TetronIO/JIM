@@ -133,6 +133,14 @@ public class Worker : BackgroundService
         if (recoveredCount > 0)
             Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
 
+        // Recover any Pending Exports left stranded in Status Executing by a worker crash or restart
+        // mid-export. At startup nothing can genuinely be exporting, so every Executing row is a leftover;
+        // without this it is picked up by neither the export queue nor import reconciliation (which now
+        // deliberately excludes Executing) and would be stranded forever.
+        var recoveredExportCount = await mainLoopJim.ExportExecution.RecoverStrandedExecutingPendingExportsAsync();
+        if (recoveredExportCount > 0)
+            Log.Warning("ExecuteAsync: Recovered {Count} stranded Executing Pending Export(s) from previous crash", recoveredExportCount);
+
         // Healthcheck heartbeat file path — Docker healthcheck monitors this file's age
         // to determine if the worker's main loop is still executing.
         const string healthcheckFile = "/tmp/healthcheck";

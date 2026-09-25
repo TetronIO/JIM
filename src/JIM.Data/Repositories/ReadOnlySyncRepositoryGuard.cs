@@ -171,9 +171,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
         => _inner.GetPendingExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
-        => _inner.GetPendingExportsForConfirmationEvaluationAsync(connectedSystemId);
-
     public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
         => _inner.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId);
 
@@ -567,6 +564,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));
+
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+        => throw new PreviewWriteAttemptedException(nameof(RecoverStrandedExecutingPendingExportsAsync));
 
     public Task SetPendingExportQueueingItemsAsync(IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
         => throw new PreviewWriteAttemptedException(nameof(SetPendingExportQueueingItemsAsync));
