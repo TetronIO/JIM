@@ -126,7 +126,7 @@ Exempt from rule 1: deliberately narrow, single-purpose statements that set call
 **Worker Hot Path - Raw SQL Over EF Projection:**
 - For queries on the synchronisation hot path (per-page flushes, cross-page resolution, export evaluation, change-record persistence), default to raw Npgsql (`NpgsqlCommand` + `DbDataReader`, or `BeginBinaryImportAsync` for COPY) rather than EF Core - even `AsNoTracking()` projection.
 - Measured on a cross-page MvoChange-id lookup (113 RPEIs): EF projection 7 ms vs raw SQL 2 ms (~3.5x faster). The gap widens with row count because EF materialisation cost scales harder than the query itself.
-- EF projection is still appropriate for UI reads and infrequent operations. For **bulk worker paths**, mirror the existing `BulkInsertRpeisRawAsync` / `BulkUpdateRpeiFieldsRawAsync` / `BulkInsertMvoChangesRawAsync` patterns - they exist for a reason.
+- EF projection is still appropriate for UI reads and infrequent operations. For **bulk worker paths**, mirror the existing `BulkInsertRpeisOnConnectionAsync` / `BulkUpdateRpeiFieldsRawAsync` / `BulkInsertMvoChangesRawAsync` patterns - they exist for a reason.
 - When adding a new **Summary**-tier method (see Entity Retrieval Naming Taxonomy below), implement as raw SQL into a DTO, not EF projection into an anonymous type.
 
 **Raw SQL Writes Must Fix Up or Detach Tracked Instances:**
