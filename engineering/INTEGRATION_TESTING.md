@@ -113,6 +113,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 11: filter to cells using a single operator
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority" -Step BaselineResolution  # Scenario 14: BaselineResolution, RecallReElection, IdenticalValueHandOver, WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion (OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario22-OpenLdapPasswordPolicy" -Step Discovery  # Scenario 22 (cumulative): Discovery, Provision, Override (OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario23-UniqueValueGeneration" -Step Brownfield  # Scenario 23 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, Collision, SurfaceParity, FeatureFlag
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
@@ -1288,6 +1289,34 @@ Samba AD and OpenLDAP.
 
 **Runner handling.** Scenario 22 is coerced to OpenLDAP (and rejected with an explicit `-DirectoryType SambaAD`), skipped on a Samba AD sweep, excluded from snapshot use and from the general OpenLDAP population (its Scenario 1 substrate needs an empty `ou=People`), and always self-populates. It does not match the runner's `Scenario2(\D|$)` pattern, and the description switch's `*Scenario2*` arm was narrowed to `*Scenario2-*` so it stops matching 20, 21 and 22.
 
+#### Scenario 23: Unique Value Generation
+
+**Status**: implemented for release 1 of [#242](https://github.com/TetronIO/JIM/issues/242). Verified green on OpenLDAP (53 assertions, Micro). The feature is behind the In development `Features.UniqueValueGeneration` flag; `Setup-Scenario1.ps1 -GenerateAccountName` enables it.
+
+**Purpose**: prove generated values end to end against a real directory: the HR feed carries no IT-owned columns (`Generate-TestCSV.ps1 -OmitItOwnedAttributes`) and JIM generates the Account Name instead, plus a sequence (Staff Number), a random token (Badge Code) and an export-mode value on the directory (`preferredLanguage`). The unit and database tiers cover the service in isolation; this is the only coverage of generation interacting with joins, Attribute Priority, drift detection and a directory's own uniqueness.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario23-UniqueValueGeneration.ps1` and `test/integration/Setup-Scenario23.ps1`, which composes `Setup-Scenario1.ps1 -GenerateAccountName`. Scenario 1 itself is unchanged; it moves to generated Account Names when the feature flag is removed ([#1803](https://github.com/TetronIO/JIM/issues/1803)), because its setup is shared by Scenarios 4 to 7, 17, 20, 21 and 22.
+
+| Test | Assertion |
+|------|-----------|
+| 1 Joiners | Every person has a unique (case-insensitive) Account Name; each base value shared by n people yields exactly `{base, base1, ..., base(n-1)}`, whatever the processing order; the values reach the directory |
+| 2 Gates | Two joiners with the same name in one run, and one sharing an existing person's name, all get distinct, correctly suffixed values |
+| 3 Stability | Full and delta re-runs change nothing and stage nothing; a surname change keeps the Account Name (sticky) |
+| 4 Sequence | `EMP-NNNNNN` format and uniqueness; raising Sequence Start skips ahead; lowering it leaves the counter alone |
+| 5 Random | Hex format and uniqueness |
+| 6 Export mode | The generated `preferredLanguage` reaches the directory and never appears on the Metaverse Object |
+| 7 Brownfield | An existing account (`pashworth99`) is kept by a higher-priority import Attribute Flow from the directory, run in the documented initialisation order; nothing is renamed |
+| 7b Withdrawal | Withdrawing that flow hands the attribute back to the generated flow, which adopts the values already held; nothing is renamed |
+| 8 Start again | Counter back to the configured Start; survivors keep their numbers; no collisions; the REST route answers too |
+| 9 Failure | An attempt limit of 1 on a constant base: one object wins, the rest fail with `GeneratedValueExhausted`, nothing partial written |
+| 10 Collision | Samba AD only: an account outside JIM's import scope already holds the value; the export fails as an ordinary export error (no probing until release 3) |
+| 11 Surface parity | A mapping configured through raw REST and one through PowerShell behave identically |
+| 12 Feature flag | With the flag off, creating a generated mapping is refused with a 400 and existing mappings keep generating |
+
+**What this scenario found.** Its first runs surfaced four defects the unit tiers could not: connector-space adoption renaming a live brownfield account (removed in favour of Attribute Priority, PRD FR 30 revised); a generated export change merged into a drift-staged Pending Export being left unresolved and failing the page; a stale assignment reasserted after a higher-priority flow was withdrawn, renaming the account back; and a deliberate feature-disabled refusal logged as an unhandled Error.
+
+**Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 1 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, Collision, SurfaceParity, FeatureFlag.
+
 ### Phase 2 - Database Scenarios
 
 > The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 16: Database Source/Target" is delivered by the matrix scenario below. Initial Password Provisioning then claimed 17, and Scenarios 18-22 were claimed in turn (see below), so the two remaining planned scenarios are unnumbered until one is started.
@@ -2163,6 +2192,7 @@ JIM/
         ├── Setup-Scenario19.ps1                            # Configures JIM for Scenario 19
         ├── Setup-Scenario20.ps1                            # Configures JIM for Scenario 20 (composes Setup-Scenario17)
         ├── Setup-Scenario22.ps1                            # Configures JIM for Scenario 22
+        ├── Setup-Scenario23.ps1                            # Configures JIM for Scenario 23 (composes Setup-Scenario1 -GenerateAccountName)
         ├── New-Scenario16TestDatabase.ps1                  # Deterministic SQL seeder for Scenario 16
         ├── Add-Scenario8Schedules.ps1                      # Optional schedule wiring for Scenario 8
         ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 1, 4, 5, etc.)
@@ -2210,6 +2240,7 @@ JIM/
         │   ├── Invoke-Scenario20-PasswordSynchronisation.ps1    # Password Synchronisation, outbound
         │   ├── Invoke-Scenario21-RunProfileSafeguards.ps1       # Run Profile export and deletion-detection limits
         │   ├── Invoke-Scenario22-OpenLdapPasswordPolicy.ps1     # OpenLDAP password policy discovery (OpenLDAP only)
+        │   ├── Invoke-Scenario23-UniqueValueGeneration.ps1      # Unique Value Generation, release 1 (OpenLDAP or Samba AD)
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
         ├── docker/
@@ -2317,6 +2348,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Scenario 20 | ✅ Complete | Password Synchronisation, outbound half: held while switched off, delivered when switched on, coalescing, parked-change retry (Samba AD or OpenLDAP) (#1119) |
 | Scenario 21 | ✅ Complete | Run Profile safeguards: export limits (Max creates, updates, deletes) and Full Import deletion-detection limits (#1618) |
 | Scenario 22 | ✅ Complete | OpenLDAP password policy discovery: enforcement negative control, discovered values, non-root provisioning with nothing parked, override signal (OpenLDAP only) (#1702) |
+| Scenario 23 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, target-side collision (Samba AD), surface parity, feature flag (#242) |
 | Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 16 going green) and performance baselines |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
