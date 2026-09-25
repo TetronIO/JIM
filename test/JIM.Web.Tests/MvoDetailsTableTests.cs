@@ -97,7 +97,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
             Assert.That(cut.Find("th:nth-child(3)").TextContent, Is.EqualTo("Source"));
             // The same group, label and colour the contribution bar's legend uses, so a row can be read against it.
             var legend = cut.FindAll(".jim-contribution-legend-item")
-                .ToDictionary(b => b.QuerySelector("span:nth-child(2)")!.TextContent, b => b.QuerySelector(".jim-contribution-legend-swatch")!.GetAttribute("style"));
+                .ToDictionary(b => b.QuerySelector(".jim-contribution-legend-label")!.TextContent, b => b.QuerySelector(".jim-contribution-legend-swatch")!.GetAttribute("style"));
             var hrRow = cut.FindAll("tr.jim-inspect-row").Single(r => r.TextContent.Contains("Job Title"));
             Assert.That(hrRow.QuerySelector(".jim-source-dot")!.GetAttribute("style"), Is.EqualTo(legend["HR"]));
             Assert.That(hrRow.QuerySelector(".jim-source-dot-name")!.TextContent, Is.EqualTo("HR"));

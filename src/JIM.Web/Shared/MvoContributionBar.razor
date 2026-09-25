@@ -9,12 +9,12 @@
 @* The bar itself is decorative (aria-hidden); the legend buttons are the accessible control. *@
 
 <div class="jim-contribution-bar-panel">
+    @{ var groups = ValueOriginGrouping.BuildGroups(Provenance.Attributes); }
     <div class="jim-contribution-heading">
         <span class="jim-contribution-title">Where this @ObjectTypeName gets its values</span>
-        <span class="jim-contribution-count">@Provenance.Attributes.Count.ToString("N0") attributes</span>
+        <span class="jim-contribution-count">@Provenance.Attributes.Count.ToString("N0") attributes@(groups.Count > 1 ? " · select a source to filter" : null)</span>
     </div>
 
-    @{ var groups = ValueOriginGrouping.BuildGroups(Provenance.Attributes); }
     @if (groups.Count <= 1)
     {
         <div class="jim-contribution-single">
@@ -32,7 +32,7 @@
             }
         </div>
 
-        <div class="jim-contribution-legend" role="group" aria-label="Filter attributes by source">
+        <div class="jim-contribution-legend @(ActiveFilterKey != null ? "jim-contribution-legend-filtered" : null)" role="group" aria-label="Filter attributes by source">
             @foreach (var (group, count) in groups)
             {
                 var pressed = ActiveFilterKey == group.Key;
@@ -40,8 +40,7 @@
                         aria-pressed="@(pressed ? "true" : "false")"
                         @onclick="@(() => ToggleFilterAsync(group.Key))">
                     <span class="jim-contribution-legend-swatch" style="background: var(@ColourFor(group));"></span>
-                    <span>@group.Label</span>
-                    <span class="jim-contribution-legend-count">@count.ToString("N0")</span>
+                    <span><span class="jim-contribution-legend-label">@group.Label</span> <span class="jim-contribution-legend-count">· @count.ToString("N0")</span></span>
                 </button>
             }
         </div>

@@ -1168,14 +1168,14 @@ a.jim-system-rule-chip-part:focus-visible {
     font-size: 0.875rem;
 }
 
-/* The bar itself is decorative (aria-hidden on the container); the legend below is the accessible control. The
-   2px gap separates segments of adjacent colours without a border. */
+/* The bar itself is decorative (aria-hidden on the container); the key below is the accessible control. Thick
+   enough to read as a chart rather than a rule line; the 2px gap separates segments of adjacent colours. */
 .jim-contribution-bar {
     display: flex;
     gap: 2px;
     width: 100%;
-    height: 6px;
-    border-radius: 3px;
+    height: 12px;
+    border-radius: 6px;
     overflow: hidden;
 }
 
@@ -1184,48 +1184,57 @@ a.jim-system-rule-chip-part:focus-visible {
     min-width: 2px;
 }
 
+/* The bar's key: a swatch and "HR · 6" per source, laid out as a key rather than as a row of buttons. Each entry
+   is still a real <button>, so the source filter is keyboard-operable and its pressed state is announced. */
 .jim-contribution-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 2px 14px;
 }
 
-/* A real <button>, so the source filter is keyboard-operable and its pressed state is announced. An outlined pill
-   at rest; the pressed filter takes a primary border and tint. */
 .jim-contribution-legend-item {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 999px;
-    padding: 3px 11px 3px 9px;
-    background: var(--mud-palette-surface);
+    border: 0;
+    border-radius: 4px;
+    padding: 3px 6px;
+    margin-left: -6px;
+    background: none;
     color: var(--mud-palette-text-primary);
     font: inherit;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background 0.15s, opacity 0.15s;
 }
 
 .jim-contribution-legend-item:hover {
-    background: color-mix(in srgb, var(--mud-palette-text-primary) 5%, var(--mud-palette-surface));
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 6%, transparent);
 }
 
 .jim-contribution-legend-item:focus-visible {
     outline: 2px solid var(--mud-palette-primary);
-    outline-offset: 2px;
+    outline-offset: 1px;
 }
 
-.jim-contribution-legend-item-active {
-    border-color: var(--mud-palette-primary);
-    background: color-mix(in srgb, var(--mud-palette-primary) 10%, var(--mud-palette-surface));
+/* While a filter is on, the other sources step back and the chosen one is marked, so the key shows what the
+   table below is filtered to. */
+.jim-contribution-legend-filtered .jim-contribution-legend-item {
+    opacity: 0.55;
+}
+
+.jim-contribution-legend-filtered .jim-contribution-legend-item-active {
+    opacity: 1;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--mud-palette-primary) 10%, transparent);
 }
 
 .jim-contribution-legend-swatch {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
     flex: none;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
 /* ─── Attribute inspector (MvoAttributeInspector.razor, #399) ─── */
