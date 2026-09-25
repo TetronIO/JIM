@@ -1,10 +1,10 @@
 # Podman Support
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 in progress)
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
-- **Plan:** [PODMAN_SUPPORT.md](../plans/PODMAN_SUPPORT.md)
+- **Plan:** [PODMAN_SUPPORT.md](../../plans/doing/PODMAN_SUPPORT.md)
 
 ## Problem Statement
 
@@ -186,7 +186,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 ## Open Questions
 
-*All seven are answered by decisions D1 to D7 in the [implementation plan](../plans/PODMAN_SUPPORT.md#decisions).*
+*All seven are answered by decisions D1 to D7 in the [implementation plan](../../plans/doing/PODMAN_SUPPORT.md#decisions).*
 
 1. **Secrets mechanism:** Podman secrets (`podman secret create`) referenced from the pod file, a Kubernetes `Secret` document played alongside it, or a generated file with restricted permissions?
 2. **Configuration supply:** a Kubernetes `ConfigMap` passed with `podman kube play --configmap` (and Quadlet `ConfigMap=`), or `setup.sh` generating it from the `.env` an administrator already knows?

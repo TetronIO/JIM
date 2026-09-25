@@ -1,9 +1,9 @@
 # Podman Support - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 in progress)
 - **Created:** 2026-09-25
 - **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
-- **PRD:** [PRD_PODMAN_SUPPORT.md](../prd/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
+- **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/doing/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
 
 ## Overview
 
