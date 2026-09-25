@@ -4271,10 +4271,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Note: We also include CSO.AttributeValues because connectors need access to
         // the current attribute values (e.g., current DN for LDAP rename operations).
         //
-        // AsNoTracking: Pending Exports loaded here are used for read-only cache lookups
-        // during sync (indexed by CSO ID for O(1) confirmation). In-place mutations during
-        // EvaluatePendingExportConfirmation are persisted through separate batch methods
-        // (DeletePendingExportsAsync, UpdatePendingExportsAsync), not EF change tracking.
+        // AsNoTracking: Pending Exports loaded here are used for read-only lookups (export
+        // execution, retry/failed listings). Mutations are persisted through separate batch
+        // methods (DeletePendingExportsAsync, UpdatePendingExportsAsync), not EF change tracking.
         return await Repository.Database.PendingExports
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
@@ -4282,33 +4281,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
-    }
-
-    /// <summary>
-    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
-    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
-    /// ConnectedSystemObjectId is populated.
-    /// </summary>
-    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
-    public async Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
-    {
-        // SyncEngine.EvaluatePendingExportConfirmation skips Status Pending (not yet exported, nothing
-        // to confirm) and Exported (awaiting a confirming import) unconditionally, and reads only
-        // AttributeValueChanges plus their Attribute; it is handed the Connected System Object being
-        // evaluated separately by the caller, so unlike GetPendingExportsAsync above, the CSO graph and
-        // its AttributeValues are deliberately NOT included here. At 100,000 Connected System Objects,
-        // GetPendingExportsAsync's CSO include cost 35 seconds against this same table; this query never
-        // materialises that graph. ConnectedSystemObjectId IS NOT NULL because a Pending Export with no
-        // linked CSO cannot be indexed by CSO ID for the sync processors' lookup dictionary.
-        return await Repository.Database.PendingExports
-            .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            .Where(pe => pe.ConnectedSystemId == connectedSystemId
-                      && pe.ConnectedSystemObjectId != null
-                      && pe.Status != PendingExportStatus.Pending
-                      && pe.Status != PendingExportStatus.Exported)
-            .ToListAsync();
     }
 
     /// <summary>
@@ -4725,6 +4697,36 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             export.Status = PendingExportStatus.Executing;
             export.LastAttemptedAt = now;
         }
+    }
+
+    /// <summary>
+    /// Recovers Pending Exports stranded in Status Executing (see interface doc for the full rationale).
+    /// One set-based UPDATE, so no entities are loaded and nothing needs tracker fix-up: the caller runs
+    /// this once at Worker startup, before any Pending Export could be tracked by anything.
+    /// </summary>
+    public async Task<int> RecoverStrandedExecutingPendingExportsAsync()
+    {
+        var sentStatuses = new[]
+        {
+            (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            (int)PendingExportAttributeChangeStatus.ExportedNotConfirmed
+        };
+
+        return await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""PendingExports"" AS pe
+              SET ""Status"" = CASE
+                  WHEN EXISTS (
+                      SELECT 1 FROM ""PendingExportAttributeValueChanges"" avc
+                      WHERE avc.""PendingExportId"" = pe.""Id""
+                        AND avc.""Status"" = ANY({0})
+                  ) THEN {1}
+                  ELSE {2}
+              END
+              WHERE pe.""Status"" = {3}",
+            sentStatuses,
+            (int)PendingExportStatus.Exported,
+            (int)PendingExportStatus.Pending,
+            (int)PendingExportStatus.Executing);
     }
 
     public async Task CreatePendingExportAsync(PendingExport pendingExport)

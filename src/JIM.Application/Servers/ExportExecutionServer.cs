@@ -3037,4 +3037,14 @@ public class ExportExecutionServer
         Log.Information("RetryFailedExportsAsync: Reset {Count} failed exports for system {SystemId}",
             failedExports.Count, connectedSystemId);
     }
+
+    /// <summary>
+    /// Recovers Pending Exports left stranded in Status Executing by a worker crash or restart mid-export.
+    /// Called once at Worker startup, alongside the existing stale worker task recovery: at startup nothing
+    /// can genuinely be exporting, so every Executing row is a leftover from before the crash/restart. See
+    /// <see cref="ISyncRepository.RecoverStrandedExecutingPendingExportsAsync"/> for the full rationale.
+    /// </summary>
+    /// <returns>The number of Pending Exports recovered.</returns>
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+        => SyncRepo.RecoverStrandedExecutingPendingExportsAsync();
 }

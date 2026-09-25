@@ -101,6 +101,8 @@ JIM runs as a Docker Compose stack with four services:
 !!! tip
     Start with bundled PostgreSQL for evaluation. Migrate to external for production workloads where you need backup, high availability, or monitoring integration.
 
+Start-up order does not matter: each JIM service waits up to five minutes for PostgreSQL to accept connections, logging each attempt, so JIM and its database server can be started or restarted independently. If a service keeps waiting, see [Troubleshooting](troubleshooting.md#a-service-logs-the-database-is-not-reachable-yet).
+
 ---
 
 ## Connected Deployment

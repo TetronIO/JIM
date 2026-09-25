@@ -109,22 +109,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // Load the Pending Exports that confirmation evaluation can actually act on, once upfront, and
-        // index by CSO ID for O(1) lookup. SyncEngine.EvaluatePendingExportConfirmation skips Pending and
-        // Exported statuses unconditionally (the vast majority at scale), so GetPendingExportsForConfirmationEvaluationAsync
-        // filters those out in SQL and never loads the Connected System Object graph GetPendingExportsAsync
-        // loads for every row (35 seconds at 100,000 Connected System Objects). Grouped by the scalar
-        // ConnectedSystemObjectId rather than the ConnectedSystemObject navigation, which this query no
-        // longer loads.
-        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
-        {
-            var pendingExportsForConfirmation = await _syncRepo.GetPendingExportsForConfirmationEvaluationAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = pendingExportsForConfirmation
-                .GroupBy(pe => pe.ConnectedSystemObjectId!.Value)
-                .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformFullSyncAsync: Loaded {Count} Pending Exports into confirmation lookup dictionary", pendingExportsForConfirmation.Count);
-        }
-
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
         // This eliminates O(N×M) database queries during export evaluation
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
@@ -246,7 +230,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                         break;
                     }
 
-                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
                 }
 
                 // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been

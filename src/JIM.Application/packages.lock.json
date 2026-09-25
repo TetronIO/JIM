@@ -33,6 +33,19 @@
           "Microsoft.Extensions.DependencyInjection": "10.0.12"
         }
       },
+      "Microsoft.Extensions.Hosting.Abstractions": {
+        "type": "Direct",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "ZlIxIJtWmrph0Ikj0svSaTkZ+d+ZYpTAhazpf1b3aoFRmlNnNWwkcvqnqT9yKHjKvfBRthvUrkq11OxfItOhpg==",
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.12",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Diagnostics.Abstractions": "10.0.12",
+          "Microsoft.Extensions.FileProviders.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.12"
+        }
+      },
       "NCrontab": {
         "type": "Direct",
         "requested": "[3.4.0, )",
@@ -189,18 +202,6 @@
           "Microsoft.Extensions.Primitives": "10.0.12"
         }
       },
-      "Microsoft.Extensions.Hosting.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "ZlIxIJtWmrph0Ikj0svSaTkZ+d+ZYpTAhazpf1b3aoFRmlNnNWwkcvqnqT9yKHjKvfBRthvUrkq11OxfItOhpg==",
-        "dependencies": {
-          "Microsoft.Extensions.Configuration.Abstractions": "10.0.12",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12",
-          "Microsoft.Extensions.Diagnostics.Abstractions": "10.0.12",
-          "Microsoft.Extensions.FileProviders.Abstractions": "10.0.12",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.12"
-        }
-      },
       "Microsoft.Extensions.Logging": {
         "type": "Transitive",
         "resolved": "10.0.12",
@@ -350,9 +351,9 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
-          "JIM.Scim": "[0.15.0-dev.20260924.887, )",
-          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Scim": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Utilities": "[0.15.0-dev.20260925.1139, )",
           "Microsoft.Data.SqlClient": "[7.1.0, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.301, )",
           "System.DirectoryServices.Protocols": "[10.0.12, )"
@@ -361,7 +362,7 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0-dev.20260924.887, )"
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )"
         }
       },
       "jim.models": {
@@ -374,14 +375,14 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
-          "JIM.Utilities": "[0.15.0-dev.20260924.887, )"
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Utilities": "[0.15.0-dev.20260925.1139, )"
         }
       },
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
           "Serilog": "[4.4.0, )"
         }
       }

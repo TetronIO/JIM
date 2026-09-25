@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
 - 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
+- 🔄 JIM's services now wait for the database at start-up, logging each attempt, instead of exiting and restarting until it is available; an external database that is briefly unreachable no longer takes the web portal down. (#1808)
 
 ### Fixed
 
@@ -34,13 +35,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 The air-gapped release bundle no longer ships development settings (a demo Keycloak with `admin`/`admin`, PostgreSQL open on port 5432) that `docker compose` applied automatically when run without `-f`.
 - 🐛 Case-insensitive Object Matching Rules treated `_` and `%` as wildcards, so `j_smith` could match `jxsmith` and join the wrong object, on inbound joins and export matching alike; they now require an exact case-insensitive match.
 - 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
+- 🐛 JIM's services now exit with a failure code when they stop on an error, instead of reporting a clean stop to the container runtime, systemd or monitoring. (#1808)
+
+### Security
+
+- 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
 - 🐛 Deleting a Pending Export no longer leaves its attribute changes behind in the database, where they accumulated indefinitely. (#1818)
+- 🐛 Synchronisation no longer reopens Failed or Parked Pending Exports, or counts errors against exports awaiting confirmation; this could silently strand an export outside both the export queue and the Failed list.
+- 🐛 A Failed Pending Export now clears automatically once a confirming import shows every change it asserts has taken effect, without waiting for a manual retry.
+- 🐛 A Pending Export interrupted by a worker crash or restart mid-export is recovered when the worker next starts, instead of being stranded in Executing forever.
 
 ### Performance
 
 - ⚡ Synchronisation no longer queries the database once per object to look for an existing target object before provisioning; it checks once per page, speeding up large initial synchronisations.
 - ⚡ Large imports do much less database work: new objects are no longer looked up one at a time, the object type's schema is no longer reloaded for every object, and checking that provisioned objects were created no longer loads each one in full.
-- ⚡ Synchronisation starts and writes faster: it loads only the Pending Exports it can act on, skips a redundant lookup when provisioning, and writes each page of objects, Pending Exports and Activity results in bulk.
+- ⚡ Synchronisation starts and writes faster: it skips a redundant lookup when provisioning, and writes each page of objects, Pending Exports and Activity results in bulk.
 
 ## [0.15.0] - 2026-09-23
 

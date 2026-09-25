@@ -40,7 +40,7 @@ flowchart TD
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
     CheckCancel -->|Yes| Return([Flush the current page, then return<br/>Watermark not advanced])
-    CheckCancel -->|No| Pass1[Pass 1: every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm Pending Exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
+    CheckCancel -->|No| Pass1[Pass 1: every CSO in page<br/>ProcessObsoleteConnectedSystemObjectTeardownAsync<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
     Pass1 --> Pass2[Pass 2: non-obsolete CSOs<br/>ProcessActiveConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>join, project, Attribute Flow, drift]
     Pass2 --> CsoLoop
 
@@ -75,7 +75,7 @@ flowchart LR
 
 ## Key Design Decisions
 
-- **Identical per-CSO logic**<br /> Both full and delta sync share the exact same two-pass per-CSO methods (`ProcessObsoleteAndExportConfirmationAsync()` and `ProcessActiveConnectedSystemObjectAsync()`) and page flush pipeline from `SyncTaskProcessorBase`, using `ISyncEngine` for pure domain decisions and `ISyncServer`/`ISyncRepository` for orchestration and data access. The only difference is which CSOs are selected for processing.
+- **Identical per-CSO logic**<br /> Both full and delta sync share the exact same two-pass per-CSO methods (`ProcessObsoleteConnectedSystemObjectTeardownAsync()` and `ProcessActiveConnectedSystemObjectAsync()`) and page flush pipeline from `SyncTaskProcessorBase`, using `ISyncEngine` for pure domain decisions and `ISyncServer`/`ISyncRepository` for orchestration and data access. The only difference is which CSOs are selected for processing.
 
 - **Early exit optimisation**<br /> Delta sync checks if any CSOs have been modified before loading caches and entering the page loop. If nothing has changed, it updates the watermark and returns immediately.
 

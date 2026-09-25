@@ -62,7 +62,7 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 # Read PostgreSQL image reference from docker-compose.yml (single source of truth).
 # The digest-pinned image in docker-compose.yml is maintained by Dependabot.
 $composeContent = Get-Content (Join-Path $RepoRoot "docker-compose.yml") -Raw
-if ($composeContent -match 'image:\s+(postgres:[^\s]+)') {
+if ($composeContent -match 'image:\s+((?:docker\.io/library/)?postgres:[^\s]+)') {
     $PostgresImage = $Matches[1]
     Write-Host "PostgreSQL image from docker-compose.yml: $PostgresImage" -ForegroundColor Gray
 } else {

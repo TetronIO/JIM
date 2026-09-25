@@ -115,6 +115,12 @@ public class Worker : BackgroundService
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
         using var mainLoopJim = _jimFactory.Create();
+
+        // Wait for the database server before the first database call, rather than failing and relying on the
+        // supervisor to have started PostgreSQL first (a pod starts all its containers at once). The health-check
+        // heartbeat is kept fresh meanwhile, so the container is not judged unhealthy for waiting.
+        await mainLoopJim.WaitForDatabaseAsync(JimApplication.DefaultDatabaseWaitBudget,
+            _ => HealthcheckFile.TouchAsync(), stoppingToken);
         await mainLoopJim.InitialiseDatabaseAsync();
 
         // Warm the CSO lookup cache for all Connected Systems before accepting tasks.
@@ -133,20 +139,24 @@ public class Worker : BackgroundService
         if (recoveredCount > 0)
             Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
 
-        // Healthcheck heartbeat file path — Docker healthcheck monitors this file's age
-        // to determine if the worker's main loop is still executing.
-        const string healthcheckFile = "/tmp/healthcheck";
+        // Recover any Pending Exports left stranded in Status Executing by a worker crash or restart
+        // mid-export. At startup nothing can genuinely be exporting, so every Executing row is a leftover;
+        // without this it is picked up by neither the export queue nor import reconciliation (which now
+        // deliberately excludes Executing) and would be stranded forever.
+        var recoveredExportCount = await mainLoopJim.ExportExecution.RecoverStrandedExecutingPendingExportsAsync();
+        if (recoveredExportCount > 0)
+            Log.Warning("ExecuteAsync: Recovered {Count} stranded Executing Pending Export(s) from previous crash", recoveredExportCount);
 
-        // The same liveness, written to the database for administrators: the Operations page reads it to show
-        // whether the Worker is up, what it is running and since when, and which version. Written wherever the
-        // file is touched; the writer throttles itself and never lets a failed write into this loop.
+        // The same liveness as the health-check heartbeat file, written to the database for administrators: the
+        // Operations page reads it to show whether the Worker is up, what it is running and since when, and which
+        // version. Written wherever the file is touched; the writer throttles itself and never lets a failed write
+        // into this loop.
         var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.WorkerSync);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Touch the healthcheck file each iteration so Docker knows the main loop is alive
-            try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
-            catch { /* Non-critical — don't let healthcheck IO fail the main loop */ }
+            // Touch the health-check heartbeat file each iteration, so the container runtime knows the loop is alive
+            await HealthcheckFile.TouchAsync();
 
             var (currentWork, currentWorkStartedAt) = WorkerCurrentWork.Describe(SnapshotCurrentTasks());
             await heartbeat.WriteAsync(mainLoopJim, currentWork, currentWorkStartedAt, null, stoppingToken);

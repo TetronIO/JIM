@@ -44,7 +44,6 @@ public abstract class SyncTaskProcessorBase
     protected readonly Activity _activity;
     protected readonly CancellationTokenSource _cancellationTokenSource;
     protected List<ConnectedSystemObjectType>? _objectTypes;
-    protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
     protected ExportEvaluationCache? _exportEvaluationCache;
 
     // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run.
@@ -551,15 +550,14 @@ public abstract class SyncTaskProcessorBase
 
         // Log change tracker entity count and key collection sizes to diagnose accumulation
         var trackerCount = _syncRepo.GetChangeTrackerEntityCount();
-        var pendingExportCount = _pendingExportsByCsoId?.Sum(kvp => kvp.Value.Count) ?? 0;
         var crossPageRefCount = _unresolvedCrossPageReferences.Count;
         var rpeiCount = _activity.RunProfileExecutionItems.Count;
 
         Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2} | " +
-            "Tracker: {TrackerCount}, PendingExports: {PendingExportCount}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
+            "Tracker: {TrackerCount}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
             pageNumber, totalPages, memoryMb,
             GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
-            trackerCount, pendingExportCount, crossPageRefCount, rpeiCount);
+            trackerCount, crossPageRefCount, rpeiCount);
     }
 
     /// <summary>
@@ -707,25 +705,20 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Pass 1: Processes Pending Export confirmations and obsolete CSO teardown for a single Connected System Object.
+    /// Pass 1: Processes obsolete CSO teardown for a single Connected System Object. Pending Export
+    /// confirmation is not part of synchronisation: every change to a CSO's values arrives through an
+    /// import, which confirms Pending Exports against them (<c>SyncImportTaskProcessor.ReconcilePendingExportsAsync</c>).
     /// This must run for ALL CSOs in the page BEFORE Pass 2 (ProcessActiveConnectedSystemObjectAsync) runs,
     /// so that all disconnections are recorded in _pendingDisconnectedMvoIds before any join attempts.
     /// Without this ordering guarantee, a new CSO processed before an obsolete CSO (due to GUID ordering)
     /// would see a stale join count and incorrectly throw CouldNotJoinDueToExistingJoin.
     /// </summary>
-    protected async Task ProcessObsoleteAndExportConfirmationAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected async Task ProcessObsoleteConnectedSystemObjectTeardownAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
-        Log.Verbose($"ProcessObsoleteAndExportConfirmationAsync: Pass 1 for CSO: {connectedSystemObject.Id}.");
+        Log.Verbose($"ProcessObsoleteConnectedSystemObjectTeardownAsync: Pass 1 for CSO: {connectedSystemObject.Id}.");
 
         try
         {
-            using (Diagnostics.Sync.StartSpan("ProcessPendingExport"))
-            {
-                // Note: ProcessPendingExport handles Pending Export confirmation, not CSO/MVO changes
-                // Queues operations for batch processing at end of page (avoids per-CSO database calls)
-                ProcessPendingExport(connectedSystemObject);
-            }
-
             List<ActivityRunProfileExecutionItem> obsoleteExecutionItems;
             using (Diagnostics.Sync.StartSpan("ProcessObsoleteConnectedSystemObject"))
             {
@@ -751,14 +744,14 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Error(e, "ProcessObsoleteAndExportConfirmationAsync: Unhandled error during pass 1 for {CsoId}.",
+            Log.Error(e, "ProcessObsoleteConnectedSystemObjectTeardownAsync: Unhandled error during pass 1 for {CsoId}.",
                 connectedSystemObject.Id);
         }
     }
 
     /// <summary>
     /// Pass 2: Processes joins, projections, and Attribute Flow for a single non-obsolete Connected System Object.
-    /// This must run AFTER Pass 1 (ProcessObsoleteAndExportConfirmationAsync) has completed for ALL CSOs in the page,
+    /// This must run AFTER Pass 1 (ProcessObsoleteConnectedSystemObjectTeardownAsync) has completed for ALL CSOs in the page,
     /// ensuring _pendingDisconnectedMvoIds is fully populated before any join attempts.
     /// Skips obsolete CSOs (already handled in Pass 1).
     /// </summary>
@@ -1198,22 +1191,6 @@ public abstract class SyncTaskProcessorBase
         var reason = expressionEx.InnerException?.Message ?? expressionEx.Message;
         var subject = metaverseObjectId.HasValue ? $" for Metaverse Object {metaverseObjectId.Value}" : string.Empty;
         return $"Expression evaluation failed{subject} flowing to attribute '{attribute}': {reason}. Expression: {expression}";
-    }
-
-    /// <summary>
-    /// See if a Pending Export Object for a Connected System Object can be invalidated and deleted.
-    /// This would occur when the Pending Export changes are visible on the Connected System Object after a confirming import.
-    /// Queues Pending Export operations for batch processing at the end of page processing (avoids per-CSO database calls).
-    /// </summary>
-    protected void ProcessPendingExport(ConnectedSystemObject connectedSystemObject)
-    {
-        var result = _syncEngine.EvaluatePendingExportConfirmation(connectedSystemObject, _pendingExportsByCsoId);
-        if (!result.HasResults)
-            return;
-
-        // Apply the engine's decisions to the batch collections
-        _pendingExportsToDelete.AddRange(result.ToDelete);
-        _pendingExportsToUpdate.AddRange(result.ToUpdate);
     }
 
     /// <summary>

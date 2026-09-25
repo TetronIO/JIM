@@ -65,13 +65,16 @@ public class Scheduler : BackgroundService
 
         Log.Information("Starting JIM.Scheduler...");
 
-        // Healthcheck heartbeat file path — Docker healthcheck monitors this file's age
-        // to determine if the scheduler's main loop is still executing.
-        const string healthcheckFile = "/tmp/healthcheck";
-
-        // The same liveness, written to the database for administrators: the Operations page reads it to show
-        // whether the Scheduler is up, since when, and which version. Written wherever the file is touched.
+        // The same liveness as the health-check heartbeat file, written to the database for administrators: the
+        // Operations page reads it to show whether the Scheduler is up, since when, and which version. Written
+        // wherever the file is touched.
         var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.Scheduler);
+
+        // Wait for the database server first, keeping the health-check heartbeat fresh meanwhile. Until it answers,
+        // every readiness check below would only fail, so there is nothing to gain from starting them sooner.
+        using (var waitJim = _jimFactory.Create())
+            await waitJim.WaitForDatabaseAsync(JimApplication.DefaultDatabaseWaitBudget,
+                _ => HealthcheckFile.TouchAsync(), stoppingToken);
 
         // Wait for the application to be fully ready (JIM.Worker handles initial migration and seeding).
         // We must check IsApplicationReadyAsync() rather than just database connectivity, because the
@@ -79,9 +82,8 @@ public class Scheduler : BackgroundService
         Log.Information("Waiting for application to be ready...");
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Touch the healthcheck file during readiness wait so Docker doesn't mark us unhealthy
-            try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
-            catch { /* Non-critical */ }
+            // Touch the health-check heartbeat file while waiting, so the container is not judged unhealthy
+            await HealthcheckFile.TouchAsync();
 
             try
             {
@@ -100,8 +102,10 @@ public class Scheduler : BackgroundService
 
                 Log.Information("Application is not ready yet (maintenance mode). Waiting...");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // The database answered the wait above, so this is the brief window before JIM.Worker has created
+                // the schema, or the database blipping mid-check: keep waiting either way.
                 Log.Debug(ex, "Application not yet ready, waiting...");
             }
 
@@ -116,9 +120,8 @@ public class Scheduler : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Touch the healthcheck file each polling cycle so Docker knows the main loop is alive
-            try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
-            catch { /* Non-critical */ }
+            // Touch the health-check heartbeat file each polling cycle, so the runtime knows the loop is alive
+            await HealthcheckFile.TouchAsync();
 
             try
             {
