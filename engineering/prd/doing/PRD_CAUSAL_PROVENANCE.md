@@ -1,10 +1,10 @@
 # Causal Provenance: Full-Graph Understanding
 
-- **Status:** Doing (planning complete; Phase 1 implementation not yet started)
+- **Status:** Doing (Phase 1 complete, #1223; Phase 2 Consequences and Phase 3 explorer not started)
 - **Created:** 2026-07-28
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
-- **Plan:** [CAUSAL_PROVENANCE.md](../../plans/CAUSAL_PROVENANCE.md)
+- **Plan:** [CAUSAL_PROVENANCE.md](../../plans/done/CAUSAL_PROVENANCE.md)
 
 ## Problem Statement
 
