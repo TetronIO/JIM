@@ -1,6 +1,6 @@
 # Causal Provenance: Full-Graph Understanding
 
-- **Status:** Doing (Phase 1 complete, #1223; Phase 2 Consequences and Phase 3 explorer not started)
+- **Status:** Doing (Phase 1 complete, #1223; Phase 2 Consequences not started, tracked in #1811; Phase 3 explorer not started)
 - **Created:** 2026-07-28
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
@@ -37,7 +37,7 @@ JIM does not discover this relationship at export time. The removal is staged **
 - An administrator can trace any RPEI's complete upward chain of causes back to its ultimate trigger, across Connected Systems and Activities, without manually cross-referencing unrelated Activities. Verifiable: the Project-Pulse Group worked example resolves end-to-end from a single "Caused by" expansion. **(Phase 1)**
 - An administrator can see what a given event went on to cause, and the view honestly reflects how much time has passed since the event occurred (no consequences shown before they exist). Verifiable: the same RPEI shows "no consequences yet" moments after creation and the full downstream chain once the cascade has run. **(Phase 2)**
 - A cascade with many causes and one effect, or one cause and many effects, renders as a single aggregated, expandable statement, never as a wall of repeated unexplained lines. Verifiable: ten deleted Identities that all reference the same Group render as one summarised cause, not ten. **(Phase 1/2)**
-- Provenance capture adds no meaningful risk or overhead to synchronisation. Verifiable: a run deleting 100,000 Metaverse Objects writes causal edges via chunked bulk SQL with no row-at-a-time fallback on the happy path, and an induced edge-write failure still lets the sync it describes complete and record correctly. **(Phase 1)**
+- Provenance capture adds no meaningful risk or overhead to synchronisation. Verifiable: a run deleting 100,000 Metaverse Objects writes causal edges via chunked bulk SQL with no row-at-a-time fallback on the happy path~~, and an induced edge-write failure still lets the sync it describes complete and record correctly~~ (dropped; see Acceptance Criteria). **(Phase 1)**
 - Once retention has purged an ancestor, the chain says so explicitly rather than lying by omission or erroring. Verifiable: the truncated-chain scenario below. **(Phase 1)**
 - The two links that already exist for free (`PendingExportId`, and Connected System Object / Metaverse Object ids) are exploited before any new storage is added; the new edge model only covers the seams those links cannot reach. Verifiable: implementation review confirms no edge duplicates a relationship already expressible via an existing FK or id join. **(Phase 1)**
 
@@ -219,10 +219,10 @@ Replacing JIM's row-oriented persistence (current-state Connected System Object 
 - [ ] A single RPEI with many recorded causes of the same type and reason (Scenario 3) renders as one aggregated, expandable statement, not one line per cause
 - [ ] Low-signal hops, confirming imports in particular, are foldable or collapsed by default
 - [ ] An ancestor removed by retention renders an explicit "cause no longer retained" state (Scenario 4), never a silent gap or an error
-- [ ] A 100,000-object Metaverse Object deletion run writes causal edges via chunked bulk SQL with no row-at-a-time fallback on the happy path, and shows no measurable regression against the pre-provenance baseline
+- [ ] A 100,000-object Metaverse Object deletion run writes causal edges via chunked bulk SQL with no row-at-a-time fallback on the happy path, and shows no measurable regression against the pre-provenance baseline (not run before Phase 1 shipped; tracked in [#1812](https://github.com/TetronIO/JIM/issues/1812))
 - [ ] Both ends of the edge are indexed; upward and downward traversal from any RPEI is covered by an integration test against a real multi-hop cascade
 - [ ] Deleting or purging an RPEI or Activity cascades to the causal edges whose effect it was, with no orphaned rows accumulating; deleting or purging a cause does not delete the edge that records it was once the cause (`RequiresPostgres` regression test, per the pattern in `test/JIM.Worker.Tests/`)
-- [ ] A failure to write a causal edge never fails, blocks, or corrupts the sync operation it describes, covered by a test that induces an edge-write failure and asserts the sync still completes and records correctly
+- ~~A failure to write a causal edge never fails, blocks, or corrupts the sync operation it describes, covered by a test that induces an edge-write failure and asserts the sync still completes and records correctly~~ **Dropped (2026-09-25):** this contradicts the same-transaction requirement under Non-Functional Requirements, where a failed edge write fails or retries with its batch exactly as a failed Run Profile Execution Item write does. Integrity comes from the two never diverging, not from a sync completing without its edges.
 - [ ] Downward "Consequences" honestly reflects time: an RPEI viewed immediately after creation shows "no consequences yet"; the same RPEI viewed after the causing chain completes shows them (Scenario 5, Phase 2)
 - [ ] Phase 1 and Phase 2 each ship with a changelog entry and a `docs/` update in the same PR as their user-facing change
 

@@ -1,7 +1,7 @@
 # Causal Provenance: Phase 1 Implementation Plan
 
 - **Status:** Done
-- **Note:** Phases 1a to 1e shipped in [#1497](https://github.com/TetronIO/JIM/pull/1497), which closed #1223. Two Success Criteria have no recorded evidence: the 100,000-object deletion benchmark against the pre-provenance baseline, and the induced edge-write failure test.
+- **Note:** Phases 1a to 1e shipped in [#1497](https://github.com/TetronIO/JIM/pull/1497), which closed #1223. The 100,000-object benchmark was never run and is tracked in [#1812](https://github.com/TetronIO/JIM/issues/1812). The induced edge-write failure criterion is dropped: it contradicts the same-transaction design, under which a failed edge write fails its batch exactly as a failed Run Profile Execution Item write does.
 - **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
 - **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md)
 - **Created:** 2026-08-04
