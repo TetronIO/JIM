@@ -166,9 +166,10 @@ public interface IConnectedSystemRepository
     public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
 
     /// <summary>
-    /// Batch-loads full CSO entity graphs by their IDs.
-    /// Returns CSOs with the same Include chain as GetConnectedSystemObjectByAttributeAsync
-    /// (Type.Attributes, AttributeValues.Attribute, AttributeValues.ReferenceValue.Type).
+    /// Batch-loads full CSO entity graphs by their IDs: Type.Attributes and AttributeValues.Attribute
+    /// are populated on every CSO, with CSOs of the same type sharing one Type instance. The schema
+    /// (Object Type + Attributes) is loaded once per call for the distinct types referenced rather than
+    /// via an Include chain, to avoid re-fetching it once per CSO; see the implementation for why.
     /// Used as the hydration phase of the batch pre-fetch import pipeline (#440).
     /// </summary>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);

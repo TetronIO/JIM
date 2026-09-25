@@ -2492,16 +2492,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (idList.Count == 0)
             return new List<ConnectedSystemObject>();
 
-        // Load CSOs without tracking to prevent change tracker bloat. The worker's context
-        // default is TrackAll (identity fixup for overlapping graphs), so this bulk read path
-        // must opt out per query: schema entities (Type, Type.Attributes, AttributeValue.Attribute)
-        // are shared across all CSOs and cause O(n) identity-resolution slowdown when accumulated
-        // in the tracker (317ms → 5.6s per CSO at 100K scale), and at long-tail group scale
-        // (#917: ~5k groups, ~1M membership rows) tracked graphs plus original-value snapshots
-        // account for gigabytes of peak memory. WithIdentityResolution keeps shared schema
-        // entities as single instances within this query without touching the tracker.
-        // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
-        // values, so change tracking is not required during import processing.
+        // Load CSOs with their AttributeValues, without tracking, to prevent change tracker
+        // bloat. The worker's context default is TrackAll (identity fixup for overlapping
+        // graphs), so this bulk read path must opt out per query. The save phase uses raw SQL
+        // for parent CSO rows and explicit add/remove for attribute values, so change tracking
+        // is not required during import processing.
         //
         // ReferenceValue navigations are deliberately NOT included (#917): at ~5k groups x ~200
         // members that include materialises ~1M referenced CSO entities (plus their Types) that
@@ -2509,15 +2504,77 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // and ImportRefMatchesCsoValue matches them via the GetReferenceExternalIdsAsync SQL
         // dictionary, which prefers the same secondary-then-primary external id the navigation
         // path used.
-        return await Repository.Database.ConnectedSystemObjects
-            .AsNoTrackingWithIdentityResolution()
+        //
+        // Schema (Type, Type.Attributes, AttributeValue.Attribute) is deliberately NOT loaded
+        // here via Include. Schema entities are shared across every CSO of the same type, so an
+        // Include-based split query joins the Attributes table back through the Object Type to
+        // ConnectedSystemObjects to preserve row ordering/identity, and returns one copy of the
+        // type's attributes per matching CSO row rather than once overall: at 100,000 CSOs that
+        // was about 5.4 million redundant attribute rows. Instead, the schema for the distinct
+        // types referenced by this page is loaded once below and wired onto the CSOs by hand, so
+        // the returned graph is unchanged in shape: every CSO's Type carries its full Attributes
+        // collection, CSOs of the same type share ONE Type instance, and every attribute value's
+        // Attribute is the SAME instance as the matching element of its CSO's Type.Attributes
+        // (the invariants EF's own Include-based fixup gave us before).
+        //
+        // Split query stays: as a single query, every CSO's columns would repeat once per attribute
+        // value row, which for a large group (tens of thousands of member values) is the costly shape.
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
+
+        if (csos.Count == 0)
+            return csos;
+
+        var typeIds = csos.Select(cso => cso.TypeId).Distinct().ToList();
+        var types = await Repository.Database.ConnectedSystemObjectTypes
+            .AsNoTracking()
+            .Include(t => t.Attributes)
+            .Where(t => typeIds.Contains(t.Id))
+            .ToListAsync();
+
+        var typesById = types.ToDictionary(t => t.Id);
+        var attributesById = types.SelectMany(t => t.Attributes).ToDictionary(a => a.Id);
+
+        List<int>? missingAttributeIds = null;
+        foreach (var cso in csos)
+        {
+            cso.Type = typesById[cso.TypeId];
+
+            foreach (var av in cso.AttributeValues)
+            {
+                if (attributesById.TryGetValue(av.AttributeId, out var attribute))
+                    av.Attribute = attribute;
+                else
+                    (missingAttributeIds ??= []).Add(av.AttributeId);
+            }
+        }
+
+        // Should not happen: an attribute value referencing an AttributeId absent from its own
+        // CSO's Object Type Attributes collection. Fall back to loading those attributes
+        // individually so behaviour is never worse than before this change, and log it so the
+        // underlying data mismatch can be investigated.
+        if (missingAttributeIds != null)
+        {
+            Log.Warning("GetConnectedSystemObjectsByIdsAsync: {Count} attribute value(s) in Connected System {ConnectedSystemId} referenced an AttributeId not present in their Connected System Object Type's Attributes collection ({AttributeIds}). Falling back to loading them individually.",
+                missingAttributeIds.Count, connectedSystemId, missingAttributeIds);
+
+            var fallbackAttributes = await Repository.Database.ConnectedSystemAttributes
+                .AsNoTracking()
+                .Where(a => missingAttributeIds.Contains(a.Id))
+                .ToDictionaryAsync(a => a.Id);
+
+            foreach (var cso in csos)
+            {
+                foreach (var av in cso.AttributeValues.Where(av => av.Attribute == null && fallbackAttributes.ContainsKey(av.AttributeId)))
+                    av.Attribute = fallbackAttributes[av.AttributeId];
+            }
+        }
+
+        return csos;
     }
 
     /// <summary>

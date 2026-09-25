@@ -151,9 +151,9 @@ public interface ISyncRepository
     Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
 
     /// <summary>
-    /// Batch-loads full CSO entity graphs by their IDs in a single query.
-    /// Returns CSOs with Type, Attributes, AttributeValues, and ReferenceValue navigations loaded —
-    /// the same shape as GetConnectedSystemObjectByAttributeAsync but for multiple CSOs at once.
+    /// Batch-loads full CSO entity graphs by their IDs.
+    /// Returns CSOs with Type.Attributes and AttributeValues.Attribute populated (CSOs of the same
+    /// type sharing one Type instance); ReferenceValue navigations are deliberately NOT loaded (#917).
     /// Used as the hydration phase of the import pipeline after the lookup phase identifies which CSOs exist.
     /// </summary>
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
