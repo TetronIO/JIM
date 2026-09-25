@@ -1803,6 +1803,18 @@ public class SyncImportTaskProcessor
         public Dictionary<ConnectedSystemImportObject, Guid> IncomingHashes { get; } = new();
         public Dictionary<ConnectedSystemImportObject, CsoImportStateLookupEntry> MatchedImportState { get; } = new();
         public HashSet<ConnectedSystemImportObject> SkipEligible { get; } = new();
+
+        /// <summary>
+        /// The page's batched secondary external ID resolution for import objects with no primary
+        /// external ID match (see <see cref="HydrateCsoPageAsync"/>). A missing key means
+        /// "uncovered": the value could not be resolved in the batch (no secondary external id
+        /// attribute, a non-Text secondary id, or more than one CSO sharing the value) and
+        /// <see cref="HydrateCsoAsync"/> must fall back to its single-object query. A present key
+        /// with a null value is a confirmed "no match" (zero rows, or the sole match was not Pending
+        /// Provisioning). A present key with a value is the matched Pending Provisioning CSO's id,
+        /// already included in <see cref="HydratedCsos"/> above.
+        /// </summary>
+        public Dictionary<ConnectedSystemImportObject, Guid?> SecondaryMatches { get; } = new();
     }
 
     /// <summary>
@@ -1837,7 +1849,9 @@ public class SyncImportTaskProcessor
     {
         var result = new CsoHydrationPageResult();
 
-        // Nothing to pre-fetch on a first-ever import (_csIsEmpty) - every object is new by definition.
+        // Nothing to pre-fetch on a first-ever import (_csIsEmpty) - every object is new by
+        // definition, and HydrateCsoAsync's own _csIsEmpty short-circuit means the secondary lookup
+        // below is never consulted for this run either.
         if (_csIsEmpty || _connectedSystem.ObjectTypes == null)
             return result;
 
@@ -1859,6 +1873,18 @@ public class SyncImportTaskProcessor
             .Where(pair => pair.ObjectType != null && pair.ObjectType.Attributes.Any(a => a.IsExternalId));
 
         var csoIdsToHydrate = new HashSet<Guid>();
+
+        // Secondary external ID candidates for this page's import objects with NO primary match,
+        // batched per object type so HydrateCsoAsync's Pending Provisioning confirmation (one query
+        // per unmatched object before this fix) costs one query per type per page instead. Keyed by
+        // (object type id, the type's current secondary external id attribute id) so the batch
+        // query can filter on that attribute id as a known constant (index use; see
+        // ConnectedSystemRepository.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync), then
+        // by the secondary value, since more than one import object can legitimately carry the same
+        // value (duplicate detection elsewhere is what raises an error for that; this pre-fetch pass
+        // tolerates it rather than assuming uniqueness).
+        var secondaryLookupCandidates = new Dictionary<(int ObjectTypeId, int SecondaryAttributeId), Dictionary<string, List<ConnectedSystemImportObject>>>();
+
         foreach (var (importObject, csObjectType) in hydrationCandidates)
         {
             // Malformed import objects (missing/multi-valued/empty External Id attribute) are swallowed
@@ -1887,7 +1913,10 @@ public class SyncImportTaskProcessor
             }
 
             if (!entry.HasValue)
+            {
+                CollectSecondaryLookupCandidate(importObject, csObjectType!, secondaryLookupCandidates);
                 continue;
+            }
 
             var matchedEntry = entry.Value;
             result.MatchedImportState[importObject] = matchedEntry;
@@ -1918,6 +1947,13 @@ public class SyncImportTaskProcessor
             csoIdsToHydrate.Add(matchedEntry.CsoId);
         }
 
+        // Resolve this page's secondary-external-id candidates, one batch query per object type,
+        // BEFORE the hydration pass below, so any confirmed Pending Provisioning matches are folded
+        // into the same chunked GetConnectedSystemObjectsByIdsAsync hydration as the primary matches
+        // above - not a second round of per-object queries.
+        if (secondaryLookupCandidates.Count > 0)
+            await ResolveSecondaryLookupCandidatesAsync(secondaryLookupCandidates, result, csoIdsToHydrate);
+
         if (csoIdsToHydrate.Count > 0)
         {
             foreach (var chunk in csoIdsToHydrate.Chunk(CsoHydrationChunkSize))
@@ -1931,6 +1967,115 @@ public class SyncImportTaskProcessor
         span.SetTag("hydratedCsoCount", result.HydratedCsos.Count);
         span.SetTag("skippedCount", result.SkipEligible.Count);
         return result;
+    }
+
+    /// <summary>
+    /// Records an import object with no primary external ID match as a candidate for the page's
+    /// batched secondary external ID lookup, using the same value extraction
+    /// <see cref="HydrateCsoAsync"/>'s per-object fallback uses (the import attribute matched by
+    /// name case-insensitively, first Text value). Only Text secondary external IDs are batched,
+    /// matching the single-object method's only supported case; anything else (no secondary
+    /// external id attribute, a non-Text type, or a missing/duplicated/empty import attribute) is
+    /// deliberately left uncovered for <see cref="HydrateCsoAsync"/>'s per-object fallback to
+    /// resolve (and, for a genuinely duplicated attribute, raise) exactly as it does today. Must
+    /// never throw: this runs before the per-object loop's own duplicate-attribute validation, so a
+    /// malformed import object here must fall through quietly rather than failing the whole page.
+    /// </summary>
+    private static void CollectSecondaryLookupCandidate(
+        ConnectedSystemImportObject importObject,
+        ConnectedSystemObjectType csObjectType,
+        Dictionary<(int ObjectTypeId, int SecondaryAttributeId), Dictionary<string, List<ConnectedSystemImportObject>>> candidates)
+    {
+        var secondaryExternalIdAttribute = csObjectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId);
+        if (secondaryExternalIdAttribute is not { Type: AttributeDataType.Text })
+            return;
+
+        // Deliberately avoids SingleOrDefault: a duplicated attribute name would throw here, before
+        // the per-object loop's own duplicate-attribute check has had a chance to reject the object
+        // properly. Anything other than exactly one match is left uncovered instead.
+        var matchingAttributes = importObject.Attributes.Where(
+            csioa => csioa.Name.Equals(secondaryExternalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (matchingAttributes.Count != 1 || matchingAttributes[0].StringValues.Count == 0)
+            return;
+
+        var value = matchingAttributes[0].StringValues[0];
+        var candidateKey = (ObjectTypeId: csObjectType.Id, SecondaryAttributeId: secondaryExternalIdAttribute.Id);
+        if (!candidates.TryGetValue(candidateKey, out var valuesForType))
+        {
+            valuesForType = new Dictionary<string, List<ConnectedSystemImportObject>>();
+            candidates[candidateKey] = valuesForType;
+        }
+
+        if (!valuesForType.TryGetValue(value, out var importObjectsForValue))
+        {
+            importObjectsForValue = new List<ConnectedSystemImportObject>();
+            valuesForType[value] = importObjectsForValue;
+        }
+
+        importObjectsForValue.Add(importObject);
+    }
+
+    /// <summary>
+    /// Resolves this page's secondary-external-id candidates (collected by
+    /// <see cref="CollectSecondaryLookupCandidate"/>), one batch query per object type, and folds
+    /// the outcome into <paramref name="result"/>. A value matched by exactly one Pending
+    /// Provisioning CSO is queued into <paramref name="csoIdsToHydrate"/> for the same chunked
+    /// hydration the primary-match path uses (so this adds zero extra hydration queries) and logs
+    /// the same "confirms a provisioned object" line the single-object method used to log itself.
+    /// A value matched by zero rows, or by exactly one non-Pending-Provisioning CSO, is recorded as
+    /// a confirmed "no match". A value matched by more than one CSO is left out of
+    /// <see cref="CsoHydrationPageResult.SecondaryMatches"/> entirely, so <see cref="HydrateCsoAsync"/>
+    /// falls back to the single-object query, preserving its <c>SingleOrDefaultAsync</c>
+    /// throw-on-duplicate behaviour.
+    /// </summary>
+    private async Task ResolveSecondaryLookupCandidatesAsync(
+        Dictionary<(int ObjectTypeId, int SecondaryAttributeId), Dictionary<string, List<ConnectedSystemImportObject>>> secondaryLookupCandidates,
+        CsoHydrationPageResult result,
+        HashSet<Guid> csoIdsToHydrate)
+    {
+        foreach (var ((objectTypeId, secondaryAttributeId), valuesForType) in secondaryLookupCandidates)
+        {
+            var rows = await _syncRepo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+                _connectedSystem.Id, objectTypeId, secondaryAttributeId, valuesForType.Keys.ToList());
+
+            var rowsByValue = rows
+                .GroupBy(r => r.Value, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            foreach (var (value, importObjectsForValue) in valuesForType)
+            {
+                if (!rowsByValue.TryGetValue(value, out var matchingRows))
+                {
+                    foreach (var io in importObjectsForValue)
+                        result.SecondaryMatches[io] = null;
+                    continue;
+                }
+
+                // More than one CSO shares this secondary external ID value: leave it uncovered so
+                // HydrateCsoAsync falls back to the single-object query, whose SingleOrDefaultAsync
+                // throws on the same ambiguity today.
+                if (matchingRows.Count > 1)
+                    continue;
+
+                var match = matchingRows[0];
+                if (match.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+                {
+                    // Already Normal (or any other status): if it still existed under this secondary
+                    // identity, the primary ID lookup would have found it. Confirmed non-match.
+                    foreach (var io in importObjectsForValue)
+                        result.SecondaryMatches[io] = null;
+                    continue;
+                }
+
+                csoIdsToHydrate.Add(match.ConnectedSystemObjectId);
+                foreach (var io in importObjectsForValue)
+                {
+                    result.SecondaryMatches[io] = match.ConnectedSystemObjectId;
+                    Log.Information("HydrateCsoPageAsync: Found PendingProvisioning CSO {CsoId} by secondary external ID '{SecondaryId}'. This confirms a provisioned object.",
+                        match.ConnectedSystemObjectId, LogSanitiser.Sanitise(value));
+                }
+            }
+        }
     }
 
     private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<string>? crossPageSeenExternalIds = null)
@@ -2180,7 +2325,7 @@ public class SyncImportTaskProcessor
                 ConnectedSystemObject? connectedSystemObject;
                 using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
                 {
-                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage);
+                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage, hydrationResult);
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
@@ -2672,8 +2817,21 @@ public class SyncImportTaskProcessor
     /// for attribute diffing during import processing via a small number of batch queries (#988).
     /// Falls back to secondary external ID lookup for PendingProvisioning CSOs not found in the dictionary.
     /// </summary>
-    private async Task<ConnectedSystemObject?> HydrateCsoAsync(Guid? csoId, ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, IReadOnlyDictionary<Guid, ConnectedSystemObject> hydratedCsoPage)
+    private async Task<ConnectedSystemObject?> HydrateCsoAsync(
+        Guid? csoId,
+        ConnectedSystemImportObject connectedSystemImportObject,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        IReadOnlyDictionary<Guid, ConnectedSystemObject> hydratedCsoPage,
+        CsoHydrationPageResult hydrationResult)
     {
+        // A first-ever import (_csIsEmpty) has no existing CSO at all, so no Pending Provisioning
+        // CSO can exist for the secondary lookup below to confirm: every CSO this run creates starts
+        // life as Normal, and the fallback only ever returns a Pending Provisioning match. Skip it
+        // entirely rather than issuing a per-object database round trip that can only ever come back
+        // empty (measured: 100,050 such queries, all returning nothing, on a 100,000-object first import).
+        if (_csIsEmpty)
+            return null;
+
         // If lookup found a match, retrieve the full entity from the page's pre-fetched hydration dictionary
         if (csoId.HasValue)
         {
@@ -2686,9 +2844,29 @@ public class SyncImportTaskProcessor
                 csoId.Value);
         }
 
-        // No match by primary external ID (or CSO was deleted). Check for PendingProvisioning CSOs
-        // by secondary external ID. This is a per-object query but PendingProvisioning CSOs are rare
-        // (only exist during the narrow window between provisioning evaluation and confirming import).
+        // No match by primary external ID (or CSO was deleted). The page's batch prefetch
+        // (HydrateCsoPageAsync) already resolved the secondary lookup for every Text-secondary-id
+        // candidate with no primary match, one query per object type per page instead of one query
+        // per object; consult it before falling back to the single-object query below.
+        if (hydrationResult.SecondaryMatches.TryGetValue(connectedSystemImportObject, out var secondaryMatchCsoId))
+        {
+            if (!secondaryMatchCsoId.HasValue)
+                return null;
+
+            if (hydratedCsoPage.TryGetValue(secondaryMatchCsoId.Value, out var secondaryCsoFromPage))
+                return secondaryCsoFromPage;
+
+            // Batch-resolved but concurrently deleted before hydration. Fall through to the
+            // per-object query below for up-to-date state, mirroring the primary-match fallthrough above.
+            Log.Warning("HydrateCsoAsync: Batch secondary lookup matched CSO {CsoId} but it was not found in the database. Possible concurrent deletion. Falling through to the per-object secondary lookup.",
+                secondaryMatchCsoId.Value);
+        }
+
+        // Reached only when the page batch could not resolve this value itself (no secondary
+        // external id attribute, a non-Text secondary id, or more than one CSO sharing the value -
+        // left for SingleOrDefaultAsync to throw on, as before). This is a per-object query but
+        // PendingProvisioning CSOs are rare (only exist during the narrow window between
+        // provisioning evaluation and confirming import).
         var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId);
         if (secondaryExternalIdAttribute == null)
             return null;
@@ -2725,10 +2903,14 @@ public class SyncImportTaskProcessor
     /// This replaces the previous per-object attribute-value-based search queries (#440) and,
     /// subsequently, the per-object hydration query that remained after that fix (#988).
     /// </summary>
-    private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, IReadOnlyDictionary<Guid, ConnectedSystemObject> hydratedCsoPage)
+    private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(
+        ConnectedSystemImportObject connectedSystemImportObject,
+        ConnectedSystemObjectType connectedSystemObjectType,
+        IReadOnlyDictionary<Guid, ConnectedSystemObject> hydratedCsoPage,
+        CsoHydrationPageResult hydrationResult)
     {
         var csoId = LookupCsoByExternalId(connectedSystemImportObject, connectedSystemObjectType);
-        return await HydrateCsoAsync(csoId, connectedSystemImportObject, connectedSystemObjectType, hydratedCsoPage);
+        return await HydrateCsoAsync(csoId, connectedSystemImportObject, connectedSystemObjectType, hydratedCsoPage, hydrationResult);
     }
 
     private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)

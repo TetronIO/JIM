@@ -716,6 +716,34 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
 
     /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, returns every (value, Connected System Object id, status)
+    /// row matching the same predicate the single-object method uses (case-sensitive
+    /// <c>StringValue</c> equality, <c>SecondaryExternalIdAttributeId</c> not null, matched against
+    /// that CSO's OWN configured secondary external id attribute rather than a fixed attribute name).
+    /// Used to prefetch a whole import page's Pending Provisioning confirmations in one query per
+    /// object type instead of one query per unmatched import object.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to search within.</param>
+    /// <param name="objectTypeId">The Connected System Object Type to scope the search to.</param>
+    /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
+    /// attribute id (the one <see cref="ConnectedSystemObjectTypeAttribute.IsSecondaryExternalId"/>
+    /// names today, and the same attribute the import value was read from). Also used as a known
+    /// constant in the query's attribute-value join so it can use the
+    /// <c>(AttributeId, StringValue)</c> index; only a CSO whose OWN
+    /// <see cref="ConnectedSystemObject.SecondaryExternalIdAttributeId"/> equals this value can
+    /// match, so a CSO still carrying an older secondary attribute (after an administrator
+    /// retargeted it) is correctly excluded, exactly as the single-object method would exclude it.</param>
+    /// <param name="secondaryExternalIdValues">The secondary external ID values to look up. Empty
+    /// returns an empty result without querying.</param>
+    /// <returns>Every matching (value, Connected System Object id, status) row. A value matched by
+    /// more than one CSO returns more than one row for it: the caller decides how to treat that
+    /// ambiguity (the import pipeline falls back to the single-object method, whose
+    /// <c>SingleOrDefaultAsync</c> throws on it).</returns>
+    public Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues);
+
+    /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value across ALL object types.
     /// This is used for reference resolution where the referenced object can be of any type
     /// (e.g., a group's member reference can point to a user, another group, or other object types).

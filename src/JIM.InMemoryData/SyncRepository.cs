@@ -368,7 +368,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
-    public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
+    public virtual Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
         var cso = GetCsosForSystem(connectedSystemId)
@@ -384,6 +384,46 @@ public class SyncRepository : ISyncRepository
         // working set and later have its AttributeValues released. Without cloning, that release
         // would empty the store's own copy too.
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
+    }
+
+    /// <summary>
+    /// Honest in-memory equivalent of the Postgres batch query: same predicate as
+    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (case-sensitive
+    /// <c>StringValue</c> equality against that CSO's own configured secondary external id
+    /// attribute), evaluated for many values at once. Virtual so tests can spy on call counts to
+    /// prove the import pipeline batches this per page instead of calling it per object.
+    /// </summary>
+    /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
+    /// attribute id. The in-memory store has no index to protect, but the parameter's semantics are
+    /// still enforced: combined with the existing <c>SecondaryExternalIdAttributeId</c> check below,
+    /// only a CSO whose own configured secondary attribute equals this value can match (see the
+    /// Postgres implementation for why that is the coherent behaviour, not merely an index aid).
+    /// </param>
+    public virtual Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues)
+    {
+        var results = new List<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>();
+        if (secondaryExternalIdValues.Count == 0)
+            return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
+
+        var valueSet = new HashSet<string>(secondaryExternalIdValues, StringComparer.Ordinal);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            if (cso.TypeId != objectTypeId ||
+                cso.SecondaryExternalIdAttributeId != secondaryExternalIdAttributeId)
+                continue;
+
+            foreach (var av in cso.AttributeValues.Where(av =>
+                av.AttributeId == secondaryExternalIdAttributeId &&
+                av.AttributeId == cso.SecondaryExternalIdAttributeId!.Value &&
+                av.StringValue != null &&
+                valueSet.Contains(av.StringValue)))
+            {
+                results.Add((av.StringValue!, cso.Id, cso.Status));
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(

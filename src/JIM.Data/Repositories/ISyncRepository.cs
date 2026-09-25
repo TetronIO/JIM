@@ -118,6 +118,15 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
 
     /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, in one query per object type per page instead of one
+    /// query per unmatched import object. See <c>IConnectedSystemRepository</c> for full parameter
+    /// and matching documentation.
+    /// </summary>
+    Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues);
+
+    /// <summary>
     /// Gets a CSO by secondary external ID searching across all object types.
     /// </summary>
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);

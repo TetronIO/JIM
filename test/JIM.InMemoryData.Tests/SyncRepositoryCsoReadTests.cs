@@ -13,6 +13,7 @@ public class SyncRepositoryCsoReadTests
     private const int CsId = 1;
     private const int AttrId = 10;
     private const int SecondaryAttrId = 11;
+    private const int OtherSecondaryAttrId = 12;
     private const int ObjectTypeId = 100;
 
     [SetUp]
@@ -402,6 +403,108 @@ public class SyncRepositoryCsoReadTests
         var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
             CsId, new[] { "DN1", "DN2" });
         Assert.That(result, Has.Count.EqualTo(1));
+    }
+
+    #endregion
+
+    #region Batch Secondary External ID (typed, per object type)
+
+    /// <summary>
+    /// The page-batched sibling of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>,
+    /// used to prefetch a whole import page's Pending Provisioning confirmations in one query per
+    /// object type instead of one query per unmatched import object.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_FindsMatch_ReturnsValueIdAndStatusAsync()
+    {
+        var cso = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
+        cso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        cso.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=John,DC=test"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            CsId, ObjectTypeId, SecondaryAttrId, new[] { "CN=John,DC=test" });
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Value, Is.EqualTo("CN=John,DC=test"));
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+        Assert.That(result[0].Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_OtherObjectType_IsExcludedAsync()
+    {
+        var cso = CreateCso(typeId: 999, secondaryExternalIdAttributeId: SecondaryAttrId);
+        cso.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=John,DC=test"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            CsId, ObjectTypeId, SecondaryAttrId, new[] { "CN=John,DC=test" });
+
+        Assert.That(result, Is.Empty);
+    }
+
+    /// <summary>
+    /// The <c>secondaryExternalIdAttributeId</c> parameter pins the query to the object type's
+    /// CURRENT secondary external ID attribute (needed on Postgres so the batch query can use the
+    /// (AttributeId, StringValue) index; see the Postgres implementation for the measurements). That
+    /// changes semantics, not just performance: a CSO whose OWN <c>SecondaryExternalIdAttributeId</c>
+    /// is a DIFFERENT attribute of the same type must not match, even if that other attribute
+    /// happens to hold the same string value, because the import value being looked up was read from
+    /// the type's current secondary attribute, not from an old one an administrator has since moved
+    /// away from.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CsoSecondaryAttributeDiffers_IsExcludedAsync()
+    {
+        var cso = CreateCso(secondaryExternalIdAttributeId: OtherSecondaryAttrId);
+        cso.AttributeValues.Add(CreateAv(OtherSecondaryAttrId, stringValue: "CN=John,DC=test"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            CsId, ObjectTypeId, SecondaryAttrId, new[] { "CN=John,DC=test" });
+
+        Assert.That(result, Is.Empty,
+            "a CSO whose configured secondary external id attribute is a different attribute must not match, even holding the same value");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_DuplicateValueAcrossTwoCsos_ReturnsBothRowsAsync()
+    {
+        var first = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
+        first.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=Duplicate,DC=test"));
+        var second = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
+        second.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=Duplicate,DC=test"));
+        _repo.SeedConnectedSystemObject(first);
+        _repo.SeedConnectedSystemObject(second);
+
+        var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            CsId, ObjectTypeId, SecondaryAttrId, new[] { "CN=Duplicate,DC=test" });
+
+        Assert.That(result, Has.Count.EqualTo(2),
+            "an ambiguous value must return every matching row so the caller can leave it uncovered, not pick a winner");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_CaseDiffers_DoesNotMatchAsync()
+    {
+        var cso = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
+        cso.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=John,DC=test"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            CsId, ObjectTypeId, SecondaryAttrId, new[] { "cn=john,dc=test" });
+
+        Assert.That(result, Is.Empty, "matching must be exact and case-sensitive, matching the single-object method");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync_EmptyValues_ReturnsEmptyAsync()
+    {
+        var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+            CsId, ObjectTypeId, SecondaryAttrId, Array.Empty<string>());
+
+        Assert.That(result, Is.Empty);
     }
 
     #endregion

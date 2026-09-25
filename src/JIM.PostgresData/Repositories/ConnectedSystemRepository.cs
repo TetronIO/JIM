@@ -2625,6 +2625,73 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, returns every (value, Connected System Object id, status)
+    /// row matching the same predicate the single-object method uses. Raw Npgsql with a typed
+    /// <c>unnest(@values)</c> array, following the shape of <see cref="GetExportMatchCandidateIdsAsync"/>:
+    /// this is a per-page worker hot-path query, so it stays off EF projection.
+    /// </summary>
+    public async Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues)
+    {
+        if (secondaryExternalIdValues.Count == 0)
+            return [];
+
+        // External ID matching is case-sensitive, matching the single-object method.
+        //
+        // The av."AttributeId" = @secondaryExternalIdAttributeId predicate is there for index use,
+        // not correctness on its own: without a known constant to filter on, the planner cannot use
+        // IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue against the join from
+        // unnest(), because the only attribute-id filter available (cso."SecondaryExternalIdAttributeId")
+        // is per-row and only known after joining to "ConnectedSystemObjects". Measured on a live
+        // 100k-CSO database (500 values, one object type): 1,011 ms without this predicate (a
+        // sequential-ish scan of every CSO of the type merge-joined against its secondary values) vs
+        // 45 ms with it (a nested loop, one index probe per unnested value).
+        //
+        // The existing av."AttributeId" = cso."SecondaryExternalIdAttributeId" predicate stays
+        // alongside it, unchanged: together the two mean only a CSO whose OWN configured secondary
+        // external id attribute equals the type's CURRENT one can match. That is coherent because
+        // the import value being looked up was itself read from that same current attribute
+        // (CollectSecondaryLookupCandidate); a CSO still carrying an older secondary attribute after
+        // an administrator retargeted it is correctly left unmatched by the batch, exactly as the
+        // single-object method (which has no "current" concept to compare against) would also fail
+        // to match it once the schema has moved on.
+        //
+        // DISTINCT guards against a CSO carrying more than one attribute-value row for that
+        // attribute id (should not happen, but would otherwise look like two different CSOs matching).
+        const string sql = """
+            SELECT DISTINCT v.input AS "Value", cso."Id" AS "ConnectedSystemObjectId", cso."Status" AS "Status"
+            FROM unnest(@values) AS v(input)
+            JOIN "ConnectedSystemObjectAttributeValues" av
+                ON av."AttributeId" = @secondaryExternalIdAttributeId
+               AND av."StringValue" = v.input
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
+            WHERE cso."ConnectedSystemId" = @connectedSystemId
+              AND cso."TypeId" = @objectTypeId
+              AND cso."SecondaryExternalIdAttributeId" IS NOT NULL
+              AND av."AttributeId" = cso."SecondaryExternalIdAttributeId"
+            ORDER BY v.input, cso."Id"
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("values", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text) { Value = secondaryExternalIdValues.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("objectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = objectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("secondaryExternalIdAttributeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = secondaryExternalIdAttributeId });
+
+        var results = new List<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetGuid(1), (ConnectedSystemObjectStatus)reader.GetInt32(2)));
+
+        return results;
+    }
+
+    /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value across ALL object types.
     /// This is used for reference resolution where the referenced object can be of any type
     /// (e.g., a group's member reference can point to a user, another group, or other object types).
