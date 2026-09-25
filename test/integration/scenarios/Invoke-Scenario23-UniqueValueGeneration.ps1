@@ -743,7 +743,9 @@ try {
         $survivorNumberBefore = $survivorBefore.attributes.'Staff Number'
 
         $sequenceBefore = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
-        $configuredStart = 5000  # set by the Sequence test step above
+        # The flow's configured Start as it stands now (the Sequence step raised it to 5000 and then
+        # lowered it to 1; lowering never moves the counter, but it is the value Start again returns to).
+        $configuredStart = (@(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId) | Where-Object { $_.id -eq $config.EmployeeNumberMappingId }).generation.sequenceStart
 
         $restartResult = Restart-JIMGeneratedValues -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -Confirm:$false
         Add-TestResult -Name "Restart-JIMGeneratedValues reports the counter moving back to the configured Start" -Passed ($restartResult.counterTo -eq $configuredStart) `
