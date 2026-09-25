@@ -25,7 +25,7 @@ and the [security audit log](security-audit-events.md) records a failed sign-in 
 
 **How to fix.** Serve JIM over HTTPS:
 
-1. Put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy).
+1. Put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy), and [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS.
 2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added for the plain-HTTP address (see the [SSO Setup Guide](sso-setup.md)).
 3. Open JIM at its `https://` address.
 
