@@ -136,10 +136,13 @@ gh pr merge <n> --squash --delete-branch --auto
 
 - An immediate failure right after `gh pr create` is **expected, not a blocker** (checks haven't started). The `--auto` flag queues the merge for when checks pass.
 - **NEVER use `--admin` to bypass.** The harness will refuse it, correctly.
+- In the Claude desktop app, `mcp__ccd_pr__set_auto_merge` (`enabled: true`, `merge_method: squash`) is the equivalent. It has no `--delete-branch` option and needs none: the repository deletes a PR's head branch when it merges.
 
 ## Resolve code-quality bot issues
 
 `github-code-quality` will post review comments within a couple of minutes. Don't assume it'll be silent.
+
+**In the Claude desktop app (Code tab), let the app watch the PR instead of polling for it.** After `gh pr create`, call `mcp__ccd_pr__get_status`, and `mcp__ccd_pr__bind_pr` with the PR's URL if it does not report this PR. Then turn on Auto-fix with `mcp__ccd_pr__set_monitor` (`auto_fix: true`, `address_comments: true`, and the PR's `url`); the app asks the user to approve it. From then on the app wakes the session with a `<ci-monitor-event>` for each failed check, merge conflict and review comment, the bot's included. Skip the polling in step 1 and apply steps 2 to 4 to each event as it arrives. Do not also poll `gh pr checks` or the comments endpoint, and do not reach for ScheduleWakeup, CronCreate or `/loop` to do it. Where those tools are not available (a terminal session, for example), poll as below.
 
 1. **Poll for the bot's review:**
    ```
@@ -158,7 +161,7 @@ gh pr merge <n> --squash --delete-branch --auto
 3. **Apply, build, test, commit, push:**
    - Make the edits with `Edit`.
    - Re-run `dotnet build JIM.sln` and `dotnet test JIM.sln`.
-   - Commit as a separate `fix(code-quality): ...` commit (the squash-merge collapses it away). Use a HEREDOC commit message with the `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer.
+   - Commit as a separate `fix(code-quality): ...` commit (the squash-merge collapses it away). Use a HEREDOC commit message ending with the `Co-Authored-By:` trailer from the session's attribution reminder. Never copy the model name from an older commit or from this file; it goes stale with every model change.
    - `git push` — the auto-merge stays queued and re-evaluates against the new HEAD.
 
 4. **Repeat until the bot has nothing left to say** and `gh pr checks <n>` shows all required checks passing or pending merge.
@@ -168,10 +171,14 @@ gh pr merge <n> --squash --delete-branch --auto
 Use a Bash background command, not ScheduleWakeup or sleep-polling:
 
 ```
-until [ "$(gh pr view <n> --json state -q .state)" = "MERGED" ]; do sleep 30; done
+until s=$(gh pr view <n> --json state -q .state) && [ "$s" != "OPEN" ]; do sleep 30; done; echo "$s"
 ```
 
 Run with `run_in_background: true`. The harness will notify you when it exits. Do not poll proactively in the meantime.
+
+- It exits on `MERGED` or `CLOSED`. A `CLOSED` result means someone closed the PR without merging it: stop and tell the user rather than cleaning up.
+- A transient `gh` failure keeps it waiting rather than ending the wait early.
+- Arm it even with Auto-fix on. The desktop app reports failures, conflicts and comments, not the merge itself, and this waits on the PR's state rather than its checks.
 
 If the PR transitions to BEHIND while waiting (e.g. another PR landed on `main` first), run `gh pr update-branch <n>` to re-trigger checks, then re-arm the waiter.
 
@@ -188,6 +195,7 @@ git branch -D <feature-branch>
 
 - Use `-D` (capital), not `-d`. We squash-merge, so the feature branch's commits are not ancestors of `main` and `git branch -d` would refuse with "not fully merged".
 - If you were checked out on the feature branch when the auto-delete fired, the local ref may already be gone; `-D` will then report "branch not found", which is success.
+- **In a linked git worktree, skip the checkout and the branch delete.** The desktop app gives each session its own worktree; `git rev-parse --git-dir` differs from `git rev-parse --git-common-dir` when you are in one. There `git checkout main` fails because `main` is checked out in another worktree, and the branch is the one the worktree itself is on. Do not force either, and never run `git checkout` in the repository's main checkout to get round it. Run `git fetch --prune`, confirm the remote branch is gone (`git ls-remote --heads origin <feature-branch>` prints nothing), and leave the worktree and its branch to the app.
 
 End the skill on a one-line confirmation: PR number, squash-commit SHA on `main`, and the cleaned-up branch name.
 

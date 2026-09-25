@@ -121,15 +121,17 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // Load all Pending Exports once upfront and index by CSO ID for O(1) lookup
+        // Load the Pending Exports that confirmation evaluation can actually act on, once upfront, and
+        // index by CSO ID for O(1) lookup (see SyncFullSyncTaskProcessor for the full rationale). Grouped
+        // by the scalar ConnectedSystemObjectId rather than the ConnectedSystemObject navigation, which
+        // this query no longer loads.
         using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
         {
-            var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = allPendingExports
-                .Where(pe => pe.ConnectedSystemObject?.Id != null)
-                .GroupBy(pe => pe.ConnectedSystemObject!.Id)
+            var pendingExportsForConfirmation = await _syncRepo.GetPendingExportsForConfirmationEvaluationAsync(_connectedSystem.Id);
+            _pendingExportsByCsoId = pendingExportsForConfirmation
+                .GroupBy(pe => pe.ConnectedSystemObjectId!.Value)
                 .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformDeltaSyncAsync: Loaded {Count} Pending Exports into lookup dictionary", allPendingExports.Count);
+            Log.Verbose("PerformDeltaSyncAsync: Loaded {Count} Pending Exports into confirmation lookup dictionary", pendingExportsForConfirmation.Count);
         }
 
         // Pre-load export evaluation cache

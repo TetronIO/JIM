@@ -118,6 +118,15 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
 
     /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, in one query per object type per page instead of one
+    /// query per unmatched import object. See <c>IConnectedSystemRepository</c> for full parameter
+    /// and matching documentation.
+    /// </summary>
+    Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues);
+
+    /// <summary>
     /// Gets a CSO by secondary external ID searching across all object types.
     /// </summary>
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);
@@ -151,9 +160,9 @@ public interface ISyncRepository
     Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
 
     /// <summary>
-    /// Batch-loads full CSO entity graphs by their IDs in a single query.
-    /// Returns CSOs with Type, Attributes, AttributeValues, and ReferenceValue navigations loaded —
-    /// the same shape as GetConnectedSystemObjectByAttributeAsync but for multiple CSOs at once.
+    /// Batch-loads full CSO entity graphs by their IDs.
+    /// Returns CSOs with Type.Attributes and AttributeValues.Attribute populated (CSOs of the same
+    /// type sharing one Type instance); ReferenceValue navigations are deliberately NOT loaded (#917).
     /// Used as the hydration phase of the import pipeline after the lookup phase identifies which CSOs exist.
     /// </summary>
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
@@ -222,8 +231,28 @@ public interface ISyncRepository
     /// (<see cref="JIM.Application.Interfaces.ISyncEngine.IsExportedCreateUnseenByFullImport"/>): the
     /// caller compares each returned Pending Export's Connected System Object External Id against the
     /// run's own imported set to decide whether the Create was genuinely unseen.
+    /// <para>
+    /// Loads the full graph, so the retry step calls this only for candidates the lean
+    /// <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> projection has already
+    /// decided are genuinely unseen: <paramref name="pendingExportIds"/> narrows this same eligibility
+    /// query to exactly those, rather than re-loading every candidate a second time.
+    /// </para>
     /// </summary>
-    Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    /// <param name="pendingExportIds">When supplied, restricts the result to these Pending Export ids
+    /// (still subject to every other filter above). Null loads every eligible candidate, as before.</param>
+    Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null);
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>:
+    /// identical eligibility (Connected System, Create, Status Exported, Connected System Object not null
+    /// and Pending Provisioning, Object Type, optional partition), but returns only the Pending Export id,
+    /// the Connected System Object id, and the Connected System Object's primary External Id value as
+    /// typed nullable columns - never the full Pending Export / attribute-change / Connected System
+    /// Object / attribute-value graph. A Full Import's unseen exported-Create retry step uses this to
+    /// decide, for every candidate, whether the run saw the object, and only loads the full graph for the
+    /// (usually far smaller, often empty) subset genuinely unseen.
+    /// </summary>
+    Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Loads CSOs by ID for cross-page reference resolution.
@@ -373,6 +402,27 @@ public interface ISyncRepository
         ConnectedSystemObjectType connectedSystemObjectType,
         ObjectMatchingRule objectMatchingRule);
 
+    /// <summary>
+    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
+    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
+    /// type whose named attribute equals one of the given values, in one query per rule per page
+    /// instead of one query per Metaverse Object. See <c>IConnectedSystemRepository</c> for full
+    /// parameter and eligibility documentation.
+    /// </summary>
+    Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
+    /// See <c>IConnectedSystemRepository</c> for full documentation.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId);
+
     #endregion
 
     #region Metaverse Object — Writes
@@ -518,6 +568,18 @@ public interface ISyncRepository
     /// Used at sync start to build the O(1) Pending Export lookup by CSO ID.
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Gets the Pending Exports for a Connected System that are candidates for confirmation evaluation
+    /// at the start of a sync run: Status is neither Pending (not yet exported, nothing to confirm) nor
+    /// Exported (awaiting a confirming import), which <see cref="JIM.Application.Servers.SyncEngine.EvaluatePendingExportConfirmation"/>
+    /// skips unconditionally, and ConnectedSystemObjectId is populated (a null FK cannot be indexed by
+    /// CSO ID for the O(1) lookup this method feeds). Loads only AttributeValueChanges (with their
+    /// Attribute), which is all the confirmation evaluation reads; unlike <see cref="GetPendingExportsAsync"/>,
+    /// the Connected System Object graph is deliberately NOT included, since the sync processors hand
+    /// the confirmation evaluation the Connected System Object being evaluated separately.
+    /// </summary>
+    Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId);
 
     /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred

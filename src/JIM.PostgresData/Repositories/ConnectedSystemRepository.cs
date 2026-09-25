@@ -14,6 +14,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
 using System.Diagnostics;
@@ -2491,16 +2492,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (idList.Count == 0)
             return new List<ConnectedSystemObject>();
 
-        // Load CSOs without tracking to prevent change tracker bloat. The worker's context
-        // default is TrackAll (identity fixup for overlapping graphs), so this bulk read path
-        // must opt out per query: schema entities (Type, Type.Attributes, AttributeValue.Attribute)
-        // are shared across all CSOs and cause O(n) identity-resolution slowdown when accumulated
-        // in the tracker (317ms → 5.6s per CSO at 100K scale), and at long-tail group scale
-        // (#917: ~5k groups, ~1M membership rows) tracked graphs plus original-value snapshots
-        // account for gigabytes of peak memory. WithIdentityResolution keeps shared schema
-        // entities as single instances within this query without touching the tracker.
-        // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
-        // values, so change tracking is not required during import processing.
+        // Load CSOs with their AttributeValues, without tracking, to prevent change tracker
+        // bloat. The worker's context default is TrackAll (identity fixup for overlapping
+        // graphs), so this bulk read path must opt out per query. The save phase uses raw SQL
+        // for parent CSO rows and explicit add/remove for attribute values, so change tracking
+        // is not required during import processing.
         //
         // ReferenceValue navigations are deliberately NOT included (#917): at ~5k groups x ~200
         // members that include materialises ~1M referenced CSO entities (plus their Types) that
@@ -2508,15 +2504,77 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // and ImportRefMatchesCsoValue matches them via the GetReferenceExternalIdsAsync SQL
         // dictionary, which prefers the same secondary-then-primary external id the navigation
         // path used.
-        return await Repository.Database.ConnectedSystemObjects
-            .AsNoTrackingWithIdentityResolution()
+        //
+        // Schema (Type, Type.Attributes, AttributeValue.Attribute) is deliberately NOT loaded
+        // here via Include. Schema entities are shared across every CSO of the same type, so an
+        // Include-based split query joins the Attributes table back through the Object Type to
+        // ConnectedSystemObjects to preserve row ordering/identity, and returns one copy of the
+        // type's attributes per matching CSO row rather than once overall: at 100,000 CSOs that
+        // was about 5.4 million redundant attribute rows. Instead, the schema for the distinct
+        // types referenced by this page is loaded once below and wired onto the CSOs by hand, so
+        // the returned graph is unchanged in shape: every CSO's Type carries its full Attributes
+        // collection, CSOs of the same type share ONE Type instance, and every attribute value's
+        // Attribute is the SAME instance as the matching element of its CSO's Type.Attributes
+        // (the invariants EF's own Include-based fixup gave us before).
+        //
+        // Split query stays: as a single query, every CSO's columns would repeat once per attribute
+        // value row, which for a large group (tens of thousands of member values) is the costly shape.
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
+
+        if (csos.Count == 0)
+            return csos;
+
+        var typeIds = csos.Select(cso => cso.TypeId).Distinct().ToList();
+        var types = await Repository.Database.ConnectedSystemObjectTypes
+            .AsNoTracking()
+            .Include(t => t.Attributes)
+            .Where(t => typeIds.Contains(t.Id))
+            .ToListAsync();
+
+        var typesById = types.ToDictionary(t => t.Id);
+        var attributesById = types.SelectMany(t => t.Attributes).ToDictionary(a => a.Id);
+
+        List<int>? missingAttributeIds = null;
+        foreach (var cso in csos)
+        {
+            cso.Type = typesById[cso.TypeId];
+
+            foreach (var av in cso.AttributeValues)
+            {
+                if (attributesById.TryGetValue(av.AttributeId, out var attribute))
+                    av.Attribute = attribute;
+                else
+                    (missingAttributeIds ??= []).Add(av.AttributeId);
+            }
+        }
+
+        // Should not happen: an attribute value referencing an AttributeId absent from its own
+        // CSO's Object Type Attributes collection. Fall back to loading those attributes
+        // individually so behaviour is never worse than before this change, and log it so the
+        // underlying data mismatch can be investigated.
+        if (missingAttributeIds != null)
+        {
+            Log.Warning("GetConnectedSystemObjectsByIdsAsync: {Count} attribute value(s) in Connected System {ConnectedSystemId} referenced an AttributeId not present in their Connected System Object Type's Attributes collection ({AttributeIds}). Falling back to loading them individually.",
+                missingAttributeIds.Count, connectedSystemId, missingAttributeIds);
+
+            var fallbackAttributes = await Repository.Database.ConnectedSystemAttributes
+                .AsNoTracking()
+                .Where(a => missingAttributeIds.Contains(a.Id))
+                .ToDictionaryAsync(a => a.Id);
+
+            foreach (var cso in csos)
+            {
+                foreach (var av in cso.AttributeValues.Where(av => av.Attribute == null && fallbackAttributes.ContainsKey(av.AttributeId)))
+                    av.Attribute = fallbackAttributes[av.AttributeId];
+            }
+        }
+
+        return csos;
     }
 
     /// <summary>
@@ -2564,6 +2622,73 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
                     av.StringValue == secondaryExternalIdValue));
+    }
+
+    /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, returns every (value, Connected System Object id, status)
+    /// row matching the same predicate the single-object method uses. Raw Npgsql with a typed
+    /// <c>unnest(@values)</c> array, following the shape of <see cref="GetExportMatchCandidateIdsAsync"/>:
+    /// this is a per-page worker hot-path query, so it stays off EF projection.
+    /// </summary>
+    public async Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues)
+    {
+        if (secondaryExternalIdValues.Count == 0)
+            return [];
+
+        // External ID matching is case-sensitive, matching the single-object method.
+        //
+        // The av."AttributeId" = @secondaryExternalIdAttributeId predicate is there for index use,
+        // not correctness on its own: without a known constant to filter on, the planner cannot use
+        // IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue against the join from
+        // unnest(), because the only attribute-id filter available (cso."SecondaryExternalIdAttributeId")
+        // is per-row and only known after joining to "ConnectedSystemObjects". Measured on a live
+        // 100k-CSO database (500 values, one object type): 1,011 ms without this predicate (a
+        // sequential-ish scan of every CSO of the type merge-joined against its secondary values) vs
+        // 45 ms with it (a nested loop, one index probe per unnested value).
+        //
+        // The existing av."AttributeId" = cso."SecondaryExternalIdAttributeId" predicate stays
+        // alongside it, unchanged: together the two mean only a CSO whose OWN configured secondary
+        // external id attribute equals the type's CURRENT one can match. That is coherent because
+        // the import value being looked up was itself read from that same current attribute
+        // (CollectSecondaryLookupCandidate); a CSO still carrying an older secondary attribute after
+        // an administrator retargeted it is correctly left unmatched by the batch, exactly as the
+        // single-object method (which has no "current" concept to compare against) would also fail
+        // to match it once the schema has moved on.
+        //
+        // DISTINCT guards against a CSO carrying more than one attribute-value row for that
+        // attribute id (should not happen, but would otherwise look like two different CSOs matching).
+        const string sql = """
+            SELECT DISTINCT v.input AS "Value", cso."Id" AS "ConnectedSystemObjectId", cso."Status" AS "Status"
+            FROM unnest(@values) AS v(input)
+            JOIN "ConnectedSystemObjectAttributeValues" av
+                ON av."AttributeId" = @secondaryExternalIdAttributeId
+               AND av."StringValue" = v.input
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
+            WHERE cso."ConnectedSystemId" = @connectedSystemId
+              AND cso."TypeId" = @objectTypeId
+              AND cso."SecondaryExternalIdAttributeId" IS NOT NULL
+              AND av."AttributeId" = cso."SecondaryExternalIdAttributeId"
+            ORDER BY v.input, cso."Id"
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("values", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text) { Value = secondaryExternalIdValues.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("objectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = objectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("secondaryExternalIdAttributeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = secondaryExternalIdAttributeId });
+
+        var results = new List<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetGuid(1), (ConnectedSystemObjectStatus)reader.GetInt32(2)));
+
+        return results;
     }
 
     /// <summary>
@@ -3546,8 +3671,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// this is a second, narrow query used only to find exported Creates a Full Import never confirmed.
     /// Loads what the caller needs to both compare the External Id (<c>ConnectedSystemObject.Type</c>
     /// and <c>AttributeValues</c>) and mutate the retry statuses (<c>AttributeValueChanges</c>).
+    /// <para>
+    /// The full graph is expensive at scale (measured 25 seconds for 100,000 already-confirmed
+    /// candidates), so the caller narrows to <paramref name="pendingExportIds"/> once the lean
+    /// <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> projection has decided
+    /// which candidates are genuinely unseen, rather than loading every candidate's full graph.
+    /// </para>
     /// </summary>
-    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
     {
         var query = Repository.Database.PendingExports
             .AsNoTracking()
@@ -3570,7 +3702,84 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (partitionId != null)
             query = query.Where(pe => pe.ConnectedSystemObject!.PartitionId == partitionId);
 
+        if (pendingExportIds != null)
+            query = query.Where(pe => pendingExportIds.Contains(pe.Id));
+
         return await query.ToListAsync();
+    }
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>:
+    /// identical eligibility, but projects only the Pending Export id, the Connected System Object id,
+    /// and the Connected System Object's primary External Id value as typed nullable columns, without
+    /// materialising the Pending Export / attribute-change / Connected System Object / attribute-value
+    /// graph the full query loads. A Full Import's unseen exported-Create retry step
+    /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) uses this to decide "was
+    /// this candidate seen this run?" for every candidate, then loads the full graph only for the
+    /// (usually far smaller, often empty) subset genuinely unseen.
+    /// <para>
+    /// The LEFT JOIN to <c>ConnectedSystemObjectAttributeValues</c> mirrors exactly how
+    /// <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/> picks the value: the attribute value
+    /// row whose AttributeId matches the Connected System Object's own ExternalIdAttributeId. It is a
+    /// LEFT JOIN, not an INNER JOIN, because a Pending Provisioning object legitimately has no such row
+    /// yet if the export that created it has not (re-)confirmed an External Id value; every typed column
+    /// is null in that case rather than the candidate being dropped. As with the computed property, this
+    /// assumes the External Id attribute is single-valued (JIM's own invariant for an External Id
+    /// attribute), so at most one attribute value row is expected to match per Connected System Object.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// Raw Npgsql per the Worker Hot Path rule in <c>src/CLAUDE.md</c>: a read-side SELECT projection into
+    /// a Summary-tier DTO, exempt from the raw-SQL BulkColumns rule.
+    /// </remarks>
+    public async Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var partitionFilter = partitionId.HasValue ? """AND cso."PartitionId" = @partitionId""" : string.Empty;
+        var sql = $"""
+            SELECT pe."Id", cso."Id", av."StringValue", av."IntValue", av."LongValue", av."DecimalValue", av."GuidValue"
+            FROM "PendingExports" pe
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+            LEFT JOIN "ConnectedSystemObjectAttributeValues" av
+                ON av."ConnectedSystemObjectId" = cso."Id" AND av."AttributeId" = cso."ExternalIdAttributeId"
+            WHERE pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ChangeType" = @createChangeType
+              AND pe."Status" = @exportedStatus
+              AND cso."TypeId" = @objectTypeId
+              AND cso."Status" = @pendingProvisioningStatus
+              {partitionFilter}
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("createChangeType", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportChangeType.Create });
+        command.Parameters.Add(new NpgsqlParameter("exportedStatus", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Exported });
+        command.Parameters.Add(new NpgsqlParameter("objectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = objectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("pendingProvisioningStatus", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)ConnectedSystemObjectStatus.PendingProvisioning });
+        if (partitionId.HasValue)
+            command.Parameters.Add(new NpgsqlParameter("partitionId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = partitionId.Value });
+
+        var results = new List<PendingExportRetryCandidateSummary>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new PendingExportRetryCandidateSummary
+            {
+                PendingExportId = reader.GetGuid(0),
+                ConnectedSystemObjectId = reader.GetGuid(1),
+                ExternalIdStringValue = reader.IsDBNull(2) ? null : reader.GetString(2),
+                ExternalIdIntValue = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                ExternalIdLongValue = reader.IsDBNull(4) ? null : reader.GetInt64(4),
+                ExternalIdDecimalValue = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                ExternalIdGuidValue = reader.IsDBNull(6) ? null : reader.GetGuid(6)
+            });
+        }
+
+        return results;
     }
     #endregion
 
@@ -4076,6 +4285,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
+    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
+    /// ConnectedSystemObjectId is populated.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public async Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
+    {
+        // SyncEngine.EvaluatePendingExportConfirmation skips Status Pending (not yet exported, nothing
+        // to confirm) and Exported (awaiting a confirming import) unconditionally, and reads only
+        // AttributeValueChanges plus their Attribute; it is handed the Connected System Object being
+        // evaluated separately by the caller, so unlike GetPendingExportsAsync above, the CSO graph and
+        // its AttributeValues are deliberately NOT included here. At 100,000 Connected System Objects,
+        // GetPendingExportsAsync's CSO include cost 35 seconds against this same table; this query never
+        // materialises that graph. ConnectedSystemObjectId IS NOT NULL because a Pending Export with no
+        // linked CSO cannot be indexed by CSO ID for the sync processors' lookup dictionary.
+        return await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ConnectedSystemObjectId != null
+                      && pe.Status != PendingExportStatus.Pending
+                      && pe.Status != PendingExportStatus.Exported)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values.
     /// The predicate is evaluated in SQL (backed by a partial index on
@@ -4370,11 +4606,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.CountAsync();
     }
 
-    public async Task DeletePendingExportAsync(PendingExport pendingExport)
-    {
-        Repository.Database.PendingExports.Remove(pendingExport);
-        await Repository.Database.SaveChangesAsync();
-    }
+    /// <summary>
+    /// Deletes a single Pending Export. Delegates to <see cref="DeletePendingExportsAsync"/> (raw SQL delete
+    /// of child attribute value changes, then the parent, then tracked-instance detach) rather than an EF
+    /// <c>Remove()</c> + <c>SaveChangesAsync()</c>: the <see cref="PendingExportAttributeValueChange"/>
+    /// relationship's foreign key is nullable, so EF's default client-side cascade (<c>ClientSetNull</c>)
+    /// would only null out tracked children's <c>PendingExportId</c>, leaving the rows themselves as
+    /// permanent orphans (#1818).
+    /// </summary>
+    public Task DeletePendingExportAsync(PendingExport pendingExport)
+        => DeletePendingExportsAsync(new[] { pendingExport });
 
     public async Task UpdatePendingExportAsync(PendingExport pendingExport)
     {
@@ -5432,46 +5673,42 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         ConnectedSystemObjectType connectedSystemObjectType,
         ObjectMatchingRule objectMatchingRule)
     {
-        if (objectMatchingRule.Sources.Count == 0)
-            throw new InvalidDataException("ObjectMatchingRule has no sources.");
+        // ExportMatchingValue.Resolve() reproduces the value-extraction steps below exactly, so this
+        // per-object query and the page-scoped batch candidate query (GetExportMatchCandidateIdsAsync)
+        // agree on what counts as a resolvable value.
+        var resolved = ExportMatchingValue.Resolve(metaverseObject, objectMatchingRule);
 
-        if (objectMatchingRule.Sources.Count > 1)
-            throw new NotImplementedException("Object Matching Rules with more than one source are not yet supported (advanced matching).");
-
-        var source = objectMatchingRule.Sources[0];
-
-        // The connector-space side of the comparison always comes from the source's Connected System
-        // attribute; without one there is nothing to compare CSOs on.
-        if (source.ConnectedSystemAttribute == null)
+        switch (resolved.Outcome)
         {
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Connected System attribute on its source; export matching cannot query the connector space.",
-                objectMatchingRule.Id);
-            return null;
+            case ExportMatchingOutcome.NoSources:
+                throw new InvalidDataException("ObjectMatchingRule has no sources.");
+
+            case ExportMatchingOutcome.MultipleSources:
+                throw new NotImplementedException("Object Matching Rules with more than one source are not yet supported (advanced matching).");
+
+            case ExportMatchingOutcome.NoConnectedSystemAttribute:
+                Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Connected System attribute on its source; export matching cannot query the connector space.",
+                    objectMatchingRule.Id);
+                return null;
+
+            case ExportMatchingOutcome.NoTargetMetaverseAttribute:
+                Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Target Metaverse Attribute; cannot determine the MVO-side value for export matching.",
+                    objectMatchingRule.Id);
+                return null;
+
+            case ExportMatchingOutcome.NoMetaverseValue:
+                // Collapses two formerly distinct Debug messages (no attribute value row at all, versus a
+                // row present with a null/empty typed value): both are a silent, expected skip with no
+                // admin-facing impact, and Resolve() does not distinguish between them.
+                Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: MVO {MvoId} does not have a usable value for attribute {AttrId}",
+                    metaverseObject.Id, objectMatchingRule.TargetMetaverseAttribute!.Id);
+                return null;
+
+            case ExportMatchingOutcome.UnsupportedAttributeType:
+                Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Attribute type {AttributeType} on Metaverse attribute {AttributeName} is not supported for export matching; Object Matching Rule {RuleId} cannot match on it.",
+                    objectMatchingRule.TargetMetaverseAttribute!.Type, objectMatchingRule.TargetMetaverseAttribute!.Name, objectMatchingRule.Id);
+                return null;
         }
-
-        // The MVO side of the comparison: the standard rule shape (source = Connected System attribute,
-        // target = Metaverse attribute, which is what the UI, API and PowerShell configure) serves both
-        // import and export matching, so read the rule's Target Metaverse Attribute directly.
-        var metaverseAttribute = objectMatchingRule.TargetMetaverseAttribute;
-        if (metaverseAttribute == null)
-        {
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Target Metaverse Attribute; cannot determine the MVO-side value for export matching.",
-                objectMatchingRule.Id);
-            return null;
-        }
-
-        // Get the source attribute value from the MVO
-        var mvoAttributeValue = metaverseObject.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == metaverseAttribute.Id || av.Attribute?.Id == metaverseAttribute.Id);
-
-        if (mvoAttributeValue == null)
-        {
-            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: MVO {MvoId} does not have a value for attribute {AttrId}",
-                metaverseObject.Id, metaverseAttribute.Id);
-            return null;
-        }
-
-        var connectedSystemAttributeName = source.ConnectedSystemAttribute.Name;
 
         // Query CSOs that match the value. Only unjoined, Normal-status objects are eligible: matching
         // must never steal a CSO already joined to another Metaverse Object, and an Obsolete or
@@ -5484,77 +5721,67 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                           cso.MetaverseObjectId == null &&
                           cso.Status == ConnectedSystemObjectStatus.Normal);
 
-        // Match based on attribute type. Null/empty MVO-side values are always a non-match (Debug, not a
-        // misconfiguration); genuinely unsupported attribute types are a misconfiguration and must be
-        // visible at Warning level per the Synchronisation Integrity rules, not silently no-op.
-        switch (metaverseAttribute.Type)
+        var connectedSystemAttributeName = resolved.ConnectedSystemAttributeName;
+
+        switch (resolved.DataType)
         {
-            case AttributeDataType.Text when string.IsNullOrEmpty(mvoAttributeValue.StringValue):
-            case AttributeDataType.Number when !mvoAttributeValue.IntValue.HasValue:
-            case AttributeDataType.LongNumber when !mvoAttributeValue.LongValue.HasValue:
-            case AttributeDataType.Decimal when !mvoAttributeValue.DecimalValue.HasValue:
-            case AttributeDataType.Guid when !mvoAttributeValue.GuidValue.HasValue:
-                Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
-                    metaverseAttribute.Name);
-                return null;
             case AttributeDataType.Text:
-                // Check case sensitivity setting on the matching rule
-                if (objectMatchingRule.CaseSensitive)
+                var textValue = (string)resolved.Value!;
+                if (resolved.CaseSensitive)
                 {
-                    // Case-sensitive comparison (default) - null check already done above
                     query = query.Where(cso => cso.AttributeValues.Any(av =>
                         av.Attribute != null &&
                         av.Attribute.Name == connectedSystemAttributeName &&
                         av.StringValue != null &&
-                        av.StringValue == mvoAttributeValue.StringValue));
+                        av.StringValue == textValue));
                 }
                 else
                 {
-                    // Case-insensitive comparison using PostgreSQL ILike
+                    // Exact case-insensitive equality (not EF.Functions.ILike, which treats %, _ and \
+                    // in the value as wildcards: a value like "j_smith" would otherwise match
+                    // "jxsmith"). EF translates ToLower() to PostgreSQL's lower(), matching the batch
+                    // candidate query's "lower(av.StringValue) = lower(v.input)".
                     query = query.Where(cso => cso.AttributeValues.Any(av =>
                         av.Attribute != null &&
                         av.Attribute.Name == connectedSystemAttributeName &&
                         av.StringValue != null &&
-                        EF.Functions.ILike(av.StringValue, mvoAttributeValue.StringValue!)));
+                        av.StringValue.ToLower() == textValue.ToLower()));
                 }
                 break;
             case AttributeDataType.Number:
-                // Null check already done above
+                var intValue = (int)resolved.Value!;
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
                     av.Attribute.Name == connectedSystemAttributeName &&
                     av.IntValue != null &&
-                    av.IntValue == mvoAttributeValue.IntValue));
+                    av.IntValue == intValue));
                 break;
             case AttributeDataType.LongNumber:
-                // Null check already done above
+                var longValue = (long)resolved.Value!;
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
                     av.Attribute.Name == connectedSystemAttributeName &&
                     av.LongValue != null &&
-                    av.LongValue == mvoAttributeValue.LongValue));
+                    av.LongValue == longValue));
                 break;
             case AttributeDataType.Decimal:
-                // Null check already done above. EF translates this to PostgreSQL numeric equality,
-                // which is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                // EF translates this to PostgreSQL numeric equality, which is scale-insensitive
+                // (5.0 = 5.00 is true), matching .NET decimal equality.
+                var decimalValue = (decimal)resolved.Value!;
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
                     av.Attribute.Name == connectedSystemAttributeName &&
                     av.DecimalValue != null &&
-                    av.DecimalValue == mvoAttributeValue.DecimalValue));
+                    av.DecimalValue == decimalValue));
                 break;
             case AttributeDataType.Guid:
-                // Null check already done above
+                var guidValue = (Guid)resolved.Value!;
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
                     av.Attribute.Name == connectedSystemAttributeName &&
                     av.GuidValue != null &&
-                    av.GuidValue == mvoAttributeValue.GuidValue));
+                    av.GuidValue == guidValue));
                 break;
-            default:
-                Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Attribute type {AttributeType} on Metaverse attribute {AttributeName} is not supported for export matching; Object Matching Rule {RuleId} cannot match on it.",
-                    metaverseAttribute.Type, metaverseAttribute.Name, objectMatchingRule.Id);
-                return null;
         }
 
         var matches = await query.OrderBy(cso => cso.Id).Take(2).ToListAsync();
@@ -5566,6 +5793,127 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         return matches.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/> for a single
+    /// Object Matching Rule: finds every unjoined, Normal-status Connected System Object of the given
+    /// type whose named attribute equals one of the given values, in one query rather than one query
+    /// per Metaverse Object. Eligibility mirrors the per-object query exactly.
+    /// </summary>
+    /// <remarks>
+    /// Raw Npgsql per the Worker Hot Path rule in <c>src/CLAUDE.md</c>: a read-side SELECT projection,
+    /// so exempt from the raw-SQL BulkColumns rule. <c>unnest(@values)</c> turns the typed array
+    /// parameter into a row set so a single query can look up every value at once.
+    /// </remarks>
+    public async Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values)
+    {
+        if (values.Count == 0)
+            return [];
+
+        object valuesArray;
+        NpgsqlTypes.NpgsqlDbType elementType;
+        string comparisonPredicate;
+
+        switch (dataType)
+        {
+            case AttributeDataType.Text:
+                valuesArray = values.Cast<string>().ToArray();
+                elementType = NpgsqlTypes.NpgsqlDbType.Text;
+                // Exact equality either way: case-insensitive uses lower() on both sides rather than
+                // ILIKE, so %, _ and \ in a value never act as wildcards (matches the per-object fix).
+                comparisonPredicate = caseSensitive
+                    ? """av."StringValue" = v.input"""
+                    : """lower(av."StringValue") = lower(v.input)""";
+                break;
+            case AttributeDataType.Number:
+                valuesArray = values.Cast<int>().ToArray();
+                elementType = NpgsqlTypes.NpgsqlDbType.Integer;
+                comparisonPredicate = """av."IntValue" = v.input""";
+                break;
+            case AttributeDataType.LongNumber:
+                valuesArray = values.Cast<long>().ToArray();
+                elementType = NpgsqlTypes.NpgsqlDbType.Bigint;
+                comparisonPredicate = """av."LongValue" = v.input""";
+                break;
+            case AttributeDataType.Decimal:
+                valuesArray = values.Cast<decimal>().ToArray();
+                elementType = NpgsqlTypes.NpgsqlDbType.Numeric;
+                comparisonPredicate = """av."DecimalValue" = v.input""";
+                break;
+            case AttributeDataType.Guid:
+                valuesArray = values.Cast<Guid>().ToArray();
+                elementType = NpgsqlTypes.NpgsqlDbType.Uuid;
+                comparisonPredicate = """av."GuidValue" = v.input""";
+                break;
+            default:
+                throw new ArgumentException($"Attribute type {dataType} is not supported for export match candidate lookup.", nameof(dataType));
+        }
+
+        var sql = $"""
+            SELECT DISTINCT v.input AS "Value", cso."Id" AS "ConnectedSystemObjectId"
+            FROM unnest(@values) AS v(input)
+            JOIN "ConnectedSystemObjectAttributeValues" av ON {comparisonPredicate}
+            JOIN "ConnectedSystemAttributes" attr ON attr."Id" = av."AttributeId" AND attr."Name" = @attributeName
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
+            WHERE cso."ConnectedSystemId" = @connectedSystemId
+              AND cso."TypeId" = @connectedSystemObjectTypeId
+              AND cso."MetaverseObjectId" IS NULL
+              AND cso."Status" = @status
+            ORDER BY v.input, cso."Id"
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("values", NpgsqlTypes.NpgsqlDbType.Array | elementType) { Value = valuesArray });
+        command.Parameters.Add(new NpgsqlParameter("attributeName", NpgsqlTypes.NpgsqlDbType.Text) { Value = connectedSystemAttributeName });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemObjectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemObjectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("status", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)ConnectedSystemObjectStatus.Normal });
+
+        var results = new List<(object Value, Guid ConnectedSystemObjectId)>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            object value = dataType switch
+            {
+                AttributeDataType.Text => reader.GetString(0),
+                AttributeDataType.Number => reader.GetInt32(0),
+                AttributeDataType.LongNumber => reader.GetInt64(0),
+                AttributeDataType.Decimal => reader.GetDecimal(0),
+                AttributeDataType.Guid => reader.GetGuid(0),
+                _ => throw new ArgumentException($"Attribute type {dataType} is not supported for export match candidate lookup.", nameof(dataType))
+            };
+            results.Add((value, reader.GetGuid(1)));
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>.
+    /// Same query shape and tracking behaviour (default tracked, not <c>AsNoTracking</c>) as
+    /// <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s result, so a caller that fixes up
+    /// the tracked instance after an atomic claim behaves identically either way.
+    /// </summary>
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.Id == connectedSystemObjectId &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal)
+            .SingleOrDefaultAsync();
     }
     #endregion
 

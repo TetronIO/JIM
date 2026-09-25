@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -94,6 +95,10 @@ public partial class SyncRepository : ISyncRepository
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
         => _repo.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
 
+    public Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(connectedSystemId, objectTypeId, secondaryExternalIdAttributeId, secondaryExternalIdValues);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
         int connectedSystemId, string secondaryExternalIdValue)
         => _repo.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(connectedSystemId, secondaryExternalIdValue);
@@ -136,8 +141,11 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(connectedSystemId, objectTypeId, partitionId);
 
-    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
-        => _repo.ConnectedSystems.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(connectedSystemId, objectTypeId, partitionId);
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
+        => _repo.ConnectedSystems.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(connectedSystemId, objectTypeId, partitionId, pendingExportIds);
+
+    public Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetExportedCreatePendingExportRetryCandidateSummariesAsync(connectedSystemId, objectTypeId, partitionId);
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
@@ -198,6 +206,14 @@ public partial class SyncRepository : ISyncRepository
         MetaverseObject metaverseObject, ConnectedSystem connectedSystem,
         ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
         => _repo.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);
+
+    public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId, int connectedSystemObjectTypeId, string connectedSystemAttributeName,
+        AttributeDataType dataType, bool caseSensitive, IReadOnlyCollection<object> values)
+        => _repo.ConnectedSystems.GetExportMatchCandidateIdsAsync(connectedSystemId, connectedSystemObjectTypeId, connectedSystemAttributeName, dataType, caseSensitive, values);
+
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectForExportMatchAsync(connectedSystemObjectId);
 
     #endregion
 
@@ -261,6 +277,14 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
+    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
+    /// ConnectedSystemObjectId is populated.
+    /// </summary>
+    public Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetPendingExportsForConfirmationEvaluationAsync(connectedSystemId);
 
     /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred

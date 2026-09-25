@@ -146,6 +146,110 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Prefetches export-matching candidates for a whole page of Metaverse Objects in one batch query
+    /// per distinct (Connected System, Connected System Object Type, Object Matching Rule, attribute,
+    /// data type, case sensitivity) combination on the page, instead of the one-database-round-trip-per-object
+    /// cost <see cref="AttemptExportMatchingAsync"/> otherwise pays for every
+    /// <see cref="OutboundStagingOutcome.ProvisionNewCso"/> verdict. Always starts from a fresh
+    /// <see cref="ExportMatchCandidates"/>: candidates left over from a previous page must never be reused.
+    /// <para>
+    /// This is an optimisation only. The eligibility filter below mirrors exactly when
+    /// <c>SyncEngine.ExportStaging.DecideOutboundStaging</c> reaches
+    /// <see cref="OutboundStagingOutcome.ProvisionNewCso"/> (no existing Connected System Object for the
+    /// pair, and the rule's Connected System is a genuine target with provisioning enabled). A pair the
+    /// prefetch does not cover simply falls back to the correct, if slower,
+    /// <see cref="ObjectMatchingServer.FindMatchingConnectedSystemObjectAsync"/>, so under-covering here is
+    /// safe and over-covering is impossible by construction.
+    /// </para>
+    /// <para>
+    /// Deliberately uncaught: per the Synchronisation Integrity rule that a hard failure beats continuing
+    /// on unknown state, a failed prefetch must fail the page loudly rather than silently leaving every
+    /// object on it to fall back to provisioning duplicates.
+    /// </para>
+    /// </summary>
+    /// <param name="cache">The export evaluation cache to populate.
+    /// <see cref="ExportEvaluationCache.ExportRulesByMvoTypeId"/>, <see cref="ExportEvaluationCache.TargetSystemIds"/>
+    /// and <see cref="ExportEvaluationCache.CsoLookup"/> must already reflect the current page.</param>
+    /// <param name="metaverseObjects">The page's Metaverse Objects to prefetch export-matching candidates for.</param>
+    public async Task PrefetchExportMatchCandidatesForPageAsync(
+        ExportEvaluationCache cache,
+        IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    {
+        var candidates = new ExportMatchCandidates();
+        cache.ExportMatchCandidates = candidates;
+
+        using var span = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("PrefetchExportMatchCandidates");
+        span.SetTag("mvoCount", metaverseObjects.Count);
+
+        var groups = new Dictionary<
+            (int ConnectedSystemId, int ConnectedSystemObjectTypeId, int ObjectMatchingRuleId, string AttributeName, AttributeDataType DataType, bool CaseSensitive),
+            HashSet<object>>();
+
+        var coveredPairCount = 0;
+
+        var mvoRulePairs = metaverseObjects
+            .Where(mvo => mvo.Id != Guid.Empty && mvo.Type != null)
+            .Select(mvo => (Mvo: mvo, Rules: cache.ExportRulesByMvoTypeId.GetValueOrDefault(mvo.Type!.Id)))
+            .Where(pair => pair.Rules != null);
+
+        foreach (var (mvo, rulesForType) in mvoRulePairs)
+        {
+            var eligibleRules = rulesForType!.Where(exportRule =>
+                cache.TargetSystemIds.Contains(exportRule.ConnectedSystemId) &&
+                exportRule.ProvisionToConnectedSystem == true &&
+                !cache.CsoLookup.ContainsKey((mvo.Id, exportRule.ConnectedSystemId)));
+
+            foreach (var exportRule in eligibleRules)
+            {
+                candidates.MarkCovered(mvo.Id, exportRule.Id);
+                coveredPairCount++;
+
+                var resolvedForRule = _syncEngine.SelectExportMatchingRules(exportRule)
+                    .Select(matchingRule => (MatchingRule: matchingRule, Resolved: ExportMatchingValue.Resolve(mvo, matchingRule)))
+                    .Where(x => x.Resolved.Outcome == ExportMatchingOutcome.Resolved);
+
+                foreach (var (matchingRule, resolved) in resolvedForRule)
+                {
+                    var key = (exportRule.ConnectedSystemId, exportRule.ConnectedSystemObjectType.Id, matchingRule.Id,
+                        resolved.ConnectedSystemAttributeName!, resolved.DataType, resolved.CaseSensitive);
+
+                    if (!groups.TryGetValue(key, out var values))
+                    {
+                        values = [];
+                        groups[key] = values;
+                    }
+
+                    values.Add(resolved.Value!);
+                }
+            }
+        }
+
+        var queryCount = 0;
+        var candidateCount = 0;
+
+        foreach (var (key, values) in groups)
+        {
+            var results = await SyncRepo.GetExportMatchCandidateIdsAsync(
+                key.ConnectedSystemId, key.ConnectedSystemObjectTypeId, key.AttributeName, key.DataType, key.CaseSensitive, values);
+            queryCount++;
+
+            foreach (var (value, connectedSystemObjectId) in results)
+            {
+                candidates.AddCandidate(key.ObjectMatchingRuleId, value, connectedSystemObjectId);
+                candidateCount++;
+            }
+        }
+
+        span.SetTag("coveredPairCount", coveredPairCount);
+        span.SetTag("queryCount", queryCount);
+        span.SetTag("candidateCount", candidateCount);
+        span.SetSuccess();
+
+        Log.Debug("PrefetchExportMatchCandidatesForPageAsync: {MvoCount} Metaverse Object(s), {CoveredCount} covered (Metaverse Object, export rule) pair(s), {QueryCount} batch queries, {CandidateCount} candidate(s) found",
+            metaverseObjects.Count, coveredPairCount, queryCount, candidateCount);
+    }
+
+    /// <summary>
     /// Evaluates all export rules for an MVO that has changed and creates PendingExports.
     /// This is the main entry point called after inbound sync updates an MVO.
     /// </summary>
@@ -1028,10 +1132,13 @@ public class ExportEvaluationServer
         }
 
         // Lean fetch (issue #986): this method only reads ChangeType/Id/Status off the existing
-        // Pending Export and passes it to DeletePendingExportAsync, which needs AttributeValueChanges
-        // loaded for EF-tracked child-row disposal. The heavy fetch also loaded the CSO's and source
-        // Metaverse Object's full attribute value graphs, which for a large group CSO (group
-        // deprovisioning) runs into the hundreds of thousands of rows, none of them read here.
+        // Pending Export. AttributeValueChanges is still loaded here (see the lightweight query's own
+        // remarks: needed by GetAttributeChangeMergeKey for single-vs-multi-valued dedup elsewhere on this
+        // path), not because DeletePendingExportAsync below requires it: it now deletes child rows via raw
+        // SQL keyed on PendingExportId directly, so it works whether or not this navigation is populated
+        // (#1818). The heavy fetch also loaded the CSO's and source Metaverse Object's full attribute value
+        // graphs, which for a large group CSO (group deprovisioning) runs into the hundreds of thousands of
+        // rows, none of them read here.
         var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
 
         // The definitive decision, now that the existing Pending Export is known: the engine owns the
@@ -2306,7 +2413,7 @@ public class ExportEvaluationServer
                 ConnectedSystemObject? matchedCso = null;
                 using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("ExportMatching"))
                 {
-                    matchedCso = await AttemptExportMatchingAsync(mvo, exportRule);
+                    matchedCso = await AttemptExportMatchingAsync(mvo, exportRule, cache);
                 }
 
                 if (matchedCso != null)
@@ -2317,11 +2424,18 @@ public class ExportEvaluationServer
                     // at write time, so only one caller wins the join; on failure, fall through to
                     // provisioning below by clearing matchedCso.
                     var dateJoined = DateTime.UtcNow;
-                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCso.Id, mvo.Id, dateJoined);
+                    var matchedCsoId = matchedCso.Id;
+                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCsoId, mvo.Id, dateJoined);
+
+                    // Whether the claim won or lost, this Connected System Object must not be offered to
+                    // any other Metaverse Object evaluated later on this page: a win means it is now
+                    // joined, a loss means another Metaverse Object has already claimed it.
+                    cache.ExportMatchCandidates?.Remove(matchedCsoId);
+
                     if (!claimed)
                     {
                         Log.Warning("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found Connected System Object {CsoId} for Metaverse Object {MvoId} in system {SystemId}, but another Metaverse Object claimed it first; falling back to provisioning",
-                            matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
+                            matchedCsoId, mvo.Id, exportRule.ConnectedSystemId);
                         matchedCso = null;
                     }
                     else
@@ -2461,7 +2575,11 @@ public class ExportEvaluationServer
         // If found, delete the old PE and return a new merged PE for batch creation - UNLESS it is a
         // Create that has already been sent and is awaiting confirmation (see the append branch below),
         // which must never be deleted and replaced.
-        if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
+        // Skipped entirely when createdNewCso is true: csoForExport was minted moments ago by
+        // CreatePendingProvisioningCsoAsync with a fresh Guid.NewGuid(), so no persisted Pending Export
+        // can possibly reference it yet. Without this guard the lookup always returns null - profiling
+        // recorded 100,098 such no-op lookups on one run - and the database round trip is pure waste.
+        if (!createdNewCso && csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
 
@@ -2563,8 +2681,10 @@ public class ExportEvaluationServer
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not superseded by export eval (see
                 // SelectSurvivingDriftChanges).
-                // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
-                // child entities, making the tracked instances unusable for a new PE.
+                // Clone drift-only changes with new IDs: DeletePendingExportAsync below deletes the old
+                // child rows via raw SQL and then detaches their tracked instances from the change tracker
+                // (DetachPendingExportGraphs; #1818), so dbPendingExport.AttributeValueChanges no longer
+                // holds live, attachable entities by the time the new PE is built.
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges)
                     .Select(avc => new PendingExportAttributeValueChange
                     {
@@ -3191,7 +3311,14 @@ public class ExportEvaluationServer
     /// Attempts to find an existing CSO in the target system that matches the MVO using Object Matching Rules.
     /// This prevents provisioning duplicates when the object already exists in the target.
     /// </summary>
-    private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule)
+    /// <param name="mvo">The Metaverse Object about to be provisioned.</param>
+    /// <param name="exportRule">The export Synchronisation Rule under evaluation.</param>
+    /// <param name="cache">The run's export evaluation cache. When its
+    /// <see cref="ExportEvaluationCache.ExportMatchCandidates"/> covers this (Metaverse Object, export
+    /// Synchronisation Rule) pair (<see cref="ExportMatchCandidates.IsCovered"/>), the lookup is answered
+    /// entirely from the page's prefetched candidates instead of a per-object database query. Null (the
+    /// Sync Preview caller's default) always uses the per-object path.</param>
+    private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule, ExportEvaluationCache? cache = null)
     {
         // Which rules to try, and in what order, is the pure engine's verdict (#288 extraction); an empty
         // answer (no rules configured, or the mode unreadable because a navigation is not loaded) means
@@ -3203,6 +3330,15 @@ public class ExportEvaluationServer
 
         try
         {
+            if (cache?.ExportMatchCandidates is { } candidates && candidates.IsCovered(mvo.Id, exportRule.Id))
+            {
+                return await Application.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+                    mvo,
+                    exportRule.ConnectedSystem,
+                    matchingRules.ToList(),
+                    candidates);
+            }
+
             return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
                 mvo,
                 exportRule.ConnectedSystem,

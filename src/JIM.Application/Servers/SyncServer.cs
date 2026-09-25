@@ -344,6 +344,9 @@ public class SyncServer : ISyncServer
     public Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds)
         => _exportEval.RefreshExportEvaluationCacheForPageAsync(cache, mvoIds);
 
+    public Task PrefetchExportMatchCandidatesForPageAsync(ExportEvaluationCache cache, IReadOnlyCollection<MetaverseObject> metaverseObjects)
+        => _exportEval.PrefetchExportMatchCandidatesForPageAsync(cache, metaverseObjects);
+
     public Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
         List<MetaverseObjectAttributeValue> changedAttributes,

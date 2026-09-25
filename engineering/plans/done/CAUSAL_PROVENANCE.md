@@ -1,8 +1,9 @@
 # Causal Provenance: Phase 1 Implementation Plan
 
-- **Status:** Planned
+- **Status:** Done
+- **Note:** Phases 1a to 1e shipped in [#1497](https://github.com/TetronIO/JIM/pull/1497), which closed #1223. The 100,000-object benchmark was never run and is tracked in [#1812](https://github.com/TetronIO/JIM/issues/1812). The induced edge-write failure criterion is dropped: it contradicts the same-transaction design, under which a failed edge write fails its batch exactly as a failed Run Profile Execution Item write does.
 - **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
-- **PRD:** [PRD_CAUSAL_PROVENANCE.md](../prd/doing/PRD_CAUSAL_PROVENANCE.md)
+- **PRD:** [PRD_CAUSAL_PROVENANCE.md](../../prd/doing/PRD_CAUSAL_PROVENANCE.md)
 - **Created:** 2026-08-04
 
 ## Overview
@@ -102,7 +103,7 @@ A cohort of one is the degenerate case and renders as a plain hop, which is why 
 
 ## Implementation Phases
 
-### Phase 1a: Model, schema and persistence
+### Phase 1a: Model, schema and persistence ✅
 
 - `CausalEdge`, `CausalEdgeType`, `CausalReasonCode` in `JIM.Models`.
 - EF Core migration: table, `DeleteBehavior.Cascade` from `ActivityRunProfileExecutionItem` on the effect side only, and indices on **both** ends (`EffectRpeiId`, and a composite over the cause-side ids), since traversal runs in both directions.
@@ -111,7 +112,7 @@ A cohort of one is the degenerate case and renders as a plain hop, which is why 
 - Ordinal pinning tests for both enums.
 - A `RequiresPostgres` round-trip test persisting a fully populated edge and asserting every field on read-back.
 
-### Phase 1b: Worker capture at the seams
+### Phase 1b: Worker capture at the seams ✅
 
 Edge writes join the existing RPEI flush transaction, never a new one, so an edge can never exist without the effect it describes.
 
@@ -185,13 +186,13 @@ Phase 1b was validated on the full stack, not just by tests, because the flush o
 
 Not exercised at runtime: a cohort with more than one member. Every runtime cohort was of size one (one deleted object per referencing group). The multi-member case, and the accumulation across pages that it depends on, is covered by unit tests that fail with 4 of 10 if accumulation regresses to last-write-wins.
 
-### Phase 1c: Application read path
+### Phase 1c: Application read path ✅
 
 - A server method on `JimApplication` returning the cohort walk for a given Run Profile Execution Item, bounded by a maximum depth.
 - Cause-side resolution is best-effort: an unresolvable ancestor yields an explicit truncated-chain marker, never a gap and never an exception.
 - No `Jim.Repository.*` access from `JIM.Web`.
 
-### Phase 1d: UI
+### Phase 1d: UI ✅
 
 - A "Caused by" affordance below the view canvas in `CausalityPanel`, expanded by default, outside the canvas so Flow, Timeline and Graph share one rendering and the Flow view's measured SVG connector geometry is untouched.
 - Cohort statements with counts, expandable to members; forks rendered as named branches.
@@ -199,7 +200,7 @@ Not exercised at runtime: a cohort with more than one member. Every runtime coho
 - The "cause no longer retained" terminal state styled calm and expected, not alarming: past one retention window it is the normal end of a long chain.
 - bUnit tests in `test/JIM.Web.Tests/`.
 
-### Phase 1e: Metaverse Impact retirement
+### Phase 1e: Metaverse Impact retirement ✅
 
 **The section retires in Phase 1; it does not wait for Phase 2.** One of its pieces genuinely belongs to Phase 2, but keeping a titled section and its subtitle ("How the Metaverse Object Deletion Rule for these objects applies to this change") alive to host a single unrelated alert is worse than not having the section at all: the heading would promise a Deletion Rule explanation the content no longer delivers.
 
@@ -237,6 +238,6 @@ The legacy no-snapshot fallback is already removed. The rest:
 
 ## Dependencies
 
-- **[Causality Visualisation Redesign](../prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087)**, still open: the surface Phase 1d attaches to.
-- **[RPEI Outcome Graph](done/RPEI_OUTCOME_GRAPH.md) (#363, Done)**: the single-item outcome tree this extends into a cross-item graph.
-- **[Synchronisation Rule Causality Tracking](SYNC_RULE_CAUSALITY_TRACKING.md) (#399, Planned)**: adjacent and orthogonal; not blocking.
+- **[Causality Visualisation Redesign](../../prd/done/PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087)**, still open: the surface Phase 1d attaches to.
+- **[RPEI Outcome Graph](RPEI_OUTCOME_GRAPH.md) (#363, Done)**: the single-item outcome tree this extends into a cross-item graph.
+- **[Synchronisation Rule Causality Tracking](../SYNC_RULE_CAUSALITY_TRACKING.md) (#399, Planned)**: adjacent and orthogonal; not blocking.

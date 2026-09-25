@@ -166,9 +166,10 @@ public interface IConnectedSystemRepository
     public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
 
     /// <summary>
-    /// Batch-loads full CSO entity graphs by their IDs.
-    /// Returns CSOs with the same Include chain as GetConnectedSystemObjectByAttributeAsync
-    /// (Type.Attributes, AttributeValues.Attribute, AttributeValues.ReferenceValue.Type).
+    /// Batch-loads full CSO entity graphs by their IDs: Type.Attributes and AttributeValues.Attribute
+    /// are populated on every CSO, with CSOs of the same type sharing one Type instance. The schema
+    /// (Object Type + Attributes) is loaded once per call for the distinct types referenced rather than
+    /// via an Include chain, to avoid re-fetching it once per CSO; see the implementation for why.
     /// Used as the hydration phase of the batch pre-fetch import pipeline (#440).
     /// </summary>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
@@ -192,6 +193,17 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
+    /// evaluation at the start of a sync run: Status is neither Pending nor Exported (both skipped
+    /// unconditionally by <see cref="JIM.Application.Servers.SyncEngine.EvaluatePendingExportConfirmation"/>),
+    /// and ConnectedSystemObjectId is populated. Loads only AttributeValueChanges (with their Attribute);
+    /// unlike <see cref="GetPendingExportsAsync"/>, the Connected System Object graph is deliberately NOT
+    /// included, since the caller is handed the Connected System Object being evaluated separately.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId);
 
     /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
@@ -648,6 +660,51 @@ public interface IConnectedSystemRepository
         ObjectMatchingRule objectMatchingRule);
 
     /// <summary>
+    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
+    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
+    /// type in the given Connected System whose named attribute equals one of the given values. Used to
+    /// prefetch export-matching candidates for a whole page of Metaverse Objects in one query per rule,
+    /// instead of one query per object.
+    /// </summary>
+    /// <param name="connectedSystemId">The target Connected System.</param>
+    /// <param name="connectedSystemObjectTypeId">The target Connected System Object Type.</param>
+    /// <param name="connectedSystemAttributeName">The Connected System attribute to compare, by name
+    /// (matches <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s name-based predicate).</param>
+    /// <param name="dataType">The attribute's data type; determines which typed column is compared and
+    /// how the <paramref name="values"/> are interpreted. Only Text, Number, LongNumber, Decimal and
+    /// Guid are supported; any other value throws <see cref="ArgumentException"/>.</param>
+    /// <param name="caseSensitive">For Text: whether the comparison is case-sensitive (exact equality
+    /// either way; case-insensitive never treats <c>%</c>, <c>_</c> or <c>\</c> as wildcards).</param>
+    /// <param name="values">The Metaverse-side values to look up candidates for. Empty returns an empty
+    /// result without querying.</param>
+    /// <returns>Every matching (value, Connected System Object Id) pair, one row per match (a
+    /// multi-valued attribute can match twice; duplicates of the same pair are not returned), ordered by
+    /// value then Connected System Object Id ascending. Each returned value is the exact input element
+    /// from <paramref name="values"/> it matched, so callers can key results by the Metaverse Object's
+    /// own value.</returns>
+    public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>:
+    /// same query shape (and tracking behaviour: the default tracked, not <c>AsNoTracking</c>, because
+    /// callers fix up the tracked instance after an atomic claim) as
+    /// <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s result, with
+    /// <c>AttributeValues</c> and their <c>Attribute</c> included.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The candidate's Connected System Object Id.</param>
+    /// <returns>The Connected System Object, or null when it no longer exists or is no longer eligible
+    /// (already joined, or not <see cref="ConnectedSystemObjectStatus.Normal"/>) - the candidate
+    /// list can go stale between the batch prefetch and hydration if another Metaverse Object on the
+    /// same page claims it first.</returns>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value.
     /// Used to find PendingProvisioning CSOs during import reconciliation when the
     /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.
@@ -657,6 +714,34 @@ public interface IConnectedSystemRepository
     /// <param name="secondaryExternalIdValue">The secondary external ID value (e.g., DN for LDAP).</param>
     /// <returns>The matching CSO, or null if not found.</returns>
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
+
+    /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, returns every (value, Connected System Object id, status)
+    /// row matching the same predicate the single-object method uses (case-sensitive
+    /// <c>StringValue</c> equality, <c>SecondaryExternalIdAttributeId</c> not null, matched against
+    /// that CSO's OWN configured secondary external id attribute rather than a fixed attribute name).
+    /// Used to prefetch a whole import page's Pending Provisioning confirmations in one query per
+    /// object type instead of one query per unmatched import object.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to search within.</param>
+    /// <param name="objectTypeId">The Connected System Object Type to scope the search to.</param>
+    /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
+    /// attribute id (the one <see cref="ConnectedSystemObjectTypeAttribute.IsSecondaryExternalId"/>
+    /// names today, and the same attribute the import value was read from). Also used as a known
+    /// constant in the query's attribute-value join so it can use the
+    /// <c>(AttributeId, StringValue)</c> index; only a CSO whose OWN
+    /// <see cref="ConnectedSystemObject.SecondaryExternalIdAttributeId"/> equals this value can
+    /// match, so a CSO still carrying an older secondary attribute (after an administrator
+    /// retargeted it) is correctly excluded, exactly as the single-object method would exclude it.</param>
+    /// <param name="secondaryExternalIdValues">The secondary external ID values to look up. Empty
+    /// returns an empty result without querying.</param>
+    /// <returns>Every matching (value, Connected System Object id, status) row. A value matched by
+    /// more than one CSO returns more than one row for it: the caller decides how to treat that
+    /// ambiguity (the import pipeline falls back to the single-object method, whose
+    /// <c>SingleOrDefaultAsync</c> throws on it).</returns>
+    public Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues);
 
     /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value across ALL object types.
@@ -1328,7 +1413,14 @@ public interface IConnectedSystemRepository
     /// PendingProvisioning. See <see cref="ISyncRepository.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>
     /// for the full rationale.
     /// </summary>
-    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null);
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>.
+    /// See <see cref="ISyncRepository.GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> for the
+    /// full rationale.
+    /// </summary>
+    public Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     public Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     public Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);

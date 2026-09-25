@@ -212,6 +212,7 @@ public class FullSyncTests
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
@@ -306,6 +307,7 @@ public class FullSyncTests
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 0,
@@ -427,6 +429,7 @@ public class FullSyncTests
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 2, // Already failed twice
@@ -4021,6 +4024,69 @@ public class FullSyncTests
     }
 
     #endregion
+
+    #region Pending Export Upfront Load
+
+    /// <summary>
+    /// Regression guard for the Pending Export upfront-load optimisation: the full sync processor must
+    /// call the lean, status-filtered <c>GetPendingExportsForConfirmationEvaluationAsync</c> exactly once
+    /// per run, and must never fall back to the broad <c>GetPendingExportsAsync</c>, which eager-loads
+    /// the Connected System Object graph (and its attribute values) for every Pending Export in the
+    /// system regardless of Status - the 35-second-at-100,000-objects cost this optimisation removes.
+    /// </summary>
+    [Test]
+    public async Task PerformFullSyncAsync_LoadsPendingExportsViaConfirmationEvaluationFetchNotTheBroadFetchAsync()
+    {
+        var countingRepo = new ConfirmationLoadCountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            mvos: MetaverseObjectsData,
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData,
+            repository: countingRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var connectedSystem = ConnectedSystemsData[0];
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(
+            q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(localJim), countingRepo, connectedSystem, runProfile, activity, new CancellationTokenSource());
+
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(countingRepo.GetPendingExportsForConfirmationEvaluationAsyncCallCount, Is.EqualTo(1),
+                "The upfront Pending Export load must call the lean, status-filtered fetch exactly once.");
+            Assert.That(countingRepo.GetPendingExportsAsyncCallCount, Is.EqualTo(0),
+                "The upfront Pending Export load must never call the broad fetch (it eager-loads the CSO graph for every row).");
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Spy repository counting calls to the two Pending Export upfront-load candidates, proving which
+    /// one <see cref="SyncFullSyncTaskProcessor"/> actually calls.
+    /// </summary>
+    private sealed class ConfirmationLoadCountingSyncRepository : SyncRepository
+    {
+        public int GetPendingExportsAsyncCallCount;
+        public int GetPendingExportsForConfirmationEvaluationAsyncCallCount;
+
+        public override Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+        {
+            Interlocked.Increment(ref GetPendingExportsAsyncCallCount);
+            return base.GetPendingExportsAsync(connectedSystemId);
+        }
+
+        public override Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
+        {
+            Interlocked.Increment(ref GetPendingExportsForConfirmationEvaluationAsyncCallCount);
+            return base.GetPendingExportsForConfirmationEvaluationAsync(connectedSystemId);
+        }
+    }
 
     /// <summary>
     /// Spy repository that counts the per-object repository calls the set-based MVO deletion

@@ -166,7 +166,16 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Falls back to the shared EF-based implementation for small batches.
+    /// Below-threshold fallback for <see cref="CreateMetaverseObjectsBulkAsync"/>: writes MVO rows
+    /// then their attribute values via COPY binary import on the EF connection's own transaction,
+    /// reusing the same on-connection writers the parallel branch above uses
+    /// (<see cref="BulkInsertMvosOnConnectionAsync"/>, <see cref="BulkInsertMvoAttributeValuesOnConnectionAsync"/>)
+    /// rather than opening N independent connections. COPY binary is markedly faster than
+    /// parameterised multi-row INSERT even on a single connection. No partition-based reference
+    /// filtering is needed (unlike the CSO single-connection path, MVO attribute values carry no such
+    /// filter at all): this whole batch is one transaction on one connection, and MVO rows are
+    /// COPY'd, so visible to this session, before attribute values are COPY'd, so a same-batch
+    /// forward reference resolves without cross-partition isolation.
     /// </summary>
     private async Task CreateMvosOnSingleConnectionAsync(List<MetaverseObject> metaverseObjects)
     {
@@ -175,14 +184,18 @@ public partial class SyncRepository
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        await BulkInsertMvosViaEfAsync(metaverseObjects);
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
+
+        await BulkInsertMvosOnConnectionAsync(npgsqlConn, npgsqlTx, metaverseObjects);
 
         var allAttributeValues = metaverseObjects
             .SelectMany(mvo => mvo.AttributeValues.Select(av => (MvoId: mvo.Id, Value: av)))
             .ToList();
 
         if (allAttributeValues.Count > 0)
-            await BulkInsertMvoAttributeValuesViaEfAsync(allAttributeValues);
+            await BulkInsertMvoAttributeValuesOnConnectionAsync(npgsqlConn, npgsqlTx, allAttributeValues);
 
         await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
@@ -331,50 +344,11 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Inserts MVO rows using the main EF connection (single-connection fallback for small batches).
-    /// </summary>
-    private async Task BulkInsertMvosViaEfAsync(List<MetaverseObject> objects)
-    {
-        var columnsPerRow = MvoBulkInsertColumns.MetaverseObjects.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
-
-        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
-        {
-            var sql = new StringBuilder();
-            sql.Append($@"INSERT INTO ""MetaverseObjects"" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjects)}) VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(n => $"{{{n}}}"))).Append(')');
-
-                var mvo = chunk[i];
-                parameters.Add(mvo.Id);
-                parameters.Add(mvo.Created);
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(mvo.Type.Id);
-                parameters.Add((int)mvo.Status);
-                parameters.Add((int)mvo.Origin);
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.LastConnectorDisconnectedDate, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add((int)mvo.DeletionInitiatedByType);
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedByName, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemId, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemName, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(mvo.ScopeReviewPending);
-                parameters.Add(BulkSqlHelpers.NullableParam(mvo.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-            }
-
-            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
-        }
-    }
-
-    /// <summary>
-    /// Inserts MVO attribute value rows using the main EF connection (single-connection fallback).
+    /// Inserts MVO attribute value rows using parameterised multi-row INSERT on the main EF
+    /// connection. Used solely by <see cref="UpdateMetaverseObjectsBulkAsync"/>'s reconciliation
+    /// insert (a small, variable-shaped set of newly added values diffed against what already
+    /// exists); the create path (<see cref="CreateMvosOnSingleConnectionAsync"/>) uses the COPY
+    /// binary writer <see cref="BulkInsertMvoAttributeValuesOnConnectionAsync"/> instead.
     /// </summary>
     private async Task BulkInsertMvoAttributeValuesViaEfAsync(
         List<(Guid MvoId, MetaverseObjectAttributeValue Value)> attributeValues)
