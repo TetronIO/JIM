@@ -4606,11 +4606,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.CountAsync();
     }
 
-    public async Task DeletePendingExportAsync(PendingExport pendingExport)
-    {
-        Repository.Database.PendingExports.Remove(pendingExport);
-        await Repository.Database.SaveChangesAsync();
-    }
+    /// <summary>
+    /// Deletes a single Pending Export. Delegates to <see cref="DeletePendingExportsAsync"/> (raw SQL delete
+    /// of child attribute value changes, then the parent, then tracked-instance detach) rather than an EF
+    /// <c>Remove()</c> + <c>SaveChangesAsync()</c>: the <see cref="PendingExportAttributeValueChange"/>
+    /// relationship's foreign key is nullable, so EF's default client-side cascade (<c>ClientSetNull</c>)
+    /// would only null out tracked children's <c>PendingExportId</c>, leaving the rows themselves as
+    /// permanent orphans (#1818).
+    /// </summary>
+    public Task DeletePendingExportAsync(PendingExport pendingExport)
+        => DeletePendingExportsAsync(new[] { pendingExport });
 
     public async Task UpdatePendingExportAsync(PendingExport pendingExport)
     {
