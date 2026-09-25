@@ -237,6 +237,16 @@ public interface ISyncServer
     Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds);
 
     /// <summary>
+    /// Prefetches export-matching candidates for a whole page of Metaverse Objects in one batch query per
+    /// Object Matching Rule group, instead of the one-database-round-trip-per-object cost export matching
+    /// otherwise pays for every provisioning verdict. Populates
+    /// <see cref="ExportEvaluationCache.ExportMatchCandidates"/> with a fresh instance; the caller clears
+    /// it back to null once the page's evaluation finishes, so page-scoped candidates never leak into any
+    /// other evaluation path.
+    /// </summary>
+    Task PrefetchExportMatchCandidatesForPageAsync(ExportEvaluationCache cache, IReadOnlyCollection<MetaverseObject> metaverseObjects);
+
+    /// <summary>
     /// Evaluates all export rules for an MVO that has changed, creating Pending Exports
     /// with no-net-change detection.
     /// </summary>

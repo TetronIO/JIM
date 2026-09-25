@@ -648,6 +648,51 @@ public interface IConnectedSystemRepository
         ObjectMatchingRule objectMatchingRule);
 
     /// <summary>
+    /// Batch equivalent of <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>: for a single
+    /// Object Matching Rule, finds every unjoined, Normal-status Connected System Object of the given
+    /// type in the given Connected System whose named attribute equals one of the given values. Used to
+    /// prefetch export-matching candidates for a whole page of Metaverse Objects in one query per rule,
+    /// instead of one query per object.
+    /// </summary>
+    /// <param name="connectedSystemId">The target Connected System.</param>
+    /// <param name="connectedSystemObjectTypeId">The target Connected System Object Type.</param>
+    /// <param name="connectedSystemAttributeName">The Connected System attribute to compare, by name
+    /// (matches <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s name-based predicate).</param>
+    /// <param name="dataType">The attribute's data type; determines which typed column is compared and
+    /// how the <paramref name="values"/> are interpreted. Only Text, Number, LongNumber, Decimal and
+    /// Guid are supported; any other value throws <see cref="ArgumentException"/>.</param>
+    /// <param name="caseSensitive">For Text: whether the comparison is case-sensitive (exact equality
+    /// either way; case-insensitive never treats <c>%</c>, <c>_</c> or <c>\</c> as wildcards).</param>
+    /// <param name="values">The Metaverse-side values to look up candidates for. Empty returns an empty
+    /// result without querying.</param>
+    /// <returns>Every matching (value, Connected System Object Id) pair, one row per match (a
+    /// multi-valued attribute can match twice; duplicates of the same pair are not returned), ordered by
+    /// value then Connected System Object Id ascending. Each returned value is the exact input element
+    /// from <paramref name="values"/> it matched, so callers can key results by the Metaverse Object's
+    /// own value.</returns>
+    public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId,
+        int connectedSystemObjectTypeId,
+        string connectedSystemAttributeName,
+        AttributeDataType dataType,
+        bool caseSensitive,
+        IReadOnlyCollection<object> values);
+
+    /// <summary>
+    /// Hydrates a single export-matching candidate found by <see cref="GetExportMatchCandidateIdsAsync"/>:
+    /// same query shape (and tracking behaviour: the default tracked, not <c>AsNoTracking</c>, because
+    /// callers fix up the tracked instance after an atomic claim) as
+    /// <see cref="FindConnectedSystemObjectUsingMatchingRuleAsync"/>'s result, with
+    /// <c>AttributeValues</c> and their <c>Attribute</c> included.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The candidate's Connected System Object Id.</param>
+    /// <returns>The Connected System Object, or null when it no longer exists or is no longer eligible
+    /// (already joined, or not <see cref="ConnectedSystemObjectStatus.Normal"/>) - the candidate
+    /// list can go stale between the batch prefetch and hydration if another Metaverse Object on the
+    /// same page claims it first.</returns>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value.
     /// Used to find PendingProvisioning CSOs during import reconciliation when the
     /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.
