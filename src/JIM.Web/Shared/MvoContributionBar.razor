@@ -6,9 +6,10 @@
 @* The Inspect view's contribution bar (#399): "Where this {Object Type} gets its values", a segmented bar   *@
 @* showing each source's share of the object's attributes, and a legend that doubles as the source filter.     *@
 @* When every attribute shares one origin the bar collapses to a single sentence (see the plan's Risks table). *@
-@* The bar itself is decorative (aria-hidden); the legend buttons are the accessible control. *@
+@* The bar itself is decorative (aria-hidden); the legend buttons are the accessible control. It sits in an     *@
+@* outlined panel like the table and inspector beside it, rather than on the page background. *@
 
-<div class="jim-contribution-bar-panel">
+<MudPaper Outlined="true" Class="pa-4 jim-contribution-bar-panel">
     @{ var groups = ValueOriginGrouping.BuildGroups(Provenance.Attributes); }
     <div class="jim-contribution-heading">
         <span class="jim-contribution-title">Where this @ObjectTypeName gets its values</span>
@@ -45,7 +46,7 @@
             }
         </div>
     }
-</div>
+</MudPaper>
 
 @code {
     /// <summary>The Metaverse Object's attribute origins, as loaded for the Inspect view.</summary>
