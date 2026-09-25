@@ -681,7 +681,7 @@ try {
 
         # Initialise in the documented order: Full Import every Connected System, Full
         # Synchronisation sources then targets, then Export.
-        $steps = @(
+        $initRuns = @(
             @{ System = $config.CSVSystemId;  Profile = $config.CSVImportProfileId;      Name = "HR CSV Full Import" }
             @{ System = $config.LDAPSystemId; Profile = $config.LDAPFullImportProfileId; Name = "Directory Full Import" }
             @{ System = $config.CSVSystemId;  Profile = $config.CSVSyncProfileId;        Name = "HR CSV Full Synchronisation" }
@@ -690,9 +690,9 @@ try {
             @{ System = $config.LDAPSystemId; Profile = $config.LDAPFullImportProfileId; Name = "Directory Full Import (confirming)" }
             @{ System = $config.LDAPSystemId; Profile = $config.LDAPFullSyncProfileId;   Name = "Directory Full Synchronisation (confirming)" }
         )
-        foreach ($step in $steps) {
-            $r = Start-JIMRunProfile -ConnectedSystemId $step.System -RunProfileId $step.Profile -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $r.activityId -Name $step.Name
+        foreach ($initRun in $initRuns) {
+            $r = Start-JIMRunProfile -ConnectedSystemId $initRun.System -RunProfileId $initRun.Profile -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $r.activityId -Name $initRun.Name
         }
 
         $percival = @(Get-JIMMetaverseObject -AttributeName "Employee ID" -AttributeValue "EMP900020" -Attributes @("Account Name")) | Select-Object -First 1
