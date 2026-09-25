@@ -936,6 +936,12 @@ static async Task CompleteJimApplicationBootstrapAsync(WebApplication app)
     var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType)!;
     var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute)!;
 
+    // Wait for the database server first: until it answers, each readiness check below would throw and end the host.
+    // Nothing can cancel this yet (the host's shutdown handling starts with app.Run), so there is no token to pass.
+    using (var waitScope = app.Services.CreateScope())
+        await waitScope.ServiceProvider.GetRequiredService<JimApplication>()
+            .WaitForDatabaseAsync(JimApplication.DefaultDatabaseWaitBudget, null, CancellationToken.None);
+
     while (true)
     {
         // A fresh scope per attempt gives each iteration its own DbContext and disposes it when the scope ends.

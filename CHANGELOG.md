@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
 - 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
+- 🔄 JIM's services now wait for the database at start-up, logging each attempt, instead of exiting and restarting until it is available; an external database that is briefly unreachable no longer takes the web portal down. (#1808)
 
 ### Fixed
 
@@ -34,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 The air-gapped release bundle no longer ships development settings (a demo Keycloak with `admin`/`admin`, PostgreSQL open on port 5432) that `docker compose` applied automatically when run without `-f`.
 - 🐛 Case-insensitive Object Matching Rules treated `_` and `%` as wildcards, so `j_smith` could match `jxsmith` and join the wrong object, on inbound joins and export matching alike; they now require an exact case-insensitive match.
 - 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
+
+### Security
+
+- 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
 
 ### Performance
 

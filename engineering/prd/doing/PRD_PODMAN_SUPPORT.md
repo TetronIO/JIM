@@ -1,6 +1,6 @@
 # Podman Support
 
-- **Status:** Doing (Phase 1 in progress)
+- **Status:** Doing (Phase 1 complete)
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
@@ -200,10 +200,10 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 ### Phase 1: runtime-neutral cleanup
 
-- [ ] All image references fully qualified; the release bundle builds with the new PostgreSQL reference
-- [ ] Worker waits for PostgreSQL at start-up with a bounded retry and logged attempts, covered by tests
-- [ ] Worker `SYS_ADMIN` and `DAC_READ_SEARCH` removed, or their use documented if one is found
-- [ ] Every JIM service (Web and Scheduler as well as Worker) waits for an unreachable database instead of exiting (requirement 12's criterion withdrawn; see plan D8)
+- [x] All image references fully qualified; the release bundle builds with the new PostgreSQL reference
+- [x] Worker waits for PostgreSQL at start-up with a bounded retry and logged attempts, covered by tests
+- [x] Worker `SYS_ADMIN` and `DAC_READ_SEARCH` removed, or their use documented if one is found
+- [x] Every JIM service (Web and Scheduler as well as Worker) waits for an unreachable database instead of exiting (requirement 12's criterion withdrawn; see plan D8)
 
 ### Phase 2: Podman path
 
