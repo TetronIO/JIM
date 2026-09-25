@@ -38,14 +38,10 @@
         Metaverse untouched. preferredLanguage is part of RFC 4519's organizationalPerson (which both
         inetOrgPerson and Active Directory's user class descend from) and is not used by any other
         Scenario 1 mapping, so it is genuinely spare on both directory types this scenario supports.
-      - "Locker Code" (new Metaverse attribute, import mode): an ordinary (non-generated) export
-        mapping flows it to the LDAP target's "physicalDeliveryOfficeName" attribute (also RFC 4519
-        organizationalPerson, also spare, and a real Active Directory attribute), and a generated
-        import mapping (OnlyIfTaken against the constant base "LOCKER") is created DISABLED. This
-        pair exists solely for the Adopt before generate test step: enabling the import mapping only
-        after a brownfield Connected System Object is already joined and already holds a
-        physicalDeliveryOfficeName value is what makes an import-mode adoption reproducible at all
-        (see that step's own comments for why the ordering matters).
+      - The IDs the Brownfield test step needs to add an import Attribute Flow from the directory
+        (its account name attribute to Account Name) at higher priority than the generated flow.
+        That step creates the directory import Synchronisation Rule itself, so Tests 1 to 6 run
+        against Scenario 1's shape unchanged.
 
     Supports OpenLDAP (default) and Samba AD; refuses 389 Directory Server, since the SambaAD-only
     target-side collision test needs a real directory-wide unique-value constraint a CSV target
@@ -177,7 +173,6 @@ try {
         @{ Name = "Staff Number"; Type = "Text"; Plurality = "SingleValued" }  # Sequence token
         @{ Name = "Badge Code";      Type = "Text"; Plurality = "SingleValued" }  # Random token
         @{ Name = "Call Sign";       Type = "Text"; Plurality = "SingleValued" }  # OnlyIfTaken, Failure test
-        @{ Name = "Locker Code";     Type = "Text"; Plurality = "SingleValued" }  # OnlyIfTaken, Adopt before generate test
     )
 
     $mvAttributes = Get-JIMMetaverseAttribute
@@ -200,7 +195,7 @@ try {
     $employeeNumberAttr = $mvAttributes | Where-Object { $_.name -eq "Staff Number" }
     $badgeCodeAttr = $mvAttributes | Where-Object { $_.name -eq "Badge Code" }
     $callSignAttr = $mvAttributes | Where-Object { $_.name -eq "Call Sign" }
-    $lockerCodeAttr = $mvAttributes | Where-Object { $_.name -eq "Locker Code" }
+    $accountNameAttr = $mvAttributes | Where-Object { $_.name -eq "Account Name" }
 
     # Step 4: Create the three additional generated IMPORT mappings on the HR import rule.
     Write-TestStep "Step 4" "Creating the Sequence, Random and Failure-test generated import mappings"
@@ -254,30 +249,6 @@ try {
         Write-Host "  Call Sign mapping already exists (ID: $($callSignMapping.id))" -ForegroundColor Gray
     }
 
-    $lockerCodeMapping = $existingImportMappings | Where-Object { $_.targetMetaverseAttributeId -eq $lockerCodeAttr.id }
-    if (-not $lockerCodeMapping) {
-        # Deliberately created DISABLED, and stays that way until the Adopt before generate test step
-        # turns it on. Unique Value Generation's adopt-before-generate check only ever sees a joined
-        # Connected System Object that was ALREADY joined (committed in an earlier, separate
-        # synchronisation) by the time this mapping first resolves for an object (release 1's
-        # adopt-existing lookup is a database read of already-persisted joins; see
-        # GeneratedValueParticipation.FindAdoptableValueAsync and its callers in
-        # SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync). Since HR is the only system that
-        # projects a Metaverse Object, that object's very first synchronisation pass is also this
-        # mapping's first (and, being sticky thereafter, only) chance to resolve; a brownfield join
-        # cannot be committed before an object exists to join to. Creating this mapping disabled and
-        # enabling it only once a brownfield Locker Code CSO is already joined is what makes the
-        # reproduction sound rather than a race against the engine's own ordering.
-        $lockerCodeMapping = New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
-            -TargetMetaverseAttributeId $lockerCodeAttr.id `
-            -Expression '"LOCKER"' `
-            -Generate -TokenKind OnlyIfTaken -AttemptLimit 1000 -Enabled $false
-        Write-Host "  ✓ Generated Locker Code mapping created, disabled (OnlyIfTaken \"LOCKER\", ID: $($lockerCodeMapping.id))" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Locker Code mapping already exists (ID: $($lockerCodeMapping.id))" -ForegroundColor Gray
-    }
-
     # Step 5: Select a spare LDAP attribute and create a generated EXPORT mapping on it.
     Write-TestStep "Step 5" "Creating the generated export mapping (preferredLanguage)"
 
@@ -327,34 +298,22 @@ try {
         Write-Host "  preferredLanguage export mapping already exists (ID: $($preferredLanguageMapping.id))" -ForegroundColor Gray
     }
 
-    # Step 6: Select physicalDeliveryOfficeName and create the ORDINARY (non-generated) export
-    # mapping the Adopt before generate test's Locker Code pair needs. Also RFC 4519
-    # organizationalPerson, and a genuine Active Directory attribute ("Office"), spare on both.
-    Write-TestStep "Step 6" "Creating the ordinary export mapping for Locker Code (physicalDeliveryOfficeName)"
+    # Step 6: Resolve what the Brownfield test step needs: the directory's account name attribute
+    # (uid on an RFC directory, sAMAccountName on Active Directory) and the generated Account Name
+    # mapping on the HR import rule, so it can put a directory flow ahead of it in Attribute Priority.
+    Write-TestStep "Step 6" "Resolving the directory account name attribute and the generated Account Name mapping"
 
-    $officeAttr = $ldapUserType.attributes | Where-Object { $_.name -eq 'physicalDeliveryOfficeName' }
-    if (-not $officeAttr) {
-        throw "Setup failed: LDAP attribute 'physicalDeliveryOfficeName' not found in the schema for " +
-              "'$ldapSystemName' (object type '$ldapUserObjectClass'). It is part of RFC 4519's " +
-              "organizationalPerson and is expected on both OpenLDAP and Active Directory; if the schema " +
-              "genuinely lacks it, pick a different spare attribute here and in " +
-              "Invoke-Scenario23-UniqueValueGeneration.ps1's Adopt before generate step."
+    $accountNameLdapAttrName = $DirectoryConfig.UserNameAttr
+    $accountNameLdapAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $accountNameLdapAttrName }
+    if (-not $accountNameLdapAttr) {
+        throw "Setup failed: LDAP attribute '$accountNameLdapAttrName' not found on '$ldapSystemName' (object type '$ldapUserObjectClass')."
     }
-    if (-not $officeAttr.selected) {
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeId $officeAttr.id -Selected $true | Out-Null
-        Write-Host "  ✓ Selected LDAP attribute 'physicalDeliveryOfficeName'" -ForegroundColor Green
+    $accountNameMapping = @(Get-JIMSyncRuleMapping -SyncRuleId $importRule.id) | Where-Object { $_.targetMetaverseAttributeId -eq $accountNameAttr.id } | Select-Object -First 1
+    if (-not $accountNameMapping) {
+        throw "Setup failed: no Account Name mapping on '$importRuleName'; Setup-Scenario1.ps1 -GenerateAccountName should have created it."
     }
-
-    $officeMapping = $existingExportMappings | Where-Object { $_.targetConnectedSystemAttributeId -eq $officeAttr.id }
-    if (-not $officeMapping) {
-        $officeMapping = New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
-            -TargetConnectedSystemAttributeId $officeAttr.id `
-            -SourceMetaverseAttributeId $lockerCodeAttr.id
-        Write-Host "  ✓ Ordinary export mapping created: Locker Code -> physicalDeliveryOfficeName (ID: $($officeMapping.id))" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Locker Code -> physicalDeliveryOfficeName mapping already exists (ID: $($officeMapping.id))" -ForegroundColor Gray
-    }
+    $mvUserTypeId = $mvUserType.id
+    Write-Host "  ✓ Directory account name attribute: $accountNameLdapAttrName (ID: $($accountNameLdapAttr.id)); generated Account Name mapping ID: $($accountNameMapping.id)" -ForegroundColor Green
 }
 finally {
     Disconnect-JIM -ErrorAction SilentlyContinue
@@ -365,11 +324,10 @@ finally {
 Write-TestSection "Scenario 23 Setup Complete"
 Write-Host "Directory:              $($DirectoryConfig.ConnectedSystemName) ($($DirectoryConfig.DirectoryType))" -ForegroundColor Cyan
 Write-Host "Account Name:           Generated (OnlyIfTaken, Number)" -ForegroundColor Cyan
-Write-Host "Staff Number:        Generated (Sequence, EMP-NNNNNN from 1000)" -ForegroundColor Cyan
+Write-Host "Staff Number:           Generated (Sequence, EMP-NNNNNN from 1000)" -ForegroundColor Cyan
 Write-Host "Badge Code:             Generated (Random, Hex, 8 characters)" -ForegroundColor Cyan
 Write-Host "Call Sign:              Generated, disabled (OnlyIfTaken \"CALLSIGN\", AttemptLimit 1)" -ForegroundColor Cyan
-Write-Host "Locker Code:            Generated, disabled (OnlyIfTaken \"LOCKER\"); ordinary export -> physicalDeliveryOfficeName" -ForegroundColor Cyan
-Write-Host "preferredLanguage (export):    Generated (Random, Digits, 6 characters)" -ForegroundColor Cyan
+Write-Host "preferredLanguage:      Generated (export mode) (Random, Digits, 6 characters)" -ForegroundColor Cyan
 Write-Host ""
 
 # Return Scenario 1's configuration plus the ids this scenario's assertions need.
@@ -378,12 +336,14 @@ $config.ExportRuleId = $exportRule.id
 $config.EmployeeNumberMvAttributeId = $employeeNumberAttr.id
 $config.BadgeCodeMvAttributeId = $badgeCodeAttr.id
 $config.CallSignMvAttributeId = $callSignAttr.id
-$config.LockerCodeMvAttributeId = $lockerCodeAttr.id
+$config.AccountNameMvAttributeId = $accountNameAttr.id
+$config.AccountNameMappingId = $accountNameMapping.id
+$config.AccountNameLdapAttributeId = $accountNameLdapAttr.id
+$config.LdapUserTypeId = $ldapUserType.id
+$config.MvUserTypeId = $mvUserTypeId
 $config.EmployeeNumberMappingId = $employeeNumberMapping.id
 $config.BadgeCodeMappingId = $badgeCodeMapping.id
 $config.CallSignMappingId = $callSignMapping.id
-$config.LockerCodeMappingId = $lockerCodeMapping.id
-$config.PostalCodeMappingId = $preferredLanguageMapping.id
-$config.PostalCodeAttributeId = $preferredLanguageAttr.id
-$config.OfficeAttributeId = $officeAttr.id
+$config.PreferredLanguageMappingId = $preferredLanguageMapping.id
+$config.PreferredLanguageAttributeId = $preferredLanguageAttr.id
 return $config

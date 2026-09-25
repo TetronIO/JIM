@@ -8,8 +8,9 @@
 .DESCRIPTION
     Exercises release 1 of Unique Value Generation (#242): a "Generated Value" source type on import
     and export Attribute Flows, whose value is a base expression plus a uniqueness token (OnlyIfTaken,
-    Sequence or Random), local gates (reservation within a run, Metaverse, connector space), adopt
-    before generate, sticky assignments across re-runs, and Start again. Release 1 does NOT include
+    Sequence or Random), local gates (reservation within a run, Metaverse, connector space), a brownfield account kept
+    by Attribute Priority (and the generated flow adopting the values Metaverse Objects already hold
+    when that higher-priority flow is withdrawn), sticky assignments across re-runs, and Start again. Release 1 does NOT include
     probing, the retired values register, Collision Remediation or Needs Decision (those ship in
     releases 2 to 4); a target-side collision in this release is an ordinary export error naming the
     value and the system, which the SambaAD-only Collision step asserts directly.
@@ -58,7 +59,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "AdoptBeforeGenerate", "StartAgain", "Failure", "Collision", "SurfaceParity", "FeatureFlag", "All")]
+    [ValidateSet("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "Collision", "SurfaceParity", "FeatureFlag", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -298,7 +299,7 @@ function New-OutOfBandLdapAccount {
     <#
     .SYNOPSIS
         Creates a directory account directly against OpenLDAP or Samba AD, never through JIM, for the
-        Adopt before generate and (Samba AD only) Collision test steps. Returns the account's DN.
+        Brownfield and (Samba AD only) Collision test steps. Returns the account's DN.
     .DESCRIPTION
         OpenLDAP: a plain ldapadd over the configured bind. Samba AD: ldbadd routed through the running
         server (never direct sam.ldb file access, which races the server's own writes; see Scenario 5's
@@ -311,7 +312,6 @@ function New-OutOfBandLdapAccount {
         [Parameter(Mandatory=$true)][string]$LastName,
         [string]$EmployeeIdValue,
         [string]$PreferredLanguage,
-        [string]$OfficeName,
         [switch]$OutsideImportScope
     )
 
@@ -326,7 +326,6 @@ function New-OutOfBandLdapAccount {
         )
         if ($EmployeeIdValue) { $lines += "employeeNumber: $EmployeeIdValue" }
         if ($PreferredLanguage) { $lines += "preferredLanguage: $PreferredLanguage" }
-        if ($OfficeName) { $lines += "physicalDeliveryOfficeName: $OfficeName" }
         $ldif = ($lines -join "`n") + "`n"
 
         $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x `
@@ -347,7 +346,6 @@ function New-OutOfBandLdapAccount {
         )
         if ($EmployeeIdValue) { $lines += "employeeID: $EmployeeIdValue" }
         if ($PreferredLanguage) { $lines += "preferredLanguage: $PreferredLanguage" }
-        if ($OfficeName) { $lines += "physicalDeliveryOfficeName: $OfficeName" }
         $ldif = ($lines -join "`n") + "`n"
 
         $ldifPath = [System.IO.Path]::GetTempFileName()
@@ -426,7 +424,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "AdoptBeforeGenerate", "StartAgain", "Failure", "Collision", "SurfaceParity", "FeatureFlag")
+$stepOrder = @("Joiners", "Gates", "Stability", "Sequence", "Random", "ExportMode", "Brownfield", "StartAgain", "Failure", "Collision", "SurfaceParity", "FeatureFlag")
 $lastStepIndex = if ($Step -eq "All") { $stepOrder.Count - 1 } else { $stepOrder.IndexOf($Step) }
 
 try {
@@ -648,64 +646,93 @@ try {
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
-    # Adopt before generate (import mode): a generated mapping created AFTER a brownfield
-    # Connected System Object is already joined and already holds the value adopts it, and
-    # stages no rename.
+    # Brownfield: an existing directory account keeps its account name through Attribute
+    # Priority, not through any special rule. The administrator adds an import Attribute Flow
+    # from the directory at higher priority than the generated flow and initialises in the
+    # documented order (Full Import everything, Full Synchronisation sources then targets, then
+    # Export). Then (7b) the directory flow is withdrawn: the generated flow takes over and adopts
+    # the value each Metaverse Object already holds, so nobody is renamed.
     # ─────────────────────────────────────────────────────────────────────────────────────
-    if ($lastStepIndex -ge $stepOrder.IndexOf("AdoptBeforeGenerate")) {
-        Write-TestSection "Test 7: Adopt before generate"
+    if ($lastStepIndex -ge $stepOrder.IndexOf("Brownfield")) {
+        Write-TestSection "Test 7: Brownfield account kept by Attribute Priority"
 
-        # Why the Locker Code mapping (see Setup-Scenario23.ps1) was created disabled, and is only
-        # enabled here: release 1's adopt-existing lookup (GeneratedValueParticipation.FindAdoptableValueAsync,
-        # called from SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync) is a database read of
-        # an ALREADY-COMMITTED join. "sticky first" (UniqueValueGenerationServer.ResolveAsync) means a
-        # generated mapping's very first resolution for an object is also its only chance to adopt;
-        # every resolution after that is sticky regardless. HR is the only system that projects a
-        # Metaverse Object, so that object's first HR synchronisation pass is also this mapping's
-        # first (and otherwise only) chance to resolve. A brownfield join committed in an EARLIER,
-        # separate synchronisation cannot exist before the object it joins to does. Enabling the
-        # mapping only once the join is already committed is what makes this reproducible at all,
-        # rather than a race against the engine's own ordering.
-        $officeValue = "LEGACY-OFFICE-1"
-        $dn = New-OutOfBandLdapAccount -AccountName "pashworth99" -FirstName "Percival" -LastName "Ashworth" `
-            -EmployeeIdValue "EMP900020" -OfficeName $officeValue
+        $dn = New-OutOfBandLdapAccount -AccountName "pashworth99" -FirstName "Percival" -LastName "Ashworth" -EmployeeIdValue "EMP900020"
         Write-Host "  Created out-of-band account: $dn" -ForegroundColor Gray
-
-        # A Full Import, not Delta: this brings a directory-side change JIM did not itself make into
-        # view reliably (Scenario 5's out-of-band-account pattern uses the same Full Import arrange
-        # step for exactly this reason).
-        $ldapImport1 = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $ldapImport1.activityId -Name "Directory Full Import (adopt - arrange)"
-
-        $unjoined = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.LDAPSystemId -Search "Percival Ashworth" -JoinType NotJoined -PageSize 10)
-        Add-TestResult -Name "Out-of-band account imported as an unjoined Connected System Object (proves genuine brownfield arrange)" -Passed ($unjoined.Count -gt 0) `
-            -Detail "Expected at least one unjoined CSO matching 'Percival Ashworth', found $($unjoined.Count)"
-
         Add-HrCsvJoiner -EmployeeId "EMP900020" -FirstName "Percival" -LastName "Ashworth"
-        Invoke-Cycle -Config $config | Out-Null
 
-        $adoptedMvo = @(Get-JIMMetaverseObject -AttributeName "Employee ID" -AttributeValue "EMP900020" -Attributes @("Account Name")) | Select-Object -First 1
-        Assert-NotNull -Value $adoptedMvo -Message "Percival Ashworth's Metaverse Object was projected"
+        # The directory import Synchronisation Rule: no projection (HR is authoritative for people),
+        # one Attribute Flow from the directory's account name attribute to Account Name, ranked
+        # above the generated flow.
+        $directoryImportRule = New-JIMSyncRule -Name "$($DirectoryConfig.ConnectedSystemName) Import Users (Account Name)" `
+            -ConnectedSystemId $config.LDAPSystemId -ConnectedSystemObjectTypeId $config.LdapUserTypeId `
+            -MetaverseObjectTypeId $config.MvUserTypeId -Direction Import -PassThru
+        $directoryAccountNameMapping = New-JIMSyncRuleMapping -SyncRuleId $directoryImportRule.id `
+            -TargetMetaverseAttributeId $config.AccountNameMvAttributeId `
+            -SourceConnectedSystemAttributeId $config.AccountNameLdapAttributeId
+        Set-JIMMetaverseAttributePriority -AttributeId $config.AccountNameMvAttributeId -ObjectTypeId $config.MvUserTypeId `
+            -MappingId @($directoryAccountNameMapping.id, $config.AccountNameMappingId) | Out-Null
+        $priority = @((Get-JIMMetaverseAttributePriority -AttributeId $config.AccountNameMvAttributeId -ObjectTypeId $config.MvUserTypeId).contributors)
+        Add-TestResult -Name "The directory's Account Name flow is ranked above the generated flow" `
+            -Passed ($priority.Count -ge 2 -and $priority[0].mappingId -eq $directoryAccountNameMapping.id -and $priority[1].mappingId -eq $config.AccountNameMappingId) `
+            -Detail "Contributors: $(@($priority | ForEach-Object { "$($_.mappingId)=$($_.priority)" }) -join ', ')"
 
-        # Enable the disabled Locker Code mapping now that the join above is committed, then run one
-        # more cycle so it resolves for the first time.
-        Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.LockerCodeMappingId -Enabled $true | Out-Null
-        Invoke-Cycle -Config $config -FirstRun | Out-Null  # a configuration change needs a Full Synchronisation to reach unchanged objects
+        $beforeNames = @{}
+        foreach ($p in (Get-Population)) { $beforeNames[$p.id] = $p.attributes.'Account Name' }
 
-        $adoptedLockerCodeValue = Get-MvoAttributeValue -MvoId $adoptedMvo.id -AttributeName "Locker Code"
-        Add-TestResult -Name "Locker Code adopted the brownfield office value ('$officeValue'), not a fresh 'LOCKER' candidate" -Passed ($adoptedLockerCodeValue -eq $officeValue) `
-            -Detail "Expected '$officeValue', got '$adoptedLockerCodeValue'"
+        # Initialise in the documented order: Full Import every Connected System, Full
+        # Synchronisation sources then targets, then Export.
+        $steps = @(
+            @{ System = $config.CSVSystemId;  Profile = $config.CSVImportProfileId;      Name = "HR CSV Full Import" }
+            @{ System = $config.LDAPSystemId; Profile = $config.LDAPFullImportProfileId; Name = "Directory Full Import" }
+            @{ System = $config.CSVSystemId;  Profile = $config.CSVSyncProfileId;        Name = "HR CSV Full Synchronisation" }
+            @{ System = $config.LDAPSystemId; Profile = $config.LDAPFullSyncProfileId;   Name = "Directory Full Synchronisation" }
+            @{ System = $config.LDAPSystemId; Profile = $config.LDAPExportProfileId;     Name = "Directory Export" }
+            @{ System = $config.LDAPSystemId; Profile = $config.LDAPFullImportProfileId; Name = "Directory Full Import (confirming)" }
+            @{ System = $config.LDAPSystemId; Profile = $config.LDAPFullSyncProfileId;   Name = "Directory Full Synchronisation (confirming)" }
+        )
+        foreach ($step in $steps) {
+            $r = Start-JIMRunProfile -ConnectedSystemId $step.System -RunProfileId $step.Profile -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $r.activityId -Name $step.Name
+        }
 
-        $assignments = @(Get-JIMGeneratedValue -MetaverseObjectId $adoptedMvo.id)
-        $lockerAssignment = $assignments | Where-Object { $_.attributeName -eq 'Locker Code' }
-        Add-TestResult -Name "Get-JIMGeneratedValue reports the Locker Code assignment as Adopted" -Passed ($null -ne $lockerAssignment -and $lockerAssignment.adopted -eq $true) `
-            -Detail "Assignment: $($lockerAssignment | ConvertTo-Json -Compress)"
+        $percival = @(Get-JIMMetaverseObject -AttributeName "Employee ID" -AttributeValue "EMP900020" -Attributes @("Account Name")) | Select-Object -First 1
+        Assert-NotNull -Value $percival -Message "Percival Ashworth's Metaverse Object was projected"
+        Add-TestResult -Name "Percival's Account Name is the existing account's 'pashworth99' (the higher-priority directory flow won)" `
+            -Passed ($percival.attributes.'Account Name' -eq 'pashworth99') -Detail "Got '$($percival.attributes.'Account Name')'"
 
-        # No rename: the ordinary export mapping (Locker Code -> physicalDeliveryOfficeName) must
-        # leave the directory's value exactly as the brownfield account already had it.
-        $ldapUser = Get-LDAPUser -UserIdentifier "pashworth99" -DirectoryConfig $DirectoryConfig
-        Add-TestResult -Name "physicalDeliveryOfficeName in the directory is unchanged ('$officeValue'); no rename was exported" -Passed ($ldapUser -and $ldapUser['physicalDeliveryOfficeName'] -eq $officeValue) `
-            -Detail "Directory value: '$($ldapUser['physicalDeliveryOfficeName'])'"
+        $existing = Get-LDAPUser -UserIdentifier "pashworth99" -DirectoryConfig $DirectoryConfig
+        $renamed = Get-LDAPUser -UserIdentifier "percival.ashworth" -DirectoryConfig $DirectoryConfig
+        Add-TestResult -Name "The existing directory account was not renamed" -Passed ($null -ne $existing -and $null -eq $renamed) `
+            -Detail "pashworth99 present: $($null -ne $existing); percival.ashworth present: $($null -ne $renamed)"
+
+        $percivalAccountNameAssignment = @(Get-JIMGeneratedValue -MetaverseObjectId $percival.id) | Where-Object { $_.attributeName -eq 'Account Name' }
+        Add-TestResult -Name "No generated Account Name assignment is held for Percival (the directory owns the value)" -Passed ($null -eq $percivalAccountNameAssignment) `
+            -Detail "Assignment: $($percivalAccountNameAssignment | ConvertTo-Json -Compress)"
+
+        $afterInit = @{}
+        foreach ($p in (Get-Population)) { $afterInit[$p.id] = $p.attributes.'Account Name' }
+        $changedDuringInit = @($beforeNames.Keys | Where-Object { $afterInit[$_] -ne $beforeNames[$_] })
+        Add-TestResult -Name "No existing person's Account Name changed when the directory flow took priority" -Passed ($changedDuringInit.Count -eq 0) `
+            -Detail "$($changedDuringInit.Count) changed: $(@($changedDuringInit | Select-Object -First 5 | ForEach-Object { "$($beforeNames[$_]) -> $($afterInit[$_])" }) -join '; ')"
+
+        # 7b: withdraw the directory flow. The generated flow becomes the winning contributor again;
+        # each Metaverse Object already holds a value, so it is adopted rather than a new one generated.
+        Write-TestSection "Test 7b: Directory flow withdrawn; the generated flow adopts the values already held"
+        Set-JIMSyncRuleMapping -SyncRuleId $directoryImportRule.id -MappingId $directoryAccountNameMapping.id -Enabled $false | Out-Null
+        Invoke-Cycle -Config $config -FirstRun | Out-Null  # a configuration change needs a Full Synchronisation
+
+        $afterWithdraw = @{}
+        foreach ($p in (Get-Population)) { $afterWithdraw[$p.id] = $p.attributes.'Account Name' }
+        $changedOnWithdraw = @($afterInit.Keys | Where-Object { $afterWithdraw[$_] -ne $afterInit[$_] })
+        Add-TestResult -Name "Withdrawing the directory flow renames nobody" -Passed ($changedOnWithdraw.Count -eq 0) `
+            -Detail "$($changedOnWithdraw.Count) changed: $(@($changedOnWithdraw | Select-Object -First 5 | ForEach-Object { "$($afterInit[$_]) -> $($afterWithdraw[$_])" }) -join '; ')"
+
+        $percivalAssignment = @(Get-JIMGeneratedValue -MetaverseObjectId $percival.id) | Where-Object { $_.attributeName -eq 'Account Name' }
+        Add-TestResult -Name "Percival's 'pashworth99' is now held as an adopted generated value" `
+            -Passed ($null -ne $percivalAssignment -and $percivalAssignment.value -eq 'pashworth99' -and $percivalAssignment.adopted -eq $true) `
+            -Detail "Assignment: $($percivalAssignment | ConvertTo-Json -Compress)"
+        $stillThere = Get-LDAPUser -UserIdentifier "pashworth99" -DirectoryConfig $DirectoryConfig
+        Add-TestResult -Name "The directory account is still 'pashworth99' after the withdrawal" -Passed ($null -ne $stillThere)
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
