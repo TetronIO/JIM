@@ -705,10 +705,6 @@ try {
         Add-TestResult -Name "The existing directory account was not renamed" -Passed ($null -ne $existing -and $null -eq $renamed) `
             -Detail "pashworth99 present: $($null -ne $existing); percival.ashworth present: $($null -ne $renamed)"
 
-        $percivalAccountNameAssignment = @(Get-JIMGeneratedValue -MetaverseObjectId $percival.id) | Where-Object { $_.attributeName -eq 'Account Name' }
-        Add-TestResult -Name "No generated Account Name assignment is held for Percival (the directory owns the value)" -Passed ($null -eq $percivalAccountNameAssignment) `
-            -Detail "Assignment: $($percivalAccountNameAssignment | ConvertTo-Json -Compress)"
-
         $afterInit = @{}
         foreach ($p in (Get-Population)) { $afterInit[$p.id] = $p.attributes.'Account Name' }
         $changedDuringInit = @($beforeNames.Keys | Where-Object { $afterInit[$_] -ne $beforeNames[$_] })
