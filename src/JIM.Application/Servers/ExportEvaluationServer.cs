@@ -1124,10 +1124,13 @@ public class ExportEvaluationServer
         }
 
         // Lean fetch (issue #986): this method only reads ChangeType/Id/Status off the existing
-        // Pending Export and passes it to DeletePendingExportAsync, which needs AttributeValueChanges
-        // loaded for EF-tracked child-row disposal. The heavy fetch also loaded the CSO's and source
-        // Metaverse Object's full attribute value graphs, which for a large group CSO (group
-        // deprovisioning) runs into the hundreds of thousands of rows, none of them read here.
+        // Pending Export. AttributeValueChanges is still loaded here (see the lightweight query's own
+        // remarks: needed by GetAttributeChangeMergeKey for single-vs-multi-valued dedup elsewhere on this
+        // path), not because DeletePendingExportAsync below requires it: it now deletes child rows via raw
+        // SQL keyed on PendingExportId directly, so it works whether or not this navigation is populated
+        // (#1818). The heavy fetch also loaded the CSO's and source Metaverse Object's full attribute value
+        // graphs, which for a large group CSO (group deprovisioning) runs into the hundreds of thousands of
+        // rows, none of them read here.
         var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
 
         // The definitive decision, now that the existing Pending Export is known: the engine owns the
@@ -2635,8 +2638,10 @@ public class ExportEvaluationServer
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not superseded by export eval (see
                 // SelectSurvivingDriftChanges).
-                // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
-                // child entities, making the tracked instances unusable for a new PE.
+                // Clone drift-only changes with new IDs: DeletePendingExportAsync below deletes the old
+                // child rows via raw SQL and then detaches their tracked instances from the change tracker
+                // (DetachPendingExportGraphs; #1818), so dbPendingExport.AttributeValueChanges no longer
+                // holds live, attachable entities by the time the new PE is built.
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges)
                     .Select(avc => new PendingExportAttributeValueChange
                     {
