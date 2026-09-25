@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Case-insensitive Object Matching Rules treated `_` and `%` as wildcards, so `j_smith` could match `jxsmith` and join the wrong object, on inbound joins and export matching alike; they now require an exact case-insensitive match.
 - 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
 - 🐛 JIM's services now exit with a failure code when they stop on an error, instead of reporting a clean stop to the container runtime, systemd or monitoring. (#1808)
+- 🐛 A synchronisation that fails while saving its progress is now marked Failed straight away, instead of only after two further attempts that logged misleading database errors.
 
 ### Security
 
