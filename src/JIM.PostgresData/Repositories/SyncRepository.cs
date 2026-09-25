@@ -279,14 +279,6 @@ public partial class SyncRepository : ISyncRepository
         => _repo.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
 
     /// <summary>
-    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
-    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
-    /// ConnectedSystemObjectId is populated.
-    /// </summary>
-    public Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetPendingExportsForConfirmationEvaluationAsync(connectedSystemId);
-
-    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values.
     /// The predicate is evaluated in SQL (backed by a partial index on
@@ -630,6 +622,9 @@ public partial class SyncRepository : ISyncRepository
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
+
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+        => _repo.ConnectedSystems.RecoverStrandedExecutingPendingExportsAsync();
 
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
         => _repo.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds);

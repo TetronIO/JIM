@@ -35,12 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Case-insensitive Object Matching Rules treated `_` and `%` as wildcards, so `j_smith` could match `jxsmith` and join the wrong object, on inbound joins and export matching alike; they now require an exact case-insensitive match.
 - 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
 - 🐛 Deleting a Pending Export no longer leaves its attribute changes behind in the database, where they accumulated indefinitely. (#1818)
+- 🐛 Synchronisation no longer reopens Failed or Parked Pending Exports, or counts errors against exports awaiting confirmation; this could silently strand an export outside both the export queue and the Failed list.
+- 🐛 A Failed Pending Export now clears automatically once a confirming import shows every change it asserts has taken effect, without waiting for a manual retry.
+- 🐛 A Pending Export interrupted by a worker crash or restart mid-export is recovered when the worker next starts, instead of being stranded in Executing forever.
 
 ### Performance
 
 - ⚡ Synchronisation no longer queries the database once per object to look for an existing target object before provisioning; it checks once per page, speeding up large initial synchronisations.
 - ⚡ Large imports do much less database work: new objects are no longer looked up one at a time, the object type's schema is no longer reloaded for every object, and checking that provisioned objects were created no longer loads each one in full.
-- ⚡ Synchronisation starts and writes faster: it loads only the Pending Exports it can act on, skips a redundant lookup when provisioning, and writes each page of objects, Pending Exports and Activity results in bulk.
+- ⚡ Synchronisation starts and writes faster: it skips a redundant lookup when provisioning, and writes each page of objects, Pending Exports and Activity results in bulk.
 
 ## [0.15.0] - 2026-09-23
 
