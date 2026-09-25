@@ -38,13 +38,13 @@
     Get-OrGenerate-TestCSV.ps1 -OmitItOwnedAttributes to be representative of a real HR feed.
 
     Email still feeds Email -> mail and Email -> userPrincipalName on export. When the CSV has no
-    "email" column, an ordinary Expression import mapping derives it from the same two CS attributes
-    the generated Account Name reads (Lower(cs["firstName"]) + "." + Lower(cs["lastName"]) +
-    "@panoply.local"): import mappings evaluate against the Connected System only, so this cannot
-    read the just-generated Account Name itself (mv[...] reads arrive with the Metaverse-Derived
-    Attribute Flows PRD, release 2). This is the least surprising option given the export mappings
-    already flow Email onward; it is not collision-checked the way Account Name is, so two same-named
-    joiners would share an Email until release 2 derives it from the generated value instead.
+    "email" column, Email is generated too, from the same two CS attributes the generated Account
+    Name reads (Lower(cs["firstName"]) + "." + Lower(cs["lastName"]) + "@panoply.local", OnlyIfTaken,
+    Number, the suffix placed before the "@"). It has to be generated rather than merely derived:
+    Active Directory refuses a duplicate userPrincipalName, so two same-named people cannot share an
+    address. Import mappings evaluate against the Connected System only, so Email cannot yet be read
+    from the generated Account Name itself (mv[...] reads arrive with the Metaverse-Derived Attribute
+    Flows PRD, release 2), and the two can in principle carry different suffixes until then.
 
     Without this switch, setup is unchanged: the ordinary samAccountName -> Account Name mapping is
     created exactly as before, and the feature flag is left alone. Scenario 1 itself is not converted
@@ -1048,8 +1048,11 @@ try {
 
             # Email still feeds Email -> mail / userPrincipalName on export. When the CSV was
             # generated with -OmitItOwnedAttributes there is no "email" column, so the ordinary
-            # mapping loop above found no $csvAttr and silently created nothing; derive it instead
-            # from the same two CS attributes the generated Account Name reads.
+            # mapping loop above found no $csvAttr and silently created nothing; generate it instead
+            # from the same two CS attributes the generated Account Name reads. It must be generated
+            # rather than merely derived: two people with the same name would otherwise share an
+            # address, and Active Directory refuses a duplicate userPrincipalName. The suffix goes
+            # before the "@" (marisol.fenwick1@panoply.local), which is the email-shaped placement rule.
             $csvEmailAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'email' }
             if (-not $csvEmailAttr) {
                 $emailMvAttr = $mvAttributes | Where-Object { $_.name -eq 'Email' }
@@ -1062,8 +1065,9 @@ try {
                 if (-not $existingEmailMapping) {
                     New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
                         -TargetMetaverseAttributeId $emailMvAttr.id `
-                        -Expression 'Lower(cs["firstName"]) + "." + Lower(cs["lastName"]) + "@panoply.local"' | Out-Null
-                    Write-Host "  ✓ Email derived from names (CSV has no 'email' column): Lower(firstName).Lower(lastName)@panoply.local" -ForegroundColor Green
+                        -Expression 'Lower(cs["firstName"]) + "." + Lower(cs["lastName"]) + "@panoply.local"' `
+                        -Generate -TokenKind OnlyIfTaken -SuffixStyle Number -SuffixStart 1 | Out-Null
+                    Write-Host "  ✓ Generated Email mapping created (CSV has no 'email' column): Lower(firstName).Lower(lastName)@panoply.local, OnlyIfTaken/Number" -ForegroundColor Green
                 }
             }
         }

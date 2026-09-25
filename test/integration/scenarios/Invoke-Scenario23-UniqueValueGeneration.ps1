@@ -467,10 +467,13 @@ try {
 
         # Two brand-new joiners sharing a name (intra-batch: neither is persisted when the other
         # generates), and one whose base equals an existing baseline person's (the Metaverse gate).
+        # Each joiner gets its own department: Active Directory builds the DN from CN={Display Name} in
+        # an OU per department, so two same-named people in one department would collide on the DN
+        # itself, a directory naming constraint unrelated to generation.
         $existingPerson = New-TestUser -Index 1
-        Add-HrCsvJoiner -EmployeeId "EMP900001" -FirstName "Marisol" -LastName "Fenwick"
-        Add-HrCsvJoiner -EmployeeId "EMP900002" -FirstName "Marisol" -LastName "Fenwick"
-        Add-HrCsvJoiner -EmployeeId "EMP900003" -FirstName $existingPerson.FirstName -LastName $existingPerson.LastName
+        Add-HrCsvJoiner -EmployeeId "EMP900001" -FirstName "Marisol" -LastName "Fenwick" -Department "Executive"
+        Add-HrCsvJoiner -EmployeeId "EMP900002" -FirstName "Marisol" -LastName "Fenwick" -Department "Legal"
+        Add-HrCsvJoiner -EmployeeId "EMP900003" -FirstName $existingPerson.FirstName -LastName $existingPerson.LastName -Department "Facilities"
 
         Invoke-Cycle -Config $config | Out-Null
 
@@ -483,6 +486,13 @@ try {
         $expectedMarisol = @('marisol.fenwick', 'marisol.fenwick1')
         Add-TestResult -Name "Intra-batch collision resolves to {marisol.fenwick, marisol.fenwick1}" -Passed (($marisolValues -join ',') -eq ($expectedMarisol -join ',')) `
             -Detail "Expected $($expectedMarisol -join ', '); got $($marisolValues -join ', ')"
+
+        # Email is generated as well when the HR feed carries none (Setup-Scenario1.ps1 -GenerateAccountName),
+        # and an email-shaped value takes its suffix before the "@", not after it.
+        $marisolEmails = @($marisolGroup | ForEach-Object { (Get-MvoAttributeValue -MvoId $_.id -AttributeName "Email").ToLower() } | Sort-Object)
+        $expectedEmails = @(@('marisol.fenwick@panoply.local', 'marisol.fenwick1@panoply.local') | Sort-Object)
+        Add-TestResult -Name "Same-name joiners get distinct Emails with the suffix before the '@'" -Passed (($marisolEmails -join ',') -eq ($expectedEmails -join ',')) `
+            -Detail "Expected $($expectedEmails -join ', '); got $($marisolEmails -join ', ')"
 
         $reusedBase = Get-GeneratedBaseValue -FirstName $existingPerson.FirstName -LastName $existingPerson.LastName
         $reusedGroup = @($population | Where-Object { $_.attributes.'First Name' -eq $existingPerson.FirstName -and $_.attributes.'Last Name' -eq $existingPerson.LastName })
