@@ -95,7 +95,7 @@ public static class GeneratedValueParticipation
         var current = mvo.AttributeValues.FirstOrDefault(av =>
             av.AttributeId == attributeId
             && !mvo.PendingAttributeValueRemovals.Contains(av)
-            && (!generatingSyncRuleId.HasValue || av.ContributedBySyncRuleId != generatingSyncRuleId.Value));
+            && (generatingSyncRuleId == null || av.ContributedBySyncRuleId != generatingSyncRuleId));
 
         return current == null ? null : RenderMetaverseValue(current);
     }
