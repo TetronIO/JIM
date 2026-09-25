@@ -45,6 +45,10 @@
 .PARAMETER ContinueOnError
     Continue executing remaining assertions even if one fails.
 
+.PARAMETER SkipPopulate
+    Accepted for runner compatibility. This scenario provisions the accounts it asserts against and
+    needs no pre-populated directory data.
+
 .PARAMETER DirectoryConfig
     Directory configuration hashtable. Defaults to Get-DirectoryConfig -DirectoryType OpenLDAP. Samba
     AD is fully supported (pass -DirectoryConfig (Get-DirectoryConfig -DirectoryType SambaAD -Instance
@@ -73,6 +77,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$ContinueOnError,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate,
 
     [Parameter(Mandatory=$false)]
     [hashtable]$DirectoryConfig
