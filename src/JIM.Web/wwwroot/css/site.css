@@ -1254,10 +1254,12 @@ a.jim-system-rule-chip-part:focus-visible {
 
 /* The origin as labelled rows rather than one wrapping sentence: every fact lines up, and each chip keeps its own
    line instead of breaking mid-phrase. */
+/* The label column is exactly as wide as its longest label, so the values (pills, mostly) get the rest. A fixed
+   width had to fit "Synchronisation Rule" and left the shorter labels ("From", "Last set") trailing empty space. */
 .jim-inspector-facts {
     display: grid;
-    grid-template-columns: 9.5rem minmax(0, 1fr);
-    gap: 8px 12px;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 8px 16px;
     align-items: center;
     margin: 0;
     font-size: 0.875rem;
@@ -1265,6 +1267,7 @@ a.jim-system-rule-chip-part:focus-visible {
 
 .jim-inspector-facts dt {
     color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
 }
 
 .jim-inspector-facts dd {
