@@ -1132,11 +1132,12 @@ a.jim-system-rule-chip-part:focus-visible {
 
 /* A quiet strip rather than a section: a one-line heading, a thin bar and a row of legend pills. It sets context
    for the table beneath it, so it must not compete with the table for attention. */
+/* 24px below, the uniform gap between panels (JIM.Web/CLAUDE.md > Panel spacing). */
 .jim-contribution-bar-panel {
     display: flex;
     flex-direction: column;
     gap: 9px;
-    margin-bottom: 16px;
+    margin-bottom: 24px;
 }
 
 .jim-contribution-heading {
@@ -2532,10 +2533,12 @@ html[lang] .jim-schema-change-table td {
 /* The attribute inspector sits BESIDE the table, not over it (site design says Source stays visible while an
    administrator steps through attributes): the table shrinks and the panel takes a fixed width, sticky within
    the viewport (.jim-attribute-inspector, above). */
+/* 24px between the table and the inspector: side-by-side panels take the same gap as stacked ones
+   (JIM.Web/CLAUDE.md > Panel spacing). */
 .jim-inspect-layout {
     display: flex;
     align-items: flex-start;
-    gap: 16px;
+    gap: 24px;
 }
 
 .jim-inspect-main {
