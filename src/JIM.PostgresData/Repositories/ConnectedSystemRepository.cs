@@ -2492,16 +2492,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (idList.Count == 0)
             return new List<ConnectedSystemObject>();
 
-        // Load CSOs without tracking to prevent change tracker bloat. The worker's context
-        // default is TrackAll (identity fixup for overlapping graphs), so this bulk read path
-        // must opt out per query: schema entities (Type, Type.Attributes, AttributeValue.Attribute)
-        // are shared across all CSOs and cause O(n) identity-resolution slowdown when accumulated
-        // in the tracker (317ms → 5.6s per CSO at 100K scale), and at long-tail group scale
-        // (#917: ~5k groups, ~1M membership rows) tracked graphs plus original-value snapshots
-        // account for gigabytes of peak memory. WithIdentityResolution keeps shared schema
-        // entities as single instances within this query without touching the tracker.
-        // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
-        // values, so change tracking is not required during import processing.
+        // Load CSOs with their AttributeValues, without tracking, to prevent change tracker
+        // bloat. The worker's context default is TrackAll (identity fixup for overlapping
+        // graphs), so this bulk read path must opt out per query. The save phase uses raw SQL
+        // for parent CSO rows and explicit add/remove for attribute values, so change tracking
+        // is not required during import processing.
         //
         // ReferenceValue navigations are deliberately NOT included (#917): at ~5k groups x ~200
         // members that include materialises ~1M referenced CSO entities (plus their Types) that
@@ -2509,15 +2504,77 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // and ImportRefMatchesCsoValue matches them via the GetReferenceExternalIdsAsync SQL
         // dictionary, which prefers the same secondary-then-primary external id the navigation
         // path used.
-        return await Repository.Database.ConnectedSystemObjects
-            .AsNoTrackingWithIdentityResolution()
+        //
+        // Schema (Type, Type.Attributes, AttributeValue.Attribute) is deliberately NOT loaded
+        // here via Include. Schema entities are shared across every CSO of the same type, so an
+        // Include-based split query joins the Attributes table back through the Object Type to
+        // ConnectedSystemObjects to preserve row ordering/identity, and returns one copy of the
+        // type's attributes per matching CSO row rather than once overall: at 100,000 CSOs that
+        // was about 5.4 million redundant attribute rows. Instead, the schema for the distinct
+        // types referenced by this page is loaded once below and wired onto the CSOs by hand, so
+        // the returned graph is unchanged in shape: every CSO's Type carries its full Attributes
+        // collection, CSOs of the same type share ONE Type instance, and every attribute value's
+        // Attribute is the SAME instance as the matching element of its CSO's Type.Attributes
+        // (the invariants EF's own Include-based fixup gave us before).
+        //
+        // Split query stays: as a single query, every CSO's columns would repeat once per attribute
+        // value row, which for a large group (tens of thousands of member values) is the costly shape.
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
             .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
+
+        if (csos.Count == 0)
+            return csos;
+
+        var typeIds = csos.Select(cso => cso.TypeId).Distinct().ToList();
+        var types = await Repository.Database.ConnectedSystemObjectTypes
+            .AsNoTracking()
+            .Include(t => t.Attributes)
+            .Where(t => typeIds.Contains(t.Id))
+            .ToListAsync();
+
+        var typesById = types.ToDictionary(t => t.Id);
+        var attributesById = types.SelectMany(t => t.Attributes).ToDictionary(a => a.Id);
+
+        List<int>? missingAttributeIds = null;
+        foreach (var cso in csos)
+        {
+            cso.Type = typesById[cso.TypeId];
+
+            foreach (var av in cso.AttributeValues)
+            {
+                if (attributesById.TryGetValue(av.AttributeId, out var attribute))
+                    av.Attribute = attribute;
+                else
+                    (missingAttributeIds ??= []).Add(av.AttributeId);
+            }
+        }
+
+        // Should not happen: an attribute value referencing an AttributeId absent from its own
+        // CSO's Object Type Attributes collection. Fall back to loading those attributes
+        // individually so behaviour is never worse than before this change, and log it so the
+        // underlying data mismatch can be investigated.
+        if (missingAttributeIds != null)
+        {
+            Log.Warning("GetConnectedSystemObjectsByIdsAsync: {Count} attribute value(s) in Connected System {ConnectedSystemId} referenced an AttributeId not present in their Connected System Object Type's Attributes collection ({AttributeIds}). Falling back to loading them individually.",
+                missingAttributeIds.Count, connectedSystemId, missingAttributeIds);
+
+            var fallbackAttributes = await Repository.Database.ConnectedSystemAttributes
+                .AsNoTracking()
+                .Where(a => missingAttributeIds.Contains(a.Id))
+                .ToDictionaryAsync(a => a.Id);
+
+            foreach (var cso in csos)
+            {
+                foreach (var av in cso.AttributeValues.Where(av => av.Attribute == null && fallbackAttributes.ContainsKey(av.AttributeId)))
+                    av.Attribute = fallbackAttributes[av.AttributeId];
+            }
+        }
+
+        return csos;
     }
 
     /// <summary>
@@ -2565,6 +2622,73 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
                     av.StringValue == secondaryExternalIdValue));
+    }
+
+    /// <summary>
+    /// Batch equivalent of <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/>: for many
+    /// secondary external ID values at once, returns every (value, Connected System Object id, status)
+    /// row matching the same predicate the single-object method uses. Raw Npgsql with a typed
+    /// <c>unnest(@values)</c> array, following the shape of <see cref="GetExportMatchCandidateIdsAsync"/>:
+    /// this is a per-page worker hot-path query, so it stays off EF projection.
+    /// </summary>
+    public async Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues)
+    {
+        if (secondaryExternalIdValues.Count == 0)
+            return [];
+
+        // External ID matching is case-sensitive, matching the single-object method.
+        //
+        // The av."AttributeId" = @secondaryExternalIdAttributeId predicate is there for index use,
+        // not correctness on its own: without a known constant to filter on, the planner cannot use
+        // IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue against the join from
+        // unnest(), because the only attribute-id filter available (cso."SecondaryExternalIdAttributeId")
+        // is per-row and only known after joining to "ConnectedSystemObjects". Measured on a live
+        // 100k-CSO database (500 values, one object type): 1,011 ms without this predicate (a
+        // sequential-ish scan of every CSO of the type merge-joined against its secondary values) vs
+        // 45 ms with it (a nested loop, one index probe per unnested value).
+        //
+        // The existing av."AttributeId" = cso."SecondaryExternalIdAttributeId" predicate stays
+        // alongside it, unchanged: together the two mean only a CSO whose OWN configured secondary
+        // external id attribute equals the type's CURRENT one can match. That is coherent because
+        // the import value being looked up was itself read from that same current attribute
+        // (CollectSecondaryLookupCandidate); a CSO still carrying an older secondary attribute after
+        // an administrator retargeted it is correctly left unmatched by the batch, exactly as the
+        // single-object method (which has no "current" concept to compare against) would also fail
+        // to match it once the schema has moved on.
+        //
+        // DISTINCT guards against a CSO carrying more than one attribute-value row for that
+        // attribute id (should not happen, but would otherwise look like two different CSOs matching).
+        const string sql = """
+            SELECT DISTINCT v.input AS "Value", cso."Id" AS "ConnectedSystemObjectId", cso."Status" AS "Status"
+            FROM unnest(@values) AS v(input)
+            JOIN "ConnectedSystemObjectAttributeValues" av
+                ON av."AttributeId" = @secondaryExternalIdAttributeId
+               AND av."StringValue" = v.input
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
+            WHERE cso."ConnectedSystemId" = @connectedSystemId
+              AND cso."TypeId" = @objectTypeId
+              AND cso."SecondaryExternalIdAttributeId" IS NOT NULL
+              AND av."AttributeId" = cso."SecondaryExternalIdAttributeId"
+            ORDER BY v.input, cso."Id"
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("values", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text) { Value = secondaryExternalIdValues.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("objectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = objectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("secondaryExternalIdAttributeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = secondaryExternalIdAttributeId });
+
+        var results = new List<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetGuid(1), (ConnectedSystemObjectStatus)reader.GetInt32(2)));
+
+        return results;
     }
 
     /// <summary>
@@ -3547,8 +3671,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// this is a second, narrow query used only to find exported Creates a Full Import never confirmed.
     /// Loads what the caller needs to both compare the External Id (<c>ConnectedSystemObject.Type</c>
     /// and <c>AttributeValues</c>) and mutate the retry statuses (<c>AttributeValueChanges</c>).
+    /// <para>
+    /// The full graph is expensive at scale (measured 25 seconds for 100,000 already-confirmed
+    /// candidates), so the caller narrows to <paramref name="pendingExportIds"/> once the lean
+    /// <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> projection has decided
+    /// which candidates are genuinely unseen, rather than loading every candidate's full graph.
+    /// </para>
     /// </summary>
-    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
     {
         var query = Repository.Database.PendingExports
             .AsNoTracking()
@@ -3571,7 +3702,84 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (partitionId != null)
             query = query.Where(pe => pe.ConnectedSystemObject!.PartitionId == partitionId);
 
+        if (pendingExportIds != null)
+            query = query.Where(pe => pendingExportIds.Contains(pe.Id));
+
         return await query.ToListAsync();
+    }
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>:
+    /// identical eligibility, but projects only the Pending Export id, the Connected System Object id,
+    /// and the Connected System Object's primary External Id value as typed nullable columns, without
+    /// materialising the Pending Export / attribute-change / Connected System Object / attribute-value
+    /// graph the full query loads. A Full Import's unseen exported-Create retry step
+    /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) uses this to decide "was
+    /// this candidate seen this run?" for every candidate, then loads the full graph only for the
+    /// (usually far smaller, often empty) subset genuinely unseen.
+    /// <para>
+    /// The LEFT JOIN to <c>ConnectedSystemObjectAttributeValues</c> mirrors exactly how
+    /// <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/> picks the value: the attribute value
+    /// row whose AttributeId matches the Connected System Object's own ExternalIdAttributeId. It is a
+    /// LEFT JOIN, not an INNER JOIN, because a Pending Provisioning object legitimately has no such row
+    /// yet if the export that created it has not (re-)confirmed an External Id value; every typed column
+    /// is null in that case rather than the candidate being dropped. As with the computed property, this
+    /// assumes the External Id attribute is single-valued (JIM's own invariant for an External Id
+    /// attribute), so at most one attribute value row is expected to match per Connected System Object.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// Raw Npgsql per the Worker Hot Path rule in <c>src/CLAUDE.md</c>: a read-side SELECT projection into
+    /// a Summary-tier DTO, exempt from the raw-SQL BulkColumns rule.
+    /// </remarks>
+    public async Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var partitionFilter = partitionId.HasValue ? """AND cso."PartitionId" = @partitionId""" : string.Empty;
+        var sql = $"""
+            SELECT pe."Id", cso."Id", av."StringValue", av."IntValue", av."LongValue", av."DecimalValue", av."GuidValue"
+            FROM "PendingExports" pe
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+            LEFT JOIN "ConnectedSystemObjectAttributeValues" av
+                ON av."ConnectedSystemObjectId" = cso."Id" AND av."AttributeId" = cso."ExternalIdAttributeId"
+            WHERE pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ChangeType" = @createChangeType
+              AND pe."Status" = @exportedStatus
+              AND cso."TypeId" = @objectTypeId
+              AND cso."Status" = @pendingProvisioningStatus
+              {partitionFilter}
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("createChangeType", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportChangeType.Create });
+        command.Parameters.Add(new NpgsqlParameter("exportedStatus", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Exported });
+        command.Parameters.Add(new NpgsqlParameter("objectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = objectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("pendingProvisioningStatus", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)ConnectedSystemObjectStatus.PendingProvisioning });
+        if (partitionId.HasValue)
+            command.Parameters.Add(new NpgsqlParameter("partitionId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = partitionId.Value });
+
+        var results = new List<PendingExportRetryCandidateSummary>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new PendingExportRetryCandidateSummary
+            {
+                PendingExportId = reader.GetGuid(0),
+                ConnectedSystemObjectId = reader.GetGuid(1),
+                ExternalIdStringValue = reader.IsDBNull(2) ? null : reader.GetString(2),
+                ExternalIdIntValue = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                ExternalIdLongValue = reader.IsDBNull(4) ? null : reader.GetInt64(4),
+                ExternalIdDecimalValue = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                ExternalIdGuidValue = reader.IsDBNull(6) ? null : reader.GetGuid(6)
+            });
+        }
+
+        return results;
     }
     #endregion
 
@@ -4074,6 +4282,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
+    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
+    /// ConnectedSystemObjectId is populated.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public async Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
+    {
+        // SyncEngine.EvaluatePendingExportConfirmation skips Status Pending (not yet exported, nothing
+        // to confirm) and Exported (awaiting a confirming import) unconditionally, and reads only
+        // AttributeValueChanges plus their Attribute; it is handed the Connected System Object being
+        // evaluated separately by the caller, so unlike GetPendingExportsAsync above, the CSO graph and
+        // its AttributeValues are deliberately NOT included here. At 100,000 Connected System Objects,
+        // GetPendingExportsAsync's CSO include cost 35 seconds against this same table; this query never
+        // materialises that graph. ConnectedSystemObjectId IS NOT NULL because a Pending Export with no
+        // linked CSO cannot be indexed by CSO ID for the sync processors' lookup dictionary.
+        return await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ConnectedSystemObjectId != null
+                      && pe.Status != PendingExportStatus.Pending
+                      && pe.Status != PendingExportStatus.Exported)
+            .ToListAsync();
     }
 
     /// <summary>

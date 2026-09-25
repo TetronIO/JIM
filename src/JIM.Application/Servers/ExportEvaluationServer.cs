@@ -2555,7 +2555,11 @@ public class ExportEvaluationServer
         // If found, delete the old PE and return a new merged PE for batch creation - UNLESS it is a
         // Create that has already been sent and is awaiting confirmation (see the append branch below),
         // which must never be deleted and replaced.
-        if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
+        // Skipped entirely when createdNewCso is true: csoForExport was minted moments ago by
+        // CreatePendingProvisioningCsoAsync with a fresh Guid.NewGuid(), so no persisted Pending Export
+        // can possibly reference it yet. Without this guard the lookup always returns null - profiling
+        // recorded 100,098 such no-op lookups on one run - and the database round trip is pure waste.
+        if (!createdNewCso && csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
 
