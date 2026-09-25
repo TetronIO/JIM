@@ -245,6 +245,7 @@ The first commit moves the PRD and this plan to `doing/` with `Status: Doing`.
    - JIM.Web, before its readiness loop.
    - The Scheduler, before its readiness loop, replacing today's `catch (Exception)` path for the unreachable-database case.
    - The Worker's Password Delivery Service checks `JimApplication.IsDatabaseReachableAsync()` quietly before each readiness poll, leaving the reporting to the main loop's wait; without it, the data layer logged an error every two seconds while the database was down.
+   - All three hosts run through `HostRunner`, which exits 1 when a background service failed. Found while verifying this phase: a host stopped by a failing background service returned normally, so the process exited 0 after its Fatal line, and a supervisor or monitor saw a clean stop.
 3. **Fully qualified PostgreSQL image:**
    - `docker.io/library/postgres:18.6@sha256:…` in `docker-compose.yml`.
    - Update the regex in `scripts/Build-ReleaseBundle.ps1:65` to match.

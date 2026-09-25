@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using JIM.Application;
+using JIM.Application.Hosting;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
@@ -830,8 +831,10 @@ try
     app.Logger.LogInformation("Warmup complete — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}",  5, 30);
 
     app.Logger.LogInformation("The JIM Web has started");
-    app.Run();
-    return 0;
+
+    // Non-zero when a background service failed and stopped the host, so the container runtime, or systemd, sees
+    // the failure rather than a clean stop.
+    return await HostRunner.RunAsync(app);
 }
 catch (Exception ex)
 {
