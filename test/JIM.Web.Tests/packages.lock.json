@@ -895,12 +895,13 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.5, )",
-          "JIM.Connectors": "[0.15.0-dev.20260924.887, )",
-          "JIM.Data": "[0.15.0-dev.20260924.887, )",
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
-          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
+          "JIM.Connectors": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Data": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Utilities": "[0.15.0-dev.20260925.1139, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.12, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.12, )",
+          "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )",
           "NCrontab": "[3.4.0, )",
           "Serilog": "[4.4.0, )",
           "System.Security.Cryptography.Xml": "[10.0.12, )"
@@ -910,9 +911,9 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
-          "JIM.Scim": "[0.15.0-dev.20260924.887, )",
-          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Scim": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Utilities": "[0.15.0-dev.20260925.1139, )",
           "Microsoft.Data.SqlClient": "[7.1.0, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.301, )",
           "System.DirectoryServices.Protocols": "[10.0.12, )"
@@ -921,7 +922,7 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0-dev.20260924.887, )"
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )"
         }
       },
       "jim.models": {
@@ -934,9 +935,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.15.0-dev.20260924.887, )",
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
-          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
+          "JIM.Data": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Utilities": "[0.15.0-dev.20260925.1139, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -945,15 +946,15 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
-          "JIM.Utilities": "[0.15.0-dev.20260924.887, )"
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Utilities": "[0.15.0-dev.20260925.1139, )"
         }
       },
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.15.0-dev.20260924.887, )",
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Data": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
           "NUnit": "[4.6.1, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -961,7 +962,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
           "Serilog": "[4.4.0, )"
         }
       },
@@ -971,10 +972,10 @@
           "Asp.Versioning.Mvc": "[10.2.1, )",
           "Asp.Versioning.Mvc.ApiExplorer": "[10.2.1, )",
           "Humanizer.Core": "[3.0.10, )",
-          "JIM.Application": "[0.15.0-dev.20260924.887, )",
-          "JIM.Models": "[0.15.0-dev.20260924.887, )",
-          "JIM.PostgresData": "[0.15.0-dev.20260924.887, )",
-          "JIM.Utilities": "[0.15.0-dev.20260924.887, )",
+          "JIM.Application": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Models": "[0.15.0-dev.20260925.1139, )",
+          "JIM.PostgresData": "[0.15.0-dev.20260925.1139, )",
+          "JIM.Utilities": "[0.15.0-dev.20260925.1139, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.12, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.12, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.12, )",

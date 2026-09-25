@@ -1,9 +1,9 @@
 # Podman Support - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete)
 - **Created:** 2026-09-25
 - **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
-- **PRD:** [PRD_PODMAN_SUPPORT.md](../prd/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
+- **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/doing/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
 
 ## Overview
 
@@ -224,12 +224,13 @@ These answer the PRD's open questions (OQ). Each was chosen on the evidence abov
 
 ## Implementation Phases
 
-### Phase 1: Runtime-neutral start-up and cleanup
+### Phase 1: Runtime-neutral start-up and cleanup ✅
 
 The first commit moves the PRD and this plan to `doing/` with `Status: Doing`.
 
 1. **Wait for the database** (TDD, test-first):
-   - Add `JimApplication.WaitForDatabaseAsync(TimeSpan budget, CancellationToken)`, backed by a new repository method `CanConnectAsync()`.
+   - Add `JimApplication.WaitForDatabaseAsync(TimeSpan budget, whileWaiting, CancellationToken)` (implemented in `DatabaseStartupWait`), backed by a new repository method `TryConnectAsync()`. `whileWaiting` lets a host keep its container health heartbeat fresh during the wait (`HealthcheckFile`, which also replaces the hosts' bare `catch { }` heartbeat writes).
+   - `TryConnectAsync()` opens its own Npgsql connection and names the server and the socket's own reason on failure. A server that accepts the credentials but has no JIM database yet counts as connected, because JIM.Worker's migration creates it.
    - It retries with an increasing delay (1, 2, 4 and 8 seconds, then every 15 seconds), logging one Information line per attempt with the attempt number and elapsed time.
    - When the budget runs out (five minutes by default) it fails with a single clear Fatal line, and the supervisor restarts the service.
    - The delay is injected so tests control time without a new dependency.
@@ -238,15 +239,17 @@ The first commit moves the PRD and this plan to `doing/` with `Status: Doing`.
      - connecting after several failures, checking the log lines and the delay sequence;
      - the budget running out;
      - cancellation.
-   - Only the connection failures it can recover from are caught (`NpgsqlException`, `SocketException`, `TimeoutException`), never a general exception.
+   - Only failures that waiting can fix are retried (`NpgsqlException.IsTransient`: refused, unresolvable, timed out, "starting up"). Anything else, such as rejected credentials, is thrown at once, so the service stops with the real error instead of waiting it out.
 2. **Call it at every start-up:**
    - The Worker, before `InitialiseDatabaseAsync()`.
    - JIM.Web, before its readiness loop.
    - The Scheduler, before its readiness loop, replacing today's `catch (Exception)` path for the unreachable-database case.
+   - The Worker's Password Delivery Service checks `JimApplication.IsDatabaseReachableAsync()` quietly before each readiness poll, leaving the reporting to the main loop's wait; without it, the data layer logged an error every two seconds while the database was down.
+   - All three hosts run through `HostRunner`, which exits 1 when a background service failed. Found while verifying this phase: a host stopped by a failing background service returned normally, so the process exited 0 after its Fatal line, and a supervisor or monitor saw a clean stop.
 3. **Fully qualified PostgreSQL image:**
    - `docker.io/library/postgres:18.6@sha256:…` in `docker-compose.yml`.
    - Update the regex in `scripts/Build-ReleaseBundle.ps1:65` to match.
-   - Confirm Dependabot's `docker-compose` ecosystem still tracks the digest.
+   - Confirm Dependabot's `docker-compose` ecosystem still tracks the digest. Its Docker parser drops a `docker.io` registry and treats the image as Docker Hub, and the explicit `library/` avoids its known short-name gap; confirm on its first run after merge.
 4. **Worker capabilities:**
    - Remove `SYS_ADMIN` and `DAC_READ_SEARCH` from `jim.worker` in `docker-compose.yml`; no code in `src/` mounts anything.
    - Prove it with the integration scenarios that use the File Connector's `/connector-files` volume.
@@ -320,6 +323,7 @@ Delivered as one PR, or two if review size demands: files, then installer, relea
    - A restart of the unit with data kept.
    - Upgrade by replacing the pod file and restarting.
    - The client address JIM logs for a remote request under rootless networking (see Risks).
+   - An air-gapped load of the bundle's PostgreSQL image, on Podman and on both Docker image stores (classic and containerd), resolves the digest-pinned reference without trying to pull. Found in Phase 1: the containerd store keeps the digest through `docker save` and `docker load`; the classic store and Podman are unverified.
 7. **Changelog:** ✨ "JIM can now be deployed with Podman, rootless by default, with no Docker or other extra software, including air-gapped."
 
 ### Phase 4: Proof in CI

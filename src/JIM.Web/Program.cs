@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using JIM.Application;
+using JIM.Application.Hosting;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
@@ -830,8 +831,10 @@ try
     app.Logger.LogInformation("Warmup complete — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}",  5, 30);
 
     app.Logger.LogInformation("The JIM Web has started");
-    app.Run();
-    return 0;
+
+    // Non-zero when a background service failed and stopped the host, so the container runtime, or systemd, sees
+    // the failure rather than a clean stop.
+    return await HostRunner.RunAsync(app);
 }
 catch (Exception ex)
 {
@@ -935,6 +938,12 @@ static async Task CompleteJimApplicationBootstrapAsync(WebApplication app)
     var ssoSecret = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret)!;
     var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType)!;
     var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute)!;
+
+    // Wait for the database server first: until it answers, each readiness check below would throw and end the host.
+    // Nothing can cancel this yet (the host's shutdown handling starts with app.Run), so there is no token to pass.
+    using (var waitScope = app.Services.CreateScope())
+        await waitScope.ServiceProvider.GetRequiredService<JimApplication>()
+            .WaitForDatabaseAsync(JimApplication.DefaultDatabaseWaitBudget, null, CancellationToken.None);
 
     while (true)
     {
