@@ -139,6 +139,14 @@ public class Worker : BackgroundService
         if (recoveredCount > 0)
             Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
 
+        // Recover any Pending Exports left stranded in Status Executing by a worker crash or restart
+        // mid-export. At startup nothing can genuinely be exporting, so every Executing row is a leftover;
+        // without this it is picked up by neither the export queue nor import reconciliation (which now
+        // deliberately excludes Executing) and would be stranded forever.
+        var recoveredExportCount = await mainLoopJim.ExportExecution.RecoverStrandedExecutingPendingExportsAsync();
+        if (recoveredExportCount > 0)
+            Log.Warning("ExecuteAsync: Recovered {Count} stranded Executing Pending Export(s) from previous crash", recoveredExportCount);
+
         // The same liveness as the health-check heartbeat file, written to the database for administrators: the
         // Operations page reads it to show whether the Worker is up, what it is running and since when, and which
         // version. Written wherever the file is touched; the writer throttles itself and never lets a failed write

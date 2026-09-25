@@ -478,4 +478,93 @@ public class PendingExportMergeSemanticsTests
         Assert.That(created.AttributeValueChanges.Single().AttributeId, Is.EqualTo(targetEmployeeIdAttr.Id));
         Assert.That(created.AttributeValueChanges.Single().StringValue, Is.EqualTo("E777"));
     }
+
+    #region Provisioning a brand-new CSO skips the fallback database lookup
+
+    /// <summary>
+    /// Spy repository counting calls to the fallback merge lookup
+    /// (<c>GetPendingExportLightweightByConnectedSystemObjectIdAsync</c>) that the "Fallback: check if a
+    /// Pending Export exists in the database" branch of
+    /// <c>CreateOrUpdatePendingExportWithNoNetChangeAsync</c> uses.
+    /// </summary>
+    private sealed class FallbackLookupCountingSyncRepository : SyncRepository
+    {
+        public int FallbackLookupCallCount;
+
+        public override Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+        {
+            Interlocked.Increment(ref FallbackLookupCallCount);
+            return base.GetPendingExportLightweightByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+        }
+    }
+
+    /// <summary>
+    /// A brand-new provisioning CSO is created moments earlier, in memory, by
+    /// <c>CreatePendingProvisioningCsoAsync</c>, with a freshly minted <c>Guid.NewGuid()</c>: no
+    /// persisted Pending Export can possibly reference it yet. Profiling recorded 100,098 such no-op
+    /// fallback lookups on one run; the fallback database lookup must be skipped entirely whenever the
+    /// CSO being exported to was just created by this same call (<c>createdNewCso</c>).
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_ProvisioningBrandNewCso_SkipsTheDatabaseFallbackLookupAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var employeeIdMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
+
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportSyncRule.ConnectedSystemObjectType = targetUserType;
+        exportSyncRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportSyncRule.ProvisionToConnectedSystem = true;
+        exportSyncRule.ObjectScopingCriteriaGroups.Clear();
+        exportSyncRule.ObjectMatchingRules = new List<ObjectMatchingRule>();
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = targetEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = employeeIdMvAttr,
+                MetaverseAttributeId = employeeIdMvAttr.Id
+            }}
+        });
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+
+        var exportRulesByMvoTypeId = new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportSyncRule } } };
+        var csoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(); // no existing CSO: forces ProvisionNewCso
+        var csoAttributeValues = Enumerable.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+        var cache = new ExportEvaluationCache(exportRulesByMvoTypeId, csoLookup, csoAttributeValues, new List<int> { targetSystem.Id });
+
+        var spyRepo = new FallbackLookupCountingSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(repository: spyRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var employeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { employeeIdValue };
+
+        var result = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, cache);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExports, Has.Count.EqualTo(1));
+            Assert.That(result.PendingExports.Single().ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(spyRepo.FallbackLookupCallCount, Is.EqualTo(0),
+                "A brand-new provisioning CSO cannot have a persisted Pending Export; the fallback database lookup must be skipped entirely.");
+        }
+    }
+
+    #endregion
 }

@@ -149,7 +149,12 @@ public partial class SyncRepository
         }
         else
         {
-            // Small batch — single-connection path (existing behaviour)
+            // Small batch: single-connection path. Writes RPEI rows then sync outcome rows via COPY
+            // binary import on the EF connection's own transaction, reusing the same on-connection
+            // writers the parallel branch above uses (BulkInsertRpeisOnConnectionAsync,
+            // BulkInsertSyncOutcomesOnConnectionAsync) rather than opening N independent connections.
+            // COPY binary is markedly faster than parameterised multi-row INSERT even on a single
+            // connection.
             IDbContextTransaction? transaction = null;
             var existingTransaction = _context.Database.CurrentTransaction;
             if (existingTransaction == null)
@@ -157,7 +162,11 @@ public partial class SyncRepository
 
             try
             {
-                await BulkInsertRpeisRawAsync(rpeis);
+                var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+                await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+                var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
+
+                await BulkInsertRpeisOnConnectionAsync(npgsqlConn, npgsqlTx, rpeis);
 
                 if (outcomeCsoChanges.Count > 0)
                 {
@@ -168,7 +177,7 @@ public partial class SyncRepository
                 }
 
                 if (allOutcomes.Count > 0)
-                    await BulkInsertSyncOutcomesRawAsync(allOutcomes);
+                    await BulkInsertSyncOutcomesOnConnectionAsync(npgsqlConn, npgsqlTx, allOutcomes);
 
                 if (allEdges.Count > 0)
                     await BulkInsertCausalEdgesAsync(allEdges);
@@ -781,10 +790,6 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Bulk inserts ActivityRunProfileExecutionItem rows using parameterised multi-row INSERT.
-    /// Chunks automatically to stay within the PostgreSQL parameter limit.
-    /// </summary>
-    /// <summary>
     /// Bulk inserts causal edges (#1223) using parameterised multi-row INSERT, chunked to stay within the
     /// PostgreSQL parameter limit. Edges are append-only, so there is no matching update path.
     /// </summary>
@@ -838,49 +843,13 @@ public partial class SyncRepository
         }
     }
 
-    private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
-    {
-        const int columnsPerRow = 15;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
-
-        foreach (var chunk in BulkSqlHelpers.ChunkList(rpeis, chunkSize))
-        {
-            var sql = new System.Text.StringBuilder();
-            // Parameter order below MUST match RpeiBulkColumns.ActivityRunProfileExecutionItems exactly.
-            sql.Append($@"INSERT INTO ""ActivityRunProfileExecutionItems"" ({BulkSqlHelpers.ToQuotedList(RpeiBulkColumns.ActivityRunProfileExecutionItems)}) VALUES ");
-
-            var parameters = new List<NpgsqlParameter>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14})");
-
-                var rpei = chunk[i];
-                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
-                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.ActivityId });
-                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)rpei.ObjectChangeType });
-                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.NoChangeReason.HasValue ? (object)(int)rpei.NoChangeReason.Value : DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)rpei.ConnectedSystemObjectId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ExternalIdSnapshot ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DisplayNameSnapshot ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ObjectTypeSnapshot ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorStackTrace ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)rpei.PendingExportId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DeletionPolicySnapshotJson ?? DBNull.Value });
-            }
-
-            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
-        }
-    }
-
     /// <summary>
     /// Bulk inserts ActivityRunProfileExecutionItemSyncOutcome rows using parameterised multi-row INSERT.
-    /// Chunks automatically to stay within the PostgreSQL parameter limit.
+    /// Chunks automatically to stay within the PostgreSQL parameter limit. Used solely by
+    /// <see cref="BulkUpdateRpeiOutcomesAsync"/> (new outcomes merged onto already-persisted RPEIs);
+    /// the create path (<see cref="BulkInsertRpeisAsync"/>) uses the COPY binary writer
+    /// <see cref="BulkInsertSyncOutcomesOnConnectionAsync"/> instead, on both its parallel and
+    /// single-connection branches.
     /// </summary>
     private async Task BulkInsertSyncOutcomesRawAsync(List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
     {

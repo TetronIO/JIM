@@ -109,18 +109,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // load all Pending Exports once upfront and index by CSO ID for O(1) lookup
-        // this avoids O(n²) behaviour from loading all Pending Exports for every CSO
-        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
-        {
-            var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = allPendingExports
-                .Where(pe => pe.ConnectedSystemObject?.Id != null)
-                .GroupBy(pe => pe.ConnectedSystemObject!.Id)
-                .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformFullSyncAsync: Loaded {Count} Pending Exports into lookup dictionary", allPendingExports.Count);
-        }
-
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
         // This eliminates O(N×M) database queries during export evaluation
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
@@ -242,7 +230,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                         break;
                     }
 
-                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
                 }
 
                 // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been

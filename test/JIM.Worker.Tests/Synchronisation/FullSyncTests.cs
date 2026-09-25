@@ -188,11 +188,15 @@ public class FullSyncTests
     }
     
     /// <summary>
-    /// Tests that a PendingExport is deleted when the CSO state is confirmed to match the pending changes.
-    /// This happens during Full Sync when we verify that exported changes have been successfully applied.
+    /// A Full Sync no longer performs Pending Export confirmation itself, even when the CSO's current
+    /// attribute values fully match what the Pending Export asserts. That job belongs entirely to import
+    /// reconciliation (<c>SyncEngine.ReconcileCsoAgainstPendingExport</c>, driven by
+    /// <c>SyncImportTaskProcessor.ReconcilePendingExportsAsync</c>) now: every change to a CSO's values
+    /// arrives through an import, so the import has already reconciled anything a sync could see. Before
+    /// this fix a matching sync deleted the Pending Export outright.
     /// </summary>
     [Test]
-    public async Task PendingExportDeletedWhenCsoStateMatchesTestAsync()
+    public async Task PendingExportNotDeletedWhenCsoStateMatchesTestAsync()
     {
         // get the first CSO that we'll have a Pending Export for
         var cso = ConnectedSystemObjectsData[0];
@@ -204,14 +208,13 @@ public class FullSyncTests
         var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
 
         // create a Pending Export for updating this CSO with attribute changes
-        // Status is ExportNotConfirmed to simulate an export that has already been sent
-        // and is now being confirmed via a confirming sync
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
@@ -239,8 +242,8 @@ public class FullSyncTests
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
 
-        // update the CSO to have the exact values that are in the Pending Export
-        // (simulating that the export was successfully applied)
+        // update the CSO to have the exact values that are in the Pending Export, as though a
+        // confirming import had already run and left the CSO matching
         var csoDisplayNameValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
         if (csoDisplayNameValue != null)
             csoDisplayNameValue.StringValue = "Updated Name";
@@ -251,21 +254,6 @@ public class FullSyncTests
 
         // verify setup
         Assert.That(PendingExportsData.Count, Is.EqualTo(1), "Expected one Pending Export before sync.");
-        Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME).StringValue,
-            Is.EqualTo("Updated Name"), "Expected CSO to have the updated display name.");
-        Assert.That(cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER).IntValue,
-            Is.EqualTo(999), "Expected CSO to have the updated employee number.");
-
-        // setup mock to handle Pending Export deletion (single and batch)
-        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
-            (PendingExport entity) => {
-                PendingExportsData.Remove(entity);
-            });
-        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
-            (IEnumerable<PendingExport> entities) => {
-                foreach (var entity in entities.ToList())
-                    PendingExportsData.Remove(entity);
-            });
 
         // run full sync
         var activity = ActivitiesData.First();
@@ -273,163 +261,43 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify the Pending Export was deleted because the CSO state matches
-        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(0),
-            "Expected Pending Export to be deleted when CSO state matches the pending changes.");
+        // the sync itself must never touch the Pending Export; only a confirming import does
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1),
+                "A Full Sync must not delete a Pending Export, even when the CSO state matches it; only import reconciliation does.");
+            Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(2), "A sync must not remove attribute changes from a Pending Export.");
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed), "A sync must not change a Pending Export's status.");
+        }
     }
 
     /// <summary>
-    /// Tests that when a PendingExport is only partially successful:
-    /// 1. Successfully applied attribute changes are removed from the PendingExport
-    /// 2. Failed attribute changes remain in the PendingExport
-    /// 3. ErrorCount is incremented
-    /// 4. Status is updated to ExportNotConfirmed
+    /// A Failed Pending Export requires manual intervention. A Full Sync must leave it completely alone
+    /// when its values still do not match the CSO: no status change, no ErrorCount change, no attribute
+    /// mutation. Before this fix, the synchronisation-side confirmation check re-evaluated every
+    /// non-Pending/non-Exported Pending Export on every sync, which could reopen a Failed export by
+    /// flipping it to ExportNotConfirmed and incrementing ErrorCount, silently pulling it back into the
+    /// export queue with the very value the target had already rejected enough times to fail it.
     /// </summary>
     [Test]
-    public async Task PendingExportPartialMatchRemovesSuccessfulAttributesAndIncrementsErrorCountTestAsync()
+    public async Task FailedPendingExportWithMismatchedValues_LeftFailedWithErrorCountUnchangedTestAsync()
     {
-        // get the first CSO that we'll have a Pending Export for
         var cso = ConnectedSystemObjectsData[0];
         var connectedSystem = ConnectedSystemsData[0];
 
-        // get the Connected System Object Type attributes we'll use
         var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
-        var displayNameAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
-        var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
         var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
 
-        // create a Pending Export with 3 attribute changes that has already been exported
-        // (ExportNotConfirmed means it was exported but not all changes were confirmed)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.ExportNotConfirmed,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Failed,
             ChangeType = PendingExportChangeType.Update,
-            ErrorCount = 0,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
-            {
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    ChangeType = PendingExportAttributeChangeType.Update,
-                    AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
-                    Attribute = displayNameAttr,
-                    StringValue = "Updated Name"
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    ChangeType = PendingExportAttributeChangeType.Update,
-                    AttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER,
-                    Attribute = employeeNumberAttr,
-                    IntValue = 999
-                },
-                new()
-                {
-                    Id = Guid.NewGuid(),
-                    ChangeType = PendingExportAttributeChangeType.Update,
-                    AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
-                    Attribute = roleAttr,
-                    StringValue = "Senior Manager"
-                }
-            }
-        };
-
-        // add the Pending Export to our mock data and SyncRepo (processor reads from SyncRepo)
-        PendingExportsData.Add(pendingExport);
-        SyncRepo.SeedPendingExport(pendingExport);
-
-        // update the CSO with only 2 of the 3 pending changes (simulating partial export success)
-        // DisplayName and EmployeeNumber succeeded, Role failed
-        var csoDisplayNameValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
-        if (csoDisplayNameValue != null)
-            csoDisplayNameValue.StringValue = "Updated Name";
-
-        var csoEmployeeNumberValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
-        if (csoEmployeeNumberValue != null)
-            csoEmployeeNumberValue.IntValue = 999;
-
-        // Role is NOT updated - this simulates an export failure for this attribute
-        var csoRoleValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.ROLE);
-        if (csoRoleValue != null)
-            csoRoleValue.StringValue = "Manager"; // Different from Pending Export value "Senior Manager"
-
-        // verify setup
-        Assert.That(PendingExportsData.Count, Is.EqualTo(1), "Expected one Pending Export before sync.");
-        Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(3), "Expected 3 attribute changes before sync.");
-        Assert.That(pendingExport.ErrorCount, Is.EqualTo(0), "Expected ErrorCount to be 0 before sync.");
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed), "Expected Status to be ExportNotConfirmed before sync (already exported, awaiting confirmation).");
-
-        // setup mock to handle Pending Export deletion (shouldn't be called for partial match)
-        var deleteCallCount = 0;
-        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
-            (PendingExport entity) => {
-                deleteCallCount++;
-                PendingExportsData.Remove(entity);
-            });
-        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
-            (IEnumerable<PendingExport> entities) => {
-                var list = entities.ToList();
-                deleteCallCount += list.Count;
-                foreach (var entity in list)
-                    PendingExportsData.Remove(entity);
-            });
-
-        // run full sync
-        var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
-        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
-        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
-
-        // verify the Pending Export was NOT deleted
-        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1),
-            "Expected Pending Export to be kept when CSO state only partially matches.");
-        Assert.That(deleteCallCount, Is.EqualTo(0),
-            "Expected Delete to not be called when Pending Export doesn't fully match.");
-
-        // verify successful attribute changes were removed (DisplayName and EmployeeNumber)
-        Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1),
-            "Expected only 1 failed attribute change to remain in the Pending Export.");
-        Assert.That(pendingExport.AttributeValueChanges.Single().AttributeId,
-            Is.EqualTo((int)MockSourceSystemAttributeNames.ROLE),
-            "Expected only the failed Role attribute change to remain.");
-
-        // verify ErrorCount was incremented
-        Assert.That(pendingExport.ErrorCount, Is.EqualTo(1),
-            "Expected ErrorCount to be incremented to 1 after partial failure.");
-
-        // verify Status was updated to ExportNotConfirmed
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed),
-            "Expected Status to be updated to ExportNotConfirmed after partial failure.");
-    }
-
-    /// <summary>
-    /// Tests that ErrorCount continues to increment on repeated partial failures.
-    /// </summary>
-    [Test]
-    public async Task PendingExportErrorCountIncrementsOnRepeatedPartialFailuresTestAsync()
-    {
-        // get the first CSO that we'll have a Pending Export for
-        var cso = ConnectedSystemObjectsData[0];
-        var connectedSystem = ConnectedSystemsData[0];
-
-        // get the Connected System Object Type attributes we'll use
-        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
-        var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
-
-        // create a Pending Export that has already failed twice (ErrorCount = 2)
-        var pendingExport = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = connectedSystem.Id,
-            ConnectedSystem = connectedSystem,
-            ConnectedSystemObject = cso,
-            Status = PendingExportStatus.ExportNotConfirmed,
-            ChangeType = PendingExportChangeType.Update,
-            ErrorCount = 2, // Already failed twice
+            ErrorCount = SyncEngine.DefaultMaxRetries,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
                 new()
@@ -438,47 +306,153 @@ public class FullSyncTests
                     ChangeType = PendingExportAttributeChangeType.Update,
                     AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
                     Attribute = roleAttr,
-                    StringValue = "Senior Manager"
+                    StringValue = "Senior Manager",
+                    Status = PendingExportAttributeChangeStatus.Failed,
+                    ExportAttemptCount = SyncEngine.DefaultMaxRetries
                 }
             }
         };
-
-        // add the Pending Export to our mock data and SyncRepo (processor reads from SyncRepo)
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
 
-        // Role is still NOT matching - the export continues to fail
+        // the target continues to reject the value; the CSO never picked it up
         var csoRoleValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.ROLE);
         if (csoRoleValue != null)
-            csoRoleValue.StringValue = "Manager"; // Still different from Pending Export value
+            csoRoleValue.StringValue = "Manager";
 
-        // verify setup
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "A Failed Pending Export must not be deleted by a sync.");
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Failed), "A sync must not change a Failed Pending Export's status.");
+            Assert.That(pendingExport.ErrorCount, Is.EqualTo(SyncEngine.DefaultMaxRetries), "A sync must not touch ErrorCount on a Failed Pending Export.");
+            Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1), "A sync must not remove attribute changes from a Failed Pending Export.");
+        }
+    }
+
+    /// <summary>
+    /// A Parked Pending Export is held for an administrator's Unique Value Generation decision. A Full
+    /// Sync must never touch it, exactly as for a Failed export.
+    /// </summary>
+    [Test]
+    public async Task ParkedPendingExportWithMismatchedValues_LeftUntouchedTestAsync()
+    {
+        var cso = ConnectedSystemObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+        var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystem = connectedSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Parked,
+            ChangeType = PendingExportChangeType.Update,
+            ErrorCount = 1,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
+                    Attribute = roleAttr,
+                    StringValue = "Senior Manager",
+                    Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed,
+                    ExportAttemptCount = 1
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var csoRoleValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.ROLE);
+        if (csoRoleValue != null)
+            csoRoleValue.StringValue = "Manager";
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "A Parked Pending Export must not be deleted by a sync.");
+            Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Parked), "A sync must not change a Parked Pending Export's status.");
+            Assert.That(pendingExport.ErrorCount, Is.EqualTo(1), "A sync must not touch ErrorCount on a Parked Pending Export.");
+            Assert.That(pendingExport.AttributeValueChanges.Single().Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed),
+                "A sync must not change an individual attribute change's status on a Parked Pending Export.");
+        }
+    }
+
+    /// <summary>
+    /// An ExportNotConfirmed Pending Export's ErrorCount must not move on a sync. Before this fix, a
+    /// synchronisation-time re-check incremented ErrorCount on top of the import-side accounting, so an
+    /// export could exhaust its retries from repeated syncs alone, with no export ever having run in
+    /// between; import reconciliation, not synchronisation, owns this accounting.
+    /// </summary>
+    [Test]
+    public async Task ExportNotConfirmedPendingExport_ErrorCountUnchangedBySyncTestAsync()
+    {
+        var cso = ConnectedSystemObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+        var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystem = connectedSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.ExportNotConfirmed,
+            ChangeType = PendingExportChangeType.Update,
+            ErrorCount = 2,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.ROLE,
+                    Attribute = roleAttr,
+                    StringValue = "Senior Manager",
+                    Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed,
+                    ExportAttemptCount = 2
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        // Role is still not matching - a confirming import would retry it; a sync must leave it alone
+        var csoRoleValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.ROLE);
+        if (csoRoleValue != null)
+            csoRoleValue.StringValue = "Manager";
+
         Assert.That(pendingExport.ErrorCount, Is.EqualTo(2), "Expected ErrorCount to be 2 before sync.");
 
-        // setup mock (single and batch operations)
-        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
-            (PendingExport entity) => PendingExportsData.Remove(entity));
-        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
-            (IEnumerable<PendingExport> entities) => {
-                foreach (var entity in entities.ToList())
-                    PendingExportsData.Remove(entity);
-            });
-
-        // run full sync
         var activity = ActivitiesData.First();
         var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo,connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify ErrorCount was incremented to 3
-        Assert.That(pendingExport.ErrorCount, Is.EqualTo(3),
-            "Expected ErrorCount to be incremented to 3 after another failure.");
-
-        // verify the Pending Export still exists with the failed attribute
-        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1),
-            "Expected Pending Export to be kept.");
-        Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1),
-            "Expected failed attribute change to still be present.");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pendingExport.ErrorCount, Is.EqualTo(2), "A sync must never increment ErrorCount; only a confirming import's reconciliation does.");
+            Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "Expected the Pending Export to still exist.");
+            Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(1), "A sync must not remove attribute changes.");
+        }
     }
 
     /// <summary>

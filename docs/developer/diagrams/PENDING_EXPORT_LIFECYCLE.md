@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-25, JIM v0.15.0
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target Connected Systems.
 
@@ -124,30 +124,13 @@ flowchart LR
     RetryCreate -.->|Next export run| GetExecutable
 ```
 
-## Pending Export Confirmation During Sync
+## Confirmation Happens on Import Only
 
-During Full/Delta Sync, Pending Exports are also checked for confirmation (separate from the confirming import path above). This uses `ISyncEngine.EvaluatePendingExportConfirmation` for the pure comparison logic, invoked from `SyncTaskProcessorBase`:
+Pending Exports are confirmed only by the confirming import path shown in "3. Confirming Import" above (`ISyncEngine.ReconcileCsoAgainstPendingExport`, driven by `SyncImportTaskProcessor.ReconcilePendingExportsAsync`). Synchronisation does not re-check them: every change to a CSO's values arrives through an import, so the import has always seen it first.
 
-```mermaid
-flowchart TD
-    Start([ProcessPendingExport<br/>for each CSO]) --> LookupPE[Lookup Pending Exports<br/>for this CSO from<br/>pre-loaded dictionary]
-    LookupPE --> HasPE{PE exists<br/>for CSO?}
-    HasPE -->|No| Done([Skip])
-
-    HasPE -->|Yes| CheckStatus{PE<br/>status?}
-    CheckStatus -->|Pending| SkipPending[Skip - not yet exported<br/>Nothing to confirm]
-    CheckStatus -->|Exported| SkipExported[Skip - awaiting<br/>confirmation via import<br/>reconciliation service]
-    CheckStatus -->|ExportNotConfirmed| CompareAttrs[For each attribute change:<br/>Compare expected value<br/>against CSO current value]
-
-    CompareAttrs --> MatchResult{All attributes<br/>confirmed?}
-    MatchResult -->|All confirmed| QueueDelete[Queue PE for<br/>batch deletion]
-    MatchResult -->|Some confirmed| QueuePartialUpdate[Remove confirmed attributes<br/>If Create, change to Update<br/>Increment error count<br/>Queue for batch update]
-    MatchResult -->|None confirmed| QueueFullUpdate[Increment error count<br/>Queue for batch update]
-
-    QueueDelete --> Done
-    QueuePartialUpdate --> Done
-    QueueFullUpdate --> Done
-```
+- **Failed** Pending Exports need manual intervention, and reconciliation leaves them alone (no status, attribute, ErrorCount or attempt change) unless every change they assert is now visible on the CSO, for example because an administrator fixed the target by hand. They are then deleted, like a fully confirmed Exported one.
+- **Parked** and **Executing** Pending Exports are never touched by reconciliation.
+- **Executing** Pending Exports left behind by a worker crash or restart are recovered when the worker starts: to Exported if any change was already sent, so the next confirming import reconciles it, otherwise to Pending, so the next export retries it.
 
 ## Attribute-Level Status Tracking
 
