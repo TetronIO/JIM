@@ -18,6 +18,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
@@ -1509,6 +1510,14 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// Maximum number of unseen candidates' Pending Export ids to load in a single
+    /// <see cref="ISyncRepository.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/> full-graph
+    /// call, mirroring <see cref="CsoHydrationChunkSize"/>'s rationale: keeps individual queries (and their
+    /// parameter counts) bounded even when an unusually large fraction of a type's candidates turn out unseen.
+    /// </summary>
+    private const int UnseenExportedCreateRetryChunkSize = 1000;
+
+    /// <summary>
     /// Finds every exported Create Pending Export this Full Import did not confirm, and marks it for
     /// retry. Deliberately separate from <see cref="ProcessConnectedSystemObjectDeletionsAsync"/>:
     /// deletion detection excludes Pending Provisioning CSOs outright
@@ -1519,6 +1528,19 @@ public class SyncImportTaskProcessor
     /// import actually returned. Without this step the Pending Export sits Status Exported forever and
     /// the CSO never leaves Pending Provisioning (see <see cref="ISyncEngine.IsExportedCreateUnseenByFullImport"/>'s
     /// own doc comment for the full mechanics of why).
+    /// <para>
+    /// Two-phase to stay cheap on the ordinary case, where every candidate was confirmed by the very next
+    /// Full Import (measured 25 seconds loading the full graph for 100,000 such candidates): first, an
+    /// early exit skips every query outright when no candidate could possibly qualify (a Full Import
+    /// checked with <c>wasSeen: false</c>, the most permissive input
+    /// <see cref="ISyncEngine.IsExportedCreateUnseenByFullImport"/> can be given, since its runType and
+    /// totalObjectsImported checks do not depend on <c>wasSeen</c> and the <c>!wasSeen</c> term can only
+    /// relax further by being true). Second, for each selected Object Type, a lean Summary-tier
+    /// projection (<see cref="ISyncRepository.GetExportedCreatePendingExportRetryCandidateSummariesAsync"/>)
+    /// decides "was this candidate seen?" for every candidate without materialising a single entity; only
+    /// the (usually far smaller, often empty) genuinely unseen subset is then loaded as the full graph and
+    /// mutated.
+    /// </para>
     /// </summary>
     /// <param name="externalIdsImported">Every External Id this run actually saw, across all pages, by Object Type.</param>
     /// <param name="connectedSystemObjectsToBeUpdated">CSOs already processed elsewhere in this import run: a CSO in here was
@@ -1535,33 +1557,54 @@ public class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             return;
 
+        // No candidate could possibly qualify unless this is a Full Import that read at least one
+        // object: see the class remarks above for why `wasSeen: false` is a safe stand-in for every
+        // candidate's own (as yet unknown) wasSeen value at this point.
+        if (!_syncEngine.IsExportedCreateUnseenByFullImport(_connectedSystemRunProfile.RunType, totalObjectsImported, wasSeen: false))
+            return;
+
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
         var retried = new List<PendingExport>();
 
         foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
         {
-            var candidates = await _syncRepo.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+            var candidateSummaries = await _syncRepo.GetExportedCreatePendingExportRetryCandidateSummariesAsync(
                 _connectedSystem.Id, selectedObjectType.Id, partitionId);
 
-            if (candidates.Count == 0)
+            if (candidateSummaries.Count == 0)
                 continue;
 
             var importedExternalIdsForType = ImportedExternalIdSet.Build(externalIdsImported
                 .Where(pair => pair.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                 .Select(pair => pair.ConnectedSystemImportObjectAttribute));
 
-            foreach (var pendingExport in candidates)
+            // The runType/totalObjectsImported guard above already holds for every candidate; the only
+            // thing left to decide per candidate is whether it was seen this run.
+            var unseenPendingExportIds = candidateSummaries
+                .Where(summary => !processedCsoIds.Contains(summary.ConnectedSystemObjectId) &&
+                    !importedExternalIdsForType.Contains(summary.ExternalIdStringValue, summary.ExternalIdIntValue,
+                        summary.ExternalIdLongValue, summary.ExternalIdDecimalValue, summary.ExternalIdGuidValue))
+                .Select(summary => summary.PendingExportId)
+                .Distinct()
+                .ToList();
+
+            if (unseenPendingExportIds.Count == 0)
+                continue;
+
+            foreach (var chunk in unseenPendingExportIds.Chunk(UnseenExportedCreateRetryChunkSize))
             {
-                var cso = pendingExport.ConnectedSystemObject;
-                if (cso == null)
-                    continue;
+                var candidates = await _syncRepo.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+                    _connectedSystem.Id, selectedObjectType.Id, partitionId, chunk);
 
-                var wasSeen = processedCsoIds.Contains(cso.Id) || importedExternalIdsForType.Contains(cso.ExternalIdAttributeValue);
-                if (!_syncEngine.IsExportedCreateUnseenByFullImport(_connectedSystemRunProfile.RunType, totalObjectsImported, wasSeen))
-                    continue;
+                foreach (var pendingExport in candidates)
+                {
+                    var cso = pendingExport.ConnectedSystemObject;
+                    if (cso == null)
+                        continue;
 
-                MarkExportedCreateForRetry(pendingExport);
-                retried.Add(pendingExport);
+                    MarkExportedCreateForRetry(pendingExport);
+                    retried.Add(pendingExport);
+                }
             }
         }
 
@@ -1628,11 +1671,22 @@ public class SyncImportTaskProcessor
             if (externalIdValue == null)
                 return false;
 
-            return (externalIdValue.StringValue != null && _strings.Contains(externalIdValue.StringValue)) ||
-                   (externalIdValue.IntValue.HasValue && _ints.Contains(externalIdValue.IntValue.Value)) ||
-                   (externalIdValue.LongValue.HasValue && _longs.Contains(externalIdValue.LongValue.Value)) ||
-                   (externalIdValue.DecimalValue.HasValue && _decimals.Contains(externalIdValue.DecimalValue.Value)) ||
-                   (externalIdValue.GuidValue.HasValue && _guids.Contains(externalIdValue.GuidValue.Value));
+            return Contains(externalIdValue.StringValue, externalIdValue.IntValue, externalIdValue.LongValue,
+                externalIdValue.DecimalValue, externalIdValue.GuidValue);
+        }
+
+        /// <summary>
+        /// Overload for the lean <see cref="PendingExportRetryCandidateSummary"/> projection, which
+        /// carries the same typed nullable columns without materialising a
+        /// <see cref="ConnectedSystemObjectAttributeValue"/>.
+        /// </summary>
+        public bool Contains(string? stringValue, int? intValue, long? longValue, decimal? decimalValue, Guid? guidValue)
+        {
+            return (stringValue != null && _strings.Contains(stringValue)) ||
+                   (intValue.HasValue && _ints.Contains(intValue.Value)) ||
+                   (longValue.HasValue && _longs.Contains(longValue.Value)) ||
+                   (decimalValue.HasValue && _decimals.Contains(decimalValue.Value)) ||
+                   (guidValue.HasValue && _guids.Contains(guidValue.Value));
         }
     }
 

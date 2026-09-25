@@ -665,8 +665,51 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(values);
     }
 
-    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    /// <summary>
+    /// Number of times <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/> has
+    /// been called. Lets tests prove the two-phase Full Import unseen exported-Create retry step
+    /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) only promotes candidates to
+    /// this full graph load when the lean Summary-tier projection decided at least one is genuinely
+    /// unseen, and never for a run type or empty run the early guard already excludes.
+    /// </summary>
+    public int GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount { get; private set; }
+
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
     {
+        GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount++;
+
+        var result = _pendingExports.Values
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ChangeType == PendingExportChangeType.Create
+                      && pe.Status == PendingExportStatus.Exported
+                      && pe.ConnectedSystemObject != null
+                      && pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning
+                      && pe.ConnectedSystemObject.TypeId == objectTypeId
+                      && (partitionId == null || pe.ConnectedSystemObject.PartitionId == partitionId)
+                      && (pendingExportIds == null || pendingExportIds.Contains(pe.Id)))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Number of times <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> has been
+    /// called. Lets tests prove the retry step's early exit (not a Full Import, or nothing imported) skips
+    /// every repository query for this Connected System, including the lean projection.
+    /// </summary>
+    public int GetExportedCreatePendingExportRetryCandidateSummariesCallCount { get; private set; }
+
+    /// <summary>
+    /// In-memory equivalent of the PostgreSQL raw-SQL projection: same eligibility as
+    /// <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>, projected down to the
+    /// typed External Id columns. Mirrors <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/>'s
+    /// own value selection (the attribute value whose AttributeId matches the CSO's ExternalIdAttributeId).
+    /// </summary>
+    public Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        GetExportedCreatePendingExportRetryCandidateSummariesCallCount++;
+
         var result = _pendingExports.Values
             .Where(pe => pe.ConnectedSystemId == connectedSystemId
                       && pe.ChangeType == PendingExportChangeType.Create
@@ -675,6 +718,21 @@ public class SyncRepository : ISyncRepository
                       && pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning
                       && pe.ConnectedSystemObject.TypeId == objectTypeId
                       && (partitionId == null || pe.ConnectedSystemObject.PartitionId == partitionId))
+            .Select(pe =>
+            {
+                var cso = pe.ConnectedSystemObject!;
+                var externalIdValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+                return new PendingExportRetryCandidateSummary
+                {
+                    PendingExportId = pe.Id,
+                    ConnectedSystemObjectId = cso.Id,
+                    ExternalIdStringValue = externalIdValue?.StringValue,
+                    ExternalIdIntValue = externalIdValue?.IntValue,
+                    ExternalIdLongValue = externalIdValue?.LongValue,
+                    ExternalIdDecimalValue = externalIdValue?.DecimalValue,
+                    ExternalIdGuidValue = externalIdValue?.GuidValue
+                };
+            })
             .ToList();
         return Task.FromResult(result);
     }

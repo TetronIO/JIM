@@ -222,8 +222,28 @@ public interface ISyncRepository
     /// (<see cref="JIM.Application.Interfaces.ISyncEngine.IsExportedCreateUnseenByFullImport"/>): the
     /// caller compares each returned Pending Export's Connected System Object External Id against the
     /// run's own imported set to decide whether the Create was genuinely unseen.
+    /// <para>
+    /// Loads the full graph, so the retry step calls this only for candidates the lean
+    /// <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> projection has already
+    /// decided are genuinely unseen: <paramref name="pendingExportIds"/> narrows this same eligibility
+    /// query to exactly those, rather than re-loading every candidate a second time.
+    /// </para>
     /// </summary>
-    Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    /// <param name="pendingExportIds">When supplied, restricts the result to these Pending Export ids
+    /// (still subject to every other filter above). Null loads every eligible candidate, as before.</param>
+    Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null);
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>:
+    /// identical eligibility (Connected System, Create, Status Exported, Connected System Object not null
+    /// and Pending Provisioning, Object Type, optional partition), but returns only the Pending Export id,
+    /// the Connected System Object id, and the Connected System Object's primary External Id value as
+    /// typed nullable columns - never the full Pending Export / attribute-change / Connected System
+    /// Object / attribute-value graph. A Full Import's unseen exported-Create retry step uses this to
+    /// decide, for every candidate, whether the run saw the object, and only loads the full graph for the
+    /// (usually far smaller, often empty) subset genuinely unseen.
+    /// </summary>
+    Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Loads CSOs by ID for cross-page reference resolution.

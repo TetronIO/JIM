@@ -1374,7 +1374,14 @@ public interface IConnectedSystemRepository
     /// PendingProvisioning. See <see cref="ISyncRepository.GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>
     /// for the full rationale.
     /// </summary>
-    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null);
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>.
+    /// See <see cref="ISyncRepository.GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> for the
+    /// full rationale.
+    /// </summary>
+    public Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     public Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     public Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);

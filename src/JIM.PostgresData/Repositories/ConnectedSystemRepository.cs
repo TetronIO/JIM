@@ -3604,8 +3604,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// this is a second, narrow query used only to find exported Creates a Full Import never confirmed.
     /// Loads what the caller needs to both compare the External Id (<c>ConnectedSystemObject.Type</c>
     /// and <c>AttributeValues</c>) and mutate the retry statuses (<c>AttributeValueChanges</c>).
+    /// <para>
+    /// The full graph is expensive at scale (measured 25 seconds for 100,000 already-confirmed
+    /// candidates), so the caller narrows to <paramref name="pendingExportIds"/> once the lean
+    /// <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> projection has decided
+    /// which candidates are genuinely unseen, rather than loading every candidate's full graph.
+    /// </para>
     /// </summary>
-    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    public async Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
     {
         var query = Repository.Database.PendingExports
             .AsNoTracking()
@@ -3628,7 +3635,84 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (partitionId != null)
             query = query.Where(pe => pe.ConnectedSystemObject!.PartitionId == partitionId);
 
+        if (pendingExportIds != null)
+            query = query.Where(pe => pendingExportIds.Contains(pe.Id));
+
         return await query.ToListAsync();
+    }
+
+    /// <summary>
+    /// Lean, Summary-tier equivalent of <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>:
+    /// identical eligibility, but projects only the Pending Export id, the Connected System Object id,
+    /// and the Connected System Object's primary External Id value as typed nullable columns, without
+    /// materialising the Pending Export / attribute-change / Connected System Object / attribute-value
+    /// graph the full query loads. A Full Import's unseen exported-Create retry step
+    /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) uses this to decide "was
+    /// this candidate seen this run?" for every candidate, then loads the full graph only for the
+    /// (usually far smaller, often empty) subset genuinely unseen.
+    /// <para>
+    /// The LEFT JOIN to <c>ConnectedSystemObjectAttributeValues</c> mirrors exactly how
+    /// <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/> picks the value: the attribute value
+    /// row whose AttributeId matches the Connected System Object's own ExternalIdAttributeId. It is a
+    /// LEFT JOIN, not an INNER JOIN, because a Pending Provisioning object legitimately has no such row
+    /// yet if the export that created it has not (re-)confirmed an External Id value; every typed column
+    /// is null in that case rather than the candidate being dropped. As with the computed property, this
+    /// assumes the External Id attribute is single-valued (JIM's own invariant for an External Id
+    /// attribute), so at most one attribute value row is expected to match per Connected System Object.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// Raw Npgsql per the Worker Hot Path rule in <c>src/CLAUDE.md</c>: a read-side SELECT projection into
+    /// a Summary-tier DTO, exempt from the raw-SQL BulkColumns rule.
+    /// </remarks>
+    public async Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var partitionFilter = partitionId.HasValue ? """AND cso."PartitionId" = @partitionId""" : string.Empty;
+        var sql = $"""
+            SELECT pe."Id", cso."Id", av."StringValue", av."IntValue", av."LongValue", av."DecimalValue", av."GuidValue"
+            FROM "PendingExports" pe
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+            LEFT JOIN "ConnectedSystemObjectAttributeValues" av
+                ON av."ConnectedSystemObjectId" = cso."Id" AND av."AttributeId" = cso."ExternalIdAttributeId"
+            WHERE pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ChangeType" = @createChangeType
+              AND pe."Status" = @exportedStatus
+              AND cso."TypeId" = @objectTypeId
+              AND cso."Status" = @pendingProvisioningStatus
+              {partitionFilter}
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("createChangeType", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportChangeType.Create });
+        command.Parameters.Add(new NpgsqlParameter("exportedStatus", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Exported });
+        command.Parameters.Add(new NpgsqlParameter("objectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = objectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("pendingProvisioningStatus", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)ConnectedSystemObjectStatus.PendingProvisioning });
+        if (partitionId.HasValue)
+            command.Parameters.Add(new NpgsqlParameter("partitionId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = partitionId.Value });
+
+        var results = new List<PendingExportRetryCandidateSummary>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new PendingExportRetryCandidateSummary
+            {
+                PendingExportId = reader.GetGuid(0),
+                ConnectedSystemObjectId = reader.GetGuid(1),
+                ExternalIdStringValue = reader.IsDBNull(2) ? null : reader.GetString(2),
+                ExternalIdIntValue = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                ExternalIdLongValue = reader.IsDBNull(4) ? null : reader.GetInt64(4),
+                ExternalIdDecimalValue = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                ExternalIdGuidValue = reader.IsDBNull(6) ? null : reader.GetGuid(6)
+            });
+        }
+
+        return results;
     }
     #endregion
 
