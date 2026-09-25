@@ -17,9 +17,10 @@ LABEL org.opencontainers.image.vendor="Tetron"
 LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://junctional.io/license"
 WORKDIR /app
-# The base image's ASPNETCORE_HTTP_PORTS default; docker-compose.yml pins it explicitly.
-# TLS is terminated by a reverse proxy, so there is no HTTPS port.
-EXPOSE 8080
+# 8443 is HTTPS in production (deploy/docker-compose.production.yml). 8080 is plain HTTP: the base image's
+# ASPNETCORE_HTTP_PORTS default, which docker-compose.yml pins explicitly; in production it is bound to the
+# container's loopback interface for the health check only.
+EXPOSE 8443 8080
 
 # Pin functional dependency versions for reproducible builds
 # Update these versions when bumping base image digests

@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
-- 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
+- 🔄 JIM now serves HTTPS out of the box, with your organisation's certificate or one the setup script creates, so sign-in works from any machine without a reverse proxy. Before upgrading, put the certificate in the `tls` folder beside the compose files. (#1808)
+- 🔄 The production compose file now publishes the web UI and API over HTTPS on host port 5200 (set `JIM_WEB_PORT` to change it).
 - 🔄 JIM's services now wait for the database at start-up, logging each attempt, instead of exiting and restarting until it is available; an external database that is briefly unreachable no longer takes the web portal down. (#1808)
 
 ### Fixed

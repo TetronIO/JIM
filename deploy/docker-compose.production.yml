@@ -1,5 +1,6 @@
 # Production override for JIM
-# Removes build contexts (uses pre-built images from GHCR) and sets production restart policy.
+# Removes build contexts (uses pre-built images from GHCR), sets the production restart policy, and serves
+# the web UI and API over HTTPS.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
@@ -7,15 +8,32 @@
 # Requires DOCKER_REGISTRY and JIM_VERSION in .env, e.g.:
 #   DOCKER_REGISTRY=ghcr.io/tetronio/
 #   JIM_VERSION=0.3.0
+#
+# Requires JIM's TLS certificate and private key, as PEM files, at tls/tls.crt and tls/tls.key next to this
+# file. The key must be unencrypted and readable by UID 1654, the user JIM runs as:
+#   chown 1654:1654 tls/tls.key && chmod 400 tls/tls.key
+# setup.sh creates both files, or installs your organisation's. See the Deployment Guide, "TLS and Reverse Proxy".
 
 services:
   jim.web:
     build: !reset null
     restart: unless-stopped
-    # Publish the web UI and API on the host. JIM_WEB_PORT in .env changes the host port, and takes
-    # an address prefix to bind one interface only (e.g. 127.0.0.1:5200 behind a local reverse proxy).
+    environment:
+      # HTTPS on 8443 for every client. Plain HTTP stays on 8080 for the health check in docker-compose.yml,
+      # bound to the container's loopback interface so that nothing outside the container can reach it.
+      - ASPNETCORE_URLS=https://+:8443;http://localhost:8080
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/run/secrets/jim-tls/tls.crt
+      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/run/secrets/jim-tls/tls.key
+    # Publish HTTPS on the host. JIM_WEB_PORT in .env changes the host port, and takes an address prefix to
+    # bind one interface only (e.g. 127.0.0.1:5200 behind a reverse proxy on the same host).
     ports:
-      - "${JIM_WEB_PORT:-5200}:8080"
+      - "${JIM_WEB_PORT:-5200}:8443"
+    # Compose mounts file-based secrets read-only from the host, keeping the host file's owner and mode.
+    secrets:
+      - source: jim-tls-certificate
+        target: /run/secrets/jim-tls/tls.crt
+      - source: jim-tls-key
+        target: /run/secrets/jim-tls/tls.key
 
   jim.worker:
     build: !reset null
@@ -27,3 +45,9 @@ services:
 
   jim.database:
     restart: unless-stopped
+
+secrets:
+  jim-tls-certificate:
+    file: ./tls/tls.crt
+  jim-tls-key:
+    file: ./tls/tls.key

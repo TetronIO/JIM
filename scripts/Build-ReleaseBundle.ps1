@@ -262,10 +262,79 @@ cp .env.example .env
 
 Edit `.env` with your configuration:
 - Database credentials
-- SSO/OIDC settings (if applicable)
+- SSO/OIDC settings
 - Logging preferences
 
-### 6. Start JIM
+### 6. Install JIM's HTTPS Certificate
+
+JIM serves HTTPS, which browsers on other machines need in order to sign in. It
+reads its certificate and private key, as PEM files, from tls/tls.crt and
+tls/tls.key in the compose folder. The key must be unencrypted and belong to
+UID 1654, the user JIM runs as. Run the commands in this step as root.
+
+**Option A: your organisation's certificate** (recommended). Have it issued for
+the DNS names users will reach JIM at, then:
+
+``````bash
+mkdir -p tls && chmod 700 tls
+cp /path/to/jim.crt tls/tls.crt   # the certificate, followed by any intermediate CA certificates
+cp /path/to/jim.key tls/tls.key   # its unencrypted private key
+chown 1654:1654 tls/tls.key && chmod 400 tls/tls.key
+``````
+
+**Option B: a certificate authority (CA) of JIM's own.** Replace jim.example.com
+and 192.0.2.10 with the names and addresses users will reach JIM at, in both
+files. The CA's name constraints let it sign certificates for those names only.
+If users reach JIM by name only, delete the IP entries and replace the IP
+constraint with: excluded;IP:0.0.0.0/0.0.0.0,excluded;IP:::/::
+
+``````bash
+mkdir -p tls && chmod 700 tls && cd tls
+
+cat > ca.cnf <<'EOF'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+O = JIM
+CN = JIM certificate authority for jim.example.com
+[ext]
+basicConstraints = critical,CA:TRUE,pathlen:0
+keyUsage = critical,keyCertSign,cRLSign
+subjectKeyIdentifier = hash
+nameConstraints = permitted;DNS:jim.example.com,permitted;IP:192.0.2.10/255.255.255.255
+EOF
+
+cat > server.cnf <<'EOF'
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature
+extendedKeyUsage = serverAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+subjectAltName = DNS:jim.example.com,IP:192.0.2.10
+EOF
+
+# The CA, valid for ten years
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out ca.key
+openssl req -new -x509 -config ca.cnf -key ca.key -sha256 -days 3650 -out ca.crt
+chmod 400 ca.key
+
+# JIM's certificate, valid for a year. To renew it, run these four commands
+# again, then restart jim.web.
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out tls.key
+openssl req -new -key tls.key -subj "/CN=jim.example.com" -out tls.csr
+openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -set_serial "0x`$(openssl rand -hex 16)" -days 365 -sha256 -extfile server.cnf -out tls.crt
+chown 1654:1654 tls.key && chmod 400 tls.key
+
+cd ..
+``````
+
+Add tls/ca.crt to the trusted root certificate authorities of every machine
+whose browser or tools use JIM (for example by Group Policy). Keep tls/ca.key
+secret: anyone holding it can issue certificates for JIM's names.
+
+### 7. Start JIM
 
 With the bundled PostgreSQL container:
 
@@ -277,14 +346,18 @@ With an external PostgreSQL server (set JIM_DB_HOSTNAME in .env), leave out --pr
 
 Pass the same -f files and --profile to every later docker compose command (ps, logs, stop).
 
-### 7. Verify Installation
+### 8. Verify Installation
 
-Access JIM at http://localhost:5200 (set JIM_WEB_PORT in .env to use another port).
+JIM is ready when jim.web shows as healthy; its health check calls the
+readiness endpoint:
 
-Run the health check; it returns 200 once JIM is ready:
 ``````bash
-curl -f http://localhost:5200/api/v1/health/ready
+docker compose -f docker-compose.yml -f docker-compose.production.yml ps
 ``````
+
+Then open https://jim.example.com:5200 (set JIM_WEB_PORT in .env to use another
+port), and register https://jim.example.com:5200/signin-oidc as a redirect URI
+at your identity provider.
 
 ## Installing the PowerShell Module
 
@@ -311,9 +384,12 @@ Get-Command -Module JIM
 
 ## Connecting to JIM
 
+The machine running the module must trust JIM's certificate (or, for Option B,
+its CA).
+
 ``````powershell
 # Connect using API key
-Connect-JIM -Server "http://localhost:5200" -ApiKey "your-api-key"
+Connect-JIM -Url "https://jim.example.com:5200" -ApiKey "your-api-key"
 
 # Test connection
 Test-JIMConnection
@@ -324,30 +400,35 @@ Get-JIMConnectedSystem
 
 ## Troubleshooting
 
+Run these in the compose folder.
+
 ### Container Logs
 ``````bash
-docker compose logs jim.web
-docker compose logs jim.worker
-docker compose logs jim.scheduler
+docker compose -f docker-compose.yml -f docker-compose.production.yml logs jim.web
+docker compose -f docker-compose.yml -f docker-compose.production.yml logs jim.worker
+docker compose -f docker-compose.yml -f docker-compose.production.yml logs jim.scheduler
 ``````
 
 ### Database Connection
 ``````bash
-docker compose exec jim.db psql -U jim -d jim -c "SELECT 1"
+docker compose -f docker-compose.yml -f docker-compose.production.yml exec jim.database psql -U jim -d jim -c "SELECT 1"
 ``````
 
 ### Restart Services
 ``````bash
-docker compose restart
+docker compose -f docker-compose.yml -f docker-compose.production.yml restart
 ``````
 
 ## Support
 
 For issues and questions:
 - GitHub: https://github.com/TetronIO/JIM/issues
-- Documentation: https://github.com/TetronIO/JIM/wiki
+- Documentation: https://docs.junctional.io
 "@
-    $installGuide | Set-Content "$bundlePath/docs/INSTALL.md"
+    # LF line endings: the guide is read, and its commands pasted, on Linux hosts. This script is checked out
+    # with CRLF (.gitattributes), so the here-string carries CRLF until converted, and a heredoc copied from
+    # it would write carriage returns into the configuration files it creates.
+    ($installGuide -replace "`r`n", "`n") + "`n" | Set-Content -NoNewline "$bundlePath/docs/INSTALL.md"
     Write-Host "  Created: INSTALL.md" -ForegroundColor Gray
 
     # Create README
@@ -368,15 +449,16 @@ Contents:
 Quick Start:
 ------------
 1. Verify checksums: sha256sum -c checksums.sha256
-2. Load images:      docker load -i docker-images/*.tar
+2. Load images:      for f in docker-images/*.tar; do docker load -i "`$f"; done
 3. Configure:        cp compose/.env.example compose/.env && edit compose/.env
-4. Start:            cd compose && docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+4. Certificate:      put JIM's HTTPS certificate and key in compose/tls (see docs/INSTALL.md, step 6)
+5. Start:            cd compose && docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
 For detailed instructions, see docs/INSTALL.md
 
 License: See https://junctional.io/license
 "@
-    $readme | Set-Content "$bundlePath/README.txt"
+    ($readme -replace "`r`n", "`n") + "`n" | Set-Content -NoNewline "$bundlePath/README.txt"
     Write-Host "  Created: README.txt" -ForegroundColor Gray
 
     # Generate checksums

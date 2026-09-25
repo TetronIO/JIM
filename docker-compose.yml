@@ -14,6 +14,8 @@ services:
       # 8080 is the .NET base image's own default, and being above 1024 it binds as the non-root
       # 'app' user with no capabilities on any container runtime. Set here rather than in .env so
       # a stray ASPNETCORE_URLS in .env cannot move the port out from under the healthcheck.
+      # docker-compose.production.yml adds HTTPS on 8443 and keeps 8080 for the healthcheck,
+      # bound to the container's loopback interface.
       - ASPNETCORE_URLS=http://+:8080
     volumes:
       - jim-logs-volume:/var/log/jim

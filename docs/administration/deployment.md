@@ -4,10 +4,10 @@ title: Deployment
 
 # Deployment Guide
 
-This guide covers deploying JIM to a production environment, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, TLS configuration, and operational guidance.
+This guide covers deploying JIM to a production environment, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, HTTPS certificates, and operational guidance.
 
 !!! tip "Quick Start"
-    The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes. This page covers production hardening, reverse proxies, upgrades, and operational best practices.
+    The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes. This page covers production hardening, certificates, reverse proxies, upgrades, and operational best practices.
 
 ## Prerequisites
 
@@ -47,16 +47,17 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 ### Software Requirements
 
 - **Docker Engine** 20.10+ with Compose v2
+- **OpenSSL**, to create or check JIM's HTTPS certificate (part of every mainstream Linux distribution's base install)
 - **An OIDC identity provider** (e.g. Entra ID, Keycloak, AD FS) -- see [SSO Setup](sso-setup.md)
 
 ### Network Requirements
 
-JIM's services communicate internally over a Docker bridge network (`jim-network`). The only port that needs to be exposed externally is the web/API port on `jim.web` (container port `8080`).
+JIM's services communicate internally over a Docker bridge network (`jim-network`). The only port that needs to be exposed externally is the HTTPS port on `jim.web` (container port `8443`), which the production compose file publishes on host port `5200`.
 
-| Direction | Port                                               | Purpose                                        |
-|-----------|----------------------------------------------------|-------------------------------------------------|
-| Inbound   | Your chosen host port (e.g. 443 via reverse proxy) | Web UI and REST API                             |
-| Outbound  | Varies                                             | OIDC provider, LDAP targets, file shares, etc. |
+| Direction | Port                                                  | Purpose                                        |
+|-----------|-------------------------------------------------------|------------------------------------------------|
+| Inbound   | 5200 (HTTPS), or your reverse proxy's port if you use one | Web UI and REST API                        |
+| Outbound  | Varies                                                | OIDC provider, LDAP targets, file shares, etc. |
 
 In air-gapped environments, no outbound connectivity is required after initial deployment.
 
@@ -125,11 +126,15 @@ bash setup.sh
 
 The script will:
 
-1. **Check prerequisites** (Docker, Compose v2, curl)
+1. **Check prerequisites** (Docker, Compose v2, curl, OpenSSL)
 2. **Auto-detect the latest release**
 3. **Download compose files and environment template**
 4. **Walk you through database and SSO configuration**
-5. **Optionally start JIM**
+5. **Create JIM's HTTPS certificate, or install your organisation's** (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
+6. **Ask whether a reverse proxy or load balancer sits in front of JIM**, and trust it if so
+7. **Optionally start JIM**, then print its address and what to do next
+
+For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them.
 
 ### Option 2 -- Manual Setup
 
@@ -145,6 +150,8 @@ curl -fsSL -o .env \
   https://github.com/TetronIO/JIM/releases/latest/download/default.env.example
 
 # Edit .env -- configure SSO and database settings (see Configuration Reference)
+
+# Put JIM's HTTPS certificate and key in tls/ (see TLS and Reverse Proxy)
 
 # Start with bundled PostgreSQL
 docker compose -f docker-compose.yml -f docker-compose.production.yml \
@@ -173,6 +180,7 @@ jim-release-X.Y.Z/
 |   +-- docker-compose.yml
 |   +-- docker-compose.production.yml
 |   +-- .env.example
+|   +-- tls/                  # You add JIM's certificate and key here (Step 5)
 +-- powershell/
 |   +-- JIM/                  # PowerShell module directory
 +-- docs/
@@ -190,7 +198,7 @@ Before deploying JIM in an air-gapped environment, ensure you have:
 - **Docker Engine** (20.10+) and **Docker Compose** (v2+) installed
 - **PostgreSQL 18** -- either as a container or external database server
 - A DNS name or IP address for the JIM server
-- TLS certificates for HTTPS, which browser access from any machine other than the JIM host requires (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
+- A TLS certificate for that name from your organisation's certificate authority, or OpenSSL to create one (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
 - An OIDC identity provider accessible from the air-gapped network (e.g. AD FS, Keycloak)
 
 ### Step 1: Transfer and Verify the Bundle
@@ -247,7 +255,7 @@ cp .env.example .env
 
 Edit `.env` with your settings. See [Configuration Reference](configuration.md) for the full list of variables.
 
-### Step 5: Configure DNS
+### Step 5: Configure DNS and the Certificate
 
 Ensure your JIM server is resolvable by name in your network:
 
@@ -258,7 +266,9 @@ Ensure your JIM server is resolvable by name in your network:
     192.168.1.100  jim.your-domain.local
     ```
 
-The OIDC redirect URIs configured in your identity provider must match the JIM server's accessible URL.
+The OIDC redirect URIs configured in your identity provider must match the JIM server's accessible URL, for example `https://jim.your-domain.local:5200/signin-oidc`.
+
+Then put JIM's HTTPS certificate and key in the `compose/tls` folder, as [TLS and Reverse Proxy](#tls-and-reverse-proxy) describes: your organisation's certificate for that name, or one you create with the commands there. `docker compose up` fails with a missing-file error until both files are in place.
 
 ### Step 6: File Connector storage (optional)
 
@@ -309,10 +319,17 @@ JIM sets the database up automatically on first startup; there is no manual data
 docker compose logs jim.worker --tail=50
 ```
 
-The worker prepares the database before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards:
+The worker prepares the database before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards. `jim.web`'s health check calls it, so `jim.web` shows as `healthy` once JIM is ready:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/ready
+docker compose -f docker-compose.yml -f docker-compose.production.yml ps jim.web
+```
+
+To call the endpoint yourself over HTTPS, name the certificate authority that issued JIM's certificate, and the name the certificate was issued for:
+
+```bash
+curl --cacert tls/ca.crt --resolve jim.your-domain.local:5200:127.0.0.1 \
+  https://jim.your-domain.local:5200/api/v1/health/ready
 ```
 
 !!! warning "Troubleshooting"
@@ -320,7 +337,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 
 ### Step 9: Access JIM
 
-1. **Open your browser** to `https://jim.your-domain.local`. Until TLS is in place, you can sign in only from a browser on the JIM host itself, at `http://localhost:5200`; see [TLS and Reverse Proxy](#tls-and-reverse-proxy)
+1. **Open your browser** to `https://jim.your-domain.local:5200`. If JIM uses a certificate you created, the browser warns about it until its certificate authority is trusted; see [Distributing the certificate authority](#distributing-the-certificate-authority)
 2. **Log in** with your SSO credentials
 3. **Verify access** - the initial admin user (configured via `JIM_SSO_INITIAL_ADMIN`) will have full access
 
@@ -328,33 +345,186 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 
 ## TLS and Reverse Proxy
 
-The JIM containers serve HTTP on port 8080 internally. For production, place a reverse proxy in front to handle TLS termination.
+JIM serves HTTPS itself. In production, `jim.web` listens for HTTPS on container port `8443`, which `docker-compose.production.yml` publishes on host port `5200`, so a fresh install can be signed into from any machine at `https://<JIM's name>:5200` with no reverse proxy.
 
 !!! warning "Browsers on other machines must use HTTPS"
-    Browser access to JIM from any machine other than the JIM host requires HTTPS. In a production deployment, JIM's sign-in cookies are HTTPS-only, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: the browser loops between JIM and your identity provider (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
+    JIM's sign-in cookies are HTTPS-only in a production deployment, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: the browser loops between JIM and your identity provider (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
 
-    Plain HTTP works only at `http://localhost:5200`, which means from a browser on the JIM host itself. The host's own name or IP address fails even there, and Safari may refuse the cookies on `localhost` too.
+### The Certificate
+
+JIM reads its certificate and private key from two PEM files in the `tls` folder next to the compose files:
+
+| File          | Contents                                                                                              |
+|---------------|-------------------------------------------------------------------------------------------------------|
+| `tls/tls.crt` | JIM's certificate, followed by any intermediate CA certificates, so that clients receive the whole chain |
+| `tls/tls.key` | Its private key, **unencrypted**, belonging to UID `1654` (the user JIM runs as) with mode `400`      |
+
+The certificate must name, as subject alternative names, every DNS name and IP address users and tools reach JIM at, including the name a reverse proxy uses to connect to it. JIM accepts TLS 1.2 and 1.3.
+
+Docker mounts both files into `jim.web` read-only, keeping their owner and mode, and JIM runs with every capability dropped: if the key does not belong to UID `1654`, `jim.web` cannot read it and fails to start. Until both files exist, `docker compose up` stops with an error naming the missing file.
+
+`setup.sh` asks which of these two ways to provide them:
+
+- **Your organisation's certificate** (recommended for production)<br /> Issued by your internal certificate authority (CA), such as Active Directory Certificate Services or Identity Management, which your browsers and servers already trust. Nothing needs distributing.
+- **A certificate the installer creates**<br /> `setup.sh` creates a certificate authority for this JIM server, and a server certificate from it, for the names and addresses you give it. Browsers show a warning until the CA is trusted; see [Distributing the certificate authority](#distributing-the-certificate-authority).
+
+To provide your organisation's certificate without `setup.sh`, run as root in the folder holding the compose files:
+
+```bash
+mkdir -p tls && chmod 700 tls
+cp /path/to/jim.crt tls/tls.crt   # the certificate, followed by any intermediate CA certificates
+cp /path/to/jim.key tls/tls.key   # its unencrypted private key
+chown 1654:1654 tls/tls.key && chmod 400 tls/tls.key
+```
+
+If your key is encrypted, decrypt it first with `openssl pkey -in encrypted.key -out tls/tls.key`; keep the folder readable by root only.
+
+### A Certificate the Installer Creates
+
+`setup.sh` writes these files to `tls/`:
+
+| File      | What it is                                                         | Keep it          |
+|-----------|--------------------------------------------------------------------|------------------|
+| `ca.crt`  | The certificate authority's certificate, valid for ten years       | Distribute it    |
+| `ca.key`  | The certificate authority's private key; it signs JIM's certificates | Secret, readable by root only |
+| `tls.crt` | JIM's certificate, valid for one year                              |                  |
+| `tls.key` | JIM's private key                                                  | Secret           |
+| `names`   | The names and addresses the certificate covers, for renewal        |                  |
+
+The certificate authority is limited, by name constraints, to exactly the names and addresses you gave. A browser that trusts it accepts a certificate it signs for JIM, and rejects one for any other site, so even a stolen `ca.key` cannot be used to impersonate other servers to the machines that trust it.
+
+#### Distributing the Certificate Authority
+
+Add `ca.crt` to the trusted root certificate authorities of every machine whose browser or tools use JIM, and of any reverse proxy that connects to JIM over HTTPS:
+
+- **Windows**<br /> Group Policy (Computer Configuration > Policies > Windows Settings > Security Settings > Public Key Policies > Trusted Root Certification Authorities), or `Import-Certificate -FilePath ca.crt -CertStoreLocation Cert:\LocalMachine\Root` on one machine.
+- **Red Hat Enterprise Linux and derivatives**<br /> Copy it to `/etc/pki/ca-trust/source/anchors/` and run `update-ca-trust`.
+- **Debian and Ubuntu**<br /> Copy it to `/usr/local/share/ca-certificates/jim-ca.crt` and run `update-ca-certificates`.
+- **macOS**<br /> `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt`.
+
+Depending on its configuration, Firefox may use its own list rather than the operating system's. If it still warns, import the CA under **Settings > Privacy & Security > Certificates > View Certificates > Authorities**.
+
+The PowerShell module relies on the operating system's list, so machines that run `Connect-JIM` need the CA too.
+
+#### Creating the Certificate by Hand
+
+For an installation without `setup.sh`, such as an air-gapped one, these commands create the same files. Run them as root in the folder holding the compose files, replacing `jim.example.com` and `192.0.2.10` with the names and addresses users will reach JIM at, in both configuration files. In `nameConstraints`, each address is followed by `/255.255.255.255`; if users reach JIM by name only, delete the `IP` entries and use `excluded;IP:0.0.0.0/0.0.0.0,excluded;IP:::/::` in its place, so that the CA cannot sign for any address.
+
+```bash
+mkdir -p tls && chmod 700 tls && cd tls
+
+cat > ca.cnf <<'EOF'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+O = JIM
+CN = JIM certificate authority for jim.example.com
+[ext]
+basicConstraints = critical,CA:TRUE,pathlen:0
+keyUsage = critical,keyCertSign,cRLSign
+subjectKeyIdentifier = hash
+nameConstraints = permitted;DNS:jim.example.com,permitted;IP:192.0.2.10/255.255.255.255
+EOF
+
+cat > server.cnf <<'EOF'
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature
+extendedKeyUsage = serverAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+subjectAltName = DNS:jim.example.com,IP:192.0.2.10
+EOF
+
+# The certificate authority, valid for ten years
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out ca.key
+openssl req -new -x509 -config ca.cnf -key ca.key -sha256 -days 3650 -out ca.crt
+chmod 400 ca.key
+
+# JIM's certificate, valid for a year
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out tls.key
+openssl req -new -key tls.key -subj "/CN=jim.example.com" -out tls.csr
+openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -set_serial "0x$(openssl rand -hex 16)" \
+  -days 365 -sha256 -extfile server.cnf -out tls.crt
+chown 1654:1654 tls.key && chmod 400 tls.key
+
+cd ..
+```
+
+### Renewing the Certificate
+
+JIM sends browsers an HSTS header, which tells them to refuse plain HTTP and certificate errors for JIM's name. Once a browser trusts JIM's certificate, an **expired** certificate therefore blocks access outright, with no option to continue. Renew before the expiry date, which `setup.sh` prints at install; to read it later:
+
+```bash
+openssl x509 -in tls/tls.crt -noout -enddate
+```
+
+- **A certificate the installer created**<br /> Run the installer with `--renew-certificate`, naming the installation folder (the summary at the end of the installation prints this command with the folder filled in). It issues a new certificate from the same certificate authority, for the same names, and restarts `jim.web`; browsers that trust the CA carry on without a warning.
+
+    ```bash
+    curl -fsSL https://junctional.io/get | JIM_INSTALL_DIR=/opt/jim bash -s -- --renew-certificate
+    ```
+
+- **A certificate created by hand**<br /> Run the last four `openssl` and `chown` commands in [Creating the certificate by hand](#creating-the-certificate-by-hand) again, then restart `jim.web` as in [Replacing the certificate](#replacing-the-certificate).
+- **Your organisation's certificate**<br /> Replace the files as in [Replacing the certificate](#replacing-the-certificate).
+
+### Replacing the Certificate
+
+To install a renewed certificate from your CA, or to move from a created certificate to your organisation's, replace both files and restart `jim.web`, as root in the folder holding the compose files:
+
+```bash
+cp /path/to/new.crt tls/tls.crt
+cp /path/to/new.key tls/tls.key.new && chmod 400 tls/tls.key.new && chown 1654:1654 tls/tls.key.new
+mv -f tls/tls.key.new tls/tls.key
+docker compose -f docker-compose.yml -f docker-compose.production.yml restart jim.web
+```
+
+When you move away from a certificate the installer created, delete `tls/ca.key` and `tls/names`, and remove the JIM certificate authority from the machines that trusted it.
+
+To change the names a created certificate covers, run `setup.sh` again and choose to create a certificate: a new name needs a new certificate authority, which you distribute again.
+
+### Behind a Reverse Proxy or Load Balancer
+
+JIM does not need a reverse proxy, but you may already route web applications through one, or want JIM on port 443 behind a load balancer. Two configurations are supported:
+
+- **Re-encrypting to JIM** (recommended)<br /> The proxy terminates the browser's HTTPS connection and opens its own HTTPS connection to JIM, checking JIM's certificate. Traffic is encrypted end to end, which regulated environments commonly require, and nothing about JIM changes. The proxy must trust the CA that issued JIM's certificate. Give JIM's certificate both the name users type and the name the proxy connects to: proxies differ in which of the two they check.
+- **Plain HTTP on the JIM host's loopback interface**<br /> A proxy on the JIM host itself terminates TLS and forwards plain HTTP to JIM, which listens on the host's loopback interface only. See [Plain HTTP for a proxy on the same host](#plain-http-for-a-proxy-on-the-same-host).
+
+Either way, set `JIM_TRUSTED_PROXIES` so that JIM records each client's real address; see [Trusting the Reverse Proxy](#trusting-the-reverse-proxy).
 
 !!! important "Pass WebSocket connections through"
-    The JIM portal keeps a live connection to the server over WebSockets. Your reverse proxy **must** pass WebSocket connections through (the `Upgrade` and `Connection` headers in the example below). Without them the portal falls back to a slower connection method and responds sluggishly, and the browser's developer console reports `Failed to connect via WebSockets, using the Long Polling fallback transport`.
+    The JIM portal keeps a live connection to the server over WebSockets. Your reverse proxy **must** pass WebSocket connections through (the `Upgrade` and `Connection` headers in the examples below). Without them the portal falls back to a slower connection method and responds sluggishly, and the browser's developer console reports `Failed to connect via WebSockets, using the Long Polling fallback transport`.
 
-### nginx Example
+#### nginx Example
+
+Users reach `jim.example.com`; the proxy connects to JIM at `jim-app.example.com:5200`, and trusts the CA in `/etc/nginx/jim-ca.crt` (JIM's `tls/ca.crt`, or your organisation's CA certificate).
 
 ```nginx
 server {
     listen 443 ssl http2;
     server_name jim.example.com;
 
-    ssl_certificate     /etc/ssl/certs/jim.example.com.pem;
-    ssl_certificate_key /etc/ssl/private/jim.example.com.key;
+    ssl_certificate     /etc/nginx/ssl/jim.example.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/jim.example.com.key;
     ssl_protocols       TLSv1.2 TLSv1.3;
 
     location / {
-        proxy_pass http://localhost:5200;
+        # Re-encrypt to JIM, checking its certificate
+        proxy_pass https://jim-app.example.com:5200;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/nginx/jim-ca.crt;
+        proxy_ssl_server_name on;
+
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # JIM's sign-in response sets cookies larger than nginx's default buffer;
+        # without these, signing in fails with 502 Bad Gateway
+        proxy_buffer_size 16k;
+        proxy_buffers 8 16k;
 
         # WebSocket support (required for the JIM portal)
         proxy_http_version 1.1;
@@ -364,17 +534,55 @@ server {
 }
 ```
 
+#### Apache httpd Example
+
+Apache httpd is the default web server on Red Hat Enterprise Linux. This example needs `mod_ssl`, `mod_proxy`, `mod_proxy_http`, `mod_proxy_wstunnel`, `mod_headers` and `mod_rewrite`.
+
+```apache
+<VirtualHost *:443>
+    ServerName jim.example.com
+
+    SSLEngine on
+    SSLCertificateFile    /etc/pki/tls/certs/jim.example.com.crt
+    SSLCertificateKeyFile /etc/pki/tls/private/jim.example.com.key
+    SSLProtocol           -all +TLSv1.2 +TLSv1.3
+
+    # Re-encrypt to JIM, checking its certificate
+    SSLProxyEngine on
+    SSLProxyVerify require
+    SSLProxyCheckPeerName on
+    SSLProxyCACertificateFile /etc/pki/tls/certs/jim-ca.crt
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+
+    # WebSocket support (required for the JIM portal)
+    RewriteEngine on
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/(.*) wss://jim-app.example.com:5200/$1 [P,L]
+
+    ProxyPass        / https://jim-app.example.com:5200/
+    ProxyPassReverse / https://jim-app.example.com:5200/
+</VirtualHost>
+```
+
+On a host with SELinux enforcing, as Red Hat Enterprise Linux is by default, httpd may not open network connections until you allow it; without this, every request fails with `503 Service Unavailable` and the audit log records a `name_connect` denial:
+
+```bash
+setsebool -P httpd_can_network_connect 1
+```
+
 ### Trusting the Reverse Proxy
 
-When the reverse proxy terminates TLS, every request reaches JIM over plain HTTP. Set `JIM_TRUSTED_PROXIES` in `.env` to the address the proxy connects to JIM from, so that JIM reads the original `https` scheme and the real client IP address from the proxy's `X-Forwarded-Proto` and `X-Forwarded-For` headers. Until you do:
+Set `JIM_TRUSTED_PROXIES` in `.env` to the address the proxy connects to JIM from, so that JIM reads each client's real IP address, and the original scheme, from the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers. Until you do:
 
-- Sign-in fails: JIM sends your identity provider an `http://` callback address, which does not match the `https://` one you registered, so the identity provider rejects it with a redirect URI error.
-- JIM refuses every REST API request that carries a password, because it cannot confirm the connection is encrypted.
-- The security audit log and API rate limiting see the proxy's address instead of each client's.
+- The security audit log and API rate limiting see the proxy's address instead of each client's, so every client shares one rate limit.
+- **With plain HTTP to JIM only:** sign-in fails, because JIM sends your identity provider an `http://` callback address that does not match the `https://` one you registered, and JIM refuses every REST API request that carries a password, because it cannot confirm the connection is encrypted.
 
 The address to trust depends on where the proxy runs:
 
-- **Proxy on the JIM host, reaching JIM at `localhost:5200`** (as in the example above)<br /> JIM sees the connection arrive from the gateway address of the `jim-network` Docker network, not from `127.0.0.1`. Find it with:
+- **Proxy on another machine**<br /> That machine's IP address.
+- **Proxy on the JIM host, reaching JIM at `localhost:5200`**<br /> JIM sees the connection arrive from the gateway address of the `jim-network` Docker network, not from `127.0.0.1`. Find it with:
 
     ```bash
     docker network inspect jim-network --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
@@ -382,25 +590,45 @@ The address to trust depends on where the proxy runs:
 
     Docker assigns this address when it creates the network, so check it again after anything that removes and recreates the network, such as `docker compose down`.
 
-- **Proxy on another machine**<br /> That machine's IP address.
-
 For example:
 
 ```bash
-JIM_TRUSTED_PROXIES=172.18.0.1
+JIM_TRUSTED_PROXIES=10.0.0.5
 ```
 
 Then run your `docker compose ... up -d` command again so `jim.web` restarts with the setting. On startup `jim.web` logs `Trusting forwarded headers from 1 known proxy address(es) and 0 known network(s)`, which confirms it read the value. List only your proxy: JIM believes whatever a trusted address tells it about the client's address and scheme. See the [Configuration Reference](configuration.md#reverse-proxy) for the setting's full format.
 
-### Port Mapping
+### Plain HTTP for a Proxy on the Same Host
 
-`jim.web` listens on port `8080` inside its container. `docker-compose.production.yml` publishes it on host port `5200` on every interface. To change the host port, set `JIM_WEB_PORT` in `.env`:
+If a reverse proxy on the JIM host terminates TLS, JIM can serve it plain HTTP on the host's loopback interface instead, with no certificate of its own. Create `docker-compose.local-proxy.yml` next to the other compose files:
 
-```bash
-JIM_WEB_PORT=8000
+```yaml
+# JIM serves plain HTTP on this host's loopback interface only, for a reverse proxy on this host.
+services:
+  jim.web:
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      # Empty, so that JIM does not look for a certificate
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=
+      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=
+    ports: !override
+      - "127.0.0.1:5200:8080"
+    secrets: !reset []
+
+secrets: !reset {}
 ```
 
-When the reverse proxy runs on the same host, bind JIM to the loopback interface so it is reachable only through the proxy:
+Add `-f docker-compose.local-proxy.yml` after the other two files in every `docker compose` command for this deployment, point the proxy at `http://localhost:5200`, and set [`JIM_TRUSTED_PROXIES`](#trusting-the-reverse-proxy) to the `jim-network` gateway address. The `tls` folder is not needed. Traffic between the proxy and JIM is unencrypted, but it never leaves the host: other machines cannot reach port `5200`.
+
+### Port Mapping
+
+`jim.web` listens for HTTPS on port `8443` inside its container. `docker-compose.production.yml` publishes it on host port `5200` on every interface. To change the host port, set `JIM_WEB_PORT` in `.env`:
+
+```bash
+JIM_WEB_PORT=443
+```
+
+To accept connections on one interface only, such as the loopback interface behind a reverse proxy on the same host, prefix its address:
 
 ```bash
 JIM_WEB_PORT=127.0.0.1:5200
@@ -409,7 +637,7 @@ JIM_WEB_PORT=127.0.0.1:5200
 The base `docker-compose.yml` publishes no ports, so a deployment that leaves out `docker-compose.production.yml` is not reachable from the host.
 
 !!! note "Use `JIM_WEB_PORT` rather than a `ports` override"
-    Docker Compose combines port mappings from every file, so a `ports` entry in an override of your own adds a second mapping instead of replacing the default one.
+    Docker Compose combines port mappings from every file, so a `ports` entry in an override of your own adds a second mapping instead of replacing the default one, unless it is marked `!override` as in [Plain HTTP for a proxy on the same host](#plain-http-for-a-proxy-on-the-same-host).
 
 ---
 
@@ -530,7 +758,8 @@ Test-JIMConnection
 
 Use this checklist before going live:
 
-- [ ] TLS configured via reverse proxy (minimum TLS 1.2)
+- [ ] HTTPS certificate issued for every name users reach JIM at, and trusted by their browsers (your organisation's certificate, or the installer's certificate authority distributed)
+- [ ] Certificate renewal scheduled before the expiry date (`openssl x509 -in tls/tls.crt -noout -enddate`)
 - [ ] Strong, unique database password set
 - [ ] SSO configured and tested with your identity provider
 - [ ] Initial admin user can log in and access the administration UI
@@ -552,8 +781,8 @@ For air-gapped deployments, also verify:
 - [ ] PostgreSQL is accessible and the database has been set up
 - [ ] SSO/OIDC identity provider is accessible from JIM server
 - [ ] DNS resolves JIM server name correctly
-- [ ] TLS certificates are valid and trusted (if using HTTPS)
-- [ ] Firewall allows inbound traffic to JIM's web port only (your chosen host port, e.g. 443 via reverse proxy, or the mapped HTTP port). The bundled PostgreSQL container publishes no host port; the database is reached only over the internal `jim-network` bridge
+- [ ] JIM's certificate is valid for its name and trusted by users' browsers
+- [ ] Firewall allows inbound traffic to JIM's HTTPS port only (5200 by default, or your reverse proxy's port). The bundled PostgreSQL container publishes no host port; the database is reached only over the internal `jim-network` bridge
 - [ ] *If using an external PostgreSQL server:* the JIM host can reach it on 5432 (outbound, allowed on the database server's firewall)
 - [ ] File connector volumes mounted (if using File Connector)
 - [ ] Encryption key set backed up and included in the offline backup routine (see [Backup & Disaster Recovery](backup-recovery.md))

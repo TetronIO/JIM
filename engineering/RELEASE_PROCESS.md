@@ -134,7 +134,7 @@ Before deploying JIM, ensure you have:
 - **Docker Engine** (20.10+) and **Docker Compose** (v2+) installed
 - **PostgreSQL 18** - either as a container or external database server
 - A DNS name or IP address for the JIM server
-- TLS certificates if enabling HTTPS (recommended for production)
+- A TLS certificate for that name from your organisation's certificate authority, or OpenSSL to create one
 - An OIDC identity provider accessible from the air-gapped network (e.g., AD FS, Keycloak)
 
 #### Step 1: Transfer and Verify the Bundle
@@ -231,39 +231,9 @@ JIM_SSO_INITIAL_ADMIN=your-admin-identifier
 JIM_LOG_LEVEL=Information
 ```
 
-#### Step 5: Configure TLS (Recommended for Production)
+#### Step 5: Install the HTTPS Certificate
 
-JIM can be deployed behind a reverse proxy (nginx, Traefik, HAProxy) for TLS termination, or you can configure TLS directly.
-
-**Option A: Reverse Proxy (Recommended)**
-
-Deploy nginx or another reverse proxy in front of JIM:
-
-```nginx
-# /etc/nginx/sites-available/jim
-server {
-    listen 443 ssl;
-    server_name jim.your-domain.local;
-
-    ssl_certificate /etc/ssl/certs/jim.crt;
-    ssl_certificate_key /etc/ssl/private/jim.key;
-
-    location / {
-        proxy_pass http://localhost:5200;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-**Option B: Direct TLS in Docker**
-
-Mount certificates into the container and configure ASP.NET Core to use them (requires additional configuration in `docker-compose.yml`).
+JIM serves HTTPS itself, from `compose/tls/tls.crt` and `compose/tls/tls.key`; `docker compose up` fails until both exist. The bundle's `docs/INSTALL.md` (step 6) gives the commands, for your organisation's certificate or for a certificate authority of JIM's own, and the customer [Deployment Guide](../docs/administration/deployment.md#tls-and-reverse-proxy) covers renewal and reverse proxies.
 
 #### Step 6: Configure DNS
 

@@ -29,7 +29,20 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 |-------------------|-----------------------------------------------------------------------------|---------|-----------------------------|
 | `DOCKER_REGISTRY` | Container registry prefix for pulling images. Leave empty for local builds. | *(empty)* | `ghcr.io/tetronio/`        |
 | `JIM_VERSION`     | Release version tag. Leave empty for local builds.                          | *(empty)* | `0.10.0`                   |
-| `JIM_WEB_PORT`    | Host port the production compose file publishes the web UI and API on (the container listens on `8080`). Prefix an address to bind one interface only. | `5200` | `127.0.0.1:5200` |
+| `JIM_WEB_PORT`    | Host port the production compose file publishes the web UI and API on, over HTTPS (the container listens on `8443`). Prefix an address to bind one interface only. | `5200` | `127.0.0.1:5200` |
+
+---
+
+## HTTPS Certificate
+
+JIM's certificate is not set in `.env`. The production compose file reads it from two PEM files in the `tls` folder next to the compose files, which `setup.sh` creates:
+
+| File          | Contents                                                                                        |
+|---------------|-------------------------------------------------------------------------------------------------|
+| `tls/tls.crt` | JIM's certificate, followed by any intermediate CA certificates                                 |
+| `tls/tls.key` | Its unencrypted private key, belonging to UID `1654` with mode `400`                            |
+
+To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/secrets/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. See [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) for providing, creating and renewing the certificate.
 
 ---
 
@@ -160,7 +173,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable              | Description                                                                                                                                                                                                                     | Default              |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
-| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Required when TLS terminates at a reverse proxy: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](deployment.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)* -- forwarded headers are not trusted; the connecting socket's address is used as-is |
+| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Set it whenever a reverse proxy or load balancer sits in front of JIM. It is required when the proxy forwards plain HTTP to JIM: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](deployment.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)* -- forwarded headers are not trusted; the connecting socket's address is used as-is |
 
 !!! warning "Only set this behind a trusted reverse proxy"
     Trusting forwarded headers from an address you do not control lets a client spoof its own IP, defeating IP-based rate limiting and polluting logs. Only list proxies (or the proxy network) that terminate connections in front of JIM.

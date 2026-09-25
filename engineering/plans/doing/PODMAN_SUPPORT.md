@@ -1,6 +1,6 @@
 # Podman Support - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1 and 2 complete)
 - **Created:** 2026-09-25
 - **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
 - **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/doing/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
@@ -261,30 +261,36 @@ The first commit moves the PRD and this plan to `doing/` with `Status: Doing`.
    - Changelog: 🔄 "JIM's services now wait for the database at start-up instead of restarting until it is available."
    - Docs: the troubleshooting page gains the new log lines.
 
-### Phase 2: HTTPS by default, on both runtimes
+### Phase 2: HTTPS by default, on both runtimes ✅
 
 Runtime-neutral, so it ships on Docker without waiting for the Podman path, and the Podman path inherits it.
 
-1. **Health endpoints exempt from HTTPS redirection** in `src/JIM.Web/Program.cs`, test-first against the redirect behaviour. Both runtimes' probes are checked to report unhealthy when readiness fails.
+1. **Health endpoints exempt from HTTPS redirection:** `UseHttpsRedirectionExceptHealthProbes` in `src/JIM.Web/Middleware/HttpsRedirectionExtensions.cs`, test-first against a pipeline built with production's server addresses (a probe got 307 before the change). Verified at runtime: with the database stopped, the container's own health check command exits 22 and Docker marks `jim.web` unhealthy, then healthy again when the database returns.
 2. **Production listening** in `deploy/docker-compose.production.yml`:
    - `ASPNETCORE_URLS=https://+:8443;http://localhost:8080`, and the Kestrel certificate settings pointing at `/run/secrets/jim-tls/`.
    - `ports: "${JIM_WEB_PORT:-5200}:8443"`.
-   - Compose `secrets:` for the certificate and key.
-   - `src/JIM.Web/Dockerfile` also exposes 8443. The base compose file and the development override stay on HTTP 8080.
+   - Compose `secrets:` for the certificate and key. Verified: Compose ignores `uid`, `gid` and `mode` on file-based secrets and bind-mounts the host file with its own owner and mode, as D4 expected.
+   - `src/JIM.Web/Dockerfile` exposes 8443. The base compose file and the development override stay on HTTP 8080.
+   - Verified: TLS 1.2 and 1.3 accepted and 1.1 refused; HSTS sent; the loopback listener unreachable from other containers; an organisation chain (leaf plus issuing CA, RSA) served in full.
 3. **`deploy/setup.sh` certificate step:**
-   - Asks for the organisation's certificate and key, or generates a certificate authority and server certificate with `openssl`, for the host names and addresses the administrator gives (defaulting to the host's fully qualified name and primary address).
-   - Sets the key file's owner and mode for UID 1654, and prints the certificate authority's location and the server certificate's expiry date.
-   - `--renew-certificate` issues a new server certificate from the saved certificate authority and restarts JIM.Web.
+   - Creates a certificate authority and a server certificate with `openssl` (EC P-256, portable to OpenSSL 1.1.1), or installs and checks the organisation's certificate and key (parses, unencrypted, key matches, not expired, warns within 30 days).
+   - **Added in implementation:** the generated CA carries name constraints limiting it to the names given (non-critical, so a client that cannot apply them still accepts JIM's certificate). The CA's key sits on the JIM server and administrators are asked to trust the CA in every browser; without constraints, a stolen key could impersonate any site to those browsers. The cost: a new name needs a new CA, distributed again. An IP-only certificate uses the common name `JIM`, because OpenSSL checks a host-name-like common name against the DNS constraint when there is no DNS name.
+   - Makes the key belong to UID 1654: `chown` when run as root, otherwise from a throwaway container of the `jim-web` image, which also maps the owner correctly under rootless Docker.
+   - `--renew-certificate` issues a new server certificate from the saved CA for the saved names and restarts `jim.web`; verified that the restart serves the new certificate.
    - Asks whether a proxy or load balancer sits in front, and sets `JIM_TRUSTED_PROXIES` from the answer.
-4. **Release bundle:** the generated `INSTALL.md` gains the certificate steps as `openssl` commands, for air-gapped installs done by hand.
+   - Found while verifying: every release publishes `.env.example` as `default.env.example` (GitHub renames a leading dot), so the installer had been failing at its download step. Fixed in its own commit.
+4. **Release bundle:** the generated `INSTALL.md` gains the certificate steps as `openssl` commands, verified by running them verbatim, renewal included. It is now written with LF line endings: `.ps1` files check out with CRLF, and a heredoc copied from a CRLF guide writes carriage returns into the files it creates.
 5. **Documentation:**
-   - `docs/administration/deployment.md`: the "TLS and Reverse Proxy" section is rewritten around HTTPS by default. It covers bring-your-own certificates, renewal, a proxy re-encrypting to JIM (recommended), and the loopback HTTP alternative from #1816, with Apache httpd and nginx examples and the SELinux boolean. The security checklist's "TLS configured via reverse proxy" line changes to match.
-   - `docs/administration/configuration.md`: the certificate settings.
+   - `docs/administration/deployment.md`: "TLS and Reverse Proxy" rewritten around HTTPS by default: the certificate files, the installer's CA and distributing it, creating one by hand, renewal, replacement, re-encrypting proxies (nginx and Apache httpd, with the SELinux boolean), trusting the proxy, and the loopback HTTP alternative as a documented override file.
+   - `docs/administration/configuration.md`: the certificate settings; troubleshooting, getting started, quick start, prerequisites and security headers updated.
+   - Found while verifying: nginx rejects JIM's sign-in response (`upstream sent too big header`, 502) at its default buffer size, because the authentication cookies total about 6 KB; the nginx example now sets `proxy_buffer_size 16k` and `proxy_buffers 8 16k`. This also affected the example documented before this phase.
+   - Found while verifying: Kestrel loads `Certificates:Default` even when only HTTP URLs are configured, so the loopback HTTP override also blanks the certificate settings.
 6. **Checks before merging:**
    - `dotnet build JIM.sln` and `dotnet test JIM.sln`.
-   - A Docker boot with a generated certificate authority, then remote sign-in by server name.
-   - An nginx proxy re-encrypting to JIM, and the loopback HTTP alternative.
-7. **Changelog:** 🔄 "JIM now serves HTTPS out of the box, with your organisation's certificate or one the installer creates, so sign-in works from any machine without first setting up a reverse proxy."
+   - A Docker boot with a generated certificate authority, then browser sign-in by server name (Secure cookies, WebSocket over `wss://`).
+   - An nginx proxy re-encrypting to JIM (and rejecting JIM's certificate under the wrong CA), with sign-in through it and the client's own address recorded via `JIM_TRUSTED_PROXIES`; and the loopback HTTP alternative with no certificate.
+   - `setup.sh` end to end (created and organisation certificates, a proxy, non-root key ownership) and `--renew-certificate`.
+7. **Changelog:** 🔄 "JIM now serves HTTPS out of the box, with your organisation's certificate or one the setup script creates, so sign-in works from any machine without a reverse proxy."
 
 ### Phase 3: The Podman path
 
