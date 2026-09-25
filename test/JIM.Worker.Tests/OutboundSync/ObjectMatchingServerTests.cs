@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
@@ -1127,6 +1128,264 @@ public class ObjectMatchingServerTests
 
         // Assert
         Assert.That(result, Is.Null, "A LongNumber value mismatch must never be returned as an export match");
+    }
+
+    #endregion
+
+    #region FindPrefetchedMatchingConnectedSystemObjectAsync Tests
+
+    [Test]
+    public async Task FindPrefetchedMatchingConnectedSystemObjectAsync_SingleCandidate_ReturnsCsoAsync()
+    {
+        // Arrange
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var cso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        var candidates = new ExportMatchCandidates();
+        candidates.AddCandidate(rule.Id, "EMP001", cso.Id);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, new List<ObjectMatchingRule> { rule }, candidates);
+
+        // Assert
+        Assert.That(result, Is.Not.Null, "The single prefetched candidate should be hydrated and returned");
+        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+    }
+
+    [Test]
+    public async Task FindPrefetchedMatchingConnectedSystemObjectAsync_MultipleCandidates_ReturnsFirstAddedAsync()
+    {
+        // Arrange - two eligible candidates for the same (rule, value); the prefetched lookup returns
+        // whichever the caller (the batch query, which orders by Connected System Object Id) put first.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var firstCso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var secondCso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        var candidates = new ExportMatchCandidates();
+        candidates.AddCandidate(rule.Id, "EMP001", firstCso.Id);
+        candidates.AddCandidate(rule.Id, "EMP001", secondCso.Id);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, new List<ObjectMatchingRule> { rule }, candidates);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(firstCso.Id), "The first candidate added should be returned by ID order");
+    }
+
+    [Test]
+    public async Task FindPrefetchedMatchingConnectedSystemObjectAsync_FirstCandidateNoLongerEligible_TriesNextCandidateAsync()
+    {
+        // Arrange - the first candidate was claimed by another Metaverse Object on this page between the
+        // prefetch and this lookup, so hydration finds it no longer eligible and the next is tried.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var noLongerEligibleCso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        noLongerEligibleCso.MetaverseObjectId = Guid.NewGuid(); // claimed since the prefetch ran
+        var eligibleCso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        var candidates = new ExportMatchCandidates();
+        candidates.AddCandidate(rule.Id, "EMP001", noLongerEligibleCso.Id);
+        candidates.AddCandidate(rule.Id, "EMP001", eligibleCso.Id);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, new List<ObjectMatchingRule> { rule }, candidates);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(eligibleCso.Id), "The no-longer-eligible candidate must be skipped in favour of the next one");
+        Assert.That(candidates.GetCandidates(rule.Id, "EMP001"), Does.Not.Contain(noLongerEligibleCso.Id),
+            "The no-longer-eligible candidate must be removed so no later lookup on the page is offered it again");
+    }
+
+    [Test]
+    public async Task FindPrefetchedMatchingConnectedSystemObjectAsync_NoCandidatesForResolvedValue_ReturnsNullAsync()
+    {
+        // Arrange - the rule resolves a usable value, but the prefetch found nothing for it (no CSO in
+        // the target holds that value).
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+        var candidates = new ExportMatchCandidates(); // nothing added for rule.Id / "EMP001"
+
+        // Act
+        var result = await Jim.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, new List<ObjectMatchingRule> { rule }, candidates);
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task FindPrefetchedMatchingConnectedSystemObjectAsync_FirstRuleUnresolved_SkipsToNextResolvedRuleAsync()
+    {
+        // Arrange - the first (lowest Order) rule has no sources configured (a misconfiguration the
+        // per-object path would throw for internally); the prefetched path must log and move on to the
+        // next rule rather than stopping the whole lookup.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var cso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+
+        var unresolvedRule = new ObjectMatchingRule
+        {
+            Id = 9101,
+            Order = 1,
+            ConnectedSystemObjectTypeId = targetUserType.Id,
+            ConnectedSystemObjectType = targetUserType,
+            Sources = new List<ObjectMatchingRuleSource>() // no sources
+        };
+        var resolvedRule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+        resolvedRule.Order = 2;
+
+        var candidates = new ExportMatchCandidates();
+        candidates.AddCandidate(resolvedRule.Id, "EMP001", cso.Id);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, new List<ObjectMatchingRule> { unresolvedRule, resolvedRule }, candidates);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+    }
+
+    [Test]
+    public async Task FindPrefetchedMatchingConnectedSystemObjectAsync_MisconfiguredRule_MatchesPerObjectPathOutcomeAsync()
+    {
+        // Arrange - a rule whose source carries no Connected System attribute (a configuration fault);
+        // both the per-object and prefetched paths must report no match rather than throwing, so
+        // provisioning proceeds exactly as it would for the per-object path.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var misconfiguredRule = new ObjectMatchingRule
+        {
+            Id = 9102,
+            Order = 1,
+            ConnectedSystemObjectTypeId = targetUserType.Id,
+            ConnectedSystemObjectType = targetUserType,
+            TargetMetaverseAttribute = employeeIdAttr,
+            TargetMetaverseAttributeId = employeeIdAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 9102,
+                    Order = 1,
+                    ConnectedSystemAttribute = null,
+                    ConnectedSystemAttributeId = null
+                }
+            }
+        };
+
+        // Act
+        var perObjectResult = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { misconfiguredRule });
+        var prefetchedResult = await Jim.ObjectMatching.FindPrefetchedMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, new List<ObjectMatchingRule> { misconfiguredRule }, new ExportMatchCandidates());
+
+        // Assert - both paths agree: no match, so the caller proceeds to provisioning.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(perObjectResult, Is.Null);
+            Assert.That(prefetchedResult, Is.Null);
+        }
     }
 
     #endregion

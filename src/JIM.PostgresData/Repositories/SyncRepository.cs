@@ -199,6 +199,14 @@ public partial class SyncRepository : ISyncRepository
         ConnectedSystemObjectType connectedSystemObjectType, ObjectMatchingRule objectMatchingRule)
         => _repo.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(metaverseObject, connectedSystem, connectedSystemObjectType, objectMatchingRule);
 
+    public Task<IReadOnlyList<(object Value, Guid ConnectedSystemObjectId)>> GetExportMatchCandidateIdsAsync(
+        int connectedSystemId, int connectedSystemObjectTypeId, string connectedSystemAttributeName,
+        AttributeDataType dataType, bool caseSensitive, IReadOnlyCollection<object> values)
+        => _repo.ConnectedSystems.GetExportMatchCandidateIdsAsync(connectedSystemId, connectedSystemObjectTypeId, connectedSystemAttributeName, dataType, caseSensitive, values);
+
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectForExportMatchAsync(Guid connectedSystemObjectId)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectForExportMatchAsync(connectedSystemObjectId);
+
     #endregion
 
     #region Metaverse Object — Writes
