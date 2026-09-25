@@ -4,6 +4,7 @@
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
+- **Plan:** [PODMAN_SUPPORT.md](../plans/PODMAN_SUPPORT.md)
 
 ## Problem Statement
 
@@ -65,7 +66,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 **Start-up behaviour (runtime-neutral)**
 
 11. Every JIM service must tolerate its dependencies being unavailable at start-up, rather than relying on the supervisor to order start-up by health. A pod starts all its containers at once. Specifically, the Worker must wait for PostgreSQL with a bounded retry and a clear log line per attempt, instead of exiting. `jim.web` and `jim.scheduler` already wait for the Worker's readiness.
-12. The worker and scheduler heartbeat health checks must move from shell one-liners in `docker-compose.yml` into scripts inside the images. The one-liners are full of `%` and `$`, which systemd and Quadlet treat as specifiers, and one definition in the image then serves both runtimes.
+12. *Withdrawn during planning (plan decision D8).* This required moving the Worker and Scheduler heartbeat health checks into scripts inside the images, because systemd treats `%` and `$` as specifiers. In the chosen pod-file design the probes live in YAML that systemd never parses, and testing confirmed they reach Podman unaltered.
 
 **Remote access**
 
@@ -181,6 +182,8 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 ## Open Questions
 
+*All seven are answered by decisions D1 to D7 in the [implementation plan](../plans/PODMAN_SUPPORT.md#decisions).*
+
 1. **Secrets mechanism:** Podman secrets (`podman secret create`) referenced from the pod file, a Kubernetes `Secret` document played alongside it, or a generated file with restricted permissions?
 2. **Configuration supply:** a Kubernetes `ConfigMap` passed with `podman kube play --configmap` (and Quadlet `ConfigMap=`), or `setup.sh` generating it from the `.env` an administrator already knows?
 3. **Optional database:** one pod file with PostgreSQL removed for external-database installs, or two pod files? A separate database pod would lose the shared-`localhost` networking, so it should stay in the same pod when bundled.
@@ -196,7 +199,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 - [ ] All image references fully qualified; the release bundle builds with the new PostgreSQL reference
 - [ ] Worker waits for PostgreSQL at start-up with a bounded retry and logged attempts, covered by tests
 - [ ] Worker `SYS_ADMIN` and `DAC_READ_SEARCH` removed, or their use documented if one is found
-- [ ] Heartbeat health checks run from scripts inside the images; the Docker stack stays healthy
+- [ ] Every JIM service (Web and Scheduler as well as Worker) waits for an unreachable database instead of exiting (requirement 12's criterion withdrawn; see plan D8)
 
 ### Phase 2: Podman path
 
