@@ -41,4 +41,20 @@ public sealed record GenerationOutcome(
     string? Value,
     long? NumericValue,
     GeneratedValueAssignment? Assignment,
-    string? FailureMessage);
+    string? FailureMessage)
+{
+    /// <summary>
+    /// Set when <see cref="UniqueValueGenerationServer.ResolveAsync"/> found a live Sticky assignment for this
+    /// request's object and attribute but treated it as stale (bug fix, #242, Scenario 23) rather than
+    /// reasserting it: the object currently holds a different, genuinely-present value for the attribute, left
+    /// behind by a contributor that has since taken the attribute over. <paramref name="Kind"/> is then
+    /// whatever the request resolved to once the stale assignment was treated as absent (typically
+    /// <see cref="GenerationOutcomeKind.Adopted"/>, adopting that other value; occasionally
+    /// <see cref="GenerationOutcomeKind.Generated"/>, <see cref="GenerationOutcomeKind.Waiting"/>, or a failure
+    /// kind). The caller (the worker) must delete the stale assignment through its existing deletion flush
+    /// (<see cref="UniqueValueGenerationServer.DeleteAssignmentsAsync"/>) so the database agrees with the
+    /// object; a caller that never persists anything, such as Sync Preview, has nothing to do with it. Null on
+    /// every outcome that did not replace a stale Sticky match, which is the overwhelming majority.
+    /// </summary>
+    public Guid? StaleAssignmentId { get; init; }
+}

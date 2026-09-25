@@ -89,8 +89,8 @@ Triggering a Run Profile returns an activity ID. The actual work runs on the wor
 **Setting up Run Profiles for a new Connected System:**
 
 1. Create the Connected System and import its schema
-2. Create the Run Profiles you need. Typically: a delta import, a delta sync, and an export. Add full variants too if you want the option of a periodic ground-truth refresh.
-3. Either add them as steps to a [schedule](schedules.md) for automated execution, or run them on demand for one-off operations
+2. Create the Run Profiles you need: a Full Import, a Full Synchronisation and an Export at minimum, since the first run has to look at everything rather than only what changes. Add delta variants for ongoing operation, and keep the full variants for periodic ground-truth refreshes.
+3. Use the full variants to bring the Connected System in, in the order [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) sets out, before switching to delta; then either add the delta Run Profiles as steps to a [schedule](schedules.md) for automated execution, or run them on demand for one-off operations
 
 **Running a one-off import:**
 

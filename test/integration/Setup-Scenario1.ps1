@@ -28,6 +28,28 @@
 .EXAMPLE
     ./Setup-Scenario1.ps1 -Template Small
 
+.PARAMETER GenerateAccountName
+    Opt-in (Unique Value Generation, #242). When set, enables the In development
+    Features.UniqueValueGeneration feature flag and replaces the ordinary samAccountName -> Account
+    Name import mapping with a generated one: base expression Lower(cs["firstName"]) + "." +
+    Lower(cs["lastName"]), OnlyIfTaken with a Number collision suffix starting at 1 (JIM's own
+    defaults). The HR CSV's samAccountName column, if present, is then simply unused; it need not be
+    omitted for this switch to work, though Scenario 23 pairs it with a CSV generated via
+    Get-OrGenerate-TestCSV.ps1 -OmitItOwnedAttributes to be representative of a real HR feed.
+
+    Email still feeds Email -> mail and Email -> userPrincipalName on export. When the CSV has no
+    "email" column, Email is generated too, from the same two CS attributes the generated Account
+    Name reads (Lower(cs["firstName"]) + "." + Lower(cs["lastName"]) + "@panoply.local", OnlyIfTaken,
+    Number, the suffix placed before the "@"). It has to be generated rather than merely derived:
+    Active Directory refuses a duplicate userPrincipalName, so two same-named people cannot share an
+    address. Import mappings evaluate against the Connected System only, so Email cannot yet be read
+    from the generated Account Name itself (mv[...] reads arrive with the Metaverse-Derived Attribute
+    Flows PRD, release 2), and the two can in principle carry different suffixes until then.
+
+    Without this switch, setup is unchanged: the ordinary samAccountName -> Account Name mapping is
+    created exactly as before, and the feature flag is left alone. Scenario 1 itself is not converted
+    in this phase; Invoke-Scenario1-HRToIdentityDirectory.ps1 is unaffected either way.
+
 .NOTES
     This script requires the JIM PowerShell module and assumes:
     - JIM is running and accessible
@@ -53,7 +75,10 @@ param(
     [int]$MaxExportParallelism = 1,
 
     [Parameter(Mandatory=$false)]
-    [hashtable]$DirectoryConfig
+    [hashtable]$DirectoryConfig,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$GenerateAccountName
 )
 
 Set-StrictMode -Version Latest
@@ -878,6 +903,14 @@ try {
             @{ CsAttr = "status";            MvAttr = "Status" }               # Established/Active/Archived - controls userAccountControl in AD
         )
 
+        # Unique Value Generation (#242): -GenerateAccountName replaces the ordinary samAccountName ->
+        # Account Name mapping with a generated one, created further below once this rule's mappings
+        # are known. The two must not both exist; a target attribute can only have one contributor
+        # from this Rule at this priority.
+        if ($GenerateAccountName) {
+            $importMappings = @($importMappings | Where-Object { $_.CsAttr -ne 'samAccountName' })
+        }
+
         $exportMappings = if ($isRfcDirectory) {
             @(
                 @{ MvAttr = "Account Name";          LdapAttr = "uid" }
@@ -978,6 +1011,66 @@ try {
             }
         }
         Write-Host "  ✓ Import attribute mappings configured ($importMappingsCreated new)" -ForegroundColor Green
+
+        # Unique Value Generation (#242): replace samAccountName -> Account Name with a generated
+        # mapping, and derive Email from the names when the CSV carries no "email" column.
+        if ($GenerateAccountName) {
+            Write-Host "  Enabling Unique Value Generation and creating the generated Account Name mapping..." -ForegroundColor Gray
+
+            # In development: creating a generated mapping is refused (HTTP 400) until this is on.
+            # -AllowInDevelopment is the integration harness's standing acknowledgement (same
+            # mechanism Enable-JIMFeature's own help documents for scenario setup).
+            Enable-JIMFeature -Name "Features.UniqueValueGeneration" -AllowInDevelopment | Out-Null
+            Write-Host "  ✓ Enabled Features.UniqueValueGeneration (In development)" -ForegroundColor Green
+
+            $accountNameMvAttr = $mvAttributes | Where-Object { $_.name -eq 'Account Name' }
+            if (-not $accountNameMvAttr) {
+                throw "Setup failed: Metaverse attribute 'Account Name' not found; cannot create the generated mapping."
+            }
+
+            $existingAccountNameMapping = $existingImportMappings | Where-Object {
+                $_.targetMetaverseAttributeId -eq $accountNameMvAttr.id
+            }
+            if (-not $existingAccountNameMapping) {
+                # OnlyIfTaken (JIM's own default) with a Number suffix starting at 1: try the bare
+                # "first.last" value, and only append a collision suffix once it is taken. The base
+                # expression reads cs[...] rather than mv[...]: import mappings evaluate against the
+                # Connected System only (Metaverse-Derived Attribute Flows land in release 2).
+                New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
+                    -TargetMetaverseAttributeId $accountNameMvAttr.id `
+                    -Expression 'Lower(cs["firstName"]) + "." + Lower(cs["lastName"])' `
+                    -Generate -TokenKind OnlyIfTaken -SuffixStyle Number -SuffixStart 1 | Out-Null
+                Write-Host "  ✓ Generated Account Name mapping created (Lower(firstName).Lower(lastName), OnlyIfTaken/Number from 1)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  Account Name mapping already exists; leaving it as configured" -ForegroundColor Gray
+            }
+
+            # Email still feeds Email -> mail / userPrincipalName on export. When the CSV was
+            # generated with -OmitItOwnedAttributes there is no "email" column, so the ordinary
+            # mapping loop above found no $csvAttr and silently created nothing; generate it instead
+            # from the same two CS attributes the generated Account Name reads. It must be generated
+            # rather than merely derived: two people with the same name would otherwise share an
+            # address, and Active Directory refuses a duplicate userPrincipalName. The suffix goes
+            # before the "@" (marisol.fenwick1@panoply.local), which is the email-shaped placement rule.
+            $csvEmailAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'email' }
+            if (-not $csvEmailAttr) {
+                $emailMvAttr = $mvAttributes | Where-Object { $_.name -eq 'Email' }
+                if (-not $emailMvAttr) {
+                    throw "Setup failed: Metaverse attribute 'Email' not found; cannot derive it from names."
+                }
+                $existingEmailMapping = $existingImportMappings | Where-Object {
+                    $_.targetMetaverseAttributeId -eq $emailMvAttr.id
+                }
+                if (-not $existingEmailMapping) {
+                    New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
+                        -TargetMetaverseAttributeId $emailMvAttr.id `
+                        -Expression 'Lower(cs["firstName"]) + "." + Lower(cs["lastName"]) + "@panoply.local"' `
+                        -Generate -TokenKind OnlyIfTaken -SuffixStyle Number -SuffixStart 1 | Out-Null
+                    Write-Host "  ✓ Generated Email mapping created (CSV has no 'email' column): Lower(firstName).Lower(lastName)@panoply.local, OnlyIfTaken/Number" -ForegroundColor Green
+                }
+            }
+        }
 
         # Add constant expression mapping for Type = PersonEntity on import rule
         $typeAttr = $mvAttributes | Where-Object { $_.name -eq "Type" }

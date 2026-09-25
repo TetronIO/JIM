@@ -527,7 +527,7 @@ public class ExportEvaluationServer
                 .SetTag("ruleName", exportRule.Name ?? "unnamed")
                 .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
             {
-                var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
+                var (pendingExport, mergedExistingPendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
                     mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
                     mvAttributeDictionary, preResolvedForSystem, recallSemantics, result.AttributeFlowErrors,
                     result.ObjectTypeConflicts);
@@ -537,6 +537,14 @@ public class ExportEvaluationServer
                 if (pendingExport != null)
                 {
                     result.PendingExports.Add(pendingExport);
+                }
+
+                // Merged into an already-staged Pending Export (#242): never added to PendingExports (it
+                // already belongs to the caller's batch and must not be queued a second time), but still
+                // reported so a generated export mapping's change merged into it gets resolved.
+                if (mergedExistingPendingExport != null)
+                {
+                    result.MergedExistingPendingExports.Add(mergedExistingPendingExport);
                 }
 
                 // Collect provisioning CSOs for batch creation when deferSave is true, recording
@@ -2304,7 +2312,17 @@ public class ExportEvaluationServer
         ConnectedSystemObject? existingCso)
         => SyncEngine.DetectExportObjectTypeConflict(mvo, exportRule, existingCso);
 
-    private async Task<(PendingExport? PendingExport, ConnectedSystemObject? ProvisioningCso, int CsoAlreadyCurrentCount)> CreateOrUpdatePendingExportWithNoNetChangeAsync(
+    /// <returns>
+    /// <c>PendingExport</c> is a brand-new Pending Export the caller must add to its batch. <c>MergedExistingPendingExport</c>
+    /// is instead set when this call merged its attribute changes into an ALREADY-STAGED Pending Export from
+    /// <paramref name="existingPendingExports"/> (e.g. one drift detection staged earlier in the same page): that
+    /// row already belongs to the caller's batch, so it must never be added again, but a generated export
+    /// mapping's change merged into it still needs <c>SyncTaskProcessorBase.ResolveExportGeneratedValuesAsync</c>
+    /// to see and resolve it (#242; before this field existed, a marker merged this way was invisible to the
+    /// resolver and reached <c>FlushPendingExportOperationsAsync</c>'s integrity guard unresolved, throwing).
+    /// The two are never both set.
+    /// </returns>
+    private async Task<(PendingExport? PendingExport, PendingExport? MergedExistingPendingExport, ConnectedSystemObject? ProvisioningCso, int CsoAlreadyCurrentCount)> CreateOrUpdatePendingExportWithNoNetChangeAsync(
         MetaverseObject mvo,
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
@@ -2339,7 +2357,7 @@ public class ExportEvaluationServer
         {
             objectTypeConflicts?.Add(decision.Conflict!);
             LogObjectTypeConflict(nameof(CreateOrUpdatePendingExportWithNoNetChangeAsync), decision.Conflict!, exportRule.ConnectedSystemId);
-            return (null, null, 0);
+            return (null, null, null, 0);
         }
 
         // Reference recall must never provision (#1003): a referencing object with no presence in
@@ -2352,7 +2370,7 @@ public class ExportEvaluationServer
             Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Recall skipping MVO {MvoId} for system {SystemId}: " +
                 "no exportable presence (CSO {CsoStatus})",
                 mvo.Id, exportRule.ConnectedSystemId, existingCso?.Status.ToString() ?? "absent");
-            return (null, null, 0);
+            return (null, null, null, 0);
         }
 
         PendingExportChangeType changeType;
@@ -2371,7 +2389,7 @@ public class ExportEvaluationServer
             case OutboundStagingOutcome.ProvisioningDeclined:
                 Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: No CSO exists (or PendingProvisioning) and ProvisionToConnectedSystem is not enabled for rule {RuleName}",
                     exportRule.Name);
-                return (null, null, 0);
+                return (null, null, null, 0);
 
             case OutboundStagingOutcome.PendingProvisioningChangesIrrelevant:
                 // Restaging the existing Create Pending Export from changes irrelevant to this rule would
@@ -2379,7 +2397,7 @@ public class ExportEvaluationServer
                 Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Skipping PendingProvisioning CSO {CsoId} for rule {RuleName} — " +
                     "none of the {ChangeCount} changed attributes map to this export rule's Attribute Flow Rules",
                     existingCso!.Id, exportRule.Name, changedAttributes.Count);
-                return (null, null, 0);
+                return (null, null, null, 0);
 
             case OutboundStagingOutcome.ReusePendingProvisioningCso:
                 // Reuse existing PendingProvisioning CSO (already has secondary external ID); a previous
@@ -2491,7 +2509,7 @@ public class ExportEvaluationServer
         {
             Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: No attribute changes for MVO {MvoId} to system {SystemId} (skipped {SkippedCount} no-net-change attributes)",
                 mvo.Id, exportRule.ConnectedSystemId, csoAlreadyCurrentCount);
-            return (null, null, csoAlreadyCurrentCount);
+            return (null, null, null, csoAlreadyCurrentCount);
         }
 
         // For newly provisioned CSOs, add the secondary external ID value so confirming import can match
@@ -2544,8 +2562,10 @@ public class ExportEvaluationServer
                         csoId.Value, existingPendingExport.Id);
                 }
 
-                // Return null for PendingExport since we merged into an existing one (no new PE to batch-create)
-                return (null, provisioningCso, csoAlreadyCurrentCount);
+                // Return null for PendingExport since we merged into an existing one (no new PE to batch-create),
+                // but report the merged-into PE via MergedExistingPendingExport (#242) so a generated export
+                // mapping's change just merged into it is still visible to ResolveExportGeneratedValuesAsync.
+                return (null, existingPendingExport, provisioningCso, csoAlreadyCurrentCount);
             }
         }
 
@@ -2597,7 +2617,7 @@ public class ExportEvaluationServer
                     Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: CSO {CsoId} has a pending Delete export; " +
                         "recall skipping {ChangeCount} change(s) (deprovisioning supersedes membership updates)",
                         csoId, attributeChanges.Count);
-                    return (null, provisioningCso, csoAlreadyCurrentCount);
+                    return (null, null, provisioningCso, csoAlreadyCurrentCount);
                 }
 
                 // A Create that has already been sent (or auto-confirmed away) and is awaiting confirmation
@@ -2629,6 +2649,25 @@ public class ExportEvaluationServer
                     var changesToAdd = mergeShell.AttributeValueChanges.Where(avc => !beforeIds.Contains(avc.Id)).ToList();
                     var changeIdsToRemove = beforeIds.Except(mergeShell.AttributeValueChanges.Select(avc => avc.Id)).ToList();
 
+                    // Unique Value Generation (#242) integrity guard: this branch persists immediately via a
+                    // direct repository call below, with no deferred resolution step afterwards, unlike every
+                    // other path through this method (which routes its result through the caller's batch for
+                    // SyncTaskProcessorBase.ResolveExportGeneratedValuesAsync to resolve before
+                    // FlushPendingExportOperationsAsync persists). A generated export mapping re-evaluating this
+                    // Connected System Object before its Create is confirmed would otherwise write an unresolved
+                    // marker straight to the database with no later chance to resolve it. Fail fast rather than
+                    // risk that (Synchronisation Integrity); a full fix would give this branch the same deferred
+                    // resolution the others have.
+                    var unresolvedGeneration = changesToAdd.Find(c => c.PendingGeneration != null);
+                    if (unresolvedGeneration != null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Pending Export attribute change {unresolvedGeneration.Id} for Connected System Object {csoId.Value} still " +
+                            $"has an unresolved generated value marker for attribute {unresolvedGeneration.AttributeId}. Appending onto " +
+                            "an exported-but-unconfirmed Create Pending Export has no deferred resolution step; persisting now would " +
+                            "silently drop the value.");
+                    }
+
                     await SyncRepo.AppendAttributeChangesToPendingExportAsync(dbPendingExport.Id, changesToAdd, changeIdsToRemove);
 
                     Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Appended {AddedCount} attribute change(s) onto " +
@@ -2636,7 +2675,7 @@ public class ExportEvaluationServer
                         "staged change); the Create is never re-sent, and the change travels as an Update once the Create is confirmed. Source: MVO {MvoId}",
                         changesToAdd.Count, dbPendingExport.Id, csoId.Value, mergeResult.ReplacedCount, mvo.Id);
 
-                    return (null, provisioningCso, csoAlreadyCurrentCount);
+                    return (null, null, provisioningCso, csoAlreadyCurrentCount);
                 }
 
                 // Build merged attribute changes: start with export eval changes (takes precedence),
@@ -2732,7 +2771,7 @@ public class ExportEvaluationServer
         Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Created {ChangeType} PendingExport {ExportId} for MVO {MvoId} with {AttrCount} attribute changes (skipped {SkippedCount} no-net-change, deferSave={DeferSave})",
             changeType, pendingExport.Id, mvo.Id, attributeChanges.Count, csoAlreadyCurrentCount, deferSave);
 
-        return (pendingExport, provisioningCso, csoAlreadyCurrentCount);
+        return (pendingExport, null, provisioningCso, csoAlreadyCurrentCount);
     }
 
     /// <summary>
@@ -3160,7 +3199,7 @@ public class ExportEvaluationServer
             // resolve it here, through this session's own dry-run service, rather than leaving it to a
             // persistence-time resolver that a preview never reaches.
             if (attributeChanges.Exists(c => c.PendingGeneration != null))
-                await ResolvePreviewGeneratedExportValuesAsync(effectiveChangeType.Value, effectiveExistingCso, cache, attributeChanges);
+                await ResolvePreviewGeneratedExportValuesAsync(effectiveExistingCso, attributeChanges);
         }
 
         return new OutboundPreviewEntry
@@ -3190,9 +3229,7 @@ public class ExportEvaluationServer
     /// it.
     /// </summary>
     private async Task ResolvePreviewGeneratedExportValuesAsync(
-        PendingExportChangeType changeType,
         ConnectedSystemObject? existingCso,
-        ExportEvaluationCache cache,
         List<PendingExportAttributeValueChange> attributeChanges)
     {
         var marked = attributeChanges.Where(c => c.PendingGeneration != null).ToList();
@@ -3203,26 +3240,22 @@ public class ExportEvaluationServer
         var generationServer = _previewUniqueValueGenerationServer!;
         var resolveOptions = _previewUniqueValueResolveOptions!;
 
+        // Adoption removed (FR 30, export mode; product-owner decision): a joined Connected System Object's
+        // existing value is never read for a generated export mapping any more, in preview or in a real run.
+        // With no assignment, generation runs unconditionally, so this preview needs neither changeType nor
+        // existingCso to decide whether to look one up.
         var requests = new List<GenerationRequest>(marked.Count);
         foreach (var change in marked)
         {
-            string? adoptableValue = null;
-            if (!change.PendingGeneration!.BaseUnavailable && changeType != PendingExportChangeType.Create && existingCso != null)
-            {
-                var existingValue = cache.CsoAttributeValues[(existingCso.Id, change.AttributeId)].FirstOrDefault();
-                adoptableValue = existingValue == null ? null : RenderPreviewComparableExportValue(change.Attribute.Type, existingValue);
-            }
-
             requests.Add(new GenerationRequest
             {
                 Mode = GeneratedValueMode.Export,
                 ConnectedSystemObjectId = existingCso?.Id,
                 ConnectedSystemObjectTypeAttributeId = change.AttributeId,
-                Generation = change.PendingGeneration.Mapping.Generation!,
+                Generation = change.PendingGeneration!.Mapping.Generation!,
                 TargetType = change.Attribute.Type,
                 AttributeName = change.Attribute.Name,
                 BaseValue = change.PendingGeneration.BaseValue,
-                AdoptableValue = adoptableValue,
                 StickyOnly = change.PendingGeneration.BaseUnavailable,
                 CallerState = change
             });
@@ -3238,15 +3271,15 @@ public class ExportEvaluationServer
             switch (outcome.Kind)
             {
                 case GenerationOutcomeKind.Generated:
-                case GenerationOutcomeKind.Adopted:
                 case GenerationOutcomeKind.Sticky:
                     GeneratedExportValueWriter.Apply(change, outcome.Value, outcome.NumericValue);
                     break;
 
                 default:
-                    // Waiting, and every failure kind (Exhausted, NoBaseValue, WidthExceeded,
-                    // AdoptionConflict): nothing resolvable to show, so the preview omits the attribute rather
-                    // than displaying a blank or stale marker.
+                    // Waiting, and every failure kind (Exhausted, NoBaseValue, WidthExceeded, AdoptionConflict -
+                    // the latter now unreachable for export mode, since AdoptableValue is never populated above):
+                    // nothing resolvable to show, so the preview omits the attribute rather than displaying a
+                    // blank or stale marker.
                     attributeChanges.Remove(change);
                     break;
             }
@@ -3269,23 +3302,6 @@ public class ExportEvaluationServer
             DryRun = true,
             Reservations = new UniqueValueReservationSet(),
             ReservationOwnerId = Guid.NewGuid()
-        };
-    }
-
-    /// <summary>
-    /// The preview-side counterpart of <c>SyncTaskProcessorBase.RenderComparableExportValue</c>: renders a
-    /// Connected System Object attribute value as the text an export-mode generation candidate compares
-    /// against. A Number or LongNumber target holds its value in
-    /// <see cref="ConnectedSystemObjectAttributeValue.IntValue"/> / <see cref="ConnectedSystemObjectAttributeValue.LongValue"/>,
-    /// never <see cref="ConnectedSystemObjectAttributeValue.StringValue"/>.
-    /// </summary>
-    private static string? RenderPreviewComparableExportValue(AttributeDataType targetType, ConnectedSystemObjectAttributeValue value)
-    {
-        return targetType switch
-        {
-            AttributeDataType.Number => value.IntValue?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            AttributeDataType.LongNumber => value.LongValue?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            _ => value.StringValue
         };
     }
 
