@@ -93,7 +93,10 @@ public class MetaverseRepository : IMetaverseRepository
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.SingleOrDefaultAsync(q => EF.Functions.ILike(q.Name, name));
+        // Exact case-insensitive equality (not EF.Functions.ILike, which treats %, _ and \ in the
+        // value as wildcards: a type named "Group" would otherwise be reachable by the pattern
+        // "Gr_up"). EF translates ToLower() to PostgreSQL's lower().
+        return await query.SingleOrDefaultAsync(q => q.Name.ToLower() == name.ToLower());
     }
 
     public async Task<MetaverseObjectType?> GetMetaverseObjectTypeByPluralNameAsync(string pluralName, bool includeChildObjects)
@@ -102,7 +105,8 @@ public class MetaverseRepository : IMetaverseRepository
         if (includeChildObjects)
             query = query.Include(q => q.Attributes);
 
-        return await query.SingleOrDefaultAsync(q => EF.Functions.ILike(q.PluralName, pluralName));
+        // Exact case-insensitive equality; see the comment on GetMetaverseObjectTypeAsync(string, ...) above.
+        return await query.SingleOrDefaultAsync(q => q.PluralName.ToLower() == pluralName.ToLower());
     }
 
     public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
@@ -2441,14 +2445,16 @@ public class MetaverseRepository : IMetaverseRepository
                     EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
         }
 
-        // filter by specific attribute name and value (exact match, case-insensitive)
+        // filter by specific attribute name and value (exact match, case-insensitive; not
+        // EF.Functions.ILike, which treats %, _ and \ in the value as wildcards. EF translates
+        // ToLower() to PostgreSQL's lower().)
         if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
         {
             objects = objects.Where(q =>
                 q.AttributeValues.Any(av =>
                     av.Attribute.Name == filterAttributeName &&
                     av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, filterAttributeValue)));
+                    av.StringValue.ToLower() == filterAttributeValue.ToLower()));
         }
 
         // apply sorting
@@ -2593,12 +2599,17 @@ public class MetaverseRepository : IMetaverseRepository
                     }
                     else
                     {
+                        // Exact case-insensitive equality (not EF.Functions.ILike, which treats %, _ and
+                        // \ in the value as wildcards: a Connected System value like "j_smith" would
+                        // otherwise join to a Metaverse Object holding "jxsmith"). EF translates
+                        // ToLower() to PostgreSQL's lower(). Mirrors the export-side fix in
+                        // ConnectedSystemRepository.FindConnectedSystemObjectUsingMatchingRuleAsync.
                         matchQuery = matchQuery.Where(mvo =>
                             mvo.AttributeValues.Any(av =>
                                 objectMatchingRule.TargetMetaverseAttribute != null &&
                                 av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
                                 av.StringValue != null &&
-                                EF.Functions.ILike(av.StringValue, csoAttributeValue.StringValue!)));
+                                av.StringValue.ToLower() == csoAttributeValue.StringValue!.ToLower()));
                     }
                     break;
                 case AttributeDataType.Number:
@@ -3195,13 +3206,14 @@ public class MetaverseRepository : IMetaverseRepository
                     EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
         }
 
+        // Exact match, case-insensitive; see the comment in GetMetaverseObjectsAsync's equivalent filter above.
         if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
         {
             query = query.Where(mo =>
                 mo.AttributeValues.Any(av =>
                     av.Attribute.Name == filterAttributeName &&
                     av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, filterAttributeValue)));
+                    av.StringValue.ToLower() == filterAttributeValue.ToLower()));
         }
 
         return await query.CountAsync();
