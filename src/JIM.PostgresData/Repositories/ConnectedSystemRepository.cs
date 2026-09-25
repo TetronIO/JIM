@@ -4218,6 +4218,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
+    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
+    /// ConnectedSystemObjectId is populated.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public async Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
+    {
+        // SyncEngine.EvaluatePendingExportConfirmation skips Status Pending (not yet exported, nothing
+        // to confirm) and Exported (awaiting a confirming import) unconditionally, and reads only
+        // AttributeValueChanges plus their Attribute; it is handed the Connected System Object being
+        // evaluated separately by the caller, so unlike GetPendingExportsAsync above, the CSO graph and
+        // its AttributeValues are deliberately NOT included here. At 100,000 Connected System Objects,
+        // GetPendingExportsAsync's CSO include cost 35 seconds against this same table; this query never
+        // materialises that graph. ConnectedSystemObjectId IS NOT NULL because a Pending Export with no
+        // linked CSO cannot be indexed by CSO ID for the sync processors' lookup dictionary.
+        return await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ConnectedSystemObjectId != null
+                      && pe.Status != PendingExportStatus.Pending
+                      && pe.Status != PendingExportStatus.Exported)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values.
     /// The predicate is evaluated in SQL (backed by a partial index on

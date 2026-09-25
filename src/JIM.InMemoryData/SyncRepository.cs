@@ -1655,6 +1655,21 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
+    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
+    /// ConnectedSystemObjectId is populated.
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
+    {
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                      && pe.Status != PendingExportStatus.Pending
+                      && pe.Status != PendingExportStatus.Exported)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values (#1102).
     /// </summary>
@@ -1787,7 +1802,7 @@ public class SyncRepository : ISyncRepository
     // is already a fully wired-up graph in memory), so the lean merge-fetch variant is behaviourally
     // identical to the heavy one here. The distinction only exists - and is only provable - at the
     // Postgres repository layer, where Include chains genuinely control what gets loaded.
-    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+    public virtual Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(

@@ -561,6 +561,18 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Gets the Pending Exports for a Connected System that are candidates for confirmation evaluation
+    /// at the start of a sync run: Status is neither Pending (not yet exported, nothing to confirm) nor
+    /// Exported (awaiting a confirming import), which <see cref="JIM.Application.Servers.SyncEngine.EvaluatePendingExportConfirmation"/>
+    /// skips unconditionally, and ConnectedSystemObjectId is populated (a null FK cannot be indexed by
+    /// CSO ID for the O(1) lookup this method feeds). Loads only AttributeValueChanges (with their
+    /// Attribute), which is all the confirmation evaluation reads; unlike <see cref="GetPendingExportsAsync"/>,
+    /// the Connected System Object graph is deliberately NOT included, since the sync processors hand
+    /// the confirmation evaluation the Connected System Object being evaluated separately.
+    /// </summary>
+    Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId);
+
+    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values.
     /// The predicate is evaluated in SQL (backed by a partial index on
