@@ -72,7 +72,11 @@ internal static class SyncRuleAttributeFlowProposalMaterialiser
             Priority = proposal.Priority,
             NullIsValue = proposal.NullIsValue,
             InitialExportOnly = proposal.InitialExportOnly,
-            Enabled = proposal.Enabled
+            Enabled = proposal.Enabled,
+            // A generated mapping's settings travel with the proposal (#242, Phase 3), so
+            // SyncRuleMapping.GetSourceType() sees GeneratedMapping for an unsaved generated mapping exactly as
+            // it would for a saved one.
+            Generation = proposal.Generation?.ToEntity()
         };
 
         if (proposal.TargetMetaverseAttributeId is { } targetMetaverseAttributeId)

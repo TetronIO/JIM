@@ -1577,5 +1577,52 @@ public interface ISyncRepository
     /// </summary>
     Task IncrementGeneratedValueSequenceAssignedCountAsync(int sequenceId, long by);
 
+    /// <summary>
+    /// Raises a counter's <see cref="GeneratedValueSequence.NextValue"/> to <paramref name="newStart"/> when
+    /// that is higher than its current position, stamping <see cref="GeneratedValueSequence.LastMovedAt"/> and
+    /// <see cref="GeneratedValueSequence.LastMovedBySyncRuleMappingId"/> (Unique Value Generation, #242, plan
+    /// decision 3: a generated Sequence mapping's save reports the skip when its configured
+    /// <see cref="Logic.SyncRuleMappingGeneration.SequenceStart"/> is raised above the counter). Never seeds a
+    /// counter that does not exist yet: with nothing to move, there is nothing to report, and the correct seed
+    /// for a first-ever use is decided at generation time (the higher of the flow's start and the attribute's
+    /// highest existing value), which this method deliberately leaves alone.
+    /// </summary>
+    /// <returns>
+    /// The counter's <see cref="GeneratedValueSequence.NextValue"/> before the raise, when a row existed and
+    /// <paramref name="newStart"/> raised it; null when no counter row exists yet, or one exists but
+    /// <paramref name="newStart"/> is at or below its current position (no effect either way).
+    /// </returns>
+    Task<long?> RaiseGeneratedValueSequenceIfHigherAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newStart, int syncRuleMappingId);
+
+    /// <summary>
+    /// Unconditionally sets a counter's <see cref="GeneratedValueSequence.NextValue"/> to <paramref name="newValue"/>,
+    /// in either direction, stamping <see cref="GeneratedValueSequence.LastMovedAt"/> and
+    /// <see cref="GeneratedValueSequence.LastMovedBySyncRuleMappingId"/>: "Start again" (plan "The service",
+    /// <c>StartAgainAsync</c>), which deliberately moves the counter backwards to the flow's configured start
+    /// value. A no-op, reported as no change, when no counter row exists yet for the attribute; "Start again"
+    /// has nothing to restart until the counter has been seeded by a real generation.
+    /// </summary>
+    /// <returns>The counter's <see cref="GeneratedValueSequence.NextValue"/> before the move, or null when no
+    /// counter row exists yet.</returns>
+    Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId);
+
+    /// <summary>
+    /// How many Metaverse Objects of <paramref name="metaverseObjectTypeId"/>, joined to a Connected System
+    /// Object of <paramref name="connectedSystemId"/>, currently hold no value for <paramref name="metaverseAttributeId"/>
+    /// (Unique Value Generation, #242, Phase 3): the count behind a generated import mapping's "N existing
+    /// objects would receive a value on the next full synchronisation" preview line. Works against a mapping
+    /// that has not yet been saved (the ids are supplied directly, not resolved from a persisted mapping), so
+    /// the portal can show this while an administrator is still composing the mapping.
+    /// </summary>
+    Task<int> CountMetaverseObjectsAwaitingGeneratedValueAsync(int metaverseObjectTypeId, int connectedSystemId, int metaverseAttributeId);
+
+    /// <summary>
+    /// The committed generated values <paramref name="metaverseObjectId"/> currently holds, one row per live
+    /// import-mode assignment, denormalised with the attribute, Synchronisation Rule and mapping names a display
+    /// surface needs (Unique Value Generation, #242, Phase 3). An EF projection (a UI read, not a worker hot
+    /// path); empty when the object holds no generated values.
+    /// </summary>
+    Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId);
+
     #endregion
 }

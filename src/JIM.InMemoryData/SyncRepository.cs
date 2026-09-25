@@ -3781,6 +3781,82 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public Task<long?> RaiseGeneratedValueSequenceIfHigherAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newStart, int syncRuleMappingId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+        return Task.FromResult(MoveGeneratedValueSequence(metaverseAttributeId, connectedSystemObjectTypeAttributeId, newStart, syncRuleMappingId, onlyIfHigher: true));
+    }
+
+    /// <inheritdoc />
+    public Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId)
+    {
+        ValidateExactlyOneAttributeReference(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
+        return Task.FromResult(MoveGeneratedValueSequence(metaverseAttributeId, connectedSystemObjectTypeAttributeId, newValue, syncRuleMappingId, onlyIfHigher: false));
+    }
+
+    /// <summary>
+    /// Mirrors <c>SyncRepository.GeneratedValueOperations.MoveGeneratedValueSequenceAsync</c> in the PostgreSQL
+    /// implementation: a no-op (returns null) when no counter row exists yet, otherwise moves it and returns its
+    /// previous value.
+    /// </summary>
+    private long? MoveGeneratedValueSequence(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId, bool onlyIfHigher)
+    {
+        lock (_generatedValueSequenceLock)
+        {
+            var sequence = _generatedValueSequences.Values.SingleOrDefault(s =>
+                s.MetaverseAttributeId == metaverseAttributeId && s.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
+
+            if (sequence == null)
+                return null;
+
+            if (onlyIfHigher && newValue <= sequence.NextValue)
+                return null;
+
+            var previous = sequence.NextValue;
+            sequence.NextValue = newValue;
+            sequence.LastMovedAt = DateTime.UtcNow;
+            sequence.LastMovedBySyncRuleMappingId = syncRuleMappingId;
+            sequence.LastUpdated = DateTime.UtcNow;
+            return previous;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<int> CountMetaverseObjectsAwaitingGeneratedValueAsync(int metaverseObjectTypeId, int connectedSystemId, int metaverseAttributeId)
+    {
+        var count = _mvos.Values.Count(mvo =>
+            mvo.Type.Id == metaverseObjectTypeId &&
+            _csos.Values.Any(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == connectedSystemId) &&
+            mvo.AttributeValues.All(v => v.AttributeId != metaverseAttributeId));
+
+        return Task.FromResult(count);
+    }
+
+    /// <inheritdoc />
+    public Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId)
+    {
+        var headers = _generatedValueAssignments.Values
+            .Where(a => a.MetaverseObjectId == metaverseObjectId)
+            .Select(a => new GeneratedValueAssignmentHeader
+            {
+                AssignmentId = a.Id,
+                MetaverseAttributeId = a.MetaverseAttributeId!.Value,
+                AttributeName = a.MetaverseAttribute?.Name ?? string.Empty,
+                Value = a.Value,
+                TokenKind = a.SyncRuleMappingGeneration?.TokenKind ?? default,
+                SyncRuleId = a.SyncRuleMappingGeneration?.SyncRuleMapping?.SyncRuleId ?? 0,
+                SyncRuleName = a.SyncRuleMappingGeneration?.SyncRuleMapping?.SyncRule?.Name,
+                SyncRuleMappingId = a.SyncRuleMappingGeneration?.SyncRuleMappingId ?? 0,
+                State = a.State,
+                Adopted = a.Adopted,
+                AssignedDate = a.CommittedAt ?? a.Created
+            })
+            .ToList();
+
+        return Task.FromResult(headers);
+    }
+
     /// <summary>
     /// Mirrors <c>SyncRepository.GeneratedValueOperations.ValidateExactlyOneAttributeReference</c> in the
     /// PostgreSQL implementation, so a test exercising the in-memory repository sees the same contract.

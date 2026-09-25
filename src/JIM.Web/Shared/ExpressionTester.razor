@@ -82,6 +82,15 @@
     [Parameter]
     public string? Expression { get; set; }
 
+    /// <summary>
+    /// Raised whenever a sample value changes, carrying a snapshot of every value entered so far (keyed by
+    /// accessor, e.g. <c>cs["firstName"]</c>). Unset by every call site except the "Generated Value" live
+    /// preview (Unique Value Generation, #242, Phase 3, Work Package D2), which evaluates the base expression
+    /// against these same sample values so the preview matches what "Run test" would show.
+    /// </summary>
+    [Parameter]
+    public EventCallback<IReadOnlyDictionary<string, string?>> SampleValuesChanged { get; set; }
+
     private IReadOnlyList<ExpressionInput> _inputs = Array.Empty<ExpressionInput>();
     private readonly Dictionary<string, string?> _sampleValues = new();
     private ExpressionTestResult? _result;
@@ -103,7 +112,7 @@
 
     private string? GetSampleValue(string accessor) => _sampleValues.GetValueOrDefault(accessor);
 
-    private void SetSampleValue(string accessor, string? value)
+    private async Task SetSampleValue(string accessor, string? value)
     {
         _sampleValues[accessor] = value;
 
@@ -111,6 +120,9 @@
         // read as the answer to a question that was not asked.
         _result = null;
         _errorPosition = null;
+
+        if (SampleValuesChanged.HasDelegate)
+            await SampleValuesChanged.InvokeAsync(_sampleValues);
     }
 
     private void RunTest()

@@ -730,4 +730,214 @@ public sealed class UniqueValueGenerationServer
 
         return assignment;
     }
+
+    // ---- Configuration and Metaverse Object surfaces (#242, Phase 3) ----
+
+    /// <summary>
+    /// The read-only counter state behind the portal, REST and PowerShell surfaces' "next number" preview
+    /// (plan Phase 3 point 4: a read method callable BEFORE saving a raised <see cref="SyncRuleMappingGeneration.SequenceStart"/>).
+    /// Allocates nothing: <paramref name="mapping"/>'s target attribute's counter is read and, when it has never
+    /// been seeded, the seed is computed the same way <see cref="SequenceAllocator"/> would (the higher of the
+    /// flow's start value and the attribute's highest existing numeric value plus the increment) without
+    /// reserving it. Returns null for a mapping that is not a generated Sequence mapping: the state has no
+    /// meaning for any other token kind.
+    /// </summary>
+    public async Task<GeneratedValueSequenceState?> GetSequenceStateAsync(SyncRuleMapping mapping)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+
+        var generation = mapping.Generation;
+        if (generation == null || generation.TokenKind != GeneratedValueTokenKind.Sequence)
+            return null;
+
+        var mvAttributeId = mapping.TargetMetaverseAttributeId;
+        var csAttributeId = mapping.TargetConnectedSystemAttributeId;
+        var attributeName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
+
+        var existing = await _repository.GetGeneratedValueSequenceAsync(mvAttributeId, csAttributeId);
+
+        long nextNumber;
+        long assignedCount;
+        bool isSeeded;
+
+        if (existing != null)
+        {
+            nextNumber = Math.Max(existing.NextValue, generation.SequenceStart);
+            assignedCount = existing.AssignedCount;
+            isSeeded = true;
+        }
+        else
+        {
+            var highest = await _repository.GetHighestNumericValueForAttributeAsync(mvAttributeId, csAttributeId);
+            nextNumber = highest.HasValue
+                ? Math.Max(generation.SequenceStart, highest.Value + generation.SequenceIncrement)
+                : generation.SequenceStart;
+            assignedCount = 0;
+            isSeeded = false;
+        }
+
+        var (formatted, widthExceeded) = UniqueValueCandidates.RenderSequenceNumber(nextNumber, generation.FixedWidth, generation.OnWidthExceeded);
+
+        return new GeneratedValueSequenceState
+        {
+            AttributeName = attributeName,
+            NextNumber = nextNumber,
+            NextNumberFormatted = formatted,
+            NextNumberWidthExceeded = widthExceeded,
+            AssignedCount = assignedCount,
+            IsSeeded = isSeeded
+        };
+    }
+
+    /// <summary>
+    /// The committed generated values a Metaverse Object currently holds (plan Phase 3 point 2:
+    /// <c>GetGeneratedValuesForMetaverseObjectAsync</c>), for the object's own detail page. A thin passthrough:
+    /// all the joining and denormalisation happens in the repository projection.
+    /// </summary>
+    public Task<List<GeneratedValueAssignmentHeader>> GetAssignmentsForMetaverseObjectAsync(Guid metaverseObjectId)
+        => _repository.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(metaverseObjectId);
+
+    /// <summary>
+    /// How many Metaverse Objects of <paramref name="metaverseObjectTypeId"/>, joined to a Connected System
+    /// Object of <paramref name="connectedSystemId"/>, currently hold no value for
+    /// <paramref name="metaverseAttributeId"/> (plan Phase 3 point 2: the form's "N existing objects would
+    /// receive a value" preview line). Takes the ids directly rather than a mapping, so it answers for a
+    /// generated mapping an administrator is still composing and has not saved yet.
+    /// </summary>
+    public Task<int> CountObjectsAwaitingValueAsync(int metaverseObjectTypeId, int connectedSystemId, int metaverseAttributeId)
+        => _repository.CountMetaverseObjectsAwaitingGeneratedValueAsync(metaverseObjectTypeId, connectedSystemId, metaverseAttributeId);
+
+    /// <summary>
+    /// Applies plan decision 3's save-time counter move: when <paramref name="mapping"/> is a generated Sequence
+    /// mapping whose configured <see cref="SyncRuleMappingGeneration.SequenceStart"/> stands above the target
+    /// attribute's counter, raises the counter to that value and returns the move so the caller can report it.
+    /// A no-op (returns null) for every other token kind, for a start value at or below the counter's current
+    /// position, and when the counter has never been seeded (nothing to skip ahead from yet).
+    /// </summary>
+    public async Task<SequenceSkippedAhead?> RaiseSequenceStartIfHigherAsync(SyncRuleMapping mapping)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+
+        var generation = mapping.Generation;
+        if (generation == null || generation.TokenKind != GeneratedValueTokenKind.Sequence)
+            return null;
+
+        var previous = await _repository.RaiseGeneratedValueSequenceIfHigherAsync(
+            mapping.TargetMetaverseAttributeId, mapping.TargetConnectedSystemAttributeId, generation.SequenceStart, mapping.Id);
+
+        return previous.HasValue ? new SequenceSkippedAhead(previous.Value, generation.SequenceStart) : null;
+    }
+
+    /// <summary>
+    /// "Start again" (plan "The service": <c>StartAgainAsync</c>): for a generated Sequence mapping, moves the
+    /// target attribute's counter back (or forward; the direction is whatever the flow's configured
+    /// <see cref="SyncRuleMappingGeneration.SequenceStart"/> calls for) to that start value. Existing values and
+    /// assignments are left untouched, deliberately: there is no recall here (#1537's recall stages removal
+    /// exports that would strip connector-space values this release's "adopt before generate" is built to keep;
+    /// plan "The service"). For every other token kind, and for a Sequence mapping whose counter has never been
+    /// seeded, this is a documented no-op. <paramref name="mapping"/>'s <see cref="SyncRuleMapping.Id"/> is
+    /// recorded as the mover on the counter, for the same audit reason a save-time raise records it.
+    /// </summary>
+    public async Task<GeneratedValueRestartResult> RestartAsync(SyncRuleMapping mapping)
+    {
+        ArgumentNullException.ThrowIfNull(mapping);
+
+        var generation = mapping.Generation;
+        if (generation == null || generation.TokenKind != GeneratedValueTokenKind.Sequence)
+            return new GeneratedValueRestartResult { RetiredValuesForgotten = 0, CounterFrom = null, CounterTo = null };
+
+        var previous = await _repository.ResetGeneratedValueSequenceAsync(
+            mapping.TargetMetaverseAttributeId, mapping.TargetConnectedSystemAttributeId, generation.SequenceStart, mapping.Id);
+
+        return new GeneratedValueRestartResult
+        {
+            // The retired values register does not exist until release 2 (Phase 6); always 0 here.
+            RetiredValuesForgotten = 0,
+            CounterFrom = previous,
+            CounterTo = previous.HasValue ? generation.SequenceStart : null
+        };
+    }
+
+    /// <summary>
+    /// A pure, no-I/O preview of what <paramref name="generation"/>'s uniqueness token would produce against
+    /// <paramref name="sampleBaseValue"/> (plan Phase 3 point 2: <c>DescribeGeneratedCandidates</c>), built on
+    /// <see cref="UniqueValueCandidates"/> so a form's live preview matches the real engine exactly. A Sequence
+    /// preview starts from <paramref name="generation"/>'s configured <see cref="SyncRuleMappingGeneration.SequenceStart"/>,
+    /// never the attribute's live counter (see <see cref="GetSequenceStateAsync"/> for that).
+    /// </summary>
+    /// <param name="generation">The settings to preview. Never persisted or read from.</param>
+    /// <param name="targetAttributeType">The target attribute's data type, which decides whether a Random
+    /// preview must draw a non-zero leading digit.</param>
+    /// <param name="sampleBaseValue">A sample base value to place the token against; null or empty previews the
+    /// token on its own.</param>
+    /// <param name="count">How many candidates to compute for a token kind that produces a sequence of them
+    /// (only-if-taken, sequence). Ignored for random, which returns a single example.</param>
+    public GeneratedValueCandidatePreview DescribeGeneratedCandidates(
+        SyncRuleMappingGeneration generation, AttributeDataType targetAttributeType, string? sampleBaseValue, int count)
+    {
+        ArgumentNullException.ThrowIfNull(generation);
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), count, "Must be 1 or higher.");
+
+        var placementText = BuildPlacementText(sampleBaseValue);
+
+        switch (generation.TokenKind)
+        {
+            case GeneratedValueTokenKind.OnlyIfTaken:
+            {
+                var baseValue = sampleBaseValue ?? string.Empty;
+                var candidates = new List<string>(count);
+                for (var attempt = 1; attempt <= count; attempt++)
+                    candidates.Add(UniqueValueCandidates.OnlyIfTakenCandidate(baseValue, attempt, generation.SuffixStyle, generation.SuffixStart, generation.Separator));
+
+                return new GeneratedValueCandidatePreview
+                {
+                    FirstValue = string.IsNullOrEmpty(sampleBaseValue) ? null : baseValue,
+                    Candidates = candidates,
+                    PlacementText = placementText
+                };
+            }
+
+            case GeneratedValueTokenKind.Sequence:
+            {
+                var candidates = new List<string>(count);
+                for (var i = 0; i < count; i++)
+                {
+                    var number = generation.SequenceStart + (long)i * generation.SequenceIncrement;
+                    var (rendered, _) = UniqueValueCandidates.RenderSequenceNumber(number, generation.FixedWidth, generation.OnWidthExceeded);
+                    candidates.Add(UniqueValueCandidates.Place(sampleBaseValue, rendered, generation.Separator));
+                }
+
+                return new GeneratedValueCandidatePreview
+                {
+                    FirstValue = candidates.Count > 0 ? candidates[0] : null,
+                    Candidates = candidates,
+                    PlacementText = placementText
+                };
+            }
+
+            case GeneratedValueTokenKind.Random:
+            {
+                var isNumberTarget = targetAttributeType is AttributeDataType.Number or AttributeDataType.LongNumber;
+                var forceNonZeroLeadingDigit = isNumberTarget && generation.RandomFormat == GeneratedValueRandomFormat.Digits;
+                var token = UniqueValueCandidates.GenerateRandomToken(generation.RandomFormat, generation.RandomLength, forceNonZeroLeadingDigit);
+
+                return new GeneratedValueCandidatePreview
+                {
+                    Example = UniqueValueCandidates.Place(sampleBaseValue, token, generation.Separator),
+                    PlacementText = placementText
+                };
+            }
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(generation), generation.TokenKind, "Unrecognised token kind.");
+        }
+    }
+
+    private static string BuildPlacementText(string? sampleBaseValue) =>
+        string.IsNullOrEmpty(sampleBaseValue)
+            ? "There is no base value, so the generated value is the token on its own."
+            : sampleBaseValue.Contains('@')
+                ? "The token is placed immediately before the \"@\" in the base value."
+                : "The token is appended to the end of the base value.";
 }
