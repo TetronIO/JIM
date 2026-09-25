@@ -94,6 +94,12 @@ public class SyncRuleMappingRequest
     /// <summary>Whether the mapping is evaluated at all (#1485); a disabled mapping flows nothing.</summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Makes this a proposed generated mapping (Unique Value Generation, #242, Phase 3). Omit to preview an
+    /// ordinary attribute or Expression mapping.
+    /// </summary>
+    public SyncRuleMappingGenerationRequest? Generation { get; set; }
+
     internal SyncRuleMappingProposal ToProposal() =>
         new(TargetMetaverseAttributeId,
             TargetConnectedSystemAttributeId,
@@ -103,7 +109,32 @@ public class SyncRuleMappingRequest
             Priority,
             NullIsValue,
             InitialExportOnly,
-            Enabled);
+            Enabled,
+            Generation?.ToProposal());
+}
+
+/// <summary>
+/// One proposed generated mapping's uniqueness token settings, for the Sync Preview request (Unique Value
+/// Generation, #242, Phase 3). Mirrors <see cref="CreateSyncRuleMappingGenerationRequest"/>.
+/// </summary>
+public class SyncRuleMappingGenerationRequest
+{
+    public GeneratedValueTokenKind TokenKind { get; set; }
+    public GeneratedValueSuffixStyle SuffixStyle { get; set; } = GeneratedValueSuffixStyle.Number;
+    public int SuffixStart { get; set; } = 1;
+    public long SequenceStart { get; set; } = 1;
+    public int SequenceIncrement { get; set; } = 1;
+    public int? FixedWidth { get; set; }
+    public GeneratedValueWidthOverflowBehaviour OnWidthExceeded { get; set; } = GeneratedValueWidthOverflowBehaviour.StopAndReport;
+    public GeneratedValueRandomFormat RandomFormat { get; set; } = GeneratedValueRandomFormat.Guid;
+    public int? RandomLength { get; set; }
+    public string? Separator { get; set; }
+    public int AttemptLimit { get; set; } = 1000;
+    public bool NeverReuse { get; set; } = true;
+
+    internal SyncRuleMappingGenerationProposal ToProposal() =>
+        new(TokenKind, SuffixStyle, SuffixStart, SequenceStart, SequenceIncrement, FixedWidth, OnWidthExceeded,
+            RandomFormat, RandomLength, Separator, AttemptLimit, NeverReuse);
 }
 
 /// <summary>

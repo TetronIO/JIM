@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace JIM.Models.Logic;
 
 /// <summary>
@@ -120,4 +122,14 @@ public class SyncRuleMappingGeneration
     /// When the settings were last modified (UTC). Null if never modified after creation.
     /// </summary>
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// Set for the duration of a single create/update call when that save raised the target attribute's
+    /// <see cref="GeneratedValueSequence"/> counter because <see cref="SequenceStart"/> stood above its current
+    /// position (Phase 3, plan decision 3). Transient: never persisted, and null on every ordinary read. The
+    /// server that performed the save stamps it on the same tracked instance it returns, so the caller (a REST
+    /// controller, PowerShell) can report the skip in that one response without a second round trip.
+    /// </summary>
+    [NotMapped]
+    public SequenceSkippedAhead? SequenceSkippedAhead { get; set; }
 }

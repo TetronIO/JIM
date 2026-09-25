@@ -351,6 +351,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<GeneratedValueSequence?> GetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
         => _inner.GetGeneratedValueSequenceAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
 
+    public Task<int> CountMetaverseObjectsAwaitingGeneratedValueAsync(int metaverseObjectTypeId, int connectedSystemId, int metaverseAttributeId)
+        => _inner.CountMetaverseObjectsAwaitingGeneratedValueAsync(metaverseObjectTypeId, connectedSystemId, metaverseAttributeId);
+
+    public Task<List<GeneratedValueAssignmentHeader>> GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(Guid metaverseObjectId)
+        => _inner.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(metaverseObjectId);
+
     public Task<long?> GetHighestNumericValueForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId)
         => _inner.GetHighestNumericValueForAttributeAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId);
 
@@ -566,6 +572,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task IncrementGeneratedValueSequenceAssignedCountAsync(int sequenceId, long by)
         => throw new PreviewWriteAttemptedException(nameof(IncrementGeneratedValueSequenceAssignedCountAsync));
+
+    public Task<long?> RaiseGeneratedValueSequenceIfHigherAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newStart, int syncRuleMappingId)
+        => throw new PreviewWriteAttemptedException(nameof(RaiseGeneratedValueSequenceIfHigherAsync));
+
+    public Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId)
+        => throw new PreviewWriteAttemptedException(nameof(ResetGeneratedValueSequenceAsync));
 
     #endregion
 }

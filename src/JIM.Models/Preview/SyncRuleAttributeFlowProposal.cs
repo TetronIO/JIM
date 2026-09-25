@@ -87,6 +87,12 @@ public record SyncRuleAttributeFlowProposal(
 /// <param name="NullIsValue">Whether a null contribution stops resolution rather than falling through.</param>
 /// <param name="InitialExportOnly">Whether an export mapping flows only on the provisioning export.</param>
 /// <param name="Enabled">Whether the mapping is evaluated at all (#1485); a disabled mapping flows nothing.</param>
+/// <param name="Generation">
+/// The mapping's uniqueness token settings, when it is a generated mapping (Unique Value Generation, #242,
+/// Phase 3). Null for an ordinary attribute or Expression mapping. Present so Sync Preview of an unsaved
+/// generated mapping evaluates it exactly as the engine would: <see cref="SyncRuleMapping.GetSourceType"/>
+/// depends on whether <see cref="SyncRuleMapping.Generation"/> is set.
+/// </param>
 public record SyncRuleMappingProposal(
     int? TargetMetaverseAttributeId,
     int? TargetConnectedSystemAttributeId,
@@ -96,7 +102,8 @@ public record SyncRuleMappingProposal(
     int Priority = int.MaxValue,
     bool NullIsValue = false,
     bool InitialExportOnly = false,
-    bool Enabled = true)
+    bool Enabled = true,
+    SyncRuleMappingGenerationProposal? Generation = null)
 {
     /// <summary>
     /// This mapping as it currently stands on a Synchronisation Rule.
@@ -121,7 +128,8 @@ public record SyncRuleMappingProposal(
             mapping.Priority,
             mapping.NullIsValue,
             mapping.InitialExportOnly,
-            mapping.Enabled);
+            mapping.Enabled,
+            mapping.Generation == null ? null : SyncRuleMappingGenerationProposal.FromEntity(mapping.Generation));
     }
 
     internal string CanonicalKey()
@@ -129,8 +137,64 @@ public record SyncRuleMappingProposal(
         var sources = string.Join(">", Sources.OrderBy(source => source.Order).Select(source => source.CanonicalKey()));
         return string.Create(CultureInfo.InvariantCulture,
             $"mv={TargetMetaverseAttributeId};cs={TargetConnectedSystemAttributeId};ivp={InboundValueProcessing};" +
-            $"case={CaseNormalisation};pri={Priority};niv={NullIsValue};ieo={InitialExportOnly};en={Enabled};src=[{sources}]");
+            $"case={CaseNormalisation};pri={Priority};niv={NullIsValue};ieo={InitialExportOnly};en={Enabled};" +
+            $"gen=[{Generation?.CanonicalKey()}];src=[{sources}]");
     }
+}
+
+/// <summary>
+/// One proposed generated mapping's uniqueness token settings (Unique Value Generation, #242, Phase 3): the
+/// preview-time counterpart of <see cref="Logic.SyncRuleMappingGeneration"/>. Exclusions and Collision
+/// Remediation are deliberately absent, matching every other release 1 surface (release 4 concerns).
+/// </summary>
+public record SyncRuleMappingGenerationProposal(
+    GeneratedValueTokenKind TokenKind,
+    GeneratedValueSuffixStyle SuffixStyle,
+    int SuffixStart,
+    long SequenceStart,
+    int SequenceIncrement,
+    int? FixedWidth,
+    GeneratedValueWidthOverflowBehaviour OnWidthExceeded,
+    GeneratedValueRandomFormat RandomFormat,
+    int? RandomLength,
+    string? Separator,
+    int AttemptLimit,
+    bool NeverReuse)
+{
+    public static SyncRuleMappingGenerationProposal FromEntity(SyncRuleMappingGeneration entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new SyncRuleMappingGenerationProposal(
+            entity.TokenKind, entity.SuffixStyle, entity.SuffixStart, entity.SequenceStart, entity.SequenceIncrement,
+            entity.FixedWidth, entity.OnWidthExceeded, entity.RandomFormat, entity.RandomLength, entity.Separator,
+            entity.AttemptLimit, entity.NeverReuse);
+    }
+
+    /// <summary>
+    /// A fresh entity carrying this proposal's settings, for the materialiser to attach to its stand-in mapping.
+    /// Never persisted: Sync Preview's whole path runs inside a rollback-only transaction.
+    /// </summary>
+    public SyncRuleMappingGeneration ToEntity() => new()
+    {
+        TokenKind = TokenKind,
+        SuffixStyle = SuffixStyle,
+        SuffixStart = SuffixStart,
+        SequenceStart = SequenceStart,
+        SequenceIncrement = SequenceIncrement,
+        FixedWidth = FixedWidth,
+        OnWidthExceeded = OnWidthExceeded,
+        RandomFormat = RandomFormat,
+        RandomLength = RandomLength,
+        Separator = Separator,
+        AttemptLimit = AttemptLimit,
+        NeverReuse = NeverReuse
+    };
+
+    internal string CanonicalKey() => string.Create(CultureInfo.InvariantCulture,
+        $"tk={TokenKind};ss={SuffixStyle};sst={SuffixStart};seqs={SequenceStart};seqi={SequenceIncrement};" +
+        $"fw={FixedWidth};owe={OnWidthExceeded};rf={RandomFormat};rl={RandomLength};sep={Separator};" +
+        $"al={AttemptLimit};nr={NeverReuse}");
 }
 
 /// <summary>
