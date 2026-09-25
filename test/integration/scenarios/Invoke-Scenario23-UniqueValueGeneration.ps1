@@ -798,7 +798,7 @@ try {
             -Detail "Found $($exhausted.Count) items with that error type among $($items.Count) execution items"
 
         $population2 = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes @("Call Sign") -All)
-        $withValue = @($population2 | Where-Object { $_.attributes.'Call Sign' -eq 'CALLSIGN' })
+        $withValue = @($population2 | Where-Object { $_.attributes.PSObject.Properties['Call Sign'] -and $_.attributes.'Call Sign' -eq 'CALLSIGN' })
         Add-TestResult -Name "Exactly one object won the Call Sign value; nothing else was written for the rest" -Passed ($withValue.Count -eq 1) `
             -Detail "Expected exactly 1 object with Call Sign='CALLSIGN', found $($withValue.Count)"
 
