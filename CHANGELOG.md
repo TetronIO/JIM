@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A Failed Pending Export now clears automatically once a confirming import shows every change it asserts has taken effect, without waiting for a manual retry.
 - 🐛 A Pending Export interrupted by a worker crash or restart mid-export is recovered when the worker next starts, instead of being stranded in Executing forever.
 
+### Security
+
+- 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
+
 ### Performance
 
 - ⚡ Synchronisation no longer queries the database once per object to look for an existing target object before provisioning; it checks once per page, speeding up large initial synchronisations.

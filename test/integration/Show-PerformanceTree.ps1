@@ -11,7 +11,7 @@
     view of operations with friendly time formatting.
 
 .PARAMETER Scenario
-    The scenario name (e.g., "Scenario1-HRToIdentityDirectory"). If not specified, uses the most recent file.
+    The scenario name (e.g., "Scenario-001-HRToIdentityDirectory"). If not specified, uses the most recent file.
 
 .PARAMETER Template
     The template name (e.g., "Nano"). If not specified, uses the most recent file.
@@ -24,11 +24,11 @@
     Shows the most recent performance metrics file.
 
 .EXAMPLE
-    ./Show-PerformanceTree.ps1 -Scenario Scenario1-HRToIdentityDirectory -Template Nano
+    ./Show-PerformanceTree.ps1 -Scenario Scenario-001-HRToIdentityDirectory -Template Nano
     Shows the most recent metrics for the specified scenario and template.
 
 .EXAMPLE
-    ./Show-PerformanceTree.ps1 -File results/performance/hostname/Scenario1-HRToIdentityDirectory-Nano-2025-12-24_102142.json
+    ./Show-PerformanceTree.ps1 -File results/performance/hostname/Scenario-001-HRToIdentityDirectory-Nano-2025-12-24_102142.json
     Shows the specified metrics file.
 #>
 

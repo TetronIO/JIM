@@ -6,7 +6,7 @@
 #
 # A Connected System that imports MORE THAN ONE partition from this server (a
 # single import scoped across both the Yellowstone and Glitterband suffixes;
-# Scenario 9 is the current example) needs one identity that can bind against
+# Scenario 009 is the current example) needs one identity that can bind against
 # both, which a single-suffix service account cannot do: each suffix's cn=jim
 # group grants only its own suffix. This account is a member of every suffix's
 # cn=jim group. A single-partition Connected System keeps using its own

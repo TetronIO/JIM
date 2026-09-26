@@ -24,7 +24,7 @@ namespace JIM.Worker.Tests.Repositories;
 /// <c>PendingExport.SourceMetaverseObject</c> is configured <c>OnDelete(SetNull)</c>, and when the
 /// MVO is deleted EF Core's cascade fix-up otherwise issues an UPDATE that targets the
 /// already-deleted row, matches zero rows, and throws <c>DbUpdateConcurrencyException</c>
-/// (Scenario4-DeletionRules Test 3 failure, 2026-07-13). The in-memory provider has no relational
+/// (Scenario-004-DeletionRules Test 3 failure, 2026-07-13). The in-memory provider has no relational
 /// row-count checks, so only a real database run can catch this. Opt-in via the same
 /// <c>JIM_TEST_RESET_*</c> environment variables as the other <c>RequiresPostgres</c> fixtures;
 /// ignored when <c>JIM_TEST_RESET_DB</c> is absent.
@@ -70,7 +70,7 @@ public class MvoDeletionPendingExportReplaceDatabaseTests
     /// <summary>
     /// Seeds one user-shaped MVO/CSO pair with an unexported Create Pending Export attached to the
     /// CSO and sourced from the MVO, mirroring a provisioned system that has not yet run an export
-    /// when the MVO's deletion is triggered (the Scenario4-DeletionRules Test 3 shape).
+    /// when the MVO's deletion is triggered (the Scenario-004-DeletionRules Test 3 shape).
     /// </summary>
     private async Task<(Guid MvoId, Guid CsoId)> SeedJoinedUserWithCreatePendingExportAsync()
     {
@@ -204,7 +204,7 @@ public class MvoDeletionPendingExportReplaceDatabaseTests
     /// graphs; the method's raw SQL exists partly to avoid detonating them). The detach step must
     /// therefore not trigger DetectChanges: ChangeTracker.Entries&lt;T&gt;() otherwise attaches the
     /// undetected graph and throws an identity conflict ("another instance with the same key value
-    /// is already being tracked"), as seen on Scenario8-CrossDomainEntitlementSync.
+    /// is already being tracked"), as seen on Scenario-008-CrossDomainEntitlementSync.
     /// </summary>
     [Test]
     public async Task DeletePendingExportsByConnectedSystemObjectIdsAsync_TrackerHoldsUndetectedDuplicateKeyGraph_DeletesWithoutIdentityConflictAsync()

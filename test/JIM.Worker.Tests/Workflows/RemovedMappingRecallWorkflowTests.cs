@@ -18,7 +18,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// Connected System re-evaluates every joined Connected System Object; when the value's mapping no longer
 /// exists in the priority contributor cache, the value is recalled and the next surviving contributor is
 /// re-elected in the same run, or the attribute is genuinely cleared (a NoContributor outcome) when no
-/// contributor survives. This mirrors the disabled-rule posture Scenario 14's DisabledRuleNoOpinion proves.
+/// contributor survives. This mirrors the disabled-rule posture Scenario 014's DisabledRuleNoOpinion proves.
 /// </summary>
 [TestFixture]
 public class RemovedMappingRecallWorkflowTests : WorkflowTestBase

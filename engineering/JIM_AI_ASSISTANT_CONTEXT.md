@@ -368,7 +368,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ API with JWT and API key auth (21 controllers)
 - ✅ PowerShell module (168 cmdlets)
 - ✅ Docker deployment with air-gapped bundles
-- ✅ Integration testing framework (21 scenarios, Scenarios 1-2 and 4-22)
+- ✅ Integration testing framework (21 scenarios, Scenarios 001-002 and 004-022)
 - ✅ Credential encryption
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page

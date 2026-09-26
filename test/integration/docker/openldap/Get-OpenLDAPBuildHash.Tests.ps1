@@ -36,7 +36,7 @@ BeforeAll {
         Set-Content -LiteralPath (Join-Path $root 'utils' 'Test-GroupHelpers.ps1') -Value '# group helpers' -NoNewline
         Set-Content -LiteralPath (Join-Path $root 'Build-OpenLDAPSnapshots.ps1') -Value '# snapshots' -NoNewline
         Set-Content -LiteralPath (Join-Path $root 'Populate-OpenLDAP.ps1') -Value '# populate general' -NoNewline
-        Set-Content -LiteralPath (Join-Path $root 'Populate-OpenLDAP-Scenario8.ps1') -Value '# populate s8' -NoNewline
+        Set-Content -LiteralPath (Join-Path $root 'Populate-OpenLDAP-Scenario-008.ps1') -Value '# populate s8' -NoNewline
         return $root
     }
 
@@ -127,10 +127,10 @@ Describe 'Get-OpenLDAPSnapshotHash' {
         Get-OpenLDAPSnapshotHash -Scenario General -IntegrationRoot $script:integrationRoot | Should -Not -Be $before
     }
 
-    It 'changes when the Scenario8 populate script changes' {
-        $before = Get-OpenLDAPSnapshotHash -Scenario Scenario8 -IntegrationRoot $script:integrationRoot
-        Set-Content -LiteralPath (Join-Path $script:integrationRoot 'Populate-OpenLDAP-Scenario8.ps1') -Value '# populate s8, edited' -NoNewline
-        Get-OpenLDAPSnapshotHash -Scenario Scenario8 -IntegrationRoot $script:integrationRoot | Should -Not -Be $before
+    It 'changes when the Scenario-008 populate script changes' {
+        $before = Get-OpenLDAPSnapshotHash -Scenario Scenario-008 -IntegrationRoot $script:integrationRoot
+        Set-Content -LiteralPath (Join-Path $script:integrationRoot 'Populate-OpenLDAP-Scenario-008.ps1') -Value '# populate s8, edited' -NoNewline
+        Get-OpenLDAPSnapshotHash -Scenario Scenario-008 -IntegrationRoot $script:integrationRoot | Should -Not -Be $before
     }
 
     It 'changes when a shared helper changes' {
@@ -139,19 +139,19 @@ Describe 'Get-OpenLDAPSnapshotHash' {
         Get-OpenLDAPSnapshotHash -Scenario General -IntegrationRoot $script:integrationRoot | Should -Not -Be $before
     }
 
-    It 'differs between General and Scenario8' {
+    It 'differs between General and Scenario-008' {
         $general = Get-OpenLDAPSnapshotHash -Scenario General -IntegrationRoot $script:integrationRoot
-        $scenario8 = Get-OpenLDAPSnapshotHash -Scenario Scenario8 -IntegrationRoot $script:integrationRoot
+        $scenario8 = Get-OpenLDAPSnapshotHash -Scenario Scenario-008 -IntegrationRoot $script:integrationRoot
         $scenario8 | Should -Not -Be $general
     }
 
     It 'ignores a change to the other scenario''s populate script' {
         $generalBefore = Get-OpenLDAPSnapshotHash -Scenario General -IntegrationRoot $script:integrationRoot
-        $scenario8Before = Get-OpenLDAPSnapshotHash -Scenario Scenario8 -IntegrationRoot $script:integrationRoot
-        Set-Content -LiteralPath (Join-Path $script:integrationRoot 'Populate-OpenLDAP-Scenario8.ps1') -Value '# populate s8, edited' -NoNewline
+        $scenario8Before = Get-OpenLDAPSnapshotHash -Scenario Scenario-008 -IntegrationRoot $script:integrationRoot
+        Set-Content -LiteralPath (Join-Path $script:integrationRoot 'Populate-OpenLDAP-Scenario-008.ps1') -Value '# populate s8, edited' -NoNewline
         Get-OpenLDAPSnapshotHash -Scenario General -IntegrationRoot $script:integrationRoot | Should -Be $generalBefore
         Set-Content -LiteralPath (Join-Path $script:integrationRoot 'Populate-OpenLDAP.ps1') -Value '# populate general, edited' -NoNewline
-        Get-OpenLDAPSnapshotHash -Scenario Scenario8 -IntegrationRoot $script:integrationRoot | Should -Not -Be $scenario8Before
+        Get-OpenLDAPSnapshotHash -Scenario Scenario-008 -IntegrationRoot $script:integrationRoot | Should -Not -Be $scenario8Before
     }
 
     It 'skips a missing file rather than failing' {
@@ -169,7 +169,7 @@ Describe 'Get-OpenLDAPSnapshotImageTag' {
         Get-OpenLDAPSnapshotImageTag -Role general -Template Small | Should -Be 'jim-openldap:general-small'
     }
 
-    It 'names the Scenario 8 snapshot jim-openldap:s8-{template in lower case}' {
+    It 'names the Scenario 008 snapshot jim-openldap:s8-{template in lower case}' {
         Get-OpenLDAPSnapshotImageTag -Role s8 -Template Nano | Should -Be 'jim-openldap:s8-nano'
     }
 

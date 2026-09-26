@@ -30,7 +30,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// navigation properties, not just the Metaverse Object being updated. That discovers the Activity's
 /// freshly-added RPEI as new and inserts it early. The page flush's own raw-SQL RPEI bulk insert (the
 /// production fast path) then tries to insert the SAME RPEI Id a second time, and the whole Activity
-/// fails on a duplicate-key violation. Verified against real PostgreSQL in integration Scenario 5.
+/// fails on a duplicate-key violation. Verified against real PostgreSQL in integration Scenario 005.
 /// </para>
 /// <para>
 /// The in-memory <see cref="JIM.InMemoryData.SyncRepository"/> used by workflow tests is a hand-rolled

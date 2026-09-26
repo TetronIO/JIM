@@ -631,7 +631,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // here through trackedByName rather than through the else branch below. Entry() on a detached
                 // instance does not track it, and SetValues would file each such instance in the identity map
                 // at key 0, throwing an identity conflict from the second new attribute onwards (found live
-                // by Scenario 19's Merge step, #492). Register it for insertion instead.
+                // by Scenario 019's Merge step, #492). Register it for insertion instead.
                 if (trackedAttribute.Id == 0 &&
                     Repository.Database.Entry(trackedAttribute).State == EntityState.Detached)
                 {
@@ -4219,12 +4219,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
         // Run Profile Safeguards (#1618). Every property the entity carries has to be copied here by
         // hand; one left out is accepted by the API, reported as saved, and never written, which is
-        // exactly how the first Scenario 21 run found these three missing.
+        // exactly how the first Scenario 021 run found these three missing.
         tracked.MaxCreates = runProfile.MaxCreates;
         tracked.MaxUpdates = runProfile.MaxUpdates;
         tracked.MaxDeletes = runProfile.MaxDeletes;
         // Run Profile Safeguards (#1618, Layer 2): the same by-hand copy requirement as the three
-        // export limits above; Layer 1's first Scenario 21 run found those missing from exactly here.
+        // export limits above; Layer 1's first Scenario 021 run found those missing from exactly here.
         tracked.MaxDetectedDeletions = runProfile.MaxDetectedDeletions;
         tracked.MaxDetectedDeletionsPercent = runProfile.MaxDetectedDeletionsPercent;
         tracked.LastUpdated = runProfile.LastUpdated;
@@ -5948,7 +5948,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // structural class that carries an auxiliary-typed object. This overload is the one the worker's
             // export evaluation cache loads every rule through (GetAllSyncRulesAsync), so anything not fetched
             // here is class membership silently not computed: exports went out carrying a merged class's
-            // attributes with no class add, and the directory refused them (#492, found by Scenario 19).
+            // attributes with no class add, and the directory refused them (#492, found by Scenario 019).
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Tags)
             .Include(sr => sr.ConnectedSystemObjectType)

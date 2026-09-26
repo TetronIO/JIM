@@ -211,7 +211,7 @@ staging path, which finds the group's existing Pending Export (Scenario B above)
 unsent Create is rebuilt as a Create carrying the resolved references, an exported-but-unconfirmed Create has
 the changes appended, a pending Update is merged. The pass must never delete those rows first: a Pending
 Provisioning CSO with no Pending Export reads as "Create already sent" (see the section above), so a
-pre-deleted unsent Create came back as an Update for an object that did not exist yet (Scenario 8, fixed after
+pre-deleted unsent Create came back as an Update for an object that did not exist yet (Scenario 008, fixed after
 #1687 exposed it). `CrossPageReferenceProvisioningTests` pins the contract.
 
 ## Status Transitions

@@ -825,7 +825,7 @@ public class SyncPreviewServer
                 // own current effective value, mirroring the worker's ResolvePendingGeneratedValuesAsync
                 // exactly - never a joined Connected System Object's value, so no guarded repository read is
                 // needed here at all any more. CurrentMetaverseValue mirrors the worker's own stale-Sticky read
-                // too (bug fix, #242, Scenario 23 integration run): read regardless of StickyOnly or of whether
+                // too (bug fix, #242, Scenario 023 integration run): read regardless of StickyOnly or of whether
                 // a known assignment exists, since ResolveAsync itself decides whether a Sticky match is stale.
                 string? adoptableValue = null;
                 string? currentMetaverseValue = null;
@@ -859,7 +859,7 @@ public class SyncPreviewServer
                 var outcome = outcomes[i];
                 var request = pending[i];
 
-                // outcome.StaleAssignmentId (bug fix, #242, Scenario 23) is deliberately not acted on here: it
+                // outcome.StaleAssignmentId (bug fix, #242, Scenario 023) is deliberately not acted on here: it
                 // names an assignment the real run would delete through its page-flush deletion flush, but a
                 // preview never persists anything, so there is nothing for this dry run to delete either. The
                 // outcome's Kind already reflects the stale match being treated as absent, which is what the

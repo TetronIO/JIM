@@ -411,7 +411,7 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
     #region Drift merge integrity
 
     /// <summary>
-    /// Reproduces a bug found by Scenario 23 at runtime (not part of #242's original scope, fixed alongside it):
+    /// Reproduces a bug found by Scenario 023 at runtime (not part of #242's original scope, fixed alongside it):
     /// drift detection stages a corrective Pending Export for a Connected System Object earlier in the same
     /// page (added straight to the worker's <c>_pendingExportsToCreate</c> batch); export evaluation for the
     /// SAME Connected System Object later in the same page then merges its own changes into that already-staged

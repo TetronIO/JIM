@@ -1140,7 +1140,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Boolean:
                 default:
                     // Name what could not be handled. A bare ArgumentOutOfRangeException here cost a
-                    // day of Scenario 16 triage: deletion detection is the phase that decides whether
+                    // day of Scenario 016 triage: deletion detection is the phase that decides whether
                     // an object still exists, so a failure must say which Object Type and which type
                     // of anchor it could not answer for (#1283).
                     throw new ArgumentOutOfRangeException(

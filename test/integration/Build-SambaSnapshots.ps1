@@ -11,15 +11,15 @@
     reducing startup from minutes to seconds.
 
     Snapshot images are tagged per-scenario and per-size:
-      - jim-samba-ad:primary-{size}      (Scenario 1 — OUs only, no test users)
-      - jim-samba-ad:source-s8-{size}    (Scenario 8 source)
-      - jim-samba-ad:target-s8-{size}    (Scenario 8 target)
+      - jim-samba-ad:primary-{size}      (Scenario 001 — OUs only, no test users)
+      - jim-samba-ad:source-s8-{size}    (Scenario 008 source)
+      - jim-samba-ad:target-s8-{size}    (Scenario 008 target)
 
     A content hash label is stored on each image, computed from the populate scripts.
     The test runner compares this hash to detect stale snapshots that need rebuilding.
 
 .PARAMETER Scenario
-    Which scenario to build snapshots for (Scenario1, Scenario8, All)
+    Which scenario to build snapshots for (Scenario-001, Scenario-008, All)
 
 .PARAMETER Template
     Data size template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
@@ -31,18 +31,18 @@
     Rebuild even if a snapshot with matching content hash already exists
 
 .EXAMPLE
-    ./Build-SambaSnapshots.ps1 -Scenario Scenario1 -Template Small
+    ./Build-SambaSnapshots.ps1 -Scenario Scenario-001 -Template Small
 
 .EXAMPLE
     ./Build-SambaSnapshots.ps1 -Scenario All -Template Medium
 
 .EXAMPLE
-    ./Build-SambaSnapshots.ps1 -Scenario Scenario8 -Template Scale100k50Groups -Force
+    ./Build-SambaSnapshots.ps1 -Scenario Scenario-008 -Template Scale100k50Groups -Force
 #>
 
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet("Scenario1", "Scenario8", "All")]
+    [ValidateSet("Scenario-001", "Scenario-008", "All")]
     [string]$Scenario = "All",
 
     [Parameter(Mandatory = $true)]
@@ -83,12 +83,12 @@ function Get-PopulateScriptHash {
     )
 
     switch ($ScenarioName) {
-        "Scenario1" {
-            # S1 no longer populates test users — the target directory starts empty
+        "Scenario-001" {
+            # S001 no longer populates test users — the target directory starts empty
             # so HR-driven provisioning is tested against a clean directory.
         }
-        "Scenario8" {
-            $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1"
+        "Scenario-008" {
+            $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario-008.ps1"
         }
     }
 
@@ -272,7 +272,7 @@ Write-Host "  Scenario: $Scenario" -ForegroundColor Gray
 Write-Host "  Template: $Template" -ForegroundColor Gray
 Write-Host ""
 
-$scenariosToProcess = if ($Scenario -eq "All") { @("Scenario1", "Scenario8") } else { @($Scenario) }
+$scenariosToProcess = if ($Scenario -eq "All") { @("Scenario-001", "Scenario-008") } else { @($Scenario) }
 
 foreach ($scen in $scenariosToProcess) {
     $contentHash = Get-PopulateScriptHash -ScenarioName $scen
@@ -282,7 +282,7 @@ foreach ($scen in $scenariosToProcess) {
     Write-Host "---------------------------------------------" -ForegroundColor Yellow
 
     switch ($scen) {
-        "Scenario1" {
+        "Scenario-001" {
             $tag = Get-SnapshotImageTag -Role "primary" -Size $Template
 
             if (-not $Force -and (Test-SnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash -BaseImage "ghcr.io/tetronio/jim-samba-ad:primary")) {
@@ -298,7 +298,7 @@ foreach ($scen in $scenariosToProcess) {
                 & "$scriptRoot/docker/samba-ad-prebuilt/Build-SambaImages.ps1" -Images Primary
             }
 
-            # S1 target directory starts empty — no test user population.
+            # S001 target directory starts empty — no test user population.
             # Only OUs are created (by the base image's post-provision.sh).
             Build-Snapshot `
                 -BaseImage $baseImage `
@@ -312,14 +312,14 @@ foreach ($scen in $scenariosToProcess) {
                     DNS_FORWARDER = "8.8.8.8"
                 } `
                 -PopulateAction {
-                    # No population — S1 tests HR-driven provisioning into a clean directory
-                    Write-Host "  Skipping population (S1 starts with empty directory)" -ForegroundColor Gray
+                    # No population — S001 tests HR-driven provisioning into a clean directory
+                    Write-Host "  Skipping population (S001 starts with empty directory)" -ForegroundColor Gray
                 }
 
             Write-Host ""
         }
 
-        "Scenario8" {
+        "Scenario-008" {
             $sourceTag = Get-SnapshotImageTag -Role "source-s8" -Size $Template
             $targetTag = Get-SnapshotImageTag -Role "target-s8" -Size $Template
 
@@ -350,8 +350,8 @@ foreach ($scen in $scenariosToProcess) {
                         DNS_FORWARDER = "8.8.8.8"
                     } `
                     -PopulateAction {
-                        & "$scriptRoot/Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source -Container "samba-snapshot-source"
-                        if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD-Scenario8.ps1 (Source) failed" }
+                        & "$scriptRoot/Populate-SambaAD-Scenario-008.ps1" -Template $Template -Instance Source -Container "samba-snapshot-source"
+                        if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD-Scenario-008.ps1 (Source) failed" }
                     }
             }
 
@@ -379,8 +379,8 @@ foreach ($scen in $scenariosToProcess) {
                         DNS_FORWARDER = "8.8.8.8"
                     } `
                     -PopulateAction {
-                        & "$scriptRoot/Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Target -Container "samba-snapshot-target"
-                        if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD-Scenario8.ps1 (Target) failed" }
+                        & "$scriptRoot/Populate-SambaAD-Scenario-008.ps1" -Template $Template -Instance Target -Container "samba-snapshot-target"
+                        if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD-Scenario-008.ps1 (Target) failed" }
                     }
             }
 
@@ -396,11 +396,11 @@ Write-Host ""
 Write-Host "Available snapshots:" -ForegroundColor Gray
 foreach ($scen in $scenariosToProcess) {
     switch ($scen) {
-        "Scenario1" {
+        "Scenario-001" {
             $tag = Get-SnapshotImageTag -Role "primary" -Size $Template
             Write-Host "  $tag" -ForegroundColor Gray
         }
-        "Scenario8" {
+        "Scenario-008" {
             Write-Host "  $(Get-SnapshotImageTag -Role 'source-s8' -Size $Template)" -ForegroundColor Gray
             Write-Host "  $(Get-SnapshotImageTag -Role 'target-s8' -Size $Template)" -ForegroundColor Gray
         }

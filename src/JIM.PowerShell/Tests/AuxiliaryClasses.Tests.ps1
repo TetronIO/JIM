@@ -138,7 +138,7 @@ Describe 'Set-JIMConnectedSystemAuxiliaryClass' {
                 # Assigning from an if-expression enumerates its output, which collapses a one-element
                 # array to a scalar Int32; ConvertTo-Json then sends {"objectTypeIds":16} and the API
                 # rejects it with a 400. Merging exactly one class is the cmdlet's own first example,
-                # and Scenario 19's Merge step is where this shipped bug surfaced. The value must
+                # and Scenario 019's Merge step is where this shipped bug surfaced. The value must
                 # still be an array at the serialisation boundary.
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
                 $script:capturedBody = $null

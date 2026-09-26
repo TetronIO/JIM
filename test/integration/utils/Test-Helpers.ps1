@@ -245,7 +245,7 @@ function Get-TemplateScale {
             Groups = 80
             AvgMemberships = 15
         }
-        # Scale100k5kGroups: realistic long-tail group shape for Scenario 8 only.
+        # Scale100k5kGroups: realistic long-tail group shape for Scenario 008 only.
         # Group counts and per-user membership average are driven by the per-category
         # logic in Test-GroupHelpers.ps1 (Get-Scenario8GroupScale). Values below are
         # informational and are used by Generate-TestCSV / CSV cache keying only;
@@ -255,7 +255,7 @@ function Get-TemplateScale {
             Groups = 5027
             AvgMemberships = 9
         }
-        # Higher-tier long-tail templates. Same Scenario 8 + OpenLDAP-only constraint
+        # Higher-tier long-tail templates. Same Scenario 008 + OpenLDAP-only constraint
         # as Scale100k5kGroups: category counts grow sub-linearly for org-structure
         # categories (Divisions, Locations, Departments) and roughly linearly for the
         # ad-hoc tail (Projects, DistributionLists). The AvgMemberships values below
@@ -312,7 +312,7 @@ function Get-DirectoryConfig {
 
         A third identity, MultiPartitionJimBindDN/MultiPartitionJimBindPassword, is what a
         Connected System that imports MORE THAN ONE partition from the same server binds as
-        (Scenario 9 is the only current example: one Connected System scoped across both the
+        (Scenario 009 is the only current example: one Connected System scoped across both the
         Yellowstone and Glitterband suffixes). On OpenLDAP this is cn=svc-jim-partitions, a member
         of every suffix's cn=jim group rather than just one, so a single bind can read/write both
         partitions; a single-partition Connected System keeps using JimBindDN and is unaffected.
@@ -410,7 +410,7 @@ function Get-DirectoryConfig {
                     ShortDomain      = "RESURGAM"
                     LdapSearchPort   = 389
                     LdapSearchScheme = "ldap"
-                    ComposeProfiles  = @("scenario2")
+                    ComposeProfiles  = @("scenario-002")
                     PopulateScript   = "Populate-SambaAD.ps1"
                     ConnectedSystemName = "Resurgam AD"
                 }
@@ -447,7 +447,7 @@ function Get-DirectoryConfig {
                     ShortDomain      = "GENTIAN"
                     LdapSearchPort   = 389
                     LdapSearchScheme = "ldap"
-                    ComposeProfiles  = @("scenario2")
+                    ComposeProfiles  = @("scenario-002")
                     PopulateScript   = "Populate-SambaAD.ps1"
                     ConnectedSystemName = "Gentian AD"
                 }
@@ -470,7 +470,7 @@ function Get-DirectoryConfig {
                     JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
                     JimBindPassword  = "Svc-Jim@123!"
                     # Identity for a Connected System that imports MORE THAN ONE partition from
-                    # this server (Scenario 9: one Connected System scoped across both
+                    # this server (Scenario 009: one Connected System scoped across both
                     # Yellowstone and Glitterband). cn=svc-jim-partitions is a member of every
                     # suffix's cn=jim group (see bootstrap/01-base-ous-yellowstone.ldif and
                     # scripts/01-add-second-suffix.sh), not just its own suffix's, so a single
@@ -504,7 +504,7 @@ function Get-DirectoryConfig {
                     SecondJimBindDN  = "cn=svc-jim,ou=Services,dc=glitterband,dc=local"
                 }
                 # Source and Target use the same OpenLDAP container but different suffixes
-                # for cross-domain sync testing (Scenario 2)
+                # for cross-domain sync testing (Scenario 002)
                 Source = @{
                     ContainerName    = "openldap-primary"
                     Host             = "openldap-primary"
@@ -602,7 +602,7 @@ function Get-DirectoryConfig {
                     JimBindDN        = "cn=svc-jim,ou=Services,dc=yellowstone,dc=local"
                     JimBindPassword  = "Svc-Jim@123!"
                     # Member of both suffixes' cn=jim groups, for a Connected System scoped across
-                    # both partitions (Scenario 9); see the OpenLDAP Primary comment above.
+                    # both partitions (Scenario 009); see the OpenLDAP Primary comment above.
                     MultiPartitionJimBindDN       = "cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local"
                     MultiPartitionJimBindPassword = "Svc-Jim-Partitions@123!"
                     AuthType         = "Simple"
@@ -758,7 +758,7 @@ function Add-SambaCertificateToJimStore {
         plus whatever is in JIM's certificate store. Samba AD's self-signed certificate doubles as its
         own CA, so trusting it is what makes the scenario connections succeed.
 
-        This follows the same pattern Setup-Scenario15.ps1 uses for the SCIM test service provider's
+        This follows the same pattern Setup-Scenario-015.ps1 uses for the SCIM test service provider's
         certificate: copy the certificate off the container, remove any stale certificate of the same
         name from a previous run, then upload the fresh bytes. Bytes are uploaded rather than a path
         because -Path is read server-side by jim.web, and the host path this script reads from does not
@@ -841,7 +841,7 @@ function Add-SambaCertificateToJimStore {
     }
 
     # Import the JIM PowerShell module and connect. Self-contained per call (mirrors
-    # Setup-Scenario15.ps1's own Connect-JIM / Disconnect-JIM bracket) so this function has no
+    # Setup-Scenario-015.ps1's own Connect-JIM / Disconnect-JIM bracket) so this function has no
     # dependency on caller connection state.
     $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
     if (-not (Test-Path $modulePath)) {
@@ -997,7 +997,7 @@ function Add-DirectoryCertificateToJimStore {
         once, in Step 4a). A scenario never has to know which directory it is on: this dispatches on
         DirectoryConfig.DirectoryType to Add-SambaCertificateToJimStore or
         Add-DirsrvCertificateToJimStore, each with the config's ContainerName, and does nothing for
-        OpenLDAP, whose lab connects over plain LDAP and has no certificate to trust. Scenario 10 on
+        OpenLDAP, whose lab connects over plain LDAP and has no certificate to trust. Scenario 010 on
         the 389 lab failed exactly because it called the Samba function against dirsrv-primary.
 
         Callers still guard on DirectoryConfig.UseSSL, so a directory that connects unencrypted never
@@ -1105,7 +1105,7 @@ function Get-DatabaseConfig {
 
     .DESCRIPTION
         The Get-DirectoryConfig analogue for databases. Returns a hashtable carrying everything a
-        Scenario 16 setup or scenario script needs to talk to one database server: how to reach it from
+        Scenario 016 setup or scenario script needs to talk to one database server: how to reach it from
         inside the Docker network (which is what JIM uses), how to run SQL against it from the test host
         (which is what the seeder uses), and the dialect's spellings for the column types the matrix
         deliberately exercises.
@@ -1362,7 +1362,7 @@ function New-TestUser {
     $pronounOptions = @("he/him", "she/her", "they/them", "he/they", "she/they")
 
     # Companies: Panoply is the main company (employees), partner companies for contractors
-    # These are used for company-specific entitlement groups in Scenario 4
+    # These are used for company-specific entitlement groups in Scenario 004
     $mainCompany = "Panoply"
     $partnerCompanies = @(
         "Nexus Dynamics",      # Technology consulting partner
@@ -2401,7 +2401,7 @@ function Remove-SyncRuleAndWait {
         Metaverse attribute values: the rule is disabled immediately, and it is deleted as the final step
         of a queued Worker recall task that withdraws its values and re-elects the surviving contributors.
         A test that asserts the rule has gone the moment the cmdlet returns is racing that task, and loses;
-        Scenario 14's ScopedExceptionAuthority failed exactly that way, sub-second, every run.
+        Scenario 014's ScopedExceptionAuthority failed exactly that way, sub-second, every run.
 
         Remove-JIMSyncRule -Wait does the waiting, and reports a recall that ends badly rather than leaving
         it to surface as a rule that never went away; this adds the name-based absence check the scenarios
@@ -2451,7 +2451,7 @@ function Assert-ImportedObjectCount {
         Guards fixed-size scenarios against silent test-isolation failures. A scenario that populates a known,
         small number of directory objects but processes far more has imported stale data left behind by an earlier
         scenario (for example, the OpenLDAP directory is a long-lived container without a per-scenario data reset).
-        That pollution was why the "six-user" Scenario14-AttributePriority actually synchronised ~50,000 objects
+        That pollution was why the "six-user" Scenario-014-AttributePriority actually synchronised ~50,000 objects
         and hit a Metaverse Object update concurrency failure. Asserting the count makes the isolation break fail
         loudly at the point it happens, rather than surfacing hours later as an unrelated error.
 
@@ -2484,7 +2484,7 @@ function Assert-ImportedObjectCount {
     # that counter belongs to the synchronisation phase and is always 0 for an import activity. Count
     # every source object the import presented: new (adds) + changed (updates) + unchanged. Deletes are
     # excluded because a deleted object is no longer in the source. This stays correct whether the CSOs
-    # already existed (re-import) or not, and matches how Scenario 7/9 read import counts (totalCsoAdds).
+    # already existed (re-import) or not, and matches how Scenario 007/9 read import counts (totalCsoAdds).
     $processed = [int]$stats.totalCsoAdds + [int]$stats.totalCsoUpdates + [int]$stats.totalUnchanged
 
     if ($processed -ne $Expected) {
@@ -3356,7 +3356,7 @@ function Assert-MvoAttributeValue {
 
     .EXAMPLE
         Assert-MvoAttributeValue -MvoId $aliceMvoId -AttributeName "Job Title" `
-            -ExpectedValue "Engineer (Primary)" -ExpectedContributingSyncRuleName "Scenario 14 Primary Import Users"
+            -ExpectedValue "Engineer (Primary)" -ExpectedContributingSyncRuleName "Scenario 014 Primary Import Users"
 
     .EXAMPLE
         Assert-MvoAttributeValue -MvoId $aliceMvoId -AttributeName "Manager" -ExpectedReferenceMvoId $bobMvoId
@@ -3367,7 +3367,7 @@ function Assert-MvoAttributeValue {
 
     .EXAMPLE
         Assert-MvoAttributeValue -MvoId $frankMvoId -AttributeName "Job Title" `
-            -ExpectAssertedNull -ExpectedContributingSyncRuleName "Scenario 14 Primary Import Users"
+            -ExpectAssertedNull -ExpectedContributingSyncRuleName "Scenario 014 Primary Import Users"
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -3595,8 +3595,8 @@ function Get-MvoDeletionMarkers {
         (DeletionTriggeredBySystemId/Name, DeletionPolicySnapshotJson) or the deletion-initiator
         audit fields (DeletionInitiatedByType/Id/Name), so tests that need to assert on those read
         the MetaverseObjects table via psql in the jim.database container instead (same pattern as
-        Assert-ExportRpeisHaveCsoLink). Used by Scenario 4's deletion-rule trigger-mode tests and by
-        Scenario 5's same-page rejoin cancellation probe (#1612).
+        Assert-ExportRpeisHaveCsoLink). Used by Scenario 004's deletion-rule trigger-mode tests and by
+        Scenario 005's same-page rejoin cancellation probe (#1612).
 
     .PARAMETER MvoId
         The Metaverse Object ID (GUID) to inspect.
@@ -3832,7 +3832,7 @@ function Clear-JimErrorWatcher {
         The sentinel accumulates for the whole run, and Start-JIMRunProfile -Wait aborts whenever it is
         non-empty. That is right for a scenario that stops at its first failure, and wrong for one that
         deliberately carries on: a single early error latches the sentinel, so every Run Profile wait
-        afterwards aborts and every remaining step reports a failure it never actually had. Scenario 16
+        afterwards aborts and every remaining step reports a failure it never actually had. Scenario 016
         lost nineteen Oracle rows and half of SQL Server that way, to four errors raised before any of
         them ran.
 
@@ -4255,7 +4255,7 @@ function Assert-SyncStateInvariants {
 
     .DESCRIPTION
         Scenario assertions cover the Connected Systems a scenario cares about. This sweep covers ALL of
-        them, because a defect is happiest in the system nobody is looking at: Scenario 4 left nine
+        them, because a defect is happiest in the system nobody is looking at: Scenario 004 left nine
         unremovable Connected System Objects in "Cross-Domain Export" on every run for months, a target it
         provisions to and never asserts on. The runner calls this after every scenario, whatever the
         scenario's own outcome.

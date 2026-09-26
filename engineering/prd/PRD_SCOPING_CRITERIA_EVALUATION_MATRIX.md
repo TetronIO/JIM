@@ -1,4 +1,4 @@
-# Scoping Criteria Evaluation Matrix (Scenario 11)
+# Scoping Criteria Evaluation Matrix (Scenario 011)
 
 - **Status:** Planned
 - **Created:** 2026-05-22
@@ -9,11 +9,11 @@
 
 Synchronisation Rule scoping in JIM is driven by `SyncRuleScopingCriteria`, which composes attribute comparisons via `SearchComparisonType` operators inside `SearchGroupType` groups (`All`/`Any`, optionally nested). Together this is a moderately large evaluation matrix: 12 operators (Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains, NotContains, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals) × 6 typed value carriers (Text, Number, LongNumber, DateTime, Boolean, Guid) × 2 group structures × `CaseSensitive` flag for text comparisons.
 
-Scenario 10 (`Invoke-Scenario10-SyncRuleScoping.ps1`) deliberately covers only the **common ILM shape**: text `Equals` / `StartsWith` / `Contains` in a single `All` group, exercised against the full action lifecycle (inbound enter / in-scope-update / exit-disconnect / exit-remain-joined; outbound enter / exit-disconnect / exit-delete; cross-system inline cascade). It is fast (around 2 minutes 41 seconds on Nano) precisely because it does not enumerate the evaluation matrix.
+Scenario 010 (`Invoke-Scenario-010-SyncRuleScoping.ps1`) deliberately covers only the **common ILM shape**: text `Equals` / `StartsWith` / `Contains` in a single `All` group, exercised against the full action lifecycle (inbound enter / in-scope-update / exit-disconnect / exit-remain-joined; outbound enter / exit-disconnect / exit-delete; cross-system inline cascade). It is fast (around 2 minutes 41 seconds on Nano) precisely because it does not enumerate the evaluation matrix.
 
 The result is a coverage gap: most of the operator / attribute-type / group-structure combinations have **no integration coverage at all**. A regression in, say, `LessThanOrEquals` on a `DateTime` attribute, or `Any` (OR) group short-circuiting, would not be caught by any of the eleven existing scenarios. Unit tests cover individual operator evaluation in isolation but do not cross the API, persistence, and worker-evaluation boundaries end-to-end, and they do not cover the round-trip persistence of typed values via the public REST API.
 
-This PRD scopes a dedicated integration scenario whose purpose is **evaluation correctness across the full matrix**, complementing rather than duplicating Scenario 10. It is a parameterised sweep: each "cell" is one operator + value-type + group-structure combination, asserted by checking which subset of a known seed population is in scope after a single inbound sync.
+This PRD scopes a dedicated integration scenario whose purpose is **evaluation correctness across the full matrix**, complementing rather than duplicating Scenario 010. It is a parameterised sweep: each "cell" is one operator + value-type + group-structure combination, asserted by checking which subset of a known seed population is in scope after a single inbound sync.
 
 ## Goals
 
@@ -27,9 +27,9 @@ This PRD scopes a dedicated integration scenario whose purpose is **evaluation c
 
 ## Non-Goals
 
-- Cascade and lifecycle assertions (RPEI shapes, PendingExport queue contents, OutOfScope action selection, MVO obsoletion). Those live in Scenario 10 and must not be duplicated here.
-- Multi-connector / cross-system cascade. The matrix targets a single inbound rule against a single Connected System; outbound cascade is Scenario 10's territory.
-- Performance / scale assertions. The matrix runs at Nano and asserts correctness, not throughput. Performance baselines remain Scenario 14's responsibility.
+- Cascade and lifecycle assertions (RPEI shapes, PendingExport queue contents, OutOfScope action selection, MVO obsoletion). Those live in Scenario 010 and must not be duplicated here.
+- Multi-connector / cross-system cascade. The matrix targets a single inbound rule against a single Connected System; outbound cascade is Scenario 010's territory.
+- Performance / scale assertions. The matrix runs at Nano and asserts correctness, not throughput. Performance baselines remain Scenario 014's responsibility.
 - New operator types, new value carriers, or new group semantics. This scenario tests what the system already supports; it is not a vehicle for extending the scoping engine.
 - UI coverage. The matrix is driven via the REST API; the scoping rule editor in the Blazor UI is out of scope.
 - `Reference` attribute scoping. The scoping criteria model only carries `GuidValue` (object ID) and does not currently target reference attributes as such; if and when reference scoping is added, it gets its own coverage.
@@ -60,9 +60,9 @@ This PRD scopes a dedicated integration scenario whose purpose is **evaluation c
 
 The matrix is testing operator evaluation correctness, not scale behaviour, and every cell's expected match-set is hand-derived from a specific record population. Varying that population by `-Template` would either invalidate the expected sets (if the generator's output replaced the seed) or make the parameter a lie (if the seed were used regardless). Neither is acceptable. The scenario is therefore locked to its bespoke deterministic seed for the actual matrix work.
 
-4. The scenario **must accept** the standard `-Template` parameter for runner-API consistency (so `Run-IntegrationTests.ps1 -Scenario All -Template Small` does not have to special-case Scenario 11), but the parameter is **informational only** for this scenario. It does not change the seed population, the cell list, or the expected match-sets.
-5. The scenario's docstring must explicitly state that template is informational, mirroring Scenario 10's existing wording: "Scoping evaluation correctness is template-independent; Nano is sufficient and is the default."
-6. Scale-related concerns (query planner behaviour on large CSO tables, predicate pushdown at high row counts, evaluator memory footprint) are explicitly the responsibility of Scenario 14 (Performance Baselines) and must not be retrofitted onto this scenario.
+4. The scenario **must accept** the standard `-Template` parameter for runner-API consistency (so `Run-IntegrationTests.ps1 -Scenario All -Template Small` does not have to special-case Scenario 011), but the parameter is **informational only** for this scenario. It does not change the seed population, the cell list, or the expected match-sets.
+5. The scenario's docstring must explicitly state that template is informational, mirroring Scenario 010's existing wording: "Scoping evaluation correctness is template-independent; Nano is sufficient and is the default."
+6. Scale-related concerns (query planner behaviour on large CSO tables, predicate pushdown at high row counts, evaluator memory footprint) are explicitly the responsibility of Scenario 014 (Performance Baselines) and must not be retrofitted onto this scenario.
 
 #### Matrix manifest
 
@@ -120,7 +120,7 @@ JIM does **not** currently expose a sync-preview path that evaluates scoping cri
 
 22. Cells must be isolated from each other without paying the cost of a full `Reset-JIMSystem` per cell. The implementation plan must pick one of the following, with justification grounded in a measured wall-clock spike at Nano against the canonical seed:
     1. **Batched sync, one rule per cell, distinct projected object types** (recommended starting point): create N import Synchronisation Rules in one go, each with its cell's scoping criteria and its own Metaverse Object Type. A single inbound sync run evaluates all rules; per-cell assertions read back per-object-type. Amortises sync-run overhead across cells and is the only strategy that makes the Exhaustive tier (requirement 13) feasible inside its wall-clock budget.
-    2. **Single Synchronisation Rule, mutated in place**: keep one sandbox rule, PATCH its scoping criteria between cells, full-sync each cell, expect deprovisioning to clean up the previous cell's projections. Re-exercises the deprovisioning lifecycle that Scenario 10 already covers, so cell assertions are coupled to lifecycle correctness; rejected unless the batched path is shown to be unviable.
+    2. **Single Synchronisation Rule, mutated in place**: keep one sandbox rule, PATCH its scoping criteria between cells, full-sync each cell, expect deprovisioning to clean up the previous cell's projections. Re-exercises the deprovisioning lifecycle that Scenario 010 already covers, so cell assertions are coupled to lifecycle correctness; rejected unless the batched path is shown to be unviable.
     3. **One rule per cell, sync per cell**: simplest to reason about, but pays the sync-run overhead per cell and is the slowest of the three. Last resort only; under this strategy the Exhaustive tier must be restricted or deferred per requirement 19.
 23. If none of the three options above can keep the Default tier under its 5-minute Nano wall-clock target, the implementation plan must explicitly raise this in a follow-up issue before adopting an option that exceeds the budget. The implementation plan must not silently relax tier wall-clock targets.
 24. The scenario must complete with the JIM instance returned to a known-empty state (no sandbox rules, no leftover MVOs, no orphaned PendingExports, no leftover sandbox Metaverse Object Types), achieved by a single `Reset-JIMSystem -Force` at scenario end. The scenario must not require any manual cleanup to leave the host re-runnable.
@@ -140,10 +140,10 @@ JIM does **not** currently expose a sync-preview path that evaluates scoping cri
 
 Every configuration knob exposed by the scenario script must be selectable in **both** ways: as a parameter on `Run-IntegrationTests.ps1` (for scripted / CI use) and via the interactive menu (for ad-hoc developer use). The two surfaces must accept the same value sets and produce identical scenario invocations.
 
-30. `Run-IntegrationTests.ps1` must register Scenario 11 in the auto-detected scenario list with a human-readable description in the `switch` block that maps scenario filenames to descriptions (currently at [test/integration/Run-IntegrationTests.ps1:480-490](../../test/integration/Run-IntegrationTests.ps1#L480-L490)). Proposed: "Synchronisation Rule scoping criteria evaluation matrix".
+30. `Run-IntegrationTests.ps1` must register Scenario 011 in the auto-detected scenario list with a human-readable description in the `switch` block that maps scenario filenames to descriptions (currently at [test/integration/Run-IntegrationTests.ps1:480-490](../../test/integration/Run-IntegrationTests.ps1#L480-L490)). Proposed: "Synchronisation Rule scoping criteria evaluation matrix".
 31. The scenario must surface its scenario-specific options as **named parameters** on the scenario script (`-Quick`, `-Exhaustive`, `-OperatorFilter`, `-IncludeNegativeCells`), with `ValidateSet` constraints where the value set is bounded. Parameters must be discoverable via `Get-Help` on the scenario script and from `Run-IntegrationTests.ps1 -?`.
 32. `Run-IntegrationTests.ps1` must accept and pass through the scenario-specific parameters introduced in requirement 31. The pass-through must not require changes to other scenarios; the runner must continue to work for any scenario that does not define those parameters.
-33. When `Run-IntegrationTests.ps1` is launched **without** the scenario-specific parameters AND the user selects Scenario 11 in the interactive menu, the runner must prompt for the same options the parameters expose, in this order:
+33. When `Run-IntegrationTests.ps1` is launched **without** the scenario-specific parameters AND the user selects Scenario 011 in the interactive menu, the runner must prompt for the same options the parameters expose, in this order:
     1. **Coverage tier**: `Default (Full)` (default), `Quick`, or `Exhaustive`. Single-select; the three values are mutually exclusive.
     2. **Operator filter**: `All` (default) or a single `SearchComparisonType` value from a `ValidateSet` populated from the enum (so the menu options stay in lockstep with the enum without manual maintenance).
     3. **Include negative cells**: yes (default) or no.
@@ -201,19 +201,19 @@ Every configuration knob exposed by the scenario script must be selectable in **
 
 ### Scenario 7: Interactive menu drives the same configuration as parameters (Exhaustive run)
 
-**Given** a developer runs `./Run-IntegrationTests.ps1` with no parameters and arrow-keys down to Scenario 11
+**Given** a developer runs `./Run-IntegrationTests.ps1` with no parameters and arrow-keys down to Scenario 011
 **When** they hit Enter, then accept the default Template and DirectoryType, then arrow down to `Exhaustive` at the coverage-tier prompt, then accept the default `All` at the operator-filter prompt, then accept the default `Yes` at the include-negative-cells prompt
-**Then** the resulting scenario invocation is identical to `./Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Exhaustive` would have produced. The pre-run banner shows `Coverage tier: Exhaustive`, `Operator filter: All`, `Include negative cells: Yes`. The end-of-run re-run hint prints the exact parameterised command.
+**Then** the resulting scenario invocation is identical to `./Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -Exhaustive` would have produced. The pre-run banner shows `Coverage tier: Exhaustive`, `Operator filter: All`, `Include negative cells: Yes`. The end-of-run re-run hint prints the exact parameterised command.
 
 ### Scenario 8: Parameters skip menu prompts
 
-**Given** a developer runs `./Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Quick`
+**Given** a developer runs `./Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -Quick`
 **When** the runner detects `-Quick` was provided
 **Then** the coverage-tier prompt is skipped (no flicker, no "press Enter to accept default" line) and the runner proceeds straight to the next unspecified prompt (operator filter), exactly mirroring how `-Template Nano` already skips the template menu.
 
 ### Scenario 9: Mutually exclusive tier selectors
 
-**Given** a developer runs `./Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Quick -Exhaustive`
+**Given** a developer runs `./Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -Quick -Exhaustive`
 **When** the runner parses parameters
 **Then** the runner fails fast with a clear error stating that `-Quick` and `-Exhaustive` are mutually exclusive, before any environment setup begins.
 
@@ -230,15 +230,15 @@ Every configuration knob exposed by the scenario script must be selectable in **
 
 | Area | Impact |
 |------|--------|
-| Integration tests | New `test/integration/scenarios/Invoke-Scenario11-ScopingCriteriaMatrix.ps1`; new declarative manifest at `test/integration/scenarios/data/scoping-criteria-matrix.*`; new scenario-local data helper for the deterministic seed; new helpers under `test/integration/utils/` for manifest validation and matrix-cell execution if reusable |
-| Integration runner | `Run-IntegrationTests.ps1`: register Scenario 11 in the auto-detected list with a description in the filename-to-description `switch`; add named parameters for the scenario-specific options (`-Quick`, `-Exhaustive`, `-OperatorFilter`, `-IncludeNegativeCells`) with pass-through to the scenario script; add interactive menu prompts for coverage tier and the other options that mirror the existing template / directory-type menu idiom; extend the pre-run banner and end-of-run re-run hint to include the resolved scenario-specific values |
-| Documentation | `engineering/INTEGRATION_TESTING.md`: add Scenario 11 to the Available Scenarios table, Quick Start command list (including separate examples for Default, `-Quick`, and `-Exhaustive` invocations), step example, detail section, and Phase 1 status table; renumber the existing Phase 2 placeholders (Multi-Source Aggregation, Database Source/Target, Performance Baselines) from 11 / 12 / 13 to 12 / 13 / 14 in all locations they appear |
+| Integration tests | New `test/integration/scenarios/Invoke-Scenario-011-ScopingCriteriaMatrix.ps1`; new declarative manifest at `test/integration/scenarios/data/scoping-criteria-matrix.*`; new scenario-local data helper for the deterministic seed; new helpers under `test/integration/utils/` for manifest validation and matrix-cell execution if reusable |
+| Integration runner | `Run-IntegrationTests.ps1`: register Scenario 011 in the auto-detected list with a description in the filename-to-description `switch`; add named parameters for the scenario-specific options (`-Quick`, `-Exhaustive`, `-OperatorFilter`, `-IncludeNegativeCells`) with pass-through to the scenario script; add interactive menu prompts for coverage tier and the other options that mirror the existing template / directory-type menu idiom; extend the pre-run banner and end-of-run re-run hint to include the resolved scenario-specific values |
+| Documentation | `engineering/INTEGRATION_TESTING.md`: add Scenario 011 to the Available Scenarios table, Quick Start command list (including separate examples for Default, `-Quick`, and `-Exhaustive` invocations), step example, detail section, and Phase 1 status table; renumber the existing Phase 2 placeholders (Multi-Source Aggregation, Database Source/Target, Performance Baselines) from 11 / 12 / 13 to 12 / 13 / 14 in all locations they appear |
 | Application / API | None expected; if the matrix exposes a real bug in `SyncRuleScopingEvaluator`, validation, or persistence, that gets its own follow-up |
 | Database | None |
 
 ## Dependencies
 
-- Scenario 10 already merged. This PRD assumes Scenario 10 covers the lifecycle behaviour and that this scenario can focus purely on evaluation correctness.
+- Scenario 010 already merged. This PRD assumes Scenario 010 covers the lifecycle behaviour and that this scenario can focus purely on evaluation correctness.
 - `Reset-JIMSystem` cmdlet (delivered in `feature/scenario-sync-rule-scoping` branch). The matrix relies on it for the single end-of-scenario cleanup.
 
 ## Resolved Decisions
@@ -249,11 +249,11 @@ These were open during PRD drafting and have been settled in conversation. They 
 2. **Matrix tabulation: declarative manifest.** Cells are defined in a checked-in manifest file under `test/integration/scenarios/data/`, not inline in the scenario script. See requirements 7 and 8.
 3. **`-Step` granularity: operator-level.** `-Step <OperatorName>` runs every cell that uses that operator; `-Step <FullyQualifiedCellName>` runs a single cell; `-Step All` (default) runs the lot. `-Step` composes with the coverage tier (tier selects the candidate set, `-Step` filters within it). See requirement 36.
 4. **Three coverage tiers.** The scenario offers Quick, Default (Full), and Exhaustive tiers with wall-clock targets of < 90 s, < 5 min, and < 10 min respectively at Nano (Exhaustive contingent on the batched-sync isolation strategy). Each tier is a strict superset of the one below. See requirement 13 for the tier matrix and requirement 31 for the parameter surface.
-5. **Scenario numbering: insert at 11 and renumber.** The scoping evaluation matrix occupies Scenario 11, adjacent to its lifecycle complement Scenario 10. The existing Phase 2 placeholders move down by one: Multi-Source Aggregation becomes Scenario 12, Database Source/Target becomes Scenario 13, Performance Baselines becomes Scenario 14. The renumber is part of this scenario's `engineering/INTEGRATION_TESTING.md` documentation update (Affected Areas table).
+5. **Scenario numbering: insert at 11 and renumber.** The scoping evaluation matrix occupies Scenario 011, adjacent to its lifecycle complement Scenario 010. The existing Phase 2 placeholders move down by one: Multi-Source Aggregation becomes Scenario 012, Database Source/Target becomes Scenario 013, Performance Baselines becomes Scenario 014. The renumber is part of this scenario's `engineering/INTEGRATION_TESTING.md` documentation update (Affected Areas table).
 
 ## Acceptance Criteria
 
-- [ ] `test/integration/scenarios/Invoke-Scenario11-ScopingCriteriaMatrix.ps1` exists and is invoked via `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix`.
+- [ ] `test/integration/scenarios/Invoke-Scenario-011-ScopingCriteriaMatrix.ps1` exists and is invoked via `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix`.
 - [ ] Three coverage tiers (Quick, Default, Exhaustive) are implemented per requirement 13; `-Quick` and `-Exhaustive` are mutually exclusive and the runner fails fast when both are supplied.
 - [ ] The Default tier covers every applicable `(operator, value-type)` pair (per requirement 14), `CaseSensitive` true/false for text, at least one `All` group, at least one `Any` group, at least one nested group, and at least one null-handling cell per operator/type.
 - [ ] The Exhaustive tier additionally covers, for every applicable `(operator, value-type)` pair, all four group-structure variations (single, two-criterion `All`, two-criterion `Any`, nested `(A OR B) AND C`).
@@ -264,8 +264,8 @@ These were open during PRD drafting and have been settled in conversation. They 
 - [ ] Cell failures do not halt the scenario; the matrix completes regardless and the scenario fails overall only if any cell failed.
 - [ ] Scenario wall-clock at Nano: Quick under 90 s, Default under 5 min, Exhaustive under 10 min (on the standard devcontainer host, assuming batched-sync cell isolation).
 - [ ] Scenario tears down cleanly with no orphaned sandbox rules, MVOs, PendingExports, or sandbox Metaverse Object Types; back-to-back runs at any tier produce identical results.
-- [ ] `engineering/INTEGRATION_TESTING.md` is updated with Scenario 11 in all the places where the existing scenarios are listed (Available Scenarios table, Quick Start commands including separate Default / `-Quick` / `-Exhaustive` examples, step example, detail section, Phase 1 status table), and the existing Phase 2 placeholders 11 / 12 / 13 are renumbered to 12 / 13 / 14 everywhere they appear.
-- [ ] `Run-IntegrationTests.ps1` registers Scenario 11 in the auto-detected scenario list with a human-readable description, exposes the scenario-specific options as named parameters that pass through to the scenario script, prompts for the same options (coverage tier, operator filter, negative cells) in the interactive menu when those parameters are not supplied, skips the prompts silently when they are, and prints the resolved values in both the pre-run banner and the end-of-run re-run hint.
+- [ ] `engineering/INTEGRATION_TESTING.md` is updated with Scenario 011 in all the places where the existing scenarios are listed (Available Scenarios table, Quick Start commands including separate Default / `-Quick` / `-Exhaustive` examples, step example, detail section, Phase 1 status table), and the existing Phase 2 placeholders 11 / 12 / 13 are renumbered to 12 / 13 / 14 everywhere they appear.
+- [ ] `Run-IntegrationTests.ps1` registers Scenario 011 in the auto-detected scenario list with a human-readable description, exposes the scenario-specific options as named parameters that pass through to the scenario script, prompts for the same options (coverage tier, operator filter, negative cells) in the interactive menu when those parameters are not supplied, skips the prompts silently when they are, and prints the resolved values in both the pre-run banner and the end-of-run re-run hint.
 - [ ] Every scenario-specific option can be set in both ways (parameter and menu) and the two paths produce identical scenario invocations for the same selections.
 - [ ] No production code changes ship as part of this scenario; any bugs the matrix uncovers are filed as separate issues.
 
@@ -274,7 +274,7 @@ These were open during PRD drafting and have been settled in conversation. They 
 - Scoping criteria model: [src/JIM.Models/Logic/SyncRuleScopingCriteria.cs](../../src/JIM.Models/Logic/SyncRuleScopingCriteria.cs)
 - Operator enum: [src/JIM.Models/Search/SearchEnums.cs](../../src/JIM.Models/Search/SearchEnums.cs)
 - Attribute data type enum: [src/JIM.Models/Core/CoreEnums.cs](../../src/JIM.Models/Core/CoreEnums.cs)
-- Scenario 10 (the lifecycle complement): [test/integration/scenarios/Invoke-Scenario10-SyncRuleScoping.ps1](../../test/integration/scenarios/Invoke-Scenario10-SyncRuleScoping.ps1)
+- Scenario 010 (the lifecycle complement): [test/integration/scenarios/Invoke-Scenario-010-SyncRuleScoping.ps1](../../test/integration/scenarios/Invoke-Scenario-010-SyncRuleScoping.ps1)
 - Scoping evaluator: [engineering/SYNC_RULE_SCOPING.md](../SYNC_RULE_SCOPING.md)
 - Reset cmdlet (cell-isolation backstop): `Reset-JIMSystem -Force` (delivered on `feature/scenario-sync-rule-scoping`)
 - Phase 2 placement: existing placeholders renumbered to 12 / 13 / 14 in [engineering/INTEGRATION_TESTING.md](../INTEGRATION_TESTING.md) as part of this scenario's documentation deliverable.

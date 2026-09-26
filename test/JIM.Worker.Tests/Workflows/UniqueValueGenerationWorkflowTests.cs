@@ -577,10 +577,10 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
     #endregion
 
-    #region Stale Sticky assignment (bug fix, #242, Scenario 23 integration run)
+    #region Stale Sticky assignment (bug fix, #242, Scenario 023 integration run)
 
     /// <summary>
-    /// Reproduces the Scenario 23 integration run's bug end to end: HR generates and gets an assignment,
+    /// Reproduces the Scenario 023 integration run's bug end to end: HR generates and gets an assignment,
     /// Directory's own higher-priority import Attribute Flow then takes the attribute over and leaves the
     /// assignment behind (Directory's own run cannot reconcile HR's assignment), Directory's flow is withdrawn,
     /// and HR's generated mapping wins the attribute back. Before the fix, <c>ResolveAsync</c> found the old
@@ -693,7 +693,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Builds the stale-assignment repro topology (#242, Scenario 23 bug fix): HR's basic generation topology
+    /// Builds the stale-assignment repro topology (#242, Scenario 023 bug fix): HR's basic generation topology
     /// (default, lowest-priority generated Account Name mapping), plus a Directory Connected System that JOINS
     /// the same Metaverse Object (by Employee Number) once matched, and exports Account Name back out to its
     /// own sAMAccountName - so a wrongly-reasserted value would show up as a Pending Export renaming the live
