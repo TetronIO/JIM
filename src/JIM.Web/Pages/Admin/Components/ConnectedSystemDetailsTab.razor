@@ -7,6 +7,10 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
+    @* Above the form rather than under it: what JIM knows about the target reads before what the administrator
+       named it. Renders nothing when the Connector cannot detect facts about its target; see the component. *@
+    <ConnectedSystemDetectedFacts Capabilities="_capabilities" />
+
     <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
         <PrefilledFormValidator />
         <MudTextField T="string" Label="Connector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
@@ -15,9 +19,6 @@
     </MudForm>
     @* mt-3 (+ the input control's own 4px bottom margin) gives a 16px gap, matching the panel's pa-4 padding below the button so it sits symmetrically inside the panel *@
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-3" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
-
-    @* Renders nothing when the Connector cannot detect facts about its target; see the component. *@
-    <ConnectedSystemDetectedFacts Capabilities="_capabilities" />
 </MudPaper>
 
 @code {

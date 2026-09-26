@@ -60,7 +60,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 ### Detected facts
 
-The Connected System's **Details** tab shows a **Detected** strip beneath the form with the facts JIM has detected about the target directory:
+The Connected System's **Details** tab shows a **Detected** strip above the form with the facts JIM has detected about the target directory:
 
 | Fact | Shown when |
 |------|------------|

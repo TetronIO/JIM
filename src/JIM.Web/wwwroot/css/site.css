@@ -2416,16 +2416,24 @@ html[lang] .jim-schema-change-table td {
     flex-shrink: 0;
 }
 
-/* Detected facts strip (Connected System Details tab): read-only label-over-value items under the form,
+/* Label/value tables (the Password Policy panel): the label column shrinks to its widest label and never
+   wraps, so the value column has the room. Qualified with html[lang] to beat MudBlazor's own cell padding. */
+html[lang] .jim-kv-table td:first-child {
+    width: 1%;
+    white-space: nowrap;
+    padding-right: 2rem;
+}
+
+/* Detected facts strip (Connected System Details tab): read-only label-over-value items above the form,
    separated from it by a rule. Items wrap at narrow widths; the heading item is the first of them so the
    label reads "Detected" in the same column position as every fact's own label. */
 .jim-facts {
     display: flex;
     flex-wrap: wrap;
     gap: 8px 32px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
 }
 
 .jim-fact {
@@ -2452,6 +2460,13 @@ html[lang] .jim-schema-change-table td {
    jim-info-button rule, so only the gap to the word before it is set here. */
 .jim-fact-heading .jim-info-button {
     margin-left: 2px;
+}
+
+/* Password Synchronisation delivery fields (Passwords tab): a fixed width each, side by side. Qualified with
+   .mud-input-control because that wrapper is flex: 1 1 auto and would otherwise share the row. */
+.jim-delivery-number.mud-input-control {
+    flex: 0 0 auto;
+    width: 14rem;
 }
 
 /* Schedule Step Drag and Drop Styles */
@@ -4042,7 +4057,7 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
 }
 
 /* ─── Scope selection: summary, guidance strip and action bar ────────────────────────────────
-   The Partitions & Containers tab's page furniture around the picker above. The summary answers
+   The Scope tab's page furniture around the picker above. The summary answers
    "what does this system import?" before anything explains how to change it; the hint strip
    demotes the hierarchy-refresh guidance from a permanent alert to a line carrying the fact that
    is actually useful (when it was last retrieved), with the caveat behind a disclosure. */
@@ -4074,32 +4089,31 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
     color: var(--mud-palette-text-secondary);
 }
 
+/* Inside the summary panel now, so it carries no surface of its own: a line of secondary text with the
+   refresh button at its end. */
 .jim-scope-hint {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
-    margin-top: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     color: var(--mud-palette-text-secondary);
-    background-color: var(--mud-palette-background-grey);
-    border: 1px solid var(--mud-palette-divider-light);
-    border-radius: var(--mud-default-borderradius);
 }
 
+/* The head is the panel's heading row: the partition's name reads as a title, and the padding beneath it is the
+   ordinary 16px to the picker, not the 16px plus the switch's own slack it used to be. */
 .jim-scope-partition-head {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
-    padding: 1rem;
+    padding: 1rem 1rem 0.5rem;
 }
 
 .jim-scope-partition-name {
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 1.125rem;
+    font-weight: 600;
     color: var(--mud-palette-text-primary);
     overflow-wrap: anywhere;
 }

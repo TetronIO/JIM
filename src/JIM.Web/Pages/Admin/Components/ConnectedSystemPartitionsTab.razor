@@ -38,72 +38,65 @@
 else
 {
     @* ─── What this system currently imports, before anything about how to change it ─── *@
-    <div class="jim-scope-summary" data-testid="jim-scope-summary">
-        <div class="jim-scope-stat">
-            <span class="jim-scope-stat-value">@SelectedContainerCount of @TotalContainerCount</span>
-            <span class="jim-scope-stat-label">Containers selected</span>
-        </div>
-        <div class="jim-scope-stat">
-            <span class="jim-scope-stat-value">@SelectedPartitionCount of @ConnectedSystem.Partitions.Count</span>
-            <span class="jim-scope-stat-label">@(ConnectedSystem.Partitions.Count == 1 ? "Partition" : "Partitions") managed</span>
-        </div>
-        @* Only where there are any: a permanent "0 excluded" would sit on every Connected System that has never
-           carved anything out, which is most of them, saying nothing. Where there are exclusions the selected count
-           alone overstates what is imported, so the figure has to appear beside it. *@
-        @if (ExcludedContainerCount > 0)
-        {
-            <div class="jim-scope-stat" data-testid="jim-scope-excluded">
-                <span class="jim-scope-stat-value">@ExcludedContainerCount</span>
-                <span class="jim-scope-stat-label">@(ExcludedContainerCount == 1 ? "Container" : "Containers") excluded</span>
+    <MudPaper Outlined="true" Class="pa-4">
+        <div class="jim-scope-summary" data-testid="jim-scope-summary">
+            <div class="jim-scope-stat">
+                <span class="jim-scope-stat-value">@SelectedContainerCount of @TotalContainerCount</span>
+                <span class="jim-scope-stat-label">Containers selected</span>
             </div>
-        }
-    </div>
+            <div class="jim-scope-stat">
+                <span class="jim-scope-stat-value">@SelectedPartitionCount of @ConnectedSystem.Partitions.Count</span>
+                <span class="jim-scope-stat-label">@(ConnectedSystem.Partitions.Count == 1 ? "Partition" : "Partitions") managed</span>
+            </div>
+            @* Only where there are any: a permanent "0 excluded" would sit on every Connected System that has never
+               carved anything out, which is most of them, saying nothing. Where there are exclusions the selected count
+               alone overstates what is imported, so the figure has to appear beside it. *@
+            @if (ExcludedContainerCount > 0)
+            {
+                <div class="jim-scope-stat" data-testid="jim-scope-excluded">
+                    <span class="jim-scope-stat-value">@ExcludedContainerCount</span>
+                    <span class="jim-scope-stat-label">@(ExcludedContainerCount == 1 ? "Container" : "Containers") excluded</span>
+                </div>
+            }
+        </div>
 
-    @* ─── Guidance, demoted: the timestamp is the useful part, the caveat is read once ─── *@
-    <div class="jim-scope-hint" data-testid="jim-scope-hint">
-        <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" />
-        <span>
-            @if (_hierarchyRetrievedAt.HasValue)
-            {
-                var retrievedAt = _hierarchyRetrievedAt.Value;
-                <text>Hierarchy retrieved @retrievedAt.ToLocalTime().ToFriendlyDate()</text>
-            }
-            else
-            {
-                <text>Hierarchy retrieved from the Connected System</text>
-            }
-        </span>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
-                   OnClick="HandleImportHierarchyAsync" DropShadow="false">
-            @if (_hierarchyBeingRetrieved)
-            {
-                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                <span class="ms-2">Refreshing</span>
-            }
-            else
-            {
-                <text>Refresh</text>
-            }
-        </MudButton>
-        <MudButton Variant="Variant.Text" Size="Size.Small" DropShadow="false"
-                   OnClick="@(() => _refreshCaveatShown = !_refreshCaveatShown)"
-                   data-testid="jim-scope-hint-disclose">
-            What refreshing does to my selections
-        </MudButton>
-    </div>
-
-    @if (_refreshCaveatShown)
-    {
-        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2"
-                  data-testid="jim-scope-hint-caveat">
-            <MudText Typo="Typo.body2">
-                <strong>Refreshing preserves your selections</strong> where possible. Existing partitions and Containers are matched
-                by their external ID, so renamed or moved items keep their selection state. Partitions and Containers that no longer
-                exist in the Connected System (deleted OUs, permission changes) are removed. Make sure the Connected System identity
-                has the permissions needed to retrieve the hierarchy.
-            </MudText>
-        </MudAlert>
-    }
+        @* ─── When the hierarchy was last read, and how to read it again; what a refresh does is in the info button ─── *@
+        <div class="jim-scope-hint mt-4" data-testid="jim-scope-hint">
+            <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" />
+            <span>
+                @if (_hierarchyRetrievedAt.HasValue)
+                {
+                    var retrievedAt = _hierarchyRetrievedAt.Value;
+                    <MudTooltip Arrow="true" Placement="Placement.Top" Text="@retrievedAt.ToLocalTime().ToFriendlyDate()">
+                        @($"Hierarchy last retrieved {retrievedAt.ToLocalTime().ToRelativeTime()}")
+                    </MudTooltip>
+                }
+                else
+                {
+                    <text>The hierarchy as last retrieved from @ConnectedSystem.Name</text>
+                }
+            </span>
+            <InfoPopover Title="Refreshing the hierarchy">
+                Refreshing reads the partitions and Containers again and preserves your selections where possible:
+                existing ones are matched by their external ID, so renamed or moved items keep their selection state.
+                Partitions and Containers that no longer exist in the Connected System (deleted OUs, permission
+                changes) are removed. Make sure the Connected System identity has the permissions needed to retrieve
+                the hierarchy.
+            </InfoPopover>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
+                       OnClick="HandleImportHierarchyAsync" DropShadow="false" Class="ms-auto">
+                @if (_hierarchyBeingRetrieved)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <span class="ms-2">Refreshing</span>
+                }
+                else
+                {
+                    <text>Refresh</text>
+                }
+            </MudButton>
+        </div>
+    </MudPaper>
 }
 
 @* Hierarchy Refresh Results Panel *@
@@ -463,7 +456,6 @@ else
 
     private bool _hierarchyBeingRetrieved;
     private HierarchyRefreshResult? _hierarchyRefreshResult;
-    private bool _refreshCaveatShown;
     private bool _selectionEdited;
     private DateTime? _hierarchyRetrievedAt;
 

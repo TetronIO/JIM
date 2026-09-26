@@ -534,7 +534,7 @@ For automation, `Get-JIMConnectedSystemPasswordSynchronisation` and `Set-JIMConn
 
 ## Detected facts
 
-Beneath the form on the Details tab, a **Detected** strip lists read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing them never opens a new connection. Before the first successful connection, the strip says nothing has been detected yet.
+At the top of the Details tab, above the form, a **Detected** strip lists read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing them never opens a new connection. Before the first successful connection, the strip says nothing has been detected yet.
 
 Today only the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#detected-facts) detects and surfaces facts (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect facts, the strip is not shown at all.
 
