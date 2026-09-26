@@ -488,7 +488,7 @@ To change the names a created certificate covers, run `setup.sh` again and choos
 
 JIM does not need a reverse proxy, but you may already route web applications through one, or want JIM on port 443 behind a load balancer. Two configurations are supported:
 
-- **Re-encrypting to JIM** (recommended)<br /> The proxy terminates the browser's HTTPS connection and opens its own HTTPS connection to JIM, checking JIM's certificate. Traffic is encrypted end to end, which regulated environments commonly require, and nothing about JIM changes. The proxy must trust the CA that issued JIM's certificate. Give JIM's certificate both the name users type and the name the proxy connects to: proxies differ in which of the two they check.
+- **Re-encrypting to JIM** (recommended)<br /> The proxy terminates the browser's HTTPS connection and opens its own HTTPS connection to JIM, checking JIM's certificate. Traffic is encrypted end to end, which regulated environments commonly require, and nothing about JIM changes. The proxy must trust the CA that issued JIM's certificate, and JIM's certificate must carry both the name users type and the name the proxy connects to: nginx checks JIM's certificate against the host name in its `proxy_pass` line, while Apache httpd, which passes the name users typed on to JIM, checks it against that.
 - **Plain HTTP on the JIM host's loopback interface**<br /> A proxy on the JIM host itself terminates TLS and forwards plain HTTP to JIM, which listens on the host's loopback interface only. See [Plain HTTP for a proxy on the same host](#plain-http-for-a-proxy-on-the-same-host).
 
 Either way, set `JIM_TRUSTED_PROXIES` so that JIM records each client's real address; see [Trusting the Reverse Proxy](#trusting-the-reverse-proxy).
@@ -536,7 +536,7 @@ server {
 
 #### Apache httpd Example
 
-Apache httpd is the default web server on Red Hat Enterprise Linux. This example needs `mod_ssl`, `mod_proxy`, `mod_proxy_http`, `mod_proxy_wstunnel`, `mod_headers` and `mod_rewrite`.
+Apache httpd is the default web server on Red Hat Enterprise Linux. This example needs `mod_ssl`, `mod_proxy`, `mod_proxy_http`, `mod_proxy_wstunnel`, `mod_headers` and `mod_rewrite`. Because `ProxyPreserveHost` passes on the name users typed, Apache checks JIM's certificate against `jim.example.com`, not `jim-app.example.com`: if JIM's certificate lacks it, every request fails with `500 Internal Server Error` and Apache logs `AH02411: SSL Proxy: Peer certificate does not match for hostname`.
 
 ```apache
 <VirtualHost *:443>

@@ -30,7 +30,7 @@ Step-by-step instructions for configuring Single Sign-On with JIM using Keycloak
     - **Authentication flow**: Check **Standard flow** (Authorisation Code)
 6. Click **Next**
 7. Configure login settings:
-    - **Root URL**: `https://your-jim-url`
+    - **Root URL**: `https://your-jim-url` (`your-jim-url` is JIM's address, port included: `jim.example.com:5200` for a default installation)
     - **Valid redirect URIs**: `https://your-jim-url/signin-oidc`
     - **Valid post logout redirect URIs**: `https://your-jim-url/signout-callback-oidc`
     - **Web origins**: `https://your-jim-url`
