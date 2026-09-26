@@ -30,6 +30,10 @@ Before deploying, configure your identity provider with a client registration fo
 !!! tip "Developer environments"
     If you are using the devcontainer for development, a bundled Keycloak instance is included with pre-configured test users. No external identity provider is needed; sign in with `admin` / `admin`.
 
+## TLS Certificate
+
+To use JIM from any machine other than the one it runs on, you need a TLS certificate for JIM's host name and a reverse proxy to serve JIM over HTTPS. Over plain HTTP, only a browser on the JIM host itself can sign in. See [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
+
 ## Hardware Requirements
 
 For detailed hardware sizing and production deployment guidance, see the [Deployment Guide](../administration/deployment.md).

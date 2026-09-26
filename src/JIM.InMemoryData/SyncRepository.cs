@@ -368,7 +368,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
-    public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
+    public virtual Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
         var cso = GetCsosForSystem(connectedSystemId)
@@ -384,6 +384,46 @@ public class SyncRepository : ISyncRepository
         // working set and later have its AttributeValues released. Without cloning, that release
         // would empty the store's own copy too.
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
+    }
+
+    /// <summary>
+    /// Honest in-memory equivalent of the Postgres batch query: same predicate as
+    /// <see cref="GetConnectedSystemObjectBySecondaryExternalIdAsync"/> (case-sensitive
+    /// <c>StringValue</c> equality against that CSO's own configured secondary external id
+    /// attribute), evaluated for many values at once. Virtual so tests can spy on call counts to
+    /// prove the import pipeline batches this per page instead of calling it per object.
+    /// </summary>
+    /// <param name="secondaryExternalIdAttributeId">The object type's CURRENT secondary external ID
+    /// attribute id. The in-memory store has no index to protect, but the parameter's semantics are
+    /// still enforced: combined with the existing <c>SecondaryExternalIdAttributeId</c> check below,
+    /// only a CSO whose own configured secondary attribute equals this value can match (see the
+    /// Postgres implementation for why that is the coherent behaviour, not merely an index aid).
+    /// </param>
+    public virtual Task<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>> GetConnectedSystemObjectsBySecondaryExternalIdValuesAsync(
+        int connectedSystemId, int objectTypeId, int secondaryExternalIdAttributeId, IReadOnlyCollection<string> secondaryExternalIdValues)
+    {
+        var results = new List<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>();
+        if (secondaryExternalIdValues.Count == 0)
+            return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
+
+        var valueSet = new HashSet<string>(secondaryExternalIdValues, StringComparer.Ordinal);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            if (cso.TypeId != objectTypeId ||
+                cso.SecondaryExternalIdAttributeId != secondaryExternalIdAttributeId)
+                continue;
+
+            foreach (var av in cso.AttributeValues.Where(av =>
+                av.AttributeId == secondaryExternalIdAttributeId &&
+                av.AttributeId == cso.SecondaryExternalIdAttributeId!.Value &&
+                av.StringValue != null &&
+                valueSet.Contains(av.StringValue)))
+            {
+                results.Add((av.StringValue!, cso.Id, cso.Status));
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<(string Value, Guid ConnectedSystemObjectId, ConnectedSystemObjectStatus Status)>>(results);
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
@@ -665,8 +705,51 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(values);
     }
 
-    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    /// <summary>
+    /// Number of times <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/> has
+    /// been called. Lets tests prove the two-phase Full Import unseen exported-Create retry step
+    /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) only promotes candidates to
+    /// this full graph load when the lean Summary-tier projection decided at least one is genuinely
+    /// unseen, and never for a run type or empty run the early guard already excludes.
+    /// </summary>
+    public int GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount { get; private set; }
+
+    public Task<List<PendingExport>> GetExportedCreatePendingExportsForPendingProvisioningCsosAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null, IReadOnlyCollection<Guid>? pendingExportIds = null)
     {
+        GetExportedCreatePendingExportsForPendingProvisioningCsosCallCount++;
+
+        var result = _pendingExports.Values
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ChangeType == PendingExportChangeType.Create
+                      && pe.Status == PendingExportStatus.Exported
+                      && pe.ConnectedSystemObject != null
+                      && pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning
+                      && pe.ConnectedSystemObject.TypeId == objectTypeId
+                      && (partitionId == null || pe.ConnectedSystemObject.PartitionId == partitionId)
+                      && (pendingExportIds == null || pendingExportIds.Contains(pe.Id)))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Number of times <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> has been
+    /// called. Lets tests prove the retry step's early exit (not a Full Import, or nothing imported) skips
+    /// every repository query for this Connected System, including the lean projection.
+    /// </summary>
+    public int GetExportedCreatePendingExportRetryCandidateSummariesCallCount { get; private set; }
+
+    /// <summary>
+    /// In-memory equivalent of the PostgreSQL raw-SQL projection: same eligibility as
+    /// <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/>, projected down to the
+    /// typed External Id columns. Mirrors <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/>'s
+    /// own value selection (the attribute value whose AttributeId matches the CSO's ExternalIdAttributeId).
+    /// </summary>
+    public Task<List<PendingExportRetryCandidateSummary>> GetExportedCreatePendingExportRetryCandidateSummariesAsync(
+        int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        GetExportedCreatePendingExportRetryCandidateSummariesCallCount++;
+
         var result = _pendingExports.Values
             .Where(pe => pe.ConnectedSystemId == connectedSystemId
                       && pe.ChangeType == PendingExportChangeType.Create
@@ -675,6 +758,21 @@ public class SyncRepository : ISyncRepository
                       && pe.ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning
                       && pe.ConnectedSystemObject.TypeId == objectTypeId
                       && (partitionId == null || pe.ConnectedSystemObject.PartitionId == partitionId))
+            .Select(pe =>
+            {
+                var cso = pe.ConnectedSystemObject!;
+                var externalIdValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+                return new PendingExportRetryCandidateSummary
+                {
+                    PendingExportId = pe.Id,
+                    ConnectedSystemObjectId = cso.Id,
+                    ExternalIdStringValue = externalIdValue?.StringValue,
+                    ExternalIdIntValue = externalIdValue?.IntValue,
+                    ExternalIdLongValue = externalIdValue?.LongValue,
+                    ExternalIdDecimalValue = externalIdValue?.DecimalValue,
+                    ExternalIdGuidValue = externalIdValue?.GuidValue
+                };
+            })
             .ToList();
         return Task.FromResult(result);
     }
@@ -1729,7 +1827,7 @@ public class SyncRepository : ISyncRepository
     // is already a fully wired-up graph in memory), so the lean merge-fetch variant is behaviourally
     // identical to the heavy one here. The distinction only exists - and is only provable - at the
     // Postgres repository layer, where Include chains genuinely control what gets loaded.
-    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+    public virtual Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
@@ -2660,6 +2758,21 @@ public class SyncRepository : ISyncRepository
             _pendingExports[pe.Id] = pe;
         }
         return Task.CompletedTask;
+    }
+
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+    {
+        var recovered = 0;
+        foreach (var pe in _pendingExports.Values.Where(pe => pe.Status == PendingExportStatus.Executing))
+        {
+            var somethingAlreadySent = pe.AttributeValueChanges.Any(ac =>
+                ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+
+            pe.Status = somethingAlreadySent ? PendingExportStatus.Exported : PendingExportStatus.Pending;
+            recovered++;
+        }
+        return Task.FromResult(recovered);
     }
 
     // Virtual for test-support subclasses: the parallel export batch path re-loads Pending

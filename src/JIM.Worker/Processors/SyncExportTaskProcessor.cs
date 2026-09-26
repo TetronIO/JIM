@@ -335,7 +335,7 @@ public class SyncExportTaskProcessor
 
             // Link to the Connected System Object if available.
             // Set the scalar FK alongside the navigation: RPEIs are persisted via raw SQL / COPY
-            // (BulkInsertRpeisRawAsync), which does not trigger EF's automatic FK fix-up from the
+            // (BulkInsertRpeisOnConnectionAsync), which does not trigger EF's automatic FK fix-up from the
             // navigation. Without the explicit assignment the column is inserted as NULL, breaking
             // the audit-trail link from the Activity into the CSO detail page (#683).
             //

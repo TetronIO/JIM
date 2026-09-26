@@ -5934,7 +5934,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Transactional.PendingExport", null)
                         .WithMany("AttributeValueChanges")
-                        .HasForeignKey("PendingExportId");
+                        .HasForeignKey("PendingExportId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Attribute");
                 });

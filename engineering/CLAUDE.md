@@ -203,6 +203,7 @@ Internal engineering artefacts live under `engineering/`; the customer-facing Mk
 - `engineering/plans/done/` - Completed plans
 - `engineering/notes/` - Investigation notes and point-in-time analysis
 - `engineering/` - Active guides and references (current/completed work)
+  - `CAUSALITY_REFERENCE.md` - Every causal edge, reason code, sync outcome and RPEI error member, generated from the enums, with ordinal, meaning, producing type and portal rendering
   - `COMPLIANCE_MAPPING.md` - Security framework and standards compliance mapping
   - `DATABASE_GUIDE.md` - PostgreSQL configuration, connection pooling, and backup/restore
   - `DEVELOPER_GUIDE.md` - Comprehensive development guide

@@ -9,7 +9,51 @@ title: Troubleshooting
 
 <!-- TODO: Common issues and resolutions for deployment, authentication, synchronisation, and connectivity problems -->
 
+## Start-up
+
+### A service logs `The database is not reachable yet`
+
+At start-up, `jim.worker`, `jim.web` and `jim.scheduler` each wait for PostgreSQL before doing anything else, and log every attempt with the time spent so far and the reason:
+
+```
+The database is not reachable yet (attempt 5, 18s elapsed): jim.database:5432: Name or service not known. Retrying in 15s.
+```
+
+**What it means.** The service cannot reach PostgreSQL at the address named in the line (`JIM_DB_HOSTNAME`). A few of these lines are normal while the bundled PostgreSQL container starts, or while an external database server restarts: the service carries on as soon as PostgreSQL answers, logging `Connected to the database after 8 attempts (63s).`, and nothing is lost while it waits.
+
+**How to fix, if it keeps waiting.**
+
+1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag); for an external server, ask whoever runs it.
+2. Check that `JIM_DB_HOSTNAME` in `.env` names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port.
+3. For an external server, check that a firewall allows the JIM host to reach it.
+
+A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy starts it again, which begins a fresh five-minute wait.
+
+### A service stops with `password authentication failed`
+
+Waiting cannot fix rejected credentials, so the service does not wait for them: it stops straight away, with exit code 1 and PostgreSQL's own error, for example `28P01: password authentication failed for user "jim"`. Check `JIM_DB_USERNAME` and `JIM_DB_PASSWORD` in `.env` against the database server, then start JIM again.
+
 ## Authentication
+
+### Sign-in loops between JIM and the identity provider
+
+You open JIM, sign in at your identity provider, and land on a page titled **Sign-in could not complete** instead of the portal. (Earlier versions of JIM sent the browser back to the identity provider again and again instead, and the portal never loaded.) The `jim.web` log records a warning beginning `Sign-in stopped` that names the cause, next to one like this:
+
+```
+'.AspNetCore.Correlation.<random characters>' cookie not found.
+```
+
+and the [security audit log](security-audit-events.md) records a failed sign-in with the reason `OIDC correlation failed`.
+
+**What it means.** When sign-in starts, JIM sets short-lived cookies and checks for them when the identity provider sends the browser back; without them, JIM cannot match the identity provider's response to the sign-in it started. JIM's sign-in cookies are HTTPS-only in a production deployment, so a browser reaching JIM over plain HTTP at an address other than `localhost` discards them. That is typically `http://<server name or IP address>:5200` from another machine, and Safari can do the same even at `http://localhost:5200`. JIM restarts a sign-in once when its cookies go missing, which recovers a one-off loss such as cookies cleared mid-sign-in or the Back button onto the sign-in callback. When the connection means the cookies can never survive, or the restart fails the same way, JIM stops on this page instead of starting sign-in over and over. Nothing is lost when it stops: try again once the cause is fixed. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the HTTPS requirement.
+
+**How to fix.** Serve JIM over HTTPS:
+
+1. Put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy), and [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS. Without it, JIM sees only the proxy's plain HTTP connection even though your address bar shows `https://`.
+2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added for the plain-HTTP address (see the [SSO Setup Guide](sso-setup.md)).
+3. Open JIM at its `https://` address.
+
+If JIM is already served over HTTPS and trusts its proxy but you still see the page, the browser is blocking cookies for JIM's address, or something between the browser and JIM is removing the `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site, and make sure any proxy or security appliance passes them through unchanged.
 
 ### `Invalid parameter: redirect_uri` when running `Connect-JIM` interactively
 
@@ -30,19 +74,6 @@ curl https://your-jim-url/api/v1/auth/config
 ```
 
 The `clientId` in the response must be the client that has the loopback redirect URI registered at your identity provider.
-
-### Sign-in loops between JIM and the identity provider
-
-You sign in, the browser goes back and forth between JIM and the identity provider, and you land on a page titled **Sign-in could not complete**. JIM also logs a warning beginning `Sign-in stopped`. (Earlier versions of JIM kept going back and forth indefinitely.)
-
-**What it means.** When sign-in starts, JIM sets two short-lived cookies and checks for them when the identity provider sends the browser back. Outside Development mode these cookies are marked `Secure`, and browsers only accept `Secure` cookies over HTTPS, or over plain HTTP to `localhost`. When the cookies do not come back, JIM restarts the sign-in once, which recovers a one-off loss (cookies cleared mid-sign-in, or the Back button onto the sign-in callback). If the cookies are lost again, restarting cannot help, so JIM stops and shows this page instead.
-
-**How to fix.**
-
-- **JIM is reached over plain HTTP from another machine**, for example `http://jim01:5200`. This is the usual cause, and JIM stops straight away without restarting. Browser access from other machines requires HTTPS: put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy). Plain HTTP only works from a browser on the JIM host itself, at `http://localhost:5200`.
-- **TLS terminates at a reverse proxy that JIM does not trust.** The address bar shows `https://`, but JIM only sees the proxy's plain HTTP connection. Set `JIM_TRUSTED_PROXIES` to the proxy's address so JIM reads the `X-Forwarded-Proto` header the proxy sends; see the [Configuration Reference](configuration.md).
-- **The browser is blocking cookies for JIM's address**, or a proxy is removing `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site and make sure the proxy passes them through unchanged.
-- **Safari over `http://localhost` outside Development mode.** Unlike other browsers, Safari does not treat `localhost` as secure, so it refuses the cookies. Use HTTPS, or another browser for local testing.
 
 ## Known noisy log lines
 

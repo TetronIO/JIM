@@ -371,9 +371,9 @@ public class OptimisticExportApplyDatabaseTests
 
     /// <summary>
     /// SPEC-1079B RED test 2 (insert path): <c>ResolvedReferenceCsoId</c> must also survive the
-    /// initial multi-row INSERT (<c>CreatePendingExportsAsync</c> -&gt;
-    /// <c>BulkInsertPendingExportAttributeValueChangesRawAsync</c>), covering a change created with
-    /// the id already set (for example a change built fresh from an already-resolved value).
+    /// initial COPY binary import (<c>CreatePendingExportsAsync</c> -&gt;
+    /// <c>BulkInsertPendingExportAttributeValueChangesOnConnectionAsync</c>), covering a change created
+    /// with the id already set (for example a change built fresh from an already-resolved value).
     /// </summary>
     [Test]
     public async Task CreatePendingExportsAsync_PersistsResolvedReferenceCsoId_RoundTripsOnFreshReloadAsync()

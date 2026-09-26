@@ -1364,6 +1364,27 @@ if ($scenarioNumber -in 14, 19, 22 -and $DirectoryType -in @("SambaAD", "Directo
 }
 
 # ---------------------------------------------------------------------------
+# Default-to-OpenLDAP directory coercion (Scenario 23), and reject 389 Directory Server
+# ---------------------------------------------------------------------------
+# Scenario 23 (Unique Value Generation) supports OpenLDAP and Samba AD; unlike the OpenLDAP-only
+# coercion above, an explicit -DirectoryType SambaAD is honoured, not refused - its Collision test
+# step needs a real directory-wide unique-value constraint, which only Samba AD's substrate
+# exercises in this harness. 389 Directory Server is refused outright, matching
+# Setup-Scenario23.ps1's own refusal, but fails here in seconds rather than after the stack is
+# built. When no -DirectoryType was given at all, OpenLDAP is the faster default: the scenario's
+# whole point is an empty target directory, and OpenLDAP stands up faster than Samba AD.
+if ($scenarioNumber -eq 23) {
+    if ($DirectoryType -eq "DirectoryServer389") {
+        throw "Scenario 23 (Unique Value Generation) supports OpenLDAP and Samba AD only. Its Collision test step needs a directory-wide unique-value constraint a CSV target cannot produce, and OpenLDAP already covers the RFC-directory shape, so 389 Directory Server adds nothing this scenario needs. Use -DirectoryType OpenLDAP or -DirectoryType SambaAD."
+    }
+    if (-not $DirectoryTypeWasExplicitlySet) {
+        Write-Host "${YELLOW}This scenario defaults to OpenLDAP; using -DirectoryType OpenLDAP. Pass -DirectoryType SambaAD explicitly to also exercise its Samba-AD-only Collision test step.${NC}"
+        $DirectoryType = "OpenLDAP"
+        $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType "OpenLDAP"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Handle "-DirectoryType All": run the suite for each directory type
 # ---------------------------------------------------------------------------
 
@@ -1381,6 +1402,10 @@ if ($DirectoryType -eq "All") {
     elseif ($scenarioNumber -eq 17) {
         Write-Host "${YELLOW}This scenario is Samba AD only; skipping the OpenLDAP and 389 Directory Server legs.${NC}"
         $directoryTypesToRun = @("SambaAD")
+    }
+    elseif ($scenarioNumber -eq 23) {
+        Write-Host "${YELLOW}This scenario supports OpenLDAP and Samba AD; skipping the 389 Directory Server leg.${NC}"
+        $directoryTypesToRun = @("OpenLDAP", "SambaAD")
     }
 
     # Build common parameters to pass through (excluding DirectoryType and Template)
@@ -2489,7 +2514,10 @@ $env:DIRSRV_IMAGE_PRIMARY = $null
 # where the base image is available and fails the run outright where it is not (the prebuilt
 # ghcr.io image is private, so the snapshot build waits 120s for a domain controller that never
 # starts, and the scenario never runs).
-if (-not $IgnoreSnapshots -and -not $isRfcDirectoryRun -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18) {
+# S23 (Unique Value Generation) is included: its substrate is Setup-Scenario1.ps1
+# -GenerateAccountName, so the "OUs only, no test users" snapshot is exactly what it wants too - a
+# schema-ready, empty target directory, faster than live population.
+if (-not $IgnoreSnapshots -and -not $isRfcDirectoryRun -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18, 23) {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -2544,9 +2572,12 @@ if ($DirectoryType -eq "OpenLDAP") {
     # benefit, so they are excluded from snapshot handling entirely.
     # S22 is the same shape (Populate-OpenLDAP-Scenario22.ps1 seeds a policy, a provisioner and
     # one probe user, and its Scenario 1 substrate needs an EMPTY ou=People).
+    # S23 (Unique Value Generation) is the same shape again: its substrate is Setup-Scenario1.ps1
+    # -GenerateAccountName, and every value it generates depends on the target directory starting
+    # empty, so it must not be pre-populated with general test data either.
     # S10-S13 and S15-S18 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario8" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -2632,11 +2663,16 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # directory starts empty. S14, S19 and S22 never run on 389 at all (their fixtures are written
     # against cn=config, the ppolicy overlay and DIT content rules, so the runner coerces them to
     # OpenLDAP), but they are excluded here too for symmetry with the OpenLDAP block, whose
-    # scenario set this is (#1762). The helpers come from the fixture's Get-DirsrvBuildHash.ps1
-    # (dot-sourced above), so the snapshot hash, the tag shape and the currency test live in one place.
+    # scenario set this is (#1762). S23 (Unique Value Generation) does not run on 389 either
+    # (Setup-Scenario23.ps1 only accepts OpenLDAP and Samba AD) and is excluded for the same
+    # symmetry reason, plus safety: were it ever passed -DirectoryType DirectoryServer389 anyway,
+    # the target directory must still start empty rather than be filled by this snapshot's general
+    # population before Setup-Scenario23.ps1 gets the chance to refuse the combination. The helpers
+    # come from the fixture's Get-DirsrvBuildHash.ps1 (dot-sourced above), so the snapshot hash, the
+    # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
     # verified: a snapshot baked from a stale base is stale.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario8" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3015,7 +3051,10 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
 # Skip when using snapshots — the snapshot already has populated data
 # Scenarios 15 and 16 are excluded: they are database and SCIM scenarios with no directory. The
 # set is the one the old "*Scenario1*" wildcard selected, carried over unchanged (#1762).
-if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19 -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
+# S23 (Unique Value Generation) needs the same clean Corp OU as S1 when it runs live (no snapshot):
+# its substrate is Setup-Scenario1.ps1 -GenerateAccountName, and it supports Samba AD as well as
+# OpenLDAP.
+if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
@@ -3093,7 +3132,10 @@ if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19 -and -not $script:Usin
 # Skip for S22: self-populating (Populate-OpenLDAP-Scenario22.ps1, called by
 # Invoke-Scenario22-OpenLdapPasswordPolicy.ps1), and its Scenario 1 substrate provisions into an
 # ou=People that must start empty; the general population would fill it.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22 -and -not $script:UsingRfcDirectorySnapshots) {
+# Skip for S23 (Unique Value Generation): its substrate is Setup-Scenario1.ps1
+# -GenerateAccountName, and every value it asserts on is generated, not sourced, so the target
+# directory must start empty exactly as it must for S1.
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"

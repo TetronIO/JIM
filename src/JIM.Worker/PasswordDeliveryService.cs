@@ -112,13 +112,18 @@ public sealed class PasswordDeliveryService : BackgroundService
         {
             try
             {
-                await work.WriteHeartbeatAsync(null, null, "Waiting for the application to be ready", stoppingToken);
-
+                // Quietly first: the Worker's main loop reports its wait for the database server, and while the
+                // server is down each heartbeat and readiness check below would have the data layer log an error.
                 using var jim = _jimFactory.Create();
-                if (await jim.IsApplicationReadyAsync())
+                if (await jim.IsDatabaseReachableAsync(stoppingToken))
                 {
-                    Log.Information("PasswordDeliveryService: Application is ready.");
-                    return;
+                    await work.WriteHeartbeatAsync(null, null, "Waiting for the application to be ready", stoppingToken);
+
+                    if (await jim.IsApplicationReadyAsync())
+                    {
+                        Log.Information("PasswordDeliveryService: Application is ready.");
+                        return;
+                    }
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

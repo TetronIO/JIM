@@ -68,14 +68,26 @@ public sealed class UniqueValueGenerationServer
             var stickyMap = await LoadStickyAssignmentsAsync(requests, options);
             var toAdopt = new List<int>();
 
+            // Bug fix (#242, Scenario 23 integration run): a live Sticky assignment is only honoured while it
+            // still describes the object. A stale one (IsStickyAssignmentStale below) is treated as absent here
+            // - falling through to adopt-before-generate exactly like a request with no known assignment at all
+            // - and its id is recorded so the caller can delete it once this call's outcomes are applied.
+            var staleAssignmentIds = new Dictionary<int, Guid>();
+
             for (var i = 0; i < requests.Count; i++)
             {
                 var request = requests[i];
-                if (stickyMap.TryGetValue(i, out var sticky))
+                var hasSticky = stickyMap.TryGetValue(i, out var sticky);
+                var stale = hasSticky && IsStickyAssignmentStale(request, sticky!);
+
+                if (hasSticky && !stale)
                 {
-                    outcomes[i] = BuildStickyOutcome(request, sticky);
+                    outcomes[i] = BuildStickyOutcome(request, sticky!);
                     continue;
                 }
+
+                if (stale)
+                    staleAssignmentIds[i] = sticky!.Id;
 
                 if (request.StickyOnly)
                 {
@@ -100,6 +112,9 @@ public sealed class UniqueValueGenerationServer
             }
 
             await ResolveGenerationRoundsAsync(requests, toGenerate, outcomes, options, ownerId, claimedThisCall);
+
+            foreach (var (i, staleAssignmentId) in staleAssignmentIds)
+                outcomes[i] = outcomes[i]! with { StaleAssignmentId = staleAssignmentId };
 
             return outcomes!;
         }
@@ -309,6 +324,31 @@ public sealed class UniqueValueGenerationServer
 
     private static GenerationOutcome BuildStickyOutcome(GenerationRequest request, GeneratedValueAssignment assignment) =>
         new(request, GenerationOutcomeKind.Sticky, assignment.Value, TryParseNumeric(request, assignment.Value), assignment, null);
+
+    /// <summary>
+    /// Bug fix (#242, Scenario 23 integration run): whether <paramref name="assignment"/> no longer describes
+    /// <paramref name="request"/>'s object - import mode only, since an export-mode assignment's Connected
+    /// System Object has no competing contributor for the same attribute (nothing else can leave a different
+    /// value behind), so this never triggers there. Compares <see cref="GenerationRequest.CurrentMetaverseValue"/>
+    /// (the object's own current value, from whichever rule holds it) against the assignment's recorded value,
+    /// case-insensitively: every uniqueness gate this service enforces already treats two values differing only
+    /// by case as the same value (<see cref="GeneratedValueAssignment.NormalisedValue"/> is lower-cased, and
+    /// every gate's candidate comparison lower-cases first), so a mere case change must not be flagged as
+    /// staleness here - that would delete a still-valid assignment and force a needless re-adoption or
+    /// regeneration for no real difference in the value. <see cref="StringComparison.Ordinal"/> case-sensitive comparison is
+    /// <c>SyncTaskProcessorBase.ReconcileGeneratedValueAssignmentLifecycle</c>'s own, deliberately stricter,
+    /// choice for a different question (is this assignment's TEXT an accurate provenance record, including its
+    /// exact casing); that page-flush backstop is unchanged and still runs regardless of this check.
+    /// <para>
+    /// Null or empty <see cref="GenerationRequest.CurrentMetaverseValue"/> means the object holds no value at
+    /// all (or only a null marker) for the attribute: never stale, so FR 10's reassert-if-cleared behaviour
+    /// still applies unchanged.
+    /// </para>
+    /// </summary>
+    private static bool IsStickyAssignmentStale(GenerationRequest request, GeneratedValueAssignment assignment) =>
+        request.Mode == GeneratedValueMode.Import
+        && !string.IsNullOrEmpty(request.CurrentMetaverseValue)
+        && !string.Equals(request.CurrentMetaverseValue, assignment.Value, StringComparison.OrdinalIgnoreCase);
 
     // ---- Adopt before generate ----
 
@@ -833,10 +873,10 @@ public sealed class UniqueValueGenerationServer
     /// target attribute's counter back (or forward; the direction is whatever the flow's configured
     /// <see cref="SyncRuleMappingGeneration.SequenceStart"/> calls for) to that start value. Existing values and
     /// assignments are left untouched, deliberately: there is no recall here (#1537's recall stages removal
-    /// exports that would strip connector-space values this release's "adopt before generate" is built to keep;
-    /// plan "The service"). For every other token kind, and for a Sequence mapping whose counter has never been
-    /// seeded, this is a documented no-op. <paramref name="mapping"/>'s <see cref="SyncRuleMapping.Id"/> is
-    /// recorded as the mover on the counter, for the same audit reason a save-time raise records it.
+    /// exports, which would rename or strip an already-exported value out from under a live account; plan "The
+    /// service"). For every other token kind, and for a Sequence mapping whose counter has never been seeded,
+    /// this is a documented no-op. <paramref name="mapping"/>'s <see cref="SyncRuleMapping.Id"/> is recorded as
+    /// the mover on the counter, for the same audit reason a save-time raise records it.
     /// </summary>
     public async Task<GeneratedValueRestartResult> RestartAsync(SyncRuleMapping mapping)
     {

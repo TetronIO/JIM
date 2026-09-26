@@ -139,7 +139,7 @@ The same configuration is available for automation:
 
 ### When changes take effect
 
-A change to priority configuration takes effect as objects are next synchronised; it does not, by itself, re-synchronise existing objects. A Delta Synchronisation applies it only to recently-changed objects, so after a significant change run a Full Synchronisation of the affected objects so the Metaverse reflects the new order everywhere.
+A change to priority configuration takes effect as objects are next synchronised; it does not, by itself, re-synchronise existing objects. A Delta Synchronisation applies it only to recently-changed objects, so after a significant change run a Full Synchronisation of the affected objects so the Metaverse reflects the new order everywhere. When the Connected Systems involved also export, use the run order in [Initialising JIM](synchronisation-pipeline.md#initialising-jim), so a higher-priority value arrives before the export that would overwrite it.
 
 ## Related
 

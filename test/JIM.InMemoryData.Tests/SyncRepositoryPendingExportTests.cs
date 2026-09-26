@@ -264,6 +264,91 @@ public class SyncRepositoryPendingExportTests
         Assert.That(result[0].Id, Is.EqualTo(matchingPe.Id));
     }
 
+    #region RecoverStrandedExecutingPendingExportsAsync
+
+    /// <summary>
+    /// Crash recovery for a Pending Export left stranded in Status Executing by a worker crash or
+    /// restart mid-export: moved to Exported when a change was already sent (the next confirming import
+    /// reconciles it), to Pending when nothing was sent yet (the next export run retries it), and every
+    /// other status is left alone. ErrorCount is never touched.
+    /// </summary>
+    [Test]
+    public async Task RecoverStrandedExecutingPendingExportsAsync_MovesExecutingByWhetherAChangeWasSentAndLeavesEverythingElseAloneAsync()
+    {
+        var sentChangeExecuting = CreatePe();
+        sentChangeExecuting.Status = PendingExportStatus.Executing;
+        sentChangeExecuting.ErrorCount = 3;
+        sentChangeExecuting.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 1, Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        });
+        _repo.SeedPendingExport(sentChangeExecuting);
+
+        var pendingOnlyExecuting = CreatePe();
+        pendingOnlyExecuting.Status = PendingExportStatus.Executing;
+        pendingOnlyExecuting.ErrorCount = 3;
+        pendingOnlyExecuting.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 1, Status = PendingExportAttributeChangeStatus.Pending
+        });
+        _repo.SeedPendingExport(pendingOnlyExecuting);
+
+        var noChangesExecuting = CreatePe();
+        noChangesExecuting.Status = PendingExportStatus.Executing;
+        _repo.SeedPendingExport(noChangesExecuting);
+
+        var pending = CreatePe();
+        pending.Status = PendingExportStatus.Pending;
+        _repo.SeedPendingExport(pending);
+
+        var exported = CreatePe();
+        exported.Status = PendingExportStatus.Exported;
+        _repo.SeedPendingExport(exported);
+
+        var exportNotConfirmed = CreatePe();
+        exportNotConfirmed.Status = PendingExportStatus.ExportNotConfirmed;
+        _repo.SeedPendingExport(exportNotConfirmed);
+
+        var failed = CreatePe();
+        failed.Status = PendingExportStatus.Failed;
+        _repo.SeedPendingExport(failed);
+
+        var parked = CreatePe();
+        parked.Status = PendingExportStatus.Parked;
+        _repo.SeedPendingExport(parked);
+
+        var recoveredCount = await _repo.RecoverStrandedExecutingPendingExportsAsync();
+
+        Assert.That(recoveredCount, Is.EqualTo(3), "The three Executing Pending Exports should be recovered.");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sentChangeExecuting.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(sentChangeExecuting.ErrorCount, Is.EqualTo(3), "ErrorCount must never be touched by recovery.");
+            Assert.That(pendingOnlyExecuting.Status, Is.EqualTo(PendingExportStatus.Pending));
+            Assert.That(noChangesExecuting.Status, Is.EqualTo(PendingExportStatus.Pending), "No attribute changes at all means nothing was sent.");
+
+            Assert.That(pending.Status, Is.EqualTo(PendingExportStatus.Pending));
+            Assert.That(exported.Status, Is.EqualTo(PendingExportStatus.Exported));
+            Assert.That(exportNotConfirmed.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
+            Assert.That(failed.Status, Is.EqualTo(PendingExportStatus.Failed));
+            Assert.That(parked.Status, Is.EqualTo(PendingExportStatus.Parked));
+        }
+    }
+
+    [Test]
+    public async Task RecoverStrandedExecutingPendingExportsAsync_NoExecutingExports_ReturnsZeroAsync()
+    {
+        var pending = CreatePe();
+        pending.Status = PendingExportStatus.Pending;
+        _repo.SeedPendingExport(pending);
+
+        var recoveredCount = await _repo.RecoverStrandedExecutingPendingExportsAsync();
+
+        Assert.That(recoveredCount, Is.EqualTo(0));
+    }
+
+    #endregion
+
     #region GetExecutableExportCountsByChangeTypeAsync (Run Profile Safeguards, #1618)
 
     [Test]

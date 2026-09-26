@@ -18,6 +18,17 @@ public class ExportEvaluationResult
     public List<PendingExport> PendingExports { get; set; } = [];
 
     /// <summary>
+    /// Already-staged Pending Exports (e.g. from drift detection earlier in the same page) that this
+    /// evaluation merged its attribute changes into, rather than creating a new row for (Unique Value
+    /// Generation, #242). Distinct from <see cref="PendingExports"/>: an entry here already belongs to the
+    /// caller's own batch-create list, so it must never be added a second time, but a generated export
+    /// mapping's change merged into it still needs resolving (<c>SyncTaskProcessorBase.ResolveExportGeneratedValuesAsync</c>
+    /// must scan this list too, not only <see cref="PendingExports"/>), or its marker survives unresolved
+    /// into <c>FlushPendingExportOperationsAsync</c>'s integrity guard.
+    /// </summary>
+    public List<PendingExport> MergedExistingPendingExports { get; set; } = [];
+
+    /// <summary>
     /// List of CSOs created for provisioning (when deferSave is true).
     /// These need to be batch-persisted by the caller before the Pending Exports.
     /// </summary>

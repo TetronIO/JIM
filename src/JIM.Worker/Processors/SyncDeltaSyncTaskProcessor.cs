@@ -121,17 +121,6 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // Load all Pending Exports once upfront and index by CSO ID for O(1) lookup
-        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
-        {
-            var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = allPendingExports
-                .Where(pe => pe.ConnectedSystemObject?.Id != null)
-                .GroupBy(pe => pe.ConnectedSystemObject!.Id)
-                .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformDeltaSyncAsync: Loaded {Count} Pending Exports into lookup dictionary", allPendingExports.Count);
-        }
-
         // Pre-load export evaluation cache
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
@@ -209,7 +198,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                         break;
                     }
 
-                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
                 }
 
                 // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
@@ -250,11 +239,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // cannot be decoupled from batch persistence boundaries.
                 await PersistPendingMetaverseObjectsAsync();
 
-                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
-                // assignments, then delete whatever lifecycle reconciliation decided no longer belongs. See
-                // SyncFullSyncTaskProcessor for the full rationale; both are no-ops with no generated mappings.
-                await CommitGeneratedValueAssignmentsAsync();
+                // Unique Value Generation (#242, Phase 2 work package G): delete whatever lifecycle
+                // reconciliation (or a stale Sticky match, #242 Scenario 23 bug fix) decided no longer belongs,
+                // THEN commit this page's generated/adopted assignments. See SyncFullSyncTaskProcessor for the
+                // full rationale for the order; both are no-ops with no generated mappings.
                 await FlushGeneratedValueAssignmentDeletionsAsync();
+                await CommitGeneratedValueAssignmentsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);

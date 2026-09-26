@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Text;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -136,8 +135,25 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Falls back to the shared EF-based implementation for small batches.
+    /// Below-threshold fallback for <see cref="CreateConnectedSystemObjectsAsync"/>: writes CSO rows
+    /// then their attribute values via COPY binary import on the EF connection's own transaction,
+    /// rather than opening the N independent connections the parallel branch above uses. COPY binary
+    /// is markedly faster than parameterised multi-row INSERT even on a single connection (no
+    /// per-statement SQL parse/bind of tens of thousands of parameters), so this reuses the same
+    /// on-connection writers the parallel branch calls (<see cref="BulkInsertCsosOnConnectionAsync"/>,
+    /// <see cref="BulkInsertCsoAttributeValuesOnConnectionAsync"/>); see the established pattern for
+    /// COPY on the EF connection in <see cref="BulkInsertOptimisticApplyAttributeValuesRawAsync"/>.
     /// </summary>
+    /// <remarks>
+    /// No partition-based reference filtering is needed here (<c>partitionCsoIds: null</c>, meaning
+    /// "write every set ReferenceValueId unconditionally"), unlike the parallel branch's two-phase
+    /// write across independent connections. This whole batch is one transaction on one connection:
+    /// CSO rows are COPY'd and therefore visible to this session before attribute values are COPY'd,
+    /// so a same-batch forward reference resolves without cross-partition isolation. The caller
+    /// (<see cref="CreateConnectedSystemObjectsAsync"/>) has already nulled any ReferenceValueId
+    /// pointing outside <c>allowedCsoIds</c> (this batch plus previously committed batches), so every
+    /// ReferenceValueId reaching this method is guaranteed to exist by the time it is written.
+    /// </remarks>
     private async Task CreateCsosOnSingleConnectionAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
         var previousTimeout = _context.Database.GetCommandTimeout();
@@ -145,14 +161,18 @@ public partial class SyncRepository
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        await BulkInsertCsosViaEfAsync(connectedSystemObjects);
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
+
+        await BulkInsertCsosOnConnectionAsync(npgsqlConn, npgsqlTx, connectedSystemObjects);
 
         var allAttributeValues = connectedSystemObjects
             .SelectMany(cso => cso.AttributeValues.Select(av => (CsoId: cso.Id, Value: av)))
             .ToList();
 
         if (allAttributeValues.Count > 0)
-            await BulkInsertCsoAttributeValuesViaEfAsync(allAttributeValues);
+            await BulkInsertCsoAttributeValuesOnConnectionAsync(npgsqlConn, npgsqlTx, allAttributeValues, partitionCsoIds: null);
 
         await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
@@ -224,12 +244,18 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Inserts CSO attribute value rows on an independent NpgsqlConnection using COPY binary import.
+    /// Inserts CSO attribute value rows via COPY binary import, on either an independent
+    /// NpgsqlConnection (the parallel branch) or the EF connection's own transaction (the
+    /// single-connection branch, <see cref="CreateCsosOnSingleConnectionAsync"/>).
     /// </summary>
     /// <param name="partitionCsoIds">CSO IDs being written on THIS connection. ReferenceValueId FKs
-    /// pointing to CSOs outside this partition are written as null to avoid FK violations — the
+    /// pointing to CSOs outside this partition are written as null to avoid FK violations: the
     /// referenced CSO may be on a different parallel connection and not yet committed.
-    /// FixupCrossBatchReferenceIdsAsync resolves these after all batches complete.</param>
+    /// FixupCrossBatchReferenceIdsAsync resolves these after all batches complete. Null (the
+    /// single-connection branch's default) means "write every set ReferenceValueId unconditionally",
+    /// which is safe there because the whole batch is one transaction on one connection with CSO rows
+    /// COPY'd before attribute values, and the caller has already nulled any reference outside the
+    /// allowed set before persistence begins.</param>
     private static async Task BulkInsertCsoAttributeValuesOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -297,94 +323,6 @@ public partial class SyncRepository
         }
 
         await writer.CompleteAsync();
-    }
-
-    /// <summary>
-    /// Inserts CSO rows using the main EF connection (single-connection fallback for small batches).
-    /// </summary>
-    private async Task BulkInsertCsosViaEfAsync(List<ConnectedSystemObject> objects)
-    {
-        // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
-        var columnsPerRow = CsoBulkColumns.ConnectedSystemObjects.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
-
-        foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
-        {
-            var sql = new StringBuilder();
-            sql.Append($@"INSERT INTO ""ConnectedSystemObjects"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}) VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
-
-                var cso = chunk[i];
-                parameters.Add(cso.Id);
-                parameters.Add(cso.ConnectedSystemId);
-                parameters.Add(cso.Created);
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(cso.TypeId);
-                parameters.Add(cso.ExternalIdAttributeId);
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add((int)cso.Status);
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add((int)cso.JoinType);
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(cso.ScopeReviewPending);
-                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
-                // See BulkInsertCsosOnConnectionAsync above for the full stamp-ordering rationale.
-                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
-            }
-
-            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
-        }
-    }
-
-    /// <summary>
-    /// Inserts CSO attribute value rows using the main EF connection (single-connection fallback).
-    /// </summary>
-    private async Task BulkInsertCsoAttributeValuesViaEfAsync(
-        List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues)
-    {
-        const int columnsPerRow = 13;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
-
-        foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
-        {
-            var sql = new StringBuilder();
-            // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
-            sql.Append($@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}) VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}})");
-
-                var (csoId, av) = chunk[i];
-                parameters.Add(av.Id);
-                parameters.Add(csoId);
-                parameters.Add(av.AttributeId);
-                parameters.Add(BulkSqlHelpers.NullableParam(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.ReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
-            }
-
-            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
-        }
     }
 
     #endregion
@@ -706,6 +644,12 @@ public partial class SyncRepository
 
     #region Pending Export — Worker-Only Bulk Operations
 
+    /// <summary>
+    /// Stages new Pending Exports (and their attribute value changes) via COPY binary import on the
+    /// EF connection's own transaction, so the parent and child rows commit atomically. Unlike CSO,
+    /// MVO and RPEI creation, Pending Export creation has no separate parallel multi-connection
+    /// branch: every batch, however large, goes through this single path.
+    /// </summary>
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         var pendingExportsList = pendingExports.ToList();
@@ -727,8 +671,12 @@ public partial class SyncRepository
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
+
         // Step 1: INSERT parent PendingExport rows
-        await BulkInsertPendingExportsRawAsync(pendingExportsList);
+        await BulkInsertPendingExportsOnConnectionAsync(npgsqlConn, npgsqlTx, pendingExportsList);
 
         // Step 2: INSERT child attribute value change rows
         var allChanges = pendingExportsList
@@ -736,7 +684,7 @@ public partial class SyncRepository
             .ToList();
 
         if (allChanges.Count > 0)
-            await BulkInsertPendingExportAttributeValueChangesRawAsync(allChanges);
+            await BulkInsertPendingExportAttributeValueChangesOnConnectionAsync(npgsqlConn, npgsqlTx, allChanges);
 
         await transaction.CommitAsync();
     }
@@ -1119,96 +1067,158 @@ public partial class SyncRepository
 
     #region Private Pending Export Bulk Helpers
 
-    private async Task BulkInsertPendingExportsRawAsync(List<PendingExport> exports)
+    /// <summary>
+    /// Inserts Pending Export rows via COPY binary import on the EF connection's own transaction
+    /// (see <see cref="CreatePendingExportsAsync"/>). Pending Export creation has no separate parallel
+    /// multi-connection branch, so this is the only insert path for this table, at any batch size.
+    /// </summary>
+    private static async Task BulkInsertPendingExportsOnConnectionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        List<PendingExport> exports)
     {
-        // Taken from the column list rather than written out, so that adding a column cannot leave the
-        // placeholder count behind it.
-        var columnsPerRow = PendingExportBulkColumns.PendingExports.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        // Writer order below MUST match PendingExportBulkColumns.PendingExports exactly.
+        await using var writer = await connection.BeginBinaryImportAsync(
+            $"""
+            COPY "PendingExports" (
+                {BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExports)}
+            ) FROM STDIN (FORMAT binary)
+            """);
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
+        foreach (var pe in exports)
         {
-            var sql = new System.Text.StringBuilder();
-            // Parameter order below MUST match PendingExportBulkColumns.PendingExports exactly.
-            sql.Append($@"INSERT INTO ""PendingExports"" ({BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExports)}) VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
-
-                var pe = chunk[i];
-                parameters.Add(pe.Id);
-                parameters.Add(pe.ConnectedSystemId);
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add((int)pe.ChangeType);
-                parameters.Add((int)pe.Status);
-                parameters.Add(pe.ErrorCount);
-                parameters.Add(pe.MaxRetries);
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.SourceMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(pe.HasUnresolvedReferences);
-                parameters.Add(pe.CreatedAt);
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.ProvisioningSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(pe.QueuedByRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
-            }
-
-            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            await writer.StartRowAsync();
+            await writer.WriteAsync(pe.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(pe.ConnectedSystemId, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (pe.ConnectedSystemObjectId.HasValue)
+                await writer.WriteAsync(pe.ConnectedSystemObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync((int)pe.ChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync((int)pe.Status, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync(pe.ErrorCount, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync(pe.MaxRetries, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (pe.LastAttemptedAt.HasValue)
+                await writer.WriteAsync(pe.LastAttemptedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (pe.NextRetryAt.HasValue)
+                await writer.WriteAsync(pe.NextRetryAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (pe.LastErrorMessage is not null)
+                await writer.WriteAsync(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (pe.LastErrorStackTrace is not null)
+                await writer.WriteAsync(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (pe.SourceMetaverseObjectId.HasValue)
+                await writer.WriteAsync(pe.SourceMetaverseObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(pe.HasUnresolvedReferences, NpgsqlTypes.NpgsqlDbType.Boolean);
+            await writer.WriteAsync(pe.CreatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            if (pe.ProvisioningSyncRuleId.HasValue)
+                await writer.WriteAsync(pe.ProvisioningSyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (pe.QueuedByRunProfileExecutionItemId.HasValue)
+                await writer.WriteAsync(pe.QueuedByRunProfileExecutionItemId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
         }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>
-    /// Bulk inserts PendingExportAttributeValueChange rows using parameterised multi-row INSERT.
-    /// Uses the parent PendingExport ID (shadow FK) passed explicitly since it's not a C# property.
+    /// Inserts Pending Export attribute value change rows via COPY binary import on the EF
+    /// connection's own transaction (see <see cref="CreatePendingExportsAsync"/>). Uses the parent
+    /// Pending Export id (shadow FK) passed explicitly since it is not a C# property.
     /// </summary>
-    private async Task BulkInsertPendingExportAttributeValueChangesRawAsync(List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
+    private static async Task BulkInsertPendingExportAttributeValueChangesOnConnectionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
     {
-        // Parameter order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChanges exactly.
-        var columnsPerRow = PendingExportBulkColumns.PendingExportAttributeValueChanges.Length;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        // Writer order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChanges exactly.
+        await using var writer = await connection.BeginBinaryImportAsync(
+            $"""
+            COPY "PendingExportAttributeValueChanges" (
+                {BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChanges)}
+            ) FROM STDIN (FORMAT binary)
+            """);
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(changes, chunkSize))
+        foreach (var (pendingExportId, avc) in changes)
         {
-            var sql = new System.Text.StringBuilder();
-            sql.Append($@"INSERT INTO ""PendingExportAttributeValueChanges"" ({BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChanges)}) VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
-
-                var (pendingExportId, avc) = chunk[i];
-                parameters.Add(avc.Id);
-                parameters.Add(pendingExportId);
-                parameters.Add(avc.AttributeId);
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add((int)avc.ChangeType);
-                parameters.Add((int)avc.Status);
-                parameters.Add(avc.ExportAttemptCount);
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(avc.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
-            }
-
-            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            await writer.StartRowAsync();
+            await writer.WriteAsync(avc.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(pendingExportId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(avc.AttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (avc.StringValue is not null)
+                await writer.WriteAsync(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (avc.DateTimeValue.HasValue)
+                await writer.WriteAsync(avc.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (avc.IntValue.HasValue)
+                await writer.WriteAsync(avc.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (avc.LongValue.HasValue)
+                await writer.WriteAsync(avc.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (avc.DecimalValue.HasValue)
+                await writer.WriteAsync(avc.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
+            else
+                await writer.WriteNullAsync();
+            if (avc.ByteValue is not null)
+                await writer.WriteAsync(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea);
+            else
+                await writer.WriteNullAsync();
+            if (avc.GuidValue.HasValue)
+                await writer.WriteAsync(avc.GuidValue.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (avc.BoolValue.HasValue)
+                await writer.WriteAsync(avc.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
+            else
+                await writer.WriteNullAsync();
+            if (avc.UnresolvedReferenceValue is not null)
+                await writer.WriteAsync(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync((int)avc.ChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync((int)avc.Status, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync(avc.ExportAttemptCount, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (avc.LastExportedAt.HasValue)
+                await writer.WriteAsync(avc.LastExportedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (avc.LastImportedValue is not null)
+                await writer.WriteAsync(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (avc.ResolvedReferenceCsoId.HasValue)
+                await writer.WriteAsync(avc.ResolvedReferenceCsoId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (avc.SyncRuleId.HasValue)
+                await writer.WriteAsync(avc.SyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (avc.SyncRuleName is not null)
+                await writer.WriteAsync(avc.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>

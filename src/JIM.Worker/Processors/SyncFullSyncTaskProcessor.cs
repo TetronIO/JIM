@@ -109,18 +109,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
-        // load all Pending Exports once upfront and index by CSO ID for O(1) lookup
-        // this avoids O(n²) behaviour from loading all Pending Exports for every CSO
-        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
-        {
-            var allPendingExports = await _syncRepo.GetPendingExportsAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = allPendingExports
-                .Where(pe => pe.ConnectedSystemObject?.Id != null)
-                .GroupBy(pe => pe.ConnectedSystemObject!.Id)
-                .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformFullSyncAsync: Loaded {Count} Pending Exports into lookup dictionary", allPendingExports.Count);
-        }
-
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
         // This eliminates O(N×M) database queries during export evaluation
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
@@ -242,7 +230,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                         break;
                     }
 
-                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
                 }
 
                 // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
@@ -316,12 +304,15 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Progress updates at finer granularity would require a separate DbContext instance.
                 await PersistPendingMetaverseObjectsAsync();
 
-                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
-                // assignments now the objects have real ids, then delete whatever the page's lifecycle
-                // reconciliation decided no longer belongs. Both are no-ops for a run with no generated
-                // mappings, or a page with nothing to commit/delete.
-                await CommitGeneratedValueAssignmentsAsync();
+                // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle
+                // reconciliation (or a stale Sticky match, #242 Scenario 23 bug fix) decided no longer belongs,
+                // THEN commit this page's generated/adopted assignments now the objects have real ids - deletion
+                // must run first because a stale assignment being removed can share its (object, attribute) key
+                // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's
+                // doc comment. Both are no-ops for a run with no generated mappings, or a page with nothing to
+                // commit/delete.
                 await FlushGeneratedValueAssignmentDeletionsAsync();
+                await CommitGeneratedValueAssignmentsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
