@@ -406,6 +406,9 @@ That is exactly what `ConnectedSystemSettingsTab` did (found by driving the port
 - **Inline comments**: Use plain comments: `@* Explanation of what follows *@`. Brief, contextual, placed immediately above or beside the relevant markup.
 - Do NOT use multi-line banner comments (`===`, `amamam`, or similar filler characters). One line is enough.
 
+## Razor directive names in markup
+- **Never name a loop variable or local `attribute` in a `.razor` file.** Razor reads `@attribute` as its directive wherever it meets the token, including `@attribute.Name` inside a `@foreach (var attribute in ...)`, and fails with a misleading trio (`RZ9979` code blocks for attributes, `RZ2005` directive must start the line, `RZ1011`) pointing at the line rather than the variable. The same holds for the other directive names (`@page`, `@layout`, `@inject`, `@typeparam`, `@implements`, `@inherits`, `@using`, `@namespace`, `@preservewhitespace`, `@rendermode`). Pick `contributed`, `objectTypeAttribute`, and so on; `AuxiliaryClassesDialog.razor` is the worked example. (Rule added after that dialog cost three builds to diagnose.)
+
 ## Nullable dereference in Razor
 - When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions.
 - This is not just a style preference: CodeQL flags the bare dereference as "Dereferenced variable may be null" (`cs/dereferenced-value-may-be-null`), and unresolved findings block the merge. Pattern-matching guards (`is > 0`, `is not null`) do not satisfy the analyser any more than `HasValue` does, and the rule applies to every nullable value type: `int?`, `bool?` and friends need the local exactly as much as `DateTime?` (two findings on PR #1013 were an `int?` beside three correctly-captured `DateTime?` fields).
