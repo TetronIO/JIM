@@ -478,8 +478,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
             if (!rootDse.IsActiveDirectoryFamily)
-                throw new NotSupportedException(
-                    $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
+                throw new NotSupportedException(DirectoryServerDiscoveryUnsupportedMessage(rootDse.DirectoryType));
 
             var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(_connection, logger);
             return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
@@ -1261,6 +1260,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         UnfinishedPreflight(PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
                 $"JIM connected and authenticated successfully. {message}"),
             "Not checked, because JIM could not read the directory's basic information.");
+
+    /// <summary>
+    /// The refusal an administrator reads in the Discover Domain Controllers dialog. Names the directory the way
+    /// the rest of the portal does (<see cref="DescribeDirectory"/>), not by the enum's identifier.
+    /// </summary>
+    internal static string DirectoryServerDiscoveryUnsupportedMessage(LdapDirectoryType directoryType) =>
+        $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {DescribeDirectory(directoryType)}.";
 
     private static string DescribeDirectory(LdapDirectoryType directoryType) => directoryType switch
     {
