@@ -29,7 +29,7 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 |-------------------|-----------------------------------------------------------------------------|---------|-----------------------------|
 | `DOCKER_REGISTRY` | Container registry prefix for pulling images. Leave empty for local builds. | *(empty)* | `ghcr.io/tetronio/`        |
 | `JIM_VERSION`     | Release version tag. Leave empty for local builds.                          | *(empty)* | `0.10.0`                   |
-| `JIM_WEB_PORT`    | Host port the production compose file publishes the web UI and API on, over HTTPS (the container listens on `8443`). Prefix an address to bind one interface only. | `5200` | `127.0.0.1:5200` |
+| `JIM_WEB_PORT`    | Host port the production compose file publishes the web UI and API on, over HTTPS (the container listens on `8443`). Prefix an address to bind one interface only. | `443` | `127.0.0.1:8443` |
 
 ---
 

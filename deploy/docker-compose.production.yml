@@ -24,10 +24,11 @@ services:
       - ASPNETCORE_URLS=https://+:8443;http://localhost:8080
       - ASPNETCORE_Kestrel__Certificates__Default__Path=/run/secrets/jim-tls/tls.crt
       - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/run/secrets/jim-tls/tls.key
-    # Publish HTTPS on the host. JIM_WEB_PORT in .env changes the host port, and takes an address prefix to
-    # bind one interface only (e.g. 127.0.0.1:5200 behind a reverse proxy on the same host).
+    # Publish HTTPS on the host, on the standard port so that JIM's address needs none. JIM_WEB_PORT in .env
+    # changes the host port, and takes an address prefix to bind one interface only (e.g. 127.0.0.1:8443 behind
+    # a reverse proxy on the same host).
     ports:
-      - "${JIM_WEB_PORT:-5200}:8443"
+      - "${JIM_WEB_PORT:-443}:8443"
     # Compose mounts file-based secrets read-only from the host, keeping the host file's owner and mode.
     secrets:
       - source: jim-tls-certificate

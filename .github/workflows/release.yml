@@ -690,7 +690,8 @@ jobs:
             ./artifacts/sbom/*.spdx.json \
             ./docker-compose.yml \
             ./deploy/docker-compose.production.yml \
-            ./default.env.example
+            ./default.env.example \
+            ./deploy/setup.sh
 
   # Job 6: Notify the junctional.io marketing site to rebuild.
   # The site fetches the current JIM version from GitHub at build time, so a

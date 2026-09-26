@@ -35,21 +35,21 @@ Waiting cannot fix rejected credentials, so the service does not wait for them: 
 
 ## HTTPS
 
-### The browser shows an empty response at `http://<server>:5200`
+### The browser cannot connect at `http://<server>`
 
-The browser reports that the page sent no data, or that the connection was reset.
+The browser reports that the site cannot be reached or refused the connection, or, with a port in the address, that the page sent no data.
 
-**What it means.** JIM serves HTTPS on that port, and does not answer plain HTTP there.
+**What it means.** JIM serves HTTPS only. Nothing answers plain HTTP on port 80, and JIM's own port does not answer plain HTTP either. Nothing is wrong with JIM.
 
-**How to fix.** Open `https://<server>:5200`.
+**How to fix.** Open JIM at its `https://` address, such as `https://jim.example.com`. After a first visit over HTTPS, browsers switch to `https://` for JIM's name on their own.
 
 ### `docker compose up` fails with `bind source path does not exist: .../tls/tls.crt`
 
 Docker Compose first warns that a `secret file ... does not exist`, then stops without starting `jim.web`.
 
-**What it means.** JIM's certificate or key is missing from the `tls` folder next to the compose files. Nothing has changed in your installation; `jim.web` has simply not been started.
+**What it means.** JIM's certificate or key is missing from the installation's `tls` folder. Nothing has changed in your installation; `jim.web` has simply not been started.
 
-**How to fix.** Put the certificate at `tls/tls.crt` and its key at `tls/tls.key`, or let `setup.sh` create them; see [The certificate](deployment.md#the-certificate). Then run your `docker compose ... up -d` command again.
+**How to fix.** Run the installer's certificate step, which creates a certificate or installs your organisation's: `sudo /opt/jim/setup.sh --certificate` (from an installation made by hand, run the `setup.sh` you downloaded or the one in the release bundle, with `JIM_INSTALL_DIR=/opt/jim`). To place the files yourself instead, see [The certificate](deployment.md#the-certificate). Then run your `docker compose ... up -d` command again.
 
 ### `jim.web` keeps restarting with `Access to the path '/run/secrets/jim-tls/tls.key' is denied`
 
@@ -57,12 +57,15 @@ The `jim.web` log shows `System.UnauthorizedAccessException: Access to the path 
 
 **What it means.** JIM runs as UID `1654` with every capability dropped, and Docker mounts the key with the owner and mode it has on the host, so JIM cannot read a key that belongs to anyone else. The other services, and your data, are unaffected.
 
-**How to fix.** In the folder holding the compose files, as root:
+**How to fix.** As root, in the installation folder:
 
 ```bash
+cd /opt/jim
 chown 1654:1654 tls/tls.key && chmod 400 tls/tls.key
 docker compose -f docker-compose.yml -f docker-compose.production.yml restart jim.web
 ```
+
+The installer's certificate step (`sudo /opt/jim/setup.sh --certificate`) sets the owner itself.
 
 ### Signing in through nginx fails with `502 Bad Gateway`
 

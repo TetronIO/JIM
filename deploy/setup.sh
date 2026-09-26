@@ -2,19 +2,29 @@
 # Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # JIM Setup Script
-# Downloads and configures JIM for production deployment.
+# Installs and configures JIM for production deployment, from the internet or from a release bundle.
 #
-# Usage:
-#   curl -fsSL https://junctional.io/get | bash
+# Usage, connected:
+#   curl -fsSL https://junctional.io/get | sudo bash
 #
 # Or download and inspect first:
 #   curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/deploy/setup.sh
-#   bash setup.sh
+#   sudo bash setup.sh
+#
+# Usage, air-gapped: extract the release bundle and run the copy of this script inside it. It installs from
+# the bundle's own files and images and needs no internet connection:
+#   tar -xzf jim-release-X.Y.Z.tar.gz && cd jim-release-X.Y.Z && sudo ./setup.sh
+#
+# The installation keeps a copy of this script, for looking after it later:
+#   sudo /opt/jim/setup.sh --renew-certificate
 #
 # Options:
-#   --renew-certificate   Issue a new server certificate from the certificate authority an earlier run of
-#                         this script created, for the same names, and restart jim.web. Uses JIM_INSTALL_DIR.
+#   --renew-certificate   Issue a new server certificate from the certificate authority this script created,
+#                         for the same names, and restart jim.web.
+#   --certificate         Create or install JIM's certificate again, for example to change its names or to
+#                         move to your organisation's certificate, and restart jim.web.
 #   --help                Show this help.
+#   Both act on the installation the script sits in, or JIM_INSTALL_DIR.
 #
 # JIM serves HTTPS. The script either creates a certificate authority (CA) and a server certificate for this
 # server, or installs your organisation's certificate and key, in the tls folder of the installation.
@@ -28,7 +38,8 @@
 #     JIM_SSO_CLAIM_TYPE, JIM_SSO_MV_ATTRIBUTE, JIM_SSO_INITIAL_ADMIN
 #
 #   Optional env vars:
-#     JIM_INSTALL_DIR       - Installation directory (default: ./jim)
+#     JIM_INSTALL_DIR       - Installation directory (default: /opt/jim when run as root, otherwise ./jim)
+#     JIM_WEB_PORT          - HTTPS port users reach JIM on (default: prompt, suggesting 443)
 #     JIM_SETUP_DB_MODE     - "bundled" or "external" (default: prompt)
 #     JIM_SETUP_AUTO_START  - "true" to start JIM without prompting
 #     JIM_DB_HOSTNAME       - External DB hostname (required if db_mode=external)
@@ -60,6 +71,30 @@ JIM_UID=1654
 # A generated server certificate lasts a year (renew with --renew-certificate); its CA lasts ten.
 TLS_SERVER_DAYS=365
 TLS_CA_DAYS=3650
+
+# The standard HTTPS port, so that users and identity provider registrations need no port in JIM's address.
+DEFAULT_WEB_PORT=443
+
+# Where this script is, when it runs from a file rather than from a pipe (curl ... | bash). Run from an extracted
+# release bundle, it installs from the bundle instead of downloading; run from an installation, its options act
+# on that installation.
+SCRIPT_PATH=""
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+    SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
+fi
+# Set as the installer runs, read by later steps.
+USE_BUNDLED_DB=""
+TLS_MODE=""
+NEW_CA=""
+REPLACED_CA=""
+JIM_READY=""
+
+BUNDLE_DIR=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/compose/docker-compose.yml" ] && [ -d "${SCRIPT_DIR}/docker-images" ]; then
+    BUNDLE_DIR="$SCRIPT_DIR"
+fi
 
 # --- Colour support ---
 setup_colours() {
@@ -183,7 +218,8 @@ update_env() {
     local tmp_file="${env_file}.tmp"
     local replaced=false
 
-    : > "$tmp_file"
+    # Private from the start: the file replaces .env, which holds secrets.
+    (umask 077 && : > "$tmp_file")
 
     # First pass: try to replace an uncommented line (^KEY=...)
     if grep -q "^${key}=" "$env_file" 2>/dev/null; then
@@ -233,7 +269,7 @@ show_banner() {
 check_prerequisites() {
     info "Checking prerequisites..."
 
-    if ! command -v curl >/dev/null 2>&1; then
+    if [ -z "$BUNDLE_DIR" ] && ! command -v curl >/dev/null 2>&1; then
         fatal "curl is required but not installed. Install it with your package manager."
     fi
 
@@ -305,7 +341,104 @@ download_files() {
     # Published as default.env.example: GitHub renames an asset whose name starts with a dot.
     curl -fsSL -o "${install_dir}/.env" "${base_url}/default.env.example" \
         || fatal "Failed to download default.env.example"
+    # .env will hold the database password and the identity provider's client secret.
+    chmod 600 "${install_dir}/.env"
     success "Downloaded .env (from default.env.example)"
+}
+
+# --- Install from a release bundle ---
+read_bundle_version() {
+    [ -f "${BUNDLE_DIR}/VERSION" ] || fatal "No VERSION file in ${BUNDLE_DIR}; this does not look like a complete JIM release bundle."
+    JIM_RELEASE_VERSION=$(tr -d '[:space:]' < "${BUNDLE_DIR}/VERSION")
+    success "Installing JIM v${JIM_RELEASE_VERSION} from the release bundle in ${BUNDLE_DIR} (no internet connection needed)"
+}
+
+copy_bundle_files() {
+    local install_dir="$1"
+
+    info "Copying JIM files to ${install_dir}..."
+    mkdir -p "$install_dir"
+    cp "${BUNDLE_DIR}/compose/docker-compose.yml" "${BUNDLE_DIR}/compose/docker-compose.production.yml" "$install_dir/"
+    cp "${BUNDLE_DIR}/compose/.env.example" "${install_dir}/.env"
+    # .env will hold the database password and the identity provider's client secret.
+    chmod 600 "${install_dir}/.env"
+    success "Copied the compose files and .env"
+}
+
+# Loads the images the installation will run. The PostgreSQL image is needed only for the bundled database.
+load_bundle_images() {
+    info "Loading JIM's images from the bundle (this takes a minute or two)..."
+    local name
+    for name in jim-web jim-worker jim-scheduler; do
+        [ -f "${BUNDLE_DIR}/docker-images/${name}.tar" ] || fatal "The bundle is missing docker-images/${name}.tar"
+        docker load -i "${BUNDLE_DIR}/docker-images/${name}.tar" >/dev/null || fatal "Failed to load docker-images/${name}.tar"
+    done
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        [ -f "${BUNDLE_DIR}/docker-images/postgres-18.tar" ] \
+            || fatal "This bundle has no PostgreSQL image (docker-images/postgres-18.tar). Run the installer again and choose an external PostgreSQL server."
+        docker load -i "${BUNDLE_DIR}/docker-images/postgres-18.tar" >/dev/null || fatal "Failed to load docker-images/postgres-18.tar"
+    fi
+    success "Loaded the images"
+}
+
+# Confirms every image the installation runs is present, so that a gap shows here rather than as Compose trying
+# to download it.
+verify_bundle_images() {
+    local install_dir="$1"
+    local -a profile=()
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        profile=(--profile with-db)
+    fi
+    local image
+    for image in $(cd "$install_dir" && docker compose "${COMPOSE_FILES[@]}" ${profile[@]+"${profile[@]}"} config --images); do
+        docker image inspect "$image" >/dev/null 2>&1 \
+            || fatal "The image ${image} is not available after loading the bundle, and this installation cannot download it."
+    done
+}
+
+# The command that runs the installation's copy of this script, or the download when there is no copy.
+installer_command() {
+    local install_dir="$1"
+    local absolute_dir
+    absolute_dir=$(cd "$install_dir" && pwd)
+    local sudo_prefix=""
+    [ "$(id -u)" -eq 0 ] && sudo_prefix="sudo "
+
+    if [ -x "${absolute_dir}/setup.sh" ]; then
+        printf '%s%s/setup.sh' "$sudo_prefix" "$absolute_dir"
+    else
+        printf 'curl -fsSL https://junctional.io/get | %sJIM_INSTALL_DIR=%s bash -s --' "$sudo_prefix" "$absolute_dir"
+    fi
+}
+
+# Keeps a copy of this script in the installation, so that looking after it later needs nothing else.
+save_installer_copy() {
+    local install_dir="$1"
+    local target="${install_dir}/setup.sh"
+
+    if [ -n "$SCRIPT_PATH" ]; then
+        if [ "$SCRIPT_PATH" != "$(cd "$install_dir" && pwd)/setup.sh" ]; then
+            cp "$SCRIPT_PATH" "$target"
+        fi
+    elif ! curl -fsSL -o "$target" "${RELEASE_DOWNLOAD_BASE}/setup.sh" 2>/dev/null; then
+        rm -f "$target"
+        warn "Could not save a copy of this script in ${install_dir}; download it from ${RELEASE_DOWNLOAD_BASE}/setup.sh when you need it"
+        return
+    fi
+    chmod 755 "$target"
+}
+
+# The installation an option acts on, or the folder a new installation goes in.
+resolve_install_dir() {
+    if [ -n "${JIM_INSTALL_DIR:-}" ]; then
+        printf '%s' "$JIM_INSTALL_DIR"
+    elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/docker-compose.production.yml" ] && [ -f "${SCRIPT_DIR}/.env" ]; then
+        printf '%s' "$SCRIPT_DIR"
+    elif [ "$(id -u)" -eq 0 ]; then
+        printf '/opt/jim'
+    else
+        printf './jim'
+    fi
 }
 
 # --- Configure database ---
@@ -364,8 +497,12 @@ configure_database() {
     update_env "JIM_DB_USERNAME" "$JIM_DB_USERNAME" "$env_file"
     update_env "JIM_DB_PASSWORD" "$JIM_DB_PASSWORD" "$env_file"
 
+    # Always written: the template's value, localhost, suits running JIM outside containers in development,
+    # and would point every JIM container at itself rather than at the bundled database.
     if [ "$db_mode" = "external" ]; then
         update_env "JIM_DB_HOSTNAME" "$JIM_DB_HOSTNAME" "$env_file"
+    else
+        update_env "JIM_DB_HOSTNAME" "jim.database" "$env_file"
     fi
 }
 
@@ -646,6 +783,62 @@ certificate_first_name() {
     printf '%s' "$first"
 }
 
+# --- Configure the HTTPS port ---
+
+# Whether something on this host other than JIM already listens on the port.
+port_in_use() {
+    local port="$1"
+    if command -v ss >/dev/null 2>&1; then
+        [ -n "$(ss -Hltn "sport = :${port}" 2>/dev/null)" ] || return 1
+    else
+        # Without ss, try connecting: whatever accepts on the loopback address holds the port.
+        timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/${port}" 2>/dev/null || return 1
+    fi
+    # A reinstall finds JIM itself on the port, which is no conflict.
+    ! docker port jim.web 8443/tcp 2>/dev/null | grep -q ":${port}$"
+}
+
+# Why the port cannot be used, or nothing if it can.
+port_problem() {
+    local port="$1"
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+        printf '%s is not a port number' "$port"
+    elif port_in_use "$port"; then
+        printf 'Port %s is already in use on this host' "$port"
+    elif [ "$port" -lt 1024 ] && docker info --format '{{join .SecurityOptions " "}}' 2>/dev/null | grep -q rootless; then
+        # Rootless Docker cannot publish a port below the kernel's unprivileged-port threshold.
+        local threshold
+        threshold=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)
+        if [ "$port" -lt "$threshold" ]; then
+            printf 'Docker runs rootless here, so it cannot publish port %s. Choose a port of %s or above, or have root run: echo net.ipv4.ip_unprivileged_port_start=%s > /etc/sysctl.d/90-jim.conf && sysctl --system' "$port" "$threshold" "$port"
+        fi
+    fi
+}
+
+configure_port() {
+    local env_file="$1"
+    local from_environment="${JIM_WEB_PORT:+true}"
+
+    echo
+    info "HTTPS port"
+    echo "${DIM}  ${DEFAULT_WEB_PORT} is the standard HTTPS port, so users and your identity provider need no port in JIM's address.${RESET}"
+    echo
+
+    local problem
+    while true; do
+        prompt_value "JIM_WEB_PORT" "  HTTPS port" "$DEFAULT_WEB_PORT"
+        # JIM_WEB_PORT set in the environment may carry an address prefix, such as 127.0.0.1:443.
+        problem=$(port_problem "${JIM_WEB_PORT##*:}")
+        [ -z "$problem" ] && break
+        [ "$from_environment" = "true" ] && fatal "$problem"
+        warn "$problem"
+        JIM_WEB_PORT=""
+    done
+
+    update_env "JIM_WEB_PORT" "$JIM_WEB_PORT" "$env_file"
+    success "JIM will serve HTTPS on port ${JIM_WEB_PORT##*:}"
+}
+
 # --- Configure the HTTPS certificate ---
 configure_certificate() {
     local install_dir="$1"
@@ -693,7 +886,11 @@ configure_certificate() {
         if [ -f "${tls_dir}/ca.key" ] && [ "$TLS_NAMES" = "$previous_names" ]; then
             info "Keeping the existing certificate authority"
         else
+            if [ -f "${tls_dir}/ca.key" ]; then
+                REPLACED_CA="true"
+            fi
             create_certificate_authority "$tls_dir"
+            NEW_CA="true"
             success "Created a certificate authority: ${tls_dir}/ca.crt"
         fi
 
@@ -742,13 +939,14 @@ configure_proxy() {
 
 # --- Renew the server certificate ---
 renew_certificate() {
-    local install_dir="${JIM_INSTALL_DIR:-./jim}"
+    local install_dir
+    install_dir=$(resolve_install_dir)
     local tls_dir="${install_dir}/tls"
 
-    [ -f "${install_dir}/.env" ] || fatal "No JIM installation at ${install_dir}. Set JIM_INSTALL_DIR to its folder."
+    [ -f "${install_dir}/.env" ] || fatal "No JIM installation at ${install_dir}. Run this from the installation's copy of setup.sh, or set JIM_INSTALL_DIR."
 
     if [ ! -f "${tls_dir}/ca.key" ] || [ ! -f "${tls_dir}/names" ]; then
-        fatal "This script did not create this installation's certificate, so it cannot renew it. Replace ${tls_dir}/tls.crt and ${tls_dir}/tls.key with your renewed certificate and key, then restart jim.web (see the Deployment Guide, \"Replacing the certificate\")."
+        fatal "This installation uses your organisation's certificate, which this script cannot renew. Once your certificate authority has issued the renewed one, install it with: $(installer_command "$install_dir") --certificate"
     fi
 
     command -v openssl >/dev/null 2>&1 || fatal "openssl is required but not installed."
@@ -764,10 +962,41 @@ renew_certificate() {
     issue_server_certificate "$install_dir"
     success "Installed the new certificate; it expires on $(certificate_expiry "${tls_dir}/tls.crt")"
 
+    restart_web "$install_dir"
+}
+
+# Restarts jim.web so that it loads a new certificate; a JIM that is not running picks it up when it starts.
+restart_web() {
+    local install_dir="$1"
+
+    if [ -z "$(docker ps -q --filter name=^jim.web$ 2>/dev/null)" ]; then
+        info "jim.web is not running; it will use the new certificate when JIM starts"
+        return
+    fi
     info "Restarting jim.web to load it..."
     (cd "$install_dir" && docker compose "${COMPOSE_FILES[@]}" restart jim.web) \
         || fatal "Failed to restart jim.web. Restart it yourself: cd ${install_dir} && docker compose ${COMPOSE_FILES[*]} restart jim.web"
     success "jim.web restarted with the new certificate"
+}
+
+# --- Create or install the certificate again ---
+change_certificate() {
+    local install_dir
+    install_dir=$(resolve_install_dir)
+
+    [ -f "${install_dir}/.env" ] || fatal "No JIM installation at ${install_dir}. Run this from the installation's copy of setup.sh, or set JIM_INSTALL_DIR."
+    command -v openssl >/dev/null 2>&1 || fatal "openssl is required but not installed."
+
+    configure_certificate "$install_dir"
+    restart_web "$install_dir"
+
+    if [ "$REPLACED_CA" = "true" ]; then
+        echo
+        warn "This is a new certificate authority. Browsers trust JIM again only once ${install_dir}/tls/ca.crt replaces the old one in their trusted root certificate authorities."
+    elif [ "$NEW_CA" = "true" ]; then
+        echo
+        info "Add ${install_dir}/tls/ca.crt to the trusted root certificate authorities of every machine whose browser or tools use JIM; until then, browsers warn about JIM's certificate."
+    fi
 }
 
 # --- Launch JIM ---
@@ -782,29 +1011,40 @@ launch_jim() {
         compose_cmd="${compose_cmd} --profile with-db"
     fi
     compose_cmd="${compose_cmd} up -d"
-
-    if [ "$auto_start" = "true" ]; then
-        info "Starting JIM..."
-        (cd "$install_dir" && eval "$compose_cmd")
-    else
-        if prompt_yn "Start JIM now?"; then
-            info "Starting JIM..."
-            (cd "$install_dir" && eval "$compose_cmd")
-        else
-            echo
-            info "To start JIM later, run:"
-            echo "  cd ${install_dir}"
-            echo "  ${compose_cmd}"
-            return
-        fi
+    # From a bundle every image is already loaded, so Compose must fail rather than try the internet.
+    if [ -n "$BUNDLE_DIR" ]; then
+        compose_cmd="${compose_cmd} --pull never"
     fi
 
-    echo
-    success "JIM is starting up!"
-    echo
-    echo "  ${BOLD}Wait a moment for services to become healthy, then visit:${RESET}"
-    echo "  ${CYAN}$(jim_url "$install_dir")${RESET}"
-    echo
+    if [ "$auto_start" != "true" ] && ! prompt_yn "Start JIM now?"; then
+        echo
+        info "To start JIM later, run:"
+        echo "  cd ${install_dir}"
+        echo "  ${compose_cmd}"
+        return
+    fi
+
+    info "Starting JIM..."
+    (cd "$install_dir" && eval "$compose_cmd") || fatal "Failed to start JIM. See the messages above."
+    wait_for_jim "$install_dir"
+}
+
+# Waits until jim.web reports healthy, which its health check does once JIM is ready to serve.
+wait_for_jim() {
+    local install_dir="$1"
+    local deadline=$((SECONDS + 600))
+
+    info "Waiting for JIM to be ready (the first start prepares the database, which takes a few minutes)..."
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        if [ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' jim.web 2>/dev/null)" = "healthy" ]; then
+            JIM_READY="true"
+            success "JIM is ready"
+            return
+        fi
+        sleep 5
+    done
+    JIM_READY="false"
+    warn "JIM is not ready after 10 minutes. See what it is doing with: cd ${install_dir} && docker compose ${COMPOSE_FILES[*]} logs jim.web jim.worker"
 }
 
 # The address users open JIM at: the certificate's first name, on the published port.
@@ -812,12 +1052,16 @@ jim_url() {
     local install_dir="$1"
     local port
     port=$(env_value JIM_WEB_PORT "${install_dir}/.env")
-    port="${port:-5200}"
-    # JIM_WEB_PORT may carry an address prefix, such as 127.0.0.1:5200.
+    port="${port:-$DEFAULT_WEB_PORT}"
+    # JIM_WEB_PORT may carry an address prefix, such as 127.0.0.1:443.
     port="${port##*:}"
     local name
     name=$(certificate_first_name "${install_dir}/tls/tls.crt")
-    printf 'https://%s:%s' "${name:-<this server>}" "$port"
+    if [ "$port" = "443" ]; then
+        printf 'https://%s' "${name:-<this server>}"
+    else
+        printf 'https://%s:%s' "${name:-<this server>}" "$port"
+    fi
 }
 
 # --- Summary ---
@@ -835,8 +1079,12 @@ show_summary() {
         compose="${compose} --profile with-db"
     fi
 
+    local heading="Installation complete"
+    if [ "$JIM_READY" = "false" ]; then
+        heading="Installed, but JIM is not ready yet: see the warning above"
+    fi
     echo "${BOLD}--------------------------------------------------${RESET}"
-    echo "${BOLD}  Installation complete${RESET}"
+    echo "${BOLD}  ${heading}${RESET}"
     echo "${BOLD}--------------------------------------------------${RESET}"
     echo
     echo "  ${BOLD}Location:${RESET}     ${install_dir}"
@@ -849,19 +1097,26 @@ show_summary() {
     echo "  ${BOLD}Address:${RESET}      ${url}"
     echo "  ${BOLD}Certificate:${RESET}  expires on $(certificate_expiry "${tls_dir}/tls.crt")"
     echo
+    local installer
+    installer=$(installer_command "$install_dir")
+
     echo "  ${BOLD}Next steps:${RESET}"
-    echo "    Register ${url}/signin-oidc as a redirect URI at your identity provider."
+    echo "    At your identity provider, register these redirect URIs for JIM's client:"
+    echo "      ${url}/signin-oidc"
+    echo "      ${url}/signout-callback-oidc"
     if [ "$TLS_MODE" = "generate" ]; then
         echo "    Add this certificate authority to the trusted root certificate authorities of every machine"
         echo "    whose browser or tools use JIM (for example by Group Policy); until then, browsers warn:"
         echo "      ${absolute_dir}/tls/ca.crt"
         echo "    Keep ${absolute_dir}/tls/ca.key secret: it signs JIM's certificates."
-        echo "    Renew the certificate before it expires:"
-        echo "      curl -fsSL https://junctional.io/get | JIM_INSTALL_DIR=${absolute_dir} bash -s -- --renew-certificate"
     fi
     echo
-    echo "  ${BOLD}Management commands:${RESET}"
-    echo "    cd ${install_dir}"
+    echo "  ${BOLD}Looking after JIM:${RESET}"
+    if [ "$TLS_MODE" = "generate" ]; then
+        echo "    ${installer} --renew-certificate    before the certificate expires"
+    fi
+    echo "    ${installer} --certificate          to change its names, or use your organisation's certificate"
+    echo "    cd ${absolute_dir}"
     echo "    ${compose} ps"
     echo "    ${compose} logs -f"
     echo "    ${compose} down"
@@ -874,15 +1129,18 @@ show_summary() {
 }
 
 show_help() {
-    echo "Usage: bash setup.sh [--renew-certificate | --help]"
+    echo "Usage: setup.sh [--renew-certificate | --certificate | --help]"
     echo
-    echo "Installs JIM with Docker Compose, asking for anything not set in the environment."
+    echo "Installs JIM with Docker Compose, asking for anything not set in the environment. Run from an"
+    echo "extracted release bundle, it installs from the bundle and needs no internet connection."
     echo
     echo "  --renew-certificate  Issue a new server certificate from the certificate authority this"
     echo "                       script created, for the same names, and restart jim.web."
+    echo "  --certificate        Create or install JIM's certificate again, for example to change its"
+    echo "                       names or to use your organisation's certificate, and restart jim.web."
     echo "  --help               Show this help."
     echo
-    echo "Both act on the installation in JIM_INSTALL_DIR (default: ./jim)."
+    echo "The options act on the installation this script sits in, or on JIM_INSTALL_DIR."
     echo "Documentation: ${DOCS_BASE}/administration/deployment/"
 }
 
@@ -902,6 +1160,10 @@ main() {
             renew_certificate
             exit 0
             ;;
+        --certificate)
+            change_certificate
+            exit 0
+            ;;
         --help|-h)
             show_help
             exit 0
@@ -913,8 +1175,8 @@ main() {
 
     show_banner
 
-    # Determine install directory
-    local install_dir="${JIM_INSTALL_DIR:-./jim}"
+    local install_dir
+    install_dir=$(resolve_install_dir)
 
     # Check for existing installation
     if [ -f "${install_dir}/.env" ]; then
@@ -926,19 +1188,35 @@ main() {
     fi
 
     check_prerequisites
-    detect_latest_version
-    download_files "$install_dir"
+    if [ -n "$BUNDLE_DIR" ]; then
+        read_bundle_version
+        copy_bundle_files "$install_dir"
+    else
+        detect_latest_version
+        download_files "$install_dir"
+    fi
+    save_installer_copy "$install_dir"
 
     local env_file="${install_dir}/.env"
 
     configure_database "$env_file"
     configure_sso "$env_file"
     configure_registry "$env_file"
+    if [ -n "$BUNDLE_DIR" ]; then
+        load_bundle_images
+        verify_bundle_images "$install_dir"
+    fi
+    configure_port "$env_file"
     configure_certificate "$install_dir"
     configure_proxy "$env_file"
 
     launch_jim "$install_dir"
     show_summary "$install_dir"
+
+    # Automation can tell a JIM that never became ready from a successful installation.
+    if [ "$JIM_READY" = "false" ]; then
+        exit 1
+    fi
 }
 
 main "$@"

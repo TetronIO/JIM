@@ -71,7 +71,7 @@ References:
           both pods on network "jim"; JIM reaches PostgreSQL at host name "jim-database"
           settings: ConfigMap "jim-config"; secrets: Podman secrets "jim-secrets", "jim-tls"
 
-        Both runtimes: HTTPS on host port 5200 (container 8443); HTTP 8080 on loopback inside
+        Both runtimes: HTTPS on host port 443 (container 8443); HTTP 8080 on loopback inside
         the container, for health probes only
 ```
 
@@ -144,7 +144,7 @@ These answer the PRD's open questions (OQ). Each was chosen on the evidence abov
 **D4. HTTPS (OQ4): JIM serves HTTPS itself by default, on both runtimes.**
 - **Why:** it is how Red Hat's own containerized product installs (scenario 4), and #1816 established that sign-in from another machine needs HTTPS. A default that leaves remote sign-in broken until the administrator builds a proxy is the wrong default on either runtime.
 - **Listening, in production:**
-  - HTTPS on container port 8443, published on host port 5200 (`JIM_WEB_PORT` still changes it).
+  - HTTPS on container port 8443, published on host port 443, the standard port, so JIM's address and every identity provider registration need no port (`JIM_WEB_PORT` changes it; the installer asks). Chosen in implementation over the originally planned 5200, which put `:5200` in every URL and redirect URI.
   - HTTP on `localhost:8080` inside the container, for the health probes only. It is never published, and binding it to loopback means no other container can reach it either.
   - Development is unchanged: HTTP on `localhost:5200` through the development override, which browsers treat as secure.
 - **The certificate, chosen at install:**
@@ -177,7 +177,7 @@ These answer the PRD's open questions (OQ). Each was chosen on the evidence abov
 - **Consequences, all documented:**
   - Operating JIM uses `systemctl --user -M jim@ status jim.service` and `journalctl _SYSTEMD_USER_UNIT=jim.service`. The documentation gives an operations cheat sheet.
   - Volumes and secrets live under the `jim` account's home directory. The backup documentation says where, and exports volumes with `podman volume export` run as that account.
-  - Host ports below 1024 need a proxy or the `net.ipv4.ip_unprivileged_port_start` setting. The default port 5200 is unaffected.
+  - Host ports below 1024 need the `net.ipv4.ip_unprivileged_port_start` setting, and the default port, 443, is one. The rootless installer (run as root) sets it to 443 in `/etc/sysctl.d/`, or the administrator picks a port of 1024 or above. Red Hat's containerized Ansible Automation Platform is believed to lower the same setting for its rootless install; confirm that precedent in Phase 3 before relying on it in the documentation. Rootless Docker has the same limit, and Phase 2's installer already checks for it.
   - File Connector bind mounts see container UIDs mapped into the account's subordinate range, as PRD requirement 18 covers.
 - **Testing:** CI boots the Podman path rootful and rootless on GitHub's Ubuntu runner, the rootless leg under a dedicated account as the installer creates it. Acceptance also needs one manual run on a RHEL 9 or 10 virtual machine with SELinux enforcing and firewalld running, rootless and rootful, covering the Ansible route (D12), because GitHub's runner is neither RHEL nor SELinux-enforcing.
 - **Rejected:** rootful as the default. It gives up the protection the target customers ask for, in exchange for convenience the installer can provide instead.
@@ -268,7 +268,7 @@ Runtime-neutral, so it ships on Docker without waiting for the Podman path, and 
 1. **Health endpoints exempt from HTTPS redirection:** `UseHttpsRedirectionExceptHealthProbes` in `src/JIM.Web/Middleware/HttpsRedirectionExtensions.cs`, test-first against a pipeline built with production's server addresses (a probe got 307 before the change). Verified at runtime: with the database stopped, the container's own health check command exits 22 and Docker marks `jim.web` unhealthy, then healthy again when the database returns.
 2. **Production listening** in `deploy/docker-compose.production.yml`:
    - `ASPNETCORE_URLS=https://+:8443;http://localhost:8080`, and the Kestrel certificate settings pointing at `/run/secrets/jim-tls/`.
-   - `ports: "${JIM_WEB_PORT:-5200}:8443"`.
+   - `ports: "${JIM_WEB_PORT:-443}:8443"`.
    - Compose `secrets:` for the certificate and key. Verified: Compose ignores `uid`, `gid` and `mode` on file-based secrets and bind-mounts the host file with its own owner and mode, as D4 expected.
    - `src/JIM.Web/Dockerfile` exposes 8443. The base compose file and the development override stay on HTTP 8080.
    - Verified: TLS 1.2 and 1.3 accepted and 1.1 refused; HSTS sent; the loopback listener unreachable from other containers; an organisation chain (leaf plus issuing CA, RSA) served in full.
@@ -279,9 +279,17 @@ Runtime-neutral, so it ships on Docker without waiting for the Podman path, and 
    - `--renew-certificate` issues a new server certificate from the saved CA for the saved names and restarts `jim.web`; verified that the restart serves the new certificate.
    - Asks whether a proxy or load balancer sits in front, and sets `JIM_TRUSTED_PROXIES` from the answer.
    - Found while verifying: every release publishes `.env.example` as `default.env.example` (GitHub renames a leading dot), so the installer had been failing at its download step. Fixed in its own commit.
-4. **Release bundle:** the generated `INSTALL.md` gains the certificate steps as `openssl` commands, verified by running them verbatim, renewal included. It is now written with LF line endings: `.ps1` files check out with CRLF, and a heredoc copied from a CRLF guide writes carriage returns into the files it creates.
+   - **Added after a review of the deployment engineer's journey** (agreed with the product owner, same PR):
+     - The installer asks for the HTTPS port, defaulting to 443, and refuses a port something else holds (`ss`, or a connect test without it) or that rootless Docker cannot publish.
+     - One installer for connected and air-gapped installs: run inside an extracted bundle, `setup.sh` copies the bundle's files, loads its images, checks every image the compose files name is present, and starts JIM with `--pull never`. The bundle ships `setup.sh` and a `VERSION` file, and releases publish `setup.sh` as an asset.
+     - It installs in `/opt/jim` when run as root, keeps a copy of itself there, waits until `jim.web` is healthy (reporting honestly and exiting 1 if it is not within ten minutes), and makes `.env` readable by its owner only.
+     - `--certificate` re-runs the certificate step for an existing installation, which replaces the hand-typed CA recipe and the manual replacement steps; maintenance options act on the installation the script sits in.
+   - Found while verifying the air-gapped install on a fresh host with `curl` disabled:
+     - Every bundled-database install pointed JIM at `localhost` (the development value in `.env.example`) and never started; the installer now writes `JIM_DB_HOSTNAME=jim.database`, and the by-hand steps say so.
+     - The bundle saved PostgreSQL by its digest reference, which writes an archive with no image name; `docker load` then produced an anonymous image the compose file could not find, even on the containerd store. It is now saved by name and tag, and the digest-pinned reference resolves after loading.
+4. **Release bundle:** `setup.sh` and `VERSION` at the root, and a short `INSTALL.md` built around running the installer, with a by-hand section kept for organisations whose policy requires it. It is written with LF line endings: `.ps1` files check out with CRLF, and a heredoc copied from a CRLF guide writes carriage returns into the files it creates.
 5. **Documentation:**
-   - `docs/administration/deployment.md`: "TLS and Reverse Proxy" rewritten around HTTPS by default: the certificate files, the installer's CA and distributing it, creating one by hand, renewal, replacement, re-encrypting proxies (nginx and Apache httpd, with the SELinux boolean), trusting the proxy, and the loopback HTTP alternative as a documented override file.
+   - `docs/administration/deployment.md`: installation restructured around the installer (before you install, connected and air-gapped each with the installer or by hand, what the installer does, after installing); "TLS and Reverse Proxy" rewritten around HTTPS by default: the certificate files, the installer's CA and distributing it, renewal, replacement, re-encrypting proxies (nginx and Apache httpd, with the SELinux boolean), trusting the proxy, and the loopback HTTP alternative as a documented override file.
    - `docs/administration/configuration.md`: the certificate settings; troubleshooting, getting started, quick start, prerequisites and security headers updated.
    - Found while verifying: nginx rejects JIM's sign-in response (`upstream sent too big header`, 502) at its default buffer size, because the authentication cookies total about 6 KB; the nginx example now sets `proxy_buffer_size 16k` and `proxy_buffers 8 16k`. This also affected the example documented before this phase.
    - Found while verifying: Kestrel loads `Certificates:Default` even when only HTTP URLs are configured, so the loopback HTTP override also blanks the certificate settings.
@@ -290,6 +298,9 @@ Runtime-neutral, so it ships on Docker without waiting for the Podman path, and 
    - A Docker boot with a generated certificate authority, then browser sign-in by server name (Secure cookies, WebSocket over `wss://`).
    - An nginx proxy re-encrypting to JIM (and rejecting JIM's certificate under the wrong CA), with sign-in through it and the client's own address recorded via `JIM_TRUSTED_PROXIES`; and the loopback HTTP alternative with no certificate.
    - `setup.sh` end to end (created and organisation certificates, a proxy, non-root key ownership) and `--renew-certificate`.
+   - An Apache httpd proxy re-encrypting to JIM, with sign-in through it.
+   - Air-gapped on a fresh host (JIM's images untagged, PostgreSQL's removed, volumes wiped, `curl` replaced by a stub that records calls): the installer from the bundle, then browser sign-in at `https://jim.test` on 443, with no internet access attempted; and the by-hand steps from the generated `INSTALL.md`, run verbatim.
+   - The maintenance options from `/opt/jim/setup.sh`: renewal, moving to an organisation chain, new names (new CA, with the redistribution warning), and renewal refused for an organisation certificate.
 7. **Changelog:** 🔄 "JIM now serves HTTPS out of the box, with your organisation's certificate or one the setup script creates, so sign-in works from any machine without a reverse proxy."
 
 ### Phase 3: The Podman path
@@ -329,7 +340,7 @@ Delivered as one PR, or two if review size demands: files, then installer, relea
    - A restart of the unit with data kept.
    - Upgrade by replacing the pod file and restarting.
    - The client address JIM logs for a remote request under rootless networking (see Risks).
-   - An air-gapped load of the bundle's PostgreSQL image, on Podman and on both Docker image stores (classic and containerd), resolves the digest-pinned reference without trying to pull. Found in Phase 1: the containerd store keeps the digest through `docker save` and `docker load`; the classic store and Podman are unverified.
+   - An air-gapped load of the bundle's PostgreSQL image, on Podman and on Docker's classic image store, resolves the digest-pinned reference without trying to pull. Phase 2 fixed the bundle to save the image by name and tag and verified the containerd store; the classic store and Podman are unverified. The Podman branch of the installer reuses the Docker branch's bundle mode.
 7. **Changelog:** ✨ "JIM can now be deployed with Podman, rootless by default, with no Docker or other extra software, including air-gapped."
 
 ### Phase 4: Proof in CI

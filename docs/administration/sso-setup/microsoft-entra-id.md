@@ -21,7 +21,7 @@ Step-by-step instructions for configuring Single Sign-On with JIM using Microsof
         - *Multitenant*: Users from any Entra ID directory
     - **Redirect URI**:
         - Platform: **Web**
-        - URI: `https://your-jim-url/signin-oidc` (`your-jim-url` is JIM's address, port included: `jim.example.com:5200` for a default installation)
+        - URI: `https://your-jim-url/signin-oidc` (`your-jim-url` is JIM's address, such as `jim.example.com`, with `:port` added if JIM does not use 443)
 5. Click **Register**
 6. After registration, go to **Authentication** and add a second Web redirect URI for the sign-out callback: `https://your-jim-url/signout-callback-oidc`, then click **Save**. Entra ID validates the `post_logout_redirect_uri` parameter against the same Redirect URIs list as sign-in, so this entry is required for sign-out to work.
 
