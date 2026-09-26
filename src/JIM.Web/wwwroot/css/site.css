@@ -1765,6 +1765,24 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
     box-shadow: none !important;
 }
 
+/* The Default-colour filled button, derived from the theme's tokens rather than a grey picked per theme (the
+   eight per-theme values this replaced ran from near-invisible on a light page to a lighter-than-surface navy on
+   a dark one). Mixed from the text colour over the page background, so it keeps the same distance from the page
+   in every theme: a quiet neutral at rest, a step darker (light themes) or lighter (dark themes) on hover, and
+   a step further when pressed. html[lang] so it outranks MudBlazor's own rule. */
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 12%, var(--mud-palette-background));
+    color: var(--mud-palette-text-primary);
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 20%, var(--mud-palette-background));
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):active {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 26%, var(--mud-palette-background));
+}
+
 .mud-button-group .mud-button-root {
     box-shadow: none !important;
 }
