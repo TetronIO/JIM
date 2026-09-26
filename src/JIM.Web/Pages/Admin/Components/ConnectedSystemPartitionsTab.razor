@@ -377,7 +377,8 @@ else
 
             @if (partition.Selected && ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
             {
-                <div class="pa-4 pt-0">
+                @* px-4 pb-4, not pa-4 pt-0: MudBlazor declares pa-4 after pt-0, so the pair kept a 16px top. *@
+                <div class="px-4 pb-4">
                     @if (partition.Containers != null)
                     {
                         <ScopedHierarchyPicker Partition="@partition" OnChanged="OnSelectionEdited" />

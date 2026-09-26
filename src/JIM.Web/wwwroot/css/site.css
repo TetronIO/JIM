@@ -3920,9 +3920,12 @@ html[lang] .jim-password-guidance.mud-alert {
     overflow-y: auto;
 }
 
+/* Six tracks: expander, checkbox, name, scope, object count, meta. The count column (#1276) arrived after the
+   template was written with five, so its sixth cell wrapped onto a second grid row and the row gap then sat
+   beneath the scope toggle, not above it. */
 .jim-picker-row {
     display: grid;
-    grid-template-columns: auto auto 1fr auto auto;
+    grid-template-columns: auto auto 1fr auto auto auto;
     align-items: center;
     gap: 0.5rem;
     min-height: 2rem;
@@ -4005,6 +4008,7 @@ html[lang] .jim-password-guidance.mud-alert {
 /* Fixed widths on the two trailing columns. Each row is its own grid, so without them every row
    sizes its own columns and the scope controls stagger down the tree instead of forming a column. */
 .jim-picker-meta {
+    grid-column: 6;
     font-size: 0.75rem;
     color: var(--mud-palette-text-secondary);
     font-variant-numeric: tabular-nums;
@@ -4021,9 +4025,16 @@ html[lang] .jim-password-guidance.mud-alert {
     font-size: 0.8125rem;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    min-width: 4.5rem;
-    text-align: right;
     color: var(--mud-palette-text-primary);
+}
+
+/* The count's grid cell is the tooltip root, so the column width lives here (see the picker's markup). Flex,
+   so the cell sits on the row's centre line rather than on an inline-block baseline. */
+.jim-picker-objects-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 4.5rem;
 }
 
 .jim-picker-scope {
@@ -4033,28 +4044,59 @@ html[lang] .jim-password-guidance.mud-alert {
     min-width: 11rem;
 }
 
+/* The tooltip root wrapping the toggle is inline-block by default, which leaves descender space beneath the
+   buttons and none above; flex centres them on the row. */
+.jim-picker-scope .mud-tooltip-root {
+    display: inline-flex;
+    align-items: center;
+}
+
 /* The two-segment scope control. Both states stay visible: scope decides what the next import
-   returns, so which one is active must be readable without hovering anything. Deliberately below
-   the site-wide "default sizes" rule (JIM.Web/CLAUDE.md > UI element sizing): at default size the
-   pair dominated the row it annotates, and it sits on a ~32px row by design. */
+   returns, so which one is active must be readable without hovering anything. Below the site-wide
+   "default sizes" rule (JIM.Web/CLAUDE.md > UI element sizing) because it sits on a ~32px row by
+   design; 0.75rem matches the object count beside it. It was 0.65rem (about 10px), which is small
+   text under WCAG and so needs the full 4.5:1 that the label colour below provides. */
 .jim-picker-seg .mud-button-root {
-    padding: 0 0.4rem;
+    padding: 0 0.5rem;
     min-width: 0;
-    font-size: 0.65rem;
-    line-height: 1.15rem;
+    font-size: 0.75rem;
+    line-height: 1.3rem;
     text-transform: none;
     letter-spacing: 0;
 }
 
-html[lang] .jim-picker-seg .jim-picker-seg-on {
+/* .mud-button-root in these selectors too: MudBlazor's own group and hover rules (three classes) otherwise
+   outrank them, painting the active segment's text primary on a primary fill (invisible) and swapping that fill
+   for the faint text-button hover tint on hover (the control appears to lose its state). */
+html[lang] .jim-picker-seg .jim-picker-seg-on.mud-button-root {
     background-color: var(--mud-palette-primary);
     color: var(--mud-palette-primary-text);
     border-color: var(--mud-palette-primary);
 }
 
-html[lang] .jim-picker-seg .jim-picker-seg-off {
-    color: var(--mud-palette-text-secondary);
+html[lang] .jim-picker-seg .jim-picker-seg-on.mud-button-root:hover {
+    background-color: var(--mud-palette-primary-darken);
+    border-color: var(--mud-palette-primary-darken);
 }
+
+/* The unselected segment's label takes the chip-label blend (60% accent over body text), not the raw accent: on
+   the selected row's 12% accent tint the raw accent measured 2.8:1 to 4.5:1 across the themes, and the blend
+   5.3:1 or better on every one (ThemeContrastTests covers the same blend on chips). It keeps the accent identity
+   so the pair still reads as one toggle; body text would read as an unrelated outlined button. */
+html[lang] .jim-picker-seg .jim-picker-seg-off.mud-button-root {
+    color: var(--jim-chip-text-primary);
+}
+
+html[lang] .jim-picker-seg .jim-picker-seg-off.mud-button-root:hover {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+}
+
+/* The row's checkbox is a MudBlazor input control, which carries a bottom margin meant for a form; on a
+   32px row it left the toggle and count sitting high, with more space beneath them than above. */
+html[lang] .jim-picker-row > .mud-input-control {
+    margin: 0;
+}
+
 
 /* ─── Scope selection: summary, guidance strip and action bar ────────────────────────────────
    The Scope tab's page furniture around the picker above. The summary answers
@@ -4100,14 +4142,15 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
     color: var(--mud-palette-text-secondary);
 }
 
-/* The head is the panel's heading row: the partition's name reads as a title, and the padding beneath it is the
-   ordinary 16px to the picker, not the 16px plus the switch's own slack it used to be. */
+/* The head is the panel's heading row: the partition's name reads as a title. The switch beside it is 38px tall
+   to the name's 26px, so it overhangs the name by 6px; 10px of padding under the row puts the picker 16px below
+   the name, which is the gap every other block on the page keeps. The picker's wrapper adds no top padding. */
 .jim-scope-partition-head {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
-    padding: 1rem 1rem 0.5rem;
+    padding: 1rem 1rem 0.625rem;
 }
 
 .jim-scope-partition-name {
