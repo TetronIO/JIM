@@ -431,7 +431,7 @@ jim-stack-logs() {
 }
 jim-stack-down() {
   docker compose $(_jim_compose) down
-  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true
+  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 --profile scenario-008 down --remove-orphans 2>/dev/null || true
   docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true
 }
 jim-restart() {
@@ -547,7 +547,7 @@ jim-reset() {
   fi
 
   docker compose $(_jim_compose) down --volumes
-  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile dirsrv down --volumes --remove-orphans 2>/dev/null || true
+  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 --profile scenario-008 --profile dirsrv down --volumes --remove-orphans 2>/dev/null || true
   docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
   _jim_prune_images_preserving_snapshots
   docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true

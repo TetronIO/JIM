@@ -208,7 +208,7 @@ Describe 'Add-DirectoryCertificateToJimStore' {
     <#
         The dispatcher a scenario calls to re-trust its directory after a factory reset. It must pick
         the right per-directory function from DirectoryType and hand it the config's ContainerName,
-        so a scenario never runs the Samba function against dirsrv-primary again (the Scenario 10
+        so a scenario never runs the Samba function against dirsrv-primary again (the Scenario 010
         failure on the 389 lab). Both leaf functions are mocked: they docker cp and upload.
     #>
     BeforeAll {
@@ -262,7 +262,7 @@ Describe 'in-container LDAP URIs' {
         exec inside a directory container must be pointed at LdapSearchScheme://localhost:LdapSearchPort.
         Building that URI from Port (JIM's Connected System port) or leaving the port off entirely
         (the tool then defaults to 389) only works where the two ports coincide, and on 389 Directory
-        Server they do not. Scenario 1's Set-DirectoryUserAttributes hung on exactly this.
+        Server they do not. Scenario 001's Set-DirectoryUserAttributes hung on exactly this.
     #>
     BeforeAll {
         $integrationRoot = Split-Path -Parent $PSScriptRoot

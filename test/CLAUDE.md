@@ -196,8 +196,8 @@ cd /workspaces/JIM
 # Run ALL scenarios sequentially (full regression)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small
 
-# Run a specific scenario directly (the number, ScenarioN or descriptive name also resolve: -Scenario 1)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
+# Run a specific scenario directly (the number, Scenario-NNN or descriptive name also resolve: -Scenario 1)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-001-HRToIdentityDirectory
 
 # Run with a specific template size (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups; or long-tail / OpenLDAP-only Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
@@ -205,7 +205,7 @@ cd /workspaces/JIM
 # Run against OpenLDAP instead of Samba AD
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType OpenLDAP
 
-# Run against 389 Directory Server (same lab shape as OpenLDAP; Scenarios 14, 19 and 22 stay OpenLDAP only)
+# Run against 389 Directory Server (same lab shape as OpenLDAP; Scenarios 014, 019 and 022 stay OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small -DirectoryType DirectoryServer389
 
 # Run against ALL directory types (full cross-directory regression: Samba AD, then OpenLDAP, then 389 Directory Server)
@@ -224,7 +224,7 @@ cd /workspaces/JIM
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
 
 # Setup only - configure environment without running tests (for demos, manual exploration)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -SetupOnly
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-001-HRToIdentityDirectory -SetupOnly
 
 # Set log level (overrides .env for this run, restores afterwards)
 ./test/integration/Run-IntegrationTests.ps1 -LogLevel Warning
@@ -274,7 +274,7 @@ docker run --rm mcr.microsoft.com/dotnet/sdk:10.0-noble bash -c \
   | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/' | awk 'BEGIN{c=-1} /BEGIN CERTIFICATE/{c++} c>=1' > /tmp/egress-cas.pem
 cat /root/.ccr/agent-proxy-ca.crt >> /tmp/egress-cas.pem   # ~9KB base64 total; well under the limit
 export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /tmp/egress-cas.pem)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario14-AttributePriority -DirectoryType OpenLDAP
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-014-AttributePriority -DirectoryType OpenLDAP
 ```
 
 OpenLDAP is the sensible directory type here; Samba AD images may not be cached. Because the bridge is an environment variable, there is nothing in the working tree to revert and nothing that can leak into a commit.
@@ -291,7 +291,7 @@ done
 
 (This section previously prescribed copying the CA bundle into the repo root and hand-editing a `COPY`/`ENV SSL_CERT_FILE` pair into each Dockerfile, with a warning to revert it all before committing. That predates the `EXTRA_CA_CERTS_BASE64` argument and is no longer necessary; the build arg installs the CA properly via `update-ca-certificates` instead of overriding `SSL_CERT_FILE` wholesale.)
 
-Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.
+Mind host resources: a Small-template Scenario 008 run fits in a 15 GB sandbox; the Scale templates do not.
 
 **The proxy's port changes when a session resumes, and `.env` remembers the old one.** A previous session may have written `JIM_BUILD_HTTPS_PROXY=http://127.0.0.1:<port>` (and `JIM_BUILD_NETWORK=host`) into `.env`, which `docker-compose.yml` passes to every build stage. On resume the agent proxy comes back on a **different** port, so the stored value points at nothing and `dotnet restore` fails inside the build with:
 
@@ -324,12 +324,12 @@ When the sandbox has NO working Docker daemon, `Run-IntegrationTests.ps1` cannot
 3. **Bridge the connector-files volume to the native worker.** Scenarios seed CSVs into the `jim-connector-files-volume` Docker volume (via a `busybox --user 1654:1654` sidecar) and configure the File connector path as `/connector-files/...`. The native worker reads a host path, so symlink it to the in-sandbox volume data dir: `ln -s /var/lib/docker/volumes/jim-connector-files-volume/_data /connector-files`. Then `chown -R 1654:1654` that data dir so the UID-1654 sidecar can write it (the `jim.worker` container that normally sets this ownership never runs here). Root (the native worker) can still read the 1654-owned files.
 4. **Make the directory hostname resolve.** `Get-DirectoryConfig` uses Docker-network hostnames (`openldap-primary`, `samba-ad-*`), and the native worker/web resolve via `/etc/hosts`. The integration compose publishes **no** ports for `openldap-primary` ("internal to Docker network only"), so `127.0.0.1` does NOT work; point the hostname at the container's bridge IP instead, which host processes can reach directly: `LDAP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' openldap-primary)` then add `$LDAP_IP openldap-primary` to `/etc/hosts` (re-derive after any container restart; the IP can change). Only `openldap-primary` runs in the sandbox by default, so pass `-DirectoryConfig (Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Primary)` to the scenario. The 389 Directory Server lab works the same way (`--profile dirsrv up -d dirsrv-primary`, `/etc/hosts` entry for `dirsrv-primary`, `-DirectoryConfig (Get-DirectoryConfig -DirectoryType DirectoryServer389 -Instance Primary)`), with one extra step: its Connected Systems connect over LDAPS on 3636, so add the image's lab CA (`docker cp dirsrv-primary:/data/tls/ca/jim-dirsrv-lab-ca.crt`) to JIM's certificate store with `Add-JIMCertificate` first, which is what the runner's `Add-DirsrvCertificateToJimStore` does.
 5. **Start from a clean database.** `DROP DATABASE jim; CREATE DATABASE jim OWNER jim;` (terminate connections first), then start the worker: it applies migrations and seeds on first boot. Do this between runs; scenario state (MVOs keyed on the same test attribute values) otherwise contaminates a re-run.
-6. **Invoke the scenario directly**, e.g. `Invoke-Scenario5-MatchingRules.ps1 -Step CaseSensitivity -Template Nano -JIMUrl http://localhost:5200 -ApiKey <key> -DirectoryConfig <openldap>`. This is the sanctioned sandbox exception to "never invoke scenario scripts directly / never `-SkipBuild`" above; those rules assume the Docker path, which is unavailable here. To prove red→green on a fix, revert just the fix files, `dotnet build src/JIM.Worker`, restart the worker, and re-run.
+6. **Invoke the scenario directly**, e.g. `Invoke-Scenario-005-MatchingRules.ps1 -Step CaseSensitivity -Template Nano -JIMUrl http://localhost:5200 -ApiKey <key> -DirectoryConfig <openldap>`. This is the sanctioned sandbox exception to "never invoke scenario scripts directly / never `-SkipBuild`" above; those rules assume the Docker path, which is unavailable here. To prove red→green on a fix, revert just the fix files, `dotnet build src/JIM.Worker`, restart the worker, and re-run.
 
-**Corrections to the above, from a full Scenario 14 run on the native stack (2026-08-15).** Every one of these cost a failed run before it was understood:
+**Corrections to the above, from a full Scenario 014 run on the native stack (2026-08-15).** Every one of these cost a failed run before it was understood:
 
 - **Do not invent an API key; read it from `.env`.** `JIM_INFRASTRUCTURE_API_KEY` is already defined there, and `Start-SandboxStack.ps1` loads `.env` into its own process *after* inheriting the environment, so a key exported before the call is overwritten by the one in the file. Exporting your own value gets you "Authentication failed" on the first scenario call. Pass the `.env` value to the scenario's `-ApiKey`.
-- **Reset the directory, not just the database, between runs.** Scenario steps add users (Scenario 14's Grace), delete entries and withdraw attributes; the populate scripts layer over whatever they find. Without a directory reset the first import sees 7 objects where 6 are expected and the run stops on the isolation check. Remove the container *and its volume* (`docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile openldap rm -sfv openldap-primary` then `docker volume rm -f jim-integration-openldap-primary-data`) and bring it back up; the volume is named `jim-integration-openldap-primary-data`, not the service name.
+- **Reset the directory, not just the database, between runs.** Scenario steps add users (Scenario 014's Grace), delete entries and withdraw attributes; the populate scripts layer over whatever they find. Without a directory reset the first import sees 7 objects where 6 are expected and the run stops on the isolation check. Remove the container *and its volume* (`docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile openldap rm -sfv openldap-primary` then `docker volume rm -f jim-integration-openldap-primary-data`) and bring it back up; the volume is named `jim-integration-openldap-primary-data`, not the service name.
 - **Re-derive the container IP into `/etc/hosts` on every reset**, since recreating the container changes it (step 4 above says this; it bites again on every iteration, so automate it rather than remembering it).
 - **A scenario that mutates configuration needs `-Force` on destructive cmdlets.** Preference variables such as `$ConfirmPreference` do not flow into module scope, so a `ConfirmImpact = 'High'` cmdlet still prompts, and with no interactive host the prompt fails with "Exception calling ShouldProcess with 2 argument(s): Object reference not set to an instance of an object". If a setup script stops there, that is what it means.
 - **Wrap the whole loop in a script.** Reset database, reset directory, refresh `/etc/hosts`, restart the stack, run the scenario: roughly six minutes per iteration, entirely unattended, and it is what makes iterating on a scenario in the sandbox practical rather than painful.
@@ -344,7 +344,7 @@ Verified working 2026-08-02 (used to runtime-verify #230). The baked snapshot im
 1. **Start with the public image:** `SAMBA_IMAGE_PRIMARY=diegogslomp/samba-ad-dc docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d samba-ad-primary` (light stack first, `jim-connector-files-volume` created, per the section above). First boot provisions the domain from scratch; expect 10+ minutes of forest/domain updates, and do not trust the healthcheck: it probes SMB, which comes up before LDAP.
 2. **Fix the interface binding after ANY restart.** Provisioning writes `interfaces = lo eth0@ifNN` into `smb.conf` with the veth index captured at provision time; after a container restart the index changes and LDAP silently binds loopback only (symptom: `smbclient -L localhost` works, host connections to 389/636 refused). Fix once: `docker exec samba-ad-primary sed -i 's/interfaces = lo eth0@if[0-9]*/interfaces = lo eth0/' /usr/local/samba/etc/smb.conf` then restart the container.
 3. **Use the certificate's name, not the service name.** LDAPS certificate validation is always on, and the autogenerated DC certificate carries only `dc1.panoply.local`. Point `/etc/hosts` at the container bridge IP for BOTH names (`<ip> samba-ad-primary dc1.panoply.local dc1`, re-derive the IP after restarts), set the Connected System's Host to `dc1.panoply.local` (override `$cfg.Host` after `Get-DirectoryConfig`), and add the DC's CA to the JIM certificate store: `docker cp samba-ad-primary:/usr/local/samba/private/tls/ca.pem /tmp/ && Add-JIMCertificate -Name "Samba AD test CA" -Path /tmp/ca.pem`.
-4. **Extend the schema.** The baked image's build-time extensions (extensionAttribute1-15, sshPublicKey) are missing from a raw base-image provision, and Scenario 1 requires them: `docker cp test/integration/docker/samba-ad-prebuilt/post-provision.sh samba-ad-primary:/tmp/ && docker exec samba-ad-primary bash /tmp/post-provision.sh`, then restart the container (re-applying step 2's sed if needed). It is idempotent.
+4. **Extend the schema.** The baked image's build-time extensions (extensionAttribute1-15, sshPublicKey) are missing from a raw base-image provision, and Scenario 001 requires them: `docker cp test/integration/docker/samba-ad-prebuilt/post-provision.sh samba-ad-primary:/tmp/ && docker exec samba-ad-primary bash /tmp/post-provision.sh`, then restart the container (re-applying step 2's sed if needed). It is idempotent.
 5. **Scenario limits on the native stack:** `Assert-ConnectorVolumeCsvParity` does `docker exec jim.worker`, which does not exist natively, so scripted scenarios stop after the baseline steps. Baseline Full Import/Full Sync, direct Run Profile invocations (`Start-JIMRunProfile`), and database-level assertions (`docker exec jim.database psql`) all work and are sufficient for targeted runtime verification.
 
 **Common templates by data size:**
@@ -354,8 +354,8 @@ Verified working 2026-08-02 (used to runtime-verify #230). The baked snapshot im
 - **Medium**: 1,000 users, 100 groups (~2 min) - Medium enterprise
 - **Large**: 10,000 users, 500 groups (~15 min) - Large enterprise
 - **Scale100k50Groups**: 100,000 users, 50 groups - Requires 20+ GB host RAM (OOM-killed on 16 GB machines; a 16 GB Codespace is not sufficient)
-- **Scale100k5kGroups**: 100,000 users, ~5,027 groups (realistic long-tail shape) - OpenLDAP only, Scenario 8 only. Hard-fails if combined with `-DirectoryType SambaAD` or any non-Scenario-8 scenario. Recommend a 32+ GB host: measured post-#917-quick-wins (2026-07-04), the run completes on a 29 GB host with minimal other load, but the delta membership import still spikes the worker to ~20 GB transiently (from a ~4 GB between-task floor) until #917's structural bounding of the delta materialisation lands. Pre-fix, the same run OOM-killed the host.
-- **Scale200k10kGroups / Scale500k25kGroups / Scale750k40kGroups / Scale1m60kGroups**: long-tail templates extending the Scale100k5kGroups model to 200k/500k/750k/1m users. OpenLDAP only, Scenario 8 only; same hard-fail behaviour as Scale100k5kGroups. RAM requirements scale roughly with user count. The (28+ / 40+ / 48+ / 64+ GB) figures were estimated from the 50-group baseline; the delta membership import spike scales with group count, so treat them as understated floors until #917's structural work lands. The 1m60k tier also needs the OpenLDAP accesslog `olcDbMaxSize` raised proportionally; see the section below.
+- **Scale100k5kGroups**: 100,000 users, ~5,027 groups (realistic long-tail shape) - OpenLDAP only, Scenario 008 only. Hard-fails if combined with `-DirectoryType SambaAD` or any non-Scenario-8 scenario. Recommend a 32+ GB host: measured post-#917-quick-wins (2026-07-04), the run completes on a 29 GB host with minimal other load, but the delta membership import still spikes the worker to ~20 GB transiently (from a ~4 GB between-task floor) until #917's structural bounding of the delta materialisation lands. Pre-fix, the same run OOM-killed the host.
+- **Scale200k10kGroups / Scale500k25kGroups / Scale750k40kGroups / Scale1m60kGroups**: long-tail templates extending the Scale100k5kGroups model to 200k/500k/750k/1m users. OpenLDAP only, Scenario 008 only; same hard-fail behaviour as Scale100k5kGroups. RAM requirements scale roughly with user count. The (28+ / 40+ / 48+ / 64+ GB) figures were estimated from the 50-group baseline; the delta membership import spike scales with group count, so treat them as understated floors until #917's structural work lands. The 1m60k tier also needs the OpenLDAP accesslog `olcDbMaxSize` raised proportionally; see the section below.
 
 **Directory service accounts and access control (two-identity model):**
 
@@ -403,13 +403,13 @@ The three large, deterministic HR CSVs (`hr-users.csv`, `departments.csv`, `trai
 **Callers that use the cache (templated by the caller, potentially large):**
 - `Invoke-IntegrationTests.ps1` (main runner, Step 3 populate)
 - `Run-IntegrationTests.ps1` (scenario orchestrator)
-- `scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1` (scenario-internal reset to baseline)
-- `scenarios/Invoke-Scenario7-ClearConnectedSystemObjects.ps1` (scenario-internal seed)
+- `scenarios/Invoke-Scenario-001-HRToIdentityDirectory.ps1` (scenario-internal reset to baseline)
+- `scenarios/Invoke-Scenario-007-ClearConnectedSystemObjects.ps1` (scenario-internal seed)
 
 **Callers that deliberately bypass the cache (call `Generate-TestCSV.ps1` directly):**
-- `scenarios/Invoke-Scenario4-DeletionRules.ps1` — hard-coded `Nano` template then overlays scenario-specific HR/Training CSVs from `scenarios/data/`. Caching would save negligible time (3 users) and the overlay would immediately replace the wrapper's output.
-- `scenarios/Invoke-Scenario5-MatchingRules.ps1` — hard-coded `Nano`, same overlay pattern as Scenario 4.
-- `scenarios/Invoke-Scenario6-SchedulerService.ps1` — hard-coded `Micro` (10 users); too small for caching to be worth the wrapper complexity.
+- `scenarios/Invoke-Scenario-004-DeletionRules.ps1` — hard-coded `Nano` template then overlays scenario-specific HR/Training CSVs from `scenarios/data/`. Caching would save negligible time (3 users) and the overlay would immediately replace the wrapper's output.
+- `scenarios/Invoke-Scenario-005-MatchingRules.ps1` — hard-coded `Nano`, same overlay pattern as Scenario 004.
+- `scenarios/Invoke-Scenario-006-SchedulerService.ps1` — hard-coded `Micro` (10 users); too small for caching to be worth the wrapper complexity.
 
 When adding a new scenario, ask: does it use `-Template $Template` with a potentially large template, and does it consume the generator's pristine output without further file-level tampering? If both yes, call `Get-OrGenerate-TestCSV.ps1`. Otherwise stick with `Generate-TestCSV.ps1` directly.
 

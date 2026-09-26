@@ -58,11 +58,11 @@ done
 #   - jimGroupStatus (custom: lifecycle status, e.g. "Active", "Archived")
 # Defines jimPerson (SUP inetOrgPerson STRUCTURAL) with additional MAY attributes:
 #   - jimEmployeeEndDate (Generalized Time; typed DateTime by the JIM LDAP connector so
-#     relative-date scoping criteria can target it - Scenario 8 LeaverCohort step, #908)
-#   - jimLeaverCohort (Boolean marker identifying the Scenario 8 leaver-cohort users; read
+#     relative-date scoping criteria can target it - Scenario 008 LeaverCohort step, #908)
+#   - jimLeaverCohort (Boolean marker identifying the Scenario 008 leaver-cohort users; read
 #     by the test harness over LDAP, never selected into JIM)
 # Defines jimBadgeHolder (SUP top AUXILIARY), a JIM-owned auxiliary class so auxiliary class
-# testing (issue #492, Scenario 19) does not depend on whichever schemas the base image loads:
+# testing (issue #492, Scenario 019) does not depend on whichever schemas the base image loads:
 #   - jimBadgeNumber (MUST; exercises the export-side required-attribute enforcement path)
 #   - jimBadgeColour, jimBadgeIssued (MAYs; the ordinary merge/flow path)
 #   - uid (MAY, from cosine): lets a jimBadgeHolder-typed object satisfy the 'account' carrier
@@ -83,7 +83,7 @@ cn: jim-extensions
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.1 NAME 'jimGroupType' DESC 'Group type classification' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.2 NAME 'jimGroupStatus' DESC 'Group lifecycle status' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.3 NAME 'jimEmployeeEndDate' DESC 'Employment end date' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE )
-olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.4 NAME 'jimLeaverCohort' DESC 'Scenario 8 leaver-cohort marker' EQUALITY booleanMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.7 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.4 NAME 'jimLeaverCohort' DESC 'Scenario 008 leaver-cohort marker' EQUALITY booleanMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.7 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.5 NAME 'jimBadgeNumber' DESC 'Badge number (required by jimBadgeHolder)' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.6 NAME 'jimBadgeColour' DESC 'Badge colour' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.7 NAME 'jimBadgeIssued' DESC 'Badge issue date' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE )
@@ -295,7 +295,7 @@ fi
 # stamps pwdChangedTime on password writes, which no scenario reads. Further down, once the JIM
 # service account's password policy entries exist (jim-password-policy.ldif), the overlay on each
 # suffix is pointed at that suffix's default policy (minimum length 7, quality checking), matching
-# the Samba domain. Scenario 22 (Populate-OpenLDAP-Scenario22.ps1) later repoints the Yellowstone
+# the Samba domain. Scenario 022 (Populate-OpenLDAP-Scenario-022.ps1) later repoints the Yellowstone
 # overlay at its own stricter policy entry for its own run; every other scenario keeps the lab
 # default. What the image provides here is the ppolicy request control in the rootDSE's
 # supportedControl, which is what JIM's OpenLDAP password policy reader looks for before it reads

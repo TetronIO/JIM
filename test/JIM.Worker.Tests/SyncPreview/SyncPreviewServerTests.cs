@@ -1373,7 +1373,7 @@ public class SyncPreviewServerTests
 
     /// <summary>
     /// The Sync Preview mirror of <c>UniqueValueGenerationWorkflowTests.FullSync_StaleStickyAssignmentSupersededThenWithdrawn_
-    /// AdoptsTheOtherRulesValueAndReplacesTheAssignmentAsync</c> (bug fix, #242, Scenario 23 integration run): a
+    /// AdoptsTheOtherRulesValueAndReplacesTheAssignmentAsync</c> (bug fix, #242, Scenario 023 integration run): a
     /// live Sticky assignment ("stale.value") exists for the mapping, but a higher-priority contributor has
     /// since taken the attribute over and left a DIFFERENT value ("jsmith", provenance a different rule) on the
     /// object. The preview must show that other value adopted, never the stale assignment reasserted, exactly

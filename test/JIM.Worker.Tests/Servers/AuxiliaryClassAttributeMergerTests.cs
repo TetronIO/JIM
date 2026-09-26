@@ -271,7 +271,7 @@ public class AuxiliaryClassAttributeMergerTests
     /// stamps every attribute with the structural class's own name). Active Directory discovery resolves the class
     /// hierarchy itself and stamps each attribute with the class it actually came from, so a `user` type natively
     /// carries `cn` from person, `title` from organizationalPerson and `sAMAccountName` from securityPrincipal.
-    /// Reconciling such a type stripped every inherited attribute on schema apply, which is how Scenario 4's Samba
+    /// Reconciling such a type stripped every inherited attribute on schema apply, which is how Scenario 004's Samba
     /// AD run lost sAMAccountName, sn, cn, title, department, company, employeeID, distinguishedName and
     /// description. AD types carry no class membership attribute tag, and that absence is what must spare them.
     /// </summary>

@@ -17,7 +17,7 @@ namespace JIM.Worker.Tests.Repositories;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This pins the failure that killed the first Scenario 16 run after #1285 landed: eager-loading the
+/// This pins the failure that killed the first Scenario 016 run after #1285 landed: eager-loading the
 /// <c>ReferencedObjectType</c> navigation on the object type retrievals materialised a self-referencing
 /// Object Type twice under the web host's no-tracking queries (no identity resolution), and the update's
 /// graph attach then failed with "another instance with the same key value is already being tracked" on

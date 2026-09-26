@@ -22,7 +22,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// That re-evaluation must leave the group's provisioning intact. Its Create Pending Export was staged on
 /// the group's own page and has never been sent, so after the cross-page pass the group must still hold
 /// exactly one Pending Export, still a Create, carrying every mapped attribute plus the resolved members.
-/// Scenario 8 (cross-domain entitlement synchronisation) found the cross-page pass replacing that unsent
+/// Scenario 008 (cross-domain entitlement synchronisation) found the cross-page pass replacing that unsent
 /// Create with an Update carrying only the member references: the export then tried to modify a group
 /// that had never been created and the directory refused it.
 /// </summary>

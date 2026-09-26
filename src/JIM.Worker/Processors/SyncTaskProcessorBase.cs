@@ -2041,7 +2041,7 @@ public abstract class SyncTaskProcessorBase
                 // decision: connector-space adoption sat outside the Attribute Flow priority model and has been
                 // removed; see GeneratedValueParticipation's class summary). Only for a persisted object, not
                 // StickyOnly. CurrentMetaverseValue is read regardless of StickyOnly and of whether a known
-                // assignment exists (bug fix, #242, Scenario 23 integration run): ResolveAsync needs the
+                // assignment exists (bug fix, #242, Scenario 023 integration run): ResolveAsync needs the
                 // object's raw current value, from whichever rule holds it, to tell a live Sticky assignment
                 // apart from one that no longer describes the object; a known assignment is therefore no longer
                 // a reason to skip this read, since it might turn out to be exactly the stale one.
@@ -2078,7 +2078,7 @@ public abstract class SyncTaskProcessorBase
                 var outcome = outcomes[i];
                 var pending = pendingValues[i];
 
-                // Bug fix (#242, Scenario 23 integration run): ResolveAsync found a live Sticky assignment that
+                // Bug fix (#242, Scenario 023 integration run): ResolveAsync found a live Sticky assignment that
                 // no longer described this object and treated it as absent instead of reasserting it; whatever
                 // outcome.Kind ended up being, the stale assignment itself must still be removed so the
                 // database agrees with the object. Queued here, applied by the existing deletion flush
@@ -2226,7 +2226,7 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package G) page-flush commit: call immediately after
     /// <see cref="PersistPendingMetaverseObjectsAsync"/>, once the page's Metaverse Objects have real ids, AND
-    /// after <see cref="FlushGeneratedValueAssignmentDeletionsAsync"/> (bug fix, #242, Scenario 23: a stale
+    /// after <see cref="FlushGeneratedValueAssignmentDeletionsAsync"/> (bug fix, #242, Scenario 023: a stale
     /// Sticky assignment replaced this same pass by a fresh Adopted/Generated one shares its (object, attribute)
     /// key with the row being deleted; the real database's partial unique index over that pair rejects this
     /// call's INSERT if the stale row has not been removed first, and the in-memory test double does not
@@ -2281,7 +2281,7 @@ public abstract class SyncTaskProcessorBase
     /// <see cref="ReconcileGeneratedValueAssignmentLifecycle"/> queued this page (retirement, where it applies,
     /// is not this feature's concern: release 2's retired values register writes it separately), plus every
     /// stale assignment <see cref="ResolvePendingGeneratedValuesAsync"/> found and queued (bug fix, #242,
-    /// Scenario 23), and drops them from the run cache in the same call, then clears the page-scoped list. Call
+    /// Scenario 023), and drops them from the run cache in the same call, then clears the page-scoped list. Call
     /// after <see cref="PersistPendingMetaverseObjectsAsync"/> but BEFORE
     /// <see cref="CommitGeneratedValueAssignmentsAsync"/>: a stale assignment being deleted here can share its
     /// (object, attribute) key with a fresh Adopted/Generated assignment that call is about to insert for the
@@ -2306,7 +2306,7 @@ public abstract class SyncTaskProcessorBase
     /// mapping never builds the service or queries an assignment for one.
     /// <para>
     /// Scans <see cref="ExportEvaluationResult.MergedExistingPendingExports"/> as well as
-    /// <see cref="ExportEvaluationResult.PendingExports"/> (bug found by Scenario 23 at runtime, not part of
+    /// <see cref="ExportEvaluationResult.PendingExports"/> (bug found by Scenario 023 at runtime, not part of
     /// #242's original scope): when this evaluation merged its changes into a Pending Export already staged
     /// earlier in the page (typically drift detection's own corrective export for the same Connected System
     /// Object), the merged-into row is reported there, not in <c>PendingExports</c> - it already belongs to
@@ -3575,7 +3575,7 @@ public abstract class SyncTaskProcessorBase
             // the resolved references, an exported one has the changes appended, a pending Update is
             // merged. This pass once batch-deleted them first, to dodge that lookup, which made every
             // Pending Provisioning object look like one whose Create had already been sent: the
-            // re-evaluation then staged an Update for an object that did not exist yet (Scenario 8).
+            // re-evaluation then staged an Update for an object that did not exist yet (Scenario 008).
 
             resolvedCount += batch.Count;
 
@@ -3642,7 +3642,7 @@ public abstract class SyncTaskProcessorBase
                 await PersistPendingMetaverseObjectsAsync();
 
                 // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
-                // flush sequence, deletions before commit (#242 Scenario 23 bug fix). In practice always a
+                // flush sequence, deletions before commit (#242 Scenario 023 bug fix). In practice always a
                 // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
                 // generated mapping never targets a Reference attribute, so nothing this pass resolves or
                 // reconciles ever has anything queued to commit or delete.

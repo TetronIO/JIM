@@ -240,7 +240,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 await PersistPendingMetaverseObjectsAsync();
 
                 // Unique Value Generation (#242, Phase 2 work package G): delete whatever lifecycle
-                // reconciliation (or a stale Sticky match, #242 Scenario 23 bug fix) decided no longer belongs,
+                // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
                 // THEN commit this page's generated/adopted assignments. See SyncFullSyncTaskProcessor for the
                 // full rationale for the order; both are no-ops with no generated mappings.
                 await FlushGeneratedValueAssignmentDeletionsAsync();

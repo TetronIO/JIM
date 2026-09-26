@@ -256,7 +256,7 @@ The first commit moves the PRD and this plan to `doing/` with `Status: Doing`.
 5. **Checks before merging:**
    - `dotnet build JIM.sln` and `dotnet test JIM.sln`.
    - Boot the Docker stack with PostgreSQL started last: services wait, then start with no restarts.
-   - Integration Scenario 1.
+   - Integration Scenario 001.
 6. **Changelog and docs:**
    - Changelog: 🔄 "JIM's services now wait for the database at start-up instead of restarting until it is available."
    - Docs: the troubleshooting page gains the new log lines.

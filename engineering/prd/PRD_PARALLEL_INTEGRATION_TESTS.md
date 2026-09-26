@@ -96,7 +96,7 @@ The runner separates output into three distinct channels so that parallel runs r
 
 21. Each shard's verbose output (scenario stdout, stderr, Docker output, assertion detail) must be redirected to a per-shard log file at `test/integration/results/run-<runId>/scenario-<N>.log`. Nothing from this channel appears on the main console during a parallel run.
 22. Each shard emits short lifecycle *status events* at defined points: `Launched`, `SetupComplete`, `ScenarioRunning`, `ScenarioComplete` (with outcome and duration), and `TeardownComplete`. Each event is a structured record carrying shard index, scenario name, event type, timestamp, and optional payload (duration, exit code, error message).
-23. Status events must be delivered to the parent runner via a shared `System.Collections.Concurrent.ConcurrentQueue[PSObject]` passed to each `ForEach-Object -Parallel` runspace via `$using:`. The parent drains the queue on a short interval (e.g. every 500 ms) and writes one prefixed line per event to the console, e.g. `[s2] Scenario 4 - setup complete (42s)`.
+23. Status events must be delivered to the parent runner via a shared `System.Collections.Concurrent.ConcurrentQueue[PSObject]` passed to each `ForEach-Object -Parallel` runspace via `$using:`. The parent drains the queue on a short interval (e.g. every 500 ms) and writes one prefixed line per event to the console, e.g. `[s2] Scenario 004 - setup complete (42s)`.
 24. When a shard launches, the parent must print the shard's log file path to the console so developers can `tail -f` it on demand for detailed progress.
 25. When a shard completes with a failure, the parent must print the outcome line plus a tail of the shard's log file (last 50 lines, configurable) to the console, so common failures can be diagnosed without opening the log file.
 26. The end-of-run summary must print: total wall-clock duration, prepare-phase duration, per-shard passed/failed/skipped counts, paths to the per-shard logs, and the path to the merged `full-regression-<timestamp>.json`.
@@ -183,10 +183,10 @@ The runner separates output into three distinct channels so that parallel runs r
 
 ```
 Launching 4 shards, logs at test/integration/results/run-20260422-143012/
-[s1] Scenario 1 -> scenario-1.log
-[s2] Scenario 4 -> scenario-2.log
-[s3] Scenario 5 -> scenario-3.log
-[s4] Scenario 6 -> scenario-4.log
+[s1] Scenario 001 -> scenario-1.log
+[s2] Scenario 004 -> scenario-2.log
+[s3] Scenario 005 -> scenario-3.log
+[s4] Scenario 006 -> scenario-4.log
 [s1] setup complete (38s)
 [s2] setup complete (41s)
 [s3] setup complete (44s)

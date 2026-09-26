@@ -26,7 +26,7 @@ The middle two tiers both run under `dotnet test`; they differ in the database p
 
 **UI tests** live in `test/JIM.Web.Tests/`: plain NUnit tests for display logic (notably the causality Lineage and Timeline views) and Blazor component tests rendered with [bUnit](https://bunit.dev) (a test-only dependency; nothing ships in the containers). Component tests are kept deliberately narrow, covering components under `src/JIM.Web/Shared/` that carry logic or lifecycle behaviour rather than pure markup or pages; the scope rules are in `test/CLAUDE.md`.
 
-**Supporting projects** (no tests of their own): `test/JIM.TestSupport/` holds shared test helpers, and `test/JIM.TestScimServiceProvider/` is a SCIM 2.0 service provider built on `src/JIM.Scim`. The SCIM 2.0 Client Connector's unit tests in `JIM.Worker.Tests` drive its `MockScimProvider` in process, and the same provider runs as a container over HTTPS for Integration Scenario 15.
+**Supporting projects** (no tests of their own): `test/JIM.TestSupport/` holds shared test helpers, and `test/JIM.TestScimServiceProvider/` is a SCIM 2.0 service provider built on `src/JIM.Scim`. The SCIM 2.0 Client Connector's unit tests in `JIM.Worker.Tests` drive its `MockScimProvider` in process, and the same provider runs as a container over HTTPS for Integration Scenario 015.
 
 **Characteristics**:
 - Fast execution (milliseconds per test)
@@ -235,7 +235,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 **Example**: HR to Directory synchronisation scenario
 
 ```powershell
-./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Template Large
+./Run-IntegrationTests.ps1 -Scenario Scenario-001-HRToIdentityDirectory -Template Large
 ```
 
 **What Integration Tests Are Good At**:
@@ -280,7 +280,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 | Workflow Tests | Critical workflows (sync, provisioning, deletion) | On every commit |
 | Database-Backed Component Tests | Provider-specific / raw-SQL repository behaviour | On every PR (CI `database-tests` job); locally via `jim-test-db` |
 | LDAPS Certificate Validation Tests | Certificate chain, name and expiry validation against real directories | On every PR (CI `ldaps-tests` job) |
-| Integration Tests | Key scenarios (Scenarios 1-5) | On PR, nightly, before release |
+| Integration Tests | Key scenarios (Scenarios 001-005) | On PR, nightly, before release |
 
 ## Best Practices
 
@@ -416,7 +416,7 @@ var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
 - Export rule filter `r.MetaverseObjectTypeId == targetMvo.Type?.Id` always evaluated to `false`
 - Drift detection found NO applicable export rules
 - NO corrective Pending Exports were created
-- **Scenario 8 integration test failed**
+- **Scenario 008 integration test failed**
 
 **Result in Unit/Workflow Tests**:
 - All tests **PASSED** ✅

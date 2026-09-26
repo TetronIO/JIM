@@ -137,7 +137,7 @@ public partial class SyncRepository
         // OriginalValue stays 0. This used to be a latent hazard: if a just-created MVO were then
         // updated via EF SaveChangesAsync in the same page flush, the update issued "... WHERE xmin = 0",
         // matched no rows, and threw an unhandled DbUpdateConcurrencyException that aborted the run (the
-        // pre-release Full Regression Scenario14-AttributePriority failure). That hazard is now closed:
+        // pre-release Full Regression Scenario-014-AttributePriority failure). That hazard is now closed:
         // the MVO update path is raw SQL too (see UpdateMetaverseObjectsBulkAsync), keyed by Id with no
         // xmin predicate, and it detaches the graph afterwards so no later EF SaveChangesAsync re-runs the
         // xmin-guarded update. The bogus tracked xmin is therefore harmless: nothing on the sync write path
@@ -404,7 +404,7 @@ public partial class SyncRepository
     /// the raw COPY path, which attaches them to the tracker without their real store-generated xmin. The next EF
     /// update of such an object therefore issued <c>... WHERE xmin = 0</c>, matched no rows, and threw an unhandled
     /// <see cref="DbUpdateConcurrencyException"/> that aborted the whole run (the pre-release Full Regression
-    /// Scenario14-AttributePriority failure). Keying updates by <c>Id</c> and dropping the xmin predicate removes that
+    /// Scenario-014-AttributePriority failure). Keying updates by <c>Id</c> and dropping the xmin predicate removes that
     /// failure class and converges the update path with the create path, per the design note formerly on
     /// <see cref="CreateMetaverseObjectsBulkAsync"/>. Optimistic concurrency via xmin remains in force for the EF write
     /// paths where a concurrent writer genuinely exists (UI / API edits).

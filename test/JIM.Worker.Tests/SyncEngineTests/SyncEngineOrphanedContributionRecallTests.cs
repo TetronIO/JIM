@@ -126,7 +126,7 @@ public class SyncEngineOrphanedContributionRecallTests
     public void RecallOrphanedContributions_RuleDisabled_LeavesValueInPlace()
     {
         // Disabling a whole Synchronisation Rule is the same dormant statement at rule scope (#1537): the
-        // rule's contributions leave the cache (survivor takeover is unaffected, as Scenario 14's
+        // rule's contributions leave the cache (survivor takeover is unaffected, as Scenario 014's
         // DisabledRuleNoOpinion proves), but a sole contributor's values are retained, not cleared.
         var dept = DeptAttr();
         var disabledRule = ImportRule(syncRuleId: 1, dept, ruleEnabled: false);

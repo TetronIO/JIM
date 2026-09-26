@@ -162,7 +162,7 @@ public class FullSyncAfterImportWorkflowTests
 
     /// <summary>
     /// Tests full sync with users and groups (with membership references).
-    /// This more closely matches the actual Scenario 8 with 131 objects.
+    /// This more closely matches the actual Scenario 008 with 131 objects.
     ///
     /// This test was created to investigate the issue where Full Sync shows:
     /// - 131 Projected + 31 AttributeFlow (incorrect)

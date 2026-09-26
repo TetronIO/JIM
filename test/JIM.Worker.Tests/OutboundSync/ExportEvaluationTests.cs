@@ -359,7 +359,7 @@ public class ExportEvaluationTests
     /// an object lacking the class must add the class in the same export, or the directory refuses the whole
     /// modify with an objectClassViolation. This staging overload is the one the synchronisation engine's
     /// per-page path uses, and it was the only one of the three not calling AddClassMembershipChanges: found
-    /// live by Scenario 19, whose convergence export went out carrying jimBadgeNumber with no class add.
+    /// live by Scenario 019, whose convergence export went out carrying jimBadgeNumber with no class add.
     /// </summary>
     [Test]
     public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_FirstFlowOfAMergedClassesAttribute_AddsTheClassInTheSameExportAsync()
@@ -674,7 +674,7 @@ public class ExportEvaluationTests
     /// Deleting a Metaverse Object whose provisioning was never exported cancels that provisioning outright,
     /// whatever the export Synchronisation Rule's deprovisioning action (or with no matching rule at all): the
     /// object does not exist in the target system, so there is nothing to delete there and nothing to leave
-    /// behind. Found live in Scenario 4's leftover data: the unsent Create was being replaced with a Delete that
+    /// behind. Found live in Scenario 004's leftover data: the unsent Create was being replaced with a Delete that
     /// carried no identifier, which failed the export and left a CSO no import could ever confirm away.
     /// </summary>
     [TestCase(OutboundDeprovisionAction.Delete)]
@@ -3031,7 +3031,7 @@ public class ExportEvaluationTests
     /// against the matched Connected System Object, not against the null <c>existingCso</c> that routed
     /// evaluation into provisioning in the first place. Planned against null, the planner sees an object
     /// carrying no classes and stages the structural class as an Add; the directory entry already carries
-    /// it, so the export fails with "objectClass: value #0 already exists" (found by Scenario 4's
+    /// it, so the export fails with "objectClass: value #0 already exists" (found by Scenario 004's
     /// DeprovisionJoinedDelete arrange, where a disconnect then re-add rejoins the surviving entry).
     /// </summary>
     [Test]

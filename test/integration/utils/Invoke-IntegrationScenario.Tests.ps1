@@ -13,7 +13,7 @@
     $LASTEXITCODE straight after calling the scenario with the call operator, which
     PowerShell does not set for a .ps1 that returns rather than exits. The value that
     survived was whatever the last native command inside the scenario had left, so
-    Scenario 16 printed "Result: PASS" and the run exited 1 because SQL*Plus had exited 1.
+    Scenario 016 printed "Result: PASS" and the run exited 1 because SQL*Plus had exited 1.
 
     The reverse is the costlier direction and is covered here too: a scenario that fails
     without throwing must not be reported as a pass just because its last native call
@@ -61,7 +61,7 @@ Describe 'Invoke-IntegrationScenario' {
     Context 'when the scenario returns a result object' {
 
         It 'reports success even though an internal native command exited non-zero' {
-            # This is #1382 exactly: Scenario 16 against Oracle.
+            # This is #1382 exactly: Scenario 016 against Oracle.
             $path = New-TestScenario -Name 'ReturnsSuccess' -Body @'
 Write-Host "  Result: PASS"
 return @{ Scenario = "Fake"; Success = $true }
@@ -150,7 +150,7 @@ Write-Host "  Result: PASS"
             # read it knows it is a known limit rather than an oversight. A scenario that
             # returns normally leaves $LASTEXITCODE holding whatever its last native call
             # set, and PowerShell offers no way to tell that apart from a genuine exit 1.
-            # The remedy is the contract, not a cleverer heuristic: Scenario 6 and Scenario
+            # The remedy is the contract, not a cleverer heuristic: Scenario 006 and Scenario
             # 11 were given result objects so that nothing relies on this path.
             $path = New-TestScenario -Name 'ReturnsNothingAfterDirtyCall' -Body @'
 Write-Host "  Result: PASS"
@@ -166,7 +166,7 @@ Write-Host "  Result: PASS"
 
         It 'lets the exception reach the caller so the runner can report it' {
             $path = New-TestScenario -Name 'Throws' -Body @'
-throw "Scenario 11 failed: 2 cell(s) did not match expected results."
+throw "Scenario 011 failed: 2 cell(s) did not match expected results."
 '@
 
             { Invoke-IntegrationScenario -Path $path } | Should -Throw '*did not match expected results*'
@@ -200,8 +200,8 @@ return @{ Success = $true }
         It 'returns a single outcome even when the scenario also writes pipeline output' {
             # The regression this pins: passing non-result objects back out through the function's own
             # output stream turned the return value into an array whenever a scenario emitted anything,
-            # and the runner's $outcome.ExitCode then threw under strict mode. Scenario 16 (all
-            # Write-Host) never tripped it; Scenario 8 did, on the first Phase 0 baseline run for #288.
+            # and the runner's $outcome.ExitCode then threw under strict mode. Scenario 016 (all
+            # Write-Host) never tripped it; Scenario 008 did, on the first Phase 0 baseline run for #288.
             $path = New-TestScenario -Name 'NoisyPipeline' -NoDirtyExitCode -Body @'
 Write-Output "pipeline noise before the verdict"
 "another stray pipeline object"
