@@ -1,0 +1,389 @@
+@* Shared shell for JIM's standalone error pages (Error, SignInFailed): rendered outside the Blazor app, so it
+   carries its own theme loading, styles and illustration. Pages supply ViewData["Title"] and the content. *@
+@inject JIM.Web.Models.ThemeSettings ThemeSettings
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JIM: @ViewData["Title"]</title>
+    <link href="~/css/fonts/ibm-plex.css" rel="stylesheet" />
+    <link href="~/css/fonts/space-grotesk.css" rel="stylesheet" />
+    <link id="jim-theme-light" rel="stylesheet" href="@ThemeSettings.LightThemePath" />
+    <link id="jim-theme-dark" rel="stylesheet" href="@ThemeSettings.DarkThemePath" disabled />
+    <link rel="apple-touch-icon" sizes="180x180" href="~/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="~/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="~/favicon-16x16.png">
+    <script>
+        // Apply the user's saved JIM theme preference before first paint to avoid a flash.
+        // Mirrors MainLayout.razor: localStorage 'jim_darkMode' wins; otherwise OS preference.
+        (function () {
+            try {
+                var saved = localStorage.getItem('jim_darkMode');
+                var isDark = saved === 'true' || (saved === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                var lightLink = document.getElementById('jim-theme-light');
+                var darkLink = document.getElementById('jim-theme-dark');
+                if (isDark) {
+                    if (lightLink) lightLink.disabled = true;
+                    if (darkLink) darkLink.disabled = false;
+                    document.documentElement.classList.add('jim-dark-mode');
+                }
+            } catch (e) {
+                // localStorage may be unavailable (private mode, sandboxed iframe); fall back to light.
+            }
+        })();
+    </script>
+    <style>
+        :root {
+            --jim-error-shape-primary: #e65100;
+            --jim-error-shape-secondary: #ff8f00;
+            --jim-error-shape-tertiary: #00bcd4;
+            --jim-error-gear-color: #e65100;
+            --jim-error-gear-highlight: #ffffff;
+            --jim-error-gear-hole: #1a0a00;
+            --jim-error-crack-color: #ffcc02;
+            --jim-error-sparkle-color: #ffd54f;
+            --jim-error-warning-bg: #ff6d00;
+            --jim-error-warning-color: #ffffff;
+            --jim-error-stop-color: #d32f2f;
+            --jim-error-badge-text-dark: #1a0a00;
+            --jim-error-cookie-color: #c68642;
+            --jim-error-cookie-chip: #5d3a1a;
+        }
+
+        html.jim-dark-mode {
+            --jim-error-shape-primary: #ff8a50;
+            --jim-error-shape-secondary: #ffb74d;
+            --jim-error-shape-tertiary: #4dd0e1;
+            --jim-error-gear-color: #ff8a50;
+            --jim-error-gear-highlight: #ffffff;
+            --jim-error-gear-hole: #1a1a2e;
+            --jim-error-crack-color: #ffe082;
+            --jim-error-sparkle-color: #ffe082;
+            --jim-error-warning-bg: #ff9100;
+            --jim-error-warning-color: #ffffff;
+            --jim-error-stop-color: #ef5350;
+            --jim-error-badge-text-dark: #1a1a2e;
+            --jim-error-cookie-color: #d9a066;
+            --jim-error-cookie-chip: #4a2c12;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background-color: var(--mud-palette-background, #ffffff);
+            color: var(--mud-palette-text-primary, #1a1a2e);
+            font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .jim-error-page {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 100vh;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .jim-error-illustration {
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 2rem;
+        }
+
+        .jim-error-illustration svg {
+            width: 100%;
+            height: auto;
+        }
+
+        .jim-error-content {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .jim-error-title {
+            font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+            font-size: 2.25rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+            color: var(--mud-palette-text-primary, #1a1a2e);
+        }
+
+        .jim-error-subtitle {
+            font-size: 1.125rem;
+            color: var(--mud-palette-text-secondary, #6c757d);
+            margin: 0 0 1.5rem 0;
+            font-weight: 400;
+        }
+
+        .jim-error-request-id {
+            font-size: 0.875rem;
+            color: var(--mud-palette-text-secondary, #6c757d);
+            margin: 1.5rem 0;
+        }
+
+        .jim-error-request-id code {
+            font-family: "IBM Plex Mono", "Consolas", monospace;
+            background-color: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.05));
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .jim-error-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2.5rem;
+        }
+
+        .jim-error-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.25rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            line-height: 1.75;
+            text-decoration: none;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+            min-height: 36px;
+        }
+
+        .jim-error-button-filled {
+            background-color: var(--mud-palette-primary, #764ce8);
+            color: var(--mud-palette-primary-text, #ffffff);
+            border-color: var(--mud-palette-primary, #764ce8);
+        }
+
+        .jim-error-button-filled:hover {
+            background-color: var(--mud-palette-primary-darken, #4e3c80);
+            border-color: var(--mud-palette-primary-darken, #4e3c80);
+        }
+
+        .jim-error-button-outlined {
+            background-color: transparent;
+            color: var(--mud-palette-text-primary, #1a1a2e);
+            border-color: var(--mud-palette-text-secondary, #6c757d);
+        }
+
+        .jim-error-button-outlined:hover {
+            background-color: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.05));
+        }
+
+        .jim-error-button svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* Floating animation for shapes */
+        .jim-err-float-shape { animation: jim-err-float 6s ease-in-out infinite; }
+        .jim-err-shape-1 { animation-delay: 0s; }
+        .jim-err-shape-2 { animation-delay: 0.5s; }
+        .jim-err-shape-3 { animation-delay: 1s; }
+        .jim-err-shape-4 { animation-delay: 1.5s; }
+        .jim-err-shape-5 { animation-delay: 2s; }
+        .jim-err-shape-6 { animation-delay: 2.5s; }
+        .jim-err-shape-7 { animation-delay: 3s; }
+        .jim-err-shape-8 { animation-delay: 3.5s; }
+
+        @@keyframes jim-err-float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* Main gear wobble */
+        .jim-err-gear-group {
+            animation: jim-err-gear-wobble 4s ease-in-out infinite;
+            transform-origin: 200px 150px;
+        }
+
+        @@keyframes jim-err-gear-wobble {
+            0%, 100% { transform: rotate(0deg); }
+            15% { transform: rotate(8deg); }
+            25% { transform: rotate(6deg); }
+            35% { transform: rotate(10deg); }
+            50% { transform: rotate(5deg); }
+            65% { transform: rotate(-3deg); }
+            80% { transform: rotate(2deg); }
+        }
+
+        /* Mini gears spinning */
+        .jim-err-mini-gear-1 {
+            animation: jim-err-mini-spin 8s linear infinite;
+            transform-origin: 310px 70px;
+        }
+
+        .jim-err-mini-gear-2 {
+            animation: jim-err-mini-spin-reverse 10s linear infinite;
+            transform-origin: 100px 200px;
+        }
+
+        @@keyframes jim-err-mini-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @@keyframes jim-err-mini-spin-reverse {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(-360deg); }
+        }
+
+        /* Crack glow pulse */
+        .jim-err-crack { animation: jim-err-crack-glow 2s ease-in-out infinite; }
+
+        @@keyframes jim-err-crack-glow {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* Sparkle animation */
+        .jim-err-sparkle { animation: jim-err-sparkle-pulse 2s ease-in-out infinite; }
+        .jim-err-sparkle-1 { animation-delay: 0s; }
+        .jim-err-sparkle-2 { animation-delay: 0.7s; }
+        .jim-err-sparkle-3 { animation-delay: 1.4s; }
+
+        @@keyframes jim-err-sparkle-pulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Exclamation mark bounce */
+        .jim-err-exclamation { animation: jim-err-exclamation-bounce 3s ease-in-out infinite; }
+
+        @@keyframes jim-err-exclamation-bounce {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(0, -6px); }
+            50% { transform: translate(0, 0); }
+            75% { transform: translate(0, -3px); }
+        }
+
+        /* Sign-in loop (SignInFailed): traffic flows round the JIM/identity provider loop, the stop sign
+           pulses where JIM halted it, and a cookie wobbles, falls and crumbles, as the browser's cookies did. */
+        .jim-err-loop-flow {
+            stroke-dasharray: 10 8;
+            animation: jim-err-loop-flow 1.2s linear infinite;
+        }
+
+        @@keyframes jim-err-loop-flow {
+            to { stroke-dashoffset: -36; }
+        }
+
+        .jim-err-stop {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: jim-err-stop-pulse 2s ease-in-out infinite;
+        }
+
+        @@keyframes jim-err-stop-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .jim-err-cookie {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: jim-err-cookie-fall 4s ease-in infinite;
+        }
+
+        @@keyframes jim-err-cookie-fall {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            10% { transform: translateY(0) rotate(-10deg); opacity: 1; }
+            20% { transform: translateY(0) rotate(10deg); opacity: 1; }
+            30% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            58% { transform: translateY(72px) rotate(140deg); opacity: 1; }
+            62% { transform: translateY(78px) rotate(150deg); opacity: 0; }
+            90% { transform: translateY(-12px) rotate(0deg); opacity: 0; }
+            100% { transform: translateY(0) rotate(0deg); opacity: 1; }
+        }
+
+        .jim-err-crumb {
+            opacity: 0;
+            animation: jim-err-crumb-burst 4s ease-out infinite;
+        }
+
+        @@keyframes jim-err-crumb-burst {
+            0%, 57% { transform: translate(0, 0); opacity: 0; }
+            60% { transform: translate(0, 0); opacity: 1; }
+            85% { transform: translate(var(--jim-crumb-dx), var(--jim-crumb-dy)); opacity: 0; }
+            100% { transform: translate(var(--jim-crumb-dx), var(--jim-crumb-dy)); opacity: 0; }
+        }
+
+        .jim-error-detail {
+            font-size: 1rem;
+            line-height: 1.6;
+            text-align: left;
+            margin: 0 0 1rem 0;
+        }
+
+        .jim-error-detail code {
+            font-family: "IBM Plex Mono", "Consolas", monospace;
+            background-color: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.05));
+            padding: 0.1rem 0.35rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .jim-error-links {
+            text-align: left;
+            margin: 1.5rem 0 0 0;
+            padding-left: 1.25rem;
+            line-height: 1.8;
+        }
+
+        .jim-error-links a {
+            color: var(--jim-link-color, #0076d3);
+        }
+
+        .jim-error-links a:hover {
+            color: var(--jim-link-hover-color, #005da8);
+        }
+
+        @@media (max-width: 600px) {
+            .jim-error-page { padding: 1rem; }
+            .jim-error-illustration { max-width: 280px; }
+            .jim-error-title { font-size: 1.75rem; }
+            .jim-error-subtitle { font-size: 1rem; }
+        }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .jim-err-float-shape,
+            .jim-err-gear-group,
+            .jim-err-mini-gear-1,
+            .jim-err-mini-gear-2,
+            .jim-err-crack,
+            .jim-err-sparkle,
+            .jim-err-exclamation,
+            .jim-err-loop-flow,
+            .jim-err-stop,
+            .jim-err-cookie {
+                animation: none;
+            }
+
+            /* Crumbs only exist mid-animation; with motion off, the cookie simply stays whole. */
+            .jim-err-crumb { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="jim-error-page">
+        <div class="jim-error-illustration">
+            @RenderSection("Illustration", required: true)
+        </div>
+
+        <div class="jim-error-content">
+            @RenderBody()
+        </div>
+    </div>
+</body>
+</html>

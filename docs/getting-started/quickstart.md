@@ -89,7 +89,7 @@ For detailed air-gapped deployment guidance, see the [Deployment Guide](../admin
 Once running, open [http://localhost:5200](http://localhost:5200) in a browser on the JIM host and log in with your identity provider. Then use the **Example Data** feature to populate JIM with sample users and groups for testing. When you execute a template, a live progress bar appears on the template page so you can watch generation and persistence progress without leaving it; the same task is also visible on the Operations page.
 
 !!! warning "Signing in from another machine needs HTTPS"
-    Over plain HTTP, sign-in works only from a browser on the JIM host itself, at `localhost`. From any other machine it loops between JIM and your identity provider. Put JIM behind a TLS-terminating reverse proxy before anyone signs in from elsewhere; see [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
+    Over plain HTTP, sign-in works only from a browser on the JIM host itself, at `localhost`. From any other machine, JIM stops the sign-in and explains that HTTPS is required. Put JIM behind a TLS-terminating reverse proxy before anyone signs in from elsewhere; see [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
 
 For TLS, upgrades, monitoring and the rest of production deployment, see the [Deployment Guide](../administration/deployment.md).
 

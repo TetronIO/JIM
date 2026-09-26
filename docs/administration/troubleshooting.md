@@ -37,7 +37,7 @@ Waiting cannot fix rejected credentials, so the service does not wait for them: 
 
 ### Sign-in loops between JIM and the identity provider
 
-You open JIM, sign in at your identity provider, and are sent back to the identity provider again and again; the portal never loads. Each time round, the `jim.web` log records a warning like this:
+You open JIM, sign in at your identity provider, and land on a page titled **Sign-in could not complete** instead of the portal. (Earlier versions of JIM sent the browser back to the identity provider again and again instead, and the portal never loaded.) The `jim.web` log records a warning beginning `Sign-in stopped` that names the cause, next to one like this:
 
 ```
 '.AspNetCore.Correlation.<random characters>' cookie not found.
@@ -45,13 +45,15 @@ You open JIM, sign in at your identity provider, and are sent back to the identi
 
 and the [security audit log](security-audit-events.md) records a failed sign-in with the reason `OIDC correlation failed`.
 
-**What it means.** You are reaching JIM over plain HTTP at an address other than `localhost`, typically `http://<server name or IP address>:5200` from another machine. JIM's sign-in cookies are HTTPS-only in a production deployment, so the browser discards them; without them, JIM cannot match the identity provider's response to the sign-in it started, so it starts a new one. Safari can do the same even at `http://localhost:5200`. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the requirement.
+**What it means.** When sign-in starts, JIM sets short-lived cookies and checks for them when the identity provider sends the browser back; without them, JIM cannot match the identity provider's response to the sign-in it started. JIM's sign-in cookies are HTTPS-only in a production deployment, so a browser reaching JIM over plain HTTP at an address other than `localhost` discards them. That is typically `http://<server name or IP address>:5200` from another machine, and Safari can do the same even at `http://localhost:5200`. JIM restarts a sign-in once when its cookies go missing, which recovers a one-off loss such as cookies cleared mid-sign-in or the Back button onto the sign-in callback. When the connection means the cookies can never survive, or the restart fails the same way, JIM stops on this page instead of starting sign-in over and over. Nothing is lost when it stops: try again once the cause is fixed. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the HTTPS requirement.
 
 **How to fix.** Serve JIM over HTTPS:
 
-1. Put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy), and [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS.
+1. Put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy), and [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS. Without it, JIM sees only the proxy's plain HTTP connection even though your address bar shows `https://`.
 2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added for the plain-HTTP address (see the [SSO Setup Guide](sso-setup.md)).
 3. Open JIM at its `https://` address.
+
+If JIM is already served over HTTPS and trusts its proxy but you still see the page, the browser is blocking cookies for JIM's address, or something between the browser and JIM is removing the `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site, and make sure any proxy or security appliance passes them through unchanged.
 
 ### `Invalid parameter: redirect_uri` when running `Connect-JIM` interactively
 

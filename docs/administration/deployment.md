@@ -331,7 +331,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/rea
 The JIM containers serve HTTP on port 8080 internally. For production, place a reverse proxy in front to handle TLS termination.
 
 !!! warning "Browsers on other machines must use HTTPS"
-    Browser access to JIM from any machine other than the JIM host requires HTTPS. In a production deployment, JIM's sign-in cookies are HTTPS-only, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: the browser loops between JIM and your identity provider (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
+    Browser access to JIM from any machine other than the JIM host requires HTTPS. In a production deployment, JIM's sign-in cookies are HTTPS-only, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: JIM stops it on a **Sign-in could not complete** page rather than send the browser back to your identity provider again (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
 
     Plain HTTP works only at `http://localhost:5200`, which means from a browser on the JIM host itself. The host's own name or IP address fails even there, and Safari may refuse the cookies on `localhost` too.
 
