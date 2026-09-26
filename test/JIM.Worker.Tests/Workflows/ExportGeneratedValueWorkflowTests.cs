@@ -145,14 +145,21 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
     #endregion
 
-    #region Adoption
+    #region Adoption removed: generation always overwrites what the target already holds
 
+    /// <summary>
+    /// Formerly <c>FullSync_ExistingJoinedTargetAlreadyHoldingAValue_AdoptsItAndStagesNoChangeAsync</c>: before
+    /// the product-owner decision to remove connector-space adoption, a joined target already holding the
+    /// value a generation would have produced was adopted and no change was staged. Adoption is gone in export
+    /// mode entirely (#242): with no assignment, JIM always generates and exports, overwriting whatever the
+    /// target currently holds, exactly like any other export Attribute Flow.
+    /// </summary>
     [Test]
-    public async Task FullSync_ExistingJoinedTargetAlreadyHoldingAValue_AdoptsItAndStagesNoChangeAsync()
+    public async Task FullSync_ExistingJoinedTargetAlreadyHoldingADifferentValue_GeneratesAndExportsOverwritingItAsync()
     {
         var ctx = await SetUpExportGenerationAsync();
         var mvo = await SeedPreExistingMvoAsync(ctx, employeeId: "E1", matchKey: "P1");
-        await SeedTicketingCsoAsync(ctx, mvo.Id, loginName: "e1"); // already holds the value a generation would produce
+        var ticketingCso = await SeedTicketingCsoAsync(ctx, mvo.Id, loginName: "somethingelse"); // no assignment recorded for it
 
         ConfigureHrToJoinByMatchKey(ctx);
         await SeedHrCsoAsync(ctx, "E1", note: "first", matchKey: "P1");
@@ -161,14 +168,80 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemId == ctx.Ticketing.Id), Is.False,
-                "the adopted value already matches, so no change is staged");
+            var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == ticketingCso.Id);
+            var change = pendingExport.AttributeValueChanges.Single(c => c.AttributeId == ctx.TicketingLoginNameAttribute.Id);
+            Assert.That(change.StringValue, Is.EqualTo("e1"), "the value is generated from the base expression, never adopted from the target's existing value");
+
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1));
             var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.True);
+            Assert.That(assignment.Adopted, Is.False, "connector-space adoption has been removed");
             Assert.That(assignment.Value, Is.EqualTo("e1"));
+
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.True);
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.True);
+            Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False);
+        }
+    }
+
+    #endregion
+
+    #region Initial Export Only
+
+    [Test]
+    public async Task FullSync_InitialExportOnly_ExistingJoinedCsoGetsNoExportNoAssignmentAndConsumesNoSequenceNumberAsync()
+    {
+        var ctx = await SetUpSequenceExportGenerationAsync(sequenceStart: 1000);
+        var mapping = SyncRepo.SyncRules[ctx.TicketingExportRuleId].AttributeFlowRules.Single(m => m.Generation != null);
+        mapping.InitialExportOnly = true;
+        await DbContext.SaveChangesAsync();
+
+        // A brownfield, already-joined Ticketing Connected System Object (Update, not Create): InitialExportOnly
+        // means JIM never manages this attribute on an object it did not itself provision.
+        var mvo = await SeedPreExistingMvoAsync(ctx, employeeId: "E1", matchKey: "P1");
+        var ticketingCso = await SeedTicketingCsoAsync(ctx, mvo.Id, loginName: null);
+
+        ConfigureHrToJoinByMatchKey(ctx);
+        await SeedHrCsoAsync(ctx, "E1", note: "first", matchKey: "P1");
+
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            var pendingExport = SyncRepo.PendingExports.Values.SingleOrDefault(pe => pe.ConnectedSystemObjectId == ticketingCso.Id);
+            var accountNumberFlowed = pendingExport?.AttributeValueChanges.Any(c => c.AttributeId == ctx.TicketingAccountNumberAttribute!.Id) ?? false;
+            Assert.That(accountNumberFlowed, Is.False, "InitialExportOnly must not flow on an Update to an already-existing joined Connected System Object");
+            Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "a mapping that never evaluates must never record an assignment");
+            Assert.That(SyncRepo.GeneratedValueSequences, Is.Empty, "a mapping that never evaluates must never allocate a sequence number");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_InitialExportOnly_ProvisionedCsoStillGetsAGeneratedValueAsync()
+    {
+        var ctx = await SetUpSequenceExportGenerationAsync(sequenceStart: 1000);
+        var mapping = SyncRepo.SyncRules[ctx.TicketingExportRuleId].AttributeFlowRules.Single(m => m.Generation != null);
+        mapping.InitialExportOnly = true;
+        await DbContext.SaveChangesAsync();
+
+        await SeedHrCsoAsync(ctx, "E1", note: null); // no prior join: Ticketing is provisioned (Create)
+
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            var ticketingCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Ticketing.Id);
+            Assert.That(ticketingCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning));
+
+            var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == ticketingCso.Id);
+            var change = pendingExport.AttributeValueChanges.Single(c => c.AttributeId == ctx.TicketingAccountNumberAttribute!.Id);
+            Assert.That(change.IntValue, Is.EqualTo(1000), "InitialExportOnly still flows on the provisioning Create");
+
+            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1));
+            // A sequence row now exists (the mapping evaluated and allocated), unlike the Update case above.
+            // Its exact NextValue depends on the resolve options' block size (numbers are reserved in blocks,
+            // not one at a time), so this asserts existence rather than a specific number.
+            Assert.That(SyncRepo.GeneratedValueSequences, Has.Count.EqualTo(1));
         }
     }
 
@@ -331,6 +404,87 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
         Assert.That(async () => await processor.FlushPendingExportOperationsForTestsAsync(),
             Throws.TypeOf<InvalidOperationException>().With.Message.Contains("unresolved generated value marker"));
+    }
+
+    #endregion
+
+    #region Drift merge integrity
+
+    /// <summary>
+    /// Reproduces a bug found by Scenario 23 at runtime (not part of #242's original scope, fixed alongside it):
+    /// drift detection stages a corrective Pending Export for a Connected System Object earlier in the same
+    /// page (added straight to the worker's <c>_pendingExportsToCreate</c> batch); export evaluation for the
+    /// SAME Connected System Object later in the same page then merges its own changes into that already-staged
+    /// row (<c>ExportEvaluationServer.CreateOrUpdatePendingExportWithNoNetChangeAsync</c>'s in-memory merge
+    /// branch) rather than creating a new one. When one of those merged-in changes carries an unresolved
+    /// generated value marker, <see cref="SyncTaskProcessorBase.ResolveExportGeneratedValuesAsync"/> used to scan
+    /// only <c>result.PendingExports</c>, which never included the merged-into row, so the marker survived
+    /// unresolved into <c>FlushPendingExportOperationsAsync</c>'s integrity guard and the whole page threw. The
+    /// fix (<c>ExportEvaluationResult.MergedExistingPendingExports</c>) is what this test proves.
+    /// <para>
+    /// Simulates the "drift already staged a Pending Export" half directly via <see cref="SyncTaskProcessorBase.QueuePendingExportForTests"/>
+    /// (real drift detection needs EnforceState plus a genuinely drifted target value, which is unrelated
+    /// machinery this test does not need to exercise): the state it leaves behind - an existing Update Pending
+    /// Export for the target Connected System Object, sitting in the worker's batch before export evaluation
+    /// runs - is exactly what matters here, however it got there.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task FullSync_GeneratedChangeMergesIntoAnAlreadyStagedPendingExport_ResolvesTheMarkerWithNoExceptionAsync()
+    {
+        var ctx = await SetUpExportGenerationAsync();
+        var mvo = await SeedPreExistingMvoAsync(ctx, employeeId: null, matchKey: "P1"); // no Employee Id yet
+        var ticketingCso = await SeedTicketingCsoAsync(ctx, mvo.Id, loginName: null);
+        var accountNumberAttr = SyncRepo.ObjectTypes[ctx.TicketingCsoTypeId].Attributes.Single(a => a.Name == "accountNumber");
+
+        ConfigureHrToJoinByMatchKey(ctx);
+        await SeedHrCsoAsync(ctx, "E1", note: "first", matchKey: "P1");
+
+        var reloaded = await ReloadEntityAsync(ctx.Hr);
+        var profile = await CreateRunProfileAsync(reloaded.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource());
+
+        // Stand in for a drift-detected corrective Pending Export already staged for this same Connected
+        // System Object earlier in the page: an ordinary Update change, unrelated to the generated attribute.
+        var driftPendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ctx.Ticketing.Id,
+            ConnectedSystemObjectId = ticketingCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges =
+            {
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = accountNumberAttr,
+                    AttributeId = accountNumberAttr.Id,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    IntValue = 99
+                }
+            }
+        };
+        processor.QueuePendingExportForTests(driftPendingExport);
+
+        Assert.That(async () => await processor.PerformFullSyncAsync(), Throws.Nothing,
+            "a generated change merged into an already-staged Pending Export must resolve, not throw");
+
+        using (Assert.EnterMultipleScope())
+        {
+            var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == ticketingCso.Id);
+            var loginNameChange = pendingExport.AttributeValueChanges.Single(c => c.AttributeId == ctx.TicketingLoginNameAttribute.Id);
+            Assert.That(loginNameChange.StringValue, Is.EqualTo("e1"));
+            Assert.That(loginNameChange.PendingGeneration, Is.Null, "the marker must be resolved before persistence");
+            Assert.That(pendingExport.AttributeValueChanges.Any(c => c.AttributeId == accountNumberAttr.Id), Is.True,
+                "the pre-staged (drift-standing-in) change survives the merge alongside the resolved generated one");
+
+            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1));
+            var assignedOutcomes = activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned)
+                .ToList();
+            Assert.That(assignedOutcomes, Has.Count.EqualTo(1));
+        }
     }
 
     #endregion

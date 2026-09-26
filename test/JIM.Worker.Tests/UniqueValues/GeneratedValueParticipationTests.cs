@@ -2,23 +2,20 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.UniqueValues;
-using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
-using JIM.Models.Staging;
-using Moq;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.UniqueValues;
 
 /// <summary>
-/// <see cref="GeneratedValueParticipation"/> (Unique Value Generation, #242, Phase 2 work package J): the
-/// participating-target computation and adoptable-value lookup shared by the worker's real synchronisation
-/// and Sync Preview's read-only evaluation. These pin the exact semantics the worker's private copies used
-/// to have (single-source export mappings only, exclusions removed, first non-empty value in ascending
-/// Connected System id order, numbers rendered invariant), so an extraction that drifts the behaviour fails
-/// here rather than only being noticed as a Sync Preview discrepancy.
+/// <see cref="GeneratedValueParticipation"/> (Unique Value Generation, #242, Phase 2 work package J; adoption
+/// source changed by product-owner decision): the participating-target computation (still connector-space,
+/// feeding the generation-time collision gate) and the Metaverse Object's own-value adoption lookup, shared
+/// by the worker's real synchronisation and Sync Preview's read-only evaluation. These pin the exact
+/// semantics the worker's private copies used to have, so an extraction that drifts the behaviour fails here
+/// rather than only being noticed as a Sync Preview discrepancy.
 /// </summary>
 [TestFixture]
 public class GeneratedValueParticipationTests
@@ -175,102 +172,136 @@ public class GeneratedValueParticipationTests
 
     #endregion
 
-    #region FindAdoptableValueAsync
+    #region FindMetaverseOwnValue
 
     [Test]
-    public async Task FindAdoptableValueAsync_NoTargets_ReturnsNullWithoutQueryingAsync()
+    public void FindMetaverseOwnValue_NoValueForAttribute_ReturnsNull()
     {
-        var repository = new Mock<ISyncRepository>(MockBehavior.Strict);
+        var mvo = new MetaverseObject();
 
-        var result = await GeneratedValueParticipation.FindAdoptableValueAsync(repository.Object, Guid.NewGuid(), []);
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
 
         Assert.That(result, Is.Null);
     }
 
     [Test]
-    public async Task FindAdoptableValueAsync_NoJoinedTargetSystem_ReturnsNullAsync()
+    public void FindMetaverseOwnValue_PersistedTextValueNotPendingRemoval_IsReturned()
     {
-        var mvoId = Guid.NewGuid();
-        var repository = new Mock<ISyncRepository>();
-        repository.Setup(r => r.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
-                It.IsAny<IEnumerable<Guid>>(), It.IsAny<IEnumerable<int>>()))
-            .ReturnsAsync([]);
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith" } }
+        };
 
-        var result = await GeneratedValueParticipation.FindAdoptableValueAsync(
-            repository.Object, mvoId, [(ConnectedSystemId: 3, AttributeId: 500)]);
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
 
-        Assert.That(result, Is.Null);
+        Assert.That(result, Is.EqualTo("jsmith"), "a value left behind by a withdrawn higher-priority contributor must be adoptable");
     }
 
     [Test]
-    public async Task FindAdoptableValueAsync_LowestConnectedSystemIdWithAValue_WinsOverAHigherIdAsync()
+    public void FindMetaverseOwnValue_ValuePendingRemovalThisPass_ReturnsNull()
     {
-        var mvoId = Guid.NewGuid();
-        var csoHigh = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 5 };
-        var csoLow = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 2 };
+        var value = new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith" };
+        var mvo = new MetaverseObject { AttributeValues = { value } };
+        mvo.PendingAttributeValueRemovals.Add(value);
 
-        var repository = new Mock<ISyncRepository>();
-        repository.Setup(r => r.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
-                It.IsAny<IEnumerable<Guid>>(), It.IsAny<IEnumerable<int>>()))
-            .ReturnsAsync(new Dictionary<(Guid, int), ConnectedSystemObject>
-            {
-                [(mvoId, 5)] = csoHigh,
-                [(mvoId, 2)] = csoLow
-            });
-        repository.Setup(r => r.GetCsoAttributeValuesByCsoIdsAsync(It.IsAny<IEnumerable<Guid>>()))
-            .ReturnsAsync(
-            [
-                new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = csoHigh, AttributeId = 700, StringValue = "high-value" },
-                new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = csoLow, AttributeId = 500, StringValue = "low-value" }
-            ]);
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
 
-        var result = await GeneratedValueParticipation.FindAdoptableValueAsync(
-            repository.Object, mvoId, [(ConnectedSystemId: 5, AttributeId: 700), (ConnectedSystemId: 2, AttributeId: 500)]);
-
-        Assert.That(result, Is.EqualTo("low-value"), "ascending Connected System id order must win, not declaration order");
+        Assert.That(result, Is.Null, "a value being removed this same pass by a real removal must never be adopted");
     }
 
     [Test]
-    public async Task FindAdoptableValueAsync_NumericTarget_RendersIntValueInvariantAsync()
+    public void FindMetaverseOwnValue_IntValue_RendersInvariant()
     {
-        var mvoId = Guid.NewGuid();
-        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 3 };
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, IntValue = 4242 } }
+        };
 
-        var repository = new Mock<ISyncRepository>();
-        repository.Setup(r => r.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
-                It.IsAny<IEnumerable<Guid>>(), It.IsAny<IEnumerable<int>>()))
-            .ReturnsAsync(new Dictionary<(Guid, int), ConnectedSystemObject> { [(mvoId, 3)] = cso });
-        repository.Setup(r => r.GetCsoAttributeValuesByCsoIdsAsync(It.IsAny<IEnumerable<Guid>>()))
-            .ReturnsAsync([new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = cso, AttributeId = 500, IntValue = 4242 }]);
-
-        var result = await GeneratedValueParticipation.FindAdoptableValueAsync(
-            repository.Object, mvoId, [(ConnectedSystemId: 3, AttributeId: 500)]);
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
 
         Assert.That(result, Is.EqualTo("4242"));
     }
 
     [Test]
-    public async Task FindAdoptableValueAsync_EmptyValueAtFirstTarget_FallsThroughToTheNextAsync()
+    public void FindMetaverseOwnValue_LongValue_RendersInvariant()
     {
-        var mvoId = Guid.NewGuid();
-        var csoEmpty = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 1 };
-        var csoWithValue = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 2 };
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, LongValue = 42424242424242L } }
+        };
 
-        var repository = new Mock<ISyncRepository>();
-        repository.Setup(r => r.GetConnectedSystemObjectsByMvoIdsAndTargetSystemsAsync(
-                It.IsAny<IEnumerable<Guid>>(), It.IsAny<IEnumerable<int>>()))
-            .ReturnsAsync(new Dictionary<(Guid, int), ConnectedSystemObject>
-            {
-                [(mvoId, 1)] = csoEmpty,
-                [(mvoId, 2)] = csoWithValue
-            });
-        repository.Setup(r => r.GetCsoAttributeValuesByCsoIdsAsync(It.IsAny<IEnumerable<Guid>>()))
-            .ReturnsAsync([new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = csoWithValue, AttributeId = 500, StringValue = "adopted" }]);
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
 
-        var result = await GeneratedValueParticipation.FindAdoptableValueAsync(
-            repository.Object, mvoId, [(ConnectedSystemId: 1, AttributeId: 400), (ConnectedSystemId: 2, AttributeId: 500)]);
+        Assert.That(result, Is.EqualTo("42424242424242"));
+    }
 
-        Assert.That(result, Is.EqualTo("adopted"));
+    [Test]
+    public void FindMetaverseOwnValue_AssertedNullMarkerRow_ReturnsNull()
+    {
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, NullValue = true } }
+        };
+
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
+
+        Assert.That(result, Is.Null, "an asserted-null marker carries no value to adopt");
+    }
+
+    [Test]
+    public void FindMetaverseOwnValue_ValueContributedByTheGeneratingRuleItself_ReturnsNull()
+    {
+        // The commit-loser case: a value THIS generated mapping produced in an earlier pass, whose assignment
+        // then lost the cross-run collision race, is left on the object with no assignment of its own. Self-
+        // healing means the object must draw a fresh candidate next time, never "adopt" its own abandoned
+        // attempt, so a value stamped by the generating rule's own id must never be treated as adoptable.
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "joe.bloggs", ContributedBySyncRuleId = 1 } }
+        };
+
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void FindMetaverseOwnValue_ValueContributedByADifferentRule_IsReturned()
+    {
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith", ContributedBySyncRuleId = 2 } }
+        };
+
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
+
+        Assert.That(result, Is.EqualTo("jsmith"));
+    }
+
+    [Test]
+    public void FindMetaverseOwnValue_NoGeneratingSyncRuleIdSupplied_DoesNotExcludeByProvenance()
+    {
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith", ContributedBySyncRuleId = 1 } }
+        };
+
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: null);
+
+        Assert.That(result, Is.EqualTo("jsmith"), "with no generating rule id to compare against, provenance cannot disqualify a value");
+    }
+
+    [Test]
+    public void FindMetaverseOwnValue_ValueForADifferentAttribute_ReturnsNull()
+    {
+        var mvo = new MetaverseObject
+        {
+            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 999, StringValue = "other" } }
+        };
+
+        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
+
+        Assert.That(result, Is.Null);
     }
 
     #endregion

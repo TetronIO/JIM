@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 The setup script no longer stops at `Failed to download .env.example`, and the manual download commands in the Deployment Guide and Quick Start work again: releases publish the environment template as `default.env.example`.
+- 🐛 Opening JIM over plain HTTP from another machine no longer loops endlessly between JIM and the identity provider; sign-in stops on a page explaining that browser access from other machines requires HTTPS. A one-off lost sign-in cookie is still recovered automatically.
 - 🐛 `Get-JIMScheduleExecution -Status` and the REST API's Schedule Execution list now return only executions with the requested status, instead of every execution.
 - 🐛 A Schedule with a step that cannot be queued, for example because its Connected System is being deleted, no longer runs its earlier steps and then reports Complete; it runs nothing, fails naming the step, and each step shows why it did not run. (#1768)
 - 🐛 A Schedule Execution cancelled while a step is running now stays cancelled, instead of being marked Complete or Failed when that step finishes. (#1768)
@@ -38,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Case-insensitive Object Matching Rules treated `_` and `%` as wildcards, so `j_smith` could match `jxsmith` and join the wrong object, on inbound joins and export matching alike; they now require an exact case-insensitive match.
 - 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
 - 🐛 JIM's services now exit with a failure code when they stop on an error, instead of reporting a clean stop to the container runtime, systemd or monitoring. (#1808)
+- 🐛 A synchronisation that fails while saving its progress is now marked Failed straight away, instead of only after two further attempts that logged misleading database errors.
 
 ### Security
 

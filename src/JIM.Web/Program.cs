@@ -357,15 +357,11 @@ try
 
                 // Failures a fresh attempt recovers completely (a replayed callback whose single-use code is
                 // already spent, a lost correlation cookie) restart the sign-in instead of surfacing an
-                // exception page; the audit record above still captures every occurrence. Everything else
-                // still throws, keeping genuine provider and configuration errors loud and diagnosable.
-                if (OidcSignInRecovery.ShouldRestartSignIn(ctx.Failure))
-                {
-                    ctx.Response.Redirect(OidcSignInRecovery.GetSafeReturnPath(ctx.Properties?.RedirectUri));
-                    ctx.HandleResponse();
-                }
-
-                return Task.CompletedTask;
+                // exception page; the audit record above still captures every occurrence. The restart is
+                // bounded, and refused outright where the browser can never keep the sign-in cookies (plain
+                // HTTP from another machine), so it cannot become a silent loop. Everything else still throws,
+                // keeping genuine provider and configuration errors loud and diagnosable.
+                return OidcSignInRecovery.HandleRemoteFailureAsync(ctx);
             };
 
             // Security audit events (issue #500): a token was returned but failed local validation (bad signature,

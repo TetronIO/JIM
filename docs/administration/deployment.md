@@ -348,7 +348,7 @@ curl --cacert tls/ca.crt --resolve jim.your-domain.local:5200:127.0.0.1 \
 JIM serves HTTPS itself. In production, `jim.web` listens for HTTPS on container port `8443`, which `docker-compose.production.yml` publishes on host port `5200`, so a fresh install can be signed into from any machine at `https://<JIM's name>:5200` with no reverse proxy.
 
 !!! warning "Browsers on other machines must use HTTPS"
-    JIM's sign-in cookies are HTTPS-only in a production deployment, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: the browser loops between JIM and your identity provider (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
+    JIM's sign-in cookies are HTTPS-only in a production deployment, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: JIM stops it on a **Sign-in could not complete** page rather than send the browser back to your identity provider again (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
 
 ### The Certificate
 

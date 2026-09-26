@@ -81,7 +81,7 @@ proxy_buffers 8 16k;
 
 ### Sign-in loops between JIM and the identity provider
 
-You open JIM, sign in at your identity provider, and are sent back to the identity provider again and again; the portal never loads. Each time round, the `jim.web` log records a warning like this:
+You open JIM, sign in at your identity provider, and land on a page titled **Sign-in could not complete** instead of the portal. (Earlier versions of JIM sent the browser back to the identity provider again and again instead, and the portal never loaded.) The `jim.web` log records a warning beginning `Sign-in stopped` that names the cause, next to one like this:
 
 ```
 '.AspNetCore.Correlation.<random characters>' cookie not found.
@@ -89,13 +89,15 @@ You open JIM, sign in at your identity provider, and are sent back to the identi
 
 and the [security audit log](security-audit-events.md) records a failed sign-in with the reason `OIDC correlation failed`.
 
-**What it means.** Your browser is reaching JIM over plain HTTP at an address other than `localhost`. JIM's sign-in cookies are HTTPS-only in a production deployment, so the browser discards them; without them, JIM cannot match the identity provider's response to the sign-in it started, so it starts a new one. A standard installation serves HTTPS only, so this happens when JIM's plain HTTP port has been published to other machines, typically by a compose override of your own, or by starting JIM without `docker-compose.production.yml`. Safari can do the same even at `http://localhost`. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the requirement.
+**What it means.** When sign-in starts, JIM sets short-lived cookies and checks for them when the identity provider sends the browser back; without them, JIM cannot match the identity provider's response to the sign-in it started. JIM's sign-in cookies are HTTPS-only in a production deployment, so a browser reaching JIM over plain HTTP at an address other than `localhost` discards them. A standard installation serves HTTPS only, so this happens when JIM's plain HTTP port has been published to other machines, typically by a compose override of your own or by starting JIM without `docker-compose.production.yml`. Safari can do the same even at `http://localhost`. JIM restarts a sign-in once when its cookies go missing, which recovers a one-off loss such as cookies cleared mid-sign-in or the Back button onto the sign-in callback. When the connection means the cookies can never survive, or the restart fails the same way, JIM stops on this page instead of starting sign-in over and over. Nothing is lost when it stops: try again once the cause is fixed. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the HTTPS requirement.
 
 **How to fix.**
 
-1. Start JIM with `docker-compose.production.yml`, which serves HTTPS, and remove any override that publishes port `8080` beyond the host's loopback interface.
-2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added (see the [SSO Setup Guide](sso-setup.md)).
+1. Serve JIM over HTTPS: start it with `docker-compose.production.yml`, which does, and remove any override that publishes port `8080` beyond the host's loopback interface. If a reverse proxy in front of JIM forwards plain HTTP to it, [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS. Without it, JIM sees only the proxy's plain HTTP connection even though your address bar shows `https://`.
+2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added for a plain-HTTP address (see the [SSO Setup Guide](sso-setup.md)).
 3. Open JIM at its `https://` address.
+
+If JIM is already served over HTTPS and trusts its proxy but you still see the page, the browser is blocking cookies for JIM's address, or something between the browser and JIM is removing the `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site, and make sure any proxy or security appliance passes them through unchanged.
 
 ### `Invalid parameter: redirect_uri` when running `Connect-JIM` interactively
 
