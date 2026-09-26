@@ -217,7 +217,7 @@ public class LdapConnectorPreflightTests
         var check = await RunAndGetAsync(PasswordPreflightCheck.ResetRights, containerExternalIds: []);
 
         Assert.That(check.State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine));
-        Assert.That(check.Details, Has.Some.Contains("Partitions and Containers"));
+        Assert.That(check.Details, Has.Some.Contains("Scope tab"));
     }
 
 

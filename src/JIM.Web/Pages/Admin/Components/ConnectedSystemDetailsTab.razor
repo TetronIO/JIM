@@ -15,44 +15,10 @@
     </MudForm>
     @* mt-3 (+ the input control's own 4px bottom margin) gives a 16px gap, matching the panel's pa-4 padding below the button so it sits symmetrically inside the panel *@
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-3" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
-</MudPaper>
 
-@* ─── Directory Capabilities (hidden entirely when the Connector cannot detect capabilities) ─── *@
-@if (_capabilities != null)
-{
-<MudPaper Outlined="true" Class="pa-4 mt-6">
-    <MudText Typo="Typo.h6">Directory Capabilities</MudText>
-    <MudText Typo="Typo.body1" Class="mt-2">
-        Facts the Connector detected about the target system during a previous connection, shown here for
-        reference only. Read-only: nothing here can be changed, and reading it never opens a new connection.
-    </MudText>
-
-    @if (_capabilities.Count > 0)
-    {
-        <MudSimpleTable Class="mt-4" Dense="true" Hover="false" Striped="true" Elevation="0">
-            <tbody>
-                @foreach (var capability in _capabilities)
-                {
-                    @* width: 1% + nowrap shrinks the label column to its content, keeping values beside their labels *@
-                    <tr>
-                        <td style="width: 1%; white-space: nowrap; padding-right: 2rem;">@capability.Name</td>
-                        <td>@capability.Value</td>
-                    </tr>
-                }
-            </tbody>
-        </MudSimpleTable>
-    }
-    else
-    {
-        <MudAlert Severity="Severity.Info" Class="mt-4">
-            <MudText>
-                JIM has not detected any capabilities for this Connected System yet. These are read from the
-                target system during a connection, so they will appear here once one has completed successfully.
-            </MudText>
-        </MudAlert>
-    }
+    @* Renders nothing when the Connector cannot detect facts about its target; see the component. *@
+    <ConnectedSystemDetectedFacts Capabilities="_capabilities" />
 </MudPaper>
-}
 
 @code {
     [Parameter, EditorRequired]
@@ -63,8 +29,8 @@
 
     private bool IsDetailsFormValid { get; set; }
     private string[] DetailsFormErrors { get; set; } = [];
-    // Null means the Connector does not support capability detection and the card is hidden; an empty list
-    // means it does but nothing has been detected yet, rendered as a hint.
+    // Null means the Connector does not support capability detection and the strip is not rendered; an empty
+    // list means it does but nothing has been detected yet, rendered as a single line saying so.
     private List<ConnectorCapability>? _capabilities;
     private int _capabilitiesLoadedForConnectedSystemId;
 

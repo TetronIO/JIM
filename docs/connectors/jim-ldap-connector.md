@@ -58,9 +58,9 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Authentication types**<br /> Simple bind or NTLM authentication.
 - **Automatic retry**<br /> Configurable retry with exponential backoff for transient failures.
 
-### Directory Capabilities Card
+### Detected facts
 
-The Connected System's **Details** tab shows a **Directory Capabilities** card with the facts JIM has detected about the target directory:
+The Connected System's **Details** tab shows a **Detected** strip beneath the form with the facts JIM has detected about the target directory:
 
 | Fact | Shown when |
 |------|------------|
@@ -71,7 +71,7 @@ The Connected System's **Details** tab shows a **Directory Capabilities** card w
 | Pinned Directory Server | A domain controller has been [pinned](#domain-controller-discovery-and-pinning) |
 | Invocation Id | JIM could read the pinned domain controller's invocationId |
 
-These are read from data JIM already captured during a previous connection; viewing the card never opens a new connection to the directory. Before the first successful connection, the card shows a hint rather than an error. It is read-only: there is nothing here to configure.
+These are read from data JIM already captured during a previous connection; viewing them never opens a new connection to the directory. Before the first successful connection, the strip says nothing has been detected yet. It is read-only: there is nothing here to configure.
 
 Available to automation via `GET /connected-systems/{id}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
@@ -229,7 +229,7 @@ In practice this affects Partition discovery on Active Directory and Samba AD, w
 
 ### Container Scope
 
-Each selected Container carries a scope, set with the two-segment control on its row in the Container tree on the Connected System's **Partitions & Containers** tab:
+Each selected Container carries a scope, set with the two-segment control on its row in the Container tree on the Connected System's **Scope** tab:
 
 | Scope | What is imported | Containers beneath it |
 |-------|------------------|-----------------------|
@@ -444,7 +444,7 @@ Active Directory decides for itself regardless. It refuses a password write unle
 
 Active Directory and Samba AD use `unicodePwd`, which the Connector encodes correctly on your behalf.
 
-**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the directory's password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
+**Check the channel before relying on it.** The Connected System's Passwords tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the directory's password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
 
 There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
 

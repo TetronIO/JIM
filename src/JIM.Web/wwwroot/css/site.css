@@ -2416,6 +2416,44 @@ html[lang] .jim-schema-change-table td {
     flex-shrink: 0;
 }
 
+/* Detected facts strip (Connected System Details tab): read-only label-over-value items under the form,
+   separated from it by a rule. Items wrap at narrow widths; the heading item is the first of them so the
+   label reads "Detected" in the same column position as every fact's own label. */
+.jim-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 32px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+}
+
+.jim-fact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.jim-fact-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-fact-value {
+    font-size: 0.9375rem;
+    color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
+}
+
+/* The heading item's info button sits inside a 0.75rem label; the button's own size is fixed in the
+   jim-info-button rule, so only the gap to the word before it is set here. */
+.jim-fact-heading .jim-info-button {
+    margin-left: 2px;
+}
+
 /* Schedule Step Drag and Drop Styles */
 .jim-step-drop-zone {
     min-height: 50px;

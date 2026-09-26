@@ -1670,7 +1670,7 @@ public partial class ConnectedSystemServer
     /// <see cref="ValidateConnectedSystemSettings"/>. That method also asks the Connector, whose own validation is a
     /// live probe: the LDAP Connector binds to the directory, the File Connector looks for the file. Persisting the
     /// answer to a live probe as a property of the configuration means an unreachable target marks stored settings
-    /// invalid, and the portal gates the Schema, Partitions &amp; Containers and Matching tabs on this flag, so saving
+    /// invalid, and the portal gates the Schema, Scope and Matching tabs on this flag, so saving
     /// anything at all during a directory outage locked an administrator out of three tabs until somebody re-saved
     /// the Settings tab. It also put a network round trip on the path of every unrelated save.
     ///
@@ -3177,9 +3177,9 @@ public partial class ConnectedSystemServer
     /// data itself, it is only ever replayed to the owning Connector to interpret.
     /// <para>
     /// Null when the Connected System does not exist or its Connector does not implement
-    /// <see cref="IConnectorDetectedCapabilities"/> (the UI hides the card entirely); an empty list when the
+    /// <see cref="IConnectorDetectedCapabilities"/> (the UI renders nothing); an empty list when the
     /// Connector supports detection but nothing has been detected yet (for example, before the first
-    /// successful connection), which the UI renders as a hint.
+    /// successful connection), which the UI renders as a single line saying so.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
@@ -3962,7 +3962,7 @@ public partial class ConnectedSystemServer
                 // Record it and its whole subtree as matched, or the removal pass deletes it again in this same
                 // refresh: "not matched" is how that pass recognises a container that has left the directory. A
                 // container created since the last refresh was once reported as added and then silently dropped, so
-                // it never appeared on the Partitions and Containers tab to be selected.
+                // it never appeared on the Scope tab to be selected.
                 MarkContainerTreeMatched(newContainer, matchedContainers);
 
                 result.AddedContainers.Add(new HierarchyChangeItem

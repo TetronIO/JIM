@@ -1399,7 +1399,7 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapabili
 
 ### Notes
 
-- These facts mirror the **Directory Capabilities** card on the Connected System's Details page in the portal; see the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) documentation for what each fact means.
+- These facts mirror the **Detected** strip on the Connected System's Details tab in the portal; see the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#detected-facts) documentation for what each fact means.
 
 ---
 

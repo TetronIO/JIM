@@ -77,7 +77,7 @@ Automation gets the same evaluation. Start a preview with [`New-JIMConfiguration
 | Surface | Changes that can trigger it |
 |---|---|
 | [Synchronisation Rules](synchronisation-rules.md) | Direction, enabling, provisioning and projection, scope, Attribute Flow, Object Matching Rules; **destructive:** Deprovisioning Action, Inbound Out-of-Scope Action |
-| [Connected Systems](connected-systems.md) (Details, Settings, Schema, Partitions & Containers) | Connector settings, matching mode, unresolved reference handling, attribute selection, selecting a container; **destructive:** deselecting an Object Type, a partition or a container |
+| [Connected Systems](connected-systems.md) (Details, Settings, Schema, Scope) | Connector settings, matching mode, unresolved reference handling, attribute selection, selecting a container; **destructive:** deselecting an Object Type, a partition or a container |
 | [Metaverse Object Types](metaverse.md#deletion-behaviour) | Attribute bindings; **destructive:** deletion rule, grace period, deletion trigger systems. The Deprovisioning Action dropdown on this page edits Synchronisation Rules and is confirmed the same way. |
 | [Metaverse Attributes](metaverse.md#attributes) | Data type, plurality, Object Type bindings |
 | [Service Settings](service-settings.md) | The few settings that steer synchronisation; nearly all Service Settings are operational and save in silence |

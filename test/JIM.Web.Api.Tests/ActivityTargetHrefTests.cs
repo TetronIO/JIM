@@ -54,7 +54,7 @@ public class ActivityTargetHrefTests
     {
         var href = Helpers.GetConnectedSystemActivityHref(2, ActivityTargetOperationType.ImportHierarchy);
 
-        Assert.That(href, Is.EqualTo("/admin/connected-systems/2/?t=partitions-containers"));
+        Assert.That(href, Is.EqualTo("/admin/connected-systems/2/?t=scope"));
     }
 
     [Test]
