@@ -12,7 +12,7 @@ namespace JIM.Worker.Tests;
 /// Which failures <c>Worker.SafeFailActivityAsync</c> records through a fresh DbContext first. A failure raised
 /// while a page was being persisted leaves the run's own context holding that page's unsaved entities, so saving
 /// the Activity on it re-attempts the same doomed write: the Activity is then only failed at the third attempt,
-/// after two misleading Error lines (found by Scenario 23, where JIM's own integrity guard threw mid-flush and
+/// after two misleading Error lines (found by Scenario 023, where JIM's own integrity guard threw mid-flush and
 /// the second attempt failed on a foreign key for execution items that were never written).
 /// </summary>
 [TestFixture]

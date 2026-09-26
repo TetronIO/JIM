@@ -77,7 +77,7 @@
 #   test/JIM.TestScimServiceProvider/** (SCIM integration-test service provider)
 #   -----------------------------------------------------------------------------
 #   A test-only SCIM 2.0 service provider (the unit suite's MockScimProvider
-#   hosted over HTTPS) that integration Scenario 15 drives the SCIM Connector
+#   hosted over HTTPS) that integration Scenario 015 drives the SCIM Connector
 #   against. Its whole purpose is to echo request-derived JSON back at the
 #   caller, which CodeQL's taint analysis reads as reflected XSS even though
 #   every response is served as application/scim+json (never HTML) on an

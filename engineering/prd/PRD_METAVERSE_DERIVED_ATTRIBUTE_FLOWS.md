@@ -143,7 +143,7 @@ Deriving values inside the Metaverse also raises a question JIM has never had to
 
 ## Dependencies
 
-- None to build. #242 depends on this PRD for its Scenario 1 conversion and for evaluating generated base expressions that read `mv["..."]`.
+- None to build. #242 depends on this PRD for its Scenario 001 conversion and for evaluating generated base expressions that read `mv["..."]`.
 - Reuses #892's per-object review flag, `ExpressionInputResolver`, Missing Input Behaviour (#1361) and the Example Data topological sort.
 
 ## Open Questions

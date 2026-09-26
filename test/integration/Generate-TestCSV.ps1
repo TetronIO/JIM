@@ -24,7 +24,7 @@
     Omits the IT-owned columns (`samAccountName`, `email`, `userPrincipalName`) from hr-users.csv, so a
     scenario that generates these values (Unique Value Generation, #242) receives a feed shaped the way
     a real HR system's would be, rather than one that already carries the identifiers JIM is meant to
-    generate. Used by Scenario 1 (`Setup-Scenario1.ps1 -GenerateAccountName`) and Scenario 23. Every
+    generate. Used by Scenario 001 (`Setup-Scenario-001.ps1 -GenerateAccountName`) and Scenario 023. Every
     other emitted file, and hr-users.csv's other columns, are unaffected; omitted, the CSV is
     byte-for-byte identical to a run without this switch.
 

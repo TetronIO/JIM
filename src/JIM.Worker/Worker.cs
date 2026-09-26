@@ -1000,7 +1000,7 @@ public class Worker : BackgroundService
         // from its identity map rather than refreshing it from a later query, so a Synchronisation Rule or
         // Metaverse Object Type loaded for one batch was being reused, as it then stood, by every batch after it:
         // an export rule switched to Disconnect after the first batch still had its directory objects deleted
-        // (found by Scenario 4, Test 9). A fresh instance reads the configuration as it stands now, and releases
+        // (found by Scenario 004, Test 9). A fresh instance reads the configuration as it stands now, and releases
         // everything the batch tracked when it is done.
         using var jim = _jimFactory.Create();
 

@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | **Phase 1 Complete** |
 | **Phase 1** | Supported (currently shipped capabilities) |
-| **Phase 2** | Started: Scenario 16 (JIM SQL Connector matrix) is implemented against Microsoft SQL Server and Oracle Database; Multi-Source Aggregation and Performance Baselines remain road-mapped |
+| **Phase 2** | Started: Scenario 016 (JIM SQL Connector matrix) is implemented against Microsoft SQL Server and Oracle Database; Multi-Source Aggregation and Performance Baselines remain road-mapped |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 
 ---
@@ -59,64 +59,64 @@ This single script handles everything:
 **Common Options:**
 
 ```powershell
-# Run with default settings (Scenario1, Nano template, all steps)
+# Run with default settings (Scenario-001, Nano template, all steps)
 ./test/integration/Run-IntegrationTests.ps1
 
 # Run ALL scenarios sequentially (full regression)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small
 
 # Run a specific scenario
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory"   # HR CSV -> AD provisioning
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync"         # APAC AD -> EMEA AD sync
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario4-DeletionRules"           # Deletion rules testing
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario5-MatchingRules"           # Matching rules testing
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario6-SchedulerService"        # Scheduler service testing
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" # Clear connector space testing
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import Run Profiles
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Synchronisation Rule scoping behaviour (inbound + outbound)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario12-RelativeDateScoping"       # Relative-date inbound scoping (joiner/leaver)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario13-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority"        # Attribute Priority multi-source winner resolution (#91, OpenLDAP only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix"        # JIM SQL Connector provider x capability matrix (SQL Server + Oracle)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix" -Provider SqlServer  # one provider only (quicker loop; skips the 13.6GB Oracle image)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix" -Quick             # representative subset for the regular gate
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix" -FullMatrix        # full matrix including the 500,000-row scale import
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario15-ScimConnector"             # SCIM 2.0 Client Connector against the containerised test service provider
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario17-InitialPasswordProvisioning" # Initial Password provisioning and the park-then-release loop (Samba AD only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario18-WritebackToSource"         # a derived value written back into its source Connected System (#1284)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario19-AuxiliaryClasses"          # LDAP auxiliary object classes (#492, OpenLDAP only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario20-PasswordSynchronisation"   # Password Synchronisation, outbound (#1119)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario21-RunProfileSafeguards"      # Run Profile export and deletion-detection limits (#1618)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario22-OpenLdapPasswordPolicy"    # OpenLDAP password policy discovery (#1702, OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-001-HRToIdentityDirectory"   # HR CSV -> AD provisioning
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-002-CrossDomainSync"         # APAC AD -> EMEA AD sync
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-004-DeletionRules"           # Deletion rules testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-005-MatchingRules"           # Matching rules testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-006-SchedulerService"        # Scheduler service testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-007-ClearConnectedSystemObjects" # Clear connector space testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-008-CrossDomainEntitlementSync"  # Group sync between domains
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-009-PartitionScopedImports"  # Partition-scoped import Run Profiles
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-010-SyncRuleScoping"          # Synchronisation Rule scoping behaviour (inbound + outbound)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-011-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-011-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-011-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-012-RelativeDateScoping"       # Relative-date inbound scoping (joiner/leaver)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-013-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-014-AttributePriority"        # Attribute Priority multi-source winner resolution (#91, OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-016-SqlConnectorMatrix"        # JIM SQL Connector provider x capability matrix (SQL Server + Oracle)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-016-SqlConnectorMatrix" -Provider SqlServer  # one provider only (quicker loop; skips the 13.6GB Oracle image)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-016-SqlConnectorMatrix" -Quick             # representative subset for the regular gate
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-016-SqlConnectorMatrix" -FullMatrix        # full matrix including the 500,000-row scale import
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-015-ScimConnector"             # SCIM 2.0 Client Connector against the containerised test service provider
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-017-InitialPasswordProvisioning" # Initial Password provisioning and the park-then-release loop (Samba AD only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-018-WritebackToSource"         # a derived value written back into its source Connected System (#1284)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-019-AuxiliaryClasses"          # LDAP auxiliary object classes (#492, OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-020-PasswordSynchronisation"   # Password Synchronisation, outbound (#1119)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-021-RunProfileSafeguards"      # Run Profile export and deletion-detection limits (#1618)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-022-OpenLdapPasswordPolicy"    # OpenLDAP password policy discovery (#1702, OpenLDAP only)
 
-# Short forms resolve to the full name: the number, ScenarioN, or the descriptive part
-./test/integration/Run-IntegrationTests.ps1 -Scenario 5                # Scenario5-MatchingRules
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario5        # Scenario5-MatchingRules
-./test/integration/Run-IntegrationTests.ps1 -Scenario MatchingRules    # Scenario5-MatchingRules
+# Short forms resolve to the full name: the number, Scenario-NNN, or the descriptive part
+./test/integration/Run-IntegrationTests.ps1 -Scenario 005                # Scenario-005-MatchingRules
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-005        # Scenario-005-MatchingRules
+./test/integration/Run-IntegrationTests.ps1 -Scenario MatchingRules    # Scenario-005-MatchingRules
 
 # Run with a specific template size (see Data Scale Templates for the full list)
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano                    # smallest; fast dev iteration
 ./test/integration/Run-IntegrationTests.ps1 -Template Medium                  # typical CI/CD size
 ./test/integration/Run-IntegrationTests.ps1 -Template Scale100k50Groups       # scale/stress
-./test/integration/Run-IntegrationTests.ps1 -Template Scale100k5kGroups       # long-tail, OpenLDAP + Scenario 8 only
+./test/integration/Run-IntegrationTests.ps1 -Template Scale100k5kGroups       # long-tail, OpenLDAP + Scenario 008 only
 
 # Run only a specific test step (steps vary by scenario)
-./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1: Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection, InitialExportOnly
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2: Provision, ForwardSync, ReverseSync, Conflict
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 7: DeleteHistory, KeepHistory, EdgeCases
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping" -Step InboundEnterScope  # Scenario 10: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 11: filter to cells using a single operator
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority" -Step BaselineResolution  # Scenario 14: BaselineResolution, RecallReElection, IdenticalValueHandOver, WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion (OpenLDAP only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario22-OpenLdapPasswordPolicy" -Step Discovery  # Scenario 22 (cumulative): Discovery, Provision, Override (OpenLDAP only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario23-UniqueValueGeneration" -Step Brownfield  # Scenario 23 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag
+./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 001: Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection, InitialExportOnly
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-002-CrossDomainSync" -Step Provision  # Scenario 002: Provision, ForwardSync, ReverseSync, Conflict
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-007-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 007: DeleteHistory, KeepHistory, EdgeCases
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-008-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 008: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-010-SyncRuleScoping" -Step InboundEnterScope  # Scenario 010: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-011-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 011: filter to cells using a single operator
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-014-AttributePriority" -Step BaselineResolution  # Scenario 014: BaselineResolution, RecallReElection, IdenticalValueHandOver, WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion (OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-022-OpenLdapPasswordPolicy" -Step Discovery  # Scenario 022 (cumulative): Discovery, Provision, Override (OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-023-UniqueValueGeneration" -Step Brownfield  # Scenario 023 (cumulative): Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag
 
 # Combine scenario, template, and step
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-002-CrossDomainSync" -Template Small -Step All
 
 # Skip reset for faster re-runs (keeps existing environment)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset
@@ -124,8 +124,8 @@ This single script handles everything:
 # Skip rebuild (use existing Docker images)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
 
-# Run with export performance tuning (Scenarios 1, 2, 6, 8 only)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -ExportConcurrency 4 -MaxExportParallelism 2
+# Run with export performance tuning (Scenarios 001, 002, 006, 008 only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-008-CrossDomainEntitlementSync" -ExportConcurrency 4 -MaxExportParallelism 2
 
 # Set log level (overrides .env value for this run, restores afterwards)
 ./test/integration/Run-IntegrationTests.ps1 -LogLevel Warning
@@ -134,13 +134,13 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -DisableChangeTracking
 
 # Large-scale test with reduced logging and no change tracking
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -Template Large -LogLevel Warning -DisableChangeTracking
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-001-HRToIdentityDirectory" -Template Large -LogLevel Warning -DisableChangeTracking
 
 # Full pre-release regression suite (all scenarios, every directory type: Samba AD at Medium, OpenLDAP and 389 Directory Server at Large)
 ./test/integration/Run-IntegrationTests.ps1 -PreRelease
 ```
 
-**Scenario names:** `-Scenario` takes the full name (`Scenario5-MatchingRules`) or a short form that resolves to it: the number (`5`), `ScenarioN` (`Scenario5`) or the descriptive part (`MatchingRules`), case-insensitively. Numbers match exactly, never as a prefix, so `1` is Scenario 1 and not Scenario 10. An unknown name fails immediately, before any container starts, and lists the valid names (`utils/Resolve-IntegrationScenarioName.ps1`). The runner's scenario-specific branches (snapshot selection, directory-type restrictions, template relevance) compare the resolved scenario number rather than matching the name with wildcards, which used to make `*Scenario1*` match Scenarios 10-19 as well (#1762).
+**Scenario names:** `-Scenario` takes the full name (`Scenario-005-MatchingRules`) or a short form that resolves to it: the number (`5` or `005`), `Scenario-NNN` (`Scenario-005`) or the descriptive part (`MatchingRules`), case-insensitively. Numbers match exactly, never as a prefix, so `1` is Scenario 001 and not Scenario 010. An unknown name fails immediately, before any container starts, and lists the valid names (`utils/Resolve-IntegrationScenarioName.ps1`). The runner's scenario-specific branches (snapshot selection, directory-type restrictions, template relevance) compare the resolved scenario number rather than matching the name with wildcards, which used to make the unpadded names' `*Scenario1*` match Scenarios 010-019 as well (#1762).
 
 **Strict-mode hardening:** the runner uses `Set-StrictMode -Version Latest`, so local debugging must treat uninitialised variables and missing properties as errors. This matches CI behaviour and prevents drift between the two environments.
 
@@ -148,32 +148,32 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 14, 19 and 22 are OpenLDAP only; Scenario 17 is Samba AD only. Scenario 16 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand.
+In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 is Samba AD only. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand.
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
-| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver); Initial Export Only attribute flows (#223) | samba-ad-primary / openldap-primary |
-| `Scenario2-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary |
-| `Scenario3-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary |
-| `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary |
-| `Scenario5-MatchingRules` | Object Matching Rules testing | samba-ad-primary / openldap-primary |
-| `Scenario6-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary |
-| `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary |
-| `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary |
-| `Scenario9-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary |
-| `Scenario10-SyncRuleScoping` | Synchronisation Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary |
-| `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells), Default (~41 cells), Exhaustive (~152 cells). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) |
-| `Scenario12-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) |
-| `Scenario13-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) |
-| `Scenario14-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
-| `Scenario15-ScimConnector` | SCIM 2.0 Client Connector end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted rather than validation skipped (#545) | file (HR CSV source), scim-provider |
-| `Scenario16-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
-| `Scenario17-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Also proves the park-then-release loop: a static Initial Password the target genuinely refuses parks every provisioned account, and correcting the Synchronisation Rule releases them to the Password Delivery Service within seconds. Samba AD only; `-Template` is ignored | samba-ad-primary |
-| `Scenario18-WritebackToSource` | Whether a value JIM derives is written back into the Connected System it came from ([#1284](https://github.com/TetronIO/JIM/issues/1284)). Two JIM File Connector systems carry identically shaped outbound rules over the same Metaverse Objects, evaluated in one run, differing only in whether the target is the run's source. `-Template` is ignored | file (no directory container) |
-| `Scenario19-AuxiliaryClasses` | LDAP auxiliary object class support end to end ([#492](https://github.com/TetronIO/JIM/issues/492)) against the JIM-owned `jimBadgeHolder` auxiliary class: merging the class onto `jimPerson`, importing an entry carrying both classes as exactly one Connected System Object, adding the class on export in the same modify that writes its attributes, refusing an export that cannot satisfy the class's MUST attribute before it is sent, provisioning with a Structural Carrier Class, and auxiliary class discovery. Steps are cumulative (`Merge`, `Import`, `DeltaConvergence`, `MustEnforcement`, `CarrierProvisioning`, `Discovery`). OpenLDAP only; `-Template` is ignored | openldap-primary (two suffixes) |
-| `Scenario20-PasswordSynchronisation` | Password Synchronisation end to end ([#1119](https://github.com/TetronIO/JIM/issues/1119)): proves the OUTBOUND half only (inbound capture is [#1625](https://github.com/TetronIO/JIM/issues/1625)). Password changes are recorded against identities while the directory is switched off, held rather than discarded, then delivered the moment it is switched on, and the scenario signs in to the directory with each one. Also proves coalescing keeps the newest of three, and that no password value reaches a log. Samba AD or OpenLDAP, including the parked-change retry test, which both directories now genuinely refuse a too-short password for (Samba AD's domain minimum, OpenLDAP's ppolicy overlay). `-Template` is ignored | samba-ad-primary / openldap-primary |
-| `Scenario21-RunProfileSafeguards` | The five per-Run-Profile safeguards ([#1618](https://github.com/TetronIO/JIM/issues/1618)): the export limits (Max creates, Max updates, Max deletes), one change type at a time, and the Full Import deletion-detection limits (as a count and as a share of the Connector Space). A run that would exceed a limit makes none of that kind of change, and its warning names the limit. Reuses the Scenario 1 fixture (HR CSV source, directory target). Steps: `ExportLimit`, `ImportLimit` | samba-ad-primary / openldap-primary / dirsrv-primary |
-| `Scenario22-OpenLdapPasswordPolicy` | OpenLDAP password policy discovery end to end ([#1702](https://github.com/TetronIO/JIM/issues/1702)): a `ppolicy` overlay with a default policy (minimum length 12, history 5, maximum age 90 days, `pwdCheckQuality` 2) is proven to enforce by a refused 5-character change, JIM reads it as published, provisions accounts as a non-root account with generated Initial Passwords and parks none, and notices a `pwdPolicySubentry`. OpenLDAP only; `-Template` is ignored | openldap-primary (Yellowstone suffix) |
+| `Scenario-001-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver); Initial Export Only attribute flows (#223) | samba-ad-primary / openldap-primary |
+| `Scenario-002-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary |
+| `Scenario-003-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary |
+| `Scenario-004-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary |
+| `Scenario-005-MatchingRules` | Object Matching Rules testing | samba-ad-primary / openldap-primary |
+| `Scenario-006-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary |
+| `Scenario-007-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary |
+| `Scenario-008-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary |
+| `Scenario-009-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary |
+| `Scenario-010-SyncRuleScoping` | Synchronisation Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary |
+| `Scenario-011-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells), Default (~41 cells), Exhaustive (~152 cells). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) |
+| `Scenario-012-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) |
+| `Scenario-013-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) |
+| `Scenario-014-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
+| `Scenario-015-ScimConnector` | SCIM 2.0 Client Connector end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted rather than validation skipped (#545) | file (HR CSV source), scim-provider |
+| `Scenario-016-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
+| `Scenario-017-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Also proves the park-then-release loop: a static Initial Password the target genuinely refuses parks every provisioned account, and correcting the Synchronisation Rule releases them to the Password Delivery Service within seconds. Samba AD only; `-Template` is ignored | samba-ad-primary |
+| `Scenario-018-WritebackToSource` | Whether a value JIM derives is written back into the Connected System it came from ([#1284](https://github.com/TetronIO/JIM/issues/1284)). Two JIM File Connector systems carry identically shaped outbound rules over the same Metaverse Objects, evaluated in one run, differing only in whether the target is the run's source. `-Template` is ignored | file (no directory container) |
+| `Scenario-019-AuxiliaryClasses` | LDAP auxiliary object class support end to end ([#492](https://github.com/TetronIO/JIM/issues/492)) against the JIM-owned `jimBadgeHolder` auxiliary class: merging the class onto `jimPerson`, importing an entry carrying both classes as exactly one Connected System Object, adding the class on export in the same modify that writes its attributes, refusing an export that cannot satisfy the class's MUST attribute before it is sent, provisioning with a Structural Carrier Class, and auxiliary class discovery. Steps are cumulative (`Merge`, `Import`, `DeltaConvergence`, `MustEnforcement`, `CarrierProvisioning`, `Discovery`). OpenLDAP only; `-Template` is ignored | openldap-primary (two suffixes) |
+| `Scenario-020-PasswordSynchronisation` | Password Synchronisation end to end ([#1119](https://github.com/TetronIO/JIM/issues/1119)): proves the OUTBOUND half only (inbound capture is [#1625](https://github.com/TetronIO/JIM/issues/1625)). Password changes are recorded against identities while the directory is switched off, held rather than discarded, then delivered the moment it is switched on, and the scenario signs in to the directory with each one. Also proves coalescing keeps the newest of three, and that no password value reaches a log. Samba AD or OpenLDAP, including the parked-change retry test, which both directories now genuinely refuse a too-short password for (Samba AD's domain minimum, OpenLDAP's ppolicy overlay). `-Template` is ignored | samba-ad-primary / openldap-primary |
+| `Scenario-021-RunProfileSafeguards` | The five per-Run-Profile safeguards ([#1618](https://github.com/TetronIO/JIM/issues/1618)): the export limits (Max creates, Max updates, Max deletes), one change type at a time, and the Full Import deletion-detection limits (as a count and as a share of the Connector Space). A run that would exceed a limit makes none of that kind of change, and its warning names the limit. Reuses the Scenario 001 fixture (HR CSV source, directory target). Steps: `ExportLimit`, `ImportLimit` | samba-ad-primary / openldap-primary / dirsrv-primary |
+| `Scenario-022-OpenLdapPasswordPolicy` | OpenLDAP password policy discovery end to end ([#1702](https://github.com/TetronIO/JIM/issues/1702)): a `ppolicy` overlay with a default policy (minimum length 12, history 5, maximum age 90 days, `pwdCheckQuality` 2) is proven to enforce by a refused 5-character change, JIM reads it as published, provisions accounts as a non-root account with generated Initial Passwords and parks none, and notices a `pwdPolicySubentry`. OpenLDAP only; `-Template` is ignored | openldap-primary (Yellowstone suffix) |
 
 **Available Templates (`-Template` parameter):**
 
@@ -205,7 +205,7 @@ See [Data Scale Templates](#data-scale-templates) for the full list: sizes, grou
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100k50Groups -TemplateDirectoryServer389 Large
 
 # Run a specific scenario against every directory type
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -DirectoryType All
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-001-HRToIdentityDirectory -DirectoryType All
 ```
 
 > **Note:** OpenLDAP and 389 Directory Server each use a single container (`openldap-primary`, `dirsrv-primary`) with two naming contexts (suffixes) for multi-partition scenarios, while Samba AD uses separate containers (`samba-ad-source`, `samba-ad-target`). The test framework abstracts these differences via `Get-DirectoryConfig`; scenarios ask `Test-IsRfcDirectory` rather than inferring the directory from an object class, since 389 Directory Server uses `inetOrgPerson` too.
@@ -219,8 +219,8 @@ See [Data Scale Templates](#data-scale-templates) for the full list: sizes, grou
 # 2. Create Infrastructure API Key
 ./test/integration/Setup-InfrastructureApiKey.ps1
 
-# 3. Run Scenario 1
-./test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
+# 3. Run Scenario 001
+./test/integration/scenarios/Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
 ```
 
 **Helper Scripts:**
@@ -301,7 +301,7 @@ The Integration Testing Framework provides end-to-end validation of JIM's synchr
 - **Realistic Systems**: Test against actual Samba AD, SQL Server, Oracle, etc., not mocks
 - **Idempotent**: Complete stand-up/tear-down for repeatable testing
 - **Scalable**: Template-based data sets from 3 to 1M objects
-- **Phased**: Phase 1 (supported) covers LDAP/CSV; Phase 2 adds databases, starting with the JIM SQL Connector matrix (Scenario 16)
+- **Phased**: Phase 1 (supported) covers LDAP/CSV; Phase 2 adds databases, starting with the JIM SQL Connector matrix (Scenario 016)
 - **Opt-In**: Manual trigger only, not automatic on every commit
 
 ### Step-Based Execution Model
@@ -322,7 +322,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
 
-**Export performance parameters** (accepted by Scenarios 1, 2, 6, 8, i.e. scenarios with LDAP exports):
+**Export performance parameters** (accepted by Scenarios 001, 002, 006, 008, i.e. scenarios with LDAP exports):
 - `-ExportConcurrency <N>` - LDAP connector pipelining concurrency (1-8, omit for JIM default of 1)
 - `-MaxExportParallelism <N>` - Parallel export batch processing (1-16, omit for JIM default of 1)
 - These are only passed through to scenarios when explicitly provided to the test runner
@@ -358,8 +358,8 @@ flowchart TB
         end
         subgraph P2["Phase 2 (profile: phase2)"]
             direction TB
-            P2A["sqlserver-hris-a<br/>SQL Server 2022<br/>1433 (Scenario 16)"]
-            P2B["oracle-hris-b<br/>Oracle Database Free 23ai<br/>1521, service FREEPDB1 (Scenario 16)"]
+            P2A["sqlserver-hris-a<br/>SQL Server 2022<br/>1433 (Scenario 016)"]
+            P2B["oracle-hris-b<br/>Oracle Database Free 23ai<br/>1521, service FREEPDB1 (Scenario 016)"]
             P2C["postgres-target<br/>PostgreSQL 16<br/>5432 (staged, priority 2)"]
             P2E["mysql-test<br/>MySQL 8<br/>3306 (staged, priority 2)"]
         end
@@ -379,17 +379,17 @@ Every directory lab is bound as two different identities depending on who is ask
 
 - **The directory administrator** (`cn=admin,<suffix>`, the rootDN) populates test data, runs out-of-band assertions (`ldapsearch`/`ldapmodify`/`ldapdelete` from scenario scripts and `utils/LDAP-Helpers.ps1`), verifies snapshot content, and serves the compose healthcheck. It bypasses every access-control rule and policy overlay, which is exactly why it is the wrong identity for JIM itself to bind as.
 - **JIM's Connected Systems bind as a delegated service account**, `cn=svc-jim,ou=Services,<suffix>` (one per suffix: Yellowstone and Glitterband), granted access via membership of that suffix's `cn=jim,ou=Services,<suffix>` group (a `groupOfNames`), under an explicit, versioned access-control set written for JIM's actual LDAP operations (bind, read, delta-import read of `cn=accesslog`, add/modify/modrdn/delete, RFC 3062 Password Modify). Access rules grant `by group.exact="cn=jim,ou=Services,<suffix>" ...` rather than naming an account's DN directly, so delegating a further Connected System is a membership change, not an ACL edit. `Get-DirectoryConfig` (`test/integration/utils/Test-Helpers.ps1`) returns both identities on every config: `BindDN`/`BindPassword` for the administrator, `JimBindDN`/`JimBindPassword` for JIM. Every setup script that configures an LDAP Connector's Username/Password settings uses the latter.
-- **A third account, `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local`, is for a Connected System that imports more than one partition** from the same server: Scenario 9 (partition-scoped imports) runs one Connected System scoped across both Yellowstone and Glitterband, which a single-suffix `svc-jim` account cannot serve. It is a member of *both* suffixes' `cn=jim` groups, while each suffix's own `svc-jim` stays a member of its own group only, so isolation between suffixes is unaffected for every single-partition Connected System. `Get-DirectoryConfig` exposes it as `MultiPartitionJimBindDN`/`MultiPartitionJimBindPassword`; `Setup-Scenario9.ps1` uses it when present, falling back to `JimBindDN`/`JimBindPassword` otherwise.
-- **A `pwdMinLength 7` password policy (ppolicy)** applies on both suffix databases, matching the Samba AD domain's minimum. This is what lets Scenario 20's parked-change retry test exercise a genuine refusal on OpenLDAP, not just Samba AD.
+- **A third account, `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local`, is for a Connected System that imports more than one partition** from the same server: Scenario 009 (partition-scoped imports) runs one Connected System scoped across both Yellowstone and Glitterband, which a single-suffix `svc-jim` account cannot serve. It is a member of *both* suffixes' `cn=jim` groups, while each suffix's own `svc-jim` stays a member of its own group only, so isolation between suffixes is unaffected for every single-partition Connected System. `Get-DirectoryConfig` exposes it as `MultiPartitionJimBindDN`/`MultiPartitionJimBindPassword`; `Setup-Scenario-009.ps1` uses it when present, falling back to `JimBindDN`/`JimBindPassword` otherwise.
+- **A `pwdMinLength 7` password policy (ppolicy)** applies on both suffix databases, matching the Samba AD domain's minimum. This is what lets Scenario 020's parked-change retry test exercise a genuine refusal on OpenLDAP, not just Samba AD.
 - **The access-control and password-policy LDIFs are the single source for both the lab and the customer-facing documentation**: they live in `test/integration/docker/openldap/acl/` as six files (`jim-service-account-access.ldif` for the suffix databases, `jim-service-account-limits.ldif` exempting the JIM group from each suffix's search size and time limits (a non-rootDN client is otherwise capped at `olcSizeLimit`, 500 by default, across a whole paged import), `jim-accesslog-access.ldif` for `cn=accesslog`, `jim-frontend-access.ldif` for the frontend database, and `jim-password-policy.ldif` plus `jim-ppolicy-overlay.ldif` for the ppolicy default policy and its attachment) and are published verbatim, via MkDocs snippet includes, in `docs/connectors/jim-ldap-connector.md`'s OpenLDAP Service Account Permissions section. Changing the lab's permissions changes what customers are told to grant, and vice versa.
 
 #### 389 Directory Server
 
-389 Directory Server ([#1479](https://github.com/TetronIO/JIM/issues/1479); plan: `engineering/plans/done/DIRECTORY_SERVER_389_LAB.md`) is the RFC 4512 sibling of the OpenLDAP lab: one container, `dirsrv-primary` (compose profile `dirsrv`, image `ghcr.io/tetronio/jim-dirsrv:primary`, built from `389ds/dirsrv:3.1` by `test/integration/docker/dirsrv/Build-DirsrvImage.ps1`), hosting the same two suffixes (`dc=yellowstone,dc=local`, `dc=glitterband,dc=local`) with the same tree, the same `jim-extensions` schema and the same service accounts, so the OpenLDAP populate scripts and every directory-agnostic scenario run against it unchanged (`-DirectoryType DirectoryServer389`). Scenarios 14, 19 and 22 stay OpenLDAP only: their fixtures and assertions are written against `cn=config`, the ppolicy overlay and DIT content rules, which 389 refuses over LDAP. Snapshot images (`jim-dirsrv:general-<size>`, `jim-dirsrv:s8-<size>`) are built on first use by `test/integration/Build-DirsrvSnapshots.ps1` (or on demand), exactly as for OpenLDAP, and the runner selects them automatically; `-IgnoreSnapshots` forces live population.
+389 Directory Server ([#1479](https://github.com/TetronIO/JIM/issues/1479); plan: `engineering/plans/done/DIRECTORY_SERVER_389_LAB.md`) is the RFC 4512 sibling of the OpenLDAP lab: one container, `dirsrv-primary` (compose profile `dirsrv`, image `ghcr.io/tetronio/jim-dirsrv:primary`, built from `389ds/dirsrv:3.1` by `test/integration/docker/dirsrv/Build-DirsrvImage.ps1`), hosting the same two suffixes (`dc=yellowstone,dc=local`, `dc=glitterband,dc=local`) with the same tree, the same `jim-extensions` schema and the same service accounts, so the OpenLDAP populate scripts and every directory-agnostic scenario run against it unchanged (`-DirectoryType DirectoryServer389`). Scenarios 014, 019 and 022 stay OpenLDAP only: their fixtures and assertions are written against `cn=config`, the ppolicy overlay and DIT content rules, which 389 refuses over LDAP. Snapshot images (`jim-dirsrv:general-<size>`, `jim-dirsrv:s8-<size>`) are built on first use by `test/integration/Build-DirsrvSnapshots.ps1` (or on demand), exactly as for OpenLDAP, and the runner selects them automatically; `-IgnoreSnapshots` forces live population.
 
 - **Everything is baked into the image at build time** by `test/integration/docker/dirsrv/build/configure.sh`, which starts the server inside `docker build`, configures it over LDAP as `cn=Directory Manager`, checks every step as the service account (a failed check fails the build), and stops it: the two backends, the tree, the schema, the ACIs, equality indexes on `uid`, `cn` and `entryUUID`, the Retro Changelog plug-in (`--max-age 7d --exclude-attrs userPassword`, and `nsslapd-log-deleted: on` set by `ldapmodify` on `cn=Retro Changelog Plugin,cn=plugins,cn=config`, since `dsconf` does not expose it, followed by a restart), and a global password policy (`passwordCheckSyntax on`, `passwordMinLength 7`, `passwordMinCategories 3`) mirroring the OpenLDAP lab's `pwdMinLength 7`, so the password scenarios have something to refuse and JIM's 389 policy discovery reads a real policy.
 - **The directory administrator** is `cn=Directory Manager` (server-wide, so it is the administrator of both suffixes; password `Test@123!`). It populates test data and runs out-of-band assertions inside the container over plain LDAP on 3389, and it bypasses every ACI and the password policy, which is why JIM never binds as it.
-- **JIM's Connected Systems bind as `cn=svc-jim,ou=Services,<suffix>`** (password `Svc-Jim@123!`), a member of that suffix's `cn=jim,ou=Services,<suffix>` group, and `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local` is a member of both suffixes' groups for Scenario 9, exactly as on OpenLDAP. Every ACI names a group, never an account. The service accounts carry `nsSizeLimit`, `nsLookThroughLimit` and `nsPagedSizeLimit` of `-1`, because 389's default search limits (`nsslapd-sizelimit` 2000, `nsslapd-lookthroughlimit` 5000) apply across a paged search.
+- **JIM's Connected Systems bind as `cn=svc-jim,ou=Services,<suffix>`** (password `Svc-Jim@123!`), a member of that suffix's `cn=jim,ou=Services,<suffix>` group, and `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local` is a member of both suffixes' groups for Scenario 009, exactly as on OpenLDAP. Every ACI names a group, never an account. The service accounts carry `nsSizeLimit`, `nsLookThroughLimit` and `nsPagedSizeLimit` of `-1`, because 389's default search limits (`nsslapd-sizelimit` 2000, `nsslapd-lookthroughlimit` 5000) apply across a paged search.
 - **JIM connects over LDAPS on 3636, not plain LDAP.** 389 refuses the RFC 3062 Password Modify operation over an unencrypted connection ("Confidentiality required") and offers no switch to allow it. The image bakes a lab CA and a server certificate naming `dirsrv-primary` under `/data/tls`, and the runner's Step 4a adds that CA to JIM's certificate store (`Add-DirsrvCertificateToJimStore` in `test/integration/utils/Test-Helpers.ps1`) before any scenario connects, as the Samba AD lab does. `Get-DirectoryConfig -DirectoryType DirectoryServer389` therefore returns `Port 3636` and `UseSSL`, while `LdapSearchPort` stays 3389 for the harness's own in-container `ldapsearch` checks.
 - **The ACI files are the single source for both the lab and the customer-facing documentation**: `test/integration/docker/dirsrv/aci/` holds three (`jim-suffix-access.ldif` per suffix, `jim-changelog-access.ldif` for `cn=changelog`, and `jim-config-access.ldif` for the global password policy on `cn=config` and the Retro Changelog plug-in's settings), published verbatim via MkDocs snippet includes in `docs/connectors/jim-ldap-connector.md`'s 389 Directory Server Service Account Permissions section. Two 389-specific forms in them are deliberate: `targetattr != "aci"` rather than `"*"` (which excludes operational attributes such as `entryUUID`), and the plug-in rule granting every attribute but `aci` because `nsslapd-log-deleted` has no schema definition and cannot be named in an ACI attribute list.
 - **Changing any file under `docker/dirsrv/` changes the image hash** (`Get-DirsrvBuildHash.ps1`, stamped into the `jim.dirsrv.build-hash` label), which is how the runner knows to rebuild.
@@ -421,15 +421,15 @@ Choose the appropriate template based on test goals. For run times see [Run-Time
 | **MediumLarge** | 5,000 | 250 | 9 | 5,250 | Large medium enterprise, validation | - |
 | **Large** | 10,000 | 500 | 10 | 10,500 | Large enterprise, baselines | - |
 | **Scale100k50Groups** | 100,000 | 50 | 12 | 100,050 | Very large enterprise, stress | 20+ GB |
-| **Scale100k5kGroups** | 100,000 | 5,027 | ~9 (measured) | 105,027 | Scenario 8 long-tail group shape (OpenLDAP only) | 20+ GB |
+| **Scale100k5kGroups** | 100,000 | 5,027 | ~9 (measured) | 105,027 | Scenario 008 long-tail group shape (OpenLDAP only) | 20+ GB |
 | **Scale200k55Groups** | 200,000 | 55 | 12 | 200,055 | Very large enterprise, extended | 24+ GB |
-| **Scale200k10kGroups** | 200,000 | 9,984 | ~8 | 209,984 | Scenario 8 long-tail group shape (OpenLDAP only) | 28+ GB |
+| **Scale200k10kGroups** | 200,000 | 9,984 | ~8 | 209,984 | Scenario 008 long-tail group shape (OpenLDAP only) | 28+ GB |
 | **Scale500k65Groups** | 500,000 | 65 | 13 | 500,065 | Massive enterprise, validation | 32+ GB |
-| **Scale500k25kGroups** | 500,000 | 24,997 | ~10 | 524,997 | Scenario 8 long-tail group shape (OpenLDAP only) | 40+ GB |
+| **Scale500k25kGroups** | 500,000 | 24,997 | ~10 | 524,997 | Scenario 008 long-tail group shape (OpenLDAP only) | 40+ GB |
 | **Scale750k70Groups** | 750,000 | 70 | 14 | 750,070 | Near-million scale validation | 32+ GB |
-| **Scale750k40kGroups** | 750,000 | 40,011 | ~11 | 790,011 | Scenario 8 long-tail group shape (OpenLDAP only) | 48+ GB |
+| **Scale750k40kGroups** | 750,000 | 40,011 | ~11 | 790,011 | Scenario 008 long-tail group shape (OpenLDAP only) | 48+ GB |
 | **Scale1m80Groups** | 1,000,000 | 70 | 15 | 1,000,070 | Global enterprise, scale limits | 64+ GB |
-| **Scale1m60kGroups** | 1,000,000 | 60,073 | ~13 | 1,060,073 | Scenario 8 long-tail group shape (OpenLDAP only) | 64+ GB |
+| **Scale1m60kGroups** | 1,000,000 | 60,073 | ~13 | 1,060,073 | Scenario 008 long-tail group shape (OpenLDAP only) | 64+ GB |
 
 - **Scale1m80Groups**: the name's "80" reflects the originally planned group count; the actual count is 70. The capped-groups templates (`Scale*Groups`) are kept for Samba AD scale testing; the long-tail counterparts (`Scale*kGroups`) model realistic group topology and are OpenLDAP only.
 - **Scale1m60kGroups**: also requires raising the OpenLDAP accesslog `olcDbMaxSize` proportionally (see Troubleshooting -> "OpenLDAP accesslog full").
@@ -448,7 +448,7 @@ All templates generate realistic enterprise data following normal distribution p
 
 ## Run-Time Estimates
 
-> Wall-clock times **measured on this devcontainer** (best endeavours; cold-cache figures marked *(est.)* are extrapolated, not directly measured). **Time (cached)** assumes the directory snapshot images and JIM stack images already exist, the normal case after the first run on a machine. **First run adds** is the one-time build of those images on top. Two things dominate: run time is driven almost entirely by **Scenarios 1, 7 and 8**, and it is strongly **directory-dependent**, because `samba-tool` takes a per-write LDB lock, Samba AD's Scenario 8 is far slower than OpenLDAP's (Scenario 8 alone measured 96 min on Samba MediumLarge versus 19 min on OpenLDAP at the larger Large template). Scenarios 2, 4, 6, 11, 12, 13 use fixed small data and barely move with `-Template`. Directory-selectable scenarios have a separate Samba AD and OpenLDAP row.
+> Wall-clock times **measured on this devcontainer** (best endeavours; cold-cache figures marked *(est.)* are extrapolated, not directly measured). **Time (cached)** assumes the directory snapshot images and JIM stack images already exist, the normal case after the first run on a machine. **First run adds** is the one-time build of those images on top. Two things dominate: run time is driven almost entirely by **Scenarios 001, 007 and 008**, and it is strongly **directory-dependent**, because `samba-tool` takes a per-write LDB lock, Samba AD's Scenario 008 is far slower than OpenLDAP's (Scenario 008 alone measured 96 min on Samba MediumLarge versus 19 min on OpenLDAP at the larger Large template). Scenarios 002, 004, 006, 011, 012, 013 use fixed small data and barely move with `-Template`. Directory-selectable scenarios have a separate Samba AD and OpenLDAP row.
 
 | Runner option | Directory | Template(s) | Time (cached) | Notes |
 |---------------|-----------|-------------|---------------|-------|
@@ -458,41 +458,41 @@ All templates generate realistic enterprise data following normal distribution p
 | `-Scenario All` | OpenLDAP | Large | ~1h 45m | first run +~15 min |
 | `-Scenario All` | OpenLDAP | Scale100k50Groups | ~7h 15m | first run +~1h |
 | `-Scenario All` | Samba AD or OpenLDAP | Nano / Micro / Small | ~30-40m *(est.)* | not directly measured |
-| Scenario1 HRToIdentityDirectory | Samba AD | Medium / MediumLarge | 11m / 24m | scales strongly |
-| Scenario1 HRToIdentityDirectory | OpenLDAP | Large / 100k | 21m / 3h | scales strongly |
-| Scenario2 CrossDomainSync | Samba AD | any | ~1.5m | fixed |
-| Scenario2 CrossDomainSync | OpenLDAP | any | ~1.5m | fixed |
-| Scenario3 GALSYNC | n/a | n/a | stub, not implemented | n/a |
-| Scenario4 DeletionRules | Samba AD | any | ~7m | fixed (grace-period waits) |
-| Scenario4 DeletionRules | OpenLDAP | any | ~7m | fixed (grace-period waits) |
-| Scenario5 MatchingRules | Samba AD | Medium / MediumLarge | ~2m | fixed (Nano data) |
-| Scenario5 MatchingRules | OpenLDAP | Large / 100k | 5m / 22m | see reset-overhead note |
-| Scenario6 SchedulerService | Samba AD | any | ~1m | fixed |
-| Scenario6 SchedulerService | OpenLDAP | any | ~1m | fixed |
-| Scenario7 ClearConnectedSystemObjects | Samba AD | Medium / MediumLarge | 1.5m / 3m | scales |
-| Scenario7 ClearConnectedSystemObjects | OpenLDAP | Large / 100k | 4.5m / 52m | scales |
-| Scenario8 CrossDomainEntitlementSync | Samba AD | Medium / MediumLarge | 8m / 96m | scales; samba-tool per-write lock |
-| Scenario8 CrossDomainEntitlementSync | OpenLDAP | Large / 100k | 19m / 2h 17m | scales |
-| Scenario9 PartitionScopedImports | Samba AD | Medium / MediumLarge | ~1m | ~fixed |
-| Scenario9 PartitionScopedImports | OpenLDAP | Large / 100k | 2m / 9m | scales |
-| Scenario10 SyncRuleScoping | Samba AD | Medium / MediumLarge | ~2.5m | ~fixed |
-| Scenario10 SyncRuleScoping | OpenLDAP | Large / 100k | 3m / 5m | mild scale |
-| Scenario11 ScopingCriteriaMatrix | file-based (no directory) | any | ~1m Default | Quick / Default / Exhaustive tiers |
-| Scenario12 RelativeDateScoping | file-based (no directory) | any | ~2.5m | date-window wait |
-| Scenario13 RelativeDateOutboundScoping | file-based (no directory) | any | ~3m | date-window wait |
-| Scenario14 AttributePriority | OpenLDAP only | (ignored) | ~2m | fixed six-user; -Template ignored |
-| Scenario16 SqlConnectorMatrix | database (SQL Server, Oracle) | (ignored) | ~25m per provider (default tier); `-FullMatrix` adds ~19m on SQL Server and ~17m on Oracle for the 500,000-row import | its own SQL seeder sizes the data; -Template ignored; see the scale-import table in the Scenario 16 section |
-| Scenario18 WritebackToSource | file (none) | (ignored) | ~8s | three seeded people; the question is per-object, not per-population |
-| Scenario20 PasswordSynchronisation | Samba AD or OpenLDAP | (ignored) | not yet measured | three provisioned accounts; the wait is delivery, not population. The parked-change retry test runs on both directories, since OpenLDAP's ppolicy overlay now refuses a too-short password too |
+| Scenario-001 HRToIdentityDirectory | Samba AD | Medium / MediumLarge | 11m / 24m | scales strongly |
+| Scenario-001 HRToIdentityDirectory | OpenLDAP | Large / 100k | 21m / 3h | scales strongly |
+| Scenario-002 CrossDomainSync | Samba AD | any | ~1.5m | fixed |
+| Scenario-002 CrossDomainSync | OpenLDAP | any | ~1.5m | fixed |
+| Scenario-003 GALSYNC | n/a | n/a | stub, not implemented | n/a |
+| Scenario-004 DeletionRules | Samba AD | any | ~7m | fixed (grace-period waits) |
+| Scenario-004 DeletionRules | OpenLDAP | any | ~7m | fixed (grace-period waits) |
+| Scenario-005 MatchingRules | Samba AD | Medium / MediumLarge | ~2m | fixed (Nano data) |
+| Scenario-005 MatchingRules | OpenLDAP | Large / 100k | 5m / 22m | see reset-overhead note |
+| Scenario-006 SchedulerService | Samba AD | any | ~1m | fixed |
+| Scenario-006 SchedulerService | OpenLDAP | any | ~1m | fixed |
+| Scenario-007 ClearConnectedSystemObjects | Samba AD | Medium / MediumLarge | 1.5m / 3m | scales |
+| Scenario-007 ClearConnectedSystemObjects | OpenLDAP | Large / 100k | 4.5m / 52m | scales |
+| Scenario-008 CrossDomainEntitlementSync | Samba AD | Medium / MediumLarge | 8m / 96m | scales; samba-tool per-write lock |
+| Scenario-008 CrossDomainEntitlementSync | OpenLDAP | Large / 100k | 19m / 2h 17m | scales |
+| Scenario-009 PartitionScopedImports | Samba AD | Medium / MediumLarge | ~1m | ~fixed |
+| Scenario-009 PartitionScopedImports | OpenLDAP | Large / 100k | 2m / 9m | scales |
+| Scenario-010 SyncRuleScoping | Samba AD | Medium / MediumLarge | ~2.5m | ~fixed |
+| Scenario-010 SyncRuleScoping | OpenLDAP | Large / 100k | 3m / 5m | mild scale |
+| Scenario-011 ScopingCriteriaMatrix | file-based (no directory) | any | ~1m Default | Quick / Default / Exhaustive tiers |
+| Scenario-012 RelativeDateScoping | file-based (no directory) | any | ~2.5m | date-window wait |
+| Scenario-013 RelativeDateOutboundScoping | file-based (no directory) | any | ~3m | date-window wait |
+| Scenario-014 AttributePriority | OpenLDAP only | (ignored) | ~2m | fixed six-user; -Template ignored |
+| Scenario-016 SqlConnectorMatrix | database (SQL Server, Oracle) | (ignored) | ~25m per provider (default tier); `-FullMatrix` adds ~19m on SQL Server and ~17m on Oracle for the 500,000-row import | its own SQL seeder sizes the data; -Template ignored; see the scale-import table in the Scenario 016 section |
+| Scenario-018 WritebackToSource | file (none) | (ignored) | ~8s | three seeded people; the question is per-object, not per-population |
+| Scenario-020 PasswordSynchronisation | Samba AD or OpenLDAP | (ignored) | not yet measured | three provisioned accounts; the wait is delivery, not population. The parked-change retry test runs on both directories, since OpenLDAP's ppolicy overlay now refuses a too-short password too |
 
 **Notes:**
 
 - Per-scenario times are the scenario's contribution inside a full run. Run one **standalone** and add the fixed harness overhead (reset, start services, cleanup): roughly +1 min warm, or +5 min on a first run that also rebuilds the JIM images (~4 min).
-- Nano/Micro/Small full-regression times are estimates, not directly measured. A run floors at roughly 25-30 min from fixed-duration scenarios (Scenario 4's grace periods, Scenarios 12/13's date-window waits) plus ~12 between-scenario resets, so shrinking the template below Medium buys little.
+- Nano/Micro/Small full-regression times are estimates, not directly measured. A run floors at roughly 25-30 min from fixed-duration scenarios (Scenario 004's grace periods, Scenarios 012/13's date-window waits) plus ~12 between-scenario resets, so shrinking the template below Medium buys little.
 - The first-run directory-snapshot build scales with user count: negligible for light templates, ~45-60 min at Scale100k50Groups (100k users). At scale, also mind the reset-hygiene caveat in [issue #961](https://github.com/TetronIO/JIM/issues/961).
-- OpenLDAP per-scenario times at scale can include between-scenario reset/directory overhead (see [#961](https://github.com/TetronIO/JIM/issues/961)); for the non-scaling scenarios (e.g. Scenario 5) treat the 100k figure as an upper bound, not the scenario's intrinsic cost.
-- Scenario 14 ignores `-Template` (it always uses its bespoke six-user, two-suffix dataset) and runs on OpenLDAP only.
-- Scenario 16 ignores `-Template` too: the LDAP data-scale templates do not apply to a database source, and its own deterministic SQL seeder sizes the data. Its cost is dominated by the database containers rather than by JIM: a cold first run also pays the 13.6GB Oracle image pull.
+- OpenLDAP per-scenario times at scale can include between-scenario reset/directory overhead (see [#961](https://github.com/TetronIO/JIM/issues/961)); for the non-scaling scenarios (e.g. Scenario 005) treat the 100k figure as an upper bound, not the scenario's intrinsic cost.
+- Scenario 014 ignores `-Template` (it always uses its bespoke six-user, two-suffix dataset) and runs on OpenLDAP only.
+- Scenario 016 ignores `-Template` too: the LDAP data-scale templates do not apply to a database source, and its own deterministic SQL seeder sizes the data. Its cost is dominated by the database containers rather than by JIM: a cold first run also pays the 13.6GB Oracle image pull.
 
 ---
 
@@ -500,7 +500,7 @@ All templates generate realistic enterprise data following normal distribution p
 
 ### Phase 1 (Supported) - Person Entity Scenarios (LDAP & CSV)
 
-#### Scenario 1: Person Entity - HR to Identity Directory
+#### Scenario 001: Person Entity - HR to Identity Directory
 
 **Purpose**: Validate the most common ILM use case - provisioning users from HR system to Active Directory.
 
@@ -533,7 +533,7 @@ All templates generate realistic enterprise data following normal distribution p
 | **ImportOnly** | Runs the HR CSV Full Import and stops before sync, for debugging CSO creation issues |
 | **SyncOnly** | Runs HR CSV Full Import + Full Sync and stops before exports, so Pending Exports can be inspected before they fire |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-001-HRToIdentityDirectory.ps1`
 
 **Execution Model**:
 
@@ -541,28 +541,28 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 
 ```powershell
 # Step 1: Joiner - Add user to HR CSV, trigger JIM sync, verify in AD
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Joiner -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step Joiner -Template Small
 
 # Step 2a: Mover - Modify user attributes in CSV, verify changes in AD
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Mover -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step Mover -Template Small
 
 # Step 2b: Mover-Rename - Change user name, verify DN rename in AD
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Mover-Rename -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step Mover-Rename -Template Small
 
 # Step 2c: Mover-Move - Change display name, verify LDAP move operation
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Mover-Move -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step Mover-Move -Template Small
 
 # Step 3: Leaver - Remove user from CSV, verify deprovisioned in AD
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Leaver -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step Leaver -Template Small
 
 # Step 4: Reconnection - Re-add user before grace period, verify preserved
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Reconnection -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step Reconnection -Template Small
 
 # Step 5: InitialExportOnly - Add Employee Type -> employeeType Initial Export Only mapping, verify provisioning/source-change/external-change behaviour (#223)
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step InitialExportOnly -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step InitialExportOnly -Template Small
 
 # Run all steps sequentially (waits for JIM between each)
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All -Template Small
+./Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Step All -Template Small
 ```
 
 **Step Details**:
@@ -593,13 +593,13 @@ Each step validates that the RPEI Outcome Graph records the correct causal chain
 | Leaver | CSV Full Import | `DeletionDetected` | Items have `outcomeSummary` containing `DeletionDetected` |
 | Leaver | CSV Delta Sync | `Disconnected` | Items have `outcomeSummary` containing `Disconnected` |
 
-These assertions piggyback on Scenario 1's existing lifecycle rather than creating a separate scenario, since outcome tracking is a cross-cutting concern exercised by every sync operation.
+These assertions piggyback on Scenario 001's existing lifecycle rather than creating a separate scenario, since outcome tracking is a cross-cutting concern exercised by every sync operation.
 
 Repository-level tests for the dual-path stats derivation logic (outcome-based vs legacy fallback) are in `test/JIM.Web.Api.Tests/ActivityOutcomeStatsIntegrationTests.cs`.
 
 ---
 
-#### Scenario 2: Person Entity - Cross-domain Synchronisation
+#### Scenario 002: Person Entity - Cross-domain Synchronisation
 
 **Purpose**: Validate unidirectional synchronisation of person entities between two directory services.
 
@@ -616,24 +616,24 @@ Repository-level tests for the dual-path stats derivation logic (outcome-based v
 | 3 | **ReverseSync** | User created directly in Target AD -> verifies it does NOT project to the metaverse (the Target import rule has `ProjectToMetaverse=false`, so Target imports may only join existing MVOs, never create new ones). Validates the unidirectional design. |
 | 4 | **Conflict** | Same user changed simultaneously in Source and Target -> Source wins; Target is overwritten on next sync |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-002-CrossDomainSync.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario2-CrossDomainSync.ps1 -Step Provision -Template Small
-./Invoke-Scenario2-CrossDomainSync.ps1 -Step ForwardSync -Template Small
-./Invoke-Scenario2-CrossDomainSync.ps1 -Step ReverseSync -Template Small
-./Invoke-Scenario2-CrossDomainSync.ps1 -Step Conflict -Template Small
+./Invoke-Scenario-002-CrossDomainSync.ps1 -Step Provision -Template Small
+./Invoke-Scenario-002-CrossDomainSync.ps1 -Step ForwardSync -Template Small
+./Invoke-Scenario-002-CrossDomainSync.ps1 -Step ReverseSync -Template Small
+./Invoke-Scenario-002-CrossDomainSync.ps1 -Step Conflict -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario2-CrossDomainSync.ps1 -Step All -Template Small
+./Invoke-Scenario-002-CrossDomainSync.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 3: Person Entity - GALSYNC (Global Address List Synchronisation)
+#### Scenario 003: Person Entity - GALSYNC (Global Address List Synchronisation)
 
 **Purpose**: Validate exporting directory users to CSV for distribution/reporting.
 
@@ -649,23 +649,23 @@ Repository-level tests for the dual-path stats derivation logic (outcome-based v
 | 2 | **Update** | User attributes modified in AD -> CSV updated |
 | 3 | **Delete** | User deleted in AD -> removed from CSV |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario3-GALSYNC.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-003-GALSYNC.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario3-GALSYNC.ps1 -Step Export -Template Small
-./Invoke-Scenario3-GALSYNC.ps1 -Step Update -Template Small
-./Invoke-Scenario3-GALSYNC.ps1 -Step Delete -Template Small
+./Invoke-Scenario-003-GALSYNC.ps1 -Step Export -Template Small
+./Invoke-Scenario-003-GALSYNC.ps1 -Step Update -Template Small
+./Invoke-Scenario-003-GALSYNC.ps1 -Step Delete -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario3-GALSYNC.ps1 -Step All -Template Small
+./Invoke-Scenario-003-GALSYNC.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 4: MVO Deletion Rules - Comprehensive Coverage
+#### Scenario 004: MVO Deletion Rules - Comprehensive Coverage
 
 **Purpose**: Validate every MVO deletion rule and obsoletion behaviour end-to-end against a two-source topology, exercising both attribute recall and full MVO deletion.
 
@@ -688,26 +688,26 @@ This shape lets the same scenario cover both *attribute recall* (Training source
 | 6 | **ManualNoRecall** | `Manual` rule + `RemoveContributedAttributesOnObsoletion=false`. MVO survives, attributes are retained, no Pending Exports queued. |
 | 7 | **InternalProtection** | MVOs with `Origin=Internal` must never be auto-deleted regardless of rule. **Deferred** pending the Internal MVO management feature. |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario4-DeletionRules.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-004-DeletionRules.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario4-DeletionRules.ps1 -Step WhenLastConnectorRecall -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step WhenLastConnectorNoRecall -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step AuthoritativeImmediate -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step AuthoritativeGracePeriod -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step ManualRecall -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step ManualNoRecall -Template Small
+./Invoke-Scenario-004-DeletionRules.ps1 -Step WhenLastConnectorRecall -Template Small
+./Invoke-Scenario-004-DeletionRules.ps1 -Step WhenLastConnectorNoRecall -Template Small
+./Invoke-Scenario-004-DeletionRules.ps1 -Step AuthoritativeImmediate -Template Small
+./Invoke-Scenario-004-DeletionRules.ps1 -Step AuthoritativeGracePeriod -Template Small
+./Invoke-Scenario-004-DeletionRules.ps1 -Step ManualRecall -Template Small
+./Invoke-Scenario-004-DeletionRules.ps1 -Step ManualNoRecall -Template Small
 
 # Run all implemented steps sequentially (skips Test 7 InternalProtection)
-./Invoke-Scenario4-DeletionRules.ps1 -Step All -Template Small
+./Invoke-Scenario-004-DeletionRules.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 5: Matching Rules and Join Logic
+#### Scenario 005: Matching Rules and Join Logic
 
 **Purpose**: Validate matching rules for joining CSOs to existing MVOs based on configurable criteria.
 
@@ -726,7 +726,7 @@ This shape lets the same scenario cover both *attribute recall* (Training source
 | 5 | **JoinConflict** | Two CSOs with different hrIds but same employeeId -> `CouldNotJoinDueToExistingJoin` error | ✅ Passing |
 | 6 | **CaseSensitivity** | Case-insensitive matching (the default) joins a CSO with `employeeId=emp123` to an existing MVO with `employeeId=EMP123` | ✅ Passing |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario5-MatchingRules.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-005-MatchingRules.ps1`
 
 **Key Design**:
 - Uses `hrId` (GUID format) as the CSV external ID instead of `employeeId`
@@ -740,36 +740,36 @@ When two CSV rows with identical external IDs are processed in the same import b
 
 ```powershell
 # Run passing tests (Projection, Join, JoinConflict)
-./Invoke-Scenario5-MatchingRules.ps1 -Step All -Template Small
+./Invoke-Scenario-005-MatchingRules.ps1 -Step All -Template Small
 
 # Individual steps
-./Invoke-Scenario5-MatchingRules.ps1 -Step Projection -Template Small
-./Invoke-Scenario5-MatchingRules.ps1 -Step Join -Template Small
-./Invoke-Scenario5-MatchingRules.ps1 -Step JoinConflict -Template Small
+./Invoke-Scenario-005-MatchingRules.ps1 -Step Projection -Template Small
+./Invoke-Scenario-005-MatchingRules.ps1 -Step Join -Template Small
+./Invoke-Scenario-005-MatchingRules.ps1 -Step JoinConflict -Template Small
 
 # Test duplicate detection (now runs in All mode)
-./Invoke-Scenario5-MatchingRules.ps1 -Step DuplicatePrevention -Template Small
+./Invoke-Scenario-005-MatchingRules.ps1 -Step DuplicatePrevention -Template Small
 
 # Test multiple matching rules (complex test - run separately)
-./Invoke-Scenario5-MatchingRules.ps1 -Step MultipleRules -Template Small
+./Invoke-Scenario-005-MatchingRules.ps1 -Step MultipleRules -Template Small
 ```
 
 ---
 
-#### Scenario 6: Scheduler Service End-to-End Testing
+#### Scenario 006: Scheduler Service End-to-End Testing
 
 **Purpose**: Validate the scheduler service functionality end-to-end, including schedule creation, automatic triggering, manual execution, step progression, parallel step execution, and overlap handling.
 
 **Concept**: This scenario tests the scheduler component of JIM that allows administrators to automate synchronisation tasks. It verifies that schedules are properly created, picked up by the scheduler service at the right times, executed through the worker, and that multi-step schedules (including parallel step execution) progress correctly.
 
-**Infrastructure**: The enhanced Scenario1 setup creates 4 Connected Systems required for comprehensive parallel testing:
+**Infrastructure**: The enhanced Scenario-001 setup creates 4 Connected Systems required for comprehensive parallel testing:
 - **HR CSV Source** - Primary identity source
 - **Training Records Source** - Secondary source (contributes training attributes)
 - **Samba AD** - Primary identity target
 - **Cross-Domain Export** - Secondary target (CSV export)
 
 **Systems**:
-- Uses any existing Connected Systems (typically from Scenario1, Scenario2, or Scenario8 setup)
+- Uses any existing Connected Systems (typically from Scenario-001, Scenario-002, or Scenario-008 setup)
 - Requires at least one Connected System with Run Profiles configured
 
 **Test Steps** (can be run individually or all together):
@@ -781,29 +781,29 @@ When two CSV rows with identical external IDs are processed in the same import b
 | 3 | **AutoTrigger** | Enable a schedule with immediate trigger (every minute) and verify scheduler picks it up |
 | 4 | **Overlap** | Verify that multiple manual executions can run concurrently for the same schedule |
 | 5 | **MultiStep** | Create a schedule with multiple sequential steps and verify they execute in order |
-| 6 | **Parallel** | Create a complex 10-step schedule with parallel imports, sequential syncs, parallel exports (requires 4 Connected Systems from Scenario1) |
+| 6 | **Parallel** | Create a complex 10-step schedule with parallel imports, sequential syncs, parallel exports (requires 4 Connected Systems from Scenario-001) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario6-SchedulerService.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-006-SchedulerService.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Run all tests
-./Invoke-Scenario6-SchedulerService.ps1 -Step All
+./Invoke-Scenario-006-SchedulerService.ps1 -Step All
 
 # Individual steps
-./Invoke-Scenario6-SchedulerService.ps1 -Step Create
-./Invoke-Scenario6-SchedulerService.ps1 -Step ManualTrigger
-./Invoke-Scenario6-SchedulerService.ps1 -Step AutoTrigger
-./Invoke-Scenario6-SchedulerService.ps1 -Step Overlap
-./Invoke-Scenario6-SchedulerService.ps1 -Step MultiStep
-./Invoke-Scenario6-SchedulerService.ps1 -Step Parallel
+./Invoke-Scenario-006-SchedulerService.ps1 -Step Create
+./Invoke-Scenario-006-SchedulerService.ps1 -Step ManualTrigger
+./Invoke-Scenario-006-SchedulerService.ps1 -Step AutoTrigger
+./Invoke-Scenario-006-SchedulerService.ps1 -Step Overlap
+./Invoke-Scenario-006-SchedulerService.ps1 -Step MultiStep
+./Invoke-Scenario-006-SchedulerService.ps1 -Step Parallel
 ```
 
 **Prerequisites**:
-- **Requires 4 Connected Systems** - Run Scenario1 setup first to create the full test infrastructure
-- The extended Scenario1 setup creates: HR CSV, Training CSV, Samba AD, Cross-Domain CSV
-- Example: `./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Step Joiner` then run Scenario6
+- **Requires 4 Connected Systems** - Run Scenario-001 setup first to create the full test infrastructure
+- The extended Scenario-001 setup creates: HR CSV, Training CSV, Samba AD, Cross-Domain CSV
+- Example: `./Run-IntegrationTests.ps1 -Scenario Scenario-001-HRToIdentityDirectory -Step Joiner` then run Scenario-006
 
 **Parallel Step Schedule Structure** (14 steps across 9 unique step indices):
 ```
@@ -828,7 +828,7 @@ Step 8 [SEQUENTIAL]:  Delta Sync AD
 
 ---
 
-#### Scenario 7: Clear Connected System Objects
+#### Scenario 007: Clear Connected System Objects
 
 **Purpose**: Validate the Clear Connected System Objects feature, which removes all CSOs from a Connected System's connector space, with optional preservation of change history.
 
@@ -846,18 +846,18 @@ Step 8 [SEQUENTIAL]:  Delta Sync AD
 | 2 | **KeepHistory** | Re-import to recreate CSOs and change history, then clear with `-KeepChangeHistory`. Asserts CSOs are gone but `changeRecordCount > 0` so audit data is preserved. |
 | 3 | **EdgeCases** | Clearing an already-empty connector space succeeds without error; clearing one Connected System does not affect CSOs in another. |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario7-ClearConnectedSystemObjects.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-007-ClearConnectedSystemObjects.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario7-ClearConnectedSystemObjects.ps1 -Step DeleteHistory -Template Nano
-./Invoke-Scenario7-ClearConnectedSystemObjects.ps1 -Step KeepHistory -Template Nano
-./Invoke-Scenario7-ClearConnectedSystemObjects.ps1 -Step EdgeCases -Template Nano
+./Invoke-Scenario-007-ClearConnectedSystemObjects.ps1 -Step DeleteHistory -Template Nano
+./Invoke-Scenario-007-ClearConnectedSystemObjects.ps1 -Step KeepHistory -Template Nano
+./Invoke-Scenario-007-ClearConnectedSystemObjects.ps1 -Step EdgeCases -Template Nano
 
 # Run all steps sequentially
-./Invoke-Scenario7-ClearConnectedSystemObjects.ps1 -Step All -Template Nano
+./Invoke-Scenario-007-ClearConnectedSystemObjects.ps1 -Step All -Template Nano
 ```
 
 ---
@@ -873,7 +873,7 @@ Two further entitlement scenarios are designed but **deferred**, both blocked on
 
 ---
 
-#### Scenario 8: Entitlement Management - Cross-domain Entitlement Synchronisation
+#### Scenario 008: Entitlement Management - Cross-domain Entitlement Synchronisation
 
 **Purpose**: Validate synchronising entitlement groups between two AD domains, with one domain authoritative for groups.
 
@@ -903,40 +903,40 @@ Two further entitlement scenarios are designed but **deferred**, both blocked on
 |------|--------|
 | **ImportToMV** | Imports from Source AD and projects to the metaverse, stopping before the export. Lets you inspect MVO state before downstream propagation. |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-008-CrossDomainEntitlementSync.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step InitialSync -Template Small
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step ForwardSync -Template Small
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step DetectDrift -Template Small
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step ReassertState -Template Small
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step NewGroup -Template Small
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step DeleteGroup -Template Small
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step LeaverCohort -Template Small   # OpenLDAP runs only; skipped on Samba AD
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step InitialSync -Template Small
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step ForwardSync -Template Small
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step ReassertState -Template Small
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step NewGroup -Template Small
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step DeleteGroup -Template Small
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step LeaverCohort -Template Small   # OpenLDAP runs only; skipped on Samba AD
 
 # Run all steps sequentially
-./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step All -Template Small
+./Invoke-Scenario-008-CrossDomainEntitlementSync.ps1 -Step All -Template Small
 
 # LeaverCohort via the runner (OpenLDAP; any template, including the long-tail Scale templates)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step LeaverCohort -DirectoryType OpenLDAP
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-008-CrossDomainEntitlementSync" -Step LeaverCohort -DirectoryType OpenLDAP
 ```
 
 ##### LeaverCohort: Temporal Scope Reconciliation at Scale (#908)
 
-The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/908)) exercises the Temporal Scope Reconciler ([#892](https://github.com/TetronIO/JIM/issues/892)) against reference-heavy, burst-shaped leaver deprovisioning at whatever scale the template provides. It is the scale companion to the Nano-scale relative-date scoping scenarios: Scenario 12 covers the inbound lane and Scenario 13 the outbound lane, each with a handful of fixed users, while this step drives the same machinery through a cohort of users and their group memberships. It is appended after `DeleteGroup` in the `-Step All` sequence.
+The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/908)) exercises the Temporal Scope Reconciler ([#892](https://github.com/TetronIO/JIM/issues/892)) against reference-heavy, burst-shaped leaver deprovisioning at whatever scale the template provides. It is the scale companion to the Nano-scale relative-date scoping scenarios: Scenario 012 covers the inbound lane and Scenario 013 the outbound lane, each with a handful of fixed users, while this step drives the same machinery through a cohort of users and their group memberships. It is appended after `DeleteGroup` in the `-Step All` sequence.
 
-**OpenLDAP only.** The step needs a DateTime-typed source attribute to carry the relative-date scoping criterion. The OpenLDAP image's JIM schema extension defines `jimPerson` (SUP inetOrgPerson STRUCTURAL) with `jimEmployeeEndDate` (Generalized Time) and `jimLeaverCohort` (a Boolean cohort marker). Samba AD has no equivalent writable Generalized-Time attribute, so on Samba AD runs the step is skipped with a message. Run it with `-DirectoryType OpenLDAP` using any template, including the long-tail Scale templates (which are Scenario 8 + OpenLDAP only).
+**OpenLDAP only.** The step needs a DateTime-typed source attribute to carry the relative-date scoping criterion. The OpenLDAP image's JIM schema extension defines `jimPerson` (SUP inetOrgPerson STRUCTURAL) with `jimEmployeeEndDate` (Generalized Time) and `jimLeaverCohort` (a Boolean cohort marker). Samba AD has no equivalent writable Generalized-Time attribute, so on Samba AD runs the step is skipped with a message. Run it with `-DirectoryType OpenLDAP` using any template, including the long-tail Scale templates (which are Scenario 008 + OpenLDAP only).
 
-**Population changes**: Scenario 8 OpenLDAP users are created as `jimPerson` with a fixed far-future `jimEmployeeEndDate` (`20991231235959Z`). Roughly 1% of users (minimum 1, capped at 10,000) are marked `jimLeaverCohort=TRUE`; the cohort is spread across the user index space and never includes a group's initial member, so no group can be emptied by the cohort's removal (`groupOfNames` requires at least one member value). The cohort choice lives in the directory itself, so snapshot images stay self-describing.
+**Population changes**: Scenario 008 OpenLDAP users are created as `jimPerson` with a fixed far-future `jimEmployeeEndDate` (`20991231235959Z`). Roughly 1% of users (minimum 1, capped at 10,000) are marked `jimLeaverCohort=TRUE`; the cohort is spread across the user index space and never includes a group's initial member, so no group can be emptied by the cohort's removal (`groupOfNames` requires at least one member value). The cohort choice lives in the directory itself, so snapshot images stay self-describing.
 
 **Setup changes**:
 
 - The Source user import rule gains a scoping criteria group `jimEmployeeEndDate >= now` (relative: Hours/0/FromNow) with `InboundOutOfScopeAction=Disconnect`.
 - The User Metaverse Object Type gains a `WhenAuthoritativeSourceDisconnected` deletion rule (Source system trigger, zero grace period), mirroring the existing Group rule.
-- The built-in "Temporal Scope Reconciliation" schedule is disabled at setup so it can only be triggered manually by the step (the same pattern Scenarios 12 and 13 use).
+- The built-in "Temporal Scope Reconciliation" schedule is disabled at setup so it can only be triggered manually by the step (the same pattern Scenarios 012 and 013 use).
 
 **Step flow**:
 
@@ -955,7 +955,7 @@ The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/9
 
 ---
 
-#### Scenario 9: Partition-Scoped Import Run Profiles
+#### Scenario 009: Partition-Scoped Import Run Profiles
 
 **Purpose**: Validate that partition-scoped import Run Profiles correctly filter to a specified partition, and that unscoped import Run Profiles import from all selected partitions.
 
@@ -974,25 +974,25 @@ The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/9
 | 3 | **UnscopedImport** | Full Import without `PartitionId` -> imports from all selected partitions |
 | 4 | **Comparison** | Verify counts are consistent (scoped subsets sum to unscoped total) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario9-PartitionScopedImports.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-009-PartitionScopedImports.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario9-PartitionScopedImports.ps1 -Step ScopedImport
-./Invoke-Scenario9-PartitionScopedImports.ps1 -Step UnscopedImport
-./Invoke-Scenario9-PartitionScopedImports.ps1 -Step Comparison
+./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step ScopedImport
+./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step UnscopedImport
+./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step Comparison
 
 # Run all steps sequentially
-./Invoke-Scenario9-PartitionScopedImports.ps1 -Step All
+./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step All
 ```
 
 > **Note**: Nano or Micro templates are recommended; the scenario validates run-profile filtering rather than data scale.
 
 ---
 
-#### Scenario 10: Synchronisation Rule Scoping Behaviour
+#### Scenario 010: Synchronisation Rule Scoping Behaviour
 
 **Purpose**: Validate the full Synchronisation Rule scoping transition matrix end-to-end: what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
 
@@ -1000,7 +1000,7 @@ The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/9
 - Source: CSV (HR system, File connector)
 - Target: Panoply AD (or OpenLDAP)
 
-Both Connected Systems are built from scratch by `Setup-Scenario10.ps1`; the scenario is independent of Scenario 1's larger HR + Training fixture.
+Both Connected Systems are built from scratch by `Setup-Scenario-010.ps1`; the scenario is independent of Scenario 001's larger HR + Training fixture.
 
 **Test Steps** (executed sequentially by `-Step All`):
 
@@ -1016,20 +1016,20 @@ Both Connected Systems are built from scratch by `Setup-Scenario10.ps1`; the sce
 | 8 | **CrossSystemCascade** | `EvaluateOutOfScopeExportsAsync` runs inline during sync -> Delete PendingExport queued immediately, before any Export run |
 | 9 | **CriteriaOperators** | Round-trip persistence of text `Equals`/`StartsWith`/`Contains` criteria in a single `All` group via the public API |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario10-SyncRuleScoping.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-010-SyncRuleScoping.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Run all 9 sub-tests in order (default)
-./Invoke-Scenario10-SyncRuleScoping.ps1 -Step All
+./Invoke-Scenario-010-SyncRuleScoping.ps1 -Step All
 
 # Run a single sub-test (useful for debugging a specific transition)
-./Invoke-Scenario10-SyncRuleScoping.ps1 -Step OutboundExitDelete
-./Invoke-Scenario10-SyncRuleScoping.ps1 -Step CrossSystemCascade
+./Invoke-Scenario-010-SyncRuleScoping.ps1 -Step OutboundExitDelete
+./Invoke-Scenario-010-SyncRuleScoping.ps1 -Step CrossSystemCascade
 ```
 
-The three cascade sub-tests (6, 7, 8) each run against a freshly-reset JIM instance (via `Reset-JIMSystem` + re-running `Setup-Scenario10`) so the assertions are not polluted by intermediate state from the inbound block. The reset is the production-realistic Export -> confirming Import -> next Sync loop.
+The three cascade sub-tests (6, 7, 8) each run against a freshly-reset JIM instance (via `Reset-JIMSystem` + re-running `Setup-Scenario-010`) so the assertions are not polluted by intermediate state from the inbound block. The reset is the production-realistic Export -> confirming Import -> next Sync loop.
 
 **Scope deliberately omitted from this scenario** (tracked separately):
 - Evaluation of `NotEquals` and comparison operators (`GreaterThan`, `LessThan`, `GreaterThanOrEquals`, `LessThanOrEquals`)
@@ -1040,13 +1040,13 @@ The three cascade sub-tests (6, 7, 8) each run against a freshly-reset JIM insta
 
 These belong in a dedicated scoping evaluation matrix scenario rather than expanding this one, which is intentionally kept fast and shaped to cover the *transition matrix* most ILM deployments will configure.
 
-The dedicated scoping evaluation matrix scenario is Scenario 11 (below).
+The dedicated scoping evaluation matrix scenario is Scenario 011 (below).
 
 ---
 
-#### Scenario 11: Scoping Criteria Evaluation Matrix
+#### Scenario 011: Scoping Criteria Evaluation Matrix
 
-**Purpose**: Exercise the full operator x value-type x group-structure evaluation matrix that `SyncRuleScopingCriteria` exposes, complementing Scenario 10 which covers the lifecycle action matrix on a single operator. Designed as the natural place to catch regressions in `ScopingEvaluationServer` and the scoping API surface as new operators or value carriers are added.
+**Purpose**: Exercise the full operator x value-type x group-structure evaluation matrix that `SyncRuleScopingCriteria` exposes, complementing Scenario 010 which covers the lifecycle action matrix on a single operator. Designed as the natural place to catch regressions in `ScopingEvaluationServer` and the scoping API surface as new operators or value carriers are added.
 
 **Systems**:
 - File connector with column-based object-type discovery (one CSO type per matrix cell).
@@ -1060,7 +1060,7 @@ The dedicated scoping evaluation matrix scenario is Scenario 11 (below).
 | Default | *(no flag)* | ~41 | < 5 min | Every applicable `(operator x value-type)` pair with text `CaseSensitive` variants, plus at least one `All`/`Any`/nested group representative. |
 | Exhaustive | `-Exhaustive` | ~152 | < 10 min | Full Cartesian on `(operator x value-type x group-structure)`. Reserved for pre-release runs and post-evaluator-refactor verification. |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario11-ScopingCriteriaMatrix.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-011-ScopingCriteriaMatrix.ps1`
 
 **Manifest**: `test/integration/scenarios/data/scoping-criteria-matrix.json` (generated by `Build-ScopingCriteriaMatrix.ps1`; canonical artifact, do not edit by hand).
 
@@ -1079,22 +1079,22 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 
 ```powershell
 # Default tier (~5 min)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix
 
 # Quick tier for PR feedback (~90s)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Quick
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -Quick
 
 # Exhaustive tier for pre-release (~10 min)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Exhaustive
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -Exhaustive
 
 # Filter to a single operator across the chosen tier
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -OperatorFilter NotEquals
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -OperatorFilter NotEquals
 
 # Filter to a single fully-qualified cell name (debug-friendly)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -Step Text.Equals.Single.CS
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -Step Text.Equals.Single.CS
 
 # Skip the API negative-cell probes (saves a few seconds; useful in CI noise reduction)
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario11-ScopingCriteriaMatrix -IncludeNegativeCells:$false
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-011-ScopingCriteriaMatrix -IncludeNegativeCells:$false
 ```
 
 **Sub-tests** (in order):
@@ -1109,13 +1109,13 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 
 ---
 
-#### Scenario 12: Relative-Date Inbound Scoping
+#### Scenario 012: Relative-Date Inbound Scoping
 
 **Purpose**: Exercise relative-date scoping criteria on an inbound (Import) Synchronisation Rule end-to-end. The rule scopes the "currently-employed" window (`employeeStartDate <= now` and `employeeEndDate >= now`), so a user is in scope only while currently employed: date-driven joiner provisioning and leaver deprovisioning. Crucially, it also proves the criterion is re-resolved against the wall clock on every run, not frozen at rule-creation time; unit tests (which inject "now") cannot prove this against the live `DateTime.UtcNow` path.
 
 **Systems**:
 - Source: CSV (HR system, File connector)
-- No directory target; metaverse-only by design. Projection is "provisioned" and last-connector deletion is "deprovisioned"; the cross-system Delete cascade to a target directory is covered by Scenario 10, and the scale variant is covered by Scenario 8's `LeaverCohort` step.
+- No directory target; metaverse-only by design. Projection is "provisioned" and last-connector deletion is "deprovisioned"; the cross-system Delete cascade to a target directory is covered by Scenario 010, and the scale variant is covered by Scenario 008's `LeaverCohort` step.
 
 The scenario seeds its own fixed test users positioned relative to "now" and ignores the template.
 
@@ -1128,29 +1128,29 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 | 3 | **LeaverDeprovisionedOnEndDate** | The leaver's end date moves into the past -> out of scope; with `InboundOutOfScopeAction=Disconnect` the CSO is disconnected and the User type's default `WhenLastConnectorDisconnected` deletion rule removes the orphaned Metaverse Object: date-driven deprovisioning |
 | 4 | **ReEvaluatedEachRun** | A user's end date is a fixed instant a few seconds in the future; sync (in scope), wait past that instant, sync again with no data changes -> the same data falls out of scope purely because "now" advanced |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario12-RelativeDateScoping.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-012-RelativeDateScoping.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Run all steps sequentially (default)
-./Invoke-Scenario12-RelativeDateScoping.ps1 -Step All -ApiKey "jim_..."
+./Invoke-Scenario-012-RelativeDateScoping.ps1 -Step All -ApiKey "jim_..."
 
 # Individual steps
-./Invoke-Scenario12-RelativeDateScoping.ps1 -Step ReEvaluatedEachRun -ApiKey "jim_..."
+./Invoke-Scenario-012-RelativeDateScoping.ps1 -Step ReEvaluatedEachRun -ApiKey "jim_..."
 ```
 
 **Step-specific parameter**: `-WindowSeconds <int>` (default 90) sets how far in the future the `ReEvaluatedEachRun` user's end date is placed; raise it on a slow host if the first import + sync does not complete within the window.
 
 ---
 
-#### Scenario 13: Relative-Date Outbound Scoping
+#### Scenario 013: Relative-Date Outbound Scoping
 
 **Purpose**: Exercise a relative-date scoping criterion on an outbound (Export) Synchronisation Rule and prove the Temporal Scope Reconciler's outbound lane ([#892](https://github.com/TetronIO/JIM/issues/892)). The export rule holds downstream provisioning until the joiner's start date arrives (`Employee Start Date <= now`). The inbound rule is deliberately unscoped, so the Metaverse Object persists throughout; only the export scope flips as "now" advances, pinning any downstream change on the outbound reconciler lane and nothing else.
 
 **Systems**:
 - Source: CSV (HR system, File connector)
-- Target: File connector (a header-only CSV the connector appends to); no directory container, so the test stays fast and free of directory flakiness, mirroring Scenario 12
+- Target: File connector (a header-only CSV the connector appends to); no directory container, so the test stays fast and free of directory flakiness, mirroring Scenario 012
 
 The scenario seeds its own fixed test users positioned relative to "now" and ignores the template.
 
@@ -1161,30 +1161,30 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 | 1 | **OutboundInitialScope** | Seeds a control (start date in the past) and a joiner (start date a fixed instant a few seconds in the future). Both project Metaverse Objects (inbound is unscoped); the export rule provisions the control downstream but holds the joiner, so the target connector space has exactly one object |
 | 2 | **ProvisionedOnSchedule** | After the wall clock passes the joiner's start instant, with no data changes: a plain sync provisions nothing new (the hot path never reconsiders an unchanged Metaverse Object); triggering the Temporal Scope Reconciler flags the joiner, the next sync provisions it downstream, and the exported row carries the joiner's Manager reference intact (proving reference attributes survive a reconciler-driven provision) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario13-RelativeDateOutboundScoping.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario-013-RelativeDateOutboundScoping.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Run all steps sequentially (default)
-./Invoke-Scenario13-RelativeDateOutboundScoping.ps1 -Step All -ApiKey "jim_..."
+./Invoke-Scenario-013-RelativeDateOutboundScoping.ps1 -Step All -ApiKey "jim_..."
 
 # Individual steps
-./Invoke-Scenario13-RelativeDateOutboundScoping.ps1 -Step ProvisionedOnSchedule -ApiKey "jim_..."
+./Invoke-Scenario-013-RelativeDateOutboundScoping.ps1 -Step ProvisionedOnSchedule -ApiKey "jim_..."
 ```
 
 **Step-specific parameter**: `-WindowSeconds <int>` (default 120) sets how far in the future the joiner's start date is placed; raise it on a slow host if setup plus the first import + sync + export does not complete before the boundary is crossed.
 
 ---
 
-#### Scenario 17: Initial Password Provisioning
+#### Scenario 017: Initial Password Provisioning
 
 **Status**: the credential chain (Tests 1-6 below) and the park-then-release loop added for #1697 are
 implemented and passing. Samba AD only.
 
-> **Setup recovers the directory hierarchy before asserting anything.** `Setup-Scenario1.ps1` imports the hierarchy once and selects the Partition afterwards, and Containers are enumerated only for a Partition that is already selected, so a single import leaves none; it warns and carries on, and the failure resurfaces several steps later as an export refused with "selected partition(s) contain no enumerated containers". Step 2b of `Setup-Scenario17.ps1` drives the sequence to completion instead (import, select the Partition, import again, select the Container) and throws on the spot if any stage fails. The ordering belongs to Setup-Scenario1 and affects every scenario that composes it.
+> **Setup recovers the directory hierarchy before asserting anything.** `Setup-Scenario-001.ps1` imports the hierarchy once and selects the Partition afterwards, and Containers are enumerated only for a Partition that is already selected, so a single import leaves none; it warns and carries on, and the failure resurfaces several steps later as an export refused with "selected partition(s) contain no enumerated containers". Step 2b of `Setup-Scenario-017.ps1` drives the sequence to completion instead (import, select the Partition, import again, select the Container) and throws on the spot if any stage fails. The ordering belongs to Setup-Scenario-001 and affects every scenario that composes it.
 >
-> **Setup also removes Scenario 1's `userAccountControl` Attribute Flow.** The Initial Password's EnableAccount option writes the same attribute, and leaving both in place gives one attribute two writers: the confirming import reports the export as unconfirmed and JIM records that it "will attempt to reassert the change on the next export run". Switching EnableAccount off is not an alternative, because `false` means "disable the account", not "leave it alone". Removing the flow is what an administrator provisioning through the Initial Password should do; the account's enabled state belongs to whichever mechanism sets the password, because Active Directory will not enable an account that does not already hold a policy-compliant one.
+> **Setup also removes Scenario 001's `userAccountControl` Attribute Flow.** The Initial Password's EnableAccount option writes the same attribute, and leaving both in place gives one attribute two writers: the confirming import reports the export as unconfirmed and JIM records that it "will attempt to reassert the change on the next export run". Switching EnableAccount off is not an alternative, because `false` means "disable the account", not "leave it alone". Removing the flow is what an administrator provisioning through the Initial Password should do; the account's enabled state belongs to whichever mechanism sets the password, because Active Directory will not enable an account that does not already hold a policy-compliant one.
 
 **The chain, and why each link is needed:**
 
@@ -1200,13 +1200,13 @@ implemented and passing. Samba AD only.
 
 **Why the password source is Static.** A generated password is produced at the moment it is set and stored nowhere, by design, so no test can ever bind with one. Static is the only source whose value the scenario can know. The delivery path it exercises (stage a Pending Initial Password on the Create export, then have the Password Delivery Service set it through the Connector's password channel) is the same one the generated sources use, so what is given up is the generator, not the mechanism.
 
-**Delivery is queued, not synchronous with the export.** The Create export's Activity completing only means the account was written; the Password Delivery Service delivers the Initial Password within seconds afterwards, retried on the Connected System's own schedule if the first attempt does not land. The scenario waits for the queue to drain (30-second budget) before reading the account back, and asserts nothing was parked or expired in the process, the same shape Scenario 20 uses for its own delivery waits.
+**Delivery is queued, not synchronous with the export.** The Create export's Activity completing only means the account was written; the Password Delivery Service delivers the Initial Password within seconds afterwards, retried on the Connected System's own schedule if the first attempt does not land. The scenario waits for the queue to drain (30-second budget) before reading the account back, and asserts nothing was parked or expired in the process, the same shape Scenario 020 uses for its own delivery waits.
 
-**The park-then-release loop, added ahead of the credential chain above (#1697).** Before the Directory Export, the Synchronisation Rule's Initial Password is deliberately set to a value the domain will refuse. A too-short static password alone will not reach the target for this: `Set-JIMSyncRuleInitialPassword` assesses a Static password against the policy JIM already discovered on the Connected System during Setup-Scenario1's schema import, and refuses to save one that policy would reject outright (confirmed empirically: a six-character value is refused at save time, "This Connected System requires at least 7 characters", never reaching the directory). The scenario instead raises the domain's *real* minimum password length via `samba-tool domain passwordsettings set --min-pwd-length` before staging a password that clears JIM's now-stale cached policy but not the domain's raised one, modelling the day after an administrator tightens a real directory's policy and before JIM's next schema refresh notices. The export then genuinely parks every provisioned account, and the scenario asserts the parked count, the queue rows' `Origin`/`SyncRuleId`, and the target's own refusal message recorded against the rule. It then corrects the rule to the valid password and restores the domain's original minimum length.
+**The park-then-release loop, added ahead of the credential chain above (#1697).** Before the Directory Export, the Synchronisation Rule's Initial Password is deliberately set to a value the domain will refuse. A too-short static password alone will not reach the target for this: `Set-JIMSyncRuleInitialPassword` assesses a Static password against the policy JIM already discovered on the Connected System during Setup-Scenario-001's schema import, and refuses to save one that policy would reject outright (confirmed empirically: a six-character value is refused at save time, "This Connected System requires at least 7 characters", never reaching the directory). The scenario instead raises the domain's *real* minimum password length via `samba-tool domain passwordsettings set --min-pwd-length` before staging a password that clears JIM's now-stale cached policy but not the domain's raised one, modelling the day after an administrator tightens a real directory's policy and before JIM's next schema refresh notices. The export then genuinely parks every provisioned account, and the scenario asserts the parked count, the queue rows' `Origin`/`SyncRuleId`, and the target's own refusal message recorded against the rule. It then corrects the rule to the valid password and restores the domain's original minimum length.
 
 **The release loop, and the defect it found.** Correcting the rule releases the parked accounts to the Password Delivery Service (`InitialPasswordServer.ReleaseParkedForSyncRuleAsync`). When this loop was first written, only the portal's save path did that: the API-key-initiated overload of `ConnectedSystemServer.CreateOrUpdateSyncRuleAsync` used by the REST API, the PowerShell module and this scenario wrote the rule with no "read the previous configuration, then release if delivery changed" step, so every row stayed `Parked` after the corrected save. Both overloads now share one update-and-release step (`UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync`), and the previous Initial Password settings are read before anything in the save can flush the tracked rule (#1712). The scenario asserts the release, and restores the domain's password policy in its `finally` block.
 
-**Why Samba AD only.** "Must change at next sign-in" is an Active Directory behaviour with no portable equivalent; JIM reports it as an expiry downgrade on every other directory (`LdapConnectorPassword.BuildNonActiveDirectoryResult`). Step 3 would have nothing to bite on. Both `Setup-Scenario17.ps1` and the scenario refuse to run against OpenLDAP rather than silently asserting less.
+**Why Samba AD only.** "Must change at next sign-in" is an Active Directory behaviour with no portable equivalent; JIM reports it as an expiry downgrade on every other directory (`LdapConnectorPassword.BuildNonActiveDirectoryResult`). Step 3 would have nothing to bite on. Both `Setup-Scenario-017.ps1` and the scenario refuse to run against OpenLDAP rather than silently asserting less.
 
 **`-Template` is ignored.** The scenario asserts against a single account; a larger template only lengthens the export. It always provisions at Micro.
 
@@ -1214,14 +1214,14 @@ implemented and passing. Samba AD only.
 
 ---
 
-#### Scenario 20: Password Synchronisation
+#### Scenario 020: Password Synchronisation
 
 **Status**: authored against [#1119](https://github.com/TetronIO/JIM/issues/1119) Phase 6. Green against
 Samba AD and OpenLDAP.
 
 **Purpose**: prove the OUTBOUND half of Password Synchronisation end to end: a password handed to JIM (REST API, PowerShell, or the portal) is queued and delivered to the accounts an identity holds across its Connected Systems, by signing in to the directory with it. Inbound capture (a directory-side password change flowing back into JIM) is a separate capability, tracked under [#1625](https://github.com/TetronIO/JIM/issues/1625), and is not exercised here. Everything else in the outbound feature's coverage stops short of a directory: the unit tests assert against a mocked LDAP executor and an in-memory queue, so they prove JIM emits the right write and moves the right rows, and prove nothing about whether a directory accepts the result.
 
-**Scripts**: `test/integration/scenarios/Invoke-Scenario20-PasswordSynchronisation.ps1` and `test/integration/Setup-Scenario20.ps1`.
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-020-PasswordSynchronisation.ps1` and `test/integration/Setup-Scenario-020.ps1`.
 
 **The chain, and why each link is needed:**
 
@@ -1244,11 +1244,11 @@ Samba AD and OpenLDAP.
 
 **Test 8 (a parked change retried on demand) is Samba AD only.** It needs a password the directory genuinely refuses so there is something real to park and retry. The OpenLDAP lab container runs no password policy of any kind (no `ppolicy` overlay; confirmed by grepping `test/integration/docker/openldap/` and empirically: a six-character value that Samba AD refuses outright is accepted without complaint by the RFC 3062 Password Modify path there), so nothing sent to it is ever refused on length or content grounds. The test is skipped on OpenLDAP with an explicit note rather than weakened to something that would not prove the same thing; adding a password policy to the OpenLDAP test image was considered and rejected as materially bigger and riskier than this scenario's scope, given how sensitive that image's existing accesslog/MDB tuning already is (see the OpenLDAP notes in `test/CLAUDE.md`).
 
-**Why the substrate is Scenario 17's.** The scenario needs accounts that are provisioned, enabled, and holding a password it knows, which is exactly what `Setup-Scenario17.ps1` builds; `Setup-Scenario20.ps1` composes it rather than rebuilding it, as Scenario 17 itself composes `Setup-Scenario1.ps1`. It asks for one thing differently: `-ExpiryBehaviour NeverExpires` rather than must-change-at-next-sign-in. Active Directory answers a correct password on a must-change account with the same result code as a wrong one (49), distinguished only by a sub-code, and the synchronised password is meant to be the only variable under test.
+**Why the substrate is Scenario 017's.** The scenario needs accounts that are provisioned, enabled, and holding a password it knows, which is exactly what `Setup-Scenario-017.ps1` builds; `Setup-Scenario-020.ps1` composes it rather than rebuilding it, as Scenario 017 itself composes `Setup-Scenario-001.ps1`. It asks for one thing differently: `-ExpiryBehaviour NeverExpires` rather than must-change-at-next-sign-in. Active Directory answers a correct password on a must-change account with the same result code as a wrong one (49), distinguished only by a sub-code, and the synchronised password is meant to be the only variable under test.
 
 **Why the system starts switched off.** Configured-but-off is the harder half of the behaviour and the one with the worse failure mode, so the scenario starts there and enables the system partway through, making the drain a real one rather than a no-op. It is also how an administrator stages a configuration ahead of a change window (requirement 4).
 
-**Runs on Samba AD or OpenLDAP.** On Samba AD, provisioning enables each account as its Initial Password lands, which is an Active Directory operation; OpenLDAP accounts have no disabled state to begin with, so there is nothing to enable and nothing that blocks signing in. The RFC 3062 Password Modify path JIM uses on OpenLDAP works over plain LDAP against the test container (no TLS required there); this was previously believed unexercisable and is not. `Setup-Scenario17.ps1`'s guard is narrower than the whole scenario now: it only requires Samba AD when `-ExpiryBehaviour RequireChangeAtNextSignIn` is requested, which Setup-Scenario20 never does (it asks for `NeverExpires`, for the reason above). `Run-IntegrationTests.ps1` skips only Scenario 17 on an OpenLDAP sweep now; Scenario 20 runs on both.
+**Runs on Samba AD or OpenLDAP.** On Samba AD, provisioning enables each account as its Initial Password lands, which is an Active Directory operation; OpenLDAP accounts have no disabled state to begin with, so there is nothing to enable and nothing that blocks signing in. The RFC 3062 Password Modify path JIM uses on OpenLDAP works over plain LDAP against the test container (no TLS required there); this was previously believed unexercisable and is not. `Setup-Scenario-017.ps1`'s guard is narrower than the whole scenario now: it only requires Samba AD when `-ExpiryBehaviour RequireChangeAtNextSignIn` is requested, which Setup-Scenario-020 never does (it asks for `NeverExpires`, for the reason above). `Run-IntegrationTests.ps1` skips only Scenario 017 on an OpenLDAP sweep now; Scenario 020 runs on both.
 
 **`-Template` is ignored.** The scenario asserts against three accounts; a larger template only lengthens the export. It always provisions at Micro.
 
@@ -1258,13 +1258,13 @@ Samba AD and OpenLDAP.
 
 ---
 
-#### Scenario 22: OpenLDAP Password Policy
+#### Scenario 022: OpenLDAP Password Policy
 
 **Status**: implemented and verified green against [#1702](https://github.com/TetronIO/JIM/issues/1702) Phase 6 (19 assertions, one Micro export; slapd 2.6.10 with `ppolicy.so` loaded from `/opt/bitnami/openldap/lib/openldap`). OpenLDAP only.
 
 **Purpose**: prove that JIM reads the password policy an OpenLDAP directory publishes through the `ppolicy` overlay, and that the Initial Passwords it generates from that policy are ones the directory accepts (PRD Scenarios 1 and 2). The unit tests in `LdapConnectorPasswordPolicyTests` assert against a mocked LDAP executor, so they prove how JIM maps what a directory says and nothing about what a real overlay says or enforces. The fixture's minimum length (12) is above JIM's default, so a generator that ignored the discovered policy would park accounts here.
 
-**Scripts**: `test/integration/scenarios/Invoke-Scenario22-OpenLdapPasswordPolicy.ps1`, `test/integration/Setup-Scenario22.ps1` and `test/integration/Populate-OpenLDAP-Scenario22.ps1`. The base image's `docker/openldap/scripts/01-add-second-suffix.sh` loads the `ppolicy` module and attaches an overlay with no default policy to both databases; the populate script is what gives the Yellowstone overlay something to enforce.
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-022-OpenLdapPasswordPolicy.ps1`, `test/integration/Setup-Scenario-022.ps1` and `test/integration/Populate-OpenLDAP-Scenario-022.ps1`. The base image's `docker/openldap/scripts/01-add-second-suffix.sh` loads the `ppolicy` module and attaches an overlay with no default policy to both databases; the populate script is what gives the Yellowstone overlay something to enforce.
 
 **The chain, and why each link is needed:**
 
@@ -1273,29 +1273,29 @@ Samba AD and OpenLDAP.
 | 1 | The probe user's RFC 3062 change to a 5-character password is refused with a constraint violation (19) | The negative control. Without it, "nothing parked" in test 5 is compatible with an overlay that enforces nothing. Any other refusal (insufficient access, bad bind) is a fixture fault and stops the scenario regardless of `-ContinueOnError`, because nothing after it could then distinguish a satisfied policy from an absent one |
 | 2 | A compliant change over the same channel succeeds, and the entry gains `pwdChangedTime` | The plan's "step 0 spike", recorded: the container takes an RFC 3062 operation from a non-root account over plain `ldap://`, which is the operation JIM's password channel uses on OpenLDAP. `pwdChangedTime` is the overlay's own stamp, so its appearance shows the write went through the overlay rather than round it |
 | 3 | `Get-JIMConnectedSystemPasswordPolicy` reports minimum length 12, history 5, maximum age 90 days, null minimum age and character-class figures, `discoveryOutcome` Read, `policyOverrideSignal` CouldNotDetermine, `furtherChecksApply` false | PRD Scenario 1, value by value. CouldNotDetermine rather than Absent is the plan's decision 2: an empty `pwdPolicySubentry` probe is never "none", because the attribute is operational and may be hidden by access control. `furtherChecksApply` false is decision 3: `pwdCheckQuality` 2 alone flags nothing, only a named check module does |
-| 4 | Scenario 1's import, synchronisation and export at Micro provision the accounts as the provisioner | The Initial Password is set only on a Create export, so provisioning is what drives the generated password into the overlay's quality check |
+| 4 | Scenario 001's import, synchronisation and export at Micro provision the accounts as the provisioner | The Initial Password is set only on a Create export, so provisioning is what drives the generated password into the overlay's quality check |
 | 5 | Every provisioned entry carries `pwdChangedTime`, and JIM reports nothing parked and nothing expired | PRD Scenario 2. With test 1 and the non-root bind, a generated password under 12 characters would have been refused and parked; zero parked therefore means every one was long enough. `pwdChangedTime` on every entry is the directory's own record that each password reached the overlay |
 | 6 | A `pwdPolicySubentry` placed on one entry turns `policyOverrideSignal` to Present after a schema refresh | The override probe is a subtree search for `(pwdPolicySubentry=*)`; this is the only way to see it answer "yes" against a real directory, and it also confirms a refresh re-reads the policy |
 
-**Why JIM binds as a non-root provisioner.** `slapo-ppolicy(5)` exempts the rootdn from every check: a Connected System bound as `cn=admin` would have every password accepted whatever its length, and test 5 would prove nothing. `Populate-OpenLDAP-Scenario22.ps1` creates `cn=jim-provisioner,dc=yellowstone,dc=local` (`organizationalRole` plus `simpleSecurityObject`) and prepends an `olcAccess` granting it write on the Yellowstone database, and `Setup-Scenario22.ps1` hands `Setup-Scenario1.ps1` a directory configuration with that account's credentials. The scenario's own reads of the directory still use the rootdn, which is the right account for observing operational attributes. Two things the first run taught about that ACL: the Bitnami image gives the database no `olcAccess` at all, so slapd's implicit `to * by * read` was what every non-rootdn bind relied on, and the first explicit rule replaces that implicit default with a deny; the populate script therefore writes the default out as the last rule before prepending anything, or every bind but the rootdn's answers `Invalid credentials (49)`. And the probe user is deleted and recreated on every run rather than having its password reset, because a reset is a change the overlay records in `pwdHistory` with a one-second timestamp, and the scenario's own change moments later was refused with `Type or value exists (20)` when it tried to record an identical value. The provisioner is also given a narrow read on `cn=config` (the database and overlay entries; `olcSuffix`, `olcPPolicyDefault` and `olcPPolicyCheckModule` only), which is what lets JIM's reader correlate the overlay's default with its database and know that no check module is named; without it the reader falls back to "the only `pwdPolicy` entry in the suffix" and the coarser further-checks rule, and test 3's `furtherChecksApply` false would not hold.
+**Why JIM binds as a non-root provisioner.** `slapo-ppolicy(5)` exempts the rootdn from every check: a Connected System bound as `cn=admin` would have every password accepted whatever its length, and test 5 would prove nothing. `Populate-OpenLDAP-Scenario-022.ps1` creates `cn=jim-provisioner,dc=yellowstone,dc=local` (`organizationalRole` plus `simpleSecurityObject`) and prepends an `olcAccess` granting it write on the Yellowstone database, and `Setup-Scenario-022.ps1` hands `Setup-Scenario-001.ps1` a directory configuration with that account's credentials. The scenario's own reads of the directory still use the rootdn, which is the right account for observing operational attributes. Two things the first run taught about that ACL: the Bitnami image gives the database no `olcAccess` at all, so slapd's implicit `to * by * read` was what every non-rootdn bind relied on, and the first explicit rule replaces that implicit default with a deny; the populate script therefore writes the default out as the last rule before prepending anything, or every bind but the rootdn's answers `Invalid credentials (49)`. And the probe user is deleted and recreated on every run rather than having its password reset, because a reset is a change the overlay records in `pwdHistory` with a one-second timestamp, and the scenario's own change moments later was refused with `Type or value exists (20)` when it tried to record an identical value. The provisioner is also given a narrow read on `cn=config` (the database and overlay entries; `olcSuffix`, `olcPPolicyDefault` and `olcPPolicyCheckModule` only), which is what lets JIM's reader correlate the overlay's default with its database and know that no check module is named; without it the reader falls back to "the only `pwdPolicy` entry in the suffix" and the coarser further-checks rule, and test 3's `furtherChecksApply` false would not hold.
 
 **Why `pwdCheckQuality` is 2.** With 2 the overlay refuses a value it cannot check (a pre-hashed one); with 1 it would let such a value through unchecked. JIM sends the cleartext through the Password Modify operation, so both settings would check it, but 2 makes the negative control airtight: a "refused" in test 1 can only mean the policy saw the value and judged it. (The plan's decision 3 is what stops this setting being reported as "further checks apply".)
 
-**Why no TLS is acceptable here.** `LdapConnector.OpenPasswordConnection` only *warns* on an unencrypted channel; it does not refuse, and Initial Password delivery proceeds. The Bitnami image runs with `LDAP_ENABLE_TLS=no`, and test 2 establishes that it takes an RFC 3062 operation in the clear (the plan's step 0 spike, confirmed on the first verification run: `ldappasswd` as the probe user over `ldap://` exits 0 and the entry gains `pwdChangedTime`). What the scenario proves is policy discovery and enforcement, neither of which depends on the transport. Scenario 20's write-up used to say the OpenLDAP container's RFC 3062 path "cannot be exercised at all"; it can, and that sentence now says why Scenario 20 still declines it. If the container ever refuses a cleartext extended operation ("Confidentiality required (13)" or "unwilling to perform (53)"), the fallback described at the top of the Invoke script applies: `LDAP_ENABLE_TLS=yes` with a generated certificate trusted through `Add-JIMCertificate` (Scenario 15's pattern), and a directory configuration switched to `ldaps://`.
+**Why no TLS is acceptable here.** `LdapConnector.OpenPasswordConnection` only *warns* on an unencrypted channel; it does not refuse, and Initial Password delivery proceeds. The Bitnami image runs with `LDAP_ENABLE_TLS=no`, and test 2 establishes that it takes an RFC 3062 operation in the clear (the plan's step 0 spike, confirmed on the first verification run: `ldappasswd` as the probe user over `ldap://` exits 0 and the entry gains `pwdChangedTime`). What the scenario proves is policy discovery and enforcement, neither of which depends on the transport. Scenario 020's write-up used to say the OpenLDAP container's RFC 3062 path "cannot be exercised at all"; it can, and that sentence now says why Scenario 020 still declines it. If the container ever refuses a cleartext extended operation ("Confidentiality required (13)" or "unwilling to perform (53)"), the fallback described at the top of the Invoke script applies: `LDAP_ENABLE_TLS=yes` with a generated certificate trusted through `Add-JIMCertificate` (Scenario 015's pattern), and a directory configuration switched to `ldaps://`.
 
-**Why the base image change invalidates snapshots.** `01-add-second-suffix.sh` is hashed into the base image label, which every OpenLDAP snapshot records as the base it was baked from, so loading the `ppolicy` overlay there rebuilds the base image on its next use and every OpenLDAP snapshot after it (`Build-OpenLDAPSnapshots.ps1`), a one-off cost. With no default policy in the image, Scenarios 1, 8, 14 and 19 see no behavioural change; the overlay only stamps `pwdChangedTime` on password writes, which none of them reads.
+**Why the base image change invalidates snapshots.** `01-add-second-suffix.sh` is hashed into the base image label, which every OpenLDAP snapshot records as the base it was baked from, so loading the `ppolicy` overlay there rebuilds the base image on its next use and every OpenLDAP snapshot after it (`Build-OpenLDAPSnapshots.ps1`), a one-off cost. With no default policy in the image, Scenarios 001, 008, 014 and 019 see no behavioural change; the overlay only stamps `pwdChangedTime` on password writes, which none of them reads.
 
 **`-Template` is ignored.** The scenario asserts against one Micro export; a larger template only lengthens it.
 
-**Runner handling.** Scenario 22 is coerced to OpenLDAP (and rejected with an explicit `-DirectoryType SambaAD`), skipped on a Samba AD sweep, excluded from snapshot use and from the general OpenLDAP population (its Scenario 1 substrate needs an empty `ou=People`), and always self-populates. It does not match the runner's `Scenario2(\D|$)` pattern, and the description switch's `*Scenario2*` arm was narrowed to `*Scenario2-*` so it stops matching 20, 21 and 22.
+**Runner handling.** Scenario 022 is coerced to OpenLDAP (and rejected with an explicit `-DirectoryType SambaAD`), skipped on a Samba AD sweep, excluded from snapshot use and from the general OpenLDAP population (its Scenario 001 substrate needs an empty `ou=People`), and always self-populates. The runner's branches compare the scenario number, so it never collides with Scenario 002.
 
-#### Scenario 23: Unique Value Generation
+#### Scenario 023: Unique Value Generation
 
-**Status**: implemented for release 1 of [#242](https://github.com/TetronIO/JIM/issues/242). Verified green on OpenLDAP and Samba AD (54 assertions each, Micro). The feature is behind the In development `Features.UniqueValueGeneration` flag; `Setup-Scenario1.ps1 -GenerateAccountName` enables it.
+**Status**: implemented for release 1 of [#242](https://github.com/TetronIO/JIM/issues/242). Verified green on OpenLDAP and Samba AD (54 assertions each, Micro). The feature is behind the In development `Features.UniqueValueGeneration` flag; `Setup-Scenario-001.ps1 -GenerateAccountName` enables it.
 
 **Purpose**: prove generated values end to end against a real directory: the HR feed carries no IT-owned columns (`Generate-TestCSV.ps1 -OmitItOwnedAttributes`) and JIM generates the Account Name instead, plus a sequence (Staff Number), a random token (Badge Code) and an export-mode value on the directory (`preferredLanguage`). The unit and database tiers cover the service in isolation; this is the only coverage of generation interacting with joins, Attribute Priority, drift detection and a directory's own uniqueness.
 
-**Scripts**: `test/integration/scenarios/Invoke-Scenario23-UniqueValueGeneration.ps1` and `test/integration/Setup-Scenario23.ps1`, which composes `Setup-Scenario1.ps1 -GenerateAccountName`. Scenario 1 itself is unchanged; it moves to generated Account Names when the feature flag is removed ([#1803](https://github.com/TetronIO/JIM/issues/1803)), because its setup is shared by Scenarios 4 to 7, 17, 20, 21 and 22.
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-023-UniqueValueGeneration.ps1` and `test/integration/Setup-Scenario-023.ps1`, which composes `Setup-Scenario-001.ps1 -GenerateAccountName`. Scenario 001 itself is unchanged; it moves to generated Account Names when the feature flag is removed ([#1803](https://github.com/TetronIO/JIM/issues/1803)), because its setup is shared by Scenarios 004 to 007, 017, 020, 021 and 22.
 
 | Test | Assertion |
 |------|-----------|
@@ -1316,35 +1316,35 @@ Samba AD and OpenLDAP.
 
 **What this scenario found.** Its first runs surfaced four defects the unit tiers could not: connector-space adoption renaming a live brownfield account (removed in favour of Attribute Priority, PRD FR 30 revised); a generated export change merged into a drift-staged Pending Export being left unresolved and failing the page; a stale assignment reasserted after a higher-priority flow was withdrawn, renaming the account back; and a deliberate feature-disabled refusal logged as an unhandled Error.
 
-**Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 1 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag.
+**Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 001 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag.
 
 ### Phase 2 - Database Scenarios
 
-> The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 16: Database Source/Target" is delivered by the matrix scenario below. Initial Password Provisioning then claimed 17, and Scenarios 18-22 were claimed in turn (see below), so the two remaining planned scenarios are unnumbered until one is started.
+> The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 016: Database Source/Target" is delivered by the matrix scenario below. Initial Password Provisioning then claimed 17, and Scenarios 018-022 were claimed in turn (see below), so the two remaining planned scenarios are unnumbered until one is started.
 
-#### Scenario 16: JIM SQL Connector Provider x Capability Matrix
+#### Scenario 016: JIM SQL Connector Provider x Capability Matrix
 
 **Status**: green on both providers at every tier. The default tier passes every functional row (17 of 17 cells on Microsoft SQL Server, 19 of 19 on Oracle Database) and `-FullMatrix` adds the 500,000-row scale import on each (18 of 18 and 20 of 20), with none reported as not exercised (August 2026, [#170](https://github.com/TetronIO/JIM/issues/170)). This is the correctness gate for the JIM SQL Connector.
 
-**Purpose**: drive one capability row per line of the PRD's Testing Requirements table against both priority 1 providers, **Microsoft SQL Server** and **Oracle Database**: full import from a table and from a view, multi-valued and reference import, delta import in both modes plus the fallback path, export (create, update, delete, natural-key and reference), the type-mapping round trip, configuration validation, the provider driver-shape rows the unit suite cannot reach, and the 500,000-row scale import. Databases are deliberately not retrofitted into Scenarios 1-14; this matrix plus the road-mapped Multi-Source Aggregation scenario are the two vehicles for database regression coverage.
+**Purpose**: drive one capability row per line of the PRD's Testing Requirements table against both priority 1 providers, **Microsoft SQL Server** and **Oracle Database**: full import from a table and from a view, multi-valued and reference import, delta import in both modes plus the fallback path, export (create, update, delete, natural-key and reference), the type-mapping round trip, configuration validation, the provider driver-shape rows the unit suite cannot reach, and the 500,000-row scale import. Databases are deliberately not retrofitted into Scenarios 001-014; this matrix plus the road-mapped Multi-Source Aggregation scenario are the two vehicles for database regression coverage.
 
-**Scripts**: `test/integration/scenarios/Invoke-Scenario16-SqlConnectorMatrix.ps1` and `test/integration/Setup-Scenario16.ps1`.
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-016-SqlConnectorMatrix.ps1` and `test/integration/Setup-Scenario-016.ps1`.
 
 **Containers**: `sqlserver-hris-a` and `oracle-hris-b` from the `phase2` compose profile. No directory container is involved.
 
-**Parameters** (all Scenario 16 only; the runner refuses to pass them to any other scenario):
+**Parameters** (all Scenario 016 only; the runner refuses to pass them to any other scenario):
 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
 | `-Provider SqlServer\|Oracle\|Both` | `Both` | Which provider to exercise. `Both` runs the whole matrix against each in turn and is what the pre-release gate uses; naming one provider is the quicker loop, and is the way to avoid the Oracle image entirely while working on SQL Server. |
-| `-Quick` | off | The representative subset, for the regular gate (the Scenario 11 tiering precedent). Mutually exclusive with `-FullMatrix`. |
+| `-Quick` | off | The representative subset, for the regular gate (the Scenario 011 tiering precedent). Mutually exclusive with `-FullMatrix`. |
 | `-FullMatrix` | off | Everything, including the 500,000-row scale import, which is the bulk of the runtime. Mutually exclusive with `-Quick`. |
 
 With neither switch, the default tier runs every functional row against the chosen provider(s) and leaves out only the scale import.
 
-`-Template` is ignored: the LDAP data-scale templates do not describe a database source, and Scenario 16 seeds its own rows with a deterministic SQL seeder sized by row count.
+`-Template` is ignored: the LDAP data-scale templates do not describe a database source, and Scenario 016 seeds its own rows with a deterministic SQL seeder sized by row count.
 
-**Stack-up**: the runner starts the `phase2` containers itself, and starts **only** the ones the requested `-Provider` needs, then waits for each to report healthy before running the scenario. Health, not a TCP connect, is the readiness signal for both: SQL Server accepts connections well before it will answer a query, and Oracle's pluggable database spends its first stretch MOUNTED rather than open READ WRITE. `postgres-target` and `mysql-test` are in the same profile but stay dormant; they are staged for the connector's priority 2 providers, which Scenario 16 does not cover.
+**Stack-up**: the runner starts the `phase2` containers itself, and starts **only** the ones the requested `-Provider` needs, then waits for each to report healthy before running the scenario. Health, not a TCP connect, is the readiness signal for both: SQL Server accepts connections well before it will answer a query, and Oracle's pluggable database spends its first stretch MOUNTED rather than open READ WRITE. `postgres-target` and `mysql-test` are in the same profile but stay dormant; they are staged for the connector's priority 2 providers, which Scenario 016 does not cover.
 
 **Container facts worth knowing** (all from `test/integration/docker/docker-compose.integration-tests.yml`):
 
@@ -1367,7 +1367,7 @@ The 500,000-row figures include the change-log and last-modified triggers firing
 
 Re-seeding is skipped when a content hash of the generated script matches what the `JIM_SEED_MANIFEST` table records, so an unchanged seed costs one round trip; pass `-Force` to rebuild regardless. On a hash match the seeder still empties the export targets and restores the source rows from the same SQL the seed uses, so a matrix row that mutated the source (the export and delta rows all do) leaves no residue for the next run. The change-log tables and last-modified columns are built, with their triggers, exactly as the two Delta Import guides under `docs/connectors/` prescribe, so the delta rows also prove that DDL; `EMPLOYEES` and `EMPLOYEE_PHONES` additionally carry a `rowversion` column on SQL Server for the `Delta.RowversionWatermark` row.
 
-**Scale import (500,000 rows), measured 2026-08-18** on the same host, `-FullMatrix`, with JIM's PostgreSQL on the runner's `Scale500k` profile (the runner applies it to Scenario 16 `-FullMatrix` automatically). The scale row seeds its own 500,000-row database after the functional rows have run against the 50-row one, and imports the identity Connected System, which reads the table (`Person`) and the view over it (`PersonView`): 1,000,000 objects per run. Peak memory is `docker stats` sampled every two seconds over the import alone.
+**Scale import (500,000 rows), measured 2026-08-18** on the same host, `-FullMatrix`, with JIM's PostgreSQL on the runner's `Scale500k` profile (the runner applies it to Scenario 016 `-FullMatrix` automatically). The scale row seeds its own 500,000-row database after the functional rows have run against the 50-row one, and imports the identity Connected System, which reads the table (`Person`) and the view over it (`PersonView`): 1,000,000 objects per run. Peak memory is `docker stats` sampled every two seconds over the import alone.
 
 | Provider | Objects read | Wall-clock | Overall rate | Read + process | Save (1,000,000 creates) | Peak: `jim.worker` | Peak: `jim.database` | Peak: source container |
 |----------|-------------:|-----------:|-------------:|---------------:|-------------------------:|-------------------:|---------------------:|-----------------------:|
@@ -1384,7 +1384,7 @@ What the numbers say: the connector's own work (keyset paging at 1,000 rows a pa
 
 > Renumbered repeatedly, for the reason given at the top of this phase: 18 was claimed by Writeback To Source ([#1284](https://github.com/TetronIO/JIM/issues/1284)), 19 by Auxiliary Classes ([#492](https://github.com/TetronIO/JIM/issues/492)), 20 by Password Synchronisation ([#1119](https://github.com/TetronIO/JIM/issues/1119)), 21 by Run Profile Safeguards ([#1618](https://github.com/TetronIO/JIM/issues/1618)) and 22 by OpenLDAP Password Policy ([#1702](https://github.com/TetronIO/JIM/issues/1702)), all of which needed a scenario before either of the two below was started. The two below therefore carry no number: each takes the next free one when work on it starts. Scenario numbers are file names, not a priority order.
 
-- **Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export. Sequenced after Scenario 16 is green: the matrix is the correctness gate, and this is the cross-technology regression breadth that follows it.
+- **Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export. Sequenced after Scenario 016 is green: the matrix is the correctness gate, and this is the cross-technology regression breadth that follows it.
 - **Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
 
 ---
@@ -1438,10 +1438,10 @@ Tests authenticate using API keys (X-API-Key header), avoiding the need for SSO/
 Connect-JIM -ApiKey $env:JIM_API_KEY -BaseUrl "http://localhost:5203"
 ```
 
-#### Example: Configure JIM for Scenario 1
+#### Example: Configure JIM for Scenario 001
 
 ```powershell
-# test/integration/Setup-Scenario1.ps1
+# test/integration/Setup-Scenario-001.ps1
 
 param(
     [string]$ApiKey = $env:JIM_API_KEY,
@@ -1516,7 +1516,7 @@ New-JIMRunProfile -Name "HR to AD Full Sync" `
         @{ ConnectedSystemId = $adSystem.Id; Type = "Export" }
     )
 
-Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
+Write-Host "Scenario 001 configuration complete" -ForegroundColor Green
 ```
 
 #### Dependencies
@@ -1534,15 +1534,15 @@ Both dependencies above are complete (see the Dependencies table). API key authe
 
 **Use the runner.** `Run-IntegrationTests.ps1` (see [Quick Start](#-quick-start)) is the supported way to run tests locally; it stands up the stack, populates data, configures JIM, runs the scenario, and tears down, for any scenario, template, and directory type. Everything below is for low-level debugging only.
 
-**Driving the pieces by hand** (when you need to inspect state between stages): stand up the environment with `Start-IntegrationTestEnvironment.ps1`, create an API key with `Setup-InfrastructureApiKey.ps1`, then invoke a scenario script directly (see the [Manual step-by-step](#-quick-start) block in Quick Start). Scenario 2 and Scenario 8 need two Samba AD instances, brought up with the `scenario2` compose profile:
+**Driving the pieces by hand** (when you need to inspect state between stages): stand up the environment with `Start-IntegrationTestEnvironment.ps1`, create an API key with `Setup-InfrastructureApiKey.ps1`, then invoke a scenario script directly (see the [Manual step-by-step](#-quick-start) block in Quick Start). Scenario 002 and Scenario 008 need two Samba AD instances, brought up with the `scenario-002` compose profile:
 
 ```powershell
-docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 up -d
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 up -d
 ```
 
 **Alternative all-Phase-1 invoker:** `./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 1` stands up every Phase 1 system, runs all scenarios, collects results to `test/integration/results/`, and tears down. Prefer `Run-IntegrationTests.ps1 -Scenario All` unless you specifically need this script.
 
-**Phase 2 (database):** Scenario 16 (JIM SQL Connector matrix) is runnable through the runner in the ordinary way; it starts the `phase2` containers it needs itself, so no separate `--profile phase2` step is required. To drive the containers by hand for debugging, bring up only what you need rather than the whole profile:
+**Phase 2 (database):** Scenario 016 (JIM SQL Connector matrix) is runnable through the runner in the ordinary way; it starts the `phase2` containers it needs itself, so no separate `--profile phase2` step is required. To drive the containers by hand for debugging, bring up only what you need rather than the whole profile:
 
 ```powershell
 docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d sqlserver-hris-a oracle-hris-b
@@ -1712,7 +1712,7 @@ If a test needs functionality the module does not yet expose, the right move is 
 
 That work is part of the test, not a detour from it.
 
-**Example**: Scenario 2 (Directory-to-Directory) was initially blocked because no API existed for partition selection. We documented the gap, created GitHub issue #191 for the missing REST endpoints, implemented the API and the matching cmdlets (`Get-JIMConnectedSystemPartition`, `Set-JIMConnectedSystemPartition`, `Import-JIMConnectedSystemHierarchy`), and only then updated the test scripts.
+**Example**: Scenario 002 (Directory-to-Directory) was initially blocked because no API existed for partition selection. We documented the gap, created GitHub issue #191 for the missing REST endpoints, implemented the API and the matching cmdlets (`Get-JIMConnectedSystemPartition`, `Set-JIMConnectedSystemPartition`, `Import-JIMConnectedSystemHierarchy`), and only then updated the test scripts.
 
 **Acceptable SQL usage**:
 - **External systems only**: Querying Samba AD, test databases, or other external systems being tested
@@ -1765,8 +1765,8 @@ foreach ($attr in $ldapUserType.attributes) {
 ```
 
 **Current Implementation**:
-- **Scenario 1 (HR to AD)**: Selects 10 LDAP attributes for export (sAMAccountName, givenName, sn, displayName, cn, mail, userPrincipalName, title, department, distinguishedName)
-- **Scenario 2 (Directory Sync)**: Selects 11 LDAP attributes for bidirectional sync (adds telephoneNumber for Phone attribute)
+- **Scenario 001 (HR to AD)**: Selects 10 LDAP attributes for export (sAMAccountName, givenName, sn, displayName, cn, mail, userPrincipalName, title, department, distinguishedName)
+- **Scenario 002 (Directory Sync)**: Selects 11 LDAP attributes for bidirectional sync (adds telephoneNumber for Phone attribute)
 
 ---
 
@@ -1939,9 +1939,9 @@ For larger templates (Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, S
 
 | Scenario | Role | Image Tag |
 |----------|------|-----------|
-| Scenario 1 | Primary AD | `jim-samba-ad:primary-{size}` |
-| Scenario 8 | Source AD (APAC) | `jim-samba-ad:source-s8-{size}` |
-| Scenario 8 | Target AD (EMEA) | `jim-samba-ad:target-s8-{size}` |
+| Scenario 001 | Primary AD | `jim-samba-ad:primary-{size}` |
+| Scenario 008 | Source AD (APAC) | `jim-samba-ad:source-s8-{size}` |
+| Scenario 008 | Target AD (EMEA) | `jim-samba-ad:target-s8-{size}` |
 
 Where `{size}` is the lowercase template name (e.g., `xlarge`, `nano`).
 
@@ -1949,13 +1949,13 @@ Where `{size}` is the lowercase template name (e.g., `xlarge`, `nano`).
 
 ```powershell
 # Build snapshots manually (without running tests)
-./test/integration/Build-SambaSnapshots.ps1 -Scenario Scenario8 -Template Scale100k50Groups
+./test/integration/Build-SambaSnapshots.ps1 -Scenario Scenario-008 -Template Scale100k50Groups
 
 # Force rebuild even if hash matches
-./test/integration/Build-SambaSnapshots.ps1 -Scenario Scenario8 -Template Scale100k50Groups -Force
+./test/integration/Build-SambaSnapshots.ps1 -Scenario Scenario-008 -Template Scale100k50Groups -Force
 
 # Ignore snapshots and force live population during a test run
-./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario8-CrossDomainEntitlementSync -Template Scale100k50Groups -IgnoreSnapshots
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-008-CrossDomainEntitlementSync -Template Scale100k50Groups -IgnoreSnapshots
 ```
 
 ### Backup and Restore
@@ -2004,7 +2004,7 @@ netstat -an | Select-String "389"
 # Solution: Stop conflicting service or change port mapping
 ```
 
-### Phase 2 Database Containers (Scenario 16)
+### Phase 2 Database Containers (Scenario 016)
 
 **"network jim-network was found but has incorrect label" when starting the JIM stack**: the phase2 database containers were brought up before the JIM stack, against a hand-created `jim-network`. The main compose file owns that network (it is not declared external there), so it refuses to reuse one it did not create, and the JIM stack will not start at all. The runner avoids this by starting the stack first; you only hit it when driving the containers by hand.
 
@@ -2077,7 +2077,7 @@ docker ps | Select-String "postgres"
 docker exec postgres-target pg_isready -U jimtest
 ```
 
-`postgres-target` (and `mysql-test`) are staged for the JIM SQL Connector's priority 2 providers and are **not** started by Scenario 16, so "not running" is the expected state during a Scenario 16 run.
+`postgres-target` (and `mysql-test`) are staged for the JIM SQL Connector's priority 2 providers and are **not** started by Scenario 016, so "not running" is the expected state during a Scenario 016 run.
 
 ### Data Population Issues
 
@@ -2178,31 +2178,31 @@ JIM/
         ├── Invoke-IntegrationTests.ps1                     # Alternative invoker script
         ├── Start-IntegrationTestEnvironment.ps1            # Starts JIM + directory containers
         ├── Setup-InfrastructureApiKey.ps1                  # Creates API key for testing
-        ├── Setup-Scenario1.ps1                             # Configures JIM for Scenario 1
-        ├── Setup-Scenario2.ps1                             # Configures JIM for Scenario 2
-        ├── Setup-Scenario8.ps1                             # Configures JIM for Scenario 8
-        ├── Setup-Scenario9.ps1                             # Configures JIM for Scenario 9
-        ├── Setup-Scenario10.ps1                            # Configures JIM for Scenario 10
-        ├── Setup-Scenario12.ps1                            # Configures JIM for Scenario 12
-        ├── Setup-Scenario13.ps1                            # Configures JIM for Scenario 13
-        ├── Setup-Scenario14.ps1                            # Configures JIM for Scenario 14
-        ├── Setup-Scenario15.ps1                            # Configures JIM for Scenario 15 (SCIM 2.0 Client Connector)
-        ├── Setup-Scenario16.ps1                            # Configures JIM for Scenario 16 (JIM SQL Connector matrix)
-        ├── Setup-Scenario17.ps1                            # Configures JIM for Scenario 17 (composes Setup-Scenario1)
-        ├── Setup-Scenario18.ps1                            # Configures JIM for Scenario 18
-        ├── Setup-Scenario19.ps1                            # Configures JIM for Scenario 19
-        ├── Setup-Scenario20.ps1                            # Configures JIM for Scenario 20 (composes Setup-Scenario17)
-        ├── Setup-Scenario22.ps1                            # Configures JIM for Scenario 22
-        ├── Setup-Scenario23.ps1                            # Configures JIM for Scenario 23 (composes Setup-Scenario1 -GenerateAccountName)
-        ├── New-Scenario16TestDatabase.ps1                  # Deterministic SQL seeder for Scenario 16
-        ├── Add-Scenario8Schedules.ps1                      # Optional schedule wiring for Scenario 8
-        ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 1, 4, 5, etc.)
-        ├── Populate-SambaAD-Scenario8.ps1                  # Samba AD population (Scenario 8)
+        ├── Setup-Scenario-001.ps1                             # Configures JIM for Scenario 001
+        ├── Setup-Scenario-002.ps1                             # Configures JIM for Scenario 002
+        ├── Setup-Scenario-008.ps1                             # Configures JIM for Scenario 008
+        ├── Setup-Scenario-009.ps1                             # Configures JIM for Scenario 009
+        ├── Setup-Scenario-010.ps1                            # Configures JIM for Scenario 010
+        ├── Setup-Scenario-012.ps1                            # Configures JIM for Scenario 012
+        ├── Setup-Scenario-013.ps1                            # Configures JIM for Scenario 013
+        ├── Setup-Scenario-014.ps1                            # Configures JIM for Scenario 014
+        ├── Setup-Scenario-015.ps1                            # Configures JIM for Scenario 015 (SCIM 2.0 Client Connector)
+        ├── Setup-Scenario-016.ps1                            # Configures JIM for Scenario 016 (JIM SQL Connector matrix)
+        ├── Setup-Scenario-017.ps1                            # Configures JIM for Scenario 017 (composes Setup-Scenario-001)
+        ├── Setup-Scenario-018.ps1                            # Configures JIM for Scenario 018
+        ├── Setup-Scenario-019.ps1                            # Configures JIM for Scenario 019
+        ├── Setup-Scenario-020.ps1                            # Configures JIM for Scenario 020 (composes Setup-Scenario-017)
+        ├── Setup-Scenario-022.ps1                            # Configures JIM for Scenario 022
+        ├── Setup-Scenario-023.ps1                            # Configures JIM for Scenario 023 (composes Setup-Scenario-001 -GenerateAccountName)
+        ├── New-Scenario-016-TestDatabase.ps1                  # Deterministic SQL seeder for Scenario 016
+        ├── Add-Scenario-008-Schedules.ps1                      # Optional schedule wiring for Scenario 008
+        ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 001, 004, 005, etc.)
+        ├── Populate-SambaAD-Scenario-008.ps1                  # Samba AD population (Scenario 008)
         ├── Populate-OpenLDAP.ps1                           # OpenLDAP population (general)
-        ├── Populate-OpenLDAP-Scenario8.ps1                 # OpenLDAP population (Scenario 8)
-        ├── Populate-OpenLDAP-Scenario14.ps1                # OpenLDAP population (Scenario 14)
-        ├── Populate-OpenLDAP-Scenario19.ps1                # OpenLDAP population (Scenario 19)
-        ├── Populate-OpenLDAP-Scenario22.ps1                # OpenLDAP population (Scenario 22)
+        ├── Populate-OpenLDAP-Scenario-008.ps1                 # OpenLDAP population (Scenario 008)
+        ├── Populate-OpenLDAP-Scenario-014.ps1                # OpenLDAP population (Scenario 014)
+        ├── Populate-OpenLDAP-Scenario-019.ps1                # OpenLDAP population (Scenario 019)
+        ├── Populate-OpenLDAP-Scenario-022.ps1                # OpenLDAP population (Scenario 022)
         ├── Generate-TestCSV.ps1                            # CSV generation (HR, training, departments)
         ├── Get-OrGenerate-TestCSV.ps1                      # Cached wrapper around Generate-TestCSV
         ├── Test-CsvCache.ps1                               # CSV cache determinism acceptance test
@@ -2219,31 +2219,31 @@ JIM/
         ├── Submit-TestResults.ps1                          # Submits run results to JIM-Bench
         ├── Test-ParallelOptimization.ps1                   # Parallelisation testing
         ├── scenarios/
-        │   ├── Invoke-Scenario1-HRToIdentityDirectory.ps1        # HR CSV -> AD provisioning
-        │   ├── Invoke-Scenario2-CrossDomainSync.ps1              # APAC -> EMEA directory sync
-        │   ├── Invoke-Scenario3-GALSYNC.ps1                      # AD -> CSV export (stub)
-        │   ├── Invoke-Scenario4-DeletionRules.ps1                # Deletion rules testing
-        │   ├── Invoke-Scenario5-MatchingRules.ps1                # Matching rules testing
-        │   ├── Invoke-Scenario6-SchedulerService.ps1             # Scheduler service testing
-        │   ├── Invoke-Scenario7-ClearConnectedSystemObjects.ps1  # Clear connector space testing
-        │   ├── Invoke-Scenario8-CrossDomainEntitlementSync.ps1   # Group sync between domains
-        │   ├── Invoke-Scenario9-PartitionScopedImports.ps1       # Partition-scoped import Run Profiles
-        │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Synchronisation Rule scoping behaviour
-        │   ├── Invoke-Scenario11-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
-        │   ├── Invoke-Scenario12-RelativeDateScoping.ps1         # Relative-date inbound scoping
-        │   ├── Invoke-Scenario13-RelativeDateOutboundScoping.ps1 # Relative-date outbound scoping
-        │   ├── Invoke-Scenario14-AttributePriority.ps1          # Attribute Priority winner resolution (OpenLDAP only)
-        │   ├── Invoke-Scenario15-ScimConnector.ps1              # SCIM 2.0 Client Connector end to end
-        │   ├── Invoke-Scenario16-SqlConnectorMatrix.ps1         # JIM SQL Connector provider x capability matrix
-        │   ├── Invoke-Scenario17-InitialPasswordProvisioning.ps1 # Initial Password provisioning (Samba AD only)
-        │   ├── Invoke-Scenario18-WritebackToSource.ps1          # Writeback into the source Connected System
-        │   ├── Invoke-Scenario19-AuxiliaryClasses.ps1           # LDAP auxiliary object classes (OpenLDAP only)
-        │   ├── Invoke-Scenario20-PasswordSynchronisation.ps1    # Password Synchronisation, outbound
-        │   ├── Invoke-Scenario21-RunProfileSafeguards.ps1       # Run Profile export and deletion-detection limits
-        │   ├── Invoke-Scenario22-OpenLdapPasswordPolicy.ps1     # OpenLDAP password policy discovery (OpenLDAP only)
-        │   ├── Invoke-Scenario23-UniqueValueGeneration.ps1      # Unique Value Generation, release 1 (OpenLDAP or Samba AD)
-        │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
-        │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
+        │   ├── Invoke-Scenario-001-HRToIdentityDirectory.ps1        # HR CSV -> AD provisioning
+        │   ├── Invoke-Scenario-002-CrossDomainSync.ps1              # APAC -> EMEA directory sync
+        │   ├── Invoke-Scenario-003-GALSYNC.ps1                      # AD -> CSV export (stub)
+        │   ├── Invoke-Scenario-004-DeletionRules.ps1                # Deletion rules testing
+        │   ├── Invoke-Scenario-005-MatchingRules.ps1                # Matching rules testing
+        │   ├── Invoke-Scenario-006-SchedulerService.ps1             # Scheduler service testing
+        │   ├── Invoke-Scenario-007-ClearConnectedSystemObjects.ps1  # Clear connector space testing
+        │   ├── Invoke-Scenario-008-CrossDomainEntitlementSync.ps1   # Group sync between domains
+        │   ├── Invoke-Scenario-009-PartitionScopedImports.ps1       # Partition-scoped import Run Profiles
+        │   ├── Invoke-Scenario-010-SyncRuleScoping.ps1             # Synchronisation Rule scoping behaviour
+        │   ├── Invoke-Scenario-011-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
+        │   ├── Invoke-Scenario-012-RelativeDateScoping.ps1         # Relative-date inbound scoping
+        │   ├── Invoke-Scenario-013-RelativeDateOutboundScoping.ps1 # Relative-date outbound scoping
+        │   ├── Invoke-Scenario-014-AttributePriority.ps1          # Attribute Priority winner resolution (OpenLDAP only)
+        │   ├── Invoke-Scenario-015-ScimConnector.ps1              # SCIM 2.0 Client Connector end to end
+        │   ├── Invoke-Scenario-016-SqlConnectorMatrix.ps1         # JIM SQL Connector provider x capability matrix
+        │   ├── Invoke-Scenario-017-InitialPasswordProvisioning.ps1 # Initial Password provisioning (Samba AD only)
+        │   ├── Invoke-Scenario-018-WritebackToSource.ps1          # Writeback into the source Connected System
+        │   ├── Invoke-Scenario-019-AuxiliaryClasses.ps1           # LDAP auxiliary object classes (OpenLDAP only)
+        │   ├── Invoke-Scenario-020-PasswordSynchronisation.ps1    # Password Synchronisation, outbound
+        │   ├── Invoke-Scenario-021-RunProfileSafeguards.ps1       # Run Profile export and deletion-detection limits
+        │   ├── Invoke-Scenario-022-OpenLdapPasswordPolicy.ps1     # OpenLDAP password policy discovery (OpenLDAP only)
+        │   ├── Invoke-Scenario-023-UniqueValueGeneration.ps1      # Unique Value Generation, release 1 (OpenLDAP or Samba AD)
+        │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 011 matrix)
+        │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 004, 005)
         ├── docker/
         │   ├── docker-compose.integration-tests.yml             # External system containers
         │   ├── samba-ad-prebuilt/                                # Custom prebuilt Samba AD base image
@@ -2279,7 +2279,7 @@ JIM/
         │   ├── Resolve-IntegrationScenarioName.ps1               # -Scenario short forms and scenario number
         │   ├── Invoke-IntegrationScenario.ps1                    # Runs one scenario and returns its outcome
         │   ├── Initialize-WorkerLogDirectories.ps1               # Worker log directory preparation
-        │   ├── Scenario16-Helpers.ps1                            # Scenario 16 shared helpers
+        │   ├── Scenario-016-Helpers.ps1                            # Scenario 016 shared helpers
         │   └── *.Tests.ps1                                       # Pester tests for the helpers above
         ├── test-data/                                            # Generated CSV test data (gitignored)
         └── results/                                              # Test results output (gitignored)
@@ -2292,14 +2292,14 @@ All integration-test containers are internal to the `jim-network` Docker network
 | Container | Role | Port | Protocol |
 |-----------|------|------|----------|
 | `samba-ad-primary` | Primary directory (single-directory scenarios) | 389 / 636 | LDAP / LDAPS |
-| `samba-ad-source` | Cross-domain source (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
-| `samba-ad-target` | Cross-domain target (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
-| `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenarios 14, 19 and 22 only run here) | 1389 / 1636 | LDAP / LDAPS |
+| `samba-ad-source` | Cross-domain source (Scenarios 002 & 8) | 389 / 636 | LDAP / LDAPS |
+| `samba-ad-target` | Cross-domain target (Scenarios 002 & 8) | 389 / 636 | LDAP / LDAPS |
+| `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenarios 014, 019 and 022 only run here) | 1389 / 1636 | LDAP / LDAPS |
 | `dirsrv-primary` | 389 Directory Server, two suffixes (every OpenLDAP scenario except 14, 19 and 22; profile `dirsrv`); JIM connects over LDAPS, the harness's own checks over LDAP inside the container | 3389 / 3636 | LDAP / LDAPS |
-| `sqlserver-hris-a` | Phase 2 source: Microsoft SQL Server 2022 (Scenario 16) | 1433 | TCP |
-| `oracle-hris-b` | Phase 2 source: Oracle Database Free 23ai, CDB service `FREE`, pluggable database `FREEPDB1` (Scenario 16) | 1521 | TCP |
-| `postgres-target` | Phase 2, PostgreSQL 16: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 16 | 5432 | TCP |
-| `mysql-test` | Phase 2, MySQL 8: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 16 | 3306 | TCP |
+| `sqlserver-hris-a` | Phase 2 source: Microsoft SQL Server 2022 (Scenario 016) | 1433 | TCP |
+| `oracle-hris-b` | Phase 2 source: Oracle Database Free 23ai, CDB service `FREE`, pluggable database `FREEPDB1` (Scenario 016) | 1521 | TCP |
+| `postgres-target` | Phase 2, PostgreSQL 16: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 016 | 5432 | TCP |
+| `mysql-test` | Phase 2, MySQL 8: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 016 | 3306 | TCP |
 
 The four `phase2` containers publish nothing to the host either: connect to Oracle and SQL Server with `docker exec` (see [Phase 2 Database Containers](#phase-2-database-containers-scenario-16) for the verified commands), and JIM's own containers reach them by container name on `jim-network`.
 
@@ -2325,40 +2325,40 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
 | API Endpoints | ✅ Complete | Schema management, Synchronisation Rules, mappings, Run Profiles |
 | PowerShell Module | ✅ Complete | Cmdlets cover every implemented scenario (1, 2, 4-22) |
-| Scenario 1 | ✅ Complete | 8 lifecycle tests (Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection) plus ImportOnly/SyncOnly diagnostic steps |
-| Scenario 2 | ✅ Complete | All 4 tests (Provision, ForwardSync, ReverseSync, Conflict) |
-| Scenario 3 | ⏳ Pending | Stub script exists, not yet implemented |
-| Scenario 4 | ✅ Complete | Deletion rules: 6 implemented tests (WhenLastConnector ± recall, AuthoritativeImmediate, AuthoritativeGracePeriod, Manual ± recall). InternalProtection deferred pending Internal MVO support. |
-| Scenario 5 | ✅ Complete | Matching rules: 5 tests passing (Projection, Join, DuplicatePrevention, JoinConflict, CaseSensitivity); MultipleRules run separately |
-| Scenario 6 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
-| Scenario 7 | ✅ Complete | Clear Connected System Objects (DeleteHistory, KeepHistory, EdgeCases) |
-| Scenario 8 | ✅ Complete | All 7 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)) plus ImportToMV diagnostic step |
-| Scenario 9 | ✅ Complete | Partition-scoped import Run Profiles |
-| Scenario 10 | ✅ Complete | Synchronisation Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
-| Scenario 11 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
-| Scenario 12 | ✅ Complete | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock (#85) |
-| Scenario 13 | ✅ Complete | Relative-date outbound scoping: staged downstream provisioning via the Temporal Scope Reconciler's outbound lane (#892) |
-| Scenario 14 | ✅ Complete | Attribute Priority multi-source winner resolution: 12 steps covering winner-takes-all scalar resolution, multi-valued handling, recall/re-election and null/withdrawal/priority-reorder behaviour (OpenLDAP only) (#91) |
-| Scenario 15 | ✅ Implemented | SCIM 2.0 Client Connector driven end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted (#545) |
+| Scenario 001 | ✅ Complete | 8 lifecycle tests (Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection) plus ImportOnly/SyncOnly diagnostic steps |
+| Scenario 002 | ✅ Complete | All 4 tests (Provision, ForwardSync, ReverseSync, Conflict) |
+| Scenario 003 | ⏳ Pending | Stub script exists, not yet implemented |
+| Scenario 004 | ✅ Complete | Deletion rules: 6 implemented tests (WhenLastConnector ± recall, AuthoritativeImmediate, AuthoritativeGracePeriod, Manual ± recall). InternalProtection deferred pending Internal MVO support. |
+| Scenario 005 | ✅ Complete | Matching rules: 5 tests passing (Projection, Join, DuplicatePrevention, JoinConflict, CaseSensitivity); MultipleRules run separately |
+| Scenario 006 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
+| Scenario 007 | ✅ Complete | Clear Connected System Objects (DeleteHistory, KeepHistory, EdgeCases) |
+| Scenario 008 | ✅ Complete | All 7 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)) plus ImportToMV diagnostic step |
+| Scenario 009 | ✅ Complete | Partition-scoped import Run Profiles |
+| Scenario 010 | ✅ Complete | Synchronisation Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
+| Scenario 011 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
+| Scenario 012 | ✅ Complete | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock (#85) |
+| Scenario 013 | ✅ Complete | Relative-date outbound scoping: staged downstream provisioning via the Temporal Scope Reconciler's outbound lane (#892) |
+| Scenario 014 | ✅ Complete | Attribute Priority multi-source winner resolution: 12 steps covering winner-takes-all scalar resolution, multi-valued handling, recall/re-election and null/withdrawal/priority-reorder behaviour (OpenLDAP only) (#91) |
+| Scenario 015 | ✅ Implemented | SCIM 2.0 Client Connector driven end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted (#545) |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
-| Scenario 16 | ✅ Implemented | JIM SQL Connector provider x capability matrix against Microsoft SQL Server and Oracle Database, with `-Provider` / `-Quick` / `-FullMatrix` coverage control; the runner starts the `phase2` containers the chosen provider needs (#170) |
-| Scenario 17 | ✅ Complete | Initial Password provisioning: the credential chain (sign in as the account holder, forced change, self-service change) and the park-then-release loop (Samba AD only) (#1121, #1697) |
-| Scenario 18 | ✅ Complete | Writeback into the source Connected System, with a control system proving the rule shape (#1284) |
-| Scenario 19 | ✅ Complete | LDAP auxiliary object classes: merge, import, export class convergence, MUST enforcement, Structural Carrier Class provisioning, discovery (OpenLDAP only) (#492) |
-| Scenario 20 | ✅ Complete | Password Synchronisation, outbound half: held while switched off, delivered when switched on, coalescing, parked-change retry (Samba AD or OpenLDAP) (#1119) |
-| Scenario 21 | ✅ Complete | Run Profile safeguards: export limits (Max creates, updates, deletes) and Full Import deletion-detection limits (#1618) |
-| Scenario 22 | ✅ Complete | OpenLDAP password policy discovery: enforcement negative control, discovered values, non-root provisioning with nothing parked, override signal (OpenLDAP only) (#1702) |
-| Scenario 23 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity, feature flag (#242) |
-| Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 16 going green) and performance baselines |
+| Scenario 016 | ✅ Implemented | JIM SQL Connector provider x capability matrix against Microsoft SQL Server and Oracle Database, with `-Provider` / `-Quick` / `-FullMatrix` coverage control; the runner starts the `phase2` containers the chosen provider needs (#170) |
+| Scenario 017 | ✅ Complete | Initial Password provisioning: the credential chain (sign in as the account holder, forced change, self-service change) and the park-then-release loop (Samba AD only) (#1121, #1697) |
+| Scenario 018 | ✅ Complete | Writeback into the source Connected System, with a control system proving the rule shape (#1284) |
+| Scenario 019 | ✅ Complete | LDAP auxiliary object classes: merge, import, export class convergence, MUST enforcement, Structural Carrier Class provisioning, discovery (OpenLDAP only) (#492) |
+| Scenario 020 | ✅ Complete | Password Synchronisation, outbound half: held while switched off, delivered when switched on, coalescing, parked-change retry (Samba AD or OpenLDAP) (#1119) |
+| Scenario 021 | ✅ Complete | Run Profile safeguards: export limits (Max creates, updates, deletes) and Full Import deletion-detection limits (#1618) |
+| Scenario 022 | ✅ Complete | OpenLDAP password policy discovery: enforcement negative control, discovered values, non-root provisioning with nothing parked, override signal (OpenLDAP only) (#1702) |
+| Scenario 023 | ✅ Complete | Unique Value Generation, release 1: generated Account Name, sequence, random and export-mode values; gates, stability, brownfield via Attribute Priority, Start again, exhaustion, surface parity, feature flag (#242) |
+| Multi-Source Aggregation, Performance Baselines | ⏳ Road-mapped | Remaining database scenarios, unnumbered until started: multi-source aggregation (follows Scenario 016 going green) and performance baselines |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Remaining Work
 
-- **Scenario 3 (GALSYNC)** - stub exists; AD-to-CSV export not yet implemented
+- **Scenario 003 (GALSYNC)** - stub exists; AD-to-CSV export not yet implemented
 - **GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
 - **Entitlement Management** (both deferred scenarios) - blocked on Internal MVO design
-- **Multi-Source Aggregation and Performance Baselines** (unnumbered) - sequenced after the Scenario 16 matrix is green ([#170](https://github.com/TetronIO/JIM/issues/170))
+- **Multi-Source Aggregation and Performance Baselines** (unnumbered) - sequenced after the Scenario 016 matrix is green ([#170](https://github.com/TetronIO/JIM/issues/170))
 
 ### Known Gaps
 
@@ -2428,7 +2428,7 @@ When either variable is missing the runner skips the streaming step and continue
 - [MVP Definition](plans/done/MVP_DEFINITION.md) - Overall project status
 - [Developer Guide](DEVELOPER_GUIDE.md) - Development setup and architecture
 - [GitHub Issue #173](https://github.com/TetronIO/JIM/issues/173) - Integration Testing Framework tracking issue
-- [GitHub Issue #170](https://github.com/TetronIO/JIM/issues/170) - SQL Database Connector (Phase 2; Scenario 16 is its integration gate)
+- [GitHub Issue #170](https://github.com/TetronIO/JIM/issues/170) - SQL Database Connector (Phase 2; Scenario 016 is its integration gate)
 - [GitHub Issue #175](https://github.com/TetronIO/JIM/issues/175) - API Key Authentication (required for non-interactive testing)
 - [GitHub Issue #176](https://github.com/TetronIO/JIM/issues/176) - PowerShell Module (required for JIM configuration)
 - [GitHub Issue #238](https://github.com/TetronIO/JIM/issues/238) - Workflow Test Framework

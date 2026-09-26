@@ -36,7 +36,7 @@
     Unique identifier for this test run.
 
 .PARAMETER Scenario
-    Scenario name (e.g. "Scenario1-HRToIdentityDirectory").
+    Scenario name (e.g. "Scenario-001-HRToIdentityDirectory").
 
 .PARAMETER Template
     Template size (e.g. "Medium", "Scale100k50Groups").

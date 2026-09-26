@@ -79,7 +79,7 @@ public sealed record GenerationRequest
     public string? AdoptableValue { get; init; }
 
     /// <summary>
-    /// Import mode only (bug fix, #242, Scenario 23 integration run): the Metaverse Object's own current
+    /// Import mode only (bug fix, #242, Scenario 023 integration run): the Metaverse Object's own current
     /// effective value for the target attribute, from WHICHEVER rule contributed it - unlike
     /// <see cref="AdoptableValue"/>, this is read with no <c>generatingSyncRuleId</c> exclusion
     /// (<see cref="GeneratedValueParticipation.FindMetaverseOwnValue"/> passed <c>null</c>), so it can equal a

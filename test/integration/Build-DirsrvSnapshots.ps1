@@ -13,10 +13,10 @@
     tag shape.
 
     Snapshot images are tagged per-scenario and per-size:
-      - jim-dirsrv:general-{size}    (Scenarios 5, 9 and the other directory-agnostic scenarios; both suffixes populated)
-      - jim-dirsrv:s8-{size}         (Scenario 8; Source populated, Target OUs only)
+      - jim-dirsrv:general-{size}    (Scenarios 005, 009 and the other directory-agnostic scenarios; both suffixes populated)
+      - jim-dirsrv:s8-{size}         (Scenario 008; Source populated, Target OUs only)
 
-    Scenario 1 does not use snapshots; the target directory starts empty. Scenarios 14, 19
+    Scenario 001 does not use snapshots; the target directory starts empty. Scenarios 014, 019
     and 22 stay OpenLDAP only.
 
     The snapshot hash (Get-DirsrvSnapshotHash, over the populate scripts and their helpers) and
@@ -33,7 +33,7 @@
     for a snapshot is the base image's unpopulated instance.
 
 .PARAMETER Scenario
-    Which scenario to build snapshots for (General, Scenario8, All)
+    Which scenario to build snapshots for (General, Scenario-008, All)
 
 .PARAMETER Template
     Data size template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
@@ -48,12 +48,12 @@
     ./Build-DirsrvSnapshots.ps1 -Scenario All -Template Medium
 
 .EXAMPLE
-    ./Build-DirsrvSnapshots.ps1 -Scenario Scenario8 -Template MediumLarge -Force
+    ./Build-DirsrvSnapshots.ps1 -Scenario Scenario-008 -Template MediumLarge -Force
 #>
 
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet("General", "Scenario8", "All")]
+    [ValidateSet("General", "Scenario-008", "All")]
     [string]$Scenario = "All",
 
     [Parameter(Mandatory = $true)]
@@ -351,7 +351,7 @@ if ($needsBaseRebuild) {
     $Force = $true
 }
 
-$scenariosToProcess = if ($Scenario -eq "All") { @("General", "Scenario8") } else { @($Scenario) }
+$scenariosToProcess = if ($Scenario -eq "All") { @("General", "Scenario-008") } else { @($Scenario) }
 
 foreach ($scen in $scenariosToProcess) {
     $snapshotHash = Get-DirsrvSnapshotHash -Scenario $scen -IntegrationRoot $scriptRoot
@@ -382,7 +382,7 @@ foreach ($scen in $scenariosToProcess) {
             Write-Host ""
         }
 
-        "Scenario8" {
+        "Scenario-008" {
             $tag = Get-DirsrvSnapshotImageTag -Role "s8" -Template $Template
 
             if (-not $Force -and (Test-DirsrvSnapshotCurrent -ImageTag $tag -ExpectedSnapshotHash $snapshotHash -ExpectedBaseHash $expectedBuildHash)) {
@@ -396,10 +396,10 @@ foreach ($scen in $scenariosToProcess) {
                 -SnapshotTag $tag `
                 -SnapshotHash $snapshotHash `
                 -PopulateAction {
-                    & "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Source -DirectoryType DirectoryServer389 -Container "dirsrv-snapshot-s8"
-                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario8.ps1 (Source) failed" }
-                    & "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Target -DirectoryType DirectoryServer389 -Container "dirsrv-snapshot-s8"
-                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario8.ps1 (Target) failed" }
+                    & "$scriptRoot/Populate-OpenLDAP-Scenario-008.ps1" -Template $Template -Instance Source -DirectoryType DirectoryServer389 -Container "dirsrv-snapshot-s8"
+                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario-008.ps1 (Source) failed" }
+                    & "$scriptRoot/Populate-OpenLDAP-Scenario-008.ps1" -Template $Template -Instance Target -DirectoryType DirectoryServer389 -Container "dirsrv-snapshot-s8"
+                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario-008.ps1 (Target) failed" }
                 }
 
             Write-Host ""
@@ -417,7 +417,7 @@ foreach ($scen in $scenariosToProcess) {
         "General" {
             Write-Host "  $(Get-DirsrvSnapshotImageTag -Role 'general' -Template $Template)" -ForegroundColor Gray
         }
-        "Scenario8" {
+        "Scenario-008" {
             Write-Host "  $(Get-DirsrvSnapshotImageTag -Role 's8' -Template $Template)" -ForegroundColor Gray
         }
     }

@@ -45,7 +45,7 @@ public sealed record GenerationOutcome(
 {
     /// <summary>
     /// Set when <see cref="UniqueValueGenerationServer.ResolveAsync"/> found a live Sticky assignment for this
-    /// request's object and attribute but treated it as stale (bug fix, #242, Scenario 23) rather than
+    /// request's object and attribute but treated it as stale (bug fix, #242, Scenario 023) rather than
     /// reasserting it: the object currently holds a different, genuinely-present value for the attribute, left
     /// behind by a contributor that has since taken the attribute over. <paramref name="Kind"/> is then
     /// whatever the request resolved to once the stale assignment was treated as absent (typically

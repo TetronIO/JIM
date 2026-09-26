@@ -16,7 +16,7 @@ namespace JIM.Worker.Tests.Repositories;
 /// path. <c>ConnectedSystemRepository.UpdateConnectedSystemRunProfileAsync</c> re-fetches the tracked row
 /// and copies the caller's properties onto it one by one, so a column added to the entity but not to that
 /// copy is silently dropped on every update: the API accepts the limit, reports success, and persists
-/// nothing. Neither the in-memory harness nor the mocked API tests can see that, which is how Scenario 21
+/// nothing. Neither the in-memory harness nor the mocked API tests can see that, which is how Scenario 021
 /// found it at runtime. Opt-in via the same <c>JIM_TEST_RESET_*</c> environment variables as the other
 /// <c>RequiresPostgres</c> fixtures; ignored when <c>JIM_TEST_RESET_DB</c> is absent. Do NOT run this
 /// fixture outside the sanctioned scratch-database workflow: <c>SetUp</c> TRUNCATEs every table.

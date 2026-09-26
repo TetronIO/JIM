@@ -35,7 +35,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Hard-fail: the long-tail templates are OpenLDAP-only Scenario 8 templates.
+# Hard-fail: the long-tail templates are OpenLDAP-only Scenario 008 templates.
 # They are not valid for the basic Samba populator either.
 $longTailTemplates = @("Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")
 if ($Template -in $longTailTemplates) {

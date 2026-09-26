@@ -399,7 +399,7 @@ public class DriftDetectionTests
     /// <summary>
     /// The Enforce State half of #492's delta convergence: a corrective export whose drifted attribute is a
     /// merged auxiliary class's contribution must add the class in the same export, exactly as ordinary export
-    /// staging does. Enforce State is on by default, so this drift path is the one that staged Scenario 19's
+    /// staging does. Enforce State is on by default, so this drift path is the one that staged Scenario 019's
     /// join-time exports live, and without the class add the directory refused every one of them with an
     /// objectClassViolation.
     /// </summary>
@@ -1064,7 +1064,7 @@ public class DriftDetectionTests
     #region Cross-System Drift Detection Tests
 
     /// <summary>
-    /// Reproduces the Scenario 8 bug: when a Source system imports group members to
+    /// Reproduces the Scenario 008 bug: when a Source system imports group members to
     /// the MVO (member → Static Members) and a Target system exports them (Static Members → member),
     /// drift detection on the Target CSO should NOT treat the Target as a non-contributor
     /// and should NOT create spurious corrective exports.

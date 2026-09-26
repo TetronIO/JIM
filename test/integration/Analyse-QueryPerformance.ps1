@@ -15,7 +15,7 @@
     (shared_preload_libraries=pg_stat_statements).
 
 .PARAMETER Scenario
-    The integration test scenario to run. Default: Scenario8-CrossDomainEntitlementSync
+    The integration test scenario to run. Default: Scenario-008-CrossDomainEntitlementSync
 
 .PARAMETER Template
     The test data template size. Default: Medium
@@ -37,7 +37,7 @@
 
 .EXAMPLE
     ./Analyse-QueryPerformance.ps1
-    Resets stats, runs S8 OpenLDAP Medium, captures and displays query analysis.
+    Resets stats, runs S008 OpenLDAP Medium, captures and displays query analysis.
 
 .EXAMPLE
     ./Analyse-QueryPerformance.ps1 -SkipTest
@@ -45,7 +45,7 @@
 
 .EXAMPLE
     ./Analyse-QueryPerformance.ps1 -Template Small -TopN 30
-    Runs S8 OpenLDAP Small and shows top 30 queries.
+    Runs S008 OpenLDAP Small and shows top 30 queries.
 
 .EXAMPLE
     ./Analyse-QueryPerformance.ps1 -ResetOnly
@@ -53,7 +53,7 @@
 #>
 
 param(
-    [string]$Scenario = "Scenario8-CrossDomainEntitlementSync",
+    [string]$Scenario = "Scenario-008-CrossDomainEntitlementSync",
 
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$Template = "Medium",

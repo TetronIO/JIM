@@ -10,7 +10,7 @@ Revisit if local multi-instance ever becomes something we actually want, for exa
 
 ## What prompted it
 
-On 2026-08-11 an agent session ran the Scenario 16 integration suite from a git worktree under `docker compose -p wt-1283`, believing the project name isolated it. The developer's JIM instance, port-forwarded through Visual Studio Code, then could not be signed in to.
+On 2026-08-11 an agent session ran the Scenario 016 integration suite from a git worktree under `docker compose -p wt-1283`, believing the project name isolated it. The developer's JIM instance, port-forwarded through Visual Studio Code, then could not be signed in to.
 
 The containers that came up carried the developer's names under the agent's project label:
 

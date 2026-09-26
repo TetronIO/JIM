@@ -305,7 +305,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 await PersistPendingMetaverseObjectsAsync();
 
                 // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle
-                // reconciliation (or a stale Sticky match, #242 Scenario 23 bug fix) decided no longer belongs,
+                // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
                 // THEN commit this page's generated/adopted assignments now the objects have real ids - deletion
                 // must run first because a stale assignment being removed can share its (object, attribute) key
                 // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's

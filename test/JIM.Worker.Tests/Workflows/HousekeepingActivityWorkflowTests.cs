@@ -354,7 +354,7 @@ public class HousekeepingActivityWorkflowTests
     /// EF Core serves a tracked entity back from its identity map rather than refreshing it from a later query, so
     /// a Synchronisation Rule loaded for one batch was being reused, as it then stood, by every batch after it: an
     /// export rule switched to Disconnect after the first batch still had its directory objects deleted (found by
-    /// Scenario 4, Test 9). Modelled as two repositories: the main loop's still says Delete; the one the factory
+    /// Scenario 004, Test 9). Modelled as two repositories: the main loop's still says Delete; the one the factory
     /// hands out, standing in for the database as it now is, says Disconnect. The current action must win.
     /// </summary>
     [Test]

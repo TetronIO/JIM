@@ -1,0 +1,794 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+<#
+.SYNOPSIS
+    Test Scenario 020: Password Synchronisation
+
+.DESCRIPTION
+    Proves the OUTBOUND half of Password Synchronisation end to end: a password handed to JIM (by the REST API,
+    PowerShell, or an administrator in the portal) is queued and delivered to the Connected Systems an identity
+    holds an account in, by signing in to the directory with it. Inbound capture, a directory-side password
+    change flowing back into JIM, is a separate capability and is not exercised here; see
+    [#1625](https://github.com/TetronIO/JIM/issues/1625).
+
+    Everything else in JIM's Password Synchronisation coverage stops short of a directory. The unit tests assert
+    against a mocked LDAP executor and an in-memory queue, so they prove JIM *emits* the right write and moves
+    the right rows; they prove nothing about whether a directory accepts the result. This scenario closes that
+    gap the way Scenario 017 does for the Initial Password: it takes the password JIM delivered and binds with it.
+
+    Four questions, in the order they matter, and each with the contrast that gives its answer meaning:
+
+      1. **Does a switched-off system accumulate, or discard?** Password Synchronisation is configured on the
+         directory and switched off. Password changes are recorded for three people, and the queue must hold
+         them, marked as held rather than due, with the directory still answering the password it had before.
+         Requirement 2, and the failure this whole feature exists to prevent: a maintenance window during which
+         every password change is silently lost for one system.
+      2. **Does coalescing keep the newest password?** One person's password is changed three times while the
+         system is off. Exactly one queued change must remain, and after delivery the directory must hold the
+         *third* password, not the first. A test that only counted rows would pass on a queue that kept the
+         oldest.
+      3. **Does enabling deliver what accumulated, unaided?** The system is switched on and nothing else is
+         done: no retry, no run profile, no restart. Every held change must be delivered on JIM's own initiative
+         (requirement 3), and the accounts must then sign in with their new passwords and refuse their old ones.
+      4. **Does an ordinary change reach the directory once the system is live?** A fourth password change, with
+         the system enabled throughout, must be delivered without anybody doing anything.
+      5. **Does delivery wait behind the synchronisation engine?** (#1635) A Full Import is started and, while it
+         runs, a password change is queued with -Wait 10. The response must come back settled with the target
+         Set, and the change must be gone from the queue, within ten seconds; a Worker busy with an import must
+         not delay a password. The measured latency is printed so a regression in the Password Delivery Service
+         shows as a number before it shows as a failure.
+      6. **Is a retry attempted when asked, not when the Worker is next idle?** A password the directory refuses
+         is queued, parks, and is retried from the queue; the new attempt must be made within five seconds. Runs
+         on both directories: the OpenLDAP lab enforces a `pwdMinLength 7` password policy (see
+         `test/integration/docker/openldap/acl/jim-password-policy.ldif`), matching the Samba AD domain's minimum,
+         so the same six-character password is refused on either directory.
+
+    Two invariants are asserted throughout rather than as a step: no password value appears in any JIM log, and
+    no queue response carries one. They are the reason the feature is allowed to hold passwords at all.
+
+    Runs against Samba AD or OpenLDAP. On Samba AD, provisioning enables each account as its Initial Password
+    lands (an Active Directory operation), which is what makes signing in the proof this scenario relies on
+    throughout. OpenLDAP accounts have no disabled state to begin with, so nothing needs enabling there; the
+    directory-side assertions below (bind outcomes, account flags) are adapted per directory accordingly.
+
+.PARAMETER Step
+    Which part to execute (Provision, Synchronise, All)
+
+.PARAMETER Template
+    Accepted for runner compatibility and deliberately not used for sizing. This scenario asserts against four
+    accounts, so a larger template would only lengthen the export for no added coverage; it always provisions at
+    Micro.
+
+.PARAMETER JIMUrl
+    The URL of the JIM instance (default: http://localhost:5200)
+
+.PARAMETER ApiKey
+    API key for authentication
+
+.PARAMETER ContinueOnError
+    Continue executing remaining tests even if a test fails.
+
+.PARAMETER SkipPopulate
+    Accepted for runner compatibility. This scenario provisions the accounts it asserts against and needs no
+    pre-populated directory data.
+
+.PARAMETER DirectoryConfig
+    Directory configuration hashtable from Get-DirectoryConfig
+
+.EXAMPLE
+    ./Invoke-Scenario-020-PasswordSynchronisation.ps1 -ApiKey "jim_..." -Template Micro
+#>
+
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Provision", "Synchronise", "All")]
+    [string]$Step = "All",
+
+    [Parameter(Mandatory=$false)]
+    [string]$Template = "Micro",
+
+    [Parameter(Mandatory=$false)]
+    [string]$JIMUrl = "http://localhost:5200",
+
+    [Parameter(Mandatory=$false)]
+    [string]$ApiKey,
+
+    [Parameter(Mandatory=$false)]
+    [int]$WaitSeconds = 0,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ContinueOnError,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DirectoryConfig
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$ConfirmPreference = 'None'
+
+. "$PSScriptRoot/../utils/Test-Helpers.ps1"
+. "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+
+if (-not $DirectoryConfig) {
+    $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
+}
+
+if (-not $ApiKey) {
+    throw "API key required for authentication. Create one via the JIM portal: Admin > API Keys."
+}
+
+# Runs against Samba AD or OpenLDAP; both directories enforce a password policy (Samba AD's domain minimum,
+# OpenLDAP's ppolicy overlay), so Test 8's deliberately-too-short password is refused on either one.
+$isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
+
+<#
+    The passwords this scenario sends.
+
+    Each satisfies a stock Active Directory complexity rule on its own merits, even though the test domain is
+    provisioned with NOCOMPLEXITY=true: a password that only passes because complexity is switched off would make
+    the scenario prove less than it appears to.
+
+    They share no token with the account names the HR template generates, because Active Directory refuses a
+    password containing the sAMAccountName or a three-character-or-longer piece of the display name, and a
+    scenario that tripped that would fail for a reason nobody was testing.
+
+    They are also pairwise unlike each other, so a bind succeeding with one cannot be confused with a bind
+    succeeding with another. The three Coalesced values matter most here: the point of that assertion is which of
+    the three the directory ended up holding.
+#>
+$passwords = @{
+    Held           = 'Ravenscroft-4-Lantern!'
+    Coalesced      = @('Windlass-1-Thicket!', 'Pinnacle-2-Ferrous!', 'Saltmarsh-3-Quiver!')
+    WhileEnabled   = 'Kingfisher-8-Bracken!'
+    WhileBusy      = 'Harbourlight-5-Meadow!'
+    # Deliberately refused. Six characters is under the test domain's minimum length of seven, the one password
+    # rule it keeps (complexity and history are switched off), so Active Directory answers with a constraint
+    # violation and JIM parks the change rather than retrying into the same refusal. Parking is what Test 8 needs.
+    Refused        = 'Qx-7!z'
+}
+
+# Every password value this scenario puts into JIM, for the never-log sweep. Flattened once here so the sweep
+# cannot drift from the list above by someone adding a password and forgetting the assertion.
+$allPasswords = @($passwords.Held) + $passwords.Coalesced + @($passwords.WhileEnabled, $passwords.WhileBusy, $passwords.Refused)
+
+# The Password Delivery Service's promise (#1635): a queued change is attempted within about a second, and a
+# retry when it is asked for, whatever the synchronisation loop is doing. These are the bounds Tests 7 and 8 hold
+# it to, with room for a slow directory write; measured at 450 ms from POST to claim in development.
+$deliveryLatencyBudgetSeconds = 10
+$retryLatencyBudgetSeconds = 5
+
+# Four accounts are what this scenario asserts against, so it always provisions at Micro no matter what the
+# runner passed. A larger template would lengthen the export and prove nothing further.
+$effectiveTemplate = "Micro"
+
+# How long delivery is given once a pass has been asked for. Generous: a delivery pass is raised the moment work
+# is queued or a system is enabled, so this is a bound on a directory write and a queue read, not on a poll
+# interval. Exceeded, it means delivery is not happening at all, which is what the failure should say.
+$deliveryTimeoutSeconds = 180
+
+$script:TestResults = @()
+$startTime = Get-Date
+
+function Add-TestResult {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$true)][bool]$Passed,
+        [Parameter(Mandatory=$false)][string]$Detail = ""
+    )
+    $script:TestResults += @{ Name = $Name; Passed = $Passed; Detail = $Detail }
+    if ($Passed) {
+        Write-Host "  ✓ PASSED: $Name" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  ✗ FAILED: $Name" -ForegroundColor Red
+        if ($Detail) { Write-Host "      $Detail" -ForegroundColor Yellow }
+        if (-not $ContinueOnError) {
+            throw "Assertion failed: $Name. $Detail"
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    Parses the accounts out of an LDIF search result, newest-parser-wins over Scenario 017's inline one.
+
+.DESCRIPTION
+    Scenario 017 parses the first entry only, inline. This scenario needs several, so it parses properly: entries
+    are separated by a blank line in LDIF, and a dn line starts one.
+
+    Directory-agnostic: the account-name attribute is passed in (sAMAccountName on Samba AD, uid on OpenLDAP),
+    and every parsed account carries it under the fixed key 'AccountName' regardless of which directory attribute
+    supplied it. userAccountControl is Active Directory-only and is simply absent from an OpenLDAP entry's hashtable.
+#>
+function Get-LDIFAccounts {
+    param(
+        # AllowEmptyString, because LDIF separates entries with a blank line and PowerShell validates every
+        # element of a Mandatory [string[]]: without it, binding fails with "argument is an empty string" on
+        # the first entry separator, which reads as though the search returned nothing.
+        [Parameter(Mandatory=$true)][AllowEmptyString()][string[]]$RawLines,
+        [Parameter(Mandatory=$true)][string]$UserNameAttr
+    )
+
+    $accounts = @()
+    $current = $null
+    $attrPattern = [regex]::Escape($UserNameAttr)
+
+    foreach ($line in $RawLines) {
+        if ($line -match '^\s*#') { continue }
+
+        if ($line -match '^dn:\s*(.+)$') {
+            if ($current -and $current.ContainsKey('AccountName')) { $accounts += $current }
+            $current = @{ dn = $matches[1].Trim() }
+            continue
+        }
+
+        if ($null -ne $current -and $line -match "^($attrPattern|userAccountControl):\s*(.+)$") {
+            $key = if ($matches[1] -eq $UserNameAttr) { 'AccountName' } else { 'userAccountControl' }
+            $current[$key] = $matches[2].Trim()
+        }
+    }
+
+    if ($current -and $current.ContainsKey('AccountName')) { $accounts += $current }
+    return $accounts
+}
+
+<#
+.SYNOPSIS
+    Waits until nothing is left on the queue for the given identities, and reports what remains if not.
+#>
+function Wait-ForQueueToDrain {
+    param(
+        [Parameter(Mandatory=$true)][guid[]]$MetaverseObjectIds,
+        [Parameter(Mandatory=$true)][string]$Description
+    )
+
+    $drained = Wait-ForCondition -Description $Description -TimeoutSeconds $deliveryTimeoutSeconds -IntervalSeconds 5 -Condition {
+        $outstanding = 0
+        foreach ($id in $MetaverseObjectIds) {
+            $outstanding += @(Get-JIMPendingPasswordChange -MetaverseObjectId $id).Count
+        }
+        return $outstanding -eq 0
+    }
+
+    if (-not $drained) {
+        # The rows themselves say far more than "it timed out": a Parked row names the target's refusal, and a
+        # Held one means the system is still switched off, which would be this scenario's own mistake.
+        foreach ($id in $MetaverseObjectIds) {
+            foreach ($change in @(Get-JIMPendingPasswordChange -MetaverseObjectId $id)) {
+                Write-Host ("      still queued: {0} on {1}, status {2}, held {3}, attempts {4}, {5}" -f `
+                    $change.metaverseObjectDisplayName, $change.connectedSystemName, $change.status, `
+                    $change.held, $change.attemptCount, $change.targetMessage) -ForegroundColor Yellow
+            }
+        }
+    }
+
+    return $drained
+}
+
+Write-TestSection "Scenario 020: Password Synchronisation"
+Write-Host "Directory:  $($DirectoryConfig.ConnectedSystemName) ($($DirectoryConfig.ContainerName))" -ForegroundColor Gray
+Write-Host "Template:   $effectiveTemplate (the -Template value is not used for sizing)" -ForegroundColor Gray
+Write-Host "Step:       $Step" -ForegroundColor Gray
+Write-Host ""
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# Step 0: Configure JIM
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+Write-TestSection "Step 0: Configuring JIM"
+
+Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
+& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$PSScriptRoot/../../test-data"
+Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
+
+$config = & "$PSScriptRoot/../Setup-Scenario-020.ps1" `
+    -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $effectiveTemplate -DirectoryConfig $DirectoryConfig
+
+if (-not $config) {
+    throw "Failed to set up Scenario 020 configuration"
+}
+
+$initialPassword = $config.InitialPassword
+$ldapSystemId = $config.LDAPSystemId
+
+$modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM.psd1"
+Remove-Module JIM -Force -ErrorAction SilentlyContinue
+Import-Module $modulePath -Force -ErrorAction Stop
+Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+try {
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Step 1: Provision the accounts this scenario changes passwords for
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    if ($Step -in @("Provision", "All")) {
+        Write-TestSection "Step 1: Provisioning accounts into $($DirectoryConfig.ConnectedSystemName)"
+
+        Write-Host "  [1/5] HR CSV Full Import..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Full Import"
+
+        Write-Host "  [2/5] HR CSV Delta Sync..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "HR CSV Delta Sync"
+
+        Write-Host "  [3/5] Directory Export (accounts created, Initial Passwords set)..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $ldapSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Export"
+
+        # A Full Import, not a Delta Import: this is the Connected System's first import, so there is no
+        # persisted baseline for a delta to compare against and the Connector refuses it outright.
+        Write-Host "  [4/5] Directory Full Import (confirms the exports)..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $ldapSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Full Import"
+
+        Write-Host "  [5/5] Directory Delta Sync..." -ForegroundColor DarkGray
+        $r = Start-JIMRunProfile -ConnectedSystemId $ldapSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Delta Sync"
+
+        Write-Host "  ✓ Provisioning complete" -ForegroundColor Green
+    }
+
+    if ($Step -eq "Provision") {
+        Write-Host "`nProvision step complete. Re-run with -Step Synchronise to assert against the accounts." -ForegroundColor Cyan
+        return
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Step 2: Choose the people this scenario changes passwords for
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Step 2: Selecting provisioned accounts and their identities"
+
+    $searchOutput = Invoke-LDAPSearch `
+        -ContainerName $DirectoryConfig.ContainerName `
+        -Server "localhost" `
+        -Port $DirectoryConfig.LdapSearchPort `
+        -Scheme $DirectoryConfig.LdapSearchScheme `
+        -BaseDN $DirectoryConfig.UserContainer `
+        -BindDN $DirectoryConfig.BindDN `
+        -BindPassword $DirectoryConfig.BindPassword `
+        -Filter "(&(objectClass=$($DirectoryConfig.UserObjectClass))($($DirectoryConfig.UserNameAttr)=*))" `
+        -Attributes @($DirectoryConfig.UserNameAttr, "userAccountControl")
+
+    if (-not $searchOutput) {
+        throw "The directory search returned nothing under $($DirectoryConfig.UserContainer). Either the export " +
+              "provisioned nothing, or the container is wrong; check the Directory Export Activity."
+    }
+
+    $lines = Expand-LDIFFoldedLine -RawLdif ($searchOutput -join "`n")
+    $accounts = @(Get-LDIFAccounts -RawLines $lines -UserNameAttr $DirectoryConfig.UserNameAttr)
+
+    # Enabled accounts only. Bit 0x2 is ACCOUNTDISABLE, and a disabled account cannot be bound as whatever
+    # password it holds, so one would fail every assertion below for a reason that is not the one under test.
+    # The HR template marks some people Archived, and Setup-Scenario-001's userAccountControl expression disables
+    # exactly those. OpenLDAP has no userAccountControl equivalent (Setup-Scenario-001 does not map one), so every
+    # provisioned account there is already usable and none are filtered out.
+    if (-not $isRfcDirectory) {
+        $accounts = @($accounts | Where-Object { $_.ContainsKey('userAccountControl') -and (([int]$_.userAccountControl) -band 0x2) -eq 0 })
+    }
+
+    if ($accounts.Count -lt 3) {
+        throw "Only $($accounts.Count) enabled account(s) found under $($DirectoryConfig.UserContainer); this " +
+              "scenario needs at least three. Check the Directory Export Activity and the Initial Password's " +
+              "parked count: an account whose password was refused is left disabled."
+    }
+
+    # Sorted so a re-run picks the same people, which makes a failure reproducible rather than a lottery.
+    # OpenLDAP's snapshot seeds baseline accounts unrelated to this scenario alongside the ones JIM
+    # provisions (a "General" snapshot shared with other scenarios; Samba AD's target directory starts
+    # empty, so this only bites there), distinguishable only by having no Metaverse Object behind them.
+    # Walking the whole sorted candidate list and skipping those, rather than taking the first three and
+    # throwing on the first miss, is what makes this directory-agnostic without hard-coding a naming
+    # convention that happens to separate the two groups on this particular snapshot.
+    $sortedCandidates = @($accounts | Sort-Object { $_.AccountName })
+
+    $people = @()
+    $skipped = @()
+    foreach ($account in $sortedCandidates) {
+        if ($people.Count -ge 3) { break }
+
+        $mvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Account Name" `
+            -AttributeValue $account.AccountName -PageSize 5) | Select-Object -First 1
+
+        if (-not $mvo) {
+            # Not necessarily a fault: a directory that carries accounts JIM never provisioned (OpenLDAP's
+            # shared snapshot) will always have some of these among the candidates.
+            $skipped += $account.AccountName
+            continue
+        }
+
+        $people += [PSCustomObject]@{
+            AccountName = $account.AccountName
+            Dn          = $account.dn
+            MvoId       = [guid]$mvo.id
+        }
+    }
+
+    if ($skipped.Count -gt 0) {
+        Write-Host "  Skipped $($skipped.Count) account(s) with no Metaverse Object (not provisioned by this scenario): $($skipped -join ', ')" -ForegroundColor Gray
+    }
+
+    if ($people.Count -lt 3) {
+        throw "Only $($people.Count) of $($sortedCandidates.Count) candidate account(s) under " +
+              "$($DirectoryConfig.UserContainer) resolve to a Metaverse Object; this scenario needs three. " +
+              "Check the Directory Export and Delta Sync Activities: an account JIM provisioned must have " +
+              "projected an identity."
+    }
+
+    $held = $people[0]
+    $coalesced = $people[1]
+    $whileEnabled = $people[2]
+
+    Write-Host "  Accumulate-while-off : $($held.AccountName)" -ForegroundColor Cyan
+    Write-Host "  Coalescing           : $($coalesced.AccountName)" -ForegroundColor Cyan
+    Write-Host "  Delivered live       : $($whileEnabled.AccountName)" -ForegroundColor Cyan
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 1: the baseline every later assertion is read against
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 1: The accounts sign in with the password they were provisioned with"
+
+    foreach ($person in $people) {
+        $bind = Test-LDAPBind -BindDN $person.Dn -BindPassword $initialPassword -DirectoryConfig $DirectoryConfig
+        Add-TestResult -Name "$($person.AccountName) signs in with its Initial Password" `
+            -Passed ($bind.Outcome -eq 'Success') `
+            -Detail "Expected Success, got '$($bind.Outcome)'. Directory said: $($bind.Output). Nothing below can be interpreted until this passes: every later assertion is 'the password changed from this one'."
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 2: a switched-off system accumulates rather than discarding (requirement 2)
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 2: A switched-off Connected System accumulates password changes"
+
+    $heldSecure = ConvertTo-SecureString -String $passwords.Held -AsPlainText -Force
+    $queueResult = Set-JIMMetaverseObjectPassword -Id $held.MvoId -Password $heldSecure -Force
+
+    Add-TestResult -Name "The change is queued for the switched-off Connected System" `
+        -Passed ((-not $queueResult.queuedForNoSystems) -and @($queueResult.targets).Count -eq 1) `
+        -Detail "queuedForNoSystems was '$($queueResult.queuedForNoSystems)' with $(@($queueResult.targets).Count) target(s). A system that is configured but switched off must still be a target; discarding the change here is what requirement 2 forbids."
+
+    $target = @($queueResult.targets) | Select-Object -First 1
+    Add-TestResult -Name "The response says the change is held rather than on its way" `
+        -Passed ($null -ne $target -and $target.enabled -eq $false) `
+        -Detail "The target reported enabled='$($target.enabled)'. 'Queued' alone reads as 'delivered soon'; an administrator has to be able to tell that this one is waiting on somebody switching the system on."
+
+    # Three changes for one person, so coalescing has something to coalesce.
+    foreach ($password in $passwords.Coalesced) {
+        $secure = ConvertTo-SecureString -String $password -AsPlainText -Force
+        Set-JIMMetaverseObjectPassword -Id $coalesced.MvoId -Password $secure -Force | Out-Null
+    }
+
+    $coalescedQueue = @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId)
+    Add-TestResult -Name "Three password changes for one person leave one queued change" `
+        -Passed ($coalescedQueue.Count -eq 1) `
+        -Detail "The queue holds $($coalescedQueue.Count) change(s) for $($coalesced.AccountName). Only the newest password should ever be sent, so a second change replaces an undelivered first rather than queueing behind it."
+
+    $heldQueue = @(Get-JIMPendingPasswordChange -MetaverseObjectId $held.MvoId)
+    Add-TestResult -Name "A queued change for a switched-off system is held, not due" `
+        -Passed ($heldQueue.Count -eq 1 -and $heldQueue[0].held -eq $true -and $heldQueue[0].due -eq $false) `
+        -Detail "held='$($heldQueue[0].held)', due='$($heldQueue[0].due)'. A delivery pass steps over a switched-off system, so reporting the change as due would put 'Due now' against a row nothing will attempt."
+
+    $summary = Get-JIMPendingPasswordChange -Summary
+    Add-TestResult -Name "The queue summary counts held changes as waiting, and none as due" `
+        -Passed ($summary.waitingCount -ge 2 -and $summary.dueCount -eq 0) `
+        -Detail "waitingCount=$($summary.waitingCount), dueCount=$($summary.dueCount). A large due count is meant to read as 'the queue is not being drained'; held changes must not produce that reading."
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 3: nothing reached the directory while the system was off
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 3: Nothing was delivered while the system was switched off"
+
+    $bindWithNew = Test-LDAPBind -BindDN $held.Dn -BindPassword $passwords.Held -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The directory does not yet hold the queued password" `
+        -Passed ($bindWithNew.Outcome -eq 'InvalidCredentials') `
+        -Detail "Expected InvalidCredentials, got '$($bindWithNew.Outcome)'. Delivery to a switched-off system would make the accumulate assertion above meaningless."
+
+    $bindWithOld = Test-LDAPBind -BindDN $held.Dn -BindPassword $initialPassword -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The account still signs in with the password it had" `
+        -Passed ($bindWithOld.Outcome -eq 'Success') `
+        -Detail "Expected Success, got '$($bindWithOld.Outcome)'. Holding a change must leave the account exactly as it was, not part-way through anything."
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 4: enabling delivers what accumulated, unaided (requirement 3)
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 4: Switching Password Synchronisation on delivers what accumulated"
+
+    Set-JIMConnectedSystemPasswordSynchronisation `
+        -Id $ldapSystemId `
+        -Enabled $true `
+        -ChangeReason "Scenario 020: the change window has closed" | Out-Null
+
+    Write-Host "  Password Synchronisation switched on; nothing else will be done." -ForegroundColor Gray
+
+    $drained = Wait-ForQueueToDrain -MetaverseObjectIds @($held.MvoId, $coalesced.MvoId) `
+        -Description "the queued password changes to be delivered without further intervention"
+
+    Add-TestResult -Name "Enabling the system delivers what accumulated, with no further intervention" `
+        -Passed $drained `
+        -Detail "The queue still held changes after $deliveryTimeoutSeconds seconds. Requirement 3 is that enabling a system processes its queued changes automatically: no retry, no run profile, no restart."
+
+    $bindDelivered = Test-LDAPBind -BindDN $held.Dn -BindPassword $passwords.Held -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The account signs in with the password queued while the system was off" `
+        -Passed ($bindDelivered.Outcome -eq 'Success') `
+        -Detail "Expected Success, got '$($bindDelivered.Outcome)'. Directory said: $($bindDelivered.Output)"
+
+    $bindSuperseded = Test-LDAPBind -BindDN $held.Dn -BindPassword $initialPassword -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The password it was provisioned with no longer works" `
+        -Passed ($bindSuperseded.Outcome -eq 'InvalidCredentials') `
+        -Detail "Expected InvalidCredentials, got '$($bindSuperseded.Outcome)'. Without this contrast the assertion above proves only that some password works, not that JIM's did."
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 5: coalescing kept the newest password, not the first
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 5: Of three password changes, the directory holds the newest"
+
+    $newest = $passwords.Coalesced[-1]
+    $oldest = $passwords.Coalesced[0]
+
+    $bindNewest = Test-LDAPBind -BindDN $coalesced.Dn -BindPassword $newest -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The account signs in with the third of the three passwords" `
+        -Passed ($bindNewest.Outcome -eq 'Success') `
+        -Detail "Expected Success, got '$($bindNewest.Outcome)'. Directory said: $($bindNewest.Output)"
+
+    $bindOldest = Test-LDAPBind -BindDN $coalesced.Dn -BindPassword $oldest -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The first of the three no longer works" `
+        -Passed ($bindOldest.Outcome -eq 'InvalidCredentials') `
+        -Detail "Expected InvalidCredentials, got '$($bindOldest.Outcome)'. A queue that coalesced to one row but kept the oldest password would pass the row count assertion and fail the person."
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 6: an ordinary change against a live system
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 6: A password change with the system enabled throughout"
+
+    $liveSecure = ConvertTo-SecureString -String $passwords.WhileEnabled -AsPlainText -Force
+    $liveResult = Set-JIMMetaverseObjectPassword -Id $whileEnabled.MvoId -Password $liveSecure -Force
+
+    $liveTarget = @($liveResult.targets) | Select-Object -First 1
+    Add-TestResult -Name "The response says the change is on its way rather than held" `
+        -Passed ($null -ne $liveTarget -and $liveTarget.enabled -eq $true) `
+        -Detail "The target reported enabled='$($liveTarget.enabled)'."
+
+    $liveDrained = Wait-ForQueueToDrain -MetaverseObjectIds @($whileEnabled.MvoId) `
+        -Description "the password change to be delivered to the live Connected System"
+
+    Add-TestResult -Name "The change is delivered without anybody doing anything" `
+        -Passed $liveDrained `
+        -Detail "The change was still queued after $deliveryTimeoutSeconds seconds."
+
+    $bindLive = Test-LDAPBind -BindDN $whileEnabled.Dn -BindPassword $passwords.WhileEnabled -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The account signs in with the synchronised password" `
+        -Passed ($bindLive.Outcome -eq 'Success') `
+        -Detail "Expected Success, got '$($bindLive.Outcome)'. Directory said: $($bindLive.Output)"
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 7: delivery does not wait behind the synchronisation engine (#1635)
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 7: A change queued while a Full Import is running is delivered within seconds"
+
+    # The directory's Full Import, started and not waited for: the longest run this scenario's own systems
+    # offer. At Micro it can finish in seconds, so the assertion is on two things it can always prove: the Worker
+    # had the import when the change was queued, and how long the password took to land regardless.
+    $import = Start-JIMRunProfile -ConnectedSystemId $ldapSystemId -RunProfileId $config.LDAPFullImportProfileId -PassThru
+    $importActivityId = $import.activityId
+    $terminalStatuses = @('Complete', 'CompleteWithWarning', 'CompleteWithError', 'FailedWithError', 'Cancelled')
+    $importStatusBefore = [string](Get-JIMActivity -Id $importActivityId).status
+
+    $busySecure = ConvertTo-SecureString -String $passwords.WhileBusy -AsPlainText -Force
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $busyResult = Set-JIMMetaverseObjectPassword -Id $whileEnabled.MvoId -Password $busySecure -Wait $deliveryLatencyBudgetSeconds -Force
+    $respondedAfter = $stopwatch.Elapsed
+
+    # Measured from the queue as well as read from the response, because the queue is the ground truth: a change
+    # is gone from it the moment the target has the password. Polled quickly; Wait-ForCondition's whole-second
+    # interval would blur a latency that is meant to be well under one.
+    $delivered = $false
+    while ($stopwatch.Elapsed.TotalSeconds -lt $deliveryLatencyBudgetSeconds) {
+        if (@(Get-JIMPendingPasswordChange -MetaverseObjectId $whileEnabled.MvoId).Count -eq 0) {
+            $delivered = $true
+            break
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    $deliveredAfter = $stopwatch.Elapsed
+    $importStatusAfter = [string](Get-JIMActivity -Id $importActivityId).status
+
+    Write-Host ("  Response after {0:N0} ms; queue empty after {1:N0} ms; import was '{2}' at queue time and '{3}' at delivery." -f `
+        $respondedAfter.TotalMilliseconds, $deliveredAfter.TotalMilliseconds, $importStatusBefore, $importStatusAfter) -ForegroundColor Cyan
+
+    Add-TestResult -Name "The Worker had the Full Import when the change was queued" `
+        -Passed ($importStatusBefore -notin $terminalStatuses) `
+        -Detail "The import's Activity was already '$importStatusBefore' when the password change was queued, so this run cannot show that delivery did not wait behind it. Start a longer import or queue sooner."
+
+    # The response shape is the contract from #1635: settled, and a state per target. Read defensively so a
+    # server without the wait reports 'the response did not say' rather than a property-not-found error.
+    $busyTarget = @($busyResult.targets) | Select-Object -First 1
+    $busySettled = if ($null -ne $busyResult.PSObject.Properties['settled']) { [bool]$busyResult.settled } else { $false }
+    $busyState = if ($null -ne $busyTarget -and $null -ne $busyTarget.PSObject.Properties['state']) { [string]$busyTarget.state } else { '(not reported)' }
+
+    Add-TestResult -Name "Set-JIMMetaverseObjectPassword -Wait returns settled, with the target Set, within $deliveryLatencyBudgetSeconds seconds" `
+        -Passed ($busySettled -and $busyState -eq 'Set' -and $respondedAfter.TotalSeconds -lt $deliveryLatencyBudgetSeconds) `
+        -Detail "settled='$busySettled', state='$busyState', responded after $([math]::Round($respondedAfter.TotalMilliseconds)) ms. A caller who asks to wait is meant to be told the password landed, not that it was noted."
+
+    Add-TestResult -Name "The password was delivered within $deliveryLatencyBudgetSeconds seconds of being queued, while the import ran" `
+        -Passed $delivered `
+        -Detail "The change was still queued after $deliveryLatencyBudgetSeconds seconds (import status now '$importStatusAfter'). The Password Delivery Service is meant to attempt a queued change within about a second, whatever the synchronisation loop is doing; a change waiting on the import to finish is the failure #1635 exists to remove."
+
+    $bindBusy = Test-LDAPBind -BindDN $whileEnabled.Dn -BindPassword $passwords.WhileBusy -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "The account signs in with the password delivered during the import" `
+        -Passed ($bindBusy.Outcome -eq 'Success') `
+        -Detail "Expected Success, got '$($bindBusy.Outcome)'. Directory said: $($bindBusy.Output)"
+
+    # Let the import finish before anything else is asserted: the later tests read the queue and the logs, and an
+    # import still running would make the worker-error sweep and the final summary read a moving target.
+    $importFinished = Wait-ForCondition -Description "the Full Import started alongside the password change to finish" -TimeoutSeconds 600 -IntervalSeconds 2 -Condition {
+        ([string](Get-JIMActivity -Id $importActivityId).status) -in $terminalStatuses
+    }
+    if (-not $importFinished) {
+        throw "The Full Import (Activity $importActivityId) had not finished after 600 seconds."
+    }
+    Assert-ActivitySuccess -ActivityId $importActivityId -Name "Directory Full Import (run alongside password delivery)"
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 8: a retry is attempted when asked for, not when the Worker is next idle (#1635)
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Runs on both directories: the OpenLDAP lab enforces a `pwdMinLength 7` ppolicy overlay on its suffix
+    # databases (matching the Samba AD domain's minimum), so the deliberately six-character password below
+    # is refused via RFC 3062 Password Modify on either directory, giving Test 8 something real to park and
+    # retry.
+    Write-TestSection "Test 8: A parked change retried from the queue is attempted within seconds"
+
+    $refusedSecure = ConvertTo-SecureString -String $passwords.Refused -AsPlainText -Force
+    # A refused password is reported as a Parked target and, because it is something a caller has to act on, as a
+    # non-terminating error too. The refusal is the point of this test, so the error stream is quietened here.
+    $refusedResult = Set-JIMMetaverseObjectPassword -Id $coalesced.MvoId -Password $refusedSecure -Wait $deliveryLatencyBudgetSeconds -Force -ErrorAction SilentlyContinue
+
+    $parked = Wait-ForCondition -Description "the refused password to be parked" -TimeoutSeconds 30 -IntervalSeconds 1 -Condition {
+        @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId -Status Parked).Count -eq 1
+    }
+    $parkedRow = @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId) | Select-Object -First 1
+
+    Add-TestResult -Name "A password the directory refuses is parked, not retried into the same refusal" `
+        -Passed ($parked -and $null -ne $parkedRow -and [string]$parkedRow.failureReason -eq 'PolicyRejection') `
+        -Detail "parked='$parked', status='$(if ($parkedRow) { $parkedRow.status })', failureReason='$(if ($parkedRow) { $parkedRow.failureReason })', target said: $(if ($parkedRow) { $parkedRow.targetMessage }). The test domain's minimum password length is seven; a six-character password is the deliberate refusal this test is built on."
+
+    if ($null -eq $parkedRow) {
+        throw "No queued change remains for $($coalesced.AccountName) to retry; the rest of Test 8 has nothing to time."
+    }
+
+    $refusedTarget = @($refusedResult.targets) | Select-Object -First 1
+    $refusedState = if ($null -ne $refusedTarget -and $null -ne $refusedTarget.PSObject.Properties['state']) { [string]$refusedTarget.state } else { '(not reported)' }
+    $refusedMessage = if ($null -ne $refusedTarget -and $null -ne $refusedTarget.PSObject.Properties['message']) { [string]$refusedTarget.message } else { '' }
+    Add-TestResult -Name "The waited-for response reports the refusal as Parked, with the directory's own words" `
+        -Passed ($refusedState -eq 'Parked' -and -not [string]::IsNullOrWhiteSpace($refusedMessage)) `
+        -Detail "state='$refusedState', message='$refusedMessage'. A refusal is exactly what a caller waiting on a reset needs to hear about before hanging up."
+
+    $attemptedBefore = $parkedRow.lastAttemptedAt
+    $retry = Resume-JIMPendingPasswordChange -Id ([guid]$parkedRow.id) -Force
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+    Add-TestResult -Name "The retry covers the one parked change" `
+        -Passed ($retry.affectedCount -eq 1) `
+        -Detail "affectedCount was $($retry.affectedCount)."
+
+    # A retry resets the attempt count and makes the change due; the Password Delivery Service is woken by that
+    # write. The new attempt is visible as a later LastAttemptedAt and an attempt count back at one, and the
+    # directory refuses again, so the change parks again: what is being timed is the attempt, not its outcome.
+    $retriedRow = $null
+    $attempted = $false
+    while ($stopwatch.Elapsed.TotalSeconds -lt $retryLatencyBudgetSeconds) {
+        $retriedRow = @(Get-JIMPendingPasswordChange -MetaverseObjectId $coalesced.MvoId) | Select-Object -First 1
+        if ($null -ne $retriedRow -and $null -ne $retriedRow.lastAttemptedAt -and ([datetime]$retriedRow.lastAttemptedAt) -gt ([datetime]$attemptedBefore)) {
+            $attempted = $true
+            break
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    $attemptedAfter = $stopwatch.Elapsed
+
+    Write-Host ("  Retry attempted after {0:N0} ms (attempt count {1}, status '{2}')." -f `
+        $attemptedAfter.TotalMilliseconds, $(if ($retriedRow) { $retriedRow.attemptCount }), $(if ($retriedRow) { $retriedRow.status })) -ForegroundColor Cyan
+
+    Add-TestResult -Name "The retried change is attempted within $retryLatencyBudgetSeconds seconds of the retry" `
+        -Passed ($attempted -and $retriedRow.attemptCount -ge 1) `
+        -Detail "attempted='$attempted' after $([math]::Round($attemptedAfter.TotalMilliseconds)) ms; lastAttemptedAt before '$attemptedBefore', now '$(if ($retriedRow) { $retriedRow.lastAttemptedAt })', attemptCount $(if ($retriedRow) { $retriedRow.attemptCount }). A retry from the queue page used to wait for the Worker to be idle; it is now meant to wake the Password Delivery Service directly."
+
+    # The coalesced account still holds the newest of its three passwords: a refused password never lands.
+    $bindStillNewest = Test-LDAPBind -BindDN $coalesced.Dn -BindPassword $passwords.Coalesced[-1] -DirectoryConfig $DirectoryConfig
+    Add-TestResult -Name "A refused password leaves the account's password as it was" `
+        -Passed ($bindStillNewest.Outcome -eq 'Success') `
+        -Detail "Expected Success with the previously delivered password, got '$($bindStillNewest.Outcome)'. Directory said: $($bindStillNewest.Output)"
+
+    # Cancelled rather than left parked, so the final summary below reads a queue this scenario has finished
+    # with. Cancelling keeps the change, marked Cancelled, which is what the summary's cancelledCount reports.
+    Stop-JIMPendingPasswordChange -Id ([guid]$parkedRow.id) -Force | Out-Null
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 9: delivery leaves nothing behind, and nothing parked
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 9: What the queue holds afterwards"
+
+    $finalSummary = Get-JIMPendingPasswordChange -Summary
+
+    Add-TestResult -Name "Nothing was parked by the directory refusing a password" `
+        -Passed ($finalSummary.parkedCount -eq 0) `
+        -Detail "parkedCount was $($finalSummary.parkedCount). A parked change is one the target refused; apart from the deliberately refused password in Test 8, since cancelled, the passwords this scenario sends are chosen to satisfy a stock complexity rule, so a refusal is a genuine finding."
+
+    Add-TestResult -Name "Nothing expired waiting to be delivered" `
+        -Passed ($finalSummary.expiredCount -eq 0) `
+        -Detail "expiredCount was $($finalSummary.expiredCount)."
+
+    Add-TestResult -Name "A delivered change leaves nothing behind" `
+        -Passed ($finalSummary.waitingCount -eq 0) `
+        -Detail "waitingCount was $($finalSummary.waitingCount). Nothing is kept once the target has the password: there is no value worth retaining and every reason not to."
+
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    # Test 10: the invariant that lets JIM hold passwords at all
+    # ─────────────────────────────────────────────────────────────────────────────────────────
+    Write-TestSection "Test 10: No password value reached a log or an API response"
+
+    # Read from the containers rather than from a file, so this covers everything JIM wrote at every level,
+    # including anything a library wrote on its behalf. The window starts before the scenario did.
+    $since = $startTime.AddMinutes(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $leaked = @()
+
+    foreach ($container in @('jim.web', 'jim.worker', 'jim.scheduler')) {
+        $logText = (docker logs --since $since $container 2>&1 | Out-String)
+        foreach ($password in $allPasswords) {
+            if ($logText -match [regex]::Escape($password)) {
+                $leaked += "$container logged a password value"
+            }
+        }
+    }
+
+    Add-TestResult -Name "No password value appears in any JIM log" `
+        -Passed ($leaked.Count -eq 0) `
+        -Detail ($leaked -join '; ')
+
+    # The queue is the one API surface that reads rows which hold an encrypted password, so it is the one worth
+    # asserting against by shape rather than by inspection: the type the surfaces bind to has nowhere to put a
+    # password, and this fails if that ever stops being true.
+    $queueRows = @(Get-JIMPendingPasswordChange -PageSize 50)
+    $passwordProperties = @()
+    foreach ($row in $queueRows) {
+        $passwordProperties += @($row.PSObject.Properties.Name | Where-Object { $_ -match '(?i)password' -and $_ -notmatch '(?i)^pendingpassword' })
+    }
+
+    Add-TestResult -Name "No queue response carries a password value" `
+        -Passed ($passwordProperties.Count -eq 0) `
+        -Detail "Properties matching 'password': $(($passwordProperties | Select-Object -Unique) -join ', ')"
+
+    # The worker logs everything it does through the password channel; an error there means a delivery that
+    # failed quietly behind a green Activity.
+    Assert-NoWorkerErrors -Since $startTime
+}
+finally {
+    Disconnect-JIM -ErrorAction SilentlyContinue
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+}
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# Summary
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+$duration = (Get-Date) - $startTime
+$passed = @($script:TestResults | Where-Object { $_.Passed }).Count
+$failed = @($script:TestResults | Where-Object { -not $_.Passed }).Count
+
+Write-TestSection "Scenario 020 Summary"
+Write-Host "Duration: $([math]::Round($duration.TotalSeconds, 1))s" -ForegroundColor Gray
+Write-Host "Passed:   $passed" -ForegroundColor Green
+if ($failed -gt 0) {
+    Write-Host "Failed:   $failed" -ForegroundColor Red
+    foreach ($result in $script:TestResults | Where-Object { -not $_.Passed }) {
+        Write-Host "  - $($result.Name)" -ForegroundColor Red
+    }
+    exit 1
+}
+
+Write-Host ""
+Write-Host "✓ A password change reaches the account it belongs to: held while the system was off," -ForegroundColor Green
+Write-Host "  delivered the moment it was switched on, newest password only, never logged, and never" -ForegroundColor Green
+Write-Host "  kept waiting behind the synchronisation engine." -ForegroundColor Green
+exit 0

@@ -240,7 +240,7 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
         // attributes as new rows, and the repository persists the same graph on the same context. The
         // repository's reconcile pass was written for a detached incoming graph; handed the tracked one, it
         // re-keyed tracked instances and collided in the identity map ("cannot be tracked because another
-        // instance with the same key value is already being tracked"), which is what failed Scenario 19's
+        // instance with the same key value is already being tracked"), which is what failed Scenario 019's
         // Merge step live. The in-memory provider cannot see this: it tracks by default, so the load and the
         // reconcile's re-load agree in ways real PostgreSQL under JIM.Web's NoTracking default does not.
         var seeded = await SeedWithAttributesAndSelectionAsync();
@@ -381,7 +381,7 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
         // The worker's export evaluation loads every rule through the parameterless GetSyncRulesAsync overload,
         // and the class membership planner reads the object type's tag, its merged auxiliary classes and its
         // structural carrier from that graph. Any of them not fetched is class membership silently not computed:
-        // Scenario 19's convergence export went out carrying jimBadgeNumber with no class add, and OpenLDAP
+        // Scenario 019's convergence export went out carrying jimBadgeNumber with no class add, and OpenLDAP
         // refused it with an objectClassViolation. Only real PostgreSQL can see this; the in-memory provider
         // populates navigations from its change tracker whether or not the query included them.
         var seeded = await SeedWithAttributesAndSelectionAsync();

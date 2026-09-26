@@ -24,7 +24,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 /// </summary>
 /// <remarks>
 /// Pinned here rather than observed on a real run: the pass takes tens of milliseconds at
-/// integration-test scale (28ms to 153ms measured on Scenario 8), so no amount of polling a running
+/// integration-test scale (28ms to 153ms measured on Scenario 008), so no amount of polling a running
 /// system reliably catches it mid-flight.
 /// </remarks>
 public class DeferredExportProgressTests

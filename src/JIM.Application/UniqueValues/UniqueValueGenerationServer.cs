@@ -68,7 +68,7 @@ public sealed class UniqueValueGenerationServer
             var stickyMap = await LoadStickyAssignmentsAsync(requests, options);
             var toAdopt = new List<int>();
 
-            // Bug fix (#242, Scenario 23 integration run): a live Sticky assignment is only honoured while it
+            // Bug fix (#242, Scenario 023 integration run): a live Sticky assignment is only honoured while it
             // still describes the object. A stale one (IsStickyAssignmentStale below) is treated as absent here
             // - falling through to adopt-before-generate exactly like a request with no known assignment at all
             // - and its id is recorded so the caller can delete it once this call's outcomes are applied.
@@ -326,7 +326,7 @@ public sealed class UniqueValueGenerationServer
         new(request, GenerationOutcomeKind.Sticky, assignment.Value, TryParseNumeric(request, assignment.Value), assignment, null);
 
     /// <summary>
-    /// Bug fix (#242, Scenario 23 integration run): whether <paramref name="assignment"/> no longer describes
+    /// Bug fix (#242, Scenario 023 integration run): whether <paramref name="assignment"/> no longer describes
     /// <paramref name="request"/>'s object - import mode only, since an export-mode assignment's Connected
     /// System Object has no competing contributor for the same attribute (nothing else can leave a different
     /// value behind), so this never triggers there. Compares <see cref="GenerationRequest.CurrentMetaverseValue"/>
