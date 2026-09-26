@@ -38,14 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Filtering Metaverse Objects by attribute value (REST `filterAttributeValue`, `Get-JIMMetaverseObject -AttributeValue`) treated `_` and `%` as wildcards and could return objects with a different value; it now returns only exact case-insensitive matches.
 - 🐛 JIM's services now exit with a failure code when they stop on an error, instead of reporting a clean stop to the container runtime, systemd or monitoring. (#1808)
 - 🐛 A synchronisation that fails while saving its progress is now marked Failed straight away, instead of only after two further attempts that logged misleading database errors.
-
-### Security
-
-- 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
 - 🐛 Deleting a Pending Export no longer leaves its attribute changes behind in the database, where they accumulated indefinitely. (#1818)
 - 🐛 Synchronisation no longer reopens Failed or Parked Pending Exports, or counts errors against exports awaiting confirmation; this could silently strand an export outside both the export queue and the Failed list.
 - 🐛 A Failed Pending Export now clears automatically once a confirming import shows every change it asserts has taken effect, without waiting for a manual retry.
 - 🐛 A Pending Export interrupted by a worker crash or restart mid-export is recovered when the worker next starts, instead of being stranded in Executing forever.
+
+### Security
+
+- 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
 
 ### Performance
 
