@@ -35,6 +35,7 @@
                    Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Storage"
                    DropShadow="false"
+                   Size="Size.Small"
                    Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space")">
             Connector Space
             <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
@@ -43,6 +44,7 @@
                    Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Outbox"
                    DropShadow="false"
+                   Size="Size.Small"
                    Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports")">
             Pending Exports
             <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
