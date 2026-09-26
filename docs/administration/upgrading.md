@@ -98,14 +98,16 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
     docker load -i docker-images/jim-scheduler.tar
     ```
 
-4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables.
+4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables. Copy the bundle's `setup.sh` over the installation's copy (`/opt/jim/setup.sh` by default), so that looking after JIM uses the new release's installer.
 
 5. **Pin the new version** in `.env` (`JIM_VERSION=0.14.0`) and start the services, using the same `-f` files and `--profile` flags you deployed with:
 
     ```bash
     docker compose -f docker-compose.yml -f docker-compose.production.yml \
-      --profile with-db up -d
+      --profile with-db up -d --pull never
     ```
+
+    `--pull never` makes Docker report an image the bundle did not load, rather than try the internet.
 
 6. **Verify**, per [Verifying the upgrade](#verifying) below.
 

@@ -25,7 +25,7 @@ This template creates a **Server application** (the confidential web client) and
 ## Step 2: Configure the Server Application
 
 1. Note the **Client Identifier** (auto-generated GUID) -- this becomes `JIM_SSO_CLIENT_ID`
-2. Add the **Redirect URI**: `https://your-jim-url/signin-oidc`, then click **Add**
+2. Add the **Redirect URI**: `https://your-jim-url/signin-oidc` (`your-jim-url` is JIM's address, such as `jim.example.com`, with `:port` added if JIM does not use 443), then click **Add**
 3. Add a second **Redirect URI** for the sign-out callback: `https://your-jim-url/signout-callback-oidc`, then click **Add**. AD FS validates the `post_logout_redirect_uri` parameter against the same Redirect URIs list as sign-in, so this entry is required for sign-out to work.
 4. Click **Next**
 
