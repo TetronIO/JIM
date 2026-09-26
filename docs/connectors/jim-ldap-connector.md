@@ -112,7 +112,7 @@ Every auxiliary class in the schema is listed whether or not anything suggests i
 
 ### Discovery
 
-**Run discovery**, at the foot of the same dialog, reads the directory's entries and records which auxiliary classes they carry. It changes no configuration.
+The classes the dialog lists come from the schema. **Discover classes in use**, at the foot of the same dialog, is a separate read, of the directory's entries, recording which auxiliary classes they actually carry. It changes no configuration.
 
 | Scope | Reads | Trade-off |
 |-------|-------|-----------|

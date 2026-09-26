@@ -125,7 +125,7 @@ public class AuxiliaryClassesPanelTests : JimComponentTestContext
 
         var component = RenderPanel(connectedSystem, objectType);
 
-        Assert.That(component.Markup, Does.Contain("Discovery has never been run"));
+        Assert.That(component.Markup, Does.Contain("entries to find which auxiliary classes are in use"));
     }
 
     [Test]

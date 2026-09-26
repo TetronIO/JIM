@@ -145,9 +145,15 @@
             @* ─── Discovery ─── *@
             <MudDivider Class="my-4" />
             <div class="d-flex align-center flex-wrap gap-2">
+                @* The classes above come from the schema; discovery is a different read, of the entries, and says
+                   which of those classes are in use. Said explicitly, because a list of classes beside "discovery
+                   has never been run" reads as a contradiction. *@
                 @if (LatestDiscoveryRun == null)
                 {
-                    <MudText Class="mud-text-secondary">Discovery has never been run on @ConnectedSystem.Name.</MudText>
+                    <MudText Class="mud-text-secondary" data-testid="jim-aux-discovery-status">
+                        These classes come from the schema. JIM has not yet read @ConnectedSystem.Name's entries to find
+                        which of them are in use.
+                    </MudText>
                 }
                 else
                 {
@@ -161,7 +167,7 @@
                            EndIcon="@(_discoveryOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                            OnClick="@(() => _discoveryOpen = !_discoveryOpen)"
                            data-testid="jim-aux-discovery-toggle">
-                    @(LatestDiscoveryRun == null ? "Run discovery" : "Run discovery again")
+                    @(LatestDiscoveryRun == null ? "Discover classes in use" : "Discover again")
                 </MudButton>
             </div>
 
@@ -169,8 +175,9 @@
             {
                 <div class="mt-2" data-testid="jim-aux-discovery">
                     <MudText Class="mb-2">
-                        Reading entries tells you which auxiliary classes @ConnectedSystem.Name's objects actually carry.
-                        It only adds suggestions; every auxiliary class in the schema is listed for enabling either way.
+                        Discovery reads @ConnectedSystem.Name's entries to find which auxiliary classes they actually carry.
+                        It only adds suggestions to the list above; every auxiliary class in the schema is listed for
+                        enabling either way.
                     </MudText>
                     <MudRadioGroup T="AuxiliaryClassDiscoveryScope" @bind-Value="_scope">
                         <MudRadio T="AuxiliaryClassDiscoveryScope" Value="AuxiliaryClassDiscoveryScope.QuickSample" Color="Color.Primary">
@@ -207,7 +214,7 @@
                                Disabled="@(_startingDiscovery || !CanStartDiscovery())"
                                OnClick="HandleRunDiscoveryAsync"
                                data-testid="jim-aux-discovery-run">
-                        Run discovery
+                        Discover classes in use
                     </MudButton>
                 </div>
             }
