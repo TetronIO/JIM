@@ -40,6 +40,11 @@ public static class AuxiliaryClassOfferBuilder
             .Select(tag => tag.Value)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // What the Object Type already has is not a contribution, however the auxiliary class also lists it.
+        var alreadyCarried = objectType.Attributes
+            .Select(attribute => attribute.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var observed = (latestDiscoveryRun?.Results ?? [])
             .Where(result => result.StructuralObjectTypeId == objectType.Id)
             .GroupBy(result => result.AuxiliaryClassName, StringComparer.OrdinalIgnoreCase)
@@ -56,7 +61,10 @@ public static class AuxiliaryClassOfferBuilder
                 {
                     ObjectType = candidate,
                     Merged = merged.Contains(candidate.Id),
-                    ContributedAttributeCount = candidate.Attributes.Count,
+                    ContributedAttributes = candidate.Attributes
+                        .Where(attribute => !alreadyCarried.Contains(attribute.Name))
+                        .OrderBy(attribute => attribute.Name, StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
                     PermittedByTheConnectedSystem = permitted.Contains(candidate.Name),
                     EntriesObservedOn = observed.TryGetValue(candidate.Name, out var entryCount) ? entryCount : null
                 })

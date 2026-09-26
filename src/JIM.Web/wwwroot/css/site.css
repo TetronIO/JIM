@@ -2469,6 +2469,42 @@ html[lang] .jim-kv-table td:first-child {
     width: 14rem;
 }
 
+/* Auxiliary class dialog: a scrolling list of rows, each openable to show the attributes the class would
+   contribute. The list states its own height ceiling (its container is the dialog, not the page). */
+.jim-aux-list {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.jim-aux-row {
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+}
+
+.jim-aux-row:last-child {
+    border-bottom: none;
+}
+
+.jim-aux-attrs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: 4px 0 8px 52px;
+    padding: 8px 12px;
+    border-left: 2px solid var(--mud-palette-primary);
+    font-size: 0.875rem;
+}
+
+.jim-aux-attr {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.jim-aux-attr .mud-text-secondary {
+    font-size: 0.75rem;
+}
+
 /* Schedule Step Drag and Drop Styles */
 .jim-step-drop-zone {
     min-height: 50px;
