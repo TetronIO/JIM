@@ -1756,6 +1756,13 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
     max-height: unset;
 }
 
+/* A spinner inside a button (the "Processing", "Fetching" states) matches the label's size. MudProgressCircular
+   defaults to 40px, so a call site that forgot Size="Size.Small" grew the button taller while it was busy. */
+html[lang] .mud-button-root .mud-progress-circular {
+    width: 1.125rem !important;
+    height: 1.125rem !important;
+}
+
 /* Remove drop shadows from all MudBlazor buttons */
 .mud-button-root {
     box-shadow: none !important;
