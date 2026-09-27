@@ -415,6 +415,10 @@ _jim_watch_until_stopped() {
     rc=$?
     [ "$rc" -eq 134 ] || return "$rc"
     echo "dotnet watch crashed (exit 134, usually a build elsewhere rewriting files mid-scan); starting it again in 2 seconds. Ctrl+C to stop."
+    # The crash takes the watcher down but not the app it launched, which is left running as an orphan on port
+    # 5200 with nothing watching it: the page keeps loading while edits never reach it, and the new watcher's app
+    # cannot bind the port. Stop it before starting again.
+    _jim_kill_project Web
     sleep 2
   done
 }
