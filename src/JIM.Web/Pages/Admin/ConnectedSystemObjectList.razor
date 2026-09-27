@@ -143,9 +143,9 @@
                        reader who clicks View gets two identical navigations. The button is what offers middle-click
                        and open-in-new-tab, which a row-click handler cannot. *@
                     <span @onclick:stopPropagation="true">
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    Size="Size.Small"
-                                   Color="Color.Primary"
+                                   Color="Color.Secondary"
                                    Href="@(Utilities.GetConnectedSystemObjectHref(context.Item))">
                             View
                         </MudButton>

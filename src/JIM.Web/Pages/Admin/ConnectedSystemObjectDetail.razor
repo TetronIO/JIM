@@ -116,7 +116,7 @@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
             }
@@ -294,7 +294,7 @@
                                 <span class="jim-one-line-list-value"><CsoAttributeValue Value="@group.Values[0]" /></span>
                                 @if (group.TotalCount > 1)
                                 {
-                                    <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" Class="jim-attr-expand-btn"
                                                OnClick="@(() => OpenMvaDialogAsync(group))">
                                         +@((group.TotalCount - 1).ToString("N0")) more
                                     </MudButton>
@@ -375,8 +375,8 @@
                 @if (_changeHistoryRows.Count < _changeHistoryTotal)
                 {
                     <div class="d-flex justify-center mt-3">
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Primary"
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Secondary"
                                    Disabled="@_changeHistoryLoading"
                                    OnClick="LoadMoreChangeHistoryAsync">
                             @if (_changeHistoryLoading)

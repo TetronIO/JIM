@@ -98,8 +98,8 @@
                     @if (_changeHistoryRows.Count < _changeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
-                            <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Secondary"
                                        Disabled="@_changeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_changeHistoryLoading)
@@ -224,7 +224,7 @@
                                     synchronised first; use a connection's Preview Sync above for that.
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                            <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
                                        Disabled="@_outboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">

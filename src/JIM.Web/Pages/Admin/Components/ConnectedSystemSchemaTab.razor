@@ -645,8 +645,8 @@ else
                         <CellTemplate>
                             <MudButton
                                 DropShadow="false"
-                                Color="Color.Primary"
-                                Variant="Variant.Outlined"
+                                Color="Color.Secondary"
+                                Variant="Variant.Filled"
                                 Size="Size.Small"
                                 OnClick="() => HandleShowEditAttributeDialogAsync(context.Item)"
                                 StartIcon="@Icons.Material.Filled.Edit">
@@ -731,8 +731,8 @@ else
            save (#1474), and deselecting an attribute has no visible effect at all. Either way this is the count an
            administrator needs before saving, not afterwards. *@
         <MudButton data-testid="jim-preview-schema-selection"
-                   Variant="Variant.Outlined"
-                   Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Color="Color.Secondary"
                    StartIcon="@Icons.Material.Filled.Visibility"
                    OnClick="PreviewSchemaSelectionAsync"
                    Disabled="@_startingSchemaPreview"
