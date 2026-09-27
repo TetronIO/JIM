@@ -24,12 +24,12 @@ html[lang] {
     /* Dark, not white: white on this coral measures 3.50:1, below the 4.5:1 AA floor. */
     --mud-palette-primary-text: #000000dd;
 
-    /* === Secondary Palette (warm grey — the light theme's bg tone) === */
-    --mud-palette-secondary: #8a8d8b;
-    --mud-palette-secondary-rgb: 138,141,139;
-    --mud-palette-secondary-darken: #6e716f;
-    --mud-palette-secondary-lighten: #a4a7a5;
-    --mud-palette-secondary-text: #000000dd;
+    /* === Secondary Palette (neutral grey, for filled secondary actions) === */
+    --mud-palette-secondary: #434644;
+    --mud-palette-secondary-rgb: 67,70,68;
+    --mud-palette-secondary-darken: #383b39;
+    --mud-palette-secondary-lighten: #505351;
+    --mud-palette-secondary-text: #dadddb;
 
     /* === Tertiary Palette (muted teal — brighter for dark bg) === */
     --mud-palette-tertiary: #5e9488;

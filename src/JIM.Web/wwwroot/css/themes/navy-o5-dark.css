@@ -23,11 +23,11 @@ html[lang] {
     --mud-palette-primary-text: #0a1018;
 
     /* === Secondary Palette (cool slate-blue) === */
-    --mud-palette-secondary: #6b8aad;
-    --mud-palette-secondary-rgb: 107,138,173;
-    --mud-palette-secondary-darken: #567498;
-    --mud-palette-secondary-lighten: #84a0c0;
-    --mud-palette-secondary-text: #0a1018;
+    --mud-palette-secondary: #40546e;
+    --mud-palette-secondary-rgb: 64,84,110;
+    --mud-palette-secondary-darken: #354760;
+    --mud-palette-secondary-lighten: #506782;
+    --mud-palette-secondary-text: #e0e4ea;
 
     /* === Tertiary Palette (muted teal — cool complement to blue) === */
     --mud-palette-tertiary: #4a9a8a;

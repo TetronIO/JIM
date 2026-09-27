@@ -3,9 +3,10 @@
  *
  * A deep navy-purple dark theme inspired by modern SaaS dashboards.
  * The sidebar uses a lighter surface tone than the page background,
- * creating a layered depth effect. Primary, secondary, and tertiary
- * colours are drawn from the JIM logo palette: bright purple, warm
- * orange, and teal — lightened for readability on dark backgrounds.
+ * creating a layered depth effect. Primary and tertiary colours are
+ * drawn from the JIM logo palette: bright purple and teal, lightened for
+ * readability on dark backgrounds; secondary is a quiet violet-grey
+ * slate, for filled secondary actions.
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -24,11 +25,11 @@ html[lang] {
     --mud-palette-primary-text: #000000dd;
 
     /* === Secondary Palette === */
-    --mud-palette-secondary: #FFB347;
-    --mud-palette-secondary-rgb: 255,179,71;
-    --mud-palette-secondary-darken: #E89A2D;
-    --mud-palette-secondary-lighten: #FFCC80;
-    --mud-palette-secondary-text: #000000dd;
+    --mud-palette-secondary: #46466a;
+    --mud-palette-secondary-rgb: 70,70,106;
+    --mud-palette-secondary-darken: #3b3b5a;
+    --mud-palette-secondary-lighten: #54547c;
+    --mud-palette-secondary-text: #e0e0ee;
 
     /* === Tertiary Palette === */
     --mud-palette-tertiary: #4DB6AC;

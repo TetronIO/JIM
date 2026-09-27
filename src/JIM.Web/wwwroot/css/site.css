@@ -25,7 +25,10 @@
        build if either drifts under. Use these for text only; fills, borders and accent bars keep the raw
        palette colour. */
     --jim-chip-text-primary: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
-    --jim-chip-text-secondary: color-mix(in srgb, var(--mud-palette-secondary) 60%, var(--mud-palette-text-primary));
+    /* Secondary takes only 40%: every theme's secondary is a quiet slate chosen as a filled-button fill, a step
+       above the panel in dark mode, so at 60% it stays too close to a dark surface to read (Future Minimal dark
+       measured 3.8:1). Also the colour of secondary text, and of text and outlined secondary buttons, below. */
+    --jim-chip-text-secondary: color-mix(in srgb, var(--mud-palette-secondary) 40%, var(--mud-palette-text-primary));
     --jim-chip-text-tertiary: color-mix(in srgb, var(--mud-palette-tertiary) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-info: color-mix(in srgb, var(--mud-palette-info) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-success: color-mix(in srgb, var(--mud-palette-success) 60%, var(--mud-palette-text-primary));
@@ -1814,6 +1817,20 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
 html[lang] .mud-button-root .mud-progress-circular {
     width: 1.125rem !important;
     height: 1.125rem !important;
+}
+
+/* Secondary as text. The palette's secondary is a slate fill for filled secondary buttons, sitting a step above the
+   panel in dark mode, so painted as text (a Color.Secondary MudText or icon, a Text or Outlined secondary button) it
+   all but vanishes against a dark surface. Such text takes the same readable blend secondary chips use. Filled
+   secondary buttons, avatars and chips keep the raw fill. */
+html[lang] .mud-secondary-text,
+html[lang] .mud-button-text.mud-button-text-secondary:not(:disabled),
+html[lang] .mud-button-outlined.mud-button-outlined-secondary:not(:disabled) {
+    color: var(--jim-chip-text-secondary) !important;
+}
+
+html[lang] .mud-button-outlined.mud-button-outlined-secondary:not(:disabled) {
+    border-color: color-mix(in srgb, var(--jim-chip-text-secondary) 60%, transparent);
 }
 
 /* Remove drop shadows from all MudBlazor buttons */

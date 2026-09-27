@@ -23,11 +23,11 @@ html[lang] {
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette (navy — from the dark theme's background) === */
-    --mud-palette-secondary: #1e3a5f;
-    --mud-palette-secondary-rgb: 30, 58, 95;
-    --mud-palette-secondary-darken: #142a48;
-    --mud-palette-secondary-lighten: #2a4e7a;
-    --mud-palette-secondary-text: #ffffffff;
+    --mud-palette-secondary: #52637a;
+    --mud-palette-secondary-rgb: 82,99,122;
+    --mud-palette-secondary-darken: #445469;
+    --mud-palette-secondary-lighten: #66778e;
+    --mud-palette-secondary-text: #ffffff;
 
     /* === Tertiary Palette (slate blue-grey) === */
     /* One step darker than the olive this was (#85782b), because that shade sits at the luminance where
