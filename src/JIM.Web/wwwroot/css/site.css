@@ -4622,9 +4622,14 @@ html[lang] .jim-scope-text .mud-input-slot {
    the spare width evenly, so a short Name column is handed as much room as the Description beside it. No
    minimum: on a row whose other columns are wide (the Connected Systems list's Stats chips at a laptop width)
    the header clips before the table scrolls, and a clipped header beside a clipped value is the lesser fault
-   than an Action column pushed off the screen. */
+   than an Action column pushed off the screen.
+
+   Two fill columns share the spare width through --jim-fill-share, set on each column's HeaderStyle and CellStyle
+   (the Connector Space's External ID and Secondary External ID split it 40/60). Each shows in full once its share
+   is wide enough and clips below that, so a wide window shows both whole and a narrow one clips both, rather than
+   one column holding a fixed cap while the other soaks up the rest. */
 .mud-table-root .mud-table-cell.jim-fill-column {
-    width: 100%;
+    width: var(--jim-fill-share, 100%);
     max-width: 0;
 }
 

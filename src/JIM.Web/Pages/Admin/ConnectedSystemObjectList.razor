@@ -125,11 +125,12 @@
                     </span>
                 </CellTemplate>
             </TemplateColumn>
-            @* Rows are one line (see the Secondary External ID column below), so this column is capped at about a
-               GUID's first eight characters, which tell rows apart; the whole value is on the title. Left to size to
-               its content, a 36-character GUID took the width the DN beside it needs. The header may wrap, so it
-               stays readable within the cap. *@
-            <TemplateColumn Sortable="false" CellClass="jim-text-code mud-text-secondary">
+            @* Rows are one line, so this column and the Secondary External ID beside it share the width the other
+               columns leave, 40/60 (see .jim-fill-column in site.css): both show in full in a wide window, and in a
+               narrow one both clip with the whole value on the title. The floor keeps a GUID's first eight
+               characters, which tell rows apart. The header may wrap, so it stays readable within the column. *@
+            <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-text-code mud-text-secondary jim-fill-column"
+                            HeaderStyle="--jim-fill-share: 40%; min-width: 7.5rem;" CellStyle="--jim-fill-share: 40%; min-width: 7.5rem;">
                 <HeaderTemplate>
                     @* The header names the Connected System's own anchor attribute once the first window reveals
                        it, e.g. "External Id (objectGUID)". *@
@@ -137,7 +138,7 @@
                 </HeaderTemplate>
                 <CellTemplate>
                     @{ var externalId = !string.IsNullOrEmpty(context.Item.PendingExternalId) ? context.Item.PendingExternalId : context.Item.ExternalIdValue; }
-                    <div class="jim-one-line jim-column-cap" style="--jim-column-cap: 7.5rem;" title="@externalId">
+                    <div class="jim-one-line" title="@externalId">
                         @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
                         {
                             <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" />
@@ -153,10 +154,11 @@
                their position in this markup, and whether the rows carry a secondary external ID is only known once
                the first window has loaded. Wrapping this column in an @if therefore registers it after every column
                below and renders it last, whatever the markup says. *@
-            @* The fill column: every other column keeps to one line and sizes to its content, and this one takes the
-               width that is left, clipping a long DN with the whole of it on the title. Wrapping it instead made each
-               row as tall as its longest identifier (88px against the 36px of a dense row). *@
-            <TemplateColumn Sortable="false" Hidden="@(!_hasSecondaryExternalId)" HeaderClass="jim-fill-column" CellClass="jim-text-code mud-text-secondary jim-fill-column">
+            @* The larger share of the fill width (see the External ID column above): every other column keeps to one
+               line and sizes to its content. Wrapping the DN instead made each row as tall as its longest identifier
+               (88px against the 36px of a dense row). *@
+            <TemplateColumn Sortable="false" Hidden="@(!_hasSecondaryExternalId)" HeaderClass="jim-fill-column" CellClass="jim-text-code mud-text-secondary jim-fill-column"
+                            HeaderStyle="--jim-fill-share: 60%;" CellStyle="--jim-fill-share: 60%;">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="@_secondaryExternalIdColumnHeader" Name="secondaryexternalid" />
                 </HeaderTemplate>
