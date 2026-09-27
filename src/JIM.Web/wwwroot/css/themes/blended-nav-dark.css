@@ -79,6 +79,11 @@ html[lang] {
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
 
+    /* === JIM Custom: Hover and pressed states (see the tonal step in site.css) === */
+    /* A dark surface lifts toward white on hover and steps back down when pressed. */
+    --jim-state-hover-mix: white 14%;
+    --jim-state-press-mix: black 12%;
+
     /* === Lines & Dividers === */
     --mud-palette-lines-default: #2e2f32;
     --mud-palette-lines-inputs: #3e3f44;

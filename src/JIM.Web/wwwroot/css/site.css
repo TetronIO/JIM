@@ -1826,15 +1826,122 @@ html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
 
 html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
     background-color: color-mix(in srgb, var(--mud-palette-text-primary) 10%, var(--mud-palette-surface));
+    border-color: var(--jim-control-border-hover);
 }
 
 html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):active {
     background-color: color-mix(in srgb, var(--mud-palette-text-primary) 15%, var(--mud-palette-surface));
+    border-color: var(--jim-control-border-hover);
 }
 
 html[lang] .mud-button-filled.mud-button-filled-default.mud-button-filled-size-small { padding: 3px 9px; }
 html[lang] .mud-button-filled.mud-button-filled-default:not(.mud-button-filled-size-small):not(.mud-button-filled-size-large) { padding: 5px 15px; }
 html[lang] .mud-button-filled.mud-button-filled-default.mud-button-filled-size-large { padding: 7px 21px; }
+
+/* ─── Hover and pressed states: the tonal step ───
+   A control that is hovered or pressed stays its own colour, one step further along its own ramp: deeper on a
+   light theme, brighter on a dark one. MudBlazor's filled hover swaps to the palette's -darken value, which in
+   every JIM theme is hand-picked and greyed out as well as darker (navy-o6 took a vivid #6135d7 to a dusty
+   #4e3b84, and on dark navy #764ce8 fell to #4e3c80, so a hovered button sank into the background instead of
+   lifting). Mixing in oklch keeps the hue and most of the chroma, and derives from the palette colour itself, so
+   every theme gets it with no per-theme hex. Each theme sets the mix: toward black on light, toward white on
+   dark, with the pressed state stepping back down so a click reads as pushing in.
+
+   Outlined and text buttons wash in their own label colour (currentColor, so a dark theme's lightened label
+   colours carry through) and their border goes solid; neutral controls (icon buttons, menus, selects, list
+   items) use --mud-palette-action-default-hover, which each theme sets to its neutral row-hover tint.
+
+   Hover rules sit inside MudBlazor's own hover media query so a touch device does not keep a stuck hover. The
+   Dark colour is left out: its filled face is overridden per theme (black on navy), and a mix from its palette
+   value would not match that face. */
+html[lang] {
+    --jim-state-hover-mix: black 13%;
+    --jim-state-press-mix: black 22%;
+    --jim-control-border-hover: var(--mud-palette-lines-inputs);
+    --jim-neutral-press: color-mix(in srgb, var(--mud-palette-action-default-hover), var(--mud-palette-text-primary) 6%);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    html[lang] :is(.mud-button-filled.mud-button-filled-primary, .mud-icon-button.mud-button-filled.mud-icon-button-color-primary):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-primary), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-secondary, .mud-icon-button.mud-button-filled.mud-icon-button-color-secondary):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-secondary), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-tertiary, .mud-icon-button.mud-button-filled.mud-icon-button-color-tertiary):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-tertiary), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-info, .mud-icon-button.mud-button-filled.mud-icon-button-color-info):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-info), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-success, .mud-icon-button.mud-button-filled.mud-icon-button-color-success):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-success), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-warning, .mud-icon-button.mud-button-filled.mud-icon-button-color-warning):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-warning), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-error, .mud-icon-button.mud-button-filled.mud-icon-button-color-error):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-error), var(--jim-state-hover-mix));
+    }
+
+    html[lang] :is(.mud-button-outlined, .mud-button-text):not(:disabled):hover {
+        background-color: color-mix(in srgb, currentColor 10%, transparent);
+    }
+
+    html[lang] .mud-button-outlined:not(:disabled):hover {
+        border-color: currentColor;
+    }
+}
+
+html[lang] :is(.mud-button-filled.mud-button-filled-primary, .mud-icon-button.mud-button-filled.mud-icon-button-color-primary):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-primary), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-secondary, .mud-icon-button.mud-button-filled.mud-icon-button-color-secondary):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-secondary), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-tertiary, .mud-icon-button.mud-button-filled.mud-icon-button-color-tertiary):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-tertiary), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-info, .mud-icon-button.mud-button-filled.mud-icon-button-color-info):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-info), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-success, .mud-icon-button.mud-button-filled.mud-icon-button-color-success):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-success), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-warning, .mud-icon-button.mud-button-filled.mud-icon-button-color-warning):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-warning), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-error, .mud-icon-button.mud-button-filled.mud-icon-button-color-error):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-error), var(--jim-state-press-mix));
+}
+
+html[lang] :is(.mud-button-outlined, .mud-button-text):not(:disabled):active {
+    background-color: color-mix(in srgb, currentColor 17%, transparent);
+}
+
+html[lang] :is(.mud-icon-button:not(.mud-switch-base):not(.mud-button-filled):not(.mud-button-outlined), .mud-list-item-clickable):not(:disabled):active {
+    background-color: var(--jim-neutral-press);
+}
+
+/* A quick, even response rather than MudBlazor's 250ms material curve, which lags behind the pointer in a dense
+   toolbar. The switch is excluded: its thumb is a .mud-button-root too, and animates its position through the
+   transition this would replace. */
+html[lang] .mud-button-root:not(.mud-switch-base) {
+    transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[lang] .mud-button-root:not(.mud-switch-base) {
+        transition: none;
+    }
+}
+
+/* Keyboard focus gets a ring as well as MudBlazor's focus tint, which on a filled button is too close to the
+   hover colour to tell apart. */
+html[lang] .mud-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
 
 .mud-button-group .mud-button-root {
     box-shadow: none !important;

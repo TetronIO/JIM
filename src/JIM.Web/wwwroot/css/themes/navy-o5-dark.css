@@ -75,6 +75,11 @@ html[lang] {
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.34);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.08);
 
+    /* === JIM Custom: Hover and pressed states (see the tonal step in site.css) === */
+    /* A dark surface lifts toward white on hover and steps back down when pressed. */
+    --jim-state-hover-mix: white 14%;
+    --jim-state-press-mix: black 12%;
+
     /* === Lines & Dividers === */
     --mud-palette-lines-default: #2c3c54;
     --mud-palette-lines-inputs: #3a4e6a;
@@ -157,19 +162,9 @@ html[lang] .mud-primary-text:not(a) {
     color: #b0b8c4 !important;
 }
 
-/* Error-coloured buttons/icon buttons — subtle hover instead of MudBlazor's
-   strong red glow which is too intense on dark navy backgrounds. */
-html[lang] .mud-button-filled.mud-button-filled-error:not(:disabled):hover,
-html[lang] .mud-icon-button.mud-button-filled.mud-icon-button-color-error:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--mud-palette-error) 85%, #000000) !important;
-}
-
-html[lang] .mud-button-outlined.mud-button-outlined-error:not(:disabled):hover,
-html[lang] .mud-icon-button.mud-button-outlined.mud-icon-button-color-error:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
-}
-
-html[lang] .mud-button-text.mud-button-text-error:not(:disabled):hover,
+/* Plain error-coloured icon buttons: a subtle wash in their own colour instead of MudBlazor's strong red glow,
+   which is too intense on dark navy backgrounds. Filled, outlined and text buttons take the tonal step in
+   site.css. */
 html[lang] .mud-icon-button.mud-icon-button-color-error:not(.mud-button-filled):not(.mud-button-outlined):not(:disabled):hover {
     background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }
