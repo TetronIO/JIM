@@ -365,8 +365,10 @@ else
             </MudText>
 
             @* Filtering by name is the grid's own search box, not a second one here: two boxes narrowing the same
-               table is exactly the confusion the shared search convention exists to prevent. *@
-            <MudGrid Class="mt-3">
+               table is exactly the confusion the shared search convention exists to prevent. The grid's own
+               negative top margin cancels its item padding; mt-0 replaces it so the fields sit one Spacing="4"
+               step (16px) below the description, rather than stacking an extra margin on the full item padding. *@
+            <MudGrid Spacing="4" Class="mt-0">
                 @if (_selectedObjectTypeHasClasses)
                 {
                     <MudItem xs="6">
@@ -495,7 +497,8 @@ else
                              LoadWindow="LoadAttributeWindowAsync"
                              SingularName="Attribute"
                              PluralName="Attributes"
-                             SearchPlaceholder="Search by name">
+                             SearchPlaceholder="Search by name"
+                             AlwaysDense="true">
             <Columns>
                 <TemplateColumn Title="Selected" Sortable="false">
                     <HeaderTemplate>
