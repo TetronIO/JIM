@@ -2680,9 +2680,12 @@ html[lang] .jim-kv-table td:first-child {
 }
 
 /* The heading item's info button sits inside a 0.75rem label; the button's own size is fixed in the
-   jim-info-button rule, so only the gap to the word before it is set here. */
+   jim-info-button rule, so only the gap to the word before it is set here. The negative block margin keeps the
+   26px button from growing the label's 17px line: left to size it, the label was centred in the taller box and
+   sat 4.5px below the fact labels beside it. The button still centres on the word. */
 .jim-fact-heading .jim-info-button {
     margin-left: 2px;
+    margin-block: -4.5px;
 }
 
 /* Password Synchronisation delivery fields (Passwords tab): a fixed width each, side by side. Qualified with
