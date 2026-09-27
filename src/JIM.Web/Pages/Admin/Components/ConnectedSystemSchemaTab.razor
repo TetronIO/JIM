@@ -62,8 +62,8 @@ else
         <MudText Class="mud-text-secondary">
             @($"{GetVisibleObjectTypes().Count():N0} Object Types, {GetSelectedObjectTypes().Count:N0} selected")
         </MudText>
-        <MudButton Color="Color.Primary"
-                   Variant="Variant.Outlined"
+        <MudButton Color="Color.Secondary"
+                   Variant="Variant.Filled"
                    Class="ms-auto"
                    Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
                    OnClick="HandleImportSchemaAsync"
