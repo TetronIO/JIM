@@ -370,7 +370,22 @@ jim-web-watch() {
               DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1 \
               DOTNET_WATCH_AUTO_RELOAD_WS_PORT=5210 \
     && { [ "$polling" = 1 ] && export DOTNET_USE_POLLING_FILE_WATCHER=1 || true; } \
-    && dotnet watch --project src/JIM.Web --non-interactive)
+    && _jim_watch_until_stopped)
+}
+
+# Runs dotnet watch, starting it again whenever it dies of an unhandled exception (exit 134, SIGABRT). Its polling
+# watcher throws "An item with the same key has already been added" when a build elsewhere (a dotnet build or test
+# from another terminal) rewrites bin/ mid-scan, and the watcher is gone with it. Ctrl+C exits cleanly and ends the
+# loop, as does any other failure, so a genuine startup error is not retried forever.
+_jim_watch_until_stopped() {
+  local rc
+  while :; do
+    dotnet watch --project src/JIM.Web --non-interactive
+    rc=$?
+    [ "$rc" -eq 134 ] || return "$rc"
+    echo "dotnet watch crashed (exit 134, usually a build elsewhere rewriting files mid-scan); starting it again in 2 seconds. Ctrl+C to stop."
+    sleep 2
+  done
 }
 
 # Database management
