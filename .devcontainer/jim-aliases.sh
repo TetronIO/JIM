@@ -19,6 +19,7 @@ alias jim='echo "JIM Development Aliases:
   jim-clean          - dotnet clean && build
   jim-msbuild-purge  - Kill cached MSBuild worker nodes (reclaims RAM)
   jim-web            - Run JIM.Web locally (sources .env)
+  jim-web-watch      - Run JIM.Web locally with hot reload (dotnet watch)
   jim-worker         - Run JIM.Worker locally (sources .env)
   jim-scheduler      - Run JIM.Scheduler locally (sources .env)
 
@@ -43,7 +44,7 @@ Docker Stack Management (auto-kills local JIM processes):
 
 Docker Builds (auto-kills local JIM processes, rebuild + start):
   jim-build          - Rebuild all services + start
-  jim-build-light    - Start db + Keycloak, run JIM.Web natively
+  jim-build-light    - Start db + Keycloak, run JIM.Web natively with hot reload
   jim-build-web      - Rebuild jim.web + start
   jim-build-worker   - Rebuild jim.worker + start
   jim-build-scheduler - Rebuild jim.scheduler + start
@@ -310,6 +311,26 @@ jim-web()       { _jim_stop_app_containers jim.web       && _jim_kill_project We
 jim-worker()    { _jim_stop_app_containers jim.worker    && _jim_kill_project Worker    && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker); }
 jim-scheduler() { _jim_stop_app_containers jim.scheduler && _jim_kill_project Scheduler && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler); }
 
+# JIM.Web under dotnet watch: Razor markup, C# method bodies and CSS apply to the running app on save, keeping the
+# page where it is; an edit hot reload cannot apply restarts the app on its own (--non-interactive, and
+# DOTNET_WATCH_RESTART_ON_RUDE_EDIT). Ctrl+R in the terminal forces a full restart when hot-reloaded state looks
+# stale. jim-web stays the plain `dotnet run`, for attaching a debugger.
+#
+# DOTNET_USE_POLLING_FILE_WATCHER is required, not a tuning choice: /workspaces/JIM is the Windows drive mounted
+# over 9p, and 9p raises no inotify events, even for writes made inside the container, so without polling the
+# watcher never sees an edit. A polling pass over the ~1,600 source files takes about 2 s on this mount, which is
+# the delay between saving and the change applying. A clone on the Linux filesystem would not need it.
+# DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER stops it trying to open a browser inside the container (launchSettings.json
+# sets launchBrowser for Visual Studio).
+jim-web-watch() {
+  _jim_stop_app_containers jim.web && _jim_kill_project Web && (set -a && source .env \
+    && export JIM_DB_HOSTNAME=localhost \
+              DOTNET_USE_POLLING_FILE_WATCHER=1 \
+              DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER=1 \
+              DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1 \
+    && dotnet watch --project src/JIM.Web --non-interactive)
+}
+
 # Database management
 alias jim-migrate='dotnet ef database update --project src/JIM.PostgresData'
 alias jim-migration='dotnet ef migrations add --project src/JIM.PostgresData'
@@ -517,7 +538,7 @@ jim-build-light() {
   docker compose $(_jim_compose) up -d jim.database jim.keycloak
   _jim_keycloak_bridge
   _jim_wait_keycloak
-  jim-web
+  jim-web-watch
 }
 
 # Cleanup orphaned Docker resources to free disk space
