@@ -259,10 +259,43 @@ alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = Ne
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 
 # Kill a specific locally-running JIM .NET project before restarting it
+# PIDs of JIM .NET processes running natively in this devcontainer, matching the given pgrep pattern.
+#
+# The devcontainer's inner Docker engine shares its process view with this shell, so a plain pgrep for
+# "dotnet.*JIM.Web" also matches the dotnet process inside the jim.web container. Killing that does not
+# free port 5200 (Docker's port mapping holds it) and the container's `restart: always` policy brings it
+# straight back, so it only produced a misleading "Stopping ..." line. Anything whose parent is a
+# containerd shim is a container's process and is left to the container helpers below.
+_jim_native_pids() {
+  local pid parent
+  for pid in $(pgrep -f "$1" 2>/dev/null); do
+    parent=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -n "$parent" ] || continue
+    case "$(ps -o comm= -p "$parent" 2>/dev/null)" in
+      containerd-shim*) ;;
+      *) echo "$pid" ;;
+    esac
+  done
+}
+
+# Stop and remove the named JIM application containers (e.g. jim.web) if they exist, so a native run can
+# bind their ports. Removed rather than stopped: with `restart: always` a stopped container comes back when
+# the Docker daemon restarts. jim-stack and jim-build recreate them.
+_jim_stop_app_containers() {
+  local running=()
+  local service
+  for service in "$@"; do
+    [ -n "$(docker ps -aq --filter "name=^${service}\$" 2>/dev/null)" ] && running+=("$service")
+  done
+  [ ${#running[@]} -gt 0 ] || return 0
+  echo "Removing Docker container(s) so they run natively instead: ${running[*]}..."
+  docker compose $(_jim_compose) rm -s -f "${running[@]}" >/dev/null
+}
+
 _jim_kill_project() {
   local project="$1"
   local pids
-  pids=$(pgrep -f "dotnet.*JIM\.${project}" 2>/dev/null || true)
+  pids=$(_jim_native_pids "dotnet.*JIM\.${project}")
   if [ -n "$pids" ]; then
     echo "Stopping existing JIM.${project} (PIDs: $(echo $pids | tr '\n' ' '))..."
     echo "$pids" | xargs kill 2>/dev/null || true
@@ -270,10 +303,12 @@ _jim_kill_project() {
   fi
 }
 
-# Local run aliases - source .env and override DB hostname for local access
-jim-web()       { _jim_kill_project Web       && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Web); }
-jim-worker()    { _jim_kill_project Worker    && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker); }
-jim-scheduler() { _jim_kill_project Scheduler && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler); }
+# Local run aliases - source .env and override DB hostname for local access. Each removes its own Docker
+# container first: a jim.web container left over from a Docker session holds port 5200, and the native
+# JIM.Web would otherwise fail with "address already in use".
+jim-web()       { _jim_stop_app_containers jim.web       && _jim_kill_project Web       && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Web); }
+jim-worker()    { _jim_stop_app_containers jim.worker    && _jim_kill_project Worker    && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker); }
+jim-scheduler() { _jim_stop_app_containers jim.scheduler && _jim_kill_project Scheduler && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler); }
 
 # Database management
 alias jim-migrate='dotnet ef database update --project src/JIM.PostgresData'
@@ -376,7 +411,7 @@ _jim_wait_keycloak() {
 # so they don't hold ports that Docker containers need to bind
 _jim_kill_local() {
   local pids
-  pids=$(pgrep -f 'dotnet.*JIM\.(Web|Worker|Scheduler)' 2>/dev/null || true)
+  pids=$(_jim_native_pids 'dotnet.*JIM\.(Web|Worker|Scheduler)')
   if [ -n "$pids" ]; then
     echo "Stopping local JIM process(es) (PIDs: $(echo $pids | tr '\n' ' '))..."
     echo "$pids" | xargs kill 2>/dev/null || true
@@ -476,6 +511,9 @@ jim-build-scheduler() {
 jim-build-light() {
   _jim_heal_docker_creds
   _jim_kill_local
+  # The light stack is db + Keycloak in Docker and JIM.Web native, nothing else: a web, worker or scheduler
+  # container left from a Docker session would hold port 5200 or process work with stale code.
+  _jim_stop_app_containers jim.web jim.worker jim.scheduler
   docker compose $(_jim_compose) up -d jim.database jim.keycloak
   _jim_keycloak_bridge
   _jim_wait_keycloak

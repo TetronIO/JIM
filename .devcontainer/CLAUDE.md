@@ -38,7 +38,7 @@
 
 **Docker Builds (rebuild and start services):**
 - `jim-build` - Build all services and start the whole stack together. Use this to bring the stack up from zero (first boot, after `jim-stack-down`, or after `jim-reset`) and whenever you want a reliable full rebuild before verifying a change at runtime.
-- `jim-build-light` - Start db + Keycloak containers, run JIM.Web natively
+- `jim-build-light` - Start db + Keycloak containers, run JIM.Web natively. Removes any `jim.web`, `jim.worker` or `jim.scheduler` container first (a leftover one holds port 5200); `jim-stack` or `jim-build` recreates them.
 - `jim-build-web` - Rebuild and restart only jim.web. Incremental: use ONLY when the full stack is already running healthy. Not for starting from zero.
 - `jim-build-worker` - Rebuild and restart only jim.worker. Incremental (same caveat as `jim-build-web`).
 - `jim-build-scheduler` - Rebuild and restart only jim.scheduler. Incremental (same caveat as `jim-build-web`).
@@ -110,7 +110,7 @@ All dependency updates from Dependabot require human review before merging - the
 **Choose one of two workflows:**
 
 **Workflow 1 - Local Debugging (Recommended):**
-1. Run `jim-build-light` (starts db + Keycloak, waits for readiness, launches JIM.Web natively)
+1. Run `jim-build-light` (removes any JIM app containers, starts db + Keycloak, waits for readiness, launches JIM.Web natively)
 2. Debug with breakpoints and hot reload
 3. Services: Web + API (http://localhost:5200), API reference at `/api/reference`
 
