@@ -4500,10 +4500,12 @@ html[lang] .jim-virtualised-list .mud-table-root>tbody>tr:nth-last-of-type(2)>.m
     border-bottom: none;
 }
 
-/* A virtualised grid turns a scroll offset into a row index by dividing by a fixed row height (RowHeight in
-   VirtualisedDataGrid.razor), so the rows must actually be that tall. Left to the text, they come out fractional
-   (31.6px dense, 51.6px normal at the 13px table size) and any change to the type scale moves them, putting the
-   scroll restore rows off. Pin them to whole pixels here; the two numbers must match RowHeight. */
+/* The row heights a virtualised grid is laid out at: RowHeight in VirtualisedDataGrid.razor, which is the
+   virtualiser's ItemSize and the scroll restore's estimate until a row renders (jimVirtualList.measuredRowHeight
+   then reads a real one). Left to the text, rows come out fractional (31.6px dense, 51.6px normal at the 13px table
+   size) and move with the type scale; pinning them keeps the estimate true. The two numbers must match RowHeight,
+   and the pin is a minimum: a cell's content taller than it grows the row, which is what the dense content rules
+   below exist to prevent. */
 html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row {
     height: 52px;
 }
@@ -4512,24 +4514,64 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-row
     height: 32px;
 }
 
-/* The Connected System schema's attribute selection grid is always dense, and its rows carry controls (a switch, a
-   chip per column, an Edit button) that MudBlazor sizes past the 20px a dense cell leaves inside its 6px padding,
-   so the rows came out 53px against the 32px the virtualiser lays them out at. 3.5px of cell padding and the
-   cell's 1px bottom border leave the content 24px, which the small switch and a Text chip fit once MudBlazor's 4px
-   chip margin is dropped; the small Edit button gives back 2px of vertical padding to fit it. */
-html[lang] .jim-schema-attribute-grid.mud-table-dense .mud-table-body .mud-table-cell {
+/* Dense rows hold their content in 24px. A dense row is pinned at 32px above, and 3.5px of cell padding plus the
+   cell's 1px bottom border leave 24px for what is in it, which is a line of 13px text, a Text chip, or a small
+   control. MudBlazor sizes the controls a list puts in its cells past that (a chip carries a 4px margin, a small
+   button is 28px, an icon button 30-48px), and a row takes the height of its tallest cell, so dense lists came out
+   at 45-60px and dense barely differed from normal. These rules fit the common in-cell controls into the row
+   instead: chips lose their vertical margin, buttons give back vertical padding, icon buttons shrink to a 20px
+   icon in a 24px target. Scoped to the body of a dense virtualised list, so normal density and headers keep
+   MudBlazor's sizes. A control that cannot sit in 24px (a select, a full-size switch) still grows its row; use
+   the small size, or accept the taller row where the control earns it. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell {
     padding-top: 3.5px;
     padding-bottom: 3.5px;
 }
 
-html[lang] .jim-schema-attribute-grid .mud-table-body .mud-chip {
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-chip {
     margin-top: 0;
     margin-bottom: 0;
 }
 
-html[lang] .jim-schema-attribute-grid .mud-table-body .mud-button-outlined-size-small {
+/* A chip's leading icon is 20px, which with the chip's own padding makes an icon chip 27px against the 24px of
+   every other chip; 17px brings it back to 24. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-chip .mud-chip-icon {
+    font-size: 1.0625rem;
+}
+
+/* An inline-block on a text line sits on the baseline, so the line box grows by the font's descent below it and a
+   24px chip or button makes a 27px line. Top alignment lets a 24px control make a 24px line. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell :is(.mud-tooltip-inline, .mud-menu, .mud-chip, .mud-button-root, .jim-object-chip) {
+    vertical-align: top;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body :is(.mud-button-filled-size-small, .mud-button-text-size-small) {
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-button-outlined-size-small {
     padding-top: 1px;
     padding-bottom: 1px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:not(.mud-switch-base) {
+    padding: 2px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:not(.mud-switch-base) .mud-icon-root {
+    font-size: 1.25rem;
+}
+
+/* A filled or outlined icon button carries a 1px border, so it gives back one more pixel of padding. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:is(.mud-button-filled, .mud-button-outlined) {
+    padding: 1px;
+}
+
+/* The object chip (the CSO / MVO badge beside a name) is its 24px glyph plus 2px of padding either side. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-chip {
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
 /* First-paint ceiling, before jimVirtualList.fit measures where the page footer lands. A grid whose container is
