@@ -281,7 +281,7 @@
 
 @if (_supportsCertificateFetch)
 {
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-5 ml-2" DropShadow="false"
+    <MudButton Variant="Variant.Filled" Color="Color.Default" Class="mt-5 ml-2" DropShadow="false"
                StartIcon="@Icons.Material.Filled.Search" Disabled="_fetchingCertificate"
                OnClick="FetchServerCertificateAsync" data-testid="jim-fetch-server-certificate">
         @if (_fetchingCertificate)
