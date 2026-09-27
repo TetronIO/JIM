@@ -273,7 +273,7 @@
     // The row height the grid is laid out at, and the divisor that turns a scroll offset into a row index. The two
     // must agree, so both read this rather than repeating the numbers. site.css pins the rows (.jim-virtualised-list
     // .mud-table-row) to these same heights; change both together.
-    private float RowHeight => _dense ? 32f : 52f;
+    private float RowHeight => _dense ? 36f : 52f;
 
     // The row to restore to, read from the URL on load, then kept current as the reader scrolls. _scrollRestored
     // stops the restore repeating on every later render, and turns the grid from reading the position to writing it.

@@ -109,7 +109,7 @@
                          PluralName="Connected System Objects"
                          SearchPlaceholder="Search external ID, secondary ID, or display name">
         <Columns>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate></HeaderTemplate>
                 <CellTemplate>
                     @* The row navigates on click and so does this button, so without stopping the click here a
@@ -125,6 +125,10 @@
                     </span>
                 </CellTemplate>
             </TemplateColumn>
+            @* Rows are one line (see the Secondary External ID column below), so this column is capped at about a
+               GUID's first eight characters, which tell rows apart; the whole value is on the title. Left to size to
+               its content, a 36-character GUID took the width the DN beside it needs. The header may wrap, so it
+               stays readable within the cap. *@
             <TemplateColumn Sortable="false" CellClass="jim-text-code mud-text-secondary">
                 <HeaderTemplate>
                     @* The header names the Connected System's own anchor attribute once the first window reveals
@@ -132,36 +136,45 @@
                     <VirtualisedSortHeader Title="@_externalIdColumnHeader" Name="externalid" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
-                    {
-                        <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" />
-                    }
-                    else
-                    {
-                        @context.Item.ExternalIdValue
-                    }
+                    @{ var externalId = !string.IsNullOrEmpty(context.Item.PendingExternalId) ? context.Item.PendingExternalId : context.Item.ExternalIdValue; }
+                    <div class="jim-one-line jim-column-cap" style="--jim-column-cap: 7.5rem;" title="@externalId">
+                        @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
+                        {
+                            <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" />
+                        }
+                        else
+                        {
+                            @context.Item.ExternalIdValue
+                        }
+                    </div>
                 </CellTemplate>
             </TemplateColumn>
             @* Hidden rather than omitted: MudDataGrid orders its columns by the order they register with it, not by
                their position in this markup, and whether the rows carry a secondary external ID is only known once
                the first window has loaded. Wrapping this column in an @if therefore registers it after every column
                below and renders it last, whatever the markup says. *@
-            <TemplateColumn Sortable="false" Hidden="@(!_hasSecondaryExternalId)" CellClass="jim-text-code mud-text-secondary">
+            @* The fill column: every other column keeps to one line and sizes to its content, and this one takes the
+               width that is left, clipping a long DN with the whole of it on the title. Wrapping it instead made each
+               row as tall as its longest identifier (88px against the 36px of a dense row). *@
+            <TemplateColumn Sortable="false" Hidden="@(!_hasSecondaryExternalId)" HeaderClass="jim-fill-column" CellClass="jim-text-code mud-text-secondary jim-fill-column">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="@_secondaryExternalIdColumnHeader" Name="secondaryexternalid" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @if (!string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue))
-                    {
-                        @context.Item.SecondaryExternalIdValue
-                    }
-                    else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
-                    {
-                        <PendingValue Value="@context.Item.PendingSecondaryExternalId" Status="@context.Item.PendingExportStatus" />
-                    }
+                    @{ var secondaryExternalId = !string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue) ? context.Item.SecondaryExternalIdValue : context.Item.PendingSecondaryExternalId; }
+                    <div class="jim-one-line" title="@secondaryExternalId">
+                        @if (!string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue))
+                        {
+                            @context.Item.SecondaryExternalIdValue
+                        }
+                        else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
+                        {
+                            <PendingValue Value="@context.Item.PendingSecondaryExternalId" Status="@context.Item.PendingExportStatus" />
+                        }
+                    </div>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Display Name" Name="displayname" />
                 </HeaderTemplate>
@@ -180,7 +193,7 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Type" Name="type" />
                 </HeaderTemplate>
@@ -188,7 +201,7 @@
                     <MudChip T="string" Text="@context.Item.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.TypeName)" Class="ma-0" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Created" Name="created" />
                 </HeaderTemplate>
@@ -198,7 +211,7 @@
                     </MudTooltip>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Date Joined" Name="datejoined" />
                 </HeaderTemplate>
@@ -216,7 +229,7 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Status" Name="status" />
                 </HeaderTemplate>
@@ -228,7 +241,7 @@
                Status plus any queued Pending Export, so "Export failed" reads off the row rather than being
                inferred from a status and a chip. Not sortable: it is resolved after the window is read, so
                sorting by it would only order the window, not the Connector Space. *@
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <MudText Typo="Typo.subtitle2">State</MudText>
                 </HeaderTemplate>
@@ -236,7 +249,7 @@
                     <ConnectionStateChip State="context.Item.State" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Join Type" Name="jointype" />
                 </HeaderTemplate>

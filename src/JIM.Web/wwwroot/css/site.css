@@ -4511,10 +4511,10 @@ html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row 
 }
 
 html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-row {
-    height: 32px;
+    height: 36px;
 }
 
-/* Dense rows hold their content in 24px. A dense row is pinned at 32px above, and 3.5px of cell padding plus the
+/* Dense rows hold their content in 24px. A dense row is pinned at 36px above, and 5.5px of cell padding plus the
    cell's 1px bottom border leave 24px for what is in it, which is a line of 13px text, a Text chip, or a small
    control. MudBlazor sizes the controls a list puts in its cells past that (a chip carries a 4px margin, a small
    button is 28px, an icon button 30-48px), and a row takes the height of its tallest cell, so dense lists came out
@@ -4522,10 +4522,11 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-row
    instead: chips lose their vertical margin, buttons give back vertical padding, icon buttons shrink to a 20px
    icon in a 24px target. Scoped to the body of a dense virtualised list, so normal density and headers keep
    MudBlazor's sizes. A control that cannot sit in 24px (a select, a full-size switch) still grows its row; use
-   the small size, or accept the taller row where the control earns it. */
+   the small size, or accept the taller row where the control earns it. The row was 32px with 3.5px of padding,
+   which left a column of chips a hair from touching; 36px gives each one 6px either side. */
 html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell {
-    padding-top: 3.5px;
-    padding-bottom: 3.5px;
+    padding-top: 5.5px;
+    padding-bottom: 5.5px;
 }
 
 html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-chip {
