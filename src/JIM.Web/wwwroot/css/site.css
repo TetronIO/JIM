@@ -1682,8 +1682,9 @@ html[lang] .mud-alert-filled-normal {
    18.5px (54px), which suits a data-dense admin tool and matches the 14px type scale. MudBlazor has no global default
    for Margin, and setting Margin.Dense on every field would mean touching some 230 of them, so these rules give the
    default outlined field the metrics Margin.Dense would, mirroring MudBlazor's own margin-dense rules: the value's
-   padding, a textarea's top offset, and the resting position of the label (translate(14px, 12px) rather than 20px),
-   so an empty field's label stays centred. The floated label's rules outrank the resting-label rule here, so a
+   padding, a textarea's top offset, and the resting position of the label, so an empty field's label stays centred.
+   MudBlazor's dense label rests at 12px, which centres it only at 16px text; at 14px the field is 37.6px tall and
+   the 18.4px label line centres at 9.6px, so the label is placed there rather than sitting 2px low. The floated label's rules outrank the resting-label rule here, so a
    field with a value still shows its label on the border. MudField's no-padding slot has a more specific rule of
    its own and is left alone. The html[lang] qualifier is needed because MudBlazor's stylesheet loads after this one. */
 html[lang] .mud-input > input.mud-input-root-outlined,
@@ -1698,7 +1699,7 @@ html[lang] .mud-input > textarea.mud-input-root-outlined {
 }
 
 html[lang] .mud-input-label-outlined {
-    transform: translate(14px, 12px) scale(1);
+    transform: translate(14px, 9.6px) scale(1);
 }
 
 /* Help text belongs to the field above it, so it sits close under that field and clear of the next one. Whatever a
