@@ -311,23 +311,58 @@ jim-web()       { _jim_stop_app_containers jim.web       && _jim_kill_project We
 jim-worker()    { _jim_stop_app_containers jim.worker    && _jim_kill_project Worker    && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker); }
 jim-scheduler() { _jim_stop_app_containers jim.scheduler && _jim_kill_project Scheduler && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler); }
 
+# Whether file-change events reach this process for files under the workspace. dotnet watch's default watcher
+# relies on them; without them it never sees an edit and has to poll instead. Whether they arrive depends on what
+# the host mounts at /workspaces/JIM, not on the container: a Windows host with the repo on a Windows drive mounts
+# it over 9p, which raises no inotify events even for writes made inside the container, while a repo cloned inside
+# WSL, macOS Docker Desktop (virtiofs), a Linux host and Codespaces all deliver them. Probed rather than guessed from
+# the filesystem type: create a file in a watched scratch directory and see whether an event arrives. Returns 0 when
+# events arrive. Any failure to probe (no python3, an unwritable workspace) reports "no", so the caller falls back
+# to polling, which works everywhere.
+_jim_file_events_work() {
+  command -v python3 >/dev/null 2>&1 || return 1
+  local probe_dir
+  probe_dir=$(mktemp -d "${PWD}/.jim-inotify-probe-XXXXXX" 2>/dev/null) || return 1
+  python3 - "$probe_dir" <<'PY'
+import ctypes, os, select, sys
+d = sys.argv[1]
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+fd = libc.inotify_init1(os.O_NONBLOCK)
+if fd < 0 or libc.inotify_add_watch(fd, d.encode(), 0x100 | 0x2) < 0:  # IN_CREATE | IN_MODIFY
+    sys.exit(1)
+with open(os.path.join(d, "probe"), "w") as f:
+    f.write("x")
+ready, _, _ = select.select([fd], [], [], 1.0)
+sys.exit(0 if ready else 1)
+PY
+  local result=$?
+  rm -rf "$probe_dir"
+  return $result
+}
+
 # JIM.Web under dotnet watch: Razor markup, C# method bodies and CSS apply to the running app on save, keeping the
 # page where it is; an edit hot reload cannot apply restarts the app on its own (--non-interactive, and
 # DOTNET_WATCH_RESTART_ON_RUDE_EDIT). Ctrl+R in the terminal forces a full restart when hot-reloaded state looks
 # stale. jim-web stays the plain `dotnet run`, for attaching a debugger.
 #
-# DOTNET_USE_POLLING_FILE_WATCHER is required, not a tuning choice: /workspaces/JIM is the Windows drive mounted
-# over 9p, and 9p raises no inotify events, even for writes made inside the container, so without polling the
-# watcher never sees an edit. A polling pass over the ~1,600 source files takes about 2 s on this mount, which is
-# the delay between saving and the change applying. A clone on the Linux filesystem would not need it.
+# Polling (DOTNET_USE_POLLING_FILE_WATCHER) is switched on only where _jim_file_events_work says the workspace
+# delivers no change events. It works everywhere but costs a pass over the ~1,600 watched files per check (about
+# 2 s on a 9p mount), which is the delay between saving and the change applying, and constant background reads.
 # DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER stops it trying to open a browser inside the container (launchSettings.json
 # sets launchBrowser for Visual Studio).
 jim-web-watch() {
+  local polling=0
+  if _jim_file_events_work; then
+    echo "File change events arrive on this workspace; dotnet watch will use them."
+  else
+    polling=1
+    echo "File change events do not arrive on this workspace (a host drive mounted over 9p, typically); dotnet watch will poll, so allow a couple of seconds per edit."
+  fi
   _jim_stop_app_containers jim.web && _jim_kill_project Web && (set -a && source .env \
     && export JIM_DB_HOSTNAME=localhost \
-              DOTNET_USE_POLLING_FILE_WATCHER=1 \
               DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER=1 \
               DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1 \
+    && { [ "$polling" = 1 ] && export DOTNET_USE_POLLING_FILE_WATCHER=1 || true; } \
     && dotnet watch --project src/JIM.Web --non-interactive)
 }
 

@@ -111,7 +111,7 @@ All dependency updates from Dependabot require human review before merging - the
 
 **Workflow 1 - Local Debugging (Recommended):**
 1. Run `jim-build-light` (removes any JIM app containers, starts db + Keycloak, waits for readiness, launches JIM.Web natively)
-2. Edits apply on save through hot reload (`dotnet watch`, polling the 9p-mounted workspace; allow a couple of seconds). An edit it cannot apply restarts JIM.Web by itself; Ctrl+R in its terminal forces one. To debug with breakpoints instead, run plain `jim-web` and attach.
+2. Edits apply on save through hot reload (`dotnet watch`). It uses file-change events where the workspace mount delivers them, and polls where it does not (a Windows host with the repo on a Windows drive, mounted over 9p; allow a couple of seconds per edit there). It says which at startup. An edit it cannot apply restarts JIM.Web by itself; Ctrl+R in its terminal forces one. To debug with breakpoints instead, run plain `jim-web` and attach.
 3. Services: Web + API (http://localhost:5200), API reference at `/api/reference`
 
 **Workflow 2 - Full Docker Stack:**
