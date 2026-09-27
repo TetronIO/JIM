@@ -116,7 +116,7 @@ body.jim-dark-mode .mud-skeleton-wave::after {
 /* Header row stays compact regardless of dense/normal toggle */
 .mud-table-root .mud-table-head .mud-table-cell {
     font-weight: 500;
-    font-size: 0.875rem;
+    font-size: var(--mud-typography-body2-size);
     text-transform: uppercase;
     letter-spacing: 0.02857em;
     padding: 6px 16px;
@@ -152,6 +152,12 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
    The html[lang] qualifier is load-bearing, not decoration: MudBlazor's own `.mud-chip.mud-chip-size-medium`
    is (0,2,0), exactly what `.mud-chip.mud-chip-text` would be, and its stylesheet is loaded after this one,
    so on a tie it wins and the height and radius below would silently do nothing. */
+/* Medium chips follow the theme's Body2 size (13px) rather than MudBlazor's fixed 14px, so they sit level with
+   the table text they mostly appear in. */
+html[lang] .mud-chip.mud-chip-size-medium {
+    font-size: var(--mud-typography-body2-size);
+}
+
 html[lang] .mud-chip.mud-chip-text {
     height: auto;
     padding: var(--jim-chip-padding);
@@ -314,9 +320,9 @@ html[lang] .mud-chip.mud-chip-text {
     background-color: inherit !important;
 }
 
-/* Normalize MudTable text size to match body text */
+/* Table text sits one step below body text (Body2, 13px against a 14px base), the norm for dense data grids */
 .mud-table-root .mud-table-body .mud-table-cell {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 /* Allow mud-text-secondary to override the default table cell text colour */
@@ -325,27 +331,27 @@ html[lang] .mud-chip.mud-chip-text {
 }
 
 .mud-table-root .mud-table-pagination-toolbar {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-toolbar * {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-select {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-caption {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-display {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-information {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 /* Consistent border radius for container elements (papers, tables, alerts, expansion panels).
@@ -941,7 +947,7 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     padding: 2px 10px 2px 3px;
     /* Normal body size, per JIM's "default sizing unless asked otherwise" UI rule: the object's name in a
        chip is the thing being linked to, so it reads at the same size as the text naming it. */
-    font-size: 1rem;
+    font-size: var(--mud-typography-body1-size);
     font-weight: 550;
     color: var(--mud-palette-text-primary);
     white-space: nowrap;
@@ -2093,7 +2099,7 @@ html[lang] .jim-schema-change-table td {
 .jim-attribute-table tbody tr td {
     padding: 12px 16px !important;
     vertical-align: middle;
-    font-size: 1rem;
+    font-size: var(--mud-typography-body1-size);
 }
 
 /* Dense mode: reduce body cell padding while keeping header at normal height */
@@ -2301,12 +2307,12 @@ html[lang] .jim-schema-change-table td {
 
 /* Key/value detail tables (the label/value panels on detail pages).
    Two things need normalising. MudSimpleTable renders its cells at body2 (0.875rem)
-   while MudText/MudLink children render at body1 (1rem), so a panel ends up mixing
+   while MudText/MudLink children render at body1, so a panel ends up mixing
    two text sizes; and a MudChip carries its own 4px margin on top of its 32px height,
    so chip-bearing rows sit taller than plain-text rows and the panel looks unbalanced.
    A single cell height plus a zeroed chip margin makes every row identical. */
 .jim-detail-table tbody tr td {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body1-size);
     line-height: 1.5rem;
     height: 44px;
     padding: 4px 16px !important;
@@ -2482,7 +2488,7 @@ html[lang] .jim-kv-table td:first-child {
 }
 
 .jim-fact-value {
-    font-size: 0.9375rem;
+    font-size: var(--mud-typography-body1-size);
     color: var(--mud-palette-text-primary);
     overflow-wrap: anywhere;
 }
@@ -4222,7 +4228,7 @@ html[lang] .jim-picker-row > .mud-input-control {
 
 .jim-scope-partition-name {
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 1.125rem;
+    font-size: var(--mud-typography-h6-size);
     font-weight: 600;
     color: var(--mud-palette-text-primary);
     overflow-wrap: anywhere;
@@ -4306,6 +4312,18 @@ html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell
    where it should: at the true bottom of the list. */
 html[lang] .jim-virtualised-list .mud-table-root>tbody>tr:nth-last-of-type(2)>.mud-table-cell {
     border-bottom: none;
+}
+
+/* A virtualised grid turns a scroll offset into a row index by dividing by a fixed row height (RowHeight in
+   VirtualisedDataGrid.razor), so the rows must actually be that tall. Left to the text, they come out fractional
+   (31.6px dense, 51.6px normal at the 13px table size) and any change to the type scale moves them, putting the
+   scroll restore rows off. Pin them to whole pixels here; the two numbers must match RowHeight. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row {
+    height: 52px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-row {
+    height: 32px;
 }
 
 /* First-paint ceiling, before jimVirtualList.fit measures where the page footer lands. A grid whose container is

@@ -89,7 +89,7 @@ public interface IUserPreferenceService
     /// <summary>
     /// Gets the user's preferred table density setting.
     /// </summary>
-    /// <returns>True if the user prefers dense rows, false for normal spacing, null if no preference (default to normal).</returns>
+    /// <returns>True if the user prefers dense rows, false for normal spacing, null if no preference (tables default to dense).</returns>
     Task<bool?> GetTableDenseAsync();
 
     /// <summary>
@@ -446,7 +446,7 @@ public class UserPreferenceService : IUserPreferenceService
             {
                 "true" => true,
                 "false" => false,
-                _ => null // No preference saved - default to normal
+                _ => null // No preference saved; callers default to dense
             };
         }
         catch (JSDisconnectedException)

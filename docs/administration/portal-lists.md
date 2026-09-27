@@ -32,7 +32,7 @@ Some lists carry filters of their own above the table (Activities can be filtere
 
 Click a column heading to sort by it, and click it again to reverse the direction. Sorting, like searching, is applied across the whole list rather than to the rows on screen, so the first row really is the first row.
 
-The compact-rows toggle at the top left of the table switches between comfortable and dense row heights. Your choice is remembered and applied to every list.
+Lists open with dense rows, so more of them fit on screen. The compact-rows toggle at the top left of the table switches to comfortable row heights and back; your choice is remembered and applied to every list.
 
 ## Sharing where you are
 

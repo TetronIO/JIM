@@ -246,7 +246,7 @@
     // ─── Internals ───
 
     private MudDataGrid<T>? _dataGrid;
-    private bool _dense;
+    private bool _dense = true;
     private bool _preferencesLoaded;
     private string? _appliedStateKey;
 
@@ -260,8 +260,9 @@
     private string? ContainerStyle => string.IsNullOrWhiteSpace(MaxHeight) ? null : $"--jim-virtualised-list-max-height: {MaxHeight};";
 
     // The row height the grid is laid out at, and the divisor that turns a scroll offset into a row index. The two
-    // must agree, so both read this rather than repeating the numbers.
-    private float RowHeight => _dense ? 36f : 50f;
+    // must agree, so both read this rather than repeating the numbers. site.css pins the rows (.jim-virtualised-list
+    // .mud-table-row) to these same heights; change both together.
+    private float RowHeight => _dense ? 32f : 52f;
 
     // The row to restore to, read from the URL on load, then kept current as the reader scrolls. _scrollRestored
     // stops the restore repeating on every later render, and turns the grid from reading the position to writing it.
@@ -325,7 +326,7 @@
         // (and picks the matching virtualisation row height) on first appearance rather than flashing.
         if (firstRender)
         {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            _dense = await PreferenceService.GetTableDenseAsync() != false;
             _preferencesLoaded = true;
             StateHasChanged();
             return;
