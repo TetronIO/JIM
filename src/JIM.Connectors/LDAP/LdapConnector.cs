@@ -138,7 +138,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private readonly string _settingDirectoryServer = "Host";
     private readonly string _settingPreferredDomainController = ConnectorSettingNames.LdapPreferredDomainController;
     private readonly string _settingDirectoryServerPort = "Port";
-    private readonly string _settingUseSecureConnection = ConnectorSettingNames.LdapUseSecureConnection;
+    private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
     private readonly string _settingUsername = LdapConnectorConstants.SETTING_USERNAME;
     private readonly string _settingPassword = "Password";

@@ -22,11 +22,4 @@ public static class ConnectorSettingNames
     /// whose Connector implements <see cref="Interfaces.IConnectorDirectoryServers"/>.
     /// </summary>
     public const string LdapPreferredDomainController = "Preferred Domain Controller";
-
-    /// <summary>
-    /// The LDAP Connector's LDAPS switch (see LdapConnector). The Connected System settings page shows its Fetch
-    /// certificate action, and the certificate it reads, beneath this field: the certificate is what LDAPS
-    /// connects with, so that is where an administrator configuring it looks.
-    /// </summary>
-    public const string LdapUseSecureConnection = "Use Secure Connection (LDAPS)?";
 }

@@ -116,14 +116,13 @@
                                                              DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                              DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
                                                              ConnectedSystemId="@ConnectedSystem.Id" />
-                                @if (ShowCertificateFetchAfter(settingValue))
-                                {
-                                    @CertificateFetch
-                                }
                                 j++;
                             }
                         }
-                        @if (ShowCertificateFetchAtEndOf(settingCategory))
+                        @* The certificate belongs to the connection, so any Connector that can read its endpoint's
+                           certificate gets this at the end of its Connectivity settings; nothing here knows which
+                           Connector it is. *@
+                        @if (_supportsCertificateFetch && settingCategory == ConnectedSystemSettingCategory.Connectivity)
                         {
                             @CertificateFetch
                         }
@@ -267,8 +266,9 @@
 
 @code {
     /// <summary>
-    /// Fetch certificate, and whatever it found: rendered beneath the setting the certificate belongs to (see
-    /// <see cref="ShowCertificateFetchAfter"/>), not beside Save Settings, where it read as unrelated to the page.
+    /// Fetch certificate, and whatever it found, as a Server Certificate section closing the Connectivity panel, for
+    /// any Connector implementing <c>IConnectorSecureEndpoint</c> (see <see cref="_supportsCertificateFetch"/>). It
+    /// used to sit beside Save Settings, where it read as unrelated to the page.
     /// The same capability as the card shown on a failed save (#1139), from the other direction: the certificate
     /// can be looked at before anything has failed. Fetching only reads and shows; nothing is stored until the
     /// trust action on the card is confirmed. A read that fails stays on the page until dismissed or fetched
@@ -276,7 +276,13 @@
     /// </summary>
     private RenderFragment CertificateFetch => __builder =>
     {
-        <div class="mt-3 mb-5" data-testid="jim-certificate-fetch">
+        <div data-testid="jim-certificate-fetch">
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.h6">Server Certificate</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Read the certificate the endpoint above presents, to check JIM trusts it before saving. Nothing is
+                stored until you choose to trust it.
+            </MudText>
             <MudButton Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" DropShadow="false"
                        StartIcon="@(_fetchingCertificate ? null : Icons.Material.Filled.Search)"
                        Disabled="_fetchingCertificate"
@@ -384,23 +390,6 @@
         _supportsCertificateFetch = await jim.Certificates.SupportsServerCertificateReadAsync(ConnectedSystem.Id);
         _supportsDirectoryServerDiscovery = await jim.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(ConnectedSystem.Id);
     }
-
-    /// <summary>
-    /// Whether Fetch certificate renders beneath <paramref name="settingValue"/>: the LDAPS switch, identified by the
-    /// connector-agnostic <see cref="ConnectorSettingNames.LdapUseSecureConnection"/> name rather than display text.
-    /// </summary>
-    private bool ShowCertificateFetchAfter(ConnectedSystemSettingValue settingValue) =>
-        _supportsCertificateFetch && settingValue.Setting.Name == ConnectorSettingNames.LdapUseSecureConnection;
-
-    /// <summary>
-    /// Whether Fetch certificate renders at the end of <paramref name="category"/>'s panel instead: for a Connector
-    /// that reads certificates (SQL, SCIM) but has no LDAPS switch to sit beneath, the end of its Connectivity
-    /// settings is where the endpoint the certificate belongs to is configured.
-    /// </summary>
-    private bool ShowCertificateFetchAtEndOf(ConnectedSystemSettingCategory category) =>
-        _supportsCertificateFetch
-        && category == ConnectedSystemSettingCategory.Connectivity
-        && ConnectedSystem.SettingValues.All(sv => sv.Setting.Name != ConnectorSettingNames.LdapUseSecureConnection);
 
     /// <summary>
     /// Whether <paramref name="settingValue"/> is the field the Discover Domain Controllers action targets:
