@@ -1678,6 +1678,39 @@ html[lang] .mud-alert-filled-normal {
     border-radius: var(--mud-default-borderradius);
 }
 
+/* Outlined fields are dense portal-wide: 10.5px above and below the value (a 38px field) rather than MudBlazor's
+   18.5px (54px), which suits a data-dense admin tool and matches the 14px type scale. MudBlazor has no global default
+   for Margin, and setting Margin.Dense on every field would mean touching some 230 of them, so these rules give the
+   default outlined field the metrics Margin.Dense would, mirroring MudBlazor's own margin-dense rules: the value's
+   padding, a textarea's top offset, and the resting position of the label (translate(14px, 12px) rather than 20px),
+   so an empty field's label stays centred. The floated label's rules outrank the resting-label rule here, so a
+   field with a value still shows its label on the border. MudField's no-padding slot has a more specific rule of
+   its own and is left alone. The html[lang] qualifier is needed because MudBlazor's stylesheet loads after this one. */
+html[lang] .mud-input > input.mud-input-root-outlined,
+html[lang] div.mud-input-slot.mud-input-root-outlined {
+    padding-top: 10.5px;
+    padding-bottom: 10.5px;
+}
+
+html[lang] .mud-input > textarea.mud-input-root-outlined {
+    margin-top: 10.5px;
+    padding-bottom: 10.5px;
+}
+
+html[lang] .mud-input-label-outlined {
+    transform: translate(14px, 12px) scale(1);
+}
+
+/* Help text belongs to the field above it, so it sits close under that field and clear of the next one. Whatever a
+   page sets between fields is measured to the next field's border, but that field's floating label rises above
+   the border, so the visible gap from help text to the next label came out barely 14px on the Settings tab, and
+   the text read as the next field's caption. This adds space after the help text (or a validation message, which
+   renders in the same place) wherever it appears, on top of the page's own spacing, and adds nothing to a field
+   with no help text. */
+html[lang] .mud-input-control-helper-container:not(:empty) {
+    padding-bottom: 8px;
+}
+
 /* MudField content (e.g. a read-only Thumbprint or Serial Number) has no spaces to wrap at and is
    a flex child by default, so a long unbroken value (min-width: auto) overflows past the outline
    instead of shrinking to fit. Let it wrap and shrink to the field's own width. */

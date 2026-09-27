@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🔄 The portal's text is now sized for a data-dense admin tool: body text, navigation, tabs and inputs are 14px (from 16px), tables and chips 13px, and headings one step smaller. Lists now open with dense rows unless you have chosen comfortable rows.
+- 🔄 The portal's text is now sized for a data-dense admin tool: body text, navigation, tabs and inputs are 14px (from 16px), tables and chips 13px, and headings one step smaller. Lists now open with dense rows unless you have chosen comfortable rows, and form fields are more compact, with their help text set clear of the next field.
 - 🔄 The Connected System's **Partitions & Containers** tab is now called **Scope**: it is where you choose what JIM manages in a system, whatever shape that takes. Links to the old tab name open the Details tab.
 - 🔄 The Password Channel check and the discovered Password Policy now sit on the Connected System's **Passwords** tab, beneath the Password Synchronisation settings, rather than on the Schema tab.
 - 🔄 A Connected System's Schema tab now opens on a one-line status with a Refresh Schema button instead of a warning band, and each Object Type shows Attribute Selection before its settings.
