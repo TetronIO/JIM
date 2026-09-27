@@ -1806,6 +1806,31 @@ html[lang] .mud-button-root .mud-progress-circular {
     box-shadow: none !important;
 }
 
+/* Button sizes, one step down from MudBlazor's, to sit with the 14px type scale. MudBlazor draws a medium button
+   36px tall in 14px uppercase, which read oversized beside 14px body text and dense form fields, and its small
+   button (31px) was barely a step below that. Medium is now 32px in 13px text and small 28px in 12px, each
+   variant's padding keeping the same height whether or not it carries a 1px border. Single-class selectors on
+   purpose: this sheet loads after MudBlazor's, so they win over its size rules at equal specificity, while a
+   component's own two-class sizing (.jim-picker-seg .mud-button-root and the like) still wins over them. Large
+   is left at MudBlazor's size; no MudButton in the portal uses it. */
+:is(.mud-button-filled-size-medium, .mud-button-outlined-size-medium, .mud-button-text-size-medium) {
+    font-size: 13px;
+    line-height: 22px;
+}
+
+.mud-button-filled-size-medium { padding: 5px 14px; }
+.mud-button-outlined-size-medium { padding: 4px 13px; }
+.mud-button-text-size-medium { padding: 5px 8px; }
+
+:is(.mud-button-filled-size-small, .mud-button-outlined-size-small, .mud-button-text-size-small) {
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.mud-button-filled-size-small { padding: 4px 10px; }
+.mud-button-outlined-size-small { padding: 3px 9px; }
+.mud-button-text-size-small { padding: 4px 5px; }
+
 .mud-button-filled {
     box-shadow: none !important;
 }
@@ -1814,8 +1839,8 @@ html[lang] .mud-button-root .mud-progress-circular {
    hover. It replaced eight per-theme greys that ran from near-invisible against a light page to a flat mid-grey
    pill that read as disabled. Built from the theme's tokens, so on a light theme it is a white button on a grey
    page and on a dark one a face just lighter than the surface, defined by its border either way. html[lang] so
-   it outranks MudBlazor's own rule; the padding rules give the border's 1px back so the box stays the size
-   MudBlazor gives a borderless filled button (4px 10px small, 6px 16px medium, 8px 22px large). */
+   it outranks MudBlazor's own rule; the padding rules give the border's 1px back so the box stays the size of a
+   borderless filled button (4px 10px small, 5px 14px medium, 8px 22px large; see "Button sizes" above). */
 html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
     background-color: color-mix(in srgb, var(--mud-palette-text-primary) 4%, var(--mud-palette-surface));
     color: var(--mud-palette-text-primary);
@@ -1833,7 +1858,7 @@ html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):active {
 }
 
 html[lang] .mud-button-filled.mud-button-filled-default.mud-button-filled-size-small { padding: 3px 9px; }
-html[lang] .mud-button-filled.mud-button-filled-default:not(.mud-button-filled-size-small):not(.mud-button-filled-size-large) { padding: 5px 15px; }
+html[lang] .mud-button-filled.mud-button-filled-default:not(.mud-button-filled-size-small):not(.mud-button-filled-size-large) { padding: 4px 13px; }
 html[lang] .mud-button-filled.mud-button-filled-default.mud-button-filled-size-large { padding: 7px 21px; }
 
 /* ─── Hover and pressed states: the tonal step ───
