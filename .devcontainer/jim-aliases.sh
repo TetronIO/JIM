@@ -350,6 +350,12 @@ PY
 # 2 s on a 9p mount), which is the delay between saving and the change applying, and constant background reads.
 # DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER stops it trying to open a browser inside the container (launchSettings.json
 # sets launchBrowser for Visual Studio).
+#
+# DOTNET_WATCH_AUTO_RELOAD_WS_PORT pins the WebSocket that dotnet watch uses to push CSS changes to the browser and
+# to reload it after a restart. Left alone it picks a random port each run, which the browser on the host reaches
+# only if VS Code happens to auto-forward it; 5210 is forwarded explicitly in devcontainer.json. Razor and C# edits
+# do not depend on it: they reach the page over Blazor's own connection on 5200. (Undocumented, but read by the
+# .NET 10 SDK's dotnet watch alongside the documented DOTNET_WATCH_AUTO_RELOAD_WS_HOSTNAME.)
 jim-web-watch() {
   local polling=0
   if _jim_file_events_work; then
@@ -362,6 +368,7 @@ jim-web-watch() {
     && export JIM_DB_HOSTNAME=localhost \
               DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER=1 \
               DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1 \
+              DOTNET_WATCH_AUTO_RELOAD_WS_PORT=5210 \
     && { [ "$polling" = 1 ] && export DOTNET_USE_POLLING_FILE_WATCHER=1 || true; } \
     && dotnet watch --project src/JIM.Web --non-interactive)
 }

@@ -170,6 +170,7 @@
     5432, // PostgreSQL
     5200, // JIM.Web (HTTP) - also serves API at /api/
     5201, // JIM.Web (HTTPS) - also serves API at /api/
+    5210, // dotnet watch browser refresh (jim-web-watch), pushes CSS changes and reloads after a restart
     8000, // MkDocs documentation preview
     8181 // Keycloak IdP (OIDC + admin console)
   ],
@@ -185,6 +186,10 @@
     },
     "5201": {
       "label": "JIM Web + API (HTTPS)",
+      "onAutoForward": "silent"
+    },
+    "5210": {
+      "label": "JIM Web hot reload (dotnet watch)",
       "onAutoForward": "silent"
     },
     "8000": {
