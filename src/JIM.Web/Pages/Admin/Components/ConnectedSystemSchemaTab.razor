@@ -498,7 +498,8 @@ else
                              SingularName="Attribute"
                              PluralName="Attributes"
                              SearchPlaceholder="Search by name"
-                             AlwaysDense="true">
+                             AlwaysDense="true"
+                             GridClass="mt-5 jim-schema-attribute-grid">
             <Columns>
                 <TemplateColumn Title="Selected" Sortable="false">
                     <HeaderTemplate>
@@ -508,18 +509,18 @@ else
                         @if (CredentialAttributes.IsCredentialAttribute(context.Item.Name))
                         {
                             <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
-                                <MudSwitch Value="false" Color="@Color.Primary" Disabled="true" />
+                                <MudSwitch Value="false" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else if (context.Item.IsExternalId || context.Item.IsSecondaryExternalId)
                         {
                             <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
-                                <MudSwitch Value="@context.Item.Selected" Color="@Color.Primary" Disabled="true" />
+                                <MudSwitch Value="@context.Item.Selected" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else
                         {
-                            <MudSwitch @bind-Value="@context.Item.Selected" @bind-Value:after="OnAttributeSelectedChangedAsync" Color="@Color.Primary" />
+                            <MudSwitch @bind-Value="@context.Item.Selected" @bind-Value:after="OnAttributeSelectedChangedAsync" Color="@Color.Primary" Size="Size.Small" />
                         }
                     </CellTemplate>
                 </TemplateColumn>
@@ -530,11 +531,11 @@ else
                     <CellTemplate>
                         @if (context.Item.IsExternalId)
                         {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">External ID</MudChip>
                         }
                         else if (context.Item.IsSecondaryExternalId)
                         {
-                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text">Secondary ID</MudChip>
                         }
                         else
                         {
@@ -578,14 +579,14 @@ else
                         @if (referencedObjectTypeName != null)
                         {
                             <MudTooltip Text="@($"This Reference attribute declares that it points at the '{referencedObjectTypeName}' Object Type, so references resolve within that Object Type alone. Declared by the Connected System's schema; read-only.")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Text">
                                     @($"Reference ({referencedObjectTypeName})")
                                 </MudChip>
                             </MudTooltip>
                         }
                         else
                         {
-                            <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                            <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Text">
                                 @context.Item.Type.ToString().SplitOnCapitalLetters()
                             </MudChip>
                         }
@@ -609,7 +610,7 @@ else
                         <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Item.Writability)" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string"
                                      Color="@Helpers.GetAttributeWritabilityChipColour(context.Item.Writability)"
-                                     Variant="Variant.Outlined">
+                                     Variant="Variant.Text">
                                 @Helpers.GetAttributeWritabilityLabel(context.Item.Writability)
                             </MudChip>
                         </MudTooltip>
