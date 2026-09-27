@@ -299,9 +299,40 @@ _jim_kill_project() {
   pids=$(_jim_native_pids "dotnet.*JIM\.${project}")
   if [ -n "$pids" ]; then
     echo "Stopping existing JIM.${project} (PIDs: $(echo $pids | tr '\n' ' '))..."
-    echo "$pids" | xargs kill 2>/dev/null || true
-    sleep 1
+    _jim_stop_pids $(echo $pids)
   fi
+  [ "$project" = Web ] && _jim_free_ports 5200 5210
+  return 0
+}
+
+# Stop the given PIDs and wait for them to exit, escalating to SIGKILL after 10 seconds. A plain `kill` is not
+# enough: dotnet watch run with --non-interactive (as jim-web-watch does) can outlive SIGTERM, keep holding its
+# ports, and make the next run fail with "address already in use".
+_jim_stop_pids() {
+  local pid alive i
+  kill "$@" 2>/dev/null || true
+  for i in $(seq 1 20); do
+    alive=""
+    for pid in "$@"; do kill -0 "$pid" 2>/dev/null && alive="$alive $pid"; done
+    [ -z "$alive" ] && return 0
+    sleep 0.5
+  done
+  echo "Process(es)$alive did not exit on SIGTERM; forcing them to stop."
+  kill -9 $(echo $alive) 2>/dev/null || true
+  sleep 1
+}
+
+# Stop any native (non-container) dotnet process still listening on the given ports, e.g. a dotnet watch orphaned by
+# a closed terminal or another session, which the name-based search can miss.
+_jim_free_ports() {
+  local port pid
+  for port in "$@"; do
+    for pid in $(ss -ltnpH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); do
+      [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = dotnet ] || continue
+      echo "Port $port is still held by dotnet (PID $pid); stopping it..."
+      _jim_stop_pids "$pid"
+    done
+  done
 }
 
 # Local run aliases - source .env and override DB hostname for local access. Each removes its own Docker
@@ -492,9 +523,9 @@ _jim_kill_local() {
   pids=$(_jim_native_pids 'dotnet.*JIM\.(Web|Worker|Scheduler)')
   if [ -n "$pids" ]; then
     echo "Stopping local JIM process(es) (PIDs: $(echo $pids | tr '\n' ' '))..."
-    echo "$pids" | xargs kill 2>/dev/null || true
-    sleep 1
+    _jim_stop_pids $(echo $pids)
   fi
+  _jim_free_ports 5200 5210
 }
 
 # Self-heal stale Docker credential helper references at command time.
