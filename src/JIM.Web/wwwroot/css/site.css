@@ -39,7 +39,7 @@
        which reads as a button rather than as a label and, in a table cell, outweighs the value beside it.
        Font size is deliberately NOT set here: it stays MudBlazor's per-size figure, so a call site passing
        Size.Small still gets a smaller chip and the Size parameter keeps its meaning. */
-    --jim-chip-padding-y: 3px;
+    --jim-chip-padding-y: 3.5px;
     --jim-chip-padding-x: 10px;
     --jim-chip-padding: var(--jim-chip-padding-y) var(--jim-chip-padding-x);
     --jim-chip-radius: 999px;
