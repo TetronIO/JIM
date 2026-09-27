@@ -122,11 +122,10 @@ body.jim-dark-mode .mud-skeleton-wave::after {
     padding: 6px 16px;
 }
 
-/* Content/data links use --jim-link-color (softer than UI primary).
-   Transition on the base state so colour animates smoothly both ways. */
+/* Content/data links use --jim-link-color (softer than UI primary). The colour change is animated by the shared
+   hover motion rule (see "Hover motion" below). */
 a.mud-link.mud-primary-text {
     color: var(--jim-link-color) !important;
-    transition: color 0.25s ease !important;
 }
 
 /* Visited link styling is handled per-theme via a hardcoded a:visited rule
@@ -143,7 +142,6 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 .mud-link-underline-hover:hover {
     text-decoration: none !important;
     color: var(--jim-link-hover-color) !important;
-    transition: color 0.25s ease !important;
 }
 
 /* Every Text-variant chip takes that shape. The height MudBlazor pins per size gives way to the padding, so
@@ -1825,12 +1823,12 @@ html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
 }
 
 html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 10%, var(--mud-palette-surface));
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 13%, var(--mud-palette-surface));
     border-color: var(--jim-control-border-hover);
 }
 
 html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):active {
-    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 15%, var(--mud-palette-surface));
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 19%, var(--mud-palette-surface));
     border-color: var(--jim-control-border-hover);
 }
 
@@ -1855,8 +1853,8 @@ html[lang] .mud-button-filled.mud-button-filled-default.mud-button-filled-size-l
    Dark colour is left out: its filled face is overridden per theme (black on navy), and a mix from its palette
    value would not match that face. */
 html[lang] {
-    --jim-state-hover-mix: black 13%;
-    --jim-state-press-mix: black 22%;
+    --jim-state-hover-mix: black 20%;
+    --jim-state-press-mix: black 30%;
     --jim-control-border-hover: var(--mud-palette-lines-inputs);
     --jim-neutral-press: color-mix(in srgb, var(--mud-palette-action-default-hover), var(--mud-palette-text-primary) 6%);
 }
@@ -1885,7 +1883,7 @@ html[lang] {
     }
 
     html[lang] :is(.mud-button-outlined, .mud-button-text):not(:disabled):hover {
-        background-color: color-mix(in srgb, currentColor 10%, transparent);
+        background-color: color-mix(in srgb, currentColor 14%, transparent);
     }
 
     html[lang] .mud-button-outlined:not(:disabled):hover {
@@ -1916,22 +1914,41 @@ html[lang] :is(.mud-button-filled.mud-button-filled-error, .mud-icon-button.mud-
 }
 
 html[lang] :is(.mud-button-outlined, .mud-button-text):not(:disabled):active {
-    background-color: color-mix(in srgb, currentColor 17%, transparent);
+    background-color: color-mix(in srgb, currentColor 22%, transparent);
 }
 
 html[lang] :is(.mud-icon-button:not(.mud-switch-base):not(.mud-button-filled):not(.mud-button-outlined), .mud-list-item-clickable):not(:disabled):active {
     background-color: var(--jim-neutral-press);
 }
 
-/* A quick, even response rather than MudBlazor's 250ms material curve, which lags behind the pointer in a dense
-   toolbar. The switch is excluded: its thumb is a .mud-button-root too, and animates its position through the
-   transition this would replace. */
-html[lang] .mud-button-root:not(.mud-switch-base) {
-    transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out, box-shadow 120ms ease-out;
+/* ─── Hover motion ───
+   One motion for everything that responds to the pointer: buttons, icon buttons, menu and list items, nav links
+   and text links. Quick in, slower out: the state arrives almost with the pointer (90ms) and eases away over
+   220ms when it leaves, so moving across a toolbar or down a menu leaves a brief trail rather than a flicker.
+   The duration on :hover governs entering the state, the base one governs leaving it. MudBlazor's own curves
+   (150-250ms on the way in) lag behind the pointer in a dense UI.
+
+   The switch is excluded: its thumb is a .mud-button-root too, and animates its position through the transition
+   this would replace. Padding stays in the list because nav links animate it when the drawer collapses. Links in
+   alerts keep their own opacity transition (an !important rule above). */
+html[lang] {
+    --jim-motion-in: 90ms;
+    --jim-motion-out: 220ms;
+    --jim-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html[lang] :is(.mud-button-root:not(.mud-switch-base), .mud-list-item-clickable, .mud-nav-link, a.mud-link) {
+    transition-property: background-color, border-color, color, box-shadow, padding;
+    transition-duration: var(--jim-motion-out);
+    transition-timing-function: var(--jim-motion-ease);
+}
+
+html[lang] :is(.mud-button-root:not(.mud-switch-base), .mud-list-item-clickable, .mud-nav-link, a.mud-link):hover {
+    transition-duration: var(--jim-motion-in);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    html[lang] .mud-button-root:not(.mud-switch-base) {
+    html[lang] :is(.mud-button-root:not(.mud-switch-base), .mud-list-item-clickable, .mud-nav-link, a.mud-link) {
         transition: none;
     }
 }

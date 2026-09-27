@@ -79,8 +79,8 @@ html[lang] {
 
     /* === JIM Custom: Hover and pressed states (see the tonal step in site.css) === */
     /* A dark surface lifts toward white on hover and steps back down when pressed. */
-    --jim-state-hover-mix: white 14%;
-    --jim-state-press-mix: black 12%;
+    --jim-state-hover-mix: white 22%;
+    --jim-state-press-mix: black 16%;
 
     /* === Lines & Dividers === */
     --mud-palette-lines-default: #2e2e50;

@@ -75,15 +75,15 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: rgba(18, 27, 41, 0.58);
-    /* The theme's navy at the table row-hover weight, not the cyan-blue this was (left over from navy-o5, whose
+    /* The theme's navy, the table row hover's hue a step stronger, not the cyan-blue this was (left over from navy-o5, whose
        primary it is). Menus, selects, list items and icon buttons hover in it, and a foreign hue there was the
        same jar the table rows were moved off. */
-    --mud-palette-action-default-hover: rgba(30, 58, 95, 0.08);
+    --mud-palette-action-default-hover: rgba(30, 58, 95, 0.11);
     --mud-palette-action-disabled: rgba(18, 27, 41, 0.34);
     --mud-palette-action-disabled-background: rgba(18, 27, 41, 0.08);
 
     /* === JIM Custom: Hover and pressed states (see the tonal step in site.css) === */
-    --jim-neutral-press: rgba(30, 58, 95, 0.14);
+    --jim-neutral-press: rgba(30, 58, 95, 0.18);
     --jim-control-border-hover: rgba(30, 58, 95, 0.50);
 
     /* === Lines & Dividers === */
