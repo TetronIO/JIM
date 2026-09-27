@@ -332,9 +332,10 @@ html[lang] .mud-chip.mud-chip-outlined {
     background-color: inherit !important;
 }
 
-/* Table text sits one step below body text (Body2, 13px against a 14px base), the norm for dense data grids */
+/* Table data is body text (Body1). Body2 is for auxiliary text that should not draw attention, which the
+   header labels and pagination below are and a table's data is not */
 .mud-table-root .mud-table-body .mud-table-cell {
-    font-size: var(--mud-typography-body2-size);
+    font-size: var(--mud-typography-body1-size);
 }
 
 /* Allow mud-text-secondary to override the default table cell text colour */
