@@ -115,6 +115,22 @@ public interface IUserPreferenceService
     Task SetCategoryExpandedAsync(int objectTypeId, string categoryName, bool expanded);
 
     /// <summary>
+    /// Gets whether an optional Connector Space column is shown for a Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose Connector Space list is being shown.</param>
+    /// <param name="column">The optional column.</param>
+    /// <returns>False only when the column has been hidden; true otherwise, including when no choice is stored.</returns>
+    Task<bool> GetConnectorSpaceColumnVisibleAsync(int connectedSystemId, ConnectorSpaceColumn column);
+
+    /// <summary>
+    /// Sets whether an optional Connector Space column is shown for a Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose Connector Space list is being shown.</param>
+    /// <param name="column">The optional column.</param>
+    /// <param name="visible">Whether the column is shown.</param>
+    Task SetConnectorSpaceColumnVisibleAsync(int connectedSystemId, ConnectorSpaceColumn column, bool visible);
+
+    /// <summary>
     /// Gets the user's preferred causality visualisation view.
     /// </summary>
     /// <returns>"lineage" or "timeline"; null if no preference (the causality panel decides).</returns>
@@ -517,6 +533,51 @@ public class UserPreferenceService : IUserPreferenceService
         {
             var key = $"categoryExpanded_{objectTypeId}_{categoryName}";
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, expanded ? "true" : "false");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    // Scoped to the Connected System, because which identifier an administrator reads differs by Connector: for an
+    // LDAP directory it is the DN, for a SCIM service the external ID.
+    private static string ConnectorSpaceColumnVisibleKey(int connectedSystemId, ConnectorSpaceColumn column) =>
+        $"connectorSpaceColumnVisible_{connectedSystemId}_{column}";
+
+    /// <inheritdoc />
+    public async Task<bool> GetConnectorSpaceColumnVisibleAsync(int connectedSystemId, ConnectorSpaceColumn column)
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", ConnectorSpaceColumnVisibleKey(connectedSystemId, column));
+
+            // Hidden only by an explicit choice: anything else, including a value this version cannot read, shows
+            // the column rather than losing it from view.
+            return value != "false";
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task SetConnectorSpaceColumnVisibleAsync(int connectedSystemId, ConnectorSpaceColumn column, bool visible)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", ConnectorSpaceColumnVisibleKey(connectedSystemId, column), visible ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {

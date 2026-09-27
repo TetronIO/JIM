@@ -14,10 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
 - ✨ A Schedule run that carried on past a failed step now ends **Complete With Error**, naming the failed steps, instead of a plain Complete, so the portal, PowerShell and monitoring scripts can tell it apart from a clean run. (#1787)
+- ✨ The Connector Space list's new **Columns** menu shows or hides the External ID and Secondary External ID columns, remembered per Connected System in your browser, so an LDAP directory's list can show just the distinguished names.
 
 ### Changed
 
-- 🔄 The portal is more compact: body text, navigation and inputs are 14px (from 16px), tables 13px, and headings a step smaller. Form fields are denser, with help text set clear of the next field, buttons are a size smaller, Outlined and Filled chips match the compact Text chips instead of standing as tall as a button, and lists open with dense rows unless you chose otherwise.
+- 🔄 The portal is more compact: 14px body text, navigation and inputs (from 16px), 13px tables, smaller headings, denser form fields with help text clear of the next field, smaller buttons and chips, and lists that open with dense rows unless you chose otherwise.
 - 🔄 The Connected System's **Partitions & Containers** tab is now called **Scope**: it is where you choose what JIM manages in a system, whatever shape that takes. Links to the old tab name open the Details tab.
 - 🔄 The Password Channel check and the discovered Password Policy now sit on the Connected System's **Passwords** tab, beneath the Password Synchronisation settings, rather than on the Schema tab.
 - 🔄 A Connected System's Schema tab now opens on a one-line status with a Refresh Schema button instead of a warning band, and each Object Type shows Attribute Selection before its settings.

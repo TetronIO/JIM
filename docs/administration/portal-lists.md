@@ -34,6 +34,8 @@ Click a column heading to sort by it, and click it again to reverse the directio
 
 Lists open with dense rows, so more of them fit on screen. The compact-rows toggle at the top left of the table switches to comfortable row heights and back; your choice is remembered and applied to every list.
 
+The Connector Space list has a **Columns** menu beside that toggle, for showing or hiding its two identifier columns, External ID and Secondary External ID. Which one you read depends on the Connector (for an LDAP directory it is usually the distinguished name held as the Secondary External ID), so the choice is remembered separately for each Connected System. Hiding a column does not change what the search box matches: it still searches both identifiers. Like row density, the choice is kept in your browser, so another browser or computer starts with both columns shown.
+
 ## Sharing where you are
 
 A list keeps its search, its sort and your position in the address bar. Copy the URL and send it to a colleague, or bookmark it, and it opens where you left it rather than at the top of an unsorted list.

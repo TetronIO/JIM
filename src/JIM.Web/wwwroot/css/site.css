@@ -4633,6 +4633,25 @@ html[lang] .jim-scope-text .mud-input-slot {
     max-width: 0;
 }
 
+/* A list's Columns menu (the Connector Space's identifier columns): a short checklist under a heading, with a hint
+   saying where the choice is kept. Checkboxes rather than menu items, so it stays open while several are set. */
+.jim-column-menu {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 12px 8px 4px;
+    min-width: 16rem;
+}
+
+.jim-column-menu-heading {
+    padding: 0 0 2px 10px;
+}
+
+.jim-column-menu-hint {
+    padding: 4px 0 0 10px;
+    margin-top: 4px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
 /* A capped column: the wrapper inside a cell whose content would otherwise set the column's width. Auto layout
    sizes a column to its widest content, and some content is arbitrarily long without being the point of the
    row (a password target's own message, a Service Setting's URL or identifier), so it would take the width
