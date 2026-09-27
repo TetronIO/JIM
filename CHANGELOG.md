@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Installing with the setup script's bundled PostgreSQL works: it pointed JIM at `localhost` instead of the bundled database, so JIM never started.
 - 🐛 The release bundle's PostgreSQL image now loads under its name, so an air-gapped install with the bundled database finds it.
 - 🐛 The setup script no longer stops at `Failed to download .env.example`, and the manual download commands in the Deployment Guide and Quick Start work again: releases publish the environment template as `default.env.example`.
+- 🐛 The LDAP Connector's Delete Behaviour setting now shows Delete as its default on new Connected Systems, matching what export does when it is left unset, instead of an empty dropdown.
 - 🐛 Discover Domain Controllers, refused on a directory that is not Active Directory or Samba AD, now names the detected directory as the portal does elsewhere ("389 Directory Server") rather than by its internal identifier.
 - 🐛 An auxiliary class's contributed attribute count (portal, REST and PowerShell) no longer includes attributes the Object Type already carries, such as the directory's common entry attributes, which overstated every class by the same few.
 - 🐛 Opening JIM over plain HTTP from another machine no longer loops endlessly between JIM and the identity provider; sign-in stops on a page explaining that browser access from other machines requires HTTPS. A one-off lost sign-in cookie is still recovered automatically.
