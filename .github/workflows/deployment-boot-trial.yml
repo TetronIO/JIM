@@ -54,16 +54,17 @@ jobs:
         sudo systemctl restart docker
         docker info -f '{{.DriverStatus}}'
 
-    # GitHub's image sets XDG_CONFIG_HOME=/home/runner/.config for every account, which the rootless leg's jim
-    # account's systemd manager would inherit: Podman's Quadlet generator would then look for the account's units
-    # in the runner's folder, which it cannot read, and generate none. No real host points every account at one
-    # account's folder, so this is undone here rather than worked around in the installer.
-    - name: Stop pointing every account at the runner's configuration folder
+    # GitHub's image sets the runner account's own XDG folders for every account (XDG_CONFIG_HOME=/home/runner/.config,
+    # XDG_RUNTIME_DIR=/run/user/1001), which the rootless leg's jim account's systemd manager would inherit: Podman's
+    # Quadlet generator would look for the account's units in the runner's folder, and Podman would refuse a runtime
+    # folder the account does not own. No real host points every account at one account's folders, so this is
+    # undone here rather than worked around in the installer.
+    - name: Stop pointing every account at the runner's own folders
       run: |
         for file in /etc/environment /etc/environment.d/*.conf /etc/security/pam_env.conf; do
-          if sudo grep -qs '^XDG_CONFIG_HOME' "$file"; then
-            echo "Removing XDG_CONFIG_HOME from $file"
-            sudo sed -i '/^XDG_CONFIG_HOME/d' "$file"
+          if sudo grep -qs '^XDG_' "$file"; then
+            echo "Removing from $file: $(sudo grep '^XDG_' "$file" | cut -d= -f1 | tr '\n' ' ')"
+            sudo sed -i '/^XDG_/d' "$file"
           fi
         done
 
