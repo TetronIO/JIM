@@ -823,3 +823,79 @@ Describe 'Add-CertificateBytesToJimStore' {
             Should -Throw "*Add-XToJimStore*dc-primary CA*"
     }
 }
+
+Describe 'Grant-JimAdDelegation' {
+    BeforeAll {
+        . "$PSScriptRoot/Invoke-LabControl.ps1"
+
+        # A stand-in for the docker executable, recording what it was asked to run.
+        function docker {
+            $script:grantDockerCalls.Add(@($args))
+            $global:LASTEXITCODE = $script:grantDockerExitCode
+            $script:grantDockerOutput
+        }
+    }
+
+    BeforeEach {
+        $script:grantDockerCalls = [System.Collections.Generic.List[object]]::new()
+        $script:grantDockerExitCode = 0
+        $script:grantDockerOutput = @('Delegation applied')
+    }
+
+    Context 'a container name (Samba AD)' {
+        It 'runs the image''s own jim-delegate.sh in the container, as it always did' {
+            Grant-JimAdDelegation -ContainerName 'samba-ad-source' -ContainerDn 'OU=TestUsers,DC=resurgam,DC=local'
+
+            $script:grantDockerCalls.Count | Should -Be 1
+            $script:grantDockerCalls[0] | Should -Be @('exec', 'samba-ad-source', '/usr/local/sbin/jim-delegate.sh', 'OU=TestUsers,DC=resurgam,DC=local')
+        }
+
+        It 'throws with the script output when jim-delegate.sh fails' {
+            $script:grantDockerExitCode = 1
+            $script:grantDockerOutput = @('access denied')
+
+            { Grant-JimAdDelegation -ContainerName 'samba-ad-source' -ContainerDn 'OU=X,DC=resurgam,DC=local' } |
+                Should -Throw '*access denied*'
+        }
+    }
+
+    Context 'a directory config with a container' {
+        It 'takes the Samba AD path with the config''s container' {
+            $config = Get-DirectoryConfig -DirectoryType SambaAD -Instance Target
+
+            Grant-JimAdDelegation -DirectoryConfig $config -ContainerDn 'OU=TestUsers,DC=gentian,DC=local'
+
+            $script:grantDockerCalls[0] | Should -Be @('exec', 'samba-ad-target', '/usr/local/sbin/jim-delegate.sh', 'OU=TestUsers,DC=gentian,DC=local')
+        }
+    }
+
+    Context 'a directory config with no container (Active Directory)' {
+        BeforeAll {
+            $script:adConfig = @{ DirectoryType = 'ActiveDirectory'; ContainerName = $null; VmName = 'dc-source'; Host = 'dc1.resurgam.local' }
+        }
+
+        It 'asks the lab host to apply it to the VM, and never touches docker' {
+            Mock Invoke-LabControl { 'Delegation applied over OU=TestUsers,DC=resurgam,DC=local' }
+
+            Grant-JimAdDelegation -DirectoryConfig $script:adConfig -ContainerDn 'OU=TestUsers,DC=resurgam,DC=local'
+
+            Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter {
+                $Script -eq 'Grant-LabDelegation.ps1' -and
+                ($Arguments -join '|') -eq '-Name|dc-source|-ContainerDn|OU=TestUsers,DC=resurgam,DC=local'
+            }
+            $script:grantDockerCalls.Count | Should -Be 0
+        }
+
+        It 'throws a message naming the container and the consequence when the lab host refuses' {
+            Mock Invoke-LabControl { throw 'exit 1: no such VM' }
+
+            { Grant-JimAdDelegation -DirectoryConfig $script:adConfig -ContainerDn 'OU=Scenario,DC=resurgam,DC=local' } |
+                Should -Throw "*could not delegate JIM's access over 'OU=Scenario,DC=resurgam,DC=local'*no such VM*"
+        }
+
+        It 'throws when the config has no VmName to address' {
+            { Grant-JimAdDelegation -DirectoryConfig @{ DirectoryType = 'ActiveDirectory'; ContainerName = $null } -ContainerDn 'OU=X,DC=y' } |
+                Should -Throw '*VmName*'
+        }
+    }
+}

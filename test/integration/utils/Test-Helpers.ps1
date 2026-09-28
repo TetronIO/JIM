@@ -1485,20 +1485,56 @@ function Grant-JimAdDelegation {
         The Docker container name of the Samba AD instance, e.g. samba-ad-primary,
         samba-ad-source, samba-ad-target.
 
+    .PARAMETER DirectoryConfig
+        A config from Get-DirectoryConfig, instead of -ContainerName. A config with a container takes
+        the Samba AD path with that container. A config with none (a real Active Directory domain
+        controller, a Hyper-V virtual machine) asks the lab host to apply the same delegation to its
+        VmName: Invoke-LabControl runs ad-lab/host/Grant-LabDelegation.ps1, which applies the access
+        control entries in jim-ad-delegation.acl unchanged, idempotently.
+
     .PARAMETER ContainerDn
         The Distinguished Name of the container (OU) to delegate over. The delegation applies to
         that container and everything below it.
 
     .EXAMPLE
         Grant-JimAdDelegation -ContainerName "samba-ad-primary" -ContainerDn "OU=Corp,DC=panoply,DC=local"
+
+    .EXAMPLE
+        Grant-JimAdDelegation -DirectoryConfig $SourceConfig -ContainerDn "OU=TestUsers,$($SourceConfig.BaseDN)"
     #>
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory=$true, ParameterSetName='Container')]
         [string]$ContainerName,
+
+        [Parameter(Mandatory=$true, ParameterSetName='Config')]
+        [hashtable]$DirectoryConfig,
 
         [Parameter(Mandatory=$true)]
         [string]$ContainerDn
     )
+
+    if ($PSCmdlet.ParameterSetName -eq 'Config') {
+        if ([string]::IsNullOrEmpty([string]$DirectoryConfig['ContainerName'])) {
+            $vmName = [string]$DirectoryConfig['VmName']
+            if ([string]::IsNullOrEmpty($vmName)) {
+                throw "Grant-JimAdDelegation: the directory config has no container and no VmName, so there is nothing to delegate on. Build the config with Get-DirectoryConfig."
+            }
+
+            if (-not (Get-Command -Name Invoke-LabControl -ErrorAction SilentlyContinue)) {
+                . "$PSScriptRoot/Invoke-LabControl.ps1"
+            }
+
+            try {
+                Invoke-LabControl -Script 'Grant-LabDelegation.ps1' -Arguments @('-Name', $vmName, '-ContainerDn', $ContainerDn) | Out-Null
+            }
+            catch {
+                throw "Grant-JimAdDelegation: could not delegate JIM's access over '$ContainerDn' on '$vmName'. JIM's Connected System will fail at export with an access error until this is granted. Grant-LabDelegation.ps1 said: $($_.Exception.Message)"
+            }
+            return
+        }
+
+        $ContainerName = [string]$DirectoryConfig['ContainerName']
+    }
 
     $output = docker exec $ContainerName /usr/local/sbin/jim-delegate.sh "$ContainerDn" 2>&1
     $outputText = ($output -join [Environment]::NewLine).Trim()

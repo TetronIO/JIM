@@ -222,6 +222,7 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 # Default to SambaAD Primary if no config provided
 if (-not $DirectoryConfig) {
@@ -992,15 +993,16 @@ try {
     foreach ($user in $testUsers) {
         if ($isRfcDirectory) {
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $deleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $userDN
+            if ($deleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
             }
         }
         else {
-            $output = & docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-            if ($output -match "Deleted user") {
+            # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
+            $deleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user
+            if ($deleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
             }
@@ -1019,13 +1021,13 @@ try {
 
     Write-Host "JIM configured for Scenario 004" -ForegroundColor Green
 
-    # Create department OUs needed for test users (Samba AD only — OpenLDAP uses flat OU)
+    # Create department OUs needed for test users (Samba AD and Active Directory; OpenLDAP uses flat OU)
     if (-not $isRfcDirectory) {
         Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
         $testDepartments = @("Information Technology", "Operations")
         foreach ($dept in $testDepartments) {
-            docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
+            $ouResult = New-DirectoryOu -DirectoryConfig $DirectoryConfig -Dn "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
+            if ($ouResult.Outcome -eq 'Created') {
                 Write-Host "  Created OU: $dept" -ForegroundColor Gray
             }
         }

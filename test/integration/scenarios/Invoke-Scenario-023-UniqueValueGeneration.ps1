@@ -90,6 +90,7 @@ $ConfirmPreference = 'None'
 
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Primary
@@ -304,10 +305,12 @@ function Assert-AccountNameInvariants {
 function New-OutOfBandLdapAccount {
     <#
     .SYNOPSIS
-        Creates a directory account directly against OpenLDAP or Samba AD, never through JIM, for the
-        Brownfield test step. Returns the account's DN.
+        Creates a directory account directly against OpenLDAP, Samba AD or Active Directory, never through
+        JIM, for the Brownfield test step. Returns the account's DN.
     .DESCRIPTION
-        OpenLDAP: a plain ldapadd over the configured bind. Samba AD: ldbadd routed through the running
+        OpenLDAP: a plain ldapadd over the configured bind. Active Directory: the same ldapadd of the Samba
+        AD account's attributes, over LDAPS through the toolbox (there is no ldb on a real domain controller,
+        and Invoke-DirectoryLdif sends LF-only LDIF regardless). Samba AD: ldbadd routed through the running
         server (never direct sam.ldb file access, which races the server's own writes; see Scenario 005's
         out-of-band account, whose pattern this follows), with LF-only line endings (Samba's ldb LDIF
         parser, unlike OpenLDAP's, does not tolerate a trailing \r from this file's CRLF here-strings).
@@ -333,11 +336,9 @@ function New-OutOfBandLdapAccount {
         if ($PreferredLanguage) { $lines += "preferredLanguage: $PreferredLanguage" }
         $ldif = ($lines -join "`n") + "`n"
 
-        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x `
-            -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" `
-            -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
-        if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
-            throw "Failed to create out-of-band OpenLDAP account '$AccountName': $result"
+        $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
+        if ($result.Outcome -eq 'Failed') {
+            throw "Failed to create out-of-band OpenLDAP account '$AccountName': $($result.Output)"
         }
         return $dn
     }
@@ -352,6 +353,14 @@ function New-OutOfBandLdapAccount {
         if ($EmployeeIdValue) { $lines += "employeeID: $EmployeeIdValue" }
         if ($PreferredLanguage) { $lines += "preferredLanguage: $PreferredLanguage" }
         $ldif = ($lines -join "`n") + "`n"
+
+        if (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig) {
+            $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation add
+            if ($result.Outcome -eq 'Failed') {
+                throw "Failed to create out-of-band Active Directory account '$AccountName': $($result.Output)"
+            }
+            return $dn
+        }
 
         $ldifPath = [System.IO.Path]::GetTempFileName()
         try {

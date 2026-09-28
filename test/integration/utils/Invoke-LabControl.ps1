@@ -104,7 +104,11 @@ function ConvertTo-LabControlArgument {
     if (Test-LabControlUnsafeText -Text $Argument) {
         throw "Invoke-LabControl: the argument '$($Argument -replace '[\r\n]', ' ')' holds a character that is unsafe on a remote command line (one of `$ `` % ; & | < > ^ ! `" or a line break). Refusing to send it."
     }
-    if ($Argument -eq '' -or $Argument -match '\s') {
+    # Quoted unless it is made only of characters no shell touches. A comma matters: with PowerShell as the
+    # host's OpenSSH shell an unquoted "a,b" is parsed as an array and reaches the script as two
+    # arguments, so a Distinguished Name would arrive in pieces. Double quotes are read the same way by
+    # cmd.exe and PowerShell for these values, and the argument cannot contain one (refused above).
+    if ($Argument -eq '' -or $Argument -notmatch '^[A-Za-z0-9._:\\/=-]+$') {
         return '"' + $Argument + '"'
     }
 

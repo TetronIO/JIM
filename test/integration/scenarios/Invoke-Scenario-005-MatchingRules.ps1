@@ -72,6 +72,7 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 # Default to SambaAD Primary if no config provided
 if (-not $DirectoryConfig) {
@@ -139,15 +140,16 @@ try {
     foreach ($user in $testUsers) {
         if ($isRfcDirectory) {
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $deleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $userDN
+            if ($deleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
             }
         }
         else {
-            $output = & docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-            if ($output -match "Deleted user") {
+            # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
+            $deleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user
+            if ($deleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
             }
@@ -201,18 +203,19 @@ try {
     # Create department OUs needed for test users AFTER Setup-Scenario-001
     # (Setup may recreate base Corp OU structure, so department OUs must come after)
     if (-not $isRfcDirectory) {
-        # Samba AD: DN expression uses OU=<Department>,OU=Users,OU=Corp,DC=panoply,DC=local
+        # Samba AD / Active Directory: DN expression uses OU=<Department>,OU=Users,OU=Corp,DC=panoply,DC=local
         Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
         $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
         foreach ($dept in $testDepartments) {
-            $result = docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            # -ViaServer: on Samba AD, through the running server rather than the database file (ignored on Active Directory)
+            $result = New-DirectoryOu -DirectoryConfig $DirectoryConfig -Dn "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -ViaServer
+            if ($result.Outcome -eq 'Created') {
                 Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
-            } elseif ($result -match "already exists") {
+            } elseif ($result.Outcome -eq 'AlreadyExists') {
                 Write-Host "  - OU $dept already exists" -ForegroundColor DarkGray
             } else {
                 # Fail loudly here rather than five tests later with a confusing missing-parent error.
-                throw "Failed to create department OU '$dept': $result"
+                throw "Failed to create department OU '$dept': $($result.Output)"
             }
         }
         Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
@@ -1390,9 +1393,11 @@ try {
 
         Write-Host "  Creating out-of-band directory account (not provisioned by JIM)..." -ForegroundColor Gray
 
-        if ($isRfcDirectory) {
-            $omjUserDN = "$($DirectoryConfig.UserRdnAttr)=$omjSamAccountName,$($DirectoryConfig.UserContainer)"
-            $omjLdif = @"
+        if ($isRfcDirectory -or (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig)) {
+            if ($isRfcDirectory) {
+                $omjDirectoryLabel = "OpenLDAP"
+                $omjUserDN = "$($DirectoryConfig.UserRdnAttr)=$omjSamAccountName,$($DirectoryConfig.UserContainer)"
+                $omjLdif = @"
 dn: $omjUserDN
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
@@ -1407,16 +1412,41 @@ mail: $omjEmail
 employeeNumber: $omjEmployeeId
 userPassword: Password123!
 "@
-            $omjCreateResult = $omjLdif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
-
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  ✓ Created out-of-band account $omjSamAccountName in OpenLDAP (DN: $omjUserDN)" -ForegroundColor Green
             }
-            elseif ($omjCreateResult -match "already exists") {
+            else {
+                # Active Directory: a plain ldapadd over LDAPS as the administrator, at the same DN and with the same
+                # attributes as the Samba AD account below. There is no ldb here, and no need for it: the CR-versus-LF
+                # trouble is the ldb LDIF parser's, and Invoke-DirectoryLdif sends LF-only LDIF regardless. The account
+                # carries no password, so it is created disabled, which the join assertions do not depend on.
+                $omjDirectoryLabel = "Active Directory"
+                $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
+                $omjLdif = @"
+dn: $omjUserDN
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: $omjDisplayName
+sn: $omjLastName
+givenName: $omjFirstName
+sAMAccountName: $omjSamAccountName
+displayName: $omjDisplayName
+userPrincipalName: $omjEmail
+mail: $omjEmail
+department: $omjDepartment
+employeeID: $omjEmployeeId
+"@
+            }
+            $omjCreateResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $omjLdif -Operation add
+
+            if ($omjCreateResult.Outcome -eq 'Created') {
+                Write-Host "  ✓ Created out-of-band account $omjSamAccountName in $omjDirectoryLabel (DN: $omjUserDN)" -ForegroundColor Green
+            }
+            elseif ($omjCreateResult.Outcome -eq 'AlreadyExists') {
                 Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
             }
             else {
-                throw "Failed to create out-of-band OpenLDAP account: $omjCreateResult"
+                throw "Failed to create out-of-band $omjDirectoryLabel account: $($omjCreateResult.Output)"
             }
         }
         else {
@@ -1602,21 +1632,22 @@ employeeID: $omjEmployeeId
         $omjCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
 
         if ($isRfcDirectory) {
-            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$omjUserDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $omjDeleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $omjUserDN
+            if ($omjDeleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
             }
             else {
-                Write-Host "  ⚠ Could not delete out-of-band directory account: $omjDeleteResult" -ForegroundColor Yellow
+                Write-Host "  ⚠ Could not delete out-of-band directory account: $($omjDeleteResult.Output)" -ForegroundColor Yellow
             }
         }
         else {
-            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$omjSamAccountName' 2>&1; echo EXIT_CODE:`$?"
-            if ($omjDeleteResult -match "Deleted user") {
+            # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
+            $omjDeleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $omjSamAccountName
+            if ($omjDeleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
             }
             else {
-                Write-Host "  ⚠ Could not delete out-of-band directory account: $omjDeleteResult" -ForegroundColor Yellow
+                Write-Host "  ⚠ Could not delete out-of-band directory account: $($omjDeleteResult.Output)" -ForegroundColor Yellow
             }
         }
         Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray

@@ -119,6 +119,7 @@ if ($Template -in $longTailTemplates) {
 
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
@@ -208,24 +209,24 @@ function Remove-LDAPTestUsers {
     param([object[]]$Users, [hashtable]$DirectoryConfig)
     if (Test-IsRfcDirectory $DirectoryConfig) {
         # OpenLDAP / 389 Directory Server path - use ldapdelete via the container.
-        # -H is required: the lab containers listen on non-default ports (1389 / 3389), and
-        # without an explicit URI ldapdelete defaults to ldap://localhost:389 and silently fails to connect.
-        $ldapUri = "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)"
+        # Remove-DirectoryEntry passes -H explicitly: the lab containers listen on non-default ports
+        # (1389 / 3389), and without an explicit URI ldapdelete defaults to ldap://localhost:389 and
+        # silently fails to connect.
         foreach ($u in $Users) {
             $dn = "uid=$($u.samAccountName),$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H $ldapUri `
-                -D $DirectoryConfig.BindDN -w $DirectoryConfig.BindPassword $dn 2>&1
-            # Exit 0 = deleted, 32 = no such object (idempotent no-op). Anything else
+            $deleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $dn
+            # Deleted, or NotFound (LDAP result 32, an idempotent no-op). Anything else
             # would silently leave stale entries in the directory, so surface it.
-            if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 32) {
-                throw "ldapdelete failed for $dn (exit $LASTEXITCODE): $output"
+            if ($deleteResult.Outcome -eq 'Failed') {
+                throw "ldapdelete failed for $dn (exit $($deleteResult.ExitCode)): $($deleteResult.Output)"
             }
         }
     }
     else {
-        # Samba AD - samba-tool user delete (no-op silently if user doesn't exist)
+        # Samba AD - samba-tool user delete (no-op silently if user doesn't exist); Active Directory - a
+        # lookup by sAMAccountName and an LDAPS delete (likewise a no-op if the account is not there).
         foreach ($u in $Users) {
-            docker exec samba-ad-primary bash -c "samba-tool user delete '$($u.samAccountName)' 2>&1" | Out-Null
+            Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $u.samAccountName | Out-Null
         }
     }
 }
@@ -300,7 +301,7 @@ function Reset-JIMForCascadeTest {
     # are invalid" (TestDirectoryConnectivity certificate validation). The helper decides per directory
     # (Samba AD's self-signed CA, the 389 Directory Server lab CA) from the config's DirectoryType.
     if ($DirectoryConfig.UseSSL) {
-        Write-Host "  Re-trusting $($DirectoryConfig.ContainerName)'s CA (the reset removed it)..." -ForegroundColor Gray
+        Write-Host "  Re-trusting $(if ($DirectoryConfig.ContainerName) { $DirectoryConfig.ContainerName } else { $DirectoryConfig.Host })'s CA (the reset removed it)..." -ForegroundColor Gray
         Add-DirectoryCertificateToJimStore -DirectoryConfig $DirectoryConfig -JIMUrl $JIMUrl -ApiKey $ApiKey
     }
 
@@ -414,11 +415,12 @@ try {
     }
 
     # Wait for the LDAP directory to be healthy (matches Scenario 009's pattern)
-    $containerName = if ($isRfcDirectory) { $DirectoryConfig.ContainerName } else { "samba-ad-primary" }
+    # (Samba AD's Host is its container name; Active Directory has no container, so its health is an LDAPS bind.)
+    $containerName = if ($isRfcDirectory) { $DirectoryConfig.ContainerName } else { $DirectoryConfig.Host }
     Write-Host "Waiting for $containerName to be healthy..." -ForegroundColor Gray
     $elapsed = 0; $maxWait = 120
     while ($elapsed -lt $maxWait) {
-        $status = docker inspect --format='{{.State.Health.Status}}' $containerName 2>&1
+        $status = Get-DirectoryHealthStatus -DirectoryConfig $DirectoryConfig
         if ($status -eq "healthy") { break }
         Start-Sleep -Seconds 5
         $elapsed += 5

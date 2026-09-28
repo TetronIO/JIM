@@ -94,9 +94,14 @@ Describe 'Get-LabControlCommand' {
         (Get-LabControlCommand -Script 'x.ps1' -Arguments @('-Note', ''))[-1] | Should -Match ([regex]::Escape('-Note ""'))
     }
 
-    It 'leaves a comma-separated list of names as one argument' {
-        (Get-LabControlCommand -Script 'x.ps1' -Arguments @('-ExtraCertificateNames', 'dc1,dc1.panoply.local'))[-1] |
-            Should -Match ([regex]::Escape('-ExtraCertificateNames dc1,dc1.panoply.local'))
+    It 'quotes a comma-separated value so PowerShell on the host does not split it into an array' {
+        (Get-LabControlCommand -Script 'x.ps1' -Arguments @('-ContainerDn', 'OU=Corp,DC=panoply,DC=local'))[-1] |
+            Should -Match ([regex]::Escape('-ContainerDn "OU=Corp,DC=panoply,DC=local"'))
+    }
+
+    It 'leaves a plain name, a switch and a Windows path unquoted' {
+        (Get-LabControlCommand -Script 'x.ps1' -Arguments @('-Name', 'dc-primary', '-AsJson'))[-1] |
+            Should -Match ([regex]::Escape('-Name dc-primary -AsJson'))
     }
 
     It 'refuses an argument the remote shell could interpret' -ForEach @(
