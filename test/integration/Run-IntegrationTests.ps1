@@ -4155,6 +4155,15 @@ Write-Host ""
 
 if ($scenarioExitCode -eq 0) {
     Write-Host "${GREEN}✓ All tests passed!${NC}"
+
+    # A pass that never crossed a synchronisation page boundary proves nothing about the code the worker runs
+    # between pages; see Test-TemplateSpansSyncPages. Say so where the pass is reported, so a reader cannot
+    # mistake an iteration run for a sign-off. Template-irrelevant scenarios assert against fixed data and
+    # are exempt.
+    if ((Test-TemplateRelevant -ScenarioName $Scenario) -and -not (Test-TemplateSpansSyncPages -Template $Template)) {
+        Write-Host "${YELLOW}⚠ Single-page run: -Template $Template fits in one synchronisation page, so page-boundary code was not exercised.${NC}"
+        Write-Host "${YELLOW}  Not a sign-off for synchronisation or worker changes; re-run at Medium or above (Pre-Release uses Medium for Samba AD, Large for OpenLDAP and 389 Directory Server).${NC}"
+    }
 }
 else {
     Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"
