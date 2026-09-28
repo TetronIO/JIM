@@ -42,7 +42,7 @@ JIM's certificate is not set in `.env`. The production compose file reads it fro
 | `tls/tls.crt` | JIM's certificate, followed by any intermediate CA certificates                                 |
 | `tls/tls.key` | Its unencrypted private key, belonging to UID `1654` with mode `400`                            |
 
-To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/secrets/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. See [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) for providing, creating and renewing the certificate.
+To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. See [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) for providing, creating and renewing the certificate.
 
 ---
 

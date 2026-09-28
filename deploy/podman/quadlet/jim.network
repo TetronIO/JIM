@@ -1,0 +1,10 @@
+# JIM on Podman: the network the JIM and database pods share
+#
+# A Quadlet unit: systemd creates the network before either pod starts. JIM reaches the bundled database on it at
+# the host name jim-database.
+
+[Unit]
+Description=JIM network
+
+[Network]
+NetworkName=jim

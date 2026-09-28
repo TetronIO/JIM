@@ -51,9 +51,9 @@ Docker Compose first warns that a `secret file ... does not exist`, then stops w
 
 **How to fix.** Run the installer's certificate step, which creates a certificate or installs your organisation's: `sudo /opt/jim/setup.sh --certificate` (from an installation made by hand, run the `setup.sh` you downloaded or the one in the release bundle, with `JIM_INSTALL_DIR=/opt/jim`). To place the files yourself instead, see [The certificate](deployment.md#the-certificate). Then run your `docker compose ... up -d` command again.
 
-### `jim.web` keeps restarting with `Access to the path '/run/secrets/jim-tls/tls.key' is denied`
+### `jim.web` keeps restarting with `Access to the path '/run/jim-tls/tls.key' is denied`
 
-The `jim.web` log shows `System.UnauthorizedAccessException: Access to the path '/run/secrets/jim-tls/tls.key' is denied`, and the container restarts again and again.
+The `jim.web` log shows `System.UnauthorizedAccessException: Access to the path '/run/jim-tls/tls.key' is denied`, and the container restarts again and again.
 
 **What it means.** JIM runs as UID `1654` with every capability dropped, and Docker mounts the key with the owner and mode it has on the host, so JIM cannot read a key that belongs to anyone else. The other services, and your data, are unaffected.
 
