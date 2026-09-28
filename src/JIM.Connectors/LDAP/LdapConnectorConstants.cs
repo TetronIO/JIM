@@ -100,6 +100,15 @@ internal static class LdapConnectorConstants
     internal const int MAX_MODIFY_BATCH_SIZE = 5000;
 
     /// <summary>
+    /// Page size for the connector's own metadata searches (the schema's classes and attributes, a partition's
+    /// containers, the forest's domain controllers), sent as a non-critical paged-results control wherever the
+    /// directory pages (see <see cref="LdapPagedSearch"/>). Active Directory refuses an unpaged search with
+    /// sizeLimitExceeded once it would exceed MaxPageSize (1,000 by default) and caps each page at that same limit,
+    /// so 1,000 reads a stock forest's 1,500-odd attributeSchema entries in two pages and is never turned away.
+    /// </summary>
+    internal const int METADATA_SEARCH_PAGE_SIZE = 1000;
+
+    /// <summary>
     /// LDAP_SERVER_SHOW_DELETED_OID - Server control that allows searching for deleted (tombstone) objects.
     /// When included in a search request, the directory returns objects from the Deleted Objects container.
     /// Required for delta import deletion detection in Active Directory.

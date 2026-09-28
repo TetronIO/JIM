@@ -14,13 +14,16 @@ namespace JIM.Connectors.LDAP;
 /// </summary>
 internal class LdapConnectorDirectoryServers
 {
-    private readonly LdapConnection _connection;
+    private readonly ILdapOperationExecutor _executor;
     private readonly ILogger _logger;
+    private readonly bool _supportsPaging;
 
-    internal LdapConnectorDirectoryServers(LdapConnection ldapConnection, ILogger logger)
+    /// <param name="supportsPaging">Whether the directory honours the paged-results control (<see cref="LdapConnectorRootDse.SupportsPaging"/>).</param>
+    internal LdapConnectorDirectoryServers(ILdapOperationExecutor executor, ILogger logger, bool supportsPaging)
     {
-        _connection = ldapConnection;
+        _executor = executor;
         _logger = logger;
+        _supportsPaging = supportsPaging;
     }
 
     /// <summary>
@@ -33,22 +36,21 @@ internal class LdapConnectorDirectoryServers
     {
         return await Task.Run(() =>
         {
-            var configurationNamingContext = LdapConnectorUtilities.GetConfigurationNamingContext(_connection, _logger);
+            var configurationNamingContext = LdapConnectorUtilities.GetConfigurationNamingContext(_executor, _logger);
             if (string.IsNullOrEmpty(configurationNamingContext))
                 throw new InvalidOperationException("Couldn't get configuration naming context from rootDSE, so domain controllers cannot be discovered.");
 
             var sitesDn = $"CN=Sites,{configurationNamingContext}";
             var request = new SearchRequest(sitesDn, "(objectClass=nTDSDSA)", SearchScope.Subtree);
             request.Attributes.Add("distinguishedName");
-            var response = (SearchResponse)_connection.SendRequest(request);
+            var ntdsDsaEntries = LdapPagedSearch.ReadAll(_executor, request, _supportsPaging, LdapConnectorConstants.METADATA_SEARCH_PAGE_SIZE, _logger, "domain controller");
 
-            _logger.Debug("GetDirectoryServersAsync: Found {Count} nTDSDSA entries under {SitesDn}", response.Entries.Count, sitesDn);
+            _logger.Debug("GetDirectoryServersAsync: Found {Count} nTDSDSA entries under {SitesDn}", ntdsDsaEntries.Count, sitesDn);
 
             // One base-scope lookup per server object for its dNSHostName. The number of domain controllers in
             // a forest is small (single/low-double digits in virtually every deployment), so an N+1 query shape
             // here is a non-issue; it also keeps the mapping logic below independent of any batching scheme.
-            var entries = response.Entries
-                .Cast<SearchResultEntry>()
+            var entries = ntdsDsaEntries
                 .Select(entry =>
                 {
                     var ntdsDsaDn = entry.DistinguishedName;
@@ -72,7 +74,7 @@ internal class LdapConnectorDirectoryServers
         {
             var request = new SearchRequest(serverDn, "(objectClass=server)", SearchScope.Base);
             request.Attributes.Add("dNSHostName");
-            var response = (SearchResponse)_connection.SendRequest(request);
+            var response = (SearchResponse)_executor.SendRequest(request);
 
             return response.Entries.Count == 0
                 ? null

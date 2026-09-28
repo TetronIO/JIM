@@ -217,7 +217,13 @@ internal class LdapConnectorRootDse
     /// Microsoft AD supports paging; Samba AD claims support but returns duplicate results.
     /// OpenLDAP supports paging via Simple Paged Results control.
     /// </summary>
-    public bool SupportsPaging => DirectoryType switch
+    public bool SupportsPaging => DirectoryTypeSupportsPaging(DirectoryType);
+
+    /// <summary>
+    /// Whether a directory of the given type honours the paged-results control, for callers that hold the type
+    /// rather than the rootDSE it was read from.
+    /// </summary>
+    internal static bool DirectoryTypeSupportsPaging(LdapDirectoryType directoryType) => directoryType switch
     {
         LdapDirectoryType.ActiveDirectory => true,
         LdapDirectoryType.SambaAD => false,
@@ -225,6 +231,5 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.Generic => true,
         LdapDirectoryType.DirectoryServer389 => true,
         _ => true
-
     };
 }
