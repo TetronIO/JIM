@@ -57,11 +57,17 @@ The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=44
 
 **How to fix.** As root: `echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system`, then `sudo systemctl --user -M jim@ restart jim.service`. Or move JIM to a port of 1024 or above (see [Port Mapping](deployment.md#port-mapping)).
 
+### On Ubuntu, JIM never becomes ready, and its logs show `Permission denied` or `Resource temporarily unavailable`
+
+**What it means.** On Ubuntu 24.04, Podman's own AppArmor profiles stop a rootful JIM's containers using the network at all. `jim-web` logs `OIDC discovery attempt 1/5 failed: Permission denied`, `jim-worker` logs `The database is not reachable yet ... Resource temporarily unavailable`, and `sudo dmesg | grep DENIED` shows `profile="crun"` with `class="net"`.
+
+**How to fix.** Allow the network in the profiles' local overrides, as [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor) shows, then restart JIM: `sudo systemctl restart jim-database.service jim.service`. The installer offers this; you need it by hand only on a host set up without the installer, or where the offer was declined.
+
 ### Other machines cannot reach JIM, but it answers on the server itself
 
 **What it means.** A firewall on the server blocks JIM's port: on RHEL, firewalld, until you allow the port.
 
-**How to fix.** `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port). If Docker is installed on the same server as a rootful Podman JIM, the default, Docker's firewall rules also drop the traffic; see [Firewall and SELinux](podman.md#firewall-and-selinux).
+**How to fix.** `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port). If Docker is installed on the same server as a rootful Podman JIM, the default, Docker's firewall rules also drop the traffic; see [Firewall, SELinux and AppArmor](podman.md#firewall-selinux-and-apparmor).
 
 ## HTTPS
 

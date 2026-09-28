@@ -366,6 +366,10 @@ Delivered as one PR: the files, the installer, the release and the documentation
    **Found on its first run:**
    - `.env.example` set `JIM_SSO_VALID_ISSUERS` to the development Keycloak's issuer, so every Docker installation trusted that issuer too. Fixed in this phase: the value moved into `docker-compose.override.yml`.
    - Docker Compose's `env_file` gives the database container every JIM setting and secret, which it never needed ([#1862](https://github.com/TetronIO/JIM/issues/1862)). It is listed as intended until that is fixed.
+
+   **Found on GitHub's Ubuntu runner (Podman 4.9), and fixed in this phase:**
+   - **Rootful JIM on Ubuntu 24.04 had no network at all.** Ubuntu gives `crun` and `podman` AppArmor profiles of their own; a container that sets no-new-privileges cannot leave them for `containers-default`, so AppArmor stacks the two (`containers-default//&crun`), and the stack denies every socket (`failed af match`). JIM reached neither PostgreSQL nor its identity provider, while its health checks stayed green: the worker was deliberately waiting. Rootless Podman, Docker and RHEL are unaffected. `setup.sh` now offers, as it does for the firewall, to add a network rule to each profile's local override in `/etc/apparmor.d/local/`; the container keeps its own profile. Removing the two profiles instead was measured and rejected: it breaks rootless Podman for every account on the host.
+   - **`setup.sh` ran the rootless account's Podman with the caller's environment,** and GitHub's sudo keeps `XDG_CONFIG_HOME`, so Podman read the runner's configuration folder and failed. The account's commands now get a clean environment, keeping proxy settings.
 5. **Required check:** pending. Informational until it has passed ten consecutive runs (D6); then an administrator adds it to the `main` ruleset.
 6. **Manual acceptance:** pending. The RHEL virtual machine run from D5, covering `setup.sh` rootless and rootful and the D12 playbook, recorded in the PR that closes #1808.
 
