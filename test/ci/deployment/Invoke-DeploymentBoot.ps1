@@ -114,8 +114,12 @@ function Get-RuntimeCommand {
         return $elevate + $Runtime
     }
     $uid = Invoke-Native @('id', '-u', $account)
+    $accountHome = (Invoke-Native @('getent', 'passwd', $account)).Split(':')[5]
     $asAccount = if ($isRoot) { @('runuser', '-u', $account, '--') } else { @('sudo', '-u', $account) }
-    $asAccount + @('env', "XDG_RUNTIME_DIR=/run/user/$uid", 'podman')
+    # With a clean environment, as setup.sh uses: sudo may keep the caller's XDG_CONFIG_HOME, which would point
+    # Podman at a folder the account cannot read.
+    $asAccount + @('env', '-i', 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', "HOME=$accountHome",
+        "XDG_RUNTIME_DIR=/run/user/$uid", 'podman')
 }
 
 function Invoke-Runtime {
@@ -194,7 +198,8 @@ function Test-ContainerHealthy {
 
 function Wait-AllHealthy {
     foreach ($name in $containers.Values) {
-        Wait-Until -TimeoutMinutes 5 -Description "$name healthy" -Condition { Test-ContainerHealthy $name }.GetNewClosure()
+        # Called afresh by Wait-Until, the condition sees this function's $name, and the script's functions.
+        Wait-Until -TimeoutMinutes 5 -Description "$name healthy" -Condition { Test-ContainerHealthy $name }
     }
 }
 
