@@ -250,7 +250,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // the Connected System after schema import, saving any changes.
             AutoTuneExportConcurrency(settingValues, rootDse, logger);
 
-            var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
+            var ldapConnectorSchema = new LdapConnectorSchema(new LdapOperationExecutor(_connection), logger, rootDse, includeAuxiliaryClasses);
             return await ldapConnectorSchema.GetSchemaAsync();
         }
         finally
@@ -481,7 +481,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 throw new NotSupportedException(
                     $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
 
-            var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(_connection, logger);
+            var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
             return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
         }
         finally

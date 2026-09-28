@@ -981,11 +981,15 @@ internal static class LdapConnectorUtilities
     /// ("CN=Configuration,DC=..."), used to locate the CN=Sites subtree for domain controller discovery
     /// (issue #1167).
     /// </summary>
-    internal static string? GetConfigurationNamingContext(LdapConnection connection, ILogger logger)
+    internal static string? GetConfigurationNamingContext(LdapConnection connection, ILogger logger) =>
+        GetConfigurationNamingContext(new LdapOperationExecutor(connection), logger);
+
+    /// <inheritdoc cref="GetConfigurationNamingContext(LdapConnection, ILogger)"/>
+    internal static string? GetConfigurationNamingContext(ILdapOperationExecutor executor, ILogger logger)
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
         request.Attributes.Add("configurationNamingContext");
-        var response = (SearchResponse)connection.SendRequest(request);
+        var response = (SearchResponse)executor.SendRequest(request);
 
         if (response.ResultCode != ResultCode.Success)
         {
