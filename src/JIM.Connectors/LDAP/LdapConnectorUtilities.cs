@@ -72,10 +72,16 @@ internal static class LdapConnectorUtilities
     {
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count == 0) return null;
+        return GetAttributeGuidValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName);
+    }
+
+    /// <inheritdoc cref="GetAttributeStringValues"/>
+    internal static List<Guid>? GetAttributeGuidValues(DirectoryAttribute? attribute, string attributeName, string? entryDn)
+    {
+        if (attribute == null || attribute.Count == 0) return null;
 
         var guidValues = new List<Guid>();
-        foreach (byte[] byteValue in entry.Attributes[attributeName])
+        foreach (byte[] byteValue in attribute.GetValues(typeof(byte[])))
             guidValues.Add(IdentifierParser.FromMicrosoftBytes(byteValue));
 
         if (guidValues.Count == 0)
@@ -88,7 +94,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = guidValues.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeGuidValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), guidValues.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entryDn), guidValues.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -251,10 +257,19 @@ internal static class LdapConnectorUtilities
     {
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count == 0) return null;
+        return GetAttributeStringValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName);
+    }
+
+    /// <summary>
+    /// Reads the values of an attribute already in hand, for a caller holding one the directory answered in ranges
+    /// (<see cref="LdapRangedAttribute"/>) rather than the entry it came from.
+    /// </summary>
+    internal static List<string>? GetAttributeStringValues(DirectoryAttribute? attribute, string attributeName, string? entryDn)
+    {
+        if (attribute == null || attribute.Count == 0) return null;
 
         // Strip null bytes and filter out empty strings (treat as "no value")
-        var values = (from string value in entry.Attributes[attributeName].GetValues(typeof(string))
+        var values = (from string value in attribute.GetValues(typeof(string))
             let cleanedValue = value.Replace("\0", string.Empty)
             where !string.IsNullOrEmpty(cleanedValue)
             select cleanedValue).ToList();
@@ -270,7 +285,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = values.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeStringValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), values.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entryDn), values.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -280,9 +295,15 @@ internal static class LdapConnectorUtilities
     {
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count == 0) return null;
+        return GetAttributeBinaryValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName);
+    }
 
-        var binaryValues = (from byte[] value in entry.Attributes[attributeName].GetValues(typeof(byte[]))
+    /// <inheritdoc cref="GetAttributeStringValues"/>
+    internal static List<byte[]>? GetAttributeBinaryValues(DirectoryAttribute? attribute, string attributeName, string? entryDn)
+    {
+        if (attribute == null || attribute.Count == 0) return null;
+
+        var binaryValues = (from byte[] value in attribute.GetValues(typeof(byte[]))
             select value).ToList();
 
         if (binaryValues.Count == 0)
@@ -296,7 +317,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = binaryValues.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeBinaryValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), binaryValues.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entryDn), binaryValues.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -332,11 +353,17 @@ internal static class LdapConnectorUtilities
     {
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count == 0) return null;
+        return GetAttributeIntValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName);
+    }
+
+    /// <inheritdoc cref="GetAttributeStringValues"/>
+    internal static List<int>? GetAttributeIntValues(DirectoryAttribute? attribute, string attributeName, string? entryDn)
+    {
+        if (attribute == null || attribute.Count == 0) return null;
 
         // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
         var result = new List<int>();
-        foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
+        foreach (string value in attribute.GetValues(typeof(string)))
         {
             if (int.TryParse(value, out var intValue))
             {
@@ -354,7 +381,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = result.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeIntValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), result.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entryDn), result.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -364,11 +391,17 @@ internal static class LdapConnectorUtilities
     {
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
-        if (entry.Attributes[attributeName].Count == 0) return null;
+        return GetAttributeLongValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName);
+    }
+
+    /// <inheritdoc cref="GetAttributeStringValues"/>
+    internal static List<long>? GetAttributeLongValues(DirectoryAttribute? attribute, string attributeName, string? entryDn)
+    {
+        if (attribute == null || attribute.Count == 0) return null;
 
         // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
         var result = new List<long>();
-        foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
+        foreach (string value in attribute.GetValues(typeof(string)))
         {
             if (long.TryParse(value, out var longValue))
             {
@@ -386,7 +419,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = result.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeLongValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), result.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entryDn), result.Count, uniqueValues.Count);
         }
 
         return uniqueValues;

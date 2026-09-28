@@ -46,6 +46,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     internal string? PinValidationWarning { get; private set; }
 
     /// <summary>
+    /// Where the follow-up reads of an attribute the directory answered in ranges go
+    /// (<see cref="LdapRangedAttribute"/>). The import's own connection; settable so a test can answer them.
+    /// </summary>
+    internal ILdapOperationExecutor RangeExecutor { get; set; }
+
+    /// <summary>
     /// Set when this session's change source may have missed something: JIM could not confirm that the account it
     /// connects as may read where the directory keeps its changes (for Active Directory, a partition's Deleted
     /// Objects container), or a search there was refused or found no container (#1723). One note per subject, the
@@ -108,6 +114,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = runProfile;
         _connection = connection;
+        RangeExecutor = new LdapOperationExecutor(connection);
         _connectionFactory = connectionFactory;
         _importConcurrency = Math.Clamp(importConcurrency, 1, LdapConnectorConstants.MAX_IMPORT_CONCURRENCY);
         _paginationTokens = paginationTokens;
@@ -988,8 +995,20 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             importObject.ObjectType = objectType.Name;
 
             // start populating import object attribute values from the search result
-            foreach (string attributeName in searchResult.Attributes.AttributeNames)
+            foreach (string attributeDescription in searchResult.Attributes.AttributeNames)
             {
+                // Active Directory answers a multi-valued attribute over its MaxValRange (1,500 by default) as
+                // "member;range=0-1499" and leaves the plain attribute out of the entry. The range option is not part
+                // of the attribute's name, so it is stripped for the schema lookup, and the values past the first
+                // range are read before the attribute is (#1853).
+                var attributeName = attributeDescription;
+                var attribute = searchResult.Attributes[attributeDescription];
+                if (LdapRangedAttribute.TryParse(attributeDescription, out var rangedAttributeName, out _, out _))
+                {
+                    attributeName = rangedAttributeName;
+                    attribute = LdapRangedAttribute.ReadAll(RangeExecutor, searchResult, attributeDescription, _searchTimeout, _logger);
+                }
+
                 // get the schema attribute for this search result attribute, so we can work out what type it is
                 var schemaAttribute = objectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
                 if (schemaAttribute == null)
@@ -1009,19 +1028,19 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                 switch (importObjectAttribute.Type)
                 {
                     case AttributeDataType.Text:
-                        var stringValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
+                        var stringValues = LdapConnectorUtilities.GetAttributeStringValues(attribute, attributeName, searchResult.DistinguishedName);
                         if (stringValues is { Count: > 0 })
                             importObjectAttribute.StringValues.AddRange(stringValues);
                         break;
 
                     case AttributeDataType.Number:
-                        var numberValues = LdapConnectorUtilities.GetEntryAttributeIntValues(searchResult, attributeName);
+                        var numberValues = LdapConnectorUtilities.GetAttributeIntValues(attribute, attributeName, searchResult.DistinguishedName);
                         if (numberValues is { Count: > 0 })
                             importObjectAttribute.IntValues.AddRange(numberValues);
                         break;
 
                     case AttributeDataType.LongNumber:
-                        var longNumberValues = LdapConnectorUtilities.GetEntryAttributeLongValues(searchResult, attributeName);
+                        var longNumberValues = LdapConnectorUtilities.GetAttributeLongValues(attribute, attributeName, searchResult.DistinguishedName);
                         if (longNumberValues is { Count: > 0 })
                         {
                             // Filter out protected attribute default values.
@@ -1050,19 +1069,19 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                         break;
 
                     case AttributeDataType.Guid:
-                        var guidValues = LdapConnectorUtilities.GetEntryAttributeGuidValues(searchResult, attributeName);
+                        var guidValues = LdapConnectorUtilities.GetAttributeGuidValues(attribute, attributeName, searchResult.DistinguishedName);
                         if (guidValues is { Count: > 0 })
                             importObjectAttribute.GuidValues.AddRange(guidValues);
                         break;
 
                     case AttributeDataType.Binary:
-                        var binaryValues = LdapConnectorUtilities.GetEntryAttributeBinaryValues(searchResult, attributeName);
+                        var binaryValues = LdapConnectorUtilities.GetAttributeBinaryValues(attribute, attributeName, searchResult.DistinguishedName);
                         if (binaryValues is { Count: > 0 })
                             importObjectAttribute.ByteValues.AddRange(binaryValues);
                         break;
 
                     case AttributeDataType.Reference:
-                        var referenceValues = LdapConnectorUtilities.GetEntryAttributeStringValues(searchResult, attributeName);
+                        var referenceValues = LdapConnectorUtilities.GetAttributeStringValues(attribute, attributeName, searchResult.DistinguishedName);
                         if (referenceValues is { Count: > 0 })
                         {
                             // Filter out the placeholder member DN so it never enters the metaverse.
