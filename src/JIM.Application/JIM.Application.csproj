@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DynamicExpresso.Core" Version="2.19.5" />
+    <PackageReference Include="DynamicExpresso.Core" Version="2.19.6" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.12" />
     <!-- Already present through Data Protection; referenced directly because HostRunner uses it. -->
