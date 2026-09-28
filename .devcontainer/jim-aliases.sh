@@ -53,7 +53,8 @@ Docker Builds (auto-kills local JIM processes, rebuild + start):
         when API surface changes.
 
 Reset:
-  jim-reset          - Full reset (containers, images, volumes)
+  jim-reset          - Full reset (containers, images, volumes); keeps Scenario 016's database servers
+  jim-reset-all      - jim-reset, and also removes Scenario 016's database servers (slow to recreate)
   jim-wipe           - Wipe JIM data (reset CSOs/MVOs/config, keep schema)
   jim-cleanup        - Free disk space (prune orphaned volumes and unused images)
 
@@ -564,7 +565,7 @@ _jim_heal_docker_creds() {
 }
 
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
-unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-light jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
+unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-light jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-reset-all jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
 
 # Docker stack management
 jim-stack() {
@@ -655,9 +656,11 @@ jim-cleanup() {
 # NOTE: docker image prune --filter "label!=X" with multiple filters is broken —
 # it deletes labelled images despite the exclusion. Work around this by collecting
 # the IDs of images to preserve, pruning everything, then checking nothing was lost.
+# Any arguments are extra image references to preserve as well (jim-reset passes Scenario 016's database images).
 _jim_prune_images_preserving_snapshots() {
   local preserve_ids
-  preserve_ids=$(docker images --filter "label=jim.samba.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
+  preserve_ids=$(for ref in "$@"; do docker images -q "$ref" 2>/dev/null; done; \
+                 docker images --filter "label=jim.samba.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.samba.build-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.openldap.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.openldap.build-hash" --filter "dangling=false" -q 2>/dev/null; \
@@ -684,7 +687,29 @@ _jim_prune_images_preserving_snapshots() {
 }
 
 # Reset (preserves Samba AD, OpenLDAP and 389 Directory Server snapshot and build images; they take a long time to build)
+# Scenario 016's two database servers (the integration compose file's phase2 profile). Oracle's image is 13.6GB and its
+# first boot creates the database from scratch (tens of minutes), so the integration runner's reset deliberately keeps
+# them (Run-IntegrationTests.ps1, Step 1) and Scenario 016 recreates its schema every run, so a kept one is never stale.
+# jim-reset keeps them for the same reason; jim-reset-all removes them too. Volume names mirror the runner's
+# $preservedVolumes; image names come from the compose file.
+_JIM_PHASE2_CONTAINERS=(sqlserver-hris-a oracle-hris-b)
+_JIM_PHASE2_VOLUMES=(jim-integration-sqlserver-data jim-integration-oracle-data)
+
+_jim_phase2_images() {
+  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 config --images \
+    "${_JIM_PHASE2_CONTAINERS[@]}" 2>/dev/null
+}
+
 jim-reset() {
+  _jim_reset keep-phase2
+}
+
+jim-reset-all() {
+  _jim_reset all
+}
+
+_jim_reset() {
+  local mode="$1"
   # Stop any natively-run JIM.Web/Worker/Scheduler processes so they don't squat on host ports (e.g. 5200)
   local native_pids
   native_pids=$(pgrep -f '/JIM\.(Web|Worker|Scheduler)$' 2>/dev/null || true)
@@ -699,11 +724,28 @@ jim-reset() {
 
   docker compose $(_jim_compose) down --volumes
   docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 --profile scenario-008 --profile dirsrv down --volumes --remove-orphans 2>/dev/null || true
-  docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
-  _jim_prune_images_preserving_snapshots
-  docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true
+  docker rm -f samba-ad-primary samba-ad-source samba-ad-target postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
+
+  local keep_volumes_pattern='^$'
+  if [ "$mode" = "all" ]; then
+    docker rm -f "${_JIM_PHASE2_CONTAINERS[@]}" 2>/dev/null || true
+    _jim_prune_images_preserving_snapshots
+  else
+    # Keep the containers themselves (stopped or running), their images and their volumes.
+    local phase2_images
+    mapfile -t phase2_images < <(_jim_phase2_images)
+    _jim_prune_images_preserving_snapshots "${phase2_images[@]}"
+    keep_volumes_pattern="^($(IFS='|'; echo "${_JIM_PHASE2_VOLUMES[*]}"))\$"
+  fi
+
+  docker volume ls --format "{{.Name}}" | grep jim-integration | grep -Ev "$keep_volumes_pattern" | xargs -r docker volume rm 2>/dev/null || true
   docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true
-  echo "JIM reset complete. Containers, images, and volumes removed (Samba AD, OpenLDAP and 389 Directory Server snapshot and build images preserved). Run jim-build to rebuild."
+
+  if [ "$mode" = "all" ]; then
+    echo "JIM reset complete. Containers, images, and volumes removed, including Scenario 016's database servers (Samba AD, OpenLDAP and 389 Directory Server snapshot and build images preserved). Run jim-build to rebuild."
+  else
+    echo "JIM reset complete. Containers, images, and volumes removed (Samba AD, OpenLDAP and 389 Directory Server snapshot and build images preserved; Scenario 016's database servers kept, use jim-reset-all to remove them too). Run jim-build to rebuild."
+  fi
 }
 
 # Documentation preview (MkDocs Material)

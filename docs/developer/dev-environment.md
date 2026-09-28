@@ -120,7 +120,8 @@ Rebuild and restart services after code changes:
 
 | Alias | Description |
 |-------|-------------|
-| `jim-reset` | Reset JIM (delete database and log volumes) |
+| `jim-reset` | Full reset (containers, images, volumes); keeps Scenario 016's database servers, which are slow to recreate |
+| `jim-reset-all` | Full reset, also removing Scenario 016's database servers |
 | `jim-prd` | Create a new PRD from template |
 
 ## Development Workflows

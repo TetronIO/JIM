@@ -46,7 +46,8 @@
 **Every `jim-build*` command builds the same `jim.web` image a release does**, including the Dockerfile's `openapi-gen` stage, which boots the app to generate the OpenAPI document and bakes it in. It takes seconds. Local builds used to skip it through an `OPENAPI_STAGE` build argument when generation took minutes, which meant a successful `jim-build` was no evidence the image could be released: #1238 landed a serialisation cycle that failed generation and no local build showed it. That switch is gone, so a generation failure now fails `jim-build` itself. To reproduce one without Docker, a database or Keycloak, run `jim-openapi-generate` (`scripts/Generate-OpenApiDoc.ps1`; add `-NoBuild` when the solution is already built).
 
 **Reset:**
-- `jim-reset` - Reset JIM (delete database & logs volumes)
+- `jim-reset` - Full reset (containers, images, volumes). Keeps Scenario 016's database servers (`sqlserver-hris-a`, `oracle-hris-b`, their volumes and images), exactly as the integration runner's own reset does: Oracle's first boot takes tens of minutes and Scenario 016 recreates its schema every run, so a kept one is never stale
+- `jim-reset-all` - `jim-reset`, and also removes Scenario 016's database servers. Only when you genuinely need them rebuilt; the next Scenario 016 run pays the full Oracle download and first-boot cost
 
 **Documentation:**
 - `jim-docs` - Preview docs site at http://localhost:8000 (live-reloading)
