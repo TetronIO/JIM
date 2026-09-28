@@ -18,10 +18,11 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* How the tab opens depends on whether there is a schema. Without one, the only thing to say is how to start,
-   and that is a call to action, so it stays an alert with the button in it. With one, a status line says what the
-   schema holds and offers a refresh; what a refresh does is said in the info button, and again on the refresh
-   preview, which is where "before anything is applied" is actually true. It used to be an amber band on every
-   visit, which is the page-description anti-pattern JIM.Web/CLAUDE.md describes. *@
+   and that is a call to action, so it stays an alert with the button in it. With one, a status line at the end of
+   the Object Type tab strip says what the schema holds and offers a refresh (a panel of its own cost a row for one
+   line); what a refresh does is said in the info button, and again on the refresh preview, which is where "before
+   anything is applied" is actually true. It used to be an amber band on every visit, which is the page-description
+   anti-pattern JIM.Web/CLAUDE.md describes. *@
 @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
 {
     <MudAlert Severity="Severity.Info" data-testid="jim-schema-retrieve">
@@ -44,49 +45,13 @@
         </MudButton>
     </MudAlert>
 }
-else
-{
-    <MudPaper Outlined="true" Class="pa-4 d-flex align-center flex-wrap gap-3" data-testid="jim-schema-status">
-        <div class="d-flex align-center">
-            <MudText Typo="Typo.h6">Schema</MudText>
-            <InfoPopover Title="Schema">
-                The Object Types and Attributes JIM has read from the Connected System. Refreshing retrieves the
-                latest and shows you what changed before anything is applied. Nothing is deleted by a refresh:
-                entries the Connected System no longer reports are retained in JIM and flagged for your attention.
-                Ensure the Connected System identity has the permissions needed to read the full schema; a partial
-                read can make entries appear removed when they are not.
-            </InfoPopover>
-        </div>
-        @* The same count the Object Types tab's "All" chip shows, so the two never disagree: internal types the
-           Connector classified are held back from both until the administrator asks to see them. *@
-        <MudText Class="mud-text-secondary">
-            @($"{GetVisibleObjectTypes().Count():N0} Object Types, {GetSelectedObjectTypes().Count:N0} selected")
-        </MudText>
-        <MudButton Color="Color.Secondary"
-                   Variant="Variant.Filled"
-                   Class="ms-auto"
-                   Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
-                   OnClick="HandleImportSchemaAsync"
-                   DropShadow="false">
-            @if (_schemaBeingRetrieved)
-            {
-                <MudProgressCircular Class="ms-n1" Indeterminate="true" Size="Size.Small" />
-                <span class="ms-2">Refreshing Schema</span>
-            }
-            else
-            {
-                <text>Refresh Schema</text>
-            }
-        </MudButton>
-    </MudPaper>
-}
 
 @if (_schemaRefreshResult != null)
 {
     var result = _schemaRefreshResult;
     <MudAlert Severity="@(result.Success ? (result.HasChanges ? Severity.Info : Severity.Success) : Severity.Error)"
               Icon="@(result.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
-              Class="mt-5 jim-alert-schema-refresh"
+              Class="mb-5 jim-alert-schema-refresh"
               ShowCloseIcon="true"
               CloseIconClicked="HandleCloseSchemaRefreshResult">
         <MudText Typo="Typo.subtitle1" Class="mb-2">
@@ -215,7 +180,7 @@ else
 @if (ConnectedSystem.ObjectTypes is { Count: > 0 })
 {
     var selectedObjectTypes = GetSelectedObjectTypes();
-    <div class="schema-tabs mt-6">
+    <div class="schema-tabs">
         <MudTabs Elevation="0"
                  Rounded="true"
                  Outlined="true"
@@ -223,7 +188,44 @@ else
                  ApplyEffectsToContainer="true"
                  TabPanelsClass="pa-4"
                  ActivePanelIndex="_activeSchemaTabIndex"
-                 ActivePanelIndexChanged="OnSchemaTabChanged">
+                 ActivePanelIndexChanged="OnSchemaTabChanged"
+                 HeaderPosition="TabHeaderPosition.After">
+            @* The schema status sits after the tabs rather than in a panel above them. MudTabs keeps the header
+               outside the scrolling tab area, so Refresh Schema stays in view however many types are selected. *@
+            <Header Context="tabs">
+                <div class="schema-status d-flex align-center gap-2 px-3" data-testid="jim-schema-status">
+                    @* The same count the Object Types tab's "All" chip shows, so the two never disagree: internal
+                       types the Connector classified are held back from both until the administrator asks to see them. *@
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary text-no-wrap">
+                        @($"{GetVisibleObjectTypes().Count():N0} Object Types, {GetSelectedObjectTypes().Count:N0} selected")
+                    </MudText>
+                    <InfoPopover Title="Schema">
+                        The Object Types and Attributes JIM has read from the Connected System. Refreshing retrieves the
+                        latest and shows you what changed before anything is applied. Nothing is deleted by a refresh:
+                        entries the Connected System no longer reports are retained in JIM and flagged for your attention.
+                        Ensure the Connected System identity has the permissions needed to read the full schema; a partial
+                        read can make entries appear removed when they are not.
+                    </InfoPopover>
+                    <MudButton Color="Color.Secondary"
+                               Variant="Variant.Filled"
+                               Size="Size.Small"
+                               Class="text-no-wrap"
+                               Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
+                               OnClick="HandleImportSchemaAsync"
+                               DropShadow="false">
+                        @if (_schemaBeingRetrieved)
+                        {
+                            <MudProgressCircular Class="ms-n1" Indeterminate="true" Size="Size.Small" />
+                            <span class="ms-2">Refreshing Schema</span>
+                        }
+                        else
+                        {
+                            <text>Refresh Schema</text>
+                        }
+                    </MudButton>
+                </div>
+            </Header>
+            <ChildContent>
 
             @* ─── Object type discovery & selection ─── *@
             <MudTabPanel Icon="@Icons.Material.Filled.Tune" Text="Object Types">
@@ -341,7 +343,6 @@ else
             @foreach (var objectType in selectedObjectTypes)
             {
                 <MudTabPanel Text="@objectType.Name">
-                    <MudText Typo="Typo.h5"><span>Object Type:</span> <span class="mud-primary-text">@objectType.Name</span></MudText>
                     @if (_selectedObjectType != null)
                     {
         @* Captured inside the guard so the markup below never dereferences the nullable field directly (see the
@@ -723,6 +724,7 @@ else
                     }
                 </MudTabPanel>
             }
+            </ChildContent>
         </MudTabs>
     </div>
 
