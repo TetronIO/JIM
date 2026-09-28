@@ -633,6 +633,19 @@ jobs:
         sudo systemctl restart docker
         docker info -f '{{.DriverStatus}}'
 
+    # GitHub's image sets XDG_CONFIG_HOME=/home/runner/.config for every account, which the rootless leg's jim
+    # account's systemd manager would inherit: Podman's Quadlet generator would then look for the account's units
+    # in the runner's folder, which it cannot read, and generate none. No real host points every account at one
+    # account's folder, so this is undone here rather than worked around in the installer.
+    - name: Stop pointing every account at the runner's configuration folder
+      run: |
+        for file in /etc/environment /etc/environment.d/*.conf /etc/security/pam_env.conf; do
+          if sudo grep -qs '^XDG_CONFIG_HOME' "$file"; then
+            echo "Removing XDG_CONFIG_HOME from $file"
+            sudo sed -i '/^XDG_CONFIG_HOME/d' "$file"
+          fi
+        done
+
     - name: Set up Docker Buildx
       id: buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0

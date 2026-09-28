@@ -221,6 +221,12 @@ function Save-Diagnostics {
             Invoke-Runtime -AllowFailure @('logs', '--tail', '300', $containers[$service]) |
                 Set-Content (Join-Path $OutputPath "$leg-$service.log")
         }
+        # The account's systemd manager: why a unit was not generated, or would not start.
+        if ($Rootless -and (Invoke-Native -AllowFailure @('id', '-u', $account))) {
+            $uid = Invoke-Native @('id', '-u', $account)
+            Invoke-Native -AllowFailure ($elevate + @('journalctl', "_UID=$uid", '--no-pager', '-n', '200')) |
+                Set-Content (Join-Path $OutputPath "$leg-journal.log")
+        }
     }
     catch {
         Write-Warning "Could not save the containers' logs: $_"

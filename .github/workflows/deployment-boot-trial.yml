@@ -14,31 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  diagnose:
-    # TEMPORARY: why the jim account's Quadlet units are not generated on Ubuntu's Podman 4.9.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-    - name: Probe the user generator
-      run: |
-        set +e
-        dpkg-query -W podman
-        for d in /usr/lib/systemd/system-generators /usr/lib/systemd/user-generators /usr/libexec/podman; do echo "$d:"; find "$d" -maxdepth 1 \( -iname '*podman*' -o -iname '*quadlet*' \) -printf '  %p -> %l\n' 2>&1; done
-        dpkg -L podman | grep -i -E 'generator|quadlet'
-        sudo useradd -m jimq && sudo loginctl enable-linger jimq && sleep 3
-        uid=$(id -u jimq)
-        as() { (cd / && sudo -u jimq env -i PATH=/usr/bin:/bin HOME=/home/jimq XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@"); }
-        as mkdir -p /home/jimq/.config/containers/systemd
-        printf '[Network]\nNetworkName=jimq\n' | sudo -u jimq tee /home/jimq/.config/containers/systemd/q.network >/dev/null
-        printf '[Container]\nImage=docker.io/library/alpine:3.20\nExec=sleep 60\n' | sudo -u jimq tee /home/jimq/.config/containers/systemd/q.container >/dev/null
-        as systemctl --user daemon-reload
-        as systemctl --user list-unit-files 'q*' 'jim*' --no-legend
-        echo "--- quadlet dry run as the user"
-        as /usr/libexec/podman/quadlet -dryrun -user 2>&1 | head -40
-        echo "--- user manager journal"
-        sudo journalctl --user -M jimq@ --no-pager 2>/dev/null | tail -20
-        sudo journalctl _UID="$uid" --no-pager 2>/dev/null | grep -i -E 'quadlet|generator' | tail -20
-
   deployment-boot:
     # Installs JIM the way a customer does, three times over: from a release bundle built from this commit,
     # with the bundle's own setup.sh, offline, on Docker, on rootful Podman and on rootless Podman. Each leg
@@ -78,6 +53,19 @@ jobs:
         echo "$current" | jq '.features["containerd-snapshotter"] = true' | sudo tee "$config" > /dev/null
         sudo systemctl restart docker
         docker info -f '{{.DriverStatus}}'
+
+    # GitHub's image sets XDG_CONFIG_HOME=/home/runner/.config for every account, which the rootless leg's jim
+    # account's systemd manager would inherit: Podman's Quadlet generator would then look for the account's units
+    # in the runner's folder, which it cannot read, and generate none. No real host points every account at one
+    # account's folder, so this is undone here rather than worked around in the installer.
+    - name: Stop pointing every account at the runner's configuration folder
+      run: |
+        for file in /etc/environment /etc/environment.d/*.conf /etc/security/pam_env.conf; do
+          if sudo grep -qs '^XDG_CONFIG_HOME' "$file"; then
+            echo "Removing XDG_CONFIG_HOME from $file"
+            sudo sed -i '/^XDG_CONFIG_HOME/d' "$file"
+          fi
+        done
 
     - name: Set up Docker Buildx
       id: buildx
