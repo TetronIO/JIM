@@ -1728,6 +1728,13 @@ html[lang] .mud-input-control-helper-container:not(:empty) {
     padding-bottom: 8px;
 }
 
+/* A button beside an outlined field (a d-flex align-start row: the field, then its action, e.g. Discover...),
+   centred on the field's box rather than on the whole control. The control starts with an 8px margin that keeps
+   room for the floating label, and its dense box is 37.6px against the button's 32px: 8 + (37.6 - 32) / 2. */
+html[lang] .jim-field-action.mud-button-root {
+    margin-top: 11px;
+}
+
 /* MudField content (e.g. a read-only Thumbprint or Serial Number) has no spaces to wrap at and is
    a flex child by default, so a long unbroken value (min-width: auto) overflows past the outline
    instead of shrinking to fit. Let it wrap and shrink to the field's own width. */
