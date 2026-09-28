@@ -58,14 +58,8 @@
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {
-                    <div class="seg" role="group" aria-label="Causality view">
-                        @foreach (var view in AvailableViews)
-                        {
-                            <button type="button" class="@(view == _view ? "on" : null)"
-                                    aria-pressed="@(view == _view ? "true" : "false")"
-                                    @onclick="() => SelectViewAsync(view)">@GetViewLabel(view)</button>
-                        }
-                    </div>
+                    <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
+                                     AriaLabel="Causality view" Class="seg" />
                 }
             </Actions>
         </CausalitySummaryBand>
@@ -129,6 +123,9 @@
     private static readonly IReadOnlyList<CausalityView> SpeculativeViews = [CausalityView.Timeline, CausalityView.Table];
 
     private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true ? SpeculativeViews : RecordedViews;
+
+    private IReadOnlyList<SegmentedToggleOption<CausalityView>> ViewOptions =>
+        AvailableViews.Select(view => new SegmentedToggleOption<CausalityView>(view, GetViewLabel(view))).ToList();
 
     /// <summary>
     /// The Run Profile Execution Item whose causality is visualised. Required for the recorded path;

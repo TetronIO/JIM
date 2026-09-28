@@ -1843,7 +1843,7 @@ html[lang] .mud-button-outlined.mud-button-outlined-secondary:not(:disabled) {
    button (31px) was barely a step below that. Medium is now 32px in 13px text and small 28px in 12px, each
    variant's padding keeping the same height whether or not it carries a 1px border. Single-class selectors on
    purpose: this sheet loads after MudBlazor's, so they win over its size rules at equal specificity, while a
-   component's own two-class sizing (.jim-picker-seg .mud-button-root and the like) still wins over them. Large
+   component's own two-class sizing still wins over them. Large
    is left at MudBlazor's size; no MudButton in the portal uses it. */
 :is(.mud-button-filled-size-medium, .mud-button-outlined-size-medium, .mud-button-text-size-medium) {
     font-size: 13px;
@@ -4330,44 +4330,83 @@ html[lang] .jim-password-guidance.mud-alert {
     align-items: center;
 }
 
-/* The two-segment scope control. Both states stay visible: scope decides what the next import
-   returns, so which one is active must be readable without hovering anything. Below the site-wide
-   "default sizes" rule (JIM.Web/CLAUDE.md > UI element sizing) because it sits on a ~32px row by
-   design; 0.75rem matches the object count beside it. It was 0.65rem (about 10px), which is small
-   text under WCAG and so needs the full 4.5:1 that the label colour below provides. */
-.jim-picker-seg .mud-button-root {
-    padding: 0 0.5rem;
-    min-width: 0;
-    font-size: 0.75rem;
-    line-height: 1.3rem;
-    text-transform: none;
-    letter-spacing: 0;
+/* ─── Segmented control (Shared/SegmentedToggle.razor) ───────────────────────────────────────
+   A recessed track with the chosen option raised as a card: the control for choosing a setting or view, as
+   opposed to a button group, which reads as a pair of actions. Neutral by design, so it can repeat down a list
+   (the Scope tab's per-container scope) without competing with the row's checkbox. Everything a host might
+   restyle is a custom property with a portal default, so the Causality view sets its own palette and size in
+   causality.css rather than overriding these rules. The chosen option carries the "on" class. */
+.jim-seg {
+    --jim-seg-track: var(--mud-palette-background);
+    --jim-seg-track-edge: var(--mud-palette-lines-default);
+    --jim-seg-on: var(--mud-palette-surface);
+    --jim-seg-on-shadow: 0 1px 2px rgba(18, 27, 41, 0.16), 0 0 0 1px rgba(18, 27, 41, 0.06);
+    --jim-seg-text: var(--mud-palette-text-secondary);
+    --jim-seg-text-on: var(--mud-palette-text-primary);
+    --jim-seg-font-size: 0.875rem;
+    --jim-seg-padding: 6px 13px;
+    --jim-seg-track-padding: 3px;
+    --jim-seg-radius: 9px;
+    --jim-seg-option-radius: 7px;
+    display: inline-flex;
+    gap: 2px;
+    padding: var(--jim-seg-track-padding);
+    border-radius: var(--jim-seg-radius);
+    background: var(--jim-seg-track);
+    box-shadow: inset 0 0 0 1px var(--jim-seg-track-edge);
 }
 
-/* .mud-button-root in these selectors too: MudBlazor's own group and hover rules (three classes) otherwise
-   outrank them, painting the active segment's text primary on a primary fill (invisible) and swapping that fill
-   for the faint text-button hover tint on hover (the control appears to lose its state). */
-html[lang] .jim-picker-seg .jim-picker-seg-on.mud-button-root {
-    background-color: var(--mud-palette-primary);
-    color: var(--mud-palette-primary-text);
-    border-color: var(--mud-palette-primary);
+/* In dark mode the surface is barely lighter than the page background the track uses, so the chosen option is
+   lifted a step further to still read as raised. */
+body.jim-dark-mode .jim-seg {
+    --jim-seg-on: color-mix(in srgb, var(--mud-palette-text-primary) 12%, var(--mud-palette-surface));
+    --jim-seg-on-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-html[lang] .jim-picker-seg .jim-picker-seg-on.mud-button-root:hover {
-    background-color: var(--mud-palette-primary-darken);
-    border-color: var(--mud-palette-primary-darken);
+/* Rows in a list or table: 0.75rem matches the counts and captions beside it, and the control stays well inside a
+   32px dense row. The dim label measures 6.2:1 (light) and 6.8:1 (dark) on the track in the default theme. */
+.jim-seg.jim-seg-dense {
+    --jim-seg-font-size: 0.75rem;
+    --jim-seg-padding: 3px 10px;
+    --jim-seg-track-padding: 2px;
+    --jim-seg-radius: 7px;
+    --jim-seg-option-radius: 5px;
 }
 
-/* The unselected segment's label takes the chip-label blend (60% accent over body text), not the raw accent: on
-   the selected row's 12% accent tint the raw accent measured 2.8:1 to 4.5:1 across the themes, and the blend
-   5.3:1 or better on every one (ThemeContrastTests covers the same blend on chips). It keeps the accent identity
-   so the pair still reads as one toggle; body text would read as an unrelated outlined button. */
-html[lang] .jim-picker-seg .jim-picker-seg-off.mud-button-root {
-    color: var(--jim-chip-text-primary);
+.jim-seg > button {
+    border: none;
+    background: transparent;
+    color: var(--jim-seg-text);
+    cursor: pointer;
+    padding: var(--jim-seg-padding);
+    font-family: inherit;
+    font-size: var(--jim-seg-font-size);
+    font-weight: 550;
+    line-height: 1.3;
+    border-radius: var(--jim-seg-option-radius);
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
 }
 
-html[lang] .jim-picker-seg .jim-picker-seg-off.mud-button-root:hover {
-    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+.jim-seg > button:hover {
+    color: var(--jim-seg-text-on);
+}
+
+.jim-seg > button.on {
+    background: var(--jim-seg-on);
+    color: var(--jim-seg-text-on);
+    box-shadow: var(--jim-seg-on-shadow);
+}
+
+.jim-seg > button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-seg > button {
+        transition: none;
+    }
 }
 
 /* The row's checkbox is a MudBlazor input control, which carries a bottom margin meant for a form; on a

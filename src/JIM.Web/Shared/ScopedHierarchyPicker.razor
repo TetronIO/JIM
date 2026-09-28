@@ -125,18 +125,12 @@
                                                            : "This Container and every Container beneath it are imported. Choose This level to import only the objects held directly in it.")" />
                                 </TooltipContent>
                                 <ChildContent>
-                                    @* Color.Primary on the group, so both segments share the accent and read as one
-                                       toggle; the active one is filled by .jim-picker-seg-on. *@
-                                    <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" Class="jim-picker-seg">
-                                        <MudButton Class="@SegmentClass(!isOneLevel)" data-testid="jim-picker-scope-subtree"
-                                                   OnClick="@(() => SetScopeAsync(container, ConnectedSystemContainerScope.Subtree))">
-                                            Whole subtree
-                                        </MudButton>
-                                        <MudButton Class="@SegmentClass(isOneLevel)" data-testid="jim-picker-scope-onelevel"
-                                                   OnClick="@(() => SetScopeAsync(container, ConnectedSystemContainerScope.OneLevel))">
-                                            This level
-                                        </MudButton>
-                                    </MudButtonGroup>
+                                    @* A setting, not an action, so a segmented control rather than a button group: it
+                                       stays neutral down a long list and leaves the checkbox as the row's accent. *@
+                                    <SegmentedToggle TValue="ConnectedSystemContainerScope" Options="ScopeOptions" Dense="true"
+                                                     AriaLabel="@($"Scope of {container.Name}")"
+                                                     Value="@(isOneLevel ? ConnectedSystemContainerScope.OneLevel : ConnectedSystemContainerScope.Subtree)"
+                                                     ValueChanged="@(scope => SetScopeAsync(container, scope))" />
                                 </ChildContent>
                             </MudTooltip>
                         }
@@ -391,5 +385,9 @@
         return classes;
     }
 
-    private static string SegmentClass(bool isOn) => isOn ? "jim-picker-seg-on" : "jim-picker-seg-off";
+    private static readonly IReadOnlyList<SegmentedToggleOption<ConnectedSystemContainerScope>> ScopeOptions =
+    [
+        new(ConnectedSystemContainerScope.Subtree, "Whole subtree", "jim-picker-scope-subtree"),
+        new(ConnectedSystemContainerScope.OneLevel, "This level", "jim-picker-scope-onelevel")
+    ];
 }
