@@ -343,8 +343,10 @@ jim-database.service), under the jim account's own systemd manager:
 ``````bash
 sudo systemctl --user -M jim@ status jim.service
 sudo systemctl --user -M jim@ restart jim.service
-sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman ps
-sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman logs jim-web
+# Podman as the jim account, from the root folder, which the account can read
+jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman "`$@"); }
+jim-podman ps
+jim-podman logs jim-web
 ``````
 
 Installed with --rootful, leave out --user -M jim@, and run podman as root.

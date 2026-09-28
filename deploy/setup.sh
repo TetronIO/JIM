@@ -781,14 +781,15 @@ jim_systemctl_command() {
     fi
 }
 
-# podman as an administrator types it to see JIM's containers.
+# A podman command as an administrator types it to see JIM's containers. For the account that runs JIM, it starts
+# from the root folder: rootless Podman fails in a folder the account cannot read, such as root's home.
 jim_podman_command() {
     if [ -n "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ]; then
-        printf 'sudo -u %s XDG_RUNTIME_DIR=/run/user/%s podman' "$PODMAN_ACCOUNT" "$(id -u "$PODMAN_ACCOUNT")"
+        printf '(cd / && sudo -u %s XDG_RUNTIME_DIR=/run/user/%s podman %s)' "$PODMAN_ACCOUNT" "$(id -u "$PODMAN_ACCOUNT")" "$*"
     elif [ "$(id -u)" -eq 0 ]; then
-        printf 'sudo podman'
+        printf 'sudo podman %s' "$*"
     else
-        printf 'podman'
+        printf 'podman %s' "$*"
     fi
 }
 
@@ -1030,13 +1031,11 @@ podman_start_commands() {
         fi
         echo "  $(jim_systemctl_command) start jim.service"
     else
-        local podman
-        podman=$(jim_podman_command)
-        echo "  ${podman} network create --ignore jim"
+        echo "  $(jim_podman_command network create --ignore jim)"
         if [ "$USE_BUNDLED_DB" = "true" ]; then
-            echo "  ${podman} kube play --replace --network jim --configmap ${absolute_dir}/jim-config.yaml ${absolute_dir}/jim-database.yaml"
+            echo "  $(jim_podman_command kube play --replace --network jim --configmap "${absolute_dir}/jim-config.yaml" "${absolute_dir}/jim-database.yaml")"
         fi
-        echo "  ${podman} kube play --replace --network jim --configmap ${absolute_dir}/jim-config.yaml --publish ${JIM_WEB_PORT}:8443 ${absolute_dir}/jim.yaml"
+        echo "  $(jim_podman_command kube play --replace --network jim --configmap "${absolute_dir}/jim-config.yaml" --publish "${JIM_WEB_PORT}:8443" "${absolute_dir}/jim.yaml")"
     fi
 }
 
@@ -1749,7 +1748,7 @@ wait_for_jim() {
     done
     JIM_READY="false"
     if [ "$RUNTIME" = "podman" ]; then
-        warn "JIM is not ready after 10 minutes. See what it is doing with: $(jim_podman_command) logs jim-web, and $(jim_podman_command) logs jim-worker"
+        warn "JIM is not ready after 10 minutes. See what it is doing with: $(jim_podman_command logs jim-web), and $(jim_podman_command logs jim-worker)"
     else
         warn "JIM is not ready after 10 minutes. See what it is doing with: cd ${install_dir} && docker compose ${COMPOSE_FILES[*]} logs jim.web jim.worker"
     fi
@@ -1846,9 +1845,8 @@ show_summary() {
     fi
     echo "    ${installer} --certificate          to change its names, or use your organisation's certificate"
     if [ "$RUNTIME" = "podman" ]; then
-        local systemctl_command podman_command
+        local systemctl_command
         systemctl_command=$(jim_systemctl_command)
-        podman_command=$(jim_podman_command)
         if [ "$PODMAN_SYSTEMD" = "true" ]; then
             echo "    ${systemctl_command} status jim.service"
             echo "    ${systemctl_command} restart jim.service"
@@ -1856,8 +1854,8 @@ show_summary() {
             echo "    Without systemd, JIM does not start by itself after a reboot. Start it with:"
             podman_start_commands "$install_dir" | sed 's/^  /      /'
         fi
-        echo "    ${podman_command} ps"
-        echo "    ${podman_command} logs -f jim-web"
+        echo "    $(jim_podman_command ps)"
+        echo "    $(jim_podman_command logs -f jim-web)"
         if [ -n "$PODMAN_ACCOUNT" ]; then
             echo "    Volumes and secrets are in the Podman storage of ${PODMAN_ACCOUNT}: $(account_home)/.local/share/containers"
         fi
