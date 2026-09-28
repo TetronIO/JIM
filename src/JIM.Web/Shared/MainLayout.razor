@@ -236,9 +236,17 @@ else
         }
     }
 
-    // Default to closed/unpinned - will be set based on screen size or saved preference in OnAfterRenderAsync
+    // Starts from the state the host page read from the drawer cookie (closed when there is none), then is set from
+    // the saved preference, or the screen size, in OnAfterRenderAsync.
     private bool IsDrawerOpen { get; set; }
     private bool IsDrawerPinned { get; set; }
+
+    /// <summary>
+    /// The drawer's open state as the user last left it, from the host page's cookie, so the first render draws it
+    /// that way rather than sliding it open once the saved preference has been read. See <see cref="App"/>.
+    /// </summary>
+    [CascadingParameter(Name = "InitialDrawerOpen")]
+    public bool? InitialDrawerOpen { get; set; }
     private bool _drawerPinnedInitialised;
     private bool _isDarkMode;
     private bool _darkModeInitialised;
@@ -294,6 +302,7 @@ else
                     IsDrawerPinned = isLargeScreen;
                 }
                 _drawerPinnedInitialised = true;
+                await MirrorDrawerStateAsync();
 
                 StateHasChanged();
             }
@@ -306,6 +315,12 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        if (InitialDrawerOpen is { } initialDrawerOpen)
+        {
+            IsDrawerOpen = initialDrawerOpen;
+            IsDrawerPinned = initialDrawerOpen;
+        }
+
         using var jim = JimFactory.Create();
         _serviceName = await jim.ServiceSettings.GetSettingValueAsync<string>(
             JIM.Models.Core.Constants.SettingKeys.ServiceName);
@@ -352,6 +367,23 @@ else
         if (_drawerPinnedInitialised)
         {
             _ = PreferenceService.SetDrawerPinnedAsync(IsDrawerPinned);
+            _ = MirrorDrawerStateAsync();
+        }
+    }
+
+    /// <summary>
+    /// Copies the drawer's pinned state, whether saved or defaulted from the screen size, into the cookie the host
+    /// page reads, so the next full load draws the drawer in this state from its first render.
+    /// </summary>
+    private async Task MirrorDrawerStateAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("jimPreferences.mirrorToCookie", "drawerOpen", IsDrawerPinned ? "true" : "false");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; the cookie keeps its previous value.
         }
     }
 
