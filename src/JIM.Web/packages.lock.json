@@ -90,15 +90,15 @@
       },
       "MudBlazor": {
         "type": "Direct",
-        "requested": "[9.10.0, )",
-        "resolved": "9.10.0",
-        "contentHash": "1TzwlootgzINmTBJn03YAF8GStLz73oLQff383MSDIQexjhPnlryatsynYSvnQ9TJmUfAJo0wsnufyGY76oXOw=="
+        "requested": "[9.11.0, )",
+        "resolved": "9.11.0",
+        "contentHash": "hboxF5cQuMYjB0w6+tScmNt0ACuoCu35TGPsCmCq8OeQgvtPtzQ1s9auAOrINj/J6I/ZyBB1rmUzrcMKj14RFA=="
       },
       "Scalar.AspNetCore": {
         "type": "Direct",
-        "requested": "[2.17.8, )",
-        "resolved": "2.17.8",
-        "contentHash": "KboA9Qm60RiikrXQ28EzUSevksNDPhRV/jTAGEw9vbo8VAw+JFXdNm9vlOtFHwptp5yCHHaupTCIMCbT/EbiiQ=="
+        "requested": "[2.17.10, )",
+        "resolved": "2.17.10",
+        "contentHash": "lASwa/do5YYLNp+EQ/LTfm9gxBykypyzQh52aJNYnYkMfFJDwsQ+W7+mKSFejfxA1jGaorFPSeUQHHslnBsdtA=="
       },
       "Serilog.AspNetCore": {
         "type": "Direct",
