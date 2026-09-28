@@ -34,6 +34,7 @@ jobs:
         "AUTH=$authority" >> $env:GITHUB_ENV
     - name: Probe remedies
       run: |
+        set +e
         py='import socket
         for fam, name in ((socket.AF_INET, "inet"), (socket.AF_INET6, "inet6")):
             try:
@@ -44,7 +45,7 @@ jobs:
         hard=(--cap-drop ALL --security-opt no-new-privileges --read-only --user 1654)
         sudo podman pull -q "$img" >/dev/null
         run() { label="$1"; shift; echo "== $label"; "$@" python3 -c "$py" 2>&1 | sed 's/^/   /'; }
-        echo "--- versions"; dpkg-query -W crun runc podman apparmor containers-common golang-github-containers-common 2>/dev/null
+        echo "--- versions"; dpkg-query -W crun podman apparmor golang-github-containers-common 2>/dev/null || true
         echo "--- /etc/apparmor.d/crun"; cat /etc/apparmor.d/crun 2>/dev/null
         for f in crun runc podman buildah passt slirp4netns; do [ -e "/etc/apparmor.d/$f" ] && echo "profile file: $f"; done
         run "rootful crun, hardened (as JIM)" sudo podman run --rm "${hard[@]}" "$img"
