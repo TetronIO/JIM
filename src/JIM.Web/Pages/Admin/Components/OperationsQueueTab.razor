@@ -227,7 +227,8 @@ rather than appearing and disappearing with the processing state *@
                                                      Class="ml-0">@GetTaskStatusDisplay(context.Item)</MudChip>
                                         </CellTemplate>
                                     </TemplateColumn>
-                                    <TemplateColumn T="WorkerTaskHeader" Title="Progress" Sortable="false" HeaderStyle="min-width: 200px;">
+                                    <TemplateColumn T="WorkerTaskHeader" Title="Progress" Sortable="false" HeaderStyle="min-width: 200px;"
+                                                    CellClass="jim-queue-progress-cell">
                                         <HeaderTemplate>
                                             <MudText Typo="Typo.button">Progress</MudText>
                                         </HeaderTemplate>

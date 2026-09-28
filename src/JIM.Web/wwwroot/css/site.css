@@ -653,9 +653,14 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     margin-left: auto;
 }
 
-/* Every cell hangs from the top of its row, so the progress rails line up across the grid rather than floating
-   at a height that shifts with each cell's contents. Scoped to the queue's own grids. */
+/* Cells sit in the middle of their row, so a running task's name, status, initiator and cancel button balance
+   against its taller progress block. The Progress cell alone hangs from the top, so its rail stays at the same
+   height in every row rather than floating when another cell happens to be taller. Scoped to the queue's grids. */
 .jim-queue-grid td {
+    vertical-align: middle;
+}
+
+.jim-queue-grid td.jim-queue-progress-cell {
     vertical-align: top;
 }
 

@@ -262,9 +262,18 @@ public class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
         var count = GetCsosForSystem(connectedSystemId)
-            .Count(c => c.LastUpdated.HasValue && c.LastUpdated.Value >= modifiedSince);
+            .Count(c => IsModifiedSince(c, modifiedSince));
         return Task.FromResult(count);
     }
+
+    /// <summary>
+    /// Delta sync's "modified since" test. Matches the production query's shape: a CSO counts when it was created
+    /// OR last updated after the watermark. A newly imported CSO has no LastUpdated until something changes it, so
+    /// testing LastUpdated alone hid every joiner from delta sync in tests (the production query never did).
+    /// Inclusive, as this provider has always been, so tests that set a watermark equal to a timestamp still see it.
+    /// </summary>
+    private static bool IsModifiedSince(ConnectedSystemObject cso, DateTime modifiedSince) =>
+        cso.Created >= modifiedSince || (cso.LastUpdated.HasValue && cso.LastUpdated.Value >= modifiedSince);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
@@ -292,10 +301,26 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
     {
-        var filtered = GetCsosForSystem(connectedSystemId)
-            .Where(c => c.LastUpdated.HasValue && c.LastUpdated.Value >= modifiedSince)
+        var modified = GetCsosForSystem(connectedSystemId)
+            .Where(c => IsModifiedSince(c, modifiedSince));
+
+        if (afterId.HasValue)
+        {
+            // Keyset path, as for GetConnectedSystemObjectsAsync: order by Id and return the first page after the
+            // cursor, so rows deleted by an earlier page cannot shift later rows past the caller.
+            var afterIdValue = afterId.Value;
+            var remaining = modified
+                .OrderBy(c => c.Id)
+                .Where(c => c.Id.CompareTo(afterIdValue) > 0)
+                .ToList();
+            var keysetResult = BuildPagedResult(remaining, 1, pageSize);
+            keysetResult.CurrentPage = page;
+            return Task.FromResult(keysetResult);
+        }
+
+        var filtered = modified
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
