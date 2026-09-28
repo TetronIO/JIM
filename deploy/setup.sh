@@ -528,6 +528,40 @@ load_bundle_images() {
     success "Loaded the images"
 }
 
+# Docker only, bundled database only. The compose file pins PostgreSQL by its registry digest, which Docker's classic
+# image store drops when it loads an image archive, so on that store the pinned reference never resolves offline.
+# The bundle records the ID of the PostgreSQL image it ships; when the pin does not resolve, this checks the image
+# loaded under the pinned name against that ID, and has Compose run the image by its ID. An ID is the digest of the
+# image's content, so, like the pin, it names only the image the bundle shipped, however the name is later retagged.
+use_verified_database_image() {
+    local install_dir="$1"
+    local pinned
+    pinned=$(cd "$install_dir" && docker compose "${COMPOSE_FILES[@]}" --profile with-db config --images jim.database) \
+        || fatal "Failed to read the PostgreSQL image from ${install_dir}/docker-compose.yml"
+
+    # Docker's containerd image store keeps the digest, and a host that once pulled the image has it.
+    if docker image inspect "$pinned" >/dev/null 2>&1; then
+        return
+    fi
+    local name="${pinned%@*}"
+    # Not pinned by digest: nothing to check here, and verify_bundle_images reports it if it is missing.
+    if [ "$name" = "$pinned" ]; then
+        return
+    fi
+
+    local ids_file="${BUNDLE_DIR}/docker-images/postgres-18.image-ids"
+    [ -f "$ids_file" ] \
+        || fatal "Docker cannot find ${pinned} by its digest, and this bundle does not record the PostgreSQL image's ID to check it by instead. Enable Docker's containerd image store (https://docs.docker.com/engine/storage/containerd/), or choose an external PostgreSQL server."
+    local id
+    id=$(docker image inspect -f '{{.Id}}' "$name" 2>/dev/null) \
+        || fatal "The PostgreSQL image ${name} is not available after loading the bundle, and this installation cannot download it."
+    grep -qxF "$id" "$ids_file" \
+        || fatal "The image named ${name} on this host (${id}) is not the PostgreSQL image this bundle ships. Check the bundle is intact (sha256sum -c checksums.sha256), and extract it again if not."
+
+    set_setting "JIM_DB_IMAGE" "$id"
+    success "Checked the PostgreSQL image against the bundle; JIM runs it by its ID, ${id}"
+}
+
 # Confirms every image the installation runs is present, so that a gap shows here rather than as Compose trying
 # to download it.
 verify_bundle_images() {
@@ -2040,6 +2074,9 @@ main() {
         if [ "$RUNTIME" = "podman" ]; then
             verify_podman_images "$install_dir"
         else
+            if [ "$USE_BUNDLED_DB" = "true" ]; then
+                use_verified_database_image "$install_dir"
+            fi
             verify_bundle_images "$install_dir"
         fi
     elif [ "$RUNTIME" = "podman" ]; then

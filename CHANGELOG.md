@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image by its pinned digest: the setup script checks the loaded image against the ID the bundle records and runs it by that ID. (#1854)
 - 🐛 A Delta Sync that removes objects no longer skips others: when more than one page of changes included deleted objects, about half were left unprocessed until the next Full Sync (for example, a leaver's account deleted from a target directory stayed in JIM).
 - 🐛 Running the setup script again over an installation with the bundled PostgreSQL no longer locks JIM out of its database: it keeps the database's password instead of generating a new one. (#1808)
 - 🐛 Installing with the setup script's bundled PostgreSQL works: it pointed JIM at `localhost` instead of the bundled database, so JIM never started.
