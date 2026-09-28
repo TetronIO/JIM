@@ -286,6 +286,29 @@ function Get-TemplateScale {
     return $scales[$Template]
 }
 
+function Test-TemplateSpansSyncPages {
+    <#
+    .SYNOPSIS
+        Whether a template's users span more than one synchronisation page.
+
+    .DESCRIPTION
+        The worker synchronises in pages (the Sync.PageSize service setting, 500 by default) and clears its
+        change tracker between them. A template whose users all fit in one page never crosses a page boundary,
+        so the code that runs between pages (tracker clear, cross-page reference fix-up, re-attaching
+        bulk-created rows) goes unexercised. A pass at such a template is not a sign-off for synchronisation
+        or worker write-path changes: Scenario 023 passed at Micro and failed at Pre-Release's Medium on
+        exactly that path.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Template,
+
+        [int]$SyncPageSize = 500
+    )
+
+    return (Get-TemplateScale -Template $Template).Users -gt $SyncPageSize
+}
+
 function Get-DirectoryConfig {
     <#
     .SYNOPSIS

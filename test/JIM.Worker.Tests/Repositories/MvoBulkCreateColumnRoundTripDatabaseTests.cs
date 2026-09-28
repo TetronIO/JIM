@@ -253,5 +253,40 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
     /// Truncates to PostgreSQL's timestamptz microsecond precision (1 microsecond = 10 ticks), so a
     /// value built from <see cref="DateTime.UtcNow"/> round-trips byte-for-byte through the database.
     /// </summary>
+    /// <summary>
+    /// Regression (Pre-Release Scenario-023-UniqueValueGeneration at Medium, page 2 of 2): the worker clears its
+    /// change tracker between sync pages, so on every page after the first the Metaverse Object Type the new
+    /// objects point at is no longer tracked. The bulk create path attached each new object as Unchanged and only
+    /// then set its shadow <c>TypeId</c>; with the Type untracked that shadow value was still empty at attach
+    /// time, so setting it marked every new object Modified. The next EF <c>SaveChangesAsync</c> on the same
+    /// context (Unique Value Generation's assignment insert) then issued
+    /// <c>UPDATE "MetaverseObjects" SET "TypeId" = ... WHERE "Id" = ... AND xmin = 0</c>, matched no rows (the
+    /// COPY-assigned xmin is unknown to EF) and aborted the run with a DbUpdateConcurrencyException.
+    /// </summary>
+    [Test]
+    public async Task CreateMetaverseObjectsAsync_TypeNotTrackedByWriteContext_LeavesObjectsUnchangedSoLaterSaveSucceedsAsync()
+    {
+        var s = await SeedGraphAsync();
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = s.MvoType, Created = DateTime.UtcNow };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs" });
+
+        // s.MvoType was saved by the seed context, so this write context has never tracked it: the same state a
+        // sync page after the first is in once the page boundary has cleared the tracker.
+        await using var writeContext = NewContext();
+        var repository = new PostgresDataRepository(writeContext);
+        await repository.Sync.CreateMetaverseObjectsAsync([mvo]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(writeContext.Entry(mvo).State, Is.EqualTo(EntityState.Unchanged));
+            Assert.That(writeContext.Entry(mvo).Property("TypeId").CurrentValue, Is.EqualTo(s.MvoType.Id));
+            Assert.That(writeContext.Entry(mvo.AttributeValues.Single()).State, Is.EqualTo(EntityState.Unchanged));
+        }
+
+        // A later unrelated EF save on the same context must not try to re-update the bulk-created row.
+        Assert.That(async () => await writeContext.SaveChangesAsync(), Throws.Nothing);
+    }
+
     private static DateTime TruncateToMicroseconds(DateTime value) => new(value.Ticks / 10 * 10, value.Kind);
 }
