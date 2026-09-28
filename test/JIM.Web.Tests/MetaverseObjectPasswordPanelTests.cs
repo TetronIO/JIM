@@ -601,17 +601,17 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 
     /// <summary>
     /// The queue link sits in the same column as the Set Password button on the card above, so it takes the same
-    /// button shape (outlined, being the secondary action) rather than reading as a stray text link.
+    /// button shape (filled in the Secondary colour, being the secondary action) rather than reading as a stray text link.
     /// </summary>
     [Test]
-    public void Panel_HistoryCard_OffersTheQueueAsAnOutlinedButton()
+    public void Panel_HistoryCard_OffersTheQueueAsASecondaryButton()
     {
         var cut = RenderPanel();
 
         var queue = Find(cut, HistoryQueueMarker);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(queue.ClassList, Does.Contain("mud-button-outlined"));
+            Assert.That(queue.ClassList, Does.Contain("mud-button-filled-secondary"));
             Assert.That(queue.TextContent.Trim(), Is.EqualTo("Password queue"));
         }
     }

@@ -30,7 +30,7 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowD
                       Variant="Variant.Outlined"
                       Class="flex-grow-1" />
         <MudTooltip Text="Enter the connectivity settings above before discovering domain controllers." Arrow="true" Placement="Placement.Top" Disabled="@DirectoryServerDiscoveryEnabled">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2 mt-1"
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" Class="ml-2 jim-field-action"
                        StartIcon="@Icons.Material.Filled.Search"
                        Disabled="@(!DirectoryServerDiscoveryEnabled)"
                        OnClick="OpenDirectoryServerDiscoveryDialogAsync"

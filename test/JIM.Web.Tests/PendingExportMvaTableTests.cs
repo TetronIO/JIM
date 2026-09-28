@@ -25,15 +25,15 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Covers the dialog listing every queued change to one multi-valued attribute of a Pending Export, now that it
-/// is a <see cref="VirtualisedDataGrid{TItem}"/> over the application layer's range read. Two things are worth
-/// pinning: that a window is handed to the range read exactly as it arrived, in one call and with the grid's
-/// decision about counting intact (anything else shows the wrong changes, or none, with no error anywhere), and
-/// that a dialog is a place the shared grid works at all, since it states its own height ceiling rather than
-/// measuring the page behind the overlay.
+/// Covers the table listing every queued change to one multi-valued attribute of a Pending Export, nested in the
+/// Attribute Changes table's value cell once the attribute carries more changes than stack inline. It is a
+/// <see cref="VirtualisedDataGrid{TItem}"/> over the application layer's range read, so what is worth pinning is
+/// that a window is handed to the range read exactly as it arrived, in one call and with the grid's decision about
+/// counting intact (anything else shows the wrong changes, or none, with no error anywhere), and that the grid is
+/// set up to live inside a table cell: embedded, with a height ceiling of its own.
 /// </summary>
 [TestFixture]
-public class PendingExportMvaDialogTests : JimComponentTestContext
+public class PendingExportMvaTableTests : JimComponentTestContext
 {
     private const string AttributeName = "member";
 
@@ -79,34 +79,41 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
             })
             .ToList();
 
-    private IRenderedComponent<MudDialogProvider> ShowDialog(int totalCount)
+    private IRenderedComponent<PendingExportMvaTable> RenderTable()
     {
-        var provider = Render<MudDialogProvider>();
-        var dialogService = Services.GetRequiredService<IDialogService>();
-        var parameters = new DialogParameters<PendingExportMvaDialog>
-        {
-            { x => x.AttributeName, AttributeName },
-            { x => x.PendingExportId, PendingExportId },
-            { x => x.TotalCount, totalCount }
-        };
-
-        provider.InvokeAsync(() => dialogService.ShowAsync<PendingExportMvaDialog>(AttributeName, parameters));
-        provider.WaitForAssertion(() =>
-            Assert.That(provider.HasComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>(), Is.True));
-
-        return provider;
+        var cut = Render<PendingExportMvaTable>(p => p
+            .Add(c => c.AttributeName, AttributeName)
+            .Add(c => c.PendingExportId, PendingExportId));
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>(), Is.True));
+        return cut;
     }
 
-    private static Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<PendingExportAttributeValueChange>>>
-        LoadWindow(IRenderedComponent<MudDialogProvider> provider) =>
-        provider.FindComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>().Instance.LoadWindow;
+    private static VirtualisedDataGrid<PendingExportAttributeValueChange> Grid(IRenderedComponent<PendingExportMvaTable> cut) =>
+        cut.FindComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>().Instance;
 
     [Test]
-    public void PendingExportMvaDialog_RendersAVirtualisedGridWithNoPager()
+    public void PendingExportMvaTable_IsEmbeddedWithItsOwnHeightCeiling()
     {
         SetupChanges(BuildChanges(3));
 
-        var provider = ShowDialog(totalCount: 3);
+        var grid = Grid(RenderTable());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(grid.Embedded, Is.True,
+                "one table sits on the page per large attribute, so none may claim the address bar or the density toggle");
+            Assert.That(grid.MaxHeight, Is.Not.Null.And.Not.Empty,
+                "its container is a table cell, not the page, so it has to state its own height ceiling");
+        }
+    }
+
+    [Test]
+    public void PendingExportMvaTable_RendersAVirtualisedGridWithNoPager()
+    {
+        SetupChanges(BuildChanges(3));
+
+        var provider = RenderTable();
 
         provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("change-0000")));
         Assert.That(provider.HasComponent<MudTablePager>(), Is.False,
@@ -114,11 +121,11 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void PendingExportMvaDialog_KeepsTheChangeTypeStatusAndValueColumns()
+    public void PendingExportMvaTable_KeepsTheChangeTypeStatusAndValueColumns()
     {
         SetupChanges(BuildChanges(2));
 
-        var provider = ShowDialog(totalCount: 2);
+        var provider = RenderTable();
 
         provider.WaitForAssertion(() =>
         {
@@ -137,14 +144,14 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
     /// window did not start on a page boundary.
     /// </summary>
     [Test]
-    public async Task PendingExportMvaDialog_Window_ReadsTheOffsetAndCountItWasAskedForInOneReadAsync()
+    public async Task PendingExportMvaTable_Window_ReadsTheOffsetAndCountItWasAskedForInOneReadAsync()
     {
         var changes = BuildChanges(250);
         SetupChanges(changes);
-        var provider = ShowDialog(totalCount: 250);
+        var provider = RenderTable();
         _connectedSystems.Invocations.Clear();
 
-        var window = await LoadWindow(provider)(
+        var window = await Grid(provider).LoadWindow(
             new VirtualisedWindowRequest(98, 6, null, "order", false, IncludeTotalCount: true),
             CancellationToken.None);
 
@@ -164,13 +171,13 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
     /// one, and the absent total must stay null: a zero in its place reads as "nothing matched".
     /// </summary>
     [Test]
-    public async Task PendingExportMvaDialog_WindowNotAskingForTheCount_DoesNotCountAndReturnsANullTotalAsync()
+    public async Task PendingExportMvaTable_WindowNotAskingForTheCount_DoesNotCountAndReturnsANullTotalAsync()
     {
         SetupChanges(BuildChanges(20));
-        var provider = ShowDialog(totalCount: 20);
+        var provider = RenderTable();
         _connectedSystems.Invocations.Clear();
 
-        var window = await LoadWindow(provider)(
+        var window = await Grid(provider).LoadWindow(
             new VirtualisedWindowRequest(0, 5, null, "order", false, IncludeTotalCount: false), CancellationToken.None);
 
         Assert.That(window.TotalItems, Is.Null, "null means not counted, and must not be read as no matches");
@@ -180,11 +187,11 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void PendingExportMvaDialog_WithNoChanges_SaysSoRatherThanShowingAnEmptyTable()
+    public void PendingExportMvaTable_WithNoChanges_SaysSoRatherThanShowingAnEmptyTable()
     {
         SetupChanges([]);
 
-        var provider = ShowDialog(totalCount: 0);
+        var provider = RenderTable();
 
         provider.WaitForAssertion(() =>
             Assert.That(provider.FindComponent<TableEmptyState>().Instance.PrimaryText,
@@ -192,11 +199,11 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void PendingExportMvaDialog_WithChanges_ShowsNoEmptyState()
+    public void PendingExportMvaTable_WithChanges_ShowsNoEmptyState()
     {
         SetupChanges(BuildChanges(4));
 
-        var provider = ShowDialog(totalCount: 4);
+        var provider = RenderTable();
 
         provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("change-0003")));
         Assert.That(provider.HasComponent<TableEmptyState>(), Is.False);

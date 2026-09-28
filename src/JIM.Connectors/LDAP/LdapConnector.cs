@@ -200,7 +200,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             // Export settings
             new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
-            new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, Category = ConnectedSystemSettingCategory.Export },
+            new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions: Delete removes the object from the directory; Disable keeps it and sets the Disable Attribute instead. Default is Delete.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, DefaultStringValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, Category = ConnectedSystemSettingCategory.Export },
             new() { Name = _settingDisableAttribute, Required = false, RequiredWhenSetting = _settingDeleteBehaviour, RequiredWhenValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Default is 4. Recommended range: 2-8. Values above 8 show diminishing returns and may overwhelm the directory server.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput, especially for very large groups. Default is 1000. Recommended range: 100-2000.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
@@ -478,8 +478,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
             if (!rootDse.IsActiveDirectoryFamily)
-                throw new NotSupportedException(
-                    $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
+                throw new NotSupportedException(DirectoryServerDiscoveryUnsupportedMessage(rootDse.DirectoryType));
 
             var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(_connection, logger);
             return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
@@ -1261,6 +1260,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         UnfinishedPreflight(PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
                 $"JIM connected and authenticated successfully. {message}"),
             "Not checked, because JIM could not read the directory's basic information.");
+
+    /// <summary>
+    /// The refusal an administrator reads in the Discover Domain Controllers dialog. Names the directory the way
+    /// the rest of the portal does (<see cref="DescribeDirectory"/>), not by the enum's identifier.
+    /// </summary>
+    internal static string DirectoryServerDiscoveryUnsupportedMessage(LdapDirectoryType directoryType) =>
+        $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {DescribeDirectory(directoryType)}.";
 
     private static string DescribeDirectory(LdapDirectoryType directoryType) => directoryType switch
     {

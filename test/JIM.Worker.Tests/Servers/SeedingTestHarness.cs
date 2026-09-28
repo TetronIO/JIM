@@ -299,6 +299,9 @@ internal sealed class SeedingTestHarness : IDisposable
                 CreatedConnectorDefinitions.Add(d);
             })
             .Returns(Task.CompletedTask);
+        // The startup sync brings every Connected System built on a definition into line with it; the harness seeds
+        // none, so each definition has nothing to reconcile.
+        ConnectedSystemRepository.Setup(r => r.GetConnectedSystemsAsync()).ReturnsAsync(new List<ConnectedSystem>());
         ConnectedSystemRepository.Setup(r => r.GetConnectorDefinitionHeadersAsync())
             .ReturnsAsync(() => (IList<ConnectorDefinitionHeader>)ConnectorDefinitions.Values
                 .Select(d => new ConnectorDefinitionHeader { Id = d.Id, Name = d.Name, BuiltIn = d.BuiltIn })

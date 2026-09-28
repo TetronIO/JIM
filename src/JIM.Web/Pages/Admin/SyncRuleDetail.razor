@@ -159,7 +159,7 @@ else if (_syncRule != null)
             {
                 @if (previewBaseline.DestructiveTogglesEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Filled" Color="Color.Secondary"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDestructiveTogglesAsync"
                         Disabled="@_startingPreview">
                         Preview Deprovisioning Impact
@@ -170,7 +170,7 @@ else if (_syncRule != null)
                 @* separately and answer different questions.                                                     *@
                 @if (previewBaseline.ScopeEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Filled" Color="Color.Secondary"
                         StartIcon="@Icons.Material.Filled.FilterAlt" OnClick="PreviewScopingCriteriaAsync"
                         Disabled="@_startingPreview">
                         Preview Scope Impact
@@ -181,7 +181,7 @@ else if (_syncRule != null)
                 @* leaving costs them, and this decides what the ones staying end up holding.                     *@
                 @if (previewBaseline.AttributeFlowEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Filled" Color="Color.Secondary"
                         StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
                         Disabled="@_startingPreview">
                         Preview Attribute Flow Impact
@@ -192,7 +192,7 @@ else if (_syncRule != null)
                 @* staying hold, and these decide whether the rule runs at all and what it may create.            *@
                 @if (previewBaseline.BehaviourEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Filled" Color="Color.Secondary"
                         StartIcon="@Icons.Material.Filled.ToggleOn" OnClick="PreviewBehaviourAsync"
                         Disabled="@_startingPreview">
                         Preview Behaviour Impact

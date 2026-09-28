@@ -8,8 +8,8 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// Source-shape test over <c>Types/View.razor</c> for the Metaverse Object detail page's two Sync Preview
-/// affordances (#1519, D-S6): the Connections tab and its Preview Outbound
-/// Synchronisation card must each sit inside an <c>AuthorizeView Roles="Administrator"</c> gate, as
+/// affordances (#1519, D-S6): the Connections tab and its Preview Exports
+/// card must each sit inside an <c>AuthorizeView Roles="Administrator"</c> gate, as
 /// the Password tab already does (#1172).
 /// <para>
 /// A source-shape test rather than a bUnit render: bUnit's <c>AuthorizeView</c> support needs a
@@ -73,7 +73,7 @@ public class TypesViewAdministratorGateTests
         var source = ReadViewRazorSource();
 
         Assert.That(IsInsideAdministratorGate(source, "data-testid=\"jim-mvo-preview-outbound\""), Is.True,
-            "The Preview Outbound Synchronisation action must be gated by <AuthorizeView Roles=\"Administrator\">.");
+            "The Preview Exports action must be gated by <AuthorizeView Roles=\"Administrator\">.");
     }
 
     [Test]

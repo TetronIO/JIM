@@ -23,11 +23,11 @@ html[lang] {
     --mud-palette-primary-text: #0a1018;
 
     /* === Secondary Palette (cool slate-blue) === */
-    --mud-palette-secondary: #6b8aad;
-    --mud-palette-secondary-rgb: 107,138,173;
-    --mud-palette-secondary-darken: #567498;
-    --mud-palette-secondary-lighten: #84a0c0;
-    --mud-palette-secondary-text: #0a1018;
+    --mud-palette-secondary: #40546e;
+    --mud-palette-secondary-rgb: 64,84,110;
+    --mud-palette-secondary-darken: #354760;
+    --mud-palette-secondary-lighten: #506782;
+    --mud-palette-secondary-text: #e0e4ea;
 
     /* === Tertiary Palette (muted teal — cool complement to blue) === */
     --mud-palette-tertiary: #4a9a8a;
@@ -74,6 +74,11 @@ html[lang] {
     --mud-palette-action-default-hover: rgba(103, 185, 255, 0.16);
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.34);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.08);
+
+    /* === JIM Custom: Hover and pressed states (see the tonal step in site.css) === */
+    /* A dark surface lifts toward white on hover and steps back down when pressed. */
+    --jim-state-hover-mix: white 22%;
+    --jim-state-press-mix: black 16%;
 
     /* === Lines & Dividers === */
     --mud-palette-lines-default: #2c3c54;
@@ -157,28 +162,9 @@ html[lang] .mud-primary-text:not(a) {
     color: #b0b8c4 !important;
 }
 
-/* Default filled button — slightly lighter navy for contrast on dark backgrounds */
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
-    background-color: #2c3c59;
-}
-
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
-    background-color: #374d6e;
-}
-
-/* Error-coloured buttons/icon buttons — subtle hover instead of MudBlazor's
-   strong red glow which is too intense on dark navy backgrounds. */
-html[lang] .mud-button-filled.mud-button-filled-error:not(:disabled):hover,
-html[lang] .mud-icon-button.mud-button-filled.mud-icon-button-color-error:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--mud-palette-error) 85%, #000000) !important;
-}
-
-html[lang] .mud-button-outlined.mud-button-outlined-error:not(:disabled):hover,
-html[lang] .mud-icon-button.mud-button-outlined.mud-icon-button-color-error:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
-}
-
-html[lang] .mud-button-text.mud-button-text-error:not(:disabled):hover,
+/* Plain error-coloured icon buttons: a subtle wash in their own colour instead of MudBlazor's strong red glow,
+   which is too intense on dark navy backgrounds. Filled, outlined and text buttons take the tonal step in
+   site.css. */
 html[lang] .mud-icon-button.mud-icon-button-color-error:not(.mud-button-filled):not(.mud-button-outlined):not(:disabled):hover {
     background-color: color-mix(in srgb, var(--mud-palette-error) 8%, transparent) !important;
 }

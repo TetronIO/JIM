@@ -130,35 +130,16 @@
     margin-left: auto;
 }
 
-.causality-panel .seg {
-    display: inline-flex;
-    background: var(--cz-inner);
-    border-radius: 9px;
-    padding: 3px;
-    gap: 2px;
-}
-
-.causality-panel .seg button {
-    border: none;
-    background: transparent;
-    color: var(--cz-text-dim);
-    cursor: pointer;
-    padding: 6px 13px;
-    font-size: 0.875rem;
-    font-weight: 550;
-    font-family: inherit;
-    border-radius: 7px;
-    transition: background 0.15s, color 0.15s;
-}
-
-.causality-panel .seg button:hover {
-    color: var(--cz-text);
-}
-
-.causality-panel .seg button.on {
-    background: var(--cz-surface);
-    color: var(--cz-text);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+/* The view switcher is the shared SegmentedToggle (.jim-seg in site.css); the panel gives it its own palette and
+   the larger size it sits at in the summary band. Qualified with .seg (the Class the panel passes) so it outranks
+   site.css's body.jim-dark-mode .jim-seg, which would otherwise repaint the chosen option in dark mode. */
+.causality-panel .jim-seg.seg {
+    --jim-seg-track: var(--cz-inner);
+    --jim-seg-track-edge: transparent;
+    --jim-seg-on: var(--cz-surface);
+    --jim-seg-on-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+    --jim-seg-text: var(--cz-text-dim);
+    --jim-seg-text-on: var(--cz-text);
 }
 
 .causality-panel .seg button:focus-visible,
@@ -1409,7 +1390,6 @@
     background: color-mix(in srgb, var(--tone) 12%, transparent);
     color: var(--tone-text, var(--tone));
     font-size: 0.8125rem;
-    font-weight: var(--jim-chip-font-weight);
     white-space: nowrap;
 }
 

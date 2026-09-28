@@ -866,9 +866,9 @@
                 <TemplateColumn T="ActivityRunProfileExecutionItemHeader" Sortable="false">
                     <HeaderTemplate></HeaderTemplate>
                     <CellTemplate>
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    Size="Size.Small"
-                                   Color="Color.Primary"
+                                   Color="Color.Secondary"
                                    Href="@($"/activity/item/{context.Item.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
                     </CellTemplate>
                 </TemplateColumn>
@@ -1004,9 +1004,9 @@
                 <TemplateColumn T="Activity" Sortable="false">
                     <HeaderTemplate></HeaderTemplate>
                     <CellTemplate>
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    Size="Size.Small"
-                                   Color="Color.Primary"
+                                   Color="Color.Secondary"
                                    Href="@($"/activity/{context.Item.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
                     </CellTemplate>
                 </TemplateColumn>

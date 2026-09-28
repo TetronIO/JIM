@@ -3,7 +3,6 @@
 @using JIM.Models.Transactional
 @using System.Globalization
 @using Utilities
-@inject IUserPreferenceService PreferenceService
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -11,90 +10,59 @@
 
 @if (MetaverseObject != null)
 {
-    <MudPaper Class="pa-0" Outlined="true">
-        <div class="d-flex justify-start pa-2 jim-attribute-table-toolbar">
-            <TableDensityToggle @bind-Dense="_dense" />
-        </div>
-        <MudSimpleTable Hover="true" Dense="@_dense" Elevation="0" Class="jim-attribute-table">
-            <thead>
-                <tr>
-                    <th class="jim-attr-header-name">Attribute</th>
-                    <th class="jim-attr-header-value">Value</th>
-                    <th class="jim-attr-header-type">Type</th>
-                    <th class="jim-attr-header-plurality">Plurality</th>
-                </tr>
-            </thead>
-            <tbody>
-                @{
-                    var groupedAttributes = GetGroupedAttributes();
-                }
-                @if (!groupedAttributes.Any())
+    @* One row per attribute, through the same table as every other object's attributes, so the search, the sorts
+       and the way a multi-valued attribute reads are the same here as on a Connected System Object. *@
+    <AttributeTable TItem="MvoAttributeTableGroup"
+                    Items="@_groups"
+                    Matches="MatchesSearch"
+                    Sort="SortGroups"
+                    DefaultSortBy="attribute"
+                    UrlParameterPrefix="attr-"
+                    RowClassFunc="@((group, _) => group.TotalCount > 1 ? "jim-attr-row-mva" : string.Empty)">
+        <HeaderContent>
+            <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
+            <MudTh Class="jim-attr-header-value"><VirtualisedSortHeader Title="Value" Name="value" /></MudTh>
+            <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="Type" Name="type" /></MudTh>
+            <MudTh Class="jim-attr-header-plurality"><VirtualisedSortHeader Title="Plurality" Name="plurality" /></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd Class="jim-attr-name">
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
+            </MudTd>
+            <MudTd Class="jim-attr-value">
+                @{ var group = context; }
+                <AttributeValuesCell TValue="MetaverseObjectAttributeValue" Values="@group.Values" TotalCount="@group.TotalCount">
+                    <ValueTemplate Context="attributeValue">
+                        @RenderValue(attributeValue)
+                    </ValueTemplate>
+                    <OverflowContent>
+                        <MvoMvaTable @key="group.AttributeName"
+                                     ValueCount="@group.TotalCount"
+                                     AttributeName="@group.AttributeName"
+                                     MetaverseObjectId="@_metaverseObjectId"
+                                     IsReferenceAttribute="@group.IsReference" />
+                    </OverflowContent>
+                </AttributeValuesCell>
+                @* Unique Value Generation (#242, Phase 3, Work Package D2): a generated value only ever targets a
+                   single-valued attribute, so the provenance chip only ever needs to consider a lone value
+                   (approved mockup screen 04). *@
+                @if (group.TotalCount == 1 && _generatedAssignmentsByAttribute.TryGetValue(group.AttributeName, out var assignment))
                 {
-                    <tr>
-                        <td colspan="4" class="text-center pa-4">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
-                        </td>
-                    </tr>
+                    <GeneratedValueProvenanceChip Assignment="assignment" Class="ml-2" />
                 }
-                else
-                {
-                    @foreach (var group in groupedAttributes)
-                    {
-                        <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
-                            <td class="jim-attr-name">
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
-                            </td>
-                            <td class="jim-attr-value">
-                                @if (group.Values.Count == 1)
-                                {
-                                    @RenderValue(group.Values[0])
-                                    @* Unique Value Generation (#242, Phase 3, Work Package D2): a generated value only
-                                       ever targets a single-valued attribute, so the provenance chip only ever needs
-                                       to consider this branch (approved mockup screen 04). *@
-                                    @if (_generatedAssignmentsByAttribute.TryGetValue(group.AttributeName, out var assignment))
-                                    {
-                                        <GeneratedValueProvenanceChip Assignment="assignment" Class="ml-2" />
-                                    }
-                                }
-                                else if (group.TotalCount <= MvaInlineThreshold)
-                                {
-                                    <div class="jim-attr-expanded">
-                                        @foreach (var val in group.Values)
-                                        {
-                                            <div class="jim-attr-expanded-item">
-                                                @RenderValue(val)
-                                            </div>
-                                        }
-                                    </div>
-                                }
-                                else
-                                {
-                                    <MvoMvaTable @key="group.AttributeName"
-                                                 AttributeName="@group.AttributeName"
-                                                 MetaverseObjectId="@MetaverseObject.Id"
-                                                 IsReferenceAttribute="@group.IsReference"
-                                                 Dense="@_dense" />
-                                }
-                            </td>
-                            <td class="jim-attr-type">
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
-                            </td>
-                            <td class="jim-attr-plurality">
-                                @if (group.IsMultiValued)
-                                {
-                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Multi</MudText>
-                                }
-                                else
-                                {
-                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Single</MudText>
-                                }
-                            </td>
-                        </tr>
-                    }
-                }
-            </tbody>
-        </MudSimpleTable>
-    </MudPaper>
+            </MudTd>
+            <MudTd Class="jim-attr-type">
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
+            </MudTd>
+            <MudTd Class="jim-attr-plurality">
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
+            </MudTd>
+        </RowTemplate>
+        <EmptyContent>
+            <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                             PrimaryText="This object has no attribute values" />
+        </EmptyContent>
+    </AttributeTable>
 }
 
 @* ─── Render Fragments ─── *@
@@ -173,14 +141,6 @@
     public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
 
     /// <summary>
-    /// Maximum number of multi-valued attribute values to show inline before truncating.
-    /// </summary>
-    private const int MvaInlineThreshold = 10;
-
-    private bool _dense;
-    private bool _preferencesLoaded;
-
-    /// <summary>
     /// Generated-value assignments for the loaded Metaverse Object (Unique Value Generation, #242, Phase 3,
     /// Work Package D2), keyed by attribute name (see <see cref="GeneratedValuePreviewHelpers.IndexAssignmentsByAttribute"/>).
     /// Loaded once per Metaverse Object, not per row (<see cref="OnParametersSetAsync"/> guards on the id).
@@ -188,9 +148,19 @@
     private Dictionary<string, GeneratedValueAssignmentHeader> _generatedAssignmentsByAttribute = new();
     private Guid? _loadedGeneratedAssignmentsForMvoId;
 
+    // Grouped once per parameter set rather than per search or sort, which only filter and order this list.
+    private List<MvoAttributeTableGroup> _groups = new();
+    private Guid _metaverseObjectId;
+
     protected override async Task OnParametersSetAsync()
     {
-        if (MetaverseObject == null || MetaverseObject.Id == _loadedGeneratedAssignmentsForMvoId)
+        if (MetaverseObject == null)
+            return;
+
+        _groups = GetGroupedAttributes();
+        _metaverseObjectId = MetaverseObject.Id;
+
+        if (MetaverseObject.Id == _loadedGeneratedAssignmentsForMvoId)
             return;
 
         using var jim = JimFactory.Create();
@@ -199,24 +169,11 @@
         _loadedGeneratedAssignmentsForMvoId = MetaverseObject.Id;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                _dense = await PreferenceService.GetTableDenseAsync() == true;
-                _preferencesLoaded = true;
-                StateHasChanged();
-            }
-            catch (InvalidOperationException)
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
-
-    private record MvoAttributeTableGroup(
+    /// <summary>
+    /// One row of the table: an attribute and the values of it the object holds. Public so the component tests can
+    /// read the table's rows by name.
+    /// </summary>
+    public record MvoAttributeTableGroup(
         string AttributeName,
         List<MetaverseObjectAttributeValue> Values,
         bool IsMultiValued,
@@ -230,7 +187,6 @@
 
         return MetaverseObject.AttributeValues
             .GroupBy(v => v.Attribute.Name)
-            .OrderBy(g => g.Key)
             .Select(g =>
             {
                 var values = g.ToList();
@@ -246,4 +202,52 @@
             .ToList();
     }
 
+    /// <summary>
+    /// Whether an attribute matches the table's search: its name, or any of its loaded values.
+    /// </summary>
+    private static bool MatchesSearch(MvoAttributeTableGroup group, string search) =>
+        group.AttributeName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+        group.Values.Any(v => GetSearchText(v).Contains(search, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Orders the attributes by one of the four sorts the table's headers offer.
+    /// </summary>
+    private static IEnumerable<MvoAttributeTableGroup> SortGroups(IEnumerable<MvoAttributeTableGroup> groups, string sortBy, bool descending)
+    {
+        IOrderedEnumerable<MvoAttributeTableGroup> Order<TKey>(Func<MvoAttributeTableGroup, TKey> key, IComparer<TKey>? comparer = null) =>
+            descending ? groups.OrderByDescending(key, comparer) : groups.OrderBy(key, comparer);
+
+        return sortBy switch
+        {
+            "value" => Order(g => GetSearchText(g.Values[0]), StringComparer.OrdinalIgnoreCase),
+            "type" => Order(g => g.Values[0].Attribute.Type),
+            "plurality" => Order(g => g.IsMultiValued),
+            _ => Order(g => g.AttributeName, StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    /// <summary>
+    /// A value as text, for searching and sorting: a reference by the name it is shown under, everything else as
+    /// the value itself.
+    /// </summary>
+    private static string GetSearchText(MetaverseObjectAttributeValue value)
+    {
+        if (value.ReferenceValue != null)
+            return value.ReferenceValue.NameOrId ?? value.ReferenceValue.Id.ToString();
+        if (!string.IsNullOrEmpty(value.StringValue))
+            return value.StringValue;
+        if (value.DateTimeValue.HasValue)
+            return value.DateTimeValue.Value.ToFriendlyDate();
+        if (value.IntValue.HasValue)
+            return value.IntValue.Value.ToString(CultureInfo.InvariantCulture);
+        if (value.LongValue.HasValue)
+            return value.LongValue.Value.ToString(CultureInfo.InvariantCulture);
+        if (value.DecimalValue.HasValue)
+            return value.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
+        if (value.GuidValue.HasValue)
+            return value.GuidValue.Value.ToString();
+        if (value.BoolValue.HasValue)
+            return value.BoolValue.Value ? "True" : "False";
+        return string.Empty;
+    }
 }

@@ -241,6 +241,13 @@ public class AuxiliaryClassOfferDto
     public int ContributedAttributeCount { get; set; }
 
     /// <summary>
+    /// The attributes merging this class would contribute, ordered by name and excluding any the Object Type
+    /// already carries. A count alone cannot inform the choice: an administrator merges a class for particular
+    /// attributes, and needs to see them before deciding.
+    /// </summary>
+    public List<AuxiliaryClassAttributeDto> ContributedAttributes { get; set; } = [];
+
+    /// <summary>
     /// Whether the Connected System itself says this class may attach, i.e. an RFC 4512 DIT Content Rule names it.
     /// Most directories publish no such statement, so its absence says nothing.
     /// </summary>
@@ -265,9 +272,53 @@ public class AuxiliaryClassOfferDto
             Name = offer.ObjectType.Name,
             Merged = offer.Merged,
             ContributedAttributeCount = offer.ContributedAttributeCount,
+            ContributedAttributes = offer.ContributedAttributes.Select(AuxiliaryClassAttributeDto.FromEntity).ToList(),
             PermittedByTheConnectedSystem = offer.PermittedByTheConnectedSystem,
             EntriesObservedOn = offer.EntriesObservedOn,
             IsSuggested = offer.IsSuggested
+        };
+    }
+}
+
+/// <summary>
+/// One attribute an auxiliary class would contribute if merged: enough to decide whether the class is wanted,
+/// without the selection and identity fields that only mean something once it is.
+/// </summary>
+public class AuxiliaryClassAttributeDto
+{
+    public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The JIM data type, as the enum name.
+    /// </summary>
+    public string Type { get; set; } = null!;
+
+    /// <summary>
+    /// <c>SingleValued</c> or <c>MultiValued</c>.
+    /// </summary>
+    public string AttributePlurality { get; set; } = null!;
+
+    /// <summary>
+    /// Whether the class's schema demands it (an RFC 4512 MUST). JIM refuses an export that would add a class
+    /// whose required attributes have no value, so this is what to check when deciding which of them to flow.
+    /// </summary>
+    public bool Required { get; set; }
+
+    /// <summary>
+    /// Whether JIM treats the attribute as credential-bearing. A credential attribute can never be selected,
+    /// however the class is merged; passwords travel by the password channel instead.
+    /// </summary>
+    public bool IsCredential { get; set; }
+
+    public static AuxiliaryClassAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        return new AuxiliaryClassAttributeDto
+        {
+            Name = attribute.Name,
+            Type = attribute.Type.ToString(),
+            AttributePlurality = attribute.AttributePlurality.ToString(),
+            Required = attribute.Required,
+            IsCredential = CredentialAttributes.IsCredentialAttribute(attribute.Name)
         };
     }
 }

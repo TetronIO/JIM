@@ -304,7 +304,14 @@ param(
     # Runs the suite from a linked git worktree, which the preflight below otherwise refuses. Only
     # correct when no other JIM stack is running on this host; see the preflight for why.
     [Parameter(Mandatory=$false)]
-    [switch]$AllowWorktree
+    [switch]$AllowWorktree,
+
+    # Internal: set by the -DirectoryType All loop on every leg after the first, so that a
+    # directory-agnostic scenario (011, 015, 016) picked up by a -Scenario All sweep runs once
+    # rather than once per directory type. Never set this directly - a plain -Scenario All
+    # -DirectoryType <single type> run must still cover every implemented scenario.
+    [Parameter(Mandatory=$false, DontShow)]
+    [switch]$SkipDirectoryAgnosticScenarios
 )
 
 Set-StrictMode -Version Latest
@@ -335,6 +342,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
 . "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 . "$scriptRoot/utils/Resolve-IntegrationScenarioName.ps1"
+. "$scriptRoot/utils/Get-ScenarioDirectoryTypes.ps1"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -1303,12 +1311,13 @@ if (-not $Scenario) {
         }
     }
 
-    # Show directory type menu only if not explicitly provided. Scenarios 014 and 019 are
-    # OpenLDAP only (two-suffix topology), as is 22 (ppolicy overlay fixture), so don't offer
-    # a choice; go straight to OpenLDAP.
+    # Show directory type menu only if not explicitly provided. A scenario that supports exactly
+    # one directory type (see Get-ScenarioDirectoryTypes.ps1) doesn't offer a choice; go straight
+    # to it.
     if (-not $DirectoryTypeWasExplicitlySet) {
-        if ($scenarioNumber -in 14, 19, 22) {
-            $DirectoryType = "OpenLDAP"
+        $menuSupportedTypes = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $scenarioNumber)
+        if ($menuSupportedTypes.Count -eq 1) {
+            $DirectoryType = $menuSupportedTypes[0]
         }
         else {
             $DirectoryType = Show-DirectoryTypeMenu
@@ -1347,14 +1356,13 @@ if (-not $Scenario) {
 # Scenarios 014 and 019 depend on two LDAP suffixes hosted on a single OpenLDAP container
 # (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no equivalent
 # multi-suffix mechanism. Scenario 022 depends on the ppolicy overlay that same script
-# loads, which is OpenLDAP's password policy mechanism. This runs after scenario/directory
-# resolution (whether the values came from parameters or the interactive menu) and before
-# the build, so the constraint is enforced whichever way they were chosen. The 389 Directory
-# Server lab has two suffixes too, but these scenarios' fixtures and assertions are written
-# against OpenLDAP (cn=config, the ppolicy overlay, olc* attributes), so it is treated like
-# Samba AD here. If -DirectoryType was explicitly passed, respect the explicit intent and
+# loads, which is OpenLDAP's password policy mechanism. See Get-ScenarioDirectoryTypes.ps1 for the
+# full reasoning. This runs after scenario/directory resolution (whether the values came from
+# parameters or the interactive menu) and before the build, so the constraint is enforced whichever
+# way they were chosen. If -DirectoryType was explicitly passed, respect the explicit intent and
 # reject; otherwise coerce to OpenLDAP. -DirectoryType All is handled by its own block below.
-if ($scenarioNumber -in 14, 19, 22 -and $DirectoryType -in @("SambaAD", "DirectoryServer389")) {
+$openLdapOnlySupport = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $scenarioNumber)
+if ($openLdapOnlySupport.Count -eq 1 -and $openLdapOnlySupport[0] -eq "OpenLDAP" -and $DirectoryType -in @("SambaAD", "DirectoryServer389")) {
     if ($DirectoryTypeWasExplicitlySet) {
         throw "Scenarios 014 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy) depend on the single OpenLDAP container's two suffixes and ppolicy overlay and are OpenLDAP only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType OpenLDAP."
     }
@@ -1392,20 +1400,31 @@ if ($DirectoryType -eq "All") {
     $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
     $directoryTypesToRun = @("SambaAD", "OpenLDAP", "DirectoryServer389")
 
-    # Scenarios 014 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy)
-    # are OpenLDAP only; run just the OpenLDAP leg rather than failing the other legs. Scenario 017
-    # (Initial Password) is Samba AD only for the mirror-image reason (see the -Scenario All sweep).
-    if ($scenarioNumber -in 14, 19, 22) {
-        Write-Host "${YELLOW}This scenario is OpenLDAP only; skipping the Samba AD and 389 Directory Server legs.${NC}"
-        $directoryTypesToRun = @("OpenLDAP")
-    }
-    elseif ($scenarioNumber -eq 17) {
-        Write-Host "${YELLOW}This scenario is Samba AD only; skipping the OpenLDAP and 389 Directory Server legs.${NC}"
-        $directoryTypesToRun = @("SambaAD")
-    }
-    elseif ($scenarioNumber -eq 23) {
-        Write-Host "${YELLOW}This scenario supports OpenLDAP and Samba AD; skipping the 389 Directory Server leg.${NC}"
-        $directoryTypesToRun = @("OpenLDAP", "SambaAD")
+    # Restrict $directoryTypesToRun to what this single scenario supports (see
+    # Get-ScenarioDirectoryTypes.ps1 for the per-scenario reasoning), keeping the canonical
+    # SambaAD, OpenLDAP, DirectoryServer389 order. $scenarioNumber is $null for "-Scenario All", in
+    # which case every directory type stays here; the -Scenario All sweep in each per-directory-type
+    # leg below applies its own per-scenario filtering instead.
+    if ($scenarioNumber) {
+        $supportedTypes = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $scenarioNumber)
+        $restrictedTypes = @($directoryTypesToRun | Where-Object { $_ -in $supportedTypes })
+
+        # Directory-agnostic scenarios (011, 015, 016) don't use a directory at all; running it
+        # once for every directory type would produce three identical results.
+        if ((Test-ScenarioIsDirectoryAgnostic -ScenarioNumber $scenarioNumber) -and $restrictedTypes.Count -gt 1) {
+            $restrictedTypes = @($restrictedTypes[0])
+        }
+
+        if ($restrictedTypes.Count -lt $directoryTypesToRun.Count) {
+            $skippedTypes = @($directoryTypesToRun | Where-Object { $_ -notin $restrictedTypes })
+            if (Test-ScenarioIsDirectoryAgnostic -ScenarioNumber $scenarioNumber) {
+                Write-Host "${YELLOW}This scenario does not use a directory; running only the $($restrictedTypes[0]) leg.${NC}"
+            }
+            else {
+                Write-Host "${YELLOW}This scenario supports $($restrictedTypes -join ', ') only; skipping the $($skippedTypes -join ', ') leg(s).${NC}"
+            }
+            $directoryTypesToRun = $restrictedTypes
+        }
     }
 
     # Build common parameters to pass through (excluding DirectoryType and Template)
@@ -1458,13 +1477,22 @@ if ($DirectoryType -eq "All") {
         # Select the template for this directory type
         $dtTemplate = $templateForDirectoryType[$dt]
 
+        # For a full "-Scenario All" sweep, every leg after the first is told to skip
+        # directory-agnostic scenarios (011, 015, 016): they don't use a directory, so the first
+        # leg's run of them already covers every leg. A single-scenario run never sets this; the
+        # restriction above has already reduced $directoryTypesToRun to one entry for those.
+        $dtParams = $passThruParams.Clone()
+        if ($Scenario -eq "All" -and $dt -ne $directoryTypesToRun[0]) {
+            $dtParams.SkipDirectoryAgnosticScenarios = $true
+        }
+
         Write-Host ""
         Write-Host "${CYAN}$("=" * 65)${NC}"
         Write-Host "${CYAN}  Directory Type: $dt (Template: $dtTemplate)${NC}"
         Write-Host "${CYAN}$("=" * 65)${NC}"
         Write-Host ""
 
-        & $selfScript @passThruParams -DirectoryType $dt -Template $dtTemplate
+        & $selfScript @dtParams -DirectoryType $dt -Template $dtTemplate
         $dtExitCode = $LASTEXITCODE
         $dtDuration = (Get-Date) - $dtStart
 
@@ -1717,30 +1745,32 @@ if ($Scenario -eq "All") {
         $implementedScenarios += ($file.BaseName -replace '^Invoke-', '')
     }
 
-    # Scenarios 014 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy)
-    # are OpenLDAP only (two-suffix topology; ppolicy overlay; cn=config fixtures); skip them on a
-    # Samba AD or 389 Directory Server sweep rather than recording a guaranteed failure.
-    if ($DirectoryType -in @("SambaAD", "DirectoryServer389")) {
-        $openLdapOnly = @($implementedScenarios | Where-Object { (Get-IntegrationScenarioNumber -Scenario $_) -in 14, 19, 22 })
-        if ($openLdapOnly.Count -gt 0) {
-            Write-Host "${YELLOW}Skipping OpenLDAP-only scenario(s) on ${DirectoryType}: $($openLdapOnly -join ', ')${NC}"
-            $implementedScenarios = @($implementedScenarios | Where-Object { (Get-IntegrationScenarioNumber -Scenario $_) -notin 14, 19, 22 })
-        }
+    # Skip scenarios that don't support this directory type (14, 19 and 22 are OpenLDAP only; 17 is
+    # Samba AD only; 23 supports OpenLDAP and Samba AD only) rather than recording a guaranteed
+    # failure. Scenario 020 runs on every directory: OpenLDAP's RFC 3062 Password Modify path works
+    # over plain LDAP against the test container (no TLS required there), verified end to end
+    # (#1697); its parked-change retry test also runs on OpenLDAP now that the lab's ppolicy overlay
+    # genuinely refuses an under-length password there. 389 Directory Server is the same family as
+    # OpenLDAP for this purpose. See Get-ScenarioDirectoryTypes.ps1 for the full per-scenario
+    # reasoning, including why 23 is skipped here too (it used to slip through and fail on this
+    # 389 Directory Server pass).
+    $unsupportedOnThisDirectory = @($implementedScenarios | Where-Object {
+        $DirectoryType -notin (Get-ScenarioSupportedDirectoryTypes -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_))
+    })
+    if ($unsupportedOnThisDirectory.Count -gt 0) {
+        Write-Host "${YELLOW}Skipping scenario(s) not supported on ${DirectoryType}: $($unsupportedOnThisDirectory -join ', ')${NC}"
+        $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notin $unsupportedOnThisDirectory })
     }
 
-    # The mirror of the rule above, and it exists for the same reason: a scenario that cannot hold on the
-    # directory being swept must be skipped rather than run to a guaranteed failure. Scenario 017 is Samba AD
-    # only because "must change at next sign-in" (its central assertion) is an Active Directory behaviour with
-    # no portable equivalent; JIM reports it as a downgrade on every other directory. Scenario 020 runs on
-    # either directory: OpenLDAP's RFC 3062 Password Modify path works over plain LDAP against the test
-    # container (no TLS required there), verified end to end (#1697); its parked-change retry test also runs
-    # on OpenLDAP now that the lab's ppolicy overlay genuinely refuses an under-length password there.
-    # 389 Directory Server is the same family as OpenLDAP for this purpose.
-    if ($DirectoryType -in @("OpenLDAP", "DirectoryServer389")) {
-        $sambaOnly = @($implementedScenarios | Where-Object { (Get-IntegrationScenarioNumber -Scenario $_) -eq 17 })
-        if ($sambaOnly.Count -gt 0) {
-            Write-Host "${YELLOW}Skipping Samba AD-only scenario(s) on ${DirectoryType}: $($sambaOnly -join ', ')${NC}"
-            $implementedScenarios = @($implementedScenarios | Where-Object { (Get-IntegrationScenarioNumber -Scenario $_) -ne 17 })
+    # Directory-agnostic scenarios (011, 015, 016) don't use a directory at all. A -DirectoryType
+    # All run sets -SkipDirectoryAgnosticScenarios on every leg after the first so they run once
+    # rather than once per directory type with identical results each time; a plain -Scenario All
+    # sweep against a single directory type never sets it, so it still covers them.
+    if ($SkipDirectoryAgnosticScenarios) {
+        $directoryAgnostic = @($implementedScenarios | Where-Object { Test-ScenarioIsDirectoryAgnostic -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_) })
+        if ($directoryAgnostic.Count -gt 0) {
+            Write-Host "${YELLOW}Skipping directory-agnostic scenario(s) already run on an earlier directory type: $($directoryAgnostic -join ', ')${NC}"
+            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notin $directoryAgnostic })
         }
     }
 
@@ -4125,6 +4155,15 @@ Write-Host ""
 
 if ($scenarioExitCode -eq 0) {
     Write-Host "${GREEN}✓ All tests passed!${NC}"
+
+    # A pass that never crossed a synchronisation page boundary proves nothing about the code the worker runs
+    # between pages; see Test-TemplateSpansSyncPages. Say so where the pass is reported, so a reader cannot
+    # mistake an iteration run for a sign-off. Template-irrelevant scenarios assert against fixed data and
+    # are exempt.
+    if ((Test-TemplateRelevant -ScenarioName $Scenario) -and -not (Test-TemplateSpansSyncPages -Template $Template)) {
+        Write-Host "${YELLOW}⚠ Single-page run: -Template $Template fits in one synchronisation page, so page-boundary code was not exercised.${NC}"
+        Write-Host "${YELLOW}  Not a sign-off for synchronisation or worker changes; re-run at Medium or above (Pre-Release uses Medium for Samba AD, Large for OpenLDAP and 389 Directory Server).${NC}"
+    }
 }
 else {
     Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"

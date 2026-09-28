@@ -216,7 +216,9 @@ public class SchedulingRepository : ISchedulingRepository
                 // execution (one row, from the same backward index scan as above) and only then reaches into Activities,
                 // so PostgreSQL joins that one execution to its Activities through IX_Activities_ScheduleExecutionId
                 // rather than weighing every Activity against it. Empty for any other outcome: a Failed run stopped, and
-                // is described by its current step index.
+                // is described by its current step index. Deduplicated and sorted below rather than here: a Distinct
+                // downstream of the OrderByDescending makes EF Core warn that the ordering is erased, when it only
+                // exists for the Take.
                 LastExecutionFailedStepIndices = s.Executions
                     .OrderByDescending(e => e.QueuedAt)
                     .Take(1)
@@ -226,11 +228,13 @@ public class SchedulingRepository : ISchedulingRepository
                                     a.ScheduleStepIndex != null &&
                                     failedOutcomes.Contains(a.Status)))
                     .Select(a => a.ScheduleStepIndex!.Value)
-                    .Distinct()
-                    .OrderBy(i => i)
                     .ToArray()
             })
             .ToListAsync();
+
+        // One entry per failed step, ascending; parallel failures at one index collapse to one.
+        foreach (var header in results.Where(h => h.LastExecutionFailedStepIndices.Length > 0))
+            header.LastExecutionFailedStepIndices = header.LastExecutionFailedStepIndices.Distinct().Order().ToArray();
 
         return (results, totalCount);
     }

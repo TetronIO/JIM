@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Web.Models.Api;
 using NUnit.Framework;
@@ -98,7 +99,7 @@ public class AuxiliaryClassApiDtoTests
         {
             ObjectType = new ConnectedSystemObjectType { Id = 2, Name = "posixAccount" },
             Merged = true,
-            ContributedAttributeCount = 7,
+            ContributedAttributes = Enumerable.Range(1, 7).Select(i => new ConnectedSystemObjectTypeAttribute { Id = i, Name = $"attribute{i}" }).ToList(),
             PermittedByTheConnectedSystem = true,
             EntriesObservedOn = 1204
         };
@@ -124,7 +125,7 @@ public class AuxiliaryClassApiDtoTests
         var offer = new AuxiliaryClassOffer
         {
             ObjectType = new ConnectedSystemObjectType { Id = 4, Name = "sambaSamAccount" },
-            ContributedAttributeCount = 21
+            ContributedAttributes = Enumerable.Range(1, 21).Select(i => new ConnectedSystemObjectTypeAttribute { Id = i, Name = $"attribute{i}" }).ToList()
         };
 
         var dto = AuxiliaryClassOfferDto.FromEntity(offer);
@@ -139,6 +140,35 @@ public class AuxiliaryClassApiDtoTests
     #endregion
 
     #region AuxiliaryClassDiscoveryRunDto
+
+    /// <summary>
+    /// A count alone does not let a caller decide whether to merge a class; the names do. Ordered by name, with
+    /// credential attributes marked, because those can never be selected however the class is merged.
+    /// </summary>
+    [Test]
+    public void AuxiliaryClassOfferDto_FromEntity_ListsTheAttributesItWouldContribute()
+    {
+        var posixAccount = AuxiliaryType(2, "posixAccount");
+        posixAccount.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 21, Name = "uidNumber", Type = AttributeDataType.Number, Required = true });
+        posixAccount.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 22, Name = "userPassword", Type = AttributeDataType.Text });
+        posixAccount.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 23, Name = "gecos", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued });
+
+        var dto = AuxiliaryClassOfferDto.FromEntity(new AuxiliaryClassOffer
+        {
+            ObjectType = posixAccount,
+            ContributedAttributes = posixAccount.Attributes.OrderBy(attribute => attribute.Name).ToList()
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ContributedAttributes.Select(a => a.Name), Is.EqualTo(new[] { "gecos", "uidNumber", "userPassword" }));
+            Assert.That(dto.ContributedAttributes.Single(a => a.Name == "uidNumber").Required, Is.True);
+            Assert.That(dto.ContributedAttributes.Single(a => a.Name == "uidNumber").Type, Is.EqualTo("Number"));
+            Assert.That(dto.ContributedAttributes.Single(a => a.Name == "gecos").AttributePlurality, Is.EqualTo("MultiValued"));
+            Assert.That(dto.ContributedAttributes.Single(a => a.Name == "userPassword").IsCredential, Is.True);
+            Assert.That(dto.ContributedAttributes.Count(a => a.IsCredential), Is.EqualTo(1));
+        }
+    }
 
     [Test]
     public void AuxiliaryClassDiscoveryRunDto_FromEntity_CarriesTheRunAndItsResults()
@@ -213,6 +243,16 @@ public class AuxiliaryClassApiDtoTests
         Tags =
         [
             new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }
+        ]
+    };
+
+    private static ConnectedSystemObjectType AuxiliaryType(int id, string name) => new()
+    {
+        Id = id,
+        Name = name,
+        Tags =
+        [
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindAuxiliary }
         ]
     };
 

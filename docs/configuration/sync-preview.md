@@ -12,7 +12,7 @@ Nothing you configure changes to ask it. JIM evaluates the object against the st
 
 - **Connected System Object page**: a **Preview Sync** button beside **Set Password**, opening the preview inline below the object's header.
 - **Metaverse Object detail page, Connections tab**: every Connected System Object joined to the Metaverse Object is listed with a per-row **Preview Sync** action, previewing that one object's synchronisation.
-- **Metaverse Object detail page, Connections tab, below the table**: **Preview Outbound Synchronisation**, which previews what would export from the Metaverse Object as it stands now, with no inbound chain (see [Outbound-only preview](#outbound-only-preview-from-a-metaverse-object) below).
+- **Metaverse Object detail page, Connections tab, below the table**: **Preview Exports**, which previews what would export from the Metaverse Object as it stands now, with no inbound chain (see [Export-only preview](#export-only-preview-from-a-metaverse-object) below).
 
 Each panel names the Connected System whose Full Synchronisation is being previewed, so a preview reached from a Connected System Object's Connections row is never mistaken for a preview of a different system.
 
@@ -44,9 +44,9 @@ The same goes for a downstream object whose provisioning was **never exported**:
 
     Under the **When Last Connector Disconnected** Deletion Rule, an account JIM has provisioned to a target system counts as a connector like any other. A Metaverse Object with target accounts is therefore **not** deleted just because its source system leaves scope; the target accounts keep it alive, holding their last known values. If you want a departing source to remove those target accounts, the Metaverse Object's type needs **When Authoritative Source Disconnected** with that source listed, which is the rule that actually deprovisions targets when an authoritative source disconnects. See [Deletion behaviour](metaverse.md#deletion-behaviour) for the full explanation, including the grace period and how a reconnection can cancel a scheduled deletion.
 
-## Outbound-only preview from a Metaverse Object
+## Export-only preview from a Metaverse Object
 
-A Metaverse Object is never synchronised itself; its Connected System Objects are. **Preview Outbound Synchronisation** below the Connections table therefore asks a narrower question than the Connections tab's per-object preview: given the Metaverse Object **as it stands right now**, what would export to each target Connected System? It carries no inbound chain at all (no scope, no join, no Attribute Flow), so it cannot tell you whether an inbound change is about to arrive first. Use it to check what an edit you have already made to the Metaverse Object would push outward; use the per-object preview on the Connections tab for the full inbound-then-outbound answer for one Connected System Object.
+A Metaverse Object is never synchronised itself; its Connected System Objects are. **Preview Exports** below the Connections table therefore asks a narrower question than the Connections tab's per-object preview: given the Metaverse Object **as it stands right now**, what would export to each target Connected System? It carries no inbound chain at all (no scope, no join, no Attribute Flow), so it cannot tell you whether an inbound change is about to arrive first. Use it to check what an edit you have already made to the Metaverse Object would push outward; use the per-object preview on the Connections tab for the full inbound-then-outbound answer for one Connected System Object.
 
 There is no single preview covering every source at once: a Full Synchronisation always belongs to one Connected System, so a preview spanning several would not correspond to any run you could actually start.
 

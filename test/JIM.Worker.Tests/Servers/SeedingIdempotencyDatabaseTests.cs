@@ -165,6 +165,80 @@ public class SeedingIdempotencyDatabaseTests
         }
     }
 
+    [Test]
+    public async Task SyncBuiltInConnectorDefinitionsAsync_ConnectedSystemMissingASettingOrItsDefault_BringsItIntoLineAsync()
+    {
+        // The upgrade case for settings: a Connected System created before its Connector gained a setting has no
+        // value for it (so the setting never appeared on it), and one created before a setting gained a default holds
+        // an unset value where the Connector quietly applies that default. Startup must add the one and fill the other,
+        // and only once.
+        await SeedAsync();
+        int connectedSystemId;
+        await using (var ctx = NewContext())
+        {
+            var definition = await ctx.ConnectorDefinitions.Include(d => d.Settings).SingleAsync(d => d.Name == "JIM LDAP Connector");
+            var connectedSystem = new JIM.Models.Staging.ConnectedSystem { Name = "Yellowstone APAC", ConnectorDefinition = definition };
+            foreach (var setting in definition.Settings)
+                connectedSystem.SettingValues.Add(new JIM.Models.Staging.ConnectedSystemSettingValue { Setting = setting, ConnectedSystem = connectedSystem });
+            connectedSystem.SettingValues.Single(v => v.Setting.Name == "Delete Behaviour").StringValue = null;
+            connectedSystem.SettingValues.Single(v => v.Setting.Name == "Host").StringValue = "dc01.yellowstone.local";
+            ctx.ConnectedSystems.Add(connectedSystem);
+            await ctx.SaveChangesAsync();
+            connectedSystemId = connectedSystem.Id;
+
+            // the setting the Connector "gained" after this system was created
+            await ctx.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ConnectedSystemSettingValues"" WHERE ""ConnectedSystemId"" = {0} AND ""SettingId"" =
+                  (SELECT ""Id"" FROM ""ConnectorDefinitionSettings"" WHERE ""Name"" = 'Search Timeout' AND ""ConnectorDefinitionId"" = {1})",
+                connectedSystemId, definition.Id);
+        }
+
+        await SyncConnectorDefinitionsAsync();
+
+        int updateActivitiesAfterFirstPass;
+        await using (var ctx = NewContext())
+        {
+            var values = await ctx.ConnectedSystemSettingValues.Include(v => v.Setting)
+                .Where(v => v.ConnectedSystem.Id == connectedSystemId).ToListAsync();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(values.Where(v => v.Setting.Name == "Search Timeout").Select(v => v.IntValue), Is.EqualTo(new int?[] { 300 }),
+                    "the missing setting must be added once, carrying its default");
+                Assert.That(values.Single(v => v.Setting.Name == "Delete Behaviour").StringValue, Is.EqualTo("Delete"),
+                    "the unset value must take the setting's declared default");
+                Assert.That(values.Single(v => v.Setting.Name == "Host").StringValue, Is.EqualTo("dc01.yellowstone.local"),
+                    "a value the administrator set is never touched");
+            }
+
+            var updates = await ctx.Activities.Where(a => a.TargetType == ActivityTargetType.ConnectedSystem &&
+                a.TargetOperationType == ActivityTargetOperationType.Update && a.ConnectedSystemId == connectedSystemId).ToListAsync();
+            Assert.That(updates, Has.Count.EqualTo(1), "the change is recorded as one Update Activity on the Connected System");
+            Assert.That(updates[0].InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+            Assert.That(updates[0].ParentActivityId, Is.Not.Null, "grouped under the System Initialisation Activity");
+            updateActivitiesAfterFirstPass = updates.Count;
+        }
+
+        await SyncConnectorDefinitionsAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var updates = await ctx.Activities.CountAsync(a => a.TargetType == ActivityTargetType.ConnectedSystem &&
+                a.TargetOperationType == ActivityTargetOperationType.Update && a.ConnectedSystemId == connectedSystemId);
+            Assert.That(updates, Is.EqualTo(updateActivitiesAfterFirstPass), "a restart once in line must record nothing further");
+            var searchTimeoutValues = await ctx.ConnectedSystemSettingValues
+                .CountAsync(v => v.ConnectedSystem.Id == connectedSystemId && v.Setting.Name == "Search Timeout");
+            Assert.That(searchTimeoutValues, Is.EqualTo(1), "and must not add the setting a second time");
+        }
+    }
+
+    private async Task SyncConnectorDefinitionsAsync()
+    {
+        await using var ctx = NewContext();
+        var jim = NewApplication(ctx);
+        await jim.Seeding.SyncBuiltInConnectorDefinitionsAsync();
+        await jim.Seeding.CompleteSeedingActivityAsync();
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     /// <summary>

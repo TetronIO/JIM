@@ -64,5 +64,17 @@ public class FileConnectorTests
         Assert.That(objectType.RequiredGroupCardinality, Is.EqualTo(ConnectorSettingRequiredGroupCardinality.ExactlyOne));
     }
 
+    [Test]
+    public void GetSettings_StopOnFirstError_DeclaresOffAsItsDefault()
+    {
+        // Import treats an unset Stop On First Error as off; declaring it keeps the checkbox and the behaviour in step,
+        // and gives the setting a value to show when JIM adds it to an existing Connected System.
+        var settings = _connector.GetSettings();
+
+        var stopOnFirstError = settings.Single(s => s.Name == "Stop On First Error");
+
+        Assert.That(stopOnFirstError.DefaultCheckboxValue, Is.False);
+    }
+
     #endregion
 }
