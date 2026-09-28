@@ -7,8 +7,9 @@
 
 .DESCRIPTION
     Creates a self-contained release package containing:
-    - Pre-built Docker images (exported as .tar files)
+    - Pre-built container images (exported as .tar files, which Docker and Podman both load)
     - Docker Compose configuration files
+    - Podman pod files and Quadlet units
     - PowerShell module
     - Installation documentation
     - SHA256 checksums for integrity verification
@@ -97,6 +98,7 @@ try {
     $directories = @(
         "$bundlePath/docker-images"
         "$bundlePath/compose"
+        "$bundlePath/podman"
         "$bundlePath/powershell"
         "$bundlePath/docs"
     )
@@ -157,6 +159,16 @@ try {
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to export the PostgreSQL image"
             }
+
+            # The compose and pod files pin PostgreSQL by its registry digest, which resolves on an air-gapped
+            # host only if the archive carries the registry's own manifest. Docker's containerd image store saves
+            # it; the classic store writes a manifest of its own, whose digest the pinned reference never matches,
+            # so the bundled database would try to download its image and fail. Refuse to build that bundle.
+            $postgresDigest = ($PostgresImage -split '@')[1]
+            $archiveIndex = tar -xOf $postgresTar index.json 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not ($archiveIndex -match [regex]::Escape($postgresDigest))) {
+                throw "The PostgreSQL archive does not carry the registry manifest $postgresDigest, so the pinned image would not resolve on an air-gapped host. Build the bundle with Docker's containerd image store (https://docs.docker.com/engine/storage/containerd/)."
+            }
             Write-Host "  Exported: $postgresTar" -ForegroundColor Green
         }
     }
@@ -183,6 +195,10 @@ try {
             Write-Host "  Copied: $file" -ForegroundColor Gray
         }
     }
+
+    # The Podman files, with this release's image references filled in.
+    Write-Host "`nRendering the Podman files..." -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'Build-PodmanFiles.ps1') -Version $Version -OutputPath "$bundlePath/podman"
 
     # The installer, which installs from this bundle when run inside it, and the version it installs.
     Copy-Item (Join-Path $RepoRoot "deploy/setup.sh") -Destination "$bundlePath/setup.sh"
@@ -239,8 +255,9 @@ uses the images and files in this bundle and downloads nothing.
 
 You need:
 
-- A Linux server with Docker Engine 24.0 or later and Docker Compose v2.24 or
-  later, 4 GB of RAM or more, and 20 GB of free disk space
+- A Linux server with 4 GB of RAM or more and 20 GB of free disk space, and
+  either Docker Engine 24.0 or later with Docker Compose v2.24 or later, or
+  Podman 4.4 or later with systemd (RHEL 9 and 10 include both)
 - OpenSSL, which every mainstream Linux distribution installs by default
 - The DNS name users will reach JIM at
 - A client registration for JIM at your identity provider: its authority URL,
@@ -269,6 +286,11 @@ You need:
     sudo ./setup.sh
     ``````
 
+   It uses Docker or Podman, whichever the server has. Where both are
+   installed it asks which; name one with --runtime docker or --runtime podman.
+   On Podman, JIM runs rootless, under an account named jim that the installer
+   creates, and systemd starts it at boot; add --rootful to run it as root.
+
    It installs JIM in /opt/jim and asks about:
 
    - the database: the bundled PostgreSQL, or your own server
@@ -277,6 +299,7 @@ You need:
    - the certificate: one it creates, with a certificate authority (CA) of its
      own, or your organisation's certificate and key
    - any reverse proxy or load balancer in front of JIM
+   - on Podman, whether to open the port in firewalld, if it is running
 
    It then loads JIM's images, starts JIM, and waits until JIM is ready.
 
@@ -305,8 +328,8 @@ sudo /opt/jim/setup.sh --renew-certificate
 sudo /opt/jim/setup.sh --certificate
 ``````
 
-Run Docker Compose commands in /opt/jim, naming both compose files, and with
---profile with-db if you use the bundled PostgreSQL:
+On Docker, run Docker Compose commands in /opt/jim, naming both compose files,
+and with --profile with-db if you use the bundled PostgreSQL:
 
 ``````bash
 cd /opt/jim
@@ -314,9 +337,24 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml --profile 
 docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db logs jim.web
 ``````
 
+On Podman, systemd runs JIM as jim.service (and the bundled PostgreSQL as
+jim-database.service), under the jim account's own systemd manager:
+
+``````bash
+sudo systemctl --user -M jim@ status jim.service
+sudo systemctl --user -M jim@ restart jim.service
+sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman ps
+sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman logs jim-web
+``````
+
+Installed with --rootful, leave out --user -M jim@, and run podman as root.
+
 ## Installing Without the Installer
 
-If your organisation's policy requires every step by hand:
+If your organisation's policy requires every step by hand, follow the steps
+for your runtime.
+
+### With Docker
 
 ``````bash
 # As root, in the extracted bundle
@@ -352,6 +390,49 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml --profile 
 ``````
 
 JIM is ready when docker compose ... ps shows jim.web as healthy.
+
+### With Podman
+
+These steps install JIM rootful, which takes the fewest steps. The Deployment
+Guide on the documentation site gives the rootless steps, which the installer
+follows. As root, in the extracted bundle:
+
+``````bash
+for f in docker-images/*.tar; do podman load -i "`$f"; done
+mkdir -p /opt/jim/tls /etc/containers/systemd && chmod 700 /opt/jim/tls
+cp podman/jim.yaml podman/jim-database.yaml podman/jim-config.yaml /opt/jim/
+cp podman/quadlet/jim.network podman/quadlet/jim.kube podman/quadlet/jim-database.kube /etc/containers/systemd/
+``````
+
+Leave out jim-database.kube if you use your own PostgreSQL server. Edit
+/opt/jim/jim-config.yaml: fill in the identity provider settings, and for your
+own PostgreSQL server set JIM_DB_HOSTNAME to its name. To use a port other than
+443, change PublishPort= in /etc/containers/systemd/jim.kube.
+
+Store the database password and client secret in Podman, from a copy of
+podman/jim-secrets.yaml with both filled in, then delete the copy:
+
+``````bash
+podman kube play jim-secrets.yaml && shred -u jim-secrets.yaml
+``````
+
+Put JIM's certificate and key in /opt/jim/tls as tls.crt and tls.key, as for
+Docker above (Podman needs no chown), and store them in Podman as well:
+
+``````bash
+printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: jim-tls\ndata:\n  tls.crt: %s\n  tls.key: %s\n' \
+  "`$(base64 -w0 /opt/jim/tls/tls.crt)" "`$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
+``````
+
+Then start JIM, and allow its port through firewalld if it is running:
+
+``````bash
+systemctl daemon-reload
+systemctl start jim-database.service jim.service
+firewall-cmd --permanent --add-service=https && firewall-cmd --reload
+``````
+
+JIM is ready when podman healthcheck run jim-web succeeds.
 
 ## Installing the PowerShell Module
 
@@ -391,8 +472,9 @@ Contents:
 ---------
 - setup.sh        : The installer; it installs from this bundle
 - VERSION         : The JIM version this bundle installs
-- docker-images/  : Pre-built Docker images (tar format)
+- docker-images/  : Pre-built container images (tar format), for Docker or Podman
 - compose/        : Docker Compose configuration files
+- podman/         : Podman pod files, settings and secrets templates, and Quadlet units
 - powershell/     : JIM PowerShell module
 - docs/           : Installation guide, readme and changelog
 - checksums.sha256: SHA256 checksums for integrity verification

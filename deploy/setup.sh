@@ -2,7 +2,8 @@
 # Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 # JIM Setup Script
-# Installs and configures JIM for production deployment, from the internet or from a release bundle.
+# Installs and configures JIM for production deployment with Docker or Podman, from the internet or from a
+# release bundle.
 #
 # Usage, connected:
 #   curl -fsSL https://junctional.io/get | sudo bash
@@ -19,15 +20,23 @@
 #   sudo /opt/jim/setup.sh --renew-certificate
 #
 # Options:
+#   --runtime docker|podman  The container runtime to install JIM on. Only needed where both are installed:
+#                         the script asks rather than guess.
+#   --rootful             Podman only: run JIM as root, instead of rootless under the jim account.
 #   --renew-certificate   Issue a new server certificate from the certificate authority this script created,
-#                         for the same names, and restart jim.web.
+#                         for the same names, and restart JIM's web service.
 #   --certificate         Create or install JIM's certificate again, for example to change its names or to
-#                         move to your organisation's certificate, and restart jim.web.
+#                         move to your organisation's certificate, and restart JIM's web service.
 #   --help                Show this help.
-#   Both act on the installation the script sits in, or JIM_INSTALL_DIR.
+#   The certificate options act on the installation the script sits in, or JIM_INSTALL_DIR.
 #
 # JIM serves HTTPS. The script either creates a certificate authority (CA) and a server certificate for this
 # server, or installs your organisation's certificate and key, in the tls folder of the installation.
+#
+# On Podman, run as root, JIM runs rootless by default: under a dedicated account, jim, which the script creates
+# with lingering enabled, so that systemd starts JIM at boot with nobody logged in. Run as any other account, the
+# script installs JIM rootless under that account instead. Podman 4.4 or later and systemd are needed; without
+# systemd, JIM still runs but does not start by itself after a reboot.
 #
 # Non-interactive mode (for automation):
 #   Set all required environment variables before running. The script will skip
@@ -54,6 +63,11 @@
 #     JIM_SETUP_TLS_KEY_FILE  - The certificate's unencrypted PEM private key (required if tls_mode=provided)
 #     JIM_TRUSTED_PROXIES   - Address(es) of a reverse proxy or load balancer in front of JIM. Set it empty
 #                             for none (default: prompt)
+#     JIM_SETUP_RUNTIME     - "docker" or "podman", as --runtime (default: the one installed; prompt if both)
+#     JIM_SETUP_PODMAN_ROOTFUL - "true" to run JIM as root on Podman, as --rootful
+#     JIM_SETUP_PODMAN_ACCOUNT - The account that runs JIM rootless on Podman (default: jim)
+#     JIM_SETUP_OPEN_FIREWALL  - "true" or "false": open the HTTPS port in firewalld, when it is running (default:
+#                             prompt). Podman only.
 
 set -euo pipefail
 
@@ -75,6 +89,13 @@ TLS_CA_DAYS=3650
 # The standard HTTPS port, so that users and identity provider registrations need no port in JIM's address.
 DEFAULT_WEB_PORT=443
 
+# Podman: the oldest version with Quadlet, which runs JIM's pods under systemd, and the files a release publishes
+# for it (the pod and settings files, then the Quadlet units).
+PODMAN_MIN_VERSION="4.4"
+PODMAN_FILES=(jim.yaml jim-database.yaml jim-config.yaml)
+QUADLET_FILES=(jim.kube jim-database.kube jim.network)
+DEFAULT_PODMAN_ACCOUNT="jim"
+
 # Where this script is, when it runs from a file rather than from a pipe (curl ... | bash). Run from an extracted
 # release bundle, it installs from the bundle instead of downloading; run from an installation, its options act
 # on that installation.
@@ -90,6 +111,12 @@ TLS_MODE=""
 NEW_CA=""
 REPLACED_CA=""
 JIM_READY=""
+EXISTING_DB_PASSWORD=""  # a reinstall's bundled database password, which the database keeps
+RUNTIME=""          # docker or podman
+CONFIG_FILE=""      # where the settings go: .env (Docker) or jim-config.yaml (Podman)
+PODMAN_ACCOUNT=""   # Podman: the account JIM runs rootless under; empty when rootful
+PODMAN_SYSTEMD=""   # Podman: "true" when systemd runs JIM through Quadlet
+PODMAN_SOURCE=""    # Podman: the folder the release's Podman files are installed from
 
 BUNDLE_DIR=""
 if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/compose/docker-compose.yml" ] && [ -d "${SCRIPT_DIR}/docker-images" ]; then
@@ -252,6 +279,57 @@ update_env() {
     mv "$tmp_file" "$env_file"
 }
 
+# --- Podman: the settings file ---
+# A value as a double-quoted YAML string, so that any text reaches JIM unchanged.
+yaml_quote() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '"%s"' "$value"
+}
+
+# Sets a value in jim-config.yaml: replaces the key's line, or its commented-out line, or adds it at the end.
+update_config_yaml() {
+    local key="$1"
+    local value="$2"
+    local config_file="$3"
+    local tmp_file="${config_file}.tmp"
+    local pattern="^  ${key}:"
+    grep -q "$pattern" "$config_file" 2>/dev/null || pattern="^  # ${key}:"
+
+    local replaced=false line
+    : > "$tmp_file"
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$replaced" = false ] && [[ "$line" =~ $pattern ]]; then
+            printf '  %s: %s\n' "$key" "$(yaml_quote "$value")" >> "$tmp_file"
+            replaced=true
+        else
+            printf '%s\n' "$line" >> "$tmp_file"
+        fi
+    done < "$config_file"
+    if [ "$replaced" = false ]; then
+        printf '  %s: %s\n' "$key" "$(yaml_quote "$value")" >> "$tmp_file"
+    fi
+
+    chmod 644 "$tmp_file"
+    mv "$tmp_file" "$config_file"
+}
+
+# Records a setting where the chosen runtime reads it. On Podman, the secrets go to Podman's secret store instead
+# (store_podman_secrets), and the port to the Quadlet unit (install_podman_units).
+set_setting() {
+    local key="$1"
+    local value="$2"
+    if [ "$RUNTIME" = "podman" ]; then
+        case "$key" in
+            JIM_DB_PASSWORD|JIM_SSO_SECRET|JIM_INFRASTRUCTURE_API_KEY|JIM_WEB_PORT) return ;;
+        esac
+        update_config_yaml "$key" "$value" "$CONFIG_FILE"
+    else
+        update_env "$key" "$value" "$CONFIG_FILE"
+    fi
+}
+
 # --- Banner ---
 show_banner() {
     echo
@@ -265,6 +343,57 @@ show_banner() {
     echo
 }
 
+# --- Choose the container runtime ---
+
+# Docker Engine, and not the docker command some distributions provide as a front end to Podman.
+docker_installed() {
+    command -v docker >/dev/null 2>&1 && ! docker --version 2>/dev/null | grep -qi podman
+}
+
+podman_installed() {
+    command -v podman >/dev/null 2>&1
+}
+
+choose_runtime() {
+    local requested="${JIM_SETUP_RUNTIME:-}"
+    if [ -n "$requested" ]; then
+        case "$requested" in
+            docker) docker_installed || fatal "Docker is not installed on this host (see https://docs.docker.com/engine/install/)" ;;
+            podman) podman_installed || fatal "Podman is not installed on this host. On RHEL and its derivatives: dnf install podman" ;;
+            *) fatal "Invalid runtime: ${requested} (must be 'docker' or 'podman')" ;;
+        esac
+        RUNTIME="$requested"
+        return
+    fi
+
+    local has_docker="" has_podman=""
+    docker_installed && has_docker="true"
+    podman_installed && has_podman="true"
+
+    if [ -n "$has_docker" ] && [ -n "$has_podman" ]; then
+        # Both are here, and either could be the one the organisation supports, so ask rather than guess.
+        echo
+        info "Docker and Podman are both installed"
+        echo "  ${BOLD}1)${RESET} Docker"
+        echo "  ${BOLD}2)${RESET} Podman"
+        echo
+        printf "Which should run JIM? "
+        local choice=""
+        read -r choice || true
+        case "$choice" in
+            1) RUNTIME="docker" ;;
+            2) RUNTIME="podman" ;;
+            *) fatal "Choose 1 or 2, or run this script again with --runtime docker or --runtime podman" ;;
+        esac
+    elif [ -n "$has_docker" ]; then
+        RUNTIME="docker"
+    elif [ -n "$has_podman" ]; then
+        RUNTIME="podman"
+    else
+        fatal "JIM runs on Docker or Podman, and neither is installed. On RHEL and its derivatives, install Podman: dnf install podman. Otherwise see https://docs.docker.com/engine/install/"
+    fi
+}
+
 # --- Prerequisites ---
 check_prerequisites() {
     info "Checking prerequisites..."
@@ -275,6 +404,12 @@ check_prerequisites() {
 
     if ! command -v openssl >/dev/null 2>&1; then
         fatal "openssl is required for JIM's HTTPS certificate but not installed. Install it with your package manager."
+    fi
+
+    if [ "$RUNTIME" = "podman" ]; then
+        check_podman
+        success "All prerequisites met"
+        return
     fi
 
     if ! command -v docker >/dev/null 2>&1; then
@@ -365,18 +500,29 @@ copy_bundle_files() {
     success "Copied the compose files and .env"
 }
 
+# Loads an image archive into the runtime that runs JIM. Podman reads it from standard input, so that the account
+# running JIM needs no access to the bundle's folder.
+load_image_archive() {
+    local archive="$1"
+    if [ "$RUNTIME" = "podman" ]; then
+        as_jim_account podman load < "$archive" >/dev/null
+    else
+        docker load -i "$archive" >/dev/null
+    fi
+}
+
 # Loads the images the installation will run. The PostgreSQL image is needed only for the bundled database.
 load_bundle_images() {
     info "Loading JIM's images from the bundle (this takes a minute or two)..."
     local name
     for name in jim-web jim-worker jim-scheduler; do
         [ -f "${BUNDLE_DIR}/docker-images/${name}.tar" ] || fatal "The bundle is missing docker-images/${name}.tar"
-        docker load -i "${BUNDLE_DIR}/docker-images/${name}.tar" >/dev/null || fatal "Failed to load docker-images/${name}.tar"
+        load_image_archive "${BUNDLE_DIR}/docker-images/${name}.tar" || fatal "Failed to load docker-images/${name}.tar"
     done
     if [ "$USE_BUNDLED_DB" = "true" ]; then
         [ -f "${BUNDLE_DIR}/docker-images/postgres-18.tar" ] \
             || fatal "This bundle has no PostgreSQL image (docker-images/postgres-18.tar). Run the installer again and choose an external PostgreSQL server."
-        docker load -i "${BUNDLE_DIR}/docker-images/postgres-18.tar" >/dev/null || fatal "Failed to load docker-images/postgres-18.tar"
+        load_image_archive "${BUNDLE_DIR}/docker-images/postgres-18.tar" || fatal "Failed to load docker-images/postgres-18.tar"
     fi
     success "Loaded the images"
 }
@@ -432,7 +578,7 @@ save_installer_copy() {
 resolve_install_dir() {
     if [ -n "${JIM_INSTALL_DIR:-}" ]; then
         printf '%s' "$JIM_INSTALL_DIR"
-    elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/docker-compose.production.yml" ] && [ -f "${SCRIPT_DIR}/.env" ]; then
+    elif [ -n "$SCRIPT_DIR" ] && is_installation "$SCRIPT_DIR"; then
         printf '%s' "$SCRIPT_DIR"
     elif [ "$(id -u)" -eq 0 ]; then
         printf '/opt/jim'
@@ -441,10 +587,461 @@ resolve_install_dir() {
     fi
 }
 
+# Whether a folder holds a JIM installation this script made, on either runtime.
+is_installation() {
+    local dir="$1"
+    { [ -f "${dir}/docker-compose.production.yml" ] && [ -f "${dir}/.env" ]; } \
+        || { [ -f "${dir}/jim-config.yaml" ] && [ -f "${dir}/install.conf" ]; }
+}
+
+# Reads how an existing installation runs, for the options that look after it.
+load_installation() {
+    local install_dir="$1"
+    if [ -f "${install_dir}/install.conf" ] && [ -f "${install_dir}/jim-config.yaml" ]; then
+        RUNTIME="podman"
+        CONFIG_FILE="${install_dir}/jim-config.yaml"
+        PODMAN_ACCOUNT=$(install_state JIM_PODMAN_ACCOUNT "$install_dir")
+        PODMAN_SYSTEMD=$(install_state JIM_PODMAN_SYSTEMD "$install_dir")
+        JIM_WEB_PORT=$(install_state JIM_WEB_PORT "$install_dir")
+        if [ -n "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -ne 0 ] && [ "$(id -un)" != "$PODMAN_ACCOUNT" ]; then
+            fatal "This installation runs as ${PODMAN_ACCOUNT}. Run this as root (sudo), or as ${PODMAN_ACCOUNT}."
+        fi
+        if [ -z "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -ne 0 ]; then
+            fatal "This installation runs as root. Run this as root (sudo)."
+        fi
+    elif [ -f "${install_dir}/.env" ]; then
+        RUNTIME="docker"
+        CONFIG_FILE="${install_dir}/.env"
+    else
+        fatal "No JIM installation at ${install_dir}. Run this from the installation's copy of setup.sh, or set JIM_INSTALL_DIR."
+    fi
+}
+
+install_state() {
+    local key="$1"
+    local install_dir="$2"
+    grep "^${key}=" "${install_dir}/install.conf" 2>/dev/null | head -1 | cut -d= -f2- || true
+}
+
+# --- Podman ---
+
+version_at_least() {
+    local actual="$1"
+    local minimum="$2"
+    [ "$(printf '%s\n%s\n' "$minimum" "$actual" | sort -V | head -1)" = "$minimum" ]
+}
+
+quadlet_available() {
+    [ -x /usr/libexec/podman/quadlet ] || [ -x /usr/lib/podman/quadlet ]
+}
+
+check_podman() {
+    local version
+    version=$(podman version --format '{{.Client.Version}}' 2>/dev/null) \
+        || fatal "Podman is installed but not working: podman version failed"
+    version_at_least "$version" "$PODMAN_MIN_VERSION" \
+        || fatal "JIM needs Podman ${PODMAN_MIN_VERSION} or later, and this host has ${version}. Update Podman with your package manager."
+    success "Podman ${version} detected"
+
+    if [ -d /run/systemd/system ] && quadlet_available; then
+        PODMAN_SYSTEMD="true"
+    else
+        PODMAN_SYSTEMD="false"
+        warn "Without systemd and Podman's Quadlet, JIM runs but will not start by itself after a reboot"
+    fi
+
+    if ! command -v base64 >/dev/null 2>&1; then
+        fatal "base64 is required but not installed. Install coreutils with your package manager."
+    fi
+}
+
+# Decides which account runs JIM: by default a dedicated account, rootless; root with --rootful; or, run by any
+# other account, that account.
+choose_podman_account() {
+    if [ "$(id -u)" -ne 0 ]; then
+        [ "${JIM_SETUP_PODMAN_ROOTFUL:-}" = "true" ] && fatal "--rootful installs JIM to run as root: run this script as root (sudo)"
+        PODMAN_ACCOUNT=$(id -un)
+        if [ "$PODMAN_SYSTEMD" = "true" ] && ! lingering_enabled "$PODMAN_ACCOUNT"; then
+            fatal "JIM would stop when you log out, and not start at boot, because lingering is not enabled for ${PODMAN_ACCOUNT}. Ask your administrators to run: loginctl enable-linger ${PODMAN_ACCOUNT}"
+        fi
+        info "Installing JIM to run rootless as ${PODMAN_ACCOUNT}"
+    elif [ "${JIM_SETUP_PODMAN_ROOTFUL:-}" = "true" ]; then
+        PODMAN_ACCOUNT=""
+        info "Installing JIM to run as root (rootful)"
+    elif [ "$PODMAN_SYSTEMD" != "true" ]; then
+        # Without systemd there is no manager to keep JIM running under another account.
+        PODMAN_ACCOUNT=""
+        info "Installing JIM to run as root (rootful), since this host has no systemd to run it under a dedicated account"
+    else
+        PODMAN_ACCOUNT="${JIM_SETUP_PODMAN_ACCOUNT:-$DEFAULT_PODMAN_ACCOUNT}"
+        info "Installing JIM to run rootless as the account ${PODMAN_ACCOUNT}"
+    fi
+}
+
+lingering_enabled() {
+    local account="$1"
+    [ -f "/var/lib/systemd/linger/${account}" ] \
+        || [ "$(loginctl show-user "$account" --property=Linger --value 2>/dev/null)" = "yes" ]
+}
+
+account_home() {
+    getent passwd "$PODMAN_ACCOUNT" | cut -d: -f6
+}
+
+nologin_shell() {
+    local shell
+    for shell in /usr/sbin/nologin /sbin/nologin; do
+        if [ -x "$shell" ]; then
+            printf '%s' "$shell"
+            return
+        fi
+    done
+    printf '/bin/false'
+}
+
+# Gives the account a range of subordinate user and group IDs, which rootless containers map their users into,
+# if it has none. useradd assigns them on current distributions; older ones, and accounts created elsewhere, may
+# lack them.
+ensure_subordinate_ids() {
+    local account="$1"
+    local uid
+    uid=$(id -u "$account")
+    local file option start
+    for file in /etc/subuid /etc/subgid; do
+        if grep -q -e "^${account}:" -e "^${uid}:" "$file" 2>/dev/null; then
+            continue
+        fi
+        start=$(awk -F: 'BEGIN { next_free = 100000 } { if ($2 + $3 > next_free) next_free = $2 + $3 } END { print next_free }' "$file" 2>/dev/null || echo 100000)
+        option="--add-subuids"
+        [ "$file" = "/etc/subgid" ] && option="--add-subgids"
+        usermod "$option" "${start}-$((start + 65535))" "$account" \
+            || fatal "Failed to give ${account} subordinate IDs in ${file}"
+    done
+}
+
+# Creates the account that runs JIM rootless, if needed, and enables lingering for it, so that its systemd
+# manager runs JIM with nobody logged in and starts it at boot.
+prepare_podman_account() {
+    [ -n "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ] || return 0
+    local account="$PODMAN_ACCOUNT"
+
+    if ! id "$account" >/dev/null 2>&1; then
+        useradd --create-home --comment "JIM (Junctional Identity Manager)" --shell "$(nologin_shell)" "$account" \
+            || fatal "Failed to create the account ${account}"
+        success "Created the account ${account}, which runs JIM"
+    else
+        info "Using the existing account ${account}"
+    fi
+    ensure_subordinate_ids "$account"
+
+    loginctl enable-linger "$account" || fatal "Failed to enable lingering for ${account}"
+    local uid
+    uid=$(id -u "$account")
+    local deadline=$((SECONDS + 60))
+    until [ -S "/run/user/${uid}/bus" ]; do
+        [ "$SECONDS" -lt "$deadline" ] \
+            || fatal "The systemd manager of ${account} did not start. See: systemctl status user@${uid}.service"
+        sleep 1
+    done
+    success "Enabled lingering for ${account}: JIM runs with nobody logged in, and starts at boot"
+}
+
+# Runs a command as the account that runs JIM: that account's Podman sees JIM's images, secrets and containers.
+as_jim_account() {
+    if [ -z "$PODMAN_ACCOUNT" ] || [ "$(id -un)" = "$PODMAN_ACCOUNT" ]; then
+        "$@"
+        return
+    fi
+    local uid
+    uid=$(id -u "$PODMAN_ACCOUNT")
+    # From the root folder, which the account can always read, rather than wherever this script was started.
+    (cd / && runuser -u "$PODMAN_ACCOUNT" -- env HOME="$(account_home)" XDG_RUNTIME_DIR="/run/user/${uid}" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" "$@")
+}
+
+# systemctl for the systemd manager that runs JIM: the system's when rootful, the account's when rootless.
+jim_systemctl() {
+    if [ -z "$PODMAN_ACCOUNT" ]; then
+        systemctl "$@"
+    else
+        as_jim_account systemctl --user "$@"
+    fi
+}
+
+# The same command, as an administrator types it.
+jim_systemctl_command() {
+    if [ -z "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ]; then
+        printf 'sudo systemctl'
+    elif [ -z "$PODMAN_ACCOUNT" ]; then
+        printf 'systemctl'
+    elif [ "$(id -u)" -eq 0 ]; then
+        printf 'sudo systemctl --user -M %s@' "$PODMAN_ACCOUNT"
+    else
+        printf 'systemctl --user'
+    fi
+}
+
+# podman as an administrator types it to see JIM's containers.
+jim_podman_command() {
+    if [ -n "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ]; then
+        printf 'sudo -u %s XDG_RUNTIME_DIR=/run/user/%s podman' "$PODMAN_ACCOUNT" "$(id -u "$PODMAN_ACCOUNT")"
+    elif [ "$(id -u)" -eq 0 ]; then
+        printf 'sudo podman'
+    else
+        printf 'podman'
+    fi
+}
+
+podman_unit_dir() {
+    if [ -z "$PODMAN_ACCOUNT" ]; then
+        printf '/etc/containers/systemd'
+    else
+        printf '%s/.config/containers/systemd' "$(account_home)"
+    fi
+}
+
+# Downloads the latest release's Podman files to a folder of their own.
+download_podman_files() {
+    local target="$1"
+    local name
+    info "Downloading JIM's Podman files..."
+    for name in "${PODMAN_FILES[@]}" "${QUADLET_FILES[@]}"; do
+        curl -fsSL -o "${target}/${name}" "${RELEASE_DOWNLOAD_BASE}/${name}" \
+            || fatal "Failed to download ${name}. The latest release may predate JIM's Podman support; see ${DOCS_BASE}/administration/deployment/"
+    done
+    success "Downloaded the Podman files"
+}
+
+# Puts the pod files and the settings file in the installation.
+install_podman_files() {
+    local install_dir="$1"
+    mkdir -p "$install_dir"
+    chmod 755 "$install_dir"
+    cp "${PODMAN_SOURCE}/jim.yaml" "${PODMAN_SOURCE}/jim-database.yaml" "${PODMAN_SOURCE}/jim-config.yaml" "$install_dir/"
+    # Readable by the account that runs JIM. None holds a secret.
+    chmod 644 "${install_dir}/jim.yaml" "${install_dir}/jim-database.yaml" "${install_dir}/jim-config.yaml"
+    success "Copied the pod files and jim-config.yaml"
+}
+
+# The images a pod file runs.
+pod_images() {
+    local pod_file="$1"
+    awk '$1 == "image:" { print $2 }' "$pod_file"
+}
+
+podman_images_needed() {
+    local install_dir="$1"
+    pod_images "${install_dir}/jim.yaml"
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        pod_images "${install_dir}/jim-database.yaml"
+    fi
+}
+
+# Downloads the images before starting JIM, so that the first start is not a long download under systemd's
+# start-up time limit, and a failed download shows here.
+pull_podman_images() {
+    local install_dir="$1"
+    local image
+    info "Downloading JIM's images (this takes a few minutes)..."
+    for image in $(podman_images_needed "$install_dir"); do
+        as_jim_account podman pull -q "$image" >/dev/null || fatal "Failed to download ${image}"
+    done
+    success "Downloaded the images"
+}
+
+verify_podman_images() {
+    local install_dir="$1"
+    local image
+    for image in $(podman_images_needed "$install_dir"); do
+        as_jim_account podman image exists "$image" \
+            || fatal "The image ${image} is not available after loading the bundle, and this installation cannot download it."
+    done
+}
+
+# Stores the secrets in the Podman secret store of the account that runs JIM, from a Kubernetes Secret document
+# passed on standard input, so that no secret is written to a file or shown in the process list.
+store_podman_secrets() {
+    {
+        printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: jim-secrets\nstringData:\n'
+        printf '  JIM_DB_PASSWORD: %s\n' "$(yaml_quote "$JIM_DB_PASSWORD")"
+        printf '  JIM_SSO_SECRET: %s\n' "$(yaml_quote "$JIM_SSO_SECRET")"
+        if [ -n "${JIM_INFRASTRUCTURE_API_KEY:-}" ]; then
+            printf '  JIM_INFRASTRUCTURE_API_KEY: %s\n' "$(yaml_quote "$JIM_INFRASTRUCTURE_API_KEY")"
+        fi
+    } | as_jim_account podman kube play --replace - >/dev/null || fatal "Failed to store JIM's secrets in Podman"
+    success "Stored the database password and client secret as the Podman secret jim-secrets"
+}
+
+# Stores JIM's certificate and key as the Podman secret jim-tls, which the pod mounts for jim.web.
+store_tls_secret() {
+    local install_dir="$1"
+    local tls_dir="${install_dir}/tls"
+    printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: jim-tls\ndata:\n  tls.crt: %s\n  tls.key: %s\n' \
+        "$(base64 -w0 "${tls_dir}/tls.crt")" "$(base64 -w0 "${tls_dir}/tls.key")" \
+        | as_jim_account podman kube play --replace - >/dev/null || fatal "Failed to store JIM's certificate in Podman"
+}
+
+# Copies a Quadlet unit, pointing it at this installation's files and the chosen port.
+render_unit() {
+    local unit="$1"
+    local absolute_dir="$2"
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            Yaml=/opt/jim/*) printf 'Yaml=%s/%s\n' "$absolute_dir" "${line#Yaml=/opt/jim/}" ;;
+            ConfigMap=/opt/jim/*) printf 'ConfigMap=%s/%s\n' "$absolute_dir" "${line#ConfigMap=/opt/jim/}" ;;
+            PublishPort=*) printf 'PublishPort=%s:8443\n' "$JIM_WEB_PORT" ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done < "$unit"
+}
+
+install_podman_units() {
+    local install_dir="$1"
+    local absolute_dir
+    absolute_dir=$(cd "$install_dir" && pwd)
+    local unit_source="$PODMAN_SOURCE"
+    [ -d "${PODMAN_SOURCE}/quadlet" ] && unit_source="${PODMAN_SOURCE}/quadlet"
+    local unit_dir
+    unit_dir=$(podman_unit_dir)
+
+    if [ -n "$PODMAN_ACCOUNT" ]; then
+        as_jim_account mkdir -p "$unit_dir" || fatal "Failed to create ${unit_dir}"
+    else
+        mkdir -p "$unit_dir"
+    fi
+
+    local unit
+    for unit in jim.network jim.kube jim-database.kube; do
+        if [ "$unit" = "jim-database.kube" ] && [ "$USE_BUNDLED_DB" != "true" ]; then
+            rm -f "${unit_dir}/${unit}"
+            continue
+        fi
+        render_unit "${unit_source}/${unit}" "$absolute_dir" > "${unit_dir}/${unit}"
+        chmod 644 "${unit_dir}/${unit}"
+        if [ -n "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ]; then
+            chown "${PODMAN_ACCOUNT}:" "${unit_dir}/${unit}"
+        fi
+    done
+    success "Installed the systemd units in ${unit_dir}"
+}
+
+# Records how this installation runs, for the options that look after it later.
+write_install_state() {
+    local install_dir="$1"
+    {
+        echo "# Written by setup.sh, whose maintenance options read it. Rerun setup.sh rather than edit it."
+        echo "JIM_RUNTIME=podman"
+        echo "JIM_PODMAN_ACCOUNT=${PODMAN_ACCOUNT}"
+        echo "JIM_PODMAN_SYSTEMD=${PODMAN_SYSTEMD}"
+        echo "JIM_WEB_PORT=${JIM_WEB_PORT}"
+    } > "${install_dir}/install.conf"
+    chmod 644 "${install_dir}/install.conf"
+}
+
+# The port a rootless container may publish from: the kernel's unprivileged-port threshold.
+unprivileged_port_start() {
+    sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024
+}
+
+# Running rootless, JIM cannot publish a port below the unprivileged-port threshold. Run as root, the installer
+# lowers the threshold to the chosen port; Red Hat's own rootless installations do the same.
+allow_unprivileged_port() {
+    local port="$1"
+    [ -n "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -eq 0 ] || return 0
+    [ "$port" -lt "$(unprivileged_port_start)" ] || return 0
+
+    { mkdir -p /etc/sysctl.d && echo "net.ipv4.ip_unprivileged_port_start=${port}" > /etc/sysctl.d/90-jim.conf; } \
+        || fatal "Failed to write /etc/sysctl.d/90-jim.conf"
+    sysctl -q -w "net.ipv4.ip_unprivileged_port_start=${port}" >/dev/null \
+        || fatal "Failed to allow rootless containers to use port ${port}"
+    info "Allowed unprivileged programs to use ports from ${port} up, so that JIM can publish port ${port} rootless (/etc/sysctl.d/90-jim.conf)"
+}
+
+# Offers to open the HTTPS port where firewalld is running, which blocks it by default on RHEL.
+configure_firewall() {
+    command -v firewall-cmd >/dev/null 2>&1 || return 0
+    [ "$(firewall-cmd --state 2>/dev/null)" = "running" ] || return 0
+    # Bound to one address, such as 127.0.0.1 behind a proxy on this host, JIM is not for other machines.
+    [[ "$JIM_WEB_PORT" == *:* ]] && return 0
+
+    local port="$JIM_WEB_PORT"
+    if firewall-cmd --query-port="${port}/tcp" >/dev/null 2>&1 \
+        || { [ "$port" = "443" ] && firewall-cmd --query-service=https >/dev/null 2>&1; }; then
+        success "firewalld already allows port ${port}"
+        return
+    fi
+
+    local open="${JIM_SETUP_OPEN_FIREWALL:-}"
+    if [ -z "$open" ]; then
+        echo
+        if prompt_yn "firewalld is running. Allow HTTPS to JIM on port ${port}?" "y"; then
+            open="true"
+        else
+            open="false"
+        fi
+    fi
+
+    local command="firewall-cmd --permanent --add-port=${port}/tcp && firewall-cmd --reload"
+    if [ "$open" != "true" ]; then
+        warn "firewalld blocks port ${port}, so other machines cannot reach JIM until you allow it: ${command}"
+    elif [ "$(id -u)" -ne 0 ]; then
+        warn "Opening the firewall needs root. Ask your administrators to run: ${command}"
+    else
+        { firewall-cmd --permanent --add-port="${port}/tcp" && firewall-cmd --reload; } >/dev/null \
+            || fatal "Failed to open port ${port} in firewalld"
+        success "Allowed port ${port} in firewalld"
+    fi
+}
+
+# Starts JIM's pods, under systemd where it can.
+start_podman() {
+    local install_dir="$1"
+    local absolute_dir
+    absolute_dir=$(cd "$install_dir" && pwd)
+
+    if [ "$PODMAN_SYSTEMD" = "true" ]; then
+        jim_systemctl daemon-reload || fatal "Failed to reload systemd"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            jim_systemctl restart jim-database.service \
+                || fatal "Failed to start the database. See: $(jim_systemctl_command) status jim-database.service"
+        fi
+        jim_systemctl restart jim.service || fatal "Failed to start JIM. See: $(jim_systemctl_command) status jim.service"
+        return
+    fi
+
+    as_jim_account podman network create --ignore jim >/dev/null || fatal "Failed to create the network jim"
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        as_jim_account podman kube play --replace --network jim --configmap "${absolute_dir}/jim-config.yaml" \
+            "${absolute_dir}/jim-database.yaml" >/dev/null || fatal "Failed to start the database"
+    fi
+    as_jim_account podman kube play --replace --network jim --configmap "${absolute_dir}/jim-config.yaml" \
+        --publish "${JIM_WEB_PORT}:8443" "${absolute_dir}/jim.yaml" >/dev/null || fatal "Failed to start JIM"
+}
+
+# The commands that start JIM, for an administrator who chose not to start it yet.
+podman_start_commands() {
+    local install_dir="$1"
+    local absolute_dir
+    absolute_dir=$(cd "$install_dir" && pwd)
+    if [ "$PODMAN_SYSTEMD" = "true" ]; then
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            echo "  $(jim_systemctl_command) start jim-database.service"
+        fi
+        echo "  $(jim_systemctl_command) start jim.service"
+    else
+        local podman
+        podman=$(jim_podman_command)
+        echo "  ${podman} network create --ignore jim"
+        if [ "$USE_BUNDLED_DB" = "true" ]; then
+            echo "  ${podman} kube play --replace --network jim --configmap ${absolute_dir}/jim-config.yaml ${absolute_dir}/jim-database.yaml"
+        fi
+        echo "  ${podman} kube play --replace --network jim --configmap ${absolute_dir}/jim-config.yaml --publish ${JIM_WEB_PORT}:8443 ${absolute_dir}/jim.yaml"
+    fi
+}
+
 # --- Configure database ---
 configure_database() {
-    local env_file="$1"
-
     echo
     info "Database configuration"
     echo
@@ -470,6 +1067,14 @@ configure_database() {
     if [ "$db_mode" = "bundled" ]; then
         info "Using bundled PostgreSQL"
 
+        # A reinstall keeps the password: the database was created with it, and a new one would lock JIM out.
+        if [ -z "${JIM_DB_PASSWORD:-}" ] && [ -n "$EXISTING_DB_PASSWORD" ]; then
+            JIM_DB_PASSWORD="$EXISTING_DB_PASSWORD"
+            success "Kept the existing database password"
+        elif [ -z "${JIM_DB_PASSWORD:-}" ] && bundled_database_exists; then
+            fatal "The bundled database already exists, with a password this script cannot read. Run it again with JIM_DB_PASSWORD set to that password, or remove the volume jim-db-volume to start afresh, which deletes JIM's data."
+        fi
+
         # Auto-generate a secure password if not set
         if [ -z "${JIM_DB_PASSWORD:-}" ]; then
             JIM_DB_PASSWORD=$(generate_password)
@@ -493,23 +1098,52 @@ configure_database() {
         fatal "Invalid JIM_SETUP_DB_MODE: $db_mode (must be 'bundled' or 'external')"
     fi
 
-    update_env "JIM_DB_NAME" "$JIM_DB_NAME" "$env_file"
-    update_env "JIM_DB_USERNAME" "$JIM_DB_USERNAME" "$env_file"
-    update_env "JIM_DB_PASSWORD" "$JIM_DB_PASSWORD" "$env_file"
+    set_setting "JIM_DB_NAME" "$JIM_DB_NAME"
+    set_setting "JIM_DB_USERNAME" "$JIM_DB_USERNAME"
+    set_setting "JIM_DB_PASSWORD" "$JIM_DB_PASSWORD"
 
-    # Always written: the template's value, localhost, suits running JIM outside containers in development,
-    # and would point every JIM container at itself rather than at the bundled database.
+    # Always written: the Docker template's value, localhost, suits running JIM outside containers in development,
+    # and would point every JIM container at itself rather than at the bundled database. The bundled database is
+    # the container jim.database on Docker, and the pod jim-database on Podman.
     if [ "$db_mode" = "external" ]; then
-        update_env "JIM_DB_HOSTNAME" "$JIM_DB_HOSTNAME" "$env_file"
+        set_setting "JIM_DB_HOSTNAME" "$JIM_DB_HOSTNAME"
+    elif [ "$RUNTIME" = "podman" ]; then
+        set_setting "JIM_DB_HOSTNAME" "jim-database"
     else
-        update_env "JIM_DB_HOSTNAME" "jim.database" "$env_file"
+        set_setting "JIM_DB_HOSTNAME" "jim.database"
+    fi
+}
+
+# The bundled database's password in an existing installation, read before the reinstall replaces its settings.
+existing_database_password() {
+    local install_dir="$1"
+    local password=""
+    if [ "$RUNTIME" = "podman" ]; then
+        [ -f "${install_dir}/jim-config.yaml" ] || return 0
+        # The secret holds the Kubernetes Secret document it was stored from, as Podman writes it back.
+        password=$(as_jim_account podman secret inspect --showsecret --format '{{.SecretData}}' jim-secrets 2>/dev/null \
+            | sed -n 's/^  JIM_DB_PASSWORD: //p' | head -1) || true
+    elif [ -f "${install_dir}/.env" ]; then
+        password=$(env_value JIM_DB_PASSWORD "${install_dir}/.env")
+    fi
+    # Stored quoted when it contains characters YAML treats specially.
+    password="${password#\"}"
+    password="${password%\"}"
+    password="${password#\'}"
+    password="${password%\'}"
+    printf '%s' "$password"
+}
+
+bundled_database_exists() {
+    if [ "$RUNTIME" = "podman" ]; then
+        as_jim_account podman volume exists jim-db-volume 2>/dev/null
+    else
+        docker volume inspect jim-db-volume >/dev/null 2>&1
     fi
 }
 
 # --- Configure SSO ---
 configure_sso() {
-    local env_file="$1"
-
     echo
     info "SSO/OIDC configuration"
     echo "${DIM}  JIM requires an OIDC identity provider (e.g., Microsoft Entra ID, AD FS, Keycloak).${RESET}"
@@ -524,21 +1158,20 @@ configure_sso() {
     prompt_value "JIM_SSO_MV_ATTRIBUTE" "  Metaverse attribute to match claim against" "Subject Identifier"
     prompt_value "JIM_SSO_INITIAL_ADMIN" "  Initial admin claim value (identifies the first admin user)"
 
-    update_env "JIM_SSO_AUTHORITY" "$JIM_SSO_AUTHORITY" "$env_file"
-    update_env "JIM_SSO_CLIENT_ID" "$JIM_SSO_CLIENT_ID" "$env_file"
-    update_env "JIM_SSO_SECRET" "$JIM_SSO_SECRET" "$env_file"
-    update_env "JIM_SSO_API_SCOPE" "$JIM_SSO_API_SCOPE" "$env_file"
-    update_env "JIM_SSO_CLAIM_TYPE" "$JIM_SSO_CLAIM_TYPE" "$env_file"
-    update_env "JIM_SSO_MV_ATTRIBUTE" "$JIM_SSO_MV_ATTRIBUTE" "$env_file"
-    update_env "JIM_SSO_INITIAL_ADMIN" "$JIM_SSO_INITIAL_ADMIN" "$env_file"
+    set_setting "JIM_SSO_AUTHORITY" "$JIM_SSO_AUTHORITY"
+    set_setting "JIM_SSO_CLIENT_ID" "$JIM_SSO_CLIENT_ID"
+    set_setting "JIM_SSO_SECRET" "$JIM_SSO_SECRET"
+    set_setting "JIM_SSO_API_SCOPE" "$JIM_SSO_API_SCOPE"
+    set_setting "JIM_SSO_CLAIM_TYPE" "$JIM_SSO_CLAIM_TYPE"
+    set_setting "JIM_SSO_MV_ATTRIBUTE" "$JIM_SSO_MV_ATTRIBUTE"
+    set_setting "JIM_SSO_INITIAL_ADMIN" "$JIM_SSO_INITIAL_ADMIN"
 }
 
 # --- Configure Docker registry ---
+# Docker only: on Podman, the pod file names JIM's images with their registry and version.
 configure_registry() {
-    local env_file="$1"
-
-    update_env "DOCKER_REGISTRY" "ghcr.io/tetronio/" "$env_file"
-    update_env "JIM_VERSION" "$JIM_RELEASE_VERSION" "$env_file"
+    set_setting "DOCKER_REGISTRY" "ghcr.io/tetronio/"
+    set_setting "JIM_VERSION" "$JIM_RELEASE_VERSION"
     success "Configured image registry: ghcr.io/tetronio/ (v${JIM_RELEASE_VERSION})"
 }
 
@@ -738,10 +1371,13 @@ install_tls_pair() {
     mv -f "${tls_dir}/tls.key.new" "${tls_dir}/tls.key"
 }
 
-# Makes the key belong to JIM's user.
+# Makes the key belong to JIM's user. Docker only: Podman hands the key to JIM from its secret store instead
+# (store_tls_secret), so the file stays readable by its owner alone.
 set_tls_key_owner() {
     local install_dir="$1"
     local key="$2"
+
+    [ "$RUNTIME" = "podman" ] && return
 
     if [ "$(id -u)" -eq 0 ]; then
         chown "${JIM_UID}:${JIM_UID}" "$key" || fatal "Failed to make ${key} belong to UID ${JIM_UID}"
@@ -795,7 +1431,20 @@ port_in_use() {
         timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/${port}" 2>/dev/null || return 1
     fi
     # A reinstall finds JIM itself on the port, which is no conflict.
-    ! docker port jim.web 8443/tcp 2>/dev/null | grep -q ":${port}$"
+    ! jim_holds_port "$port"
+}
+
+jim_holds_port() {
+    local port="$1"
+    if [ "$RUNTIME" = "podman" ]; then
+        # Before the account that runs JIM exists, JIM cannot be running. The pod holds the port whether or not
+        # jim.web is running.
+        [ -z "$PODMAN_ACCOUNT" ] || id "$PODMAN_ACCOUNT" >/dev/null 2>&1 || return 1
+        as_jim_account podman pod inspect jim --format '{{json .InfraConfig.PortBindings}}' 2>/dev/null \
+            | grep -q "\"HostPort\":\"${port}\""
+    else
+        docker port jim.web 8443/tcp 2>/dev/null | grep -q ":${port}$"
+    fi
 }
 
 # Why the port cannot be used, or nothing if it can.
@@ -805,10 +1454,18 @@ port_problem() {
         printf '%s is not a port number' "$port"
     elif port_in_use "$port"; then
         printf 'Port %s is already in use on this host' "$port"
+    elif [ "$RUNTIME" = "podman" ]; then
+        # Rootless Podman cannot publish a port below the kernel's unprivileged-port threshold. Run as root, the
+        # installer lowers the threshold (allow_unprivileged_port); run as the account itself, it cannot.
+        local threshold
+        threshold=$(unprivileged_port_start)
+        if [ -n "$PODMAN_ACCOUNT" ] && [ "$(id -u)" -ne 0 ] && [ "$port" -lt "$threshold" ]; then
+            printf 'Podman runs rootless here, so it cannot publish port %s. Choose a port of %s or above, or have root run: echo net.ipv4.ip_unprivileged_port_start=%s > /etc/sysctl.d/90-jim.conf && sysctl --system' "$port" "$threshold" "$port"
+        fi
     elif [ "$port" -lt 1024 ] && docker info --format '{{join .SecurityOptions " "}}' 2>/dev/null | grep -q rootless; then
         # Rootless Docker cannot publish a port below the kernel's unprivileged-port threshold.
         local threshold
-        threshold=$(sysctl -n net.ipv4.ip_unprivileged_port_start 2>/dev/null || echo 1024)
+        threshold=$(unprivileged_port_start)
         if [ "$port" -lt "$threshold" ]; then
             printf 'Docker runs rootless here, so it cannot publish port %s. Choose a port of %s or above, or have root run: echo net.ipv4.ip_unprivileged_port_start=%s > /etc/sysctl.d/90-jim.conf && sysctl --system' "$port" "$threshold" "$port"
         fi
@@ -816,7 +1473,6 @@ port_problem() {
 }
 
 configure_port() {
-    local env_file="$1"
     local from_environment="${JIM_WEB_PORT:+true}"
 
     echo
@@ -835,7 +1491,10 @@ configure_port() {
         JIM_WEB_PORT=""
     done
 
-    update_env "JIM_WEB_PORT" "$JIM_WEB_PORT" "$env_file"
+    set_setting "JIM_WEB_PORT" "$JIM_WEB_PORT"
+    if [ "$RUNTIME" = "podman" ]; then
+        allow_unprivileged_port "${JIM_WEB_PORT##*:}"
+    fi
     success "JIM will serve HTTPS on port ${JIM_WEB_PORT##*:}"
 }
 
@@ -916,8 +1575,6 @@ configure_certificate() {
 
 # --- Configure a reverse proxy or load balancer ---
 configure_proxy() {
-    local env_file="$1"
-
     # Set, even when empty, means already answered: empty is no proxy.
     if [ -z "${JIM_TRUSTED_PROXIES+set}" ]; then
         echo
@@ -932,7 +1589,7 @@ configure_proxy() {
     fi
 
     if [ -n "$JIM_TRUSTED_PROXIES" ]; then
-        update_env "JIM_TRUSTED_PROXIES" "$JIM_TRUSTED_PROXIES" "$env_file"
+        set_setting "JIM_TRUSTED_PROXIES" "$JIM_TRUSTED_PROXIES"
         success "Trusting the proxy at ${JIM_TRUSTED_PROXIES}"
     fi
 }
@@ -943,7 +1600,7 @@ renew_certificate() {
     install_dir=$(resolve_install_dir)
     local tls_dir="${install_dir}/tls"
 
-    [ -f "${install_dir}/.env" ] || fatal "No JIM installation at ${install_dir}. Run this from the installation's copy of setup.sh, or set JIM_INSTALL_DIR."
+    load_installation "$install_dir"
 
     if [ ! -f "${tls_dir}/ca.key" ] || [ ! -f "${tls_dir}/names" ]; then
         fatal "This installation uses your organisation's certificate, which this script cannot renew. Once your certificate authority has issued the renewed one, install it with: $(installer_command "$install_dir") --certificate"
@@ -969,6 +1626,11 @@ renew_certificate() {
 restart_web() {
     local install_dir="$1"
 
+    if [ "$RUNTIME" = "podman" ]; then
+        restart_podman_web "$install_dir"
+        return
+    fi
+
     if [ -z "$(docker ps -q --filter name=^jim.web$ 2>/dev/null)" ]; then
         info "jim.web is not running; it will use the new certificate when JIM starts"
         return
@@ -979,12 +1641,37 @@ restart_web() {
     success "jim.web restarted with the new certificate"
 }
 
+# Podman: stores the new certificate as the jim-tls secret, then restarts JIM's pod, which mounts the secret when
+# it starts. The pod restarts as a whole, so the worker and scheduler restart too.
+restart_podman_web() {
+    local install_dir="$1"
+
+    store_tls_secret "$install_dir"
+    success "Stored the new certificate as the Podman secret jim-tls"
+
+    if [ "$(as_jim_account podman pod exists jim >/dev/null 2>&1 && echo yes)" != "yes" ]; then
+        info "JIM is not running; it will use the new certificate when it starts"
+        return
+    fi
+    info "Restarting JIM to load it (its web, worker and scheduler services restart together)..."
+    if [ "$PODMAN_SYSTEMD" = "true" ]; then
+        jim_systemctl restart jim.service \
+            || fatal "Failed to restart JIM. Restart it yourself: $(jim_systemctl_command) restart jim.service"
+    else
+        local absolute_dir
+        absolute_dir=$(cd "$install_dir" && pwd)
+        as_jim_account podman kube play --replace --network jim --configmap "${absolute_dir}/jim-config.yaml" \
+            --publish "${JIM_WEB_PORT}:8443" "${absolute_dir}/jim.yaml" >/dev/null || fatal "Failed to restart JIM"
+    fi
+    success "JIM restarted with the new certificate"
+}
+
 # --- Create or install the certificate again ---
 change_certificate() {
     local install_dir
     install_dir=$(resolve_install_dir)
 
-    [ -f "${install_dir}/.env" ] || fatal "No JIM installation at ${install_dir}. Run this from the installation's copy of setup.sh, or set JIM_INSTALL_DIR."
+    load_installation "$install_dir"
     command -v openssl >/dev/null 2>&1 || fatal "openssl is required but not installed."
 
     configure_certificate "$install_dir"
@@ -1005,6 +1692,23 @@ launch_jim() {
     local auto_start="${JIM_SETUP_AUTO_START:-}"
 
     echo
+
+    if [ "$RUNTIME" = "podman" ]; then
+        if [ "$auto_start" != "true" ] && ! prompt_yn "Start JIM now?"; then
+            echo
+            if [ "$PODMAN_SYSTEMD" = "true" ]; then
+                info "JIM will start at the next boot. To start it sooner, run:"
+            else
+                info "To start JIM later, run:"
+            fi
+            podman_start_commands "$install_dir"
+            return
+        fi
+        info "Starting JIM..."
+        start_podman "$install_dir"
+        wait_for_jim "$install_dir"
+        return
+    fi
 
     local compose_cmd="docker compose ${COMPOSE_FILES[*]}"
     if [ "$USE_BUNDLED_DB" = "true" ]; then
@@ -1036,7 +1740,7 @@ wait_for_jim() {
 
     info "Waiting for JIM to be ready (the first start prepares the database, which takes a few minutes)..."
     while [ "$SECONDS" -lt "$deadline" ]; do
-        if [ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' jim.web 2>/dev/null)" = "healthy" ]; then
+        if jim_is_healthy; then
             JIM_READY="true"
             success "JIM is ready"
             return
@@ -1044,14 +1748,32 @@ wait_for_jim() {
         sleep 5
     done
     JIM_READY="false"
-    warn "JIM is not ready after 10 minutes. See what it is doing with: cd ${install_dir} && docker compose ${COMPOSE_FILES[*]} logs jim.web jim.worker"
+    if [ "$RUNTIME" = "podman" ]; then
+        warn "JIM is not ready after 10 minutes. See what it is doing with: $(jim_podman_command) logs jim-web, and $(jim_podman_command) logs jim-worker"
+    else
+        warn "JIM is not ready after 10 minutes. See what it is doing with: cd ${install_dir} && docker compose ${COMPOSE_FILES[*]} logs jim.web jim.worker"
+    fi
+}
+
+# Whether jim.web's health check passes, which it does once JIM is ready to serve. On Podman the check is run here
+# rather than read, because Podman runs health checks on a timer only under systemd.
+jim_is_healthy() {
+    if [ "$RUNTIME" = "podman" ]; then
+        as_jim_account podman healthcheck run jim-web >/dev/null 2>&1
+    else
+        [ "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' jim.web 2>/dev/null)" = "healthy" ]
+    fi
 }
 
 # The address users open JIM at: the certificate's first name, on the published port.
 jim_url() {
     local install_dir="$1"
     local port
-    port=$(env_value JIM_WEB_PORT "${install_dir}/.env")
+    if [ "$RUNTIME" = "podman" ]; then
+        port="$JIM_WEB_PORT"
+    else
+        port=$(env_value JIM_WEB_PORT "${install_dir}/.env")
+    fi
     port="${port:-$DEFAULT_WEB_PORT}"
     # JIM_WEB_PORT may carry an address prefix, such as 127.0.0.1:443.
     port="${port##*:}"
@@ -1089,6 +1811,13 @@ show_summary() {
     echo
     echo "  ${BOLD}Location:${RESET}     ${install_dir}"
     echo "  ${BOLD}Version:${RESET}      ${JIM_RELEASE_VERSION}"
+    if [ "$RUNTIME" = "podman" ] && [ -n "$PODMAN_ACCOUNT" ]; then
+        echo "  ${BOLD}Runtime:${RESET}      Podman, rootless as ${PODMAN_ACCOUNT}"
+    elif [ "$RUNTIME" = "podman" ]; then
+        echo "  ${BOLD}Runtime:${RESET}      Podman, rootful"
+    else
+        echo "  ${BOLD}Runtime:${RESET}      Docker"
+    fi
     if [ "$USE_BUNDLED_DB" = "true" ]; then
         echo "  ${BOLD}Database:${RESET}     Bundled PostgreSQL"
     else
@@ -1116,10 +1845,28 @@ show_summary() {
         echo "    ${installer} --renew-certificate    before the certificate expires"
     fi
     echo "    ${installer} --certificate          to change its names, or use your organisation's certificate"
-    echo "    cd ${absolute_dir}"
-    echo "    ${compose} ps"
-    echo "    ${compose} logs -f"
-    echo "    ${compose} down"
+    if [ "$RUNTIME" = "podman" ]; then
+        local systemctl_command podman_command
+        systemctl_command=$(jim_systemctl_command)
+        podman_command=$(jim_podman_command)
+        if [ "$PODMAN_SYSTEMD" = "true" ]; then
+            echo "    ${systemctl_command} status jim.service"
+            echo "    ${systemctl_command} restart jim.service"
+        else
+            echo "    Without systemd, JIM does not start by itself after a reboot. Start it with:"
+            podman_start_commands "$install_dir" | sed 's/^  /      /'
+        fi
+        echo "    ${podman_command} ps"
+        echo "    ${podman_command} logs -f jim-web"
+        if [ -n "$PODMAN_ACCOUNT" ]; then
+            echo "    Volumes and secrets are in the Podman storage of ${PODMAN_ACCOUNT}: $(account_home)/.local/share/containers"
+        fi
+    else
+        echo "    cd ${absolute_dir}"
+        echo "    ${compose} ps"
+        echo "    ${compose} logs -f"
+        echo "    ${compose} down"
+    fi
     echo
     echo "  ${BOLD}Documentation:${RESET}"
     echo "    Deployment: ${DOCS_BASE}/administration/deployment/"
@@ -1129,18 +1876,22 @@ show_summary() {
 }
 
 show_help() {
-    echo "Usage: setup.sh [--renew-certificate | --certificate | --help]"
+    echo "Usage: setup.sh [--runtime docker|podman] [--rootful]"
+    echo "       setup.sh --renew-certificate | --certificate | --help"
     echo
-    echo "Installs JIM with Docker Compose, asking for anything not set in the environment. Run from an"
+    echo "Installs JIM with Docker or Podman, asking for anything not set in the environment. Run from an"
     echo "extracted release bundle, it installs from the bundle and needs no internet connection."
     echo
+    echo "  --runtime docker|podman  The container runtime to install JIM on. Only needed where both are"
+    echo "                       installed: the script asks rather than guess."
+    echo "  --rootful            Podman only: run JIM as root, instead of rootless under the jim account."
     echo "  --renew-certificate  Issue a new server certificate from the certificate authority this"
-    echo "                       script created, for the same names, and restart jim.web."
+    echo "                       script created, for the same names, and restart JIM's web service."
     echo "  --certificate        Create or install JIM's certificate again, for example to change its"
-    echo "                       names or to use your organisation's certificate, and restart jim.web."
+    echo "                       names or to use your organisation's certificate, and restart JIM's web service."
     echo "  --help               Show this help."
     echo
-    echo "The options act on the installation this script sits in, or on JIM_INSTALL_DIR."
+    echo "The certificate options act on the installation this script sits in, or on JIM_INSTALL_DIR."
     echo "Documentation: ${DOCS_BASE}/administration/deployment/"
 }
 
@@ -1154,32 +1905,59 @@ main() {
 
     setup_colours
 
-    case "${1:-}" in
-        "") ;;
-        --renew-certificate)
+    local action="install"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --runtime)
+                [ $# -ge 2 ] || fatal "--runtime needs a value: docker or podman"
+                JIM_SETUP_RUNTIME="$2"
+                shift 2
+                ;;
+            --runtime=*)
+                JIM_SETUP_RUNTIME="${1#--runtime=}"
+                shift
+                ;;
+            --rootful)
+                JIM_SETUP_PODMAN_ROOTFUL="true"
+                shift
+                ;;
+            --renew-certificate)
+                action="renew-certificate"
+                shift
+                ;;
+            --certificate)
+                action="certificate"
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                fatal "Unknown option: $1 (see --help)"
+                ;;
+        esac
+    done
+
+    case "$action" in
+        renew-certificate)
             renew_certificate
             exit 0
             ;;
-        --certificate)
+        certificate)
             change_certificate
             exit 0
-            ;;
-        --help|-h)
-            show_help
-            exit 0
-            ;;
-        *)
-            fatal "Unknown option: $1 (see --help)"
             ;;
     esac
 
     show_banner
+    choose_runtime
 
     local install_dir
     install_dir=$(resolve_install_dir)
 
     # Check for existing installation
-    if [ -f "${install_dir}/.env" ]; then
+    if [ -f "${install_dir}/.env" ] || [ -f "${install_dir}/jim-config.yaml" ]; then
         warn "Existing installation detected at ${install_dir}"
         if ! prompt_yn "Overwrite configuration?" "n"; then
             info "Aborting. Existing installation left untouched."
@@ -1188,27 +1966,69 @@ main() {
     fi
 
     check_prerequisites
+    if [ "$RUNTIME" = "podman" ]; then
+        choose_podman_account
+        prepare_podman_account
+    fi
+
     if [ -n "$BUNDLE_DIR" ]; then
         read_bundle_version
-        copy_bundle_files "$install_dir"
     else
         detect_latest_version
-        download_files "$install_dir"
+    fi
+
+    EXISTING_DB_PASSWORD=$(existing_database_password "$install_dir")
+
+    if [ "$RUNTIME" = "podman" ]; then
+        if [ -n "$BUNDLE_DIR" ]; then
+            PODMAN_SOURCE="${BUNDLE_DIR}/podman"
+            [ -f "${PODMAN_SOURCE}/jim.yaml" ] || fatal "This bundle has no Podman files (podman/jim.yaml). Podman installations need a bundle of a release that supports Podman."
+        else
+            PODMAN_SOURCE=$(mktemp -d)
+            # shellcheck disable=SC2064 # Expanded now, deliberately: the folder to remove is this one.
+            trap "rm -rf '${PODMAN_SOURCE}'" EXIT
+            download_podman_files "$PODMAN_SOURCE"
+        fi
+        install_podman_files "$install_dir"
+        CONFIG_FILE="${install_dir}/jim-config.yaml"
+    else
+        if [ -n "$BUNDLE_DIR" ]; then
+            copy_bundle_files "$install_dir"
+        else
+            download_files "$install_dir"
+        fi
+        CONFIG_FILE="${install_dir}/.env"
     fi
     save_installer_copy "$install_dir"
 
-    local env_file="${install_dir}/.env"
-
-    configure_database "$env_file"
-    configure_sso "$env_file"
-    configure_registry "$env_file"
+    configure_database
+    configure_sso
+    if [ "$RUNTIME" = "docker" ]; then
+        configure_registry
+    fi
     if [ -n "$BUNDLE_DIR" ]; then
         load_bundle_images
-        verify_bundle_images "$install_dir"
+        if [ "$RUNTIME" = "podman" ]; then
+            verify_podman_images "$install_dir"
+        else
+            verify_bundle_images "$install_dir"
+        fi
+    elif [ "$RUNTIME" = "podman" ]; then
+        pull_podman_images "$install_dir"
     fi
-    configure_port "$env_file"
+    configure_port
     configure_certificate "$install_dir"
-    configure_proxy "$env_file"
+    configure_proxy
+
+    if [ "$RUNTIME" = "podman" ]; then
+        store_podman_secrets
+        store_tls_secret "$install_dir"
+        if [ "$PODMAN_SYSTEMD" = "true" ]; then
+            install_podman_units "$install_dir"
+        fi
+        write_install_state "$install_dir"
+        configure_firewall
+    fi
 
     launch_jim "$install_dir"
     show_summary "$install_dir"
