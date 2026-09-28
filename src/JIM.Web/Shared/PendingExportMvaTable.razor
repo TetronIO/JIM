@@ -1,0 +1,180 @@
+@using JIM.Models.Transactional
+@using JIM.Utilities
+@using JIM.Web.Models
+@using System.Globalization
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Every queued change to one multi-valued attribute of a Pending Export, nested in the Attribute Changes table's
+   value cell once the attribute carries more changes than stack inline (see AttributeValuesCell). The list is
+   virtualised rather than paged: the shared grid streams windows as the reader scrolls, and owns the search box
+   and the count. It is Embedded, because one sits on the page per large attribute: none may claim the address bar
+   or repeat the portal-wide density toggle. *@
+
+<div class="jim-mva-table">
+    <VirtualisedDataGrid T="PendingExportAttributeValueChange"
+                         ContainerId="@($"pending-export-mva-{_slug}")"
+                         Embedded="true"
+                         MaxHeight="@NestedValueTable.MaxHeight"
+                         StateKey="@AttributeName"
+                         DefaultSortBy="@SourceOrderSort"
+                         LoadWindow="LoadChangeWindowAsync"
+                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
+                         SingularName="Change"
+                         PluralName="Changes">
+        <Columns>
+            <TemplateColumn Title="Change Type" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Change Type</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Variant="Variant.Text" Color="GetChangeTypeColor(context.Item.ChangeType)">
+                        @context.Item.ChangeType
+                    </MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Status" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Status</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(context.Item.Status)">
+                        @context.Item.Status.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Value" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Value</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <TextValueDisplay Value="@GetValueText(context.Item)" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No changes match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.PublishedWithChanges"
+                                 PrimaryText="No changes are queued for this attribute"
+                                 SecondaryText="Changes appear here while the Pending Export is waiting to be exported, and are cleared once the Connected System confirms them." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
+</div>
+
+@code {
+    /// <summary>
+    /// The name of the attribute whose queued changes are being listed.
+    /// </summary>
+    [Parameter]
+    public string AttributeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The owning Pending Export's ID.
+    /// </summary>
+    [Parameter]
+    public Guid PendingExportId { get; set; }
+
+    /// <summary>
+    /// The attribute name reduced to an element-id-safe token. Several of these tables can render on one page, one
+    /// per large multi-valued attribute, so the grid's element id has to carry which attribute it belongs to.
+    /// </summary>
+    private string _slug = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        var slug = new string(AttributeName.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '-').ToArray());
+        _slug = string.IsNullOrEmpty(slug) ? "attribute" : slug;
+    }
+
+    /// <summary>
+    /// The sort key standing for "the order the application layer returned them in". The range read takes no sort
+    /// parameter (it orders by change id, which is the total order its offset and count are addressed against), so
+    /// no column offers a sort; naming the default something no header claims keeps the grid from showing a sort
+    /// arrow over an order it did not choose.
+    /// </summary>
+    private const string SourceOrderSort = "order";
+
+    /// <summary>
+    /// Reads one window of this attribute's queued changes: one range read at the offset and count the grid asked
+    /// for. The total comes back only when the request asked for it, and a null total is passed straight through
+    /// rather than turned into a zero, which the grid would read as "nothing matched".
+    /// </summary>
+    private async Task<VirtualisedWindow<PendingExportAttributeValueChange>> LoadChangeWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken _)
+    {
+        using var jim = JimFactory.Create();
+        var result = await jim.ConnectedSystems.GetPendingExportAttributeChangesRangeAsync(
+            PendingExportId, AttributeName, request.StartIndex, request.Count,
+            request.SearchText, request.IncludeTotalCount);
+
+        return new VirtualisedWindow<PendingExportAttributeValueChange>(result.Results, result.TotalResults);
+    }
+
+    private static string GetValueText(PendingExportAttributeValueChange change)
+    {
+        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
+            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
+
+        if (change.StringValue != null)
+            return change.StringValue;
+
+        if (change.DateTimeValue.HasValue)
+            return change.DateTimeValue.Value.ToFriendlyDate();
+
+        if (change.IntValue.HasValue)
+            return change.IntValue.Value.ToString();
+
+        if (change.LongValue.HasValue)
+            return change.LongValue.Value.ToString();
+
+        if (change.DecimalValue.HasValue)
+            return change.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
+
+        if (change.GuidValue.HasValue)
+            return change.GuidValue.Value.ToString();
+
+        if (change.BoolValue.HasValue)
+            return change.BoolValue.Value.ToString();
+
+        if (change.ByteValue != null)
+            return $"[Binary data: {change.ByteValue.Length} bytes]";
+
+        return "[null]";
+    }
+
+    private static MudBlazor.Color GetChangeTypeColor(PendingExportAttributeChangeType changeType)
+    {
+        return changeType switch
+        {
+            PendingExportAttributeChangeType.Add => MudBlazor.Color.Primary,
+            PendingExportAttributeChangeType.Update => MudBlazor.Color.Info,
+            PendingExportAttributeChangeType.Remove => MudBlazor.Color.Warning,
+            PendingExportAttributeChangeType.RemoveAll => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default,
+        };
+    }
+
+    private static MudBlazor.Color GetStatusColor(PendingExportAttributeChangeStatus status)
+    {
+        return status switch
+        {
+            PendingExportAttributeChangeStatus.Pending => MudBlazor.Color.Default,
+            PendingExportAttributeChangeStatus.ExportedPendingConfirmation => MudBlazor.Color.Info,
+            PendingExportAttributeChangeStatus.ExportedNotConfirmed => MudBlazor.Color.Warning,
+            PendingExportAttributeChangeStatus.Failed => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default,
+        };
+    }
+}

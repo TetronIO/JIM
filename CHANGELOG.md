@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Multi-valued attributes on Connected System Object and Pending Export pages now list their values in the row, as on a Metaverse Object, instead of behind **+n more**; over 10 get a scrolling table in the row. The Metaverse Object Table view gains search and sorting.
 - 🔄 The portal is more compact: 14px body text, navigation and inputs (from 16px), 13px tables, smaller headings, denser form fields with help text clear of the next field, smaller buttons and chips, and lists that open with dense rows unless you chose otherwise.
 - 🔄 The Connected System's **Partitions & Containers** tab is now called **Scope**: it is where you choose what JIM manages in a system, whatever shape that takes. Links to the old tab name open the Details tab.
 - 🔄 The Password Channel check and the discovered Password Policy now sit on the Connected System's **Passwords** tab, beneath the Password Synchronisation settings, rather than on the Schema tab.

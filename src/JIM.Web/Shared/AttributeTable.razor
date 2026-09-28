@@ -1,0 +1,223 @@
+@typeparam TItem
+@attribute [CascadingTypeParameter(nameof(TItem))]
+@using JIM.Web.Models
+@implements IVirtualisedSortable
+@inject NavigationManager NavManager
+@inject IUserPreferenceService PreferenceService
+@inject IJSRuntime JS
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One object's attributes, one row each: the shell every attribute table renders through (Connected System
+   Object, Pending Export, Metaverse Object). It is deliberately NOT a VirtualisedDataGrid. An object's attributes
+   are bounded by its schema, so there is nothing to virtualise, and a virtualised grid fixes every row to one line,
+   which is what forced a multi-valued attribute's values behind a "+n more" dialog. A plain table lets a row grow
+   to hold them inline (see AttributeValuesCell); the one set that genuinely can be huge, a single attribute's
+   values, is virtualised by the nested table inside its cell. The rows arrive loaded, so the search and the sort
+   run in memory, and both keep the same deep-link parameters the virtualised grid wrote. Sortable headers are
+   VirtualisedSortHeaders, which reach this table through the same cascade the grid provides. *@
+
+<CascadingValue Value="(IVirtualisedSortable)this" IsFixed="true">
+    <MudTable T="TItem" Items="@VisibleItems" Hover="true" Dense="@_dense" Outlined="true" Elevation="0"
+              Class="@CssClass" RowClassFunc="@RowClassFunc"
+              HeaderContent="@HeaderContent" RowTemplate="@RowTemplate">
+        <ToolBarContent>
+            @* The toolbar convention every table follows: display control, then the page's own content, on the
+               left; the count against the search box that changes it on the right. *@
+            <TableDensityToggle @bind-Dense="_dense" />
+            @if (ToolBarExtras != null)
+            {
+                <MudText Class="mx-2 mud-text-disabled">|</MudText>
+                @ToolBarExtras
+            }
+            <MudSpacer />
+            <TableObjectCount Count="@VisibleItems.Count" Total="@Items.Count"
+                              SingularName="@SingularName" PluralName="@PluralName" Class="mr-3" />
+            <SearchField Value="@SearchText" ValueChanged="@(s => SetSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+        </ToolBarContent>
+        <NoRecordsContent>
+            @* A search that matched nothing has a way out to offer; an object with no attributes at all is a
+               different situation, and the page says what would put rows there. *@
+            @if (!string.IsNullOrWhiteSpace(SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No {PluralName.ToLowerInvariant()} match \"{SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => SetSearchAsync(string.Empty))" />
+            }
+            else
+            {
+                @EmptyContent
+            }
+        </NoRecordsContent>
+    </MudTable>
+</CascadingValue>
+
+@code {
+    // ─── Parameters ───
+
+    /// <summary>Every row, as the page loaded them.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TItem> Items { get; set; } = [];
+
+    /// <summary>Whether a row matches the search text (never called with empty text). Match the attribute's name
+    /// and its values, which is what a reader searching an attribute table is looking for.</summary>
+    [Parameter, EditorRequired]
+    public Func<TItem, string, bool> Matches { get; set; } = null!;
+
+    /// <summary>Orders the rows by a sort key (the <c>Name</c> of a <see cref="VirtualisedSortHeader"/>) and
+    /// direction.</summary>
+    [Parameter, EditorRequired]
+    public Func<IEnumerable<TItem>, string, bool, IEnumerable<TItem>> Sort { get; set; } = null!;
+
+    /// <summary>The sort key applied when the URL names none.</summary>
+    [Parameter, EditorRequired]
+    public string DefaultSortBy { get; set; } = null!;
+
+    /// <summary>The header cells; use <see cref="VirtualisedSortHeader"/> inside a <c>MudTh</c> for a sortable
+    /// column.</summary>
+    [Parameter, EditorRequired]
+    public RenderFragment HeaderContent { get; set; } = null!;
+
+    /// <summary>One row's cells.</summary>
+    [Parameter, EditorRequired]
+    public RenderFragment<TItem> RowTemplate { get; set; } = null!;
+
+    /// <summary>The empty state for an object with no rows at all. A search that matched nothing is handled here,
+    /// and never reaches this fragment.</summary>
+    [Parameter]
+    public RenderFragment? EmptyContent { get; set; }
+
+    /// <summary>Content after the density toggle, such as the table's title.</summary>
+    [Parameter]
+    public RenderFragment? ToolBarExtras { get; set; }
+
+    /// <summary>Per-row CSS class; a row stacking several values takes <c>jim-attr-row-mva</c> so its cells align to
+    /// the top rather than floating beside the middle of the stack.</summary>
+    [Parameter]
+    public Func<TItem, int, string>? RowClassFunc { get; set; }
+
+    /// <summary>Prefix for the search and sort URL parameters (q, sort, desc), so they cannot collide with another
+    /// table's on the same page.</summary>
+    [Parameter]
+    public string? UrlParameterPrefix { get; set; }
+
+    /// <summary>Singular noun for the toolbar count.</summary>
+    [Parameter]
+    public string SingularName { get; set; } = "Attribute";
+
+    /// <summary>Plural noun for the toolbar count and the search-miss message.</summary>
+    [Parameter]
+    public string PluralName { get; set; } = "Attributes";
+
+    /// <summary>Placeholder for the search box.</summary>
+    [Parameter]
+    public string SearchPlaceholder { get; set; } = "Search attribute name or value";
+
+    /// <summary>Extra classes for the table.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    // ─── State ───
+
+    /// <summary>The search currently narrowing the rows; empty when the reader has not searched.</summary>
+    public string SearchText { get; private set; } = string.Empty;
+
+    /// <inheritdoc />
+    public string SortBy { get; private set; } = string.Empty;
+
+    /// <inheritdoc />
+    public bool SortDescending { get; private set; }
+
+    /// <summary>The rows the table is showing: <see cref="Items"/> filtered by the search and put in sort order.</summary>
+    public IReadOnlyList<TItem> VisibleItems { get; private set; } = [];
+
+    private bool _dense = true;
+    private bool _urlStateRead;
+
+    private string CssClass => string.IsNullOrWhiteSpace(Class) ? "jim-attribute-table" : $"jim-attribute-table {Class}";
+
+    protected override void OnParametersSet()
+    {
+        // The URL is read once: after that the table's own state is the truth, and it is the table that writes it
+        // back to the URL.
+        if (!_urlStateRead)
+        {
+            var urlState = VirtualisedListUrlState.Read(
+                NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix);
+            SearchText = urlState.SearchText ?? string.Empty;
+            SortBy = urlState.SortBy ?? DefaultSortBy;
+            SortDescending = urlState.SortDescending;
+            _urlStateRead = true;
+        }
+
+        Recompute();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() != false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Narrows the rows to those matching <paramref name="text"/>; empty text shows them all.</summary>
+    public async Task SetSearchAsync(string? text)
+    {
+        SearchText = text ?? string.Empty;
+        Recompute();
+        StateHasChanged();
+        await WriteUrlStateAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task ToggleSortAsync(string name)
+    {
+        if (SortBy == name)
+        {
+            SortDescending = !SortDescending;
+        }
+        else
+        {
+            SortBy = name;
+            SortDescending = false;
+        }
+
+        Recompute();
+        StateHasChanged();
+        await WriteUrlStateAsync();
+    }
+
+    private void Recompute()
+    {
+        var search = SearchText;
+        var matching = string.IsNullOrWhiteSpace(search) ? Items : Items.Where(i => Matches(i, search));
+        VisibleItems = Sort(matching, SortBy, SortDescending).ToList();
+    }
+
+    /// <summary>
+    /// Rewrites the URL to match the search and sort, in place and without a navigation (which would re-run the
+    /// page's whole load). Parameters this table does not own are preserved.
+    /// </summary>
+    private async Task WriteUrlStateAsync()
+    {
+        var state = new VirtualisedListUrlState { SearchText = SearchText, SortBy = SortBy, SortDescending = SortDescending };
+        var query = state.Write(NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix);
+        try
+        {
+            await JS.InvokeVoidAsync("jimInterop.replaceQueryString", query);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is no address bar left to update.
+        }
+        catch (InvalidOperationException)
+        {
+            // Prerendering: JS interop is not available yet, and the URL already says what it says.
+        }
+    }
+}

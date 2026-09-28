@@ -29,11 +29,11 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Covers the Pending Export's Attribute Changes table now that it is a <see cref="VirtualisedDataGrid{TItem}"/>.
-/// The rows are attributes rather than individual changes, and the grouping is done once when the page loads, so
-/// what is worth pinning is the seam between that list and the grid: the window is sliced from it (search, sort
-/// and slice), the count is only taken when the request asks for it, and the two empty states say different
-/// things because only one of them has a way out to offer.
+/// Covers the Pending Export's Attribute Changes table, an <see cref="AttributeTable{TItem}"/>. The rows are
+/// attributes rather than individual changes, grouped once when the page loads, so what is worth pinning is the
+/// seam between that list and the table (the search and the sort), how an attribute carrying several changes
+/// reads (inline, or a nested virtualised table beyond the inline limit), and the two empty states, which say
+/// different things because only one of them has a way out to offer.
 /// </summary>
 [TestFixture]
 public class PendingExportDetailTests : JimComponentTestContext
@@ -90,7 +90,7 @@ public class PendingExportDetailTests : JimComponentTestContext
     }
 
     /// <summary>
-    /// One single-valued change per named attribute, which is the shape that gives one grid row per attribute.
+    /// One single-valued change per named attribute, which is the shape that gives one table row per attribute.
     /// </summary>
     private static List<PendingExportAttributeValueChange> BuildChanges(params string[] attributeNames) =>
         attributeNames
@@ -106,8 +106,7 @@ public class PendingExportDetailTests : JimComponentTestContext
             .ToList();
 
     /// <summary>
-    /// One attribute carrying <paramref name="count"/> queued changes, which is the shape that gives one grid row
-    /// carrying more changes than a row can show.
+    /// One attribute carrying <paramref name="count"/> queued changes: one attribute row carrying several changes.
     /// </summary>
     private static List<PendingExportAttributeValueChange> BuildMultiValuedChanges(string attributeName, int count) =>
         Enumerable.Range(0, count)
@@ -123,8 +122,8 @@ public class PendingExportDetailTests : JimComponentTestContext
             .ToList();
 
     /// <summary>
-    /// Serves one attribute's queued changes as the repository's range read does, which is what the "+n more"
-    /// dialog reads from once it is open.
+    /// Serves one attribute's queued changes as the repository's range read does, which is what the nested changes
+    /// table reads from as it scrolls.
     /// </summary>
     private void SetupChangeRange(string attributeName, IReadOnlyList<PendingExportAttributeValueChange> changes)
     {
@@ -148,12 +147,15 @@ public class PendingExportDetailTests : JimComponentTestContext
             .Add(c => c.Id, PendingExportId));
     }
 
-    private static VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup> Grid(
+    private static AttributeTable<PendingExportDetail.AttributeChangeGroup> Table(
         IRenderedComponent<PendingExportDetail> cut) =>
-        cut.FindComponent<VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup>>().Instance;
+        cut.FindComponent<AttributeTable<PendingExportDetail.AttributeChangeGroup>>().Instance;
+
+    private static IEnumerable<string> VisibleAttributeNames(IRenderedComponent<PendingExportDetail> cut) =>
+        Table(cut).VisibleItems.Select(g => g.AttributeName);
 
     [Test]
-    public void PendingExportDetail_AttributeChanges_AreAVirtualisedGridWithNoPager()
+    public void PendingExportDetail_AttributeChanges_AreAPlainAttributeTable()
     {
         SetupChanges(BuildChanges("department", "title"));
 
@@ -163,103 +165,64 @@ public class PendingExportDetailTests : JimComponentTestContext
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup>>(), Is.True,
-                    "the Attribute Changes must be shown in the shared virtualised grid, not a hand-rolled table");
-                Assert.That(cut.HasComponent<MudBlazor.MudTablePager>(), Is.False,
-                    "a virtualised list has no page size to choose and no page controls");
+                Assert.That(cut.HasComponent<AttributeTable<PendingExportDetail.AttributeChangeGroup>>(), Is.True,
+                    "one row per attribute is bounded by the object's schema, so it is a plain table whose rows " +
+                    "can hold several changes inline");
+                Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup>>(), Is.False);
+                Assert.That(cut.HasComponent<MudBlazor.MudTablePager>(), Is.False);
                 Assert.That(cut.Markup, Does.Contain("department"));
             }
         });
     }
 
     [Test]
-    public async Task PendingExportDetail_Window_IsSlicedFromTheAttributesThePageAlreadyHoldsAsync()
+    public void PendingExportDetail_AttributeChanges_OpenSortedByAttributeWithEveryRowShown()
     {
-        SetupChanges(BuildChanges("alpha", "bravo", "charlie", "delta"));
+        SetupChanges(BuildChanges("delta", "alpha", "charlie", "bravo"));
+
         var cut = RenderPage();
+
         cut.WaitForAssertion(() =>
-            Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup>>(), Is.True));
-
-        var window = await Grid(cut).LoadWindow(
-            new VirtualisedWindowRequest(1, 2, null, "attribute", false, IncludeTotalCount: true),
-            CancellationToken.None);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(window.Items.Select(g => g.AttributeName), Is.EqualTo(new[] { "bravo", "charlie" }),
-                "the window must be the requested slice of the sorted attributes, not the first rows of it");
-            Assert.That(window.TotalItems, Is.EqualTo(4), "the total counts every matching attribute, not the window");
-        }
+            Assert.That(VisibleAttributeNames(cut), Is.EqualTo(new[] { "alpha", "bravo", "charlie", "delta" })));
     }
 
     [Test]
-    public async Task PendingExportDetail_WindowSortedDescending_ReversesTheAttributeOrderAsync()
+    public async Task PendingExportDetail_AttributeSortToggled_ReversesTheAttributeOrderAsync()
     {
         SetupChanges(BuildChanges("alpha", "bravo", "charlie"));
         var cut = RenderPage();
         cut.WaitForAssertion(() =>
-            Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup>>(), Is.True));
+            Assert.That(cut.HasComponent<AttributeTable<PendingExportDetail.AttributeChangeGroup>>(), Is.True));
 
-        var window = await Grid(cut).LoadWindow(
-            new VirtualisedWindowRequest(0, 3, null, "attribute", true, IncludeTotalCount: false),
-            CancellationToken.None);
+        await cut.InvokeAsync(() => Table(cut).ToggleSortAsync("attribute"));
 
-        Assert.That(window.Items.Select(g => g.AttributeName), Is.EqualTo(new[] { "charlie", "bravo", "alpha" }),
-            "the sort the header asks for has to reach the window, or the arrow points at an order nothing applied");
+        Assert.That(VisibleAttributeNames(cut), Is.EqualTo(new[] { "charlie", "bravo", "alpha" }),
+            "the sort the header asks for has to reach the rows, or the arrow points at an order nothing applied");
     }
 
     [Test]
-    public async Task PendingExportDetail_WindowRequestSkippingTheCount_ReturnsANullTotalRatherThanZeroAsync()
-    {
-        SetupChanges(BuildChanges("alpha", "bravo"));
-        var cut = RenderPage();
-        cut.WaitForAssertion(() =>
-            Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup>>(), Is.True));
-
-        var window = await Grid(cut).LoadWindow(
-            new VirtualisedWindowRequest(0, 2, null, "attribute", false, IncludeTotalCount: false),
-            CancellationToken.None);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(window.TotalItems, Is.Null,
-                "null is \"not counted\"; a zero here would read as a Pending Export carrying no changes");
-            Assert.That(window.Items, Has.Count.EqualTo(2), "the window itself is unaffected by skipping the count");
-        }
-    }
-
-    [Test]
-    public async Task PendingExportDetail_WindowWithASearch_MatchesTheAttributeNameAndItsValuesAsync()
+    public async Task PendingExportDetail_Search_MatchesTheAttributeNameAndItsValuesAsync()
     {
         SetupChanges(BuildChanges("department", "title"));
         var cut = RenderPage();
         cut.WaitForAssertion(() =>
-            Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportDetail.AttributeChangeGroup>>(), Is.True));
+            Assert.That(cut.HasComponent<AttributeTable<PendingExportDetail.AttributeChangeGroup>>(), Is.True));
 
-        var byName = await Grid(cut).LoadWindow(
-            new VirtualisedWindowRequest(0, 25, "DEPART", "attribute", false, IncludeTotalCount: true),
-            CancellationToken.None);
-        var byValue = await Grid(cut).LoadWindow(
-            new VirtualisedWindowRequest(0, 25, "title-value", "attribute", false, IncludeTotalCount: true),
-            CancellationToken.None);
+        await cut.InvokeAsync(() => Table(cut).SetSearchAsync("DEPART"));
+        var byName = VisibleAttributeNames(cut).ToList();
+        await cut.InvokeAsync(() => Table(cut).SetSearchAsync("title-value"));
+        var byValue = VisibleAttributeNames(cut).ToList();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(byName.Items.Select(g => g.AttributeName), Is.EqualTo(new[] { "department" }),
-                "the search matches the attribute name, case-insensitively, as the paged table's filter did");
-            Assert.That(byValue.Items.Select(g => g.AttributeName), Is.EqualTo(new[] { "title" }),
-                "the search also matches a change's value, as the paged table's filter did");
+            Assert.That(byName, Is.EqualTo(new[] { "department" }),
+                "the search matches the attribute name, case-insensitively");
+            Assert.That(byValue, Is.EqualTo(new[] { "title" }), "the search also matches a change's value");
         }
     }
 
-    // ─── One line per row ───
+    // ─── Multi-valued attributes ───
 
-    /// <summary>
-    /// The virtualiser positions every row arithmetically from one fixed row height, so a row that renders taller
-    /// than that height puts the scroll position, the row index written to the URL and the space reserved for the
-    /// rows below it out of step with what is on screen. An attribute carrying one change is one line already and
-    /// must keep rendering exactly as it did, with nothing offered to open.
-    /// </summary>
     [Test]
     public void PendingExportDetail_AttributeWithOneChange_RendersItsValueInlineWithNothingToOpen()
     {
@@ -272,14 +235,17 @@ public class PendingExportDetailTests : JimComponentTestContext
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(cut.Markup, Does.Contain("department-value"));
-                Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Empty,
-                    "there is nothing more to reach, so an affordance would be a dead one");
+                Assert.That(cut.FindAll("button").Where(b => b.TextContent.Contains("more")), Is.Empty);
             }
         });
     }
 
+    /// <summary>
+    /// A handful of changes reads in the row itself. Each is a value with its own change type and status, so each
+    /// stacked line says what will happen to that value, not just what the value is.
+    /// </summary>
     [Test]
-    public void PendingExportDetail_AttributeWithSeveralChanges_RendersOneValueAndAnAffordanceForTheRest()
+    public void PendingExportDetail_AttributeWithSeveralChangesWithinTheInlineLimit_StacksEveryChangeInTheRow()
     {
         SetupChanges(BuildMultiValuedChanges("member", 4));
 
@@ -287,50 +253,47 @@ public class PendingExportDetailTests : JimComponentTestContext
 
         cut.WaitForAssertion(() =>
         {
+            var lines = cut.FindAll(".jim-attr-expanded .jim-attr-expanded-item");
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(cut.Markup, Does.Contain("member-value-000"), "the first value still reads in the row");
-                Assert.That(cut.Markup, Does.Not.Contain("member-value-001"),
-                    "a row is one line, so the remaining changes must not be stacked into the cell");
-                Assert.That(cut.FindAll(".jim-attr-expand-btn"), Has.Count.EqualTo(1));
-                Assert.That(cut.Find(".jim-attr-expand-btn").TextContent, Does.Contain("+3 more"),
-                    "the affordance must account for every change the row is not showing");
+                Assert.That(lines, Has.Count.EqualTo(4));
+                for (var i = 0; i < 4; i++)
+                {
+                    Assert.That(lines[i].TextContent, Does.Contain($"member-value-{i:D3}"));
+                    Assert.That(lines[i].TextContent, Does.Contain("Add"),
+                        "each line carries its own change type: adding a member and removing one read very differently");
+                }
+                Assert.That(cut.FindAll("button").Where(b => b.TextContent.Contains("more")), Is.Empty,
+                    "every change is already on the page, so there is nothing more to open");
+                Assert.That(cut.HasComponent<PendingExportMvaTable>(), Is.False);
             }
         });
     }
 
     /// <summary>
-    /// The row cannot show the changes, so the affordance has to reach them, and what it opens has to be able to
-    /// carry all of them: a group with half a million members is the case this whole shape exists for. The dialog's
-    /// grid also has to state its own height ceiling (its container is not the page) and keep its state out of the
-    /// address bar (no deep link can reopen a dialog to put it back).
+    /// A group with half a million members is the case the nested table exists for: the page loads only a sample,
+    /// so the cell holds a virtualised table that reads the rest from the server as it scrolls, embedded in the
+    /// row rather than behind a dialog.
     /// </summary>
     [Test]
-    public void PendingExportDetail_SeveralChangesAffordance_OpensAVirtualisedDialogOverEveryChange()
+    public void PendingExportDetail_AttributeWithChangesBeyondTheInlineLimit_HoldsANestedVirtualisedTableInTheRow()
     {
         var changes = BuildMultiValuedChanges("member", 500);
         SetupChanges(changes.Take(10).ToList(), new Dictionary<string, int> { ["member"] = 500 });
         SetupChangeRange("member", changes);
 
-        var provider = Render<MudBlazor.MudDialogProvider>();
         var cut = RenderPage();
-        cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Not.Empty));
 
-        cut.Find(".jim-attr-expand-btn").Click();
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.HasComponent<PendingExportMvaTable>(), Is.True));
 
-        provider.WaitForAssertion(() =>
-            Assert.That(provider.HasComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>(), Is.True,
-                "the affordance must open the changes, not merely say how many there are"));
-
-        var grid = provider.FindComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>().Instance;
+        var grid = cut.FindComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>().Instance;
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(provider.HasComponent<PendingExportMvaDialog>(), Is.True);
-            Assert.That(provider.HasComponent<MudBlazor.MudTablePager>(), Is.False,
-                "the dialog's list is virtualised, so every change stays reachable however many there are");
+            Assert.That(cut.FindAll("button").Where(b => b.TextContent.Contains("more")), Is.Empty, "there is no dialog left to open");
+            Assert.That(grid.Embedded, Is.True);
             Assert.That(grid.MaxHeight, Is.Not.Null.And.Not.Empty);
-            Assert.That(grid.TrackUrlState, Is.False);
         }
     }
 

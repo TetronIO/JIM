@@ -2276,16 +2276,10 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-text-primary);
 }
 
-/* CSO Attribute Table Styles */
+/* Attribute table styles (<AttributeTable />: Connected System Object, Pending Export, Metaverse Object) */
 .jim-attribute-table {
     border-radius: var(--jim-container-radius);
     overflow: hidden;
-}
-
-/* Border between density-toggle toolbar and header row in MudSimpleTable variants
-   (MudTable's toolbar gets this from .mud-table-outlined>.mud-table-toolbar above) */
-.jim-attribute-table-toolbar {
-    border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
 }
 
 .jim-attribute-table thead tr th {
@@ -2348,22 +2342,21 @@ html[lang] .jim-schema-change-table td {
     margin: 3px 4px 3px 0;
 }
 
-/* MVA "show more" dialog table is always dense; tighten cell padding and chip
-   sizing to match the visual density of the parent MVO Detail Table dense
-   mode, since MudBlazor's built-in mud-table-dense alone leaves rows looser
-   than the parent table. */
-.jim-mva-dialog-table tbody tr td {
+/* The nested table of one large multi-valued attribute's values (<AttributeValuesCell />) is always dense; tighten
+   cell padding and chip sizing to match the visual density of the attribute table it sits in, since MudBlazor's
+   built-in mud-table-dense alone leaves rows looser than the parent table. */
+.jim-mva-table tbody tr td {
     padding: 4px 16px !important;
 }
 
-.jim-mva-dialog-table .mud-chip {
+.jim-mva-table .mud-chip {
     margin: 0;
 }
 
-/* The nested MVA table sits directly inside the attribute table's value cell; its own
-   outlined border reads tighter than plain SVA text at the same cell padding, so give it
-   extra vertical margin to match the visual gap SVA values get above and below. */
-.jim-attr-value .jim-mva-dialog-table {
+/* The nested table sits directly inside the attribute table's value cell; its own outlined border reads tighter
+   than plain single values at the same cell padding, so give it extra vertical margin to match the visual gap
+   single values get above and below. */
+.jim-attr-value .jim-mva-table {
     margin: 8px 0;
 }
 
@@ -2403,14 +2396,6 @@ html[lang] .jim-schema-change-table td {
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-}
-
-.jim-attr-expand-btn {
-    padding: 2px 8px !important;
-    min-width: auto !important;
-    font-size: 0.75rem;
-    text-transform: none !important;
-    align-self: flex-start;
 }
 
 /* The "+n more" affordance on a single-line list (<OverflowList />): low-lighted text rather than a button, so
@@ -2486,12 +2471,6 @@ html[lang] .jim-schema-change-table td {
     min-width: 0;
 }
 
-/* The shared affordance button is authored for the old stacked layout, where it sat under the values and so
-   aligned to the start of a column. On this one-line row it has to sit beside the value. */
-.jim-one-line-list .jim-attr-expand-btn {
-    align-self: center;
-}
-
 .jim-attr-expanded {
     display: flex;
     flex-direction: column;
@@ -2503,16 +2482,15 @@ html[lang] .jim-schema-change-table td {
 }
 
 /* The whole set, inside <OverflowListDialog />. The ceiling is stated rather than measured, because the dialog's
-   container is not the page; it matches the figure the Connected System Object's and Pending Export's own value
-   dialogs state, so the three read as the same kind of thing. */
+   container is not the page; it matches the nested value tables' ceiling (NestedValueTable.MaxHeight), so the two
+   read as the same kind of thing. */
 .jim-overflow-list-dialog {
     max-height: 400px;
     overflow-y: auto;
 }
 
 /* MVA rows: top-align cells so attribute name stays at top when values stack vertically */
-.jim-attribute-table tbody tr.jim-attr-row-mva td,
-.jim-attribute-table .mud-table-body .mud-table-cell.jim-attr-cell-mva {
+.jim-attribute-table tbody tr.jim-attr-row-mva td {
     vertical-align: top;
 }
 
