@@ -11,7 +11,7 @@ JIM requires an OIDC-compliant identity provider for authentication. This page i
 
     - JIM deployed and accessible (see [Deployment Guide](deployment.md))
     - Administrative access to your identity provider
-    - The URL where JIM is hosted (e.g. `https://jim.example.com`)
+    - JIM's address: `https://` and the name users type, such as `https://jim.example.com`. If JIM serves HTTPS on a port other than the standard 443, the address carries it too (`https://jim.example.com:8443`), and so must every redirect URI you register, or sign-in fails with a redirect URI mismatch. The provider guides call this address `your-jim-url`.
 
     JIM serves both the web interface and API from a single application. The API is available at `/api/` on the same host.
 

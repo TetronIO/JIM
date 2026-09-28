@@ -109,10 +109,10 @@ For detailed architecture diagrams (Component level), see the [Architecture](htt
 The fastest way to get JIM running:
 
 ```bash
-curl -fsSL https://junctional.io/get | bash
+curl -fsSL https://junctional.io/get | sudo bash
 ```
 
-This downloads everything you need, walks you through configuration, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://docs.junctional.io/getting-started/) guide.
+This downloads everything you need, walks you through configuration, including JIM's HTTPS certificate, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://docs.junctional.io/getting-started/) guide.
 
 ### Develop
 

@@ -53,7 +53,7 @@ keeps the UI live) works identically whether JIM is reached over plain HTTP (loc
 
 ## Reverse proxies and corporate networks
 
-If you terminate TLS at a reverse proxy in front of JIM (see [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy)),
+If you put a reverse proxy in front of JIM (see [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy)),
 JIM's headers pass through unchanged unless your proxy is explicitly configured to strip or rewrite them. A
 corporate web proxy or browser security extension that inspects or blocks unrecognised `Content-Security-Policy`
 directives may need an allowance for JIM's origin; the policy above is the complete list of directives JIM sends,
@@ -62,4 +62,4 @@ useful if you need to document it for a network security review.
 ## See also
 
 - [Rate Limiting](../api/rate-limiting.md): the other REST API hardening control from the same security assessment
-- [Deployment](deployment.md): TLS termination and reverse proxy configuration
+- [Deployment](deployment.md): HTTPS certificates and reverse proxy configuration

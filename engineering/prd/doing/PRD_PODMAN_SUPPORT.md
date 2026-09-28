@@ -1,6 +1,6 @@
 # Podman Support
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (plan Phases 1 and 2 complete: start-up and cleanup, and HTTPS by default on Docker)
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
