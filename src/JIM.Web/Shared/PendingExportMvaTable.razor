@@ -18,6 +18,7 @@
                          ContainerId="@($"pending-export-mva-{_slug}")"
                          Embedded="true"
                          MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@ValueCount"
                          StateKey="@AttributeName"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadChangeWindowAsync"
@@ -79,6 +80,13 @@
     /// </summary>
     [Parameter]
     public string AttributeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// How many values the attribute holds, so the table can hold its height while its first window loads (see
+    /// VirtualisedDataGrid.ExpectedItemCount).
+    /// </summary>
+    [Parameter]
+    public int? ValueCount { get; set; }
 
     /// <summary>
     /// The owning Pending Export's ID.

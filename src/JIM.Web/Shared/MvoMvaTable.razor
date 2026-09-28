@@ -22,6 +22,7 @@
                          StateKey="@AttributeName"
                          Embedded="true"
                          MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -71,6 +72,7 @@ else
                          StateKey="@AttributeName"
                          Embedded="true"
                          MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -123,6 +125,13 @@ else
     /// </summary>
     [Parameter]
     public string AttributeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// How many values the attribute holds, so the table can hold its height while its first window loads (see
+    /// VirtualisedDataGrid.ExpectedItemCount).
+    /// </summary>
+    [Parameter]
+    public int? ValueCount { get; set; }
 
     /// <summary>
     /// The owning Metaverse Object's ID.

@@ -286,6 +286,7 @@
                             </ValueTemplate>
                             <OverflowContent>
                                 <CsoMvaTable @key="group.AttributeName"
+                                             ValueCount="@group.TotalCount"
                                              AttributeName="@group.AttributeName"
                                              ConnectedSystemObjectId="@_connectedSystemObjectId"
                                              IsReferenceAttribute="@group.IsReference" />

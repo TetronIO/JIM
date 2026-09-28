@@ -37,6 +37,7 @@
                     </ValueTemplate>
                     <OverflowContent>
                         <MvoMvaTable @key="group.AttributeName"
+                                     ValueCount="@group.TotalCount"
                                      AttributeName="@group.AttributeName"
                                      MetaverseObjectId="@_metaverseObjectId"
                                      IsReferenceAttribute="@group.IsReference" />

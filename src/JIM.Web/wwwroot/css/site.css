@@ -4635,6 +4635,21 @@ html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-ch
     overflow-y: auto;
 }
 
+/* A grid told how many rows to expect (ExpectedItemCount) holds that height until its first rows arrive, and so does
+   the stand-in drawn before its density preference is read, so the content below it does not jump as it loads.
+   Only while the table has nothing to show: :has() lets go as soon as rows (or the empty state) are in the DOM,
+   which the component cannot see for itself. Height rather than min-height, so the ceiling (the stated one, or the
+   measured one fit() writes inline) still caps it. Before fit() has measured, the cap is the readable share fit()
+   gives a grid below the fold, not the ordinary fallback, which would overshoot and then shrink. */
+.jim-virtualised-list-reserving .mud-table-container:not(:has(tbody .mud-table-row, .jim-table-empty-state)) {
+    height: min(var(--jim-virtualised-list-reserved-height, 0px), var(--jim-virtualised-list-max-height, min(480px, 60vh)));
+}
+
+.jim-virtualised-list-placeholder-toolbar {
+    height: 64px;
+    border-bottom: 1px solid var(--mud-palette-table-lines);
+}
+
 /* Container Scope: Simple / Advanced mode switch and the text editor behind it (#1255) */
 .jim-scope-mode {
     display: flex;
