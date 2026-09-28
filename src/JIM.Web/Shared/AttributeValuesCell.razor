@@ -1,0 +1,69 @@
+@typeparam TValue
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The value cell of one attribute on an attribute table (see AttributeTable). Every such table shows a
+   multi-valued attribute the same way: up to InlineLimit values stacked in the cell, readable without a click, and
+   anything larger handed to the host's nested virtualised table, which reads the full set from the server as it
+   scrolls. The host says how one value renders and what the nested table is; this component only decides which of
+   the two a set of values gets, so the three attribute tables cannot drift apart on it again. *@
+
+@if (ShowsInline)
+{
+    @if (Values.Count == 1)
+    {
+        @ValueTemplate(Values[0])
+    }
+    else
+    {
+        <div class="jim-attr-expanded">
+            @foreach (var value in Values)
+            {
+                <div @key="value" class="jim-attr-expanded-item">@ValueTemplate(value)</div>
+            }
+        </div>
+    }
+}
+else
+{
+    @OverflowContent
+}
+
+@code {
+    /// <summary>
+    /// The most values stacked in the cell. It matches the per-attribute cap the detail loads apply, so a set of
+    /// this size or smaller arrived whole and a larger one arrived as a sample only the nested table can complete.
+    /// </summary>
+    public const int InlineLimit = 10;
+
+    /// <summary>The attribute's values as the page loaded them (capped at <see cref="InlineLimit"/> by the detail
+    /// load for a large multi-valued attribute).</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TValue> Values { get; set; } = [];
+
+    /// <summary>How many values the attribute holds in total, when the page loaded fewer than that. Defaults to the
+    /// number loaded.</summary>
+    [Parameter]
+    public int? TotalCount { get; set; }
+
+    /// <summary>How one value renders, whether stacked or on its own.</summary>
+    [Parameter, EditorRequired]
+    public RenderFragment<TValue> ValueTemplate { get; set; } = null!;
+
+    /// <summary>The nested virtualised table over the attribute's full set of values, rendered in place of the stack
+    /// when the set is larger than <see cref="InlineLimit"/> or was not loaded whole.</summary>
+    [Parameter, EditorRequired]
+    public RenderFragment OverflowContent { get; set; } = null!;
+
+    // Inline only when the set is small AND arrived whole: stacking a capped sample would present part of the set as
+    // all of it.
+    private bool ShowsInline
+    {
+        get
+        {
+            var total = TotalCount ?? Values.Count;
+            return total <= InlineLimit && Values.Count >= total;
+        }
+    }
+}

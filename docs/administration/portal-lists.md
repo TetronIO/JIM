@@ -52,9 +52,8 @@ The same behaviour applies to the tables that live inside a page, not just the l
 
 - An Activity's Run Profile execution items, and its child Activities
 - An API Key's usage history
-- A Connected System Object's attributes, and the Pending Exports queued against it
-- A Pending Export's Attribute Changes
-- The values of a multi-valued attribute on a Metaverse Object or a Connected System Object
+- The Pending Exports queued against a Connected System Object
+- The values of a large multi-valued attribute on a Metaverse Object, a Connected System Object or a Pending Export (see [Attribute tables](#attribute-tables))
 - The changes behind a Change History entry, and a causality event's attribute changes
 - A Connected System's schema, Run Profiles, Object Matching Rules and Attribute Flows
 - A Metaverse Object Type's attributes and its downstream deprovisioning
@@ -68,11 +67,20 @@ Two things moved rather than converted, because a scrolling table could not hold
 
 Every row of a scrolling table is one line tall, which is what lets the table place a row without having drawn the rows above it. Three things follow from that, and none of them loses you anything.
 
-**A cell holding a list shows its first item and a +n more beside it.** This covers a multi-valued attribute's values (a Connected System Object's attributes, a Pending Export's Attribute Changes), an API Key's roles, the Object Types a Metaverse Attribute is bound to, the sources of an Attribute Flow, and an Example Data Template Attribute's generation rules. **+n more** opens the whole set in a dialog, drawn exactly as it is in the row, so no item is out of reach however many there are.
+**A cell holding a list shows its first item and a +n more beside it.** This covers an API Key's roles, the Object Types a Metaverse Attribute is bound to, the sources of an Attribute Flow, and an Example Data Template Attribute's generation rules. **+n more** opens the whole set in a dialog, drawn exactly as it is in the row, so no item is out of reach however many there are.
 
 **Long text is clipped with an ellipsis rather than wrapped.** Descriptions, service log messages and imported schema descriptions are all as long as whatever wrote them chose to make them. Hover the text to read it in full; where there is a detail page or panel behind the row, as there is for a log entry, that holds the complete, selectable version.
 
 **Secondary text reads after the value rather than under it.** A setting's description, an attribute's data type and plurality, and the pattern behind a previewed change now follow what they qualify on the same line, low-lighted. Hovering shows both in full.
+
+## Attribute tables
+
+The table of one object's attributes is the exception to one line per row: a Connected System Object's **Attributes** tab, a Pending Export's **Attribute Changes**, and a Metaverse Object's **Table** view. An object has only as many attributes as its schema gives it, so these tables draw every row, and a row grows to hold a multi-valued attribute's values:
+
+- **Up to 10 values** are listed in the row, one per line. On a Pending Export, each line also shows that value's change type and status, since adding one member and removing another are different changes.
+- **More than 10 values** (a large group's members, say) are shown in a small table inside the row, which scrolls and has its own search box, so a group with half a million members is still read and searched in place.
+
+All three tables have a search box, which matches an attribute's name or any of its values shown on the page, and column headers you can click to sort. The search and sort are kept in the page address, so a refresh or a shared link shows the same view.
 
 ## The Operations queue
 

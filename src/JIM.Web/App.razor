@@ -1,6 +1,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
+<CascadingValue Name="InitialDrawerOpen" Value="InitialDrawerOpen" IsFixed="true">
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">
@@ -22,4 +23,15 @@
             </LayoutView>
         </NotFound>
     </Router>
-</CascadingAuthenticationState> 
+</CascadingAuthenticationState>
+</CascadingValue>
+
+@code {
+    /// <summary>
+    /// Whether the navigation drawer was open when the user last left it, read by the host page from the cookie
+    /// MainLayout mirrors it into; null when there is none yet. MainLayout starts from it and still reads the saved
+    /// preference once interactive, which remains the truth.
+    /// </summary>
+    [Parameter]
+    public bool? InitialDrawerOpen { get; set; }
+}

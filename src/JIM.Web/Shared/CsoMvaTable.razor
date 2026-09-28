@@ -7,21 +7,22 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Searchable, virtualised table of a single Connected System Object attribute's values. It is the content of
-   the dialog a multi-valued attribute's "+n more" opens, rather than something rendered into a row: a row in a
-   virtualised table is one line tall, so a table inside one puts every row below it at an offset the virtualiser
-   cannot know about. The scrolling, the search box, the count and the density all belong to the shared grid;
-   this component only says how a value renders and how a window of values is read. *@
+@* Searchable, virtualised table of a single Connected System Object attribute's values, nested in the value cell
+   of the attributes table for a multi-valued attribute too large to stack inline (see AttributeValuesCell). The
+   outer table is a plain one, so a row can hold this table without upsetting anything. It is Embedded, because one
+   sits on the page per large attribute: none may claim the address bar or repeat the portal-wide density toggle.
+   The scrolling, the search box and the count belong to the shared grid; this component only says how a value
+   renders and how a window of values is read. *@
 
-<div class="jim-mva-dialog-table">
+<div class="jim-mva-table">
 @if (_isReferenceAttribute)
 {
     <VirtualisedDataGrid T="ConnectedSystemObjectAttributeValue"
                          ContainerId="@($"cso-mva-{_slug}-references")"
-                         UrlParameterPrefix="@($"{_slug}-")"
                          StateKey="@AttributeName"
-                         MaxHeight="@MaxHeight"
-                         TrackUrlState="@TrackUrlState"
+                         Embedded="true"
+                         MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -95,10 +96,10 @@ else
 {
     <VirtualisedDataGrid T="ConnectedSystemObjectAttributeValue"
                          ContainerId="@($"cso-mva-{_slug}-values")"
-                         UrlParameterPrefix="@($"{_slug}-")"
                          StateKey="@AttributeName"
-                         MaxHeight="@MaxHeight"
-                         TrackUrlState="@TrackUrlState"
+                         Embedded="true"
+                         MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -153,6 +154,13 @@ else
     public string AttributeName { get; set; } = string.Empty;
 
     /// <summary>
+    /// How many values the attribute holds, so the table can hold its height while its first window loads (see
+    /// VirtualisedDataGrid.ExpectedItemCount).
+    /// </summary>
+    [Parameter]
+    public int? ValueCount { get; set; }
+
+    /// <summary>
     /// The owning Connected System Object's ID.
     /// </summary>
     [Parameter]
@@ -165,29 +173,6 @@ else
     public bool IsReferenceAttribute { get; set; }
 
     /// <summary>
-    /// Whether the host page's tables are showing compact rows. Retained for the host's binding: the grid reads
-    /// the same saved density preference the host's toggle writes, so it no longer needs threading through.
-    /// </summary>
-    [Parameter]
-    public bool Dense { get; set; }
-
-    /// <summary>
-    /// An explicit height ceiling for the values grid, passed straight through. A host whose container is not the
-    /// page (a dialog) has to state one, because the grid's default ceiling is measured from where the page footer
-    /// lands, which describes the page behind the dialog rather than the box the table is in.
-    /// </summary>
-    [Parameter]
-    public string? MaxHeight { get; set; }
-
-    /// <summary>
-    /// Whether the values grid keeps its search, sort and scroll position in the address bar. A host that is a
-    /// dialog passes false: that state would outlive the dialog that owns it, and a deep link cannot reopen the
-    /// dialog to put it back.
-    /// </summary>
-    [Parameter]
-    public bool TrackUrlState { get; set; } = true;
-
-    /// <summary>
     /// The sort key standing for "the order the application layer returned them in". The range read takes no sort
     /// parameter (it orders by value id, which is the total order its offset and count are addressed against), so
     /// no column offers a sort; naming the default something no header claims keeps the grid from showing a sort
@@ -198,9 +183,8 @@ else
     private bool _isReferenceAttribute;
 
     /// <summary>
-    /// The attribute name reduced to a URL- and element-id-safe token. Several of these tables render on one
-    /// page, one per capped multi-valued attribute, so the grid's element id and URL parameters have to carry
-    /// which attribute they belong to.
+    /// The attribute name reduced to an element-id-safe token. Several of these tables render on one page, one per
+    /// large multi-valued attribute, so the grid's element id has to carry which attribute it belongs to.
     /// </summary>
     private string _slug = string.Empty;
 

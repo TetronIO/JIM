@@ -4,6 +4,15 @@
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
 @{
     Layout = "_Layout";
+
+    // The navigation drawer's last open state, mirrored from its saved preference by MainLayout, so the first render
+    // draws the drawer as the user left it instead of opening it, animated, once the preference has been read.
+    bool? drawerOpen = Request.Cookies["jim_drawerOpen"] switch
+    {
+        "true" => true,
+        "false" => false,
+        _ => null
+    };
 }
 
-<component type="typeof(App)" render-mode="Server" />
+<component type="typeof(App)" render-mode="Server" param-InitialDrawerOpen="drawerOpen" />
