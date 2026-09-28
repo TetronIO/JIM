@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A group with more members than Active Directory returns in one read (MaxValRange, 1,500 by default) now imports with every member, instead of failing as a configuration error naming `member;range=0-1499`. (#1853)
 - 🐛 Schema, container and domain controller discovery on Active Directory now read page by page, so a forest with more attributes, organisational units or domain controllers than MaxPageSize (1,000 by default) no longer fails with "size limit exceeded". (#1853)
 - 🐛 Opening JIM over plain HTTP from another machine no longer loops endlessly between JIM and the identity provider; sign-in stops on a page explaining that browser access from other machines requires HTTPS. A one-off lost sign-in cookie is still recovered automatically.
 - 🐛 `Get-JIMScheduleExecution -Status` and the REST API's Schedule Execution list now return only executions with the requested status, instead of every execution.
