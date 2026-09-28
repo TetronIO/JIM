@@ -32,12 +32,17 @@ public class ScheduleHeaderQueryDatabaseTests
     private string _connectionString = null!;
     private readonly CommandCountingInterceptor _interceptor = new();
 
-    private JimDbContext NewContext(bool countCommands = false)
+    private JimDbContext NewContext(bool countCommands = false, bool throwOnDistinctAfterOrderBy = false)
     {
         var options = new DbContextOptionsBuilder<JimDbContext>()
             .UseNpgsql(_connectionString)
             .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+            .ConfigureWarnings(w =>
+            {
+                w.Ignore(RelationalEventId.PendingModelChangesWarning);
+                if (throwOnDistinctAfterOrderBy)
+                    w.Throw(CoreEventId.DistinctAfterOrderByWithoutRowLimitingOperatorWarning);
+            });
 
         if (countCommands)
             options.AddInterceptors(_interceptor);
@@ -236,6 +241,21 @@ public class ScheduleHeaderQueryDatabaseTests
             Assert.That(header.LastExecutionFailedStepIndices, Is.EqualTo(new[] { 1, 3 }),
                 "distinct and ascending, from the newest execution only, and warnings are not failures");
         }
+    }
+
+    [Test]
+    public async Task GetScheduleHeadersAsync_Translated_DoesNotRaiseDistinctAfterOrderByWarningAsync()
+    {
+        // The failed step indices start from the newest execution (OrderByDescending + Take(1)); a Distinct further down
+        // that chain makes EF Core log DistinctAfterOrderByWithoutRowLimitingOperatorWarning every time JIM.Web compiles
+        // the query. The ordering is only there for the Take, so the warning is noise, but noise that buries real cases
+        // of an ordering being silently dropped. Promoting it to an exception here keeps the query free of it.
+        await SeedSchedulesAsync(1);
+
+        await using var ctx = NewContext(throwOnDistinctAfterOrderBy: true);
+        var repository = new PostgresDataRepository(ctx);
+
+        Assert.DoesNotThrowAsync(() => repository.Scheduling.GetScheduleHeadersAsync(1, 10));
     }
 
     [Test]
