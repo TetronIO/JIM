@@ -121,31 +121,38 @@ public class Worker : BackgroundService
         // heartbeat is kept fresh meanwhile, so the container is not judged unhealthy for waiting.
         await mainLoopJim.WaitForDatabaseAsync(JimApplication.DefaultDatabaseWaitBudget,
             _ => HealthcheckFile.TouchAsync(), stoppingToken);
-        await mainLoopJim.InitialiseDatabaseAsync();
 
-        // Warm the CSO lookup cache for all Connected Systems before accepting tasks.
-        // This is a blocking operation — tasks queue until warming is complete.
-        await WarmCsoCacheForAllConnectedSystemsAsync(mainLoopJim);
+        // Migrations and cache warming can outlast the health check's threshold on a large installation, and Podman
+        // restarts a container whose liveness check fails, which would kill a migration part-way, over and over. The
+        // heartbeat is kept fresh until the main loop takes over.
+        await HealthcheckFile.KeepFreshWhileAsync(async () =>
+        {
+            await mainLoopJim.InitialiseDatabaseAsync();
 
-        // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
-        // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
-        foreach (var taskToCancel in await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync())
-            await mainLoopJim.Tasking.CancelWorkerTaskAsync(taskToCancel);
+            // Warm the CSO lookup cache for all Connected Systems before accepting tasks.
+            // This is a blocking operation — tasks queue until warming is complete.
+            await WarmCsoCacheForAllConnectedSystemsAsync(mainLoopJim);
 
-        // Recover any tasks stuck in Processing status from a previous crash.
-        // At startup, ALL Processing tasks are orphaned (the worker just started, nothing is genuinely processing),
-        // so we use TimeSpan.Zero to recover them all immediately without waiting for the stale timeout.
-        var recoveredCount = await mainLoopJim.Tasking.RecoverStaleWorkerTasksAsync(TimeSpan.Zero);
-        if (recoveredCount > 0)
-            Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
+            // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
+            // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
+            foreach (var taskToCancel in await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync())
+                await mainLoopJim.Tasking.CancelWorkerTaskAsync(taskToCancel);
 
-        // Recover any Pending Exports left stranded in Status Executing by a worker crash or restart
-        // mid-export. At startup nothing can genuinely be exporting, so every Executing row is a leftover;
-        // without this it is picked up by neither the export queue nor import reconciliation (which now
-        // deliberately excludes Executing) and would be stranded forever.
-        var recoveredExportCount = await mainLoopJim.ExportExecution.RecoverStrandedExecutingPendingExportsAsync();
-        if (recoveredExportCount > 0)
-            Log.Warning("ExecuteAsync: Recovered {Count} stranded Executing Pending Export(s) from previous crash", recoveredExportCount);
+            // Recover any tasks stuck in Processing status from a previous crash.
+            // At startup, ALL Processing tasks are orphaned (the worker just started, nothing is genuinely processing),
+            // so we use TimeSpan.Zero to recover them all immediately without waiting for the stale timeout.
+            var recoveredCount = await mainLoopJim.Tasking.RecoverStaleWorkerTasksAsync(TimeSpan.Zero);
+            if (recoveredCount > 0)
+                Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
+
+            // Recover any Pending Exports left stranded in Status Executing by a worker crash or restart
+            // mid-export. At startup nothing can genuinely be exporting, so every Executing row is a leftover;
+            // without this it is picked up by neither the export queue nor import reconciliation (which now
+            // deliberately excludes Executing) and would be stranded forever.
+            var recoveredExportCount = await mainLoopJim.ExportExecution.RecoverStrandedExecutingPendingExportsAsync();
+            if (recoveredExportCount > 0)
+                Log.Warning("ExecuteAsync: Recovered {Count} stranded Executing Pending Export(s) from previous crash", recoveredExportCount);
+        });
 
         // The same liveness as the health-check heartbeat file, written to the database for administrators: the
         // Operations page reads it to show whether the Worker is up, what it is running and since when, and which
