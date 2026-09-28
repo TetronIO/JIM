@@ -85,6 +85,7 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 . "$PSScriptRoot/../utils/Test-GroupHelpers.ps1"
 
 # Derive directory-specific configuration
@@ -104,8 +105,9 @@ if (-not $isRfcDirectory) {
     $targetConfig.GroupContainer = "OU=Entitlements,OU=CorpManaged,DC=gentian,DC=local"
 }
 
-$sourceContainerName = $sourceConfig.ContainerName
-$targetContainerName = $targetConfig.ContainerName
+# The name shown in the health messages: the container for the container labs, the domain controller for Active Directory.
+$sourceContainerName = if ($sourceConfig.ContainerName) { $sourceConfig.ContainerName } else { $sourceConfig.Host }
+$targetContainerName = if ($targetConfig.ContainerName) { $targetConfig.ContainerName } else { $targetConfig.Host }
 $sourceSystemName    = $sourceConfig.ConnectedSystemName
 $targetSystemName    = $targetConfig.ConnectedSystemName
 
@@ -144,8 +146,9 @@ try {
         Write-Host "  Target OpenLDAP (same container, different suffix) healthy" -ForegroundColor Green
     }
     else {
-        $sourceStatus = docker inspect --format='{{.State.Health.Status}}' $sourceContainerName 2>&1
-        $targetStatus = docker inspect --format='{{.State.Health.Status}}' $targetContainerName 2>&1
+        # Samba AD: the containers' Docker health. Active Directory has no container, so an LDAPS bind is the check.
+        $sourceStatus = Get-DirectoryHealthStatus -DirectoryConfig $sourceConfig
+        $targetStatus = Get-DirectoryHealthStatus -DirectoryConfig $targetConfig
         if ($sourceStatus -ne "healthy") {
             throw "$sourceContainerName container is not healthy (status: $sourceStatus)"
         }
@@ -166,9 +169,9 @@ try {
         }
         else {
             Write-Host "Populating test data in Source AD..." -ForegroundColor Gray
-            & "$PSScriptRoot/../Populate-SambaAD-Scenario-008.ps1" -Template $Template -Instance Source
+            & "$PSScriptRoot/../Populate-SambaAD-Scenario-008.ps1" -Template $Template -Instance Source -DirectoryConfig $DirectoryConfig
             Write-Host "Creating OU structure in Target AD..." -ForegroundColor Gray
-            & "$PSScriptRoot/../Populate-SambaAD-Scenario-008.ps1" -Template $Template -Instance Target
+            & "$PSScriptRoot/../Populate-SambaAD-Scenario-008.ps1" -Template $Template -Instance Target -DirectoryConfig $DirectoryConfig
         }
         Write-Host "Test data populated" -ForegroundColor Green
     } else {
@@ -253,12 +256,10 @@ try {
             return Get-LDAPGroupMembers -GroupName $GroupName -DirectoryConfig $Config
         }
         else {
-            # Samba AD: use samba-tool which returns sAMAccountNames directly.
-            # Get-LDAPGroupMembers returns DNs with CN=DisplayName which don't match
+            # Samba AD: samba-tool returns sAMAccountNames directly; Active Directory answers a memberOf search
+            # with the same. Get-LDAPGroupMembers returns DNs with CN=DisplayName which don't match
             # sAMAccountName values from Get-DirectoryUserList.
-            $output = docker exec $Config.ContainerName samba-tool group listmembers $GroupName 2>&1
-            if ($LASTEXITCODE -ne 0 -or -not $output) { return @() }
-            return @($output -split "`n" | Where-Object { $_.Trim() -ne "" } | ForEach-Object { $_.Trim() })
+            return @(Get-DirectoryGroupMember -DirectoryConfig $Config -GroupDn "CN=$GroupName,$($Config.GroupContainer)" -AsSamAccountName)
         }
     }
 
@@ -274,6 +275,7 @@ try {
         }
         $result = Invoke-LDAPSearch `
             -ContainerName $Config.ContainerName `
+            -DirectoryConfig $Config `
             -Server "localhost" `
             -Port $Config.LdapSearchPort `
             -Scheme $Config.LdapSearchScheme `
@@ -293,7 +295,7 @@ try {
         return $users
     }
 
-    function Add-DirectoryGroupMember {
+    function Add-EntitlementGroupMember {
         param(
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][string]$MemberName,
@@ -311,23 +313,22 @@ try {
             }
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
             $ldif = "dn: $groupDn`nchangetype: modify`nadd: member`nmember: $memberDn`n"
-            $ldifPath = [System.IO.Path]::GetTempFileName()
-            Set-Content -Path $ldifPath -Value $ldif -NoNewline
-            try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
-                if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
-                return $result
-            }
-            finally {
-                Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
-            }
+            $result = Invoke-DirectoryLdif -DirectoryConfig $Config -Ldif $ldif -Operation modify -Continue
+            if (-not $result.Success) { throw "ldapmodify failed (exit code $($result.ExitCode)): $($result.Output)" }
+            return $result.Output
         }
         else {
-            return docker exec $Config.ContainerName samba-tool group addmembers $GroupName $MemberName 2>&1
+            # Samba AD: samba-tool group addmembers, which reports a failure in its output without throwing.
+            # Active Directory: an LDAPS modify, which throws on failure so a drift step cannot pass on nothing.
+            $result = Add-DirectoryGroupMember -DirectoryConfig $Config -GroupDn "CN=$GroupName,$($Config.GroupContainer)" -MemberSamAccountName $MemberName
+            if (-not $result.Success -and (Test-ActiveDirectoryConfig -DirectoryConfig $Config)) {
+                throw "Adding '$MemberName' to '$GroupName' failed (exit code $($result.ExitCode)): $($result.Output)"
+            }
+            return $result.Output
         }
     }
 
-    function Remove-DirectoryGroupMember {
+    function Remove-EntitlementGroupMember {
         param(
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][string]$MemberName,
@@ -345,23 +346,22 @@ try {
             }
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
             $ldif = "dn: $groupDn`nchangetype: modify`ndelete: member`nmember: $memberDn`n"
-            $ldifPath = [System.IO.Path]::GetTempFileName()
-            Set-Content -Path $ldifPath -Value $ldif -NoNewline
-            try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapmodify -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
-                if ($LASTEXITCODE -ne 0) { throw "ldapmodify failed (exit code $LASTEXITCODE): $result" }
-                return $result
-            }
-            finally {
-                Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
-            }
+            $result = Invoke-DirectoryLdif -DirectoryConfig $Config -Ldif $ldif -Operation modify -Continue
+            if (-not $result.Success) { throw "ldapmodify failed (exit code $($result.ExitCode)): $($result.Output)" }
+            return $result.Output
         }
         else {
-            return docker exec $Config.ContainerName samba-tool group removemembers $GroupName $MemberName 2>&1
+            # Samba AD: samba-tool group removemembers, which reports a failure in its output without throwing.
+            # Active Directory: an LDAPS modify, which throws on failure so a drift step cannot pass on nothing.
+            $result = Remove-DirectoryGroupMember -DirectoryConfig $Config -GroupDn "CN=$GroupName,$($Config.GroupContainer)" -MemberSamAccountName $MemberName
+            if (-not $result.Success -and (Test-ActiveDirectoryConfig -DirectoryConfig $Config)) {
+                throw "Removing '$MemberName' from '$GroupName' failed (exit code $($result.ExitCode)): $($result.Output)"
+            }
+            return $result.Output
         }
     }
 
-    function New-DirectoryGroup {
+    function New-EntitlementGroup {
         param(
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][string]$Description,
@@ -374,36 +374,33 @@ try {
             $domain = if ($Config.Domain) { $Config.Domain } else { "yellowstone.local" }
             $groupMail = "$($GroupName.ToLower())@$domain"
             $ldif = "dn: $groupDn`nobjectClass: jimGroup`ncn: $GroupName`ndescription: $Description`nmail: $groupMail`njimGroupType: Self-Service`njimGroupStatus: Active`nmember: $memberDn`n"
-            $ldifPath = [System.IO.Path]::GetTempFileName()
-            Set-Content -Path $ldifPath -Value $ldif -NoNewline
-            try {
-                $result = bash -c "cat '$ldifPath' | docker exec -i $($Config.ContainerName) ldapadd -x -H '$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)' -D '$($Config.BindDN)' -w '$($Config.BindPassword)' -c" 2>&1
-                if ($LASTEXITCODE -ne 0) { throw "ldapadd failed (exit code $LASTEXITCODE): $result" }
-                return $result
-            }
-            finally {
-                Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
-            }
+            $result = Invoke-DirectoryLdif -DirectoryConfig $Config -Ldif $ldif -Operation add -Continue
+            if (-not $result.Success) { throw "ldapadd failed (exit code $($result.ExitCode)): $($result.Output)" }
+            return $result.Output
         }
         else {
-            return docker exec $Config.ContainerName samba-tool group add $GroupName `
-                --groupou="OU=Entitlements,OU=Corp" `
-                --description="$Description" 2>&1
+            # Samba AD: samba-tool group add (--groupou=OU=Entitlements,OU=Corp is the group container's DN below the base).
+            # Active Directory: an LDAPS add of a global security group in the same container.
+            $result = New-DirectoryGroup -DirectoryConfig $Config -Dn "CN=$GroupName,$($Config.GroupContainer)" -Description $Description
+            if ($result.Outcome -eq 'Failed' -and (Test-ActiveDirectoryConfig -DirectoryConfig $Config)) {
+                throw "Creating group '$GroupName' failed (exit code $($result.ExitCode)): $($result.Output)"
+            }
+            return $result.Output
         }
     }
 
-    function Remove-DirectoryGroup {
+    function Remove-EntitlementGroup {
         param(
             [Parameter(Mandatory)][string]$GroupName,
             [Parameter(Mandatory)][hashtable]$Config
         )
         if ($isRfcDirectory) {
             $groupDn = "cn=$GroupName,$($Config.GroupContainer)"
-            $result = docker exec $Config.ContainerName ldapdelete -x -H "$($Config.LdapSearchScheme)://localhost:$($Config.LdapSearchPort)" -D $Config.BindDN -w $Config.BindPassword "$groupDn" 2>&1
-            return $result
+            return (Remove-DirectoryEntry -DirectoryConfig $Config -Dn $groupDn).Output
         }
         else {
-            return docker exec $Config.ContainerName samba-tool group delete $GroupName 2>&1
+            # Samba AD: samba-tool group delete. Active Directory: an LDAPS delete of the same group.
+            return (Remove-DirectoryGroup -DirectoryConfig $Config -Dn "CN=$GroupName,$($Config.GroupContainer)").Output
         }
     }
 
@@ -765,14 +762,14 @@ try {
 
         $addedCount = 0
         foreach ($userToAdd in $usersToAdd) {
-            $result = Add-DirectoryGroupMember -GroupName $testGroupName -MemberName $userToAdd -Config $sourceConfig
+            $result = Add-EntitlementGroupMember -GroupName $testGroupName -MemberName $userToAdd -Config $sourceConfig
             Write-Host "    Added '$userToAdd' to '$testGroupName'" -ForegroundColor Green
             $addedCount++
         }
 
         $removedCount = 0
         if ($userToRemove) {
-            $result = Remove-DirectoryGroupMember -GroupName $testGroupName -MemberName $userToRemove -Config $sourceConfig
+            $result = Remove-EntitlementGroupMember -GroupName $testGroupName -MemberName $userToRemove -Config $sourceConfig
             Write-Host "    Removed '$userToRemove' from '$testGroupName'" -ForegroundColor Green
             $removedCount++
         }
@@ -953,7 +950,7 @@ try {
 
         if ($userToAddToDrift) {
             try {
-                Add-DirectoryGroupMember -GroupName $driftGroup1 -MemberName $userToAddToDrift -Config $targetConfig
+                Add-EntitlementGroupMember -GroupName $driftGroup1 -MemberName $userToAddToDrift -Config $targetConfig
                 Write-Host "    Unauthorised addition: Added '$userToAddToDrift' to '$driftGroup1'" -ForegroundColor Yellow
                 $driftAddSucceeded = $true
             }
@@ -963,7 +960,7 @@ try {
         }
 
         try {
-            Remove-DirectoryGroupMember -GroupName $driftGroup2 -MemberName $userToRemoveFromDrift -Config $targetConfig
+            Remove-EntitlementGroupMember -GroupName $driftGroup2 -MemberName $userToRemoveFromDrift -Config $targetConfig
             Write-Host "    Unauthorised removal: Removed '$userToRemoveFromDrift' from '$driftGroup2'" -ForegroundColor Yellow
             $driftRemoveSucceeded = $true
         }
@@ -1317,8 +1314,8 @@ try {
         Write-Host "  Creating new group '$newGroupName' in Source AD..." -ForegroundColor Gray
 
         # First, delete the group if it exists from a previous run
-        Remove-DirectoryGroup -GroupName $newGroupName -Config $sourceConfig 2>$null | Out-Null
-        Remove-DirectoryGroup -GroupName $newGroupName -Config $targetConfig 2>$null | Out-Null
+        Remove-EntitlementGroup -GroupName $newGroupName -Config $sourceConfig 2>$null | Out-Null
+        Remove-EntitlementGroup -GroupName $newGroupName -Config $targetConfig 2>$null | Out-Null
 
         # Create the group in Source
         # For OpenLDAP: need an initial member DN for groupOfNames MUST constraint
@@ -1331,7 +1328,7 @@ try {
             if ($firstUser) { $initialMemberDn = $firstUser['dn'] }
         }
 
-        $createResult = New-DirectoryGroup -GroupName $newGroupName -Description $newGroupDescription -Config $sourceConfig -InitialMemberDn $initialMemberDn
+        $createResult = New-EntitlementGroup -GroupName $newGroupName -Description $newGroupDescription -Config $sourceConfig -InitialMemberDn $initialMemberDn
         Write-Host "    Created group '$newGroupName' in Source" -ForegroundColor Green
 
         # Step 5.2: Add members to the new group
@@ -1350,7 +1347,7 @@ try {
                 continue
             }
             try {
-                Add-DirectoryGroupMember -GroupName $newGroupName -MemberName $userName -Config $sourceConfig
+                Add-EntitlementGroupMember -GroupName $newGroupName -MemberName $userName -Config $sourceConfig
                 $membersToAdd += $userName
                 $addedCount++
             }
@@ -1502,7 +1499,7 @@ try {
         # Step 6.3: Delete the group from Source
         Write-Host "  Deleting group '$groupToDelete' from Source..." -ForegroundColor Gray
 
-        Remove-DirectoryGroup -GroupName $groupToDelete -Config $sourceConfig
+        Remove-EntitlementGroup -GroupName $groupToDelete -Config $sourceConfig
         Write-Host "    Group deleted from Source" -ForegroundColor Green
 
         # Step 6.4: Get MVO info BEFORE deletion sync (to verify it exists and get its ID)
@@ -1847,15 +1844,8 @@ try {
                 [void]$stampLdifBuilder.AppendLine("jimEmployeeEndDate: $boundaryGeneralizedTime")
                 [void]$stampLdifBuilder.AppendLine("")
             }
-            $stampLdifPath = [System.IO.Path]::GetTempFileName()
-            Set-Content -Path $stampLdifPath -Value $stampLdifBuilder.ToString() -NoNewline
-            try {
-                $stampResult = bash -c "cat '$stampLdifPath' | docker exec -i $($sourceConfig.ContainerName) ldapmodify -x -H '$($sourceConfig.LdapSearchScheme)://localhost:$($sourceConfig.LdapSearchPort)' -D '$($sourceConfig.BindDN)' -w '$($sourceConfig.BindPassword)' -c" 2>&1
-                if ($LASTEXITCODE -ne 0) { throw "Failed to stamp cohort end dates (exit code $LASTEXITCODE): $stampResult" }
-            }
-            finally {
-                Remove-Item -Path $stampLdifPath -Force -ErrorAction SilentlyContinue
-            }
+            $stampResult = Invoke-DirectoryLdif -DirectoryConfig $sourceConfig -Ldif $stampLdifBuilder.ToString() -Operation modify -Continue
+            if (-not $stampResult.Success) { throw "Failed to stamp cohort end dates (exit code $($stampResult.ExitCode)): $($stampResult.Output)" }
             Write-Host "    Stamped $($cohortDns.Count) users" -ForegroundColor Green
 
             # Step 7.4: Pre-boundary hot-path cycle. The delta import picks up the new end dates

@@ -1,0 +1,33 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# Active Directory lab overlay for the JIM stack.
+#
+# Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory adds this file to every docker compose call
+# that starts, builds or stops the JIM stack:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f test/integration/docker/docker-compose.ad-lab.yml ...
+#
+# The lab's domain controllers are Hyper-V virtual machines on their own network. Their names are in no
+# DNS the JIM containers can see, and their LDAPS certificates name the FQDN, so JIM's connection (domain
+# controller pinning by name, and certificate name validation) only works if each FQDN resolves to the
+# controller's address inside the container. That is all this file does: it adds extra_hosts to the three
+# JIM services that open directory connections. The expressions are the ones the ldap-toolbox service in
+# docker-compose.integration-tests.yml uses. An Active Directory run always sets the JIM_AD_LAB_*_ADDRESS
+# variables for the instances it uses, so the 0.0.0.0 fallbacks never take effect for those; they exist so
+# `docker compose config` parses without them.
+
+x-ad-lab-hosts: &ad-lab-hosts
+  - "${JIM_AD_LAB_PRIMARY_HOST:-dc1.panoply.local}:${JIM_AD_LAB_PRIMARY_ADDRESS:-0.0.0.0}"
+  - "${JIM_AD_LAB_SOURCE_HOST:-dc1.resurgam.local}:${JIM_AD_LAB_SOURCE_ADDRESS:-0.0.0.0}"
+  - "${JIM_AD_LAB_TARGET_HOST:-dc1.gentian.local}:${JIM_AD_LAB_TARGET_ADDRESS:-0.0.0.0}"
+
+services:
+  jim.web:
+    extra_hosts: *ad-lab-hosts
+
+  jim.worker:
+    extra_hosts: *ad-lab-hosts
+
+  jim.scheduler:
+    extra_hosts: *ad-lab-hosts

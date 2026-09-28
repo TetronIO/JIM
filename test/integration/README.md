@@ -26,6 +26,9 @@ pwsh test/integration/Run-IntegrationTests.ps1 -Scenario 005 -DirectoryType Open
 
 # Customer-representative directory write performance (OpenLDAP; see warning below)
 pwsh test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-008-CrossDomainEntitlementSync -Template Large -DirectoryType OpenLDAP -DurableDirectoryWrites
+
+# Real Windows Server domain controllers (needs the Hyper-V lab host and the JIM_AD_LAB_* variables; see "Active Directory lab" below)
+pwsh test/integration/Run-IntegrationTests.ps1 -Scenario 008 -Template Small -DirectoryType ActiveDirectory
 ```
 
 > **⚠ Directory writes are ARTIFICIALLY FAST by default.** OpenLDAP test containers relax MDB durability (`nosync`, no per-transaction fsync), roughly a 9x write-rate difference (~308 vs ~34 adds/sec measured). This keeps large-template test cycles short, but it is **not what customers experience**: real directories fsync their writes and bound export throughput. Never derive customer-facing performance figures or hardware sizing from a default (fast) run; use `-DurableDirectoryWrites` for representative measurements. The mode is printed in the run configuration and fast/durable performance baselines are kept separate. Samba AD runs are always durable.
@@ -253,6 +256,28 @@ Names are distributed using a prime-based algorithm to ensure realistic diversit
 - **Yellowstone / Glitterband** - the same two suffixes on the single `dirsrv-primary` container (profile `dirsrv`, image `ghcr.io/tetronio/jim-dirsrv:primary`), port 3389 (LDAP) for the harness's own checks and 3636 (LDAPS) for JIM's Connected Systems: 389 accepts the Password Modify operation only over a secure connection, so the runner adds the image's lab CA to JIM's certificate store before a scenario connects. Select it with `-DirectoryType DirectoryServer389`; every OpenLDAP scenario runs against it except 14, 19 and 22.
 - The same two identities: `cn=Directory Manager` (server-wide) populates test data and runs assertions directly against the directory, while JIM's Connected Systems bind as `cn=svc-jim,ou=Services,<suffix>` through membership of that suffix's `cn=jim,ou=Services,<suffix>` group, and `cn=svc-jim-partitions,ou=Services,dc=yellowstone,dc=local` serves Scenario 009. The Retro Changelog plug-in is on with deleted entries recorded (`nsslapd-log-deleted: on`), which is what JIM's Delta Import reads; a global password policy (`passwordCheckSyntax on`, `passwordMinLength 7`) mirrors the OpenLDAP lab's.
 - The ACI LDIFs under `test/integration/docker/dirsrv/aci/` are the single source for both the lab and the customer-facing recipe, published verbatim in `docs/connectors/jim-ldap-connector.md`. The lab image is built by `test/integration/docker/dirsrv/Build-DirsrvImage.ps1` with everything baked in; snapshot images (`jim-dirsrv:general-<size>`, `jim-dirsrv:s8-<size>`) are built on first use by `Build-DirsrvSnapshots.ps1` (or on demand), exactly as for OpenLDAP, and the runner selects them automatically (`-IgnoreSnapshots` forces live population).
+
+### Active Directory lab (needs the lab host)
+
+Real Windows Server 2025 domain controllers, one forest each (`dc-primary` PANOPLY.LOCAL, `dc-source` RESURGAM.LOCAL, `dc-target` GENTIAN.LOCAL), running as Hyper-V virtual machines. Select it with `-DirectoryType ActiveDirectory`. It is **not** part of `-DirectoryType All` or `-PreRelease`, because it needs the lab host; the nightly `ad-lab` workflow has its own entry point. Building and operating the lab itself is in [`ad-lab/README.md`](ad-lab/README.md).
+
+What is different from the Samba AD run, step by step:
+
+| Runner step | Active Directory behaviour |
+|-------------|----------------------------|
+| Step 0 | The Samba image check is skipped. The lab is checked instead: the `JIM_AD_LAB_*` variables are validated (a missing one is named), `Get-LabDomainController.ps1` is called over SSH for every domain controller the scenario uses (Primary always; Source and Target too for Scenarios 002 and 008), each must have its `baseline` checkpoint, and the guest OS build strings are recorded for the run summary, the performance JSON and the regression report |
+| Step 1 | Nothing is recreated. Every domain controller the scenario uses is reverted with `Restore-LabDomainController.ps1`: to `baseline`, or for Scenario 008's Source and Target to `populated-<template>-<hash>` when that checkpoint exists with a hash matching the current populate scripts |
+| Step 3 | Only the LDAP toolbox (`jim-ldap-toolbox`, compose profile `ad-lab`) is started. The JIM containers get `extra_hosts` entries for the domain controllers from `docker/docker-compose.ad-lab.yml`, added to every JIM stack compose call |
+| Step 4 | `Wait-ActiveDirectoryReady.ps1` per domain controller: an LDAPS bind as `svc-jim` succeeds and the root DSE clock is within 5 seconds of the runner's. It reads each certificate off the wire on its first poll |
+| Step 4a | Each domain controller's LDAPS certificate is checked (its SAN carries the FQDN) and uploaded to JIM's certificate store |
+| Step 4b | Nothing: the `baseline` checkpoint already holds a clean, delegated `OU=Corp` |
+| Step 4c | Scenario 008 only, and only when Step 1 reverted Source and Target to `baseline`: `Populate-SambaAD-Scenario-008.ps1 -DirectoryConfig` delivers the same LDIF it builds for Samba with `ldapadd` and `ldapmodify` over LDAPS as the domain administrator, then `populated-<template>-<hash>` is checkpointed with `-Replace`, so the next run reverts straight to it. A change to the populate scripts changes the hash, so a stale populated checkpoint is never chosen and a new one is made (the stale one stays on the virtual machine until the monthly rebuild) |
+| Between scenarios (`-Scenario All`) | Nothing extra: each scenario is a child run whose own Steps 1, 3 and 4 revert the domain controllers it uses, start the toolbox and wait for readiness |
+| Teardown | The toolbox is stopped. The domain controllers are left as they are; the next run reverts them |
+
+Configure it with the `JIM_AD_LAB_*` environment variables (a missing one stops the run before anything starts and names it): `JIM_AD_LAB_CONTROL_HOST` (required), `JIM_AD_LAB_CONTROL_USER` (default `jim-lab`), `JIM_AD_LAB_CONTROL_KEY`, `JIM_AD_LAB_CONTROL_PORT` (default `22`), `JIM_AD_LAB_SCRIPT_ROOT` (default `C:\jim-ad-lab`), `JIM_AD_LAB_PRIMARY_ADDRESS`, `JIM_AD_LAB_SOURCE_ADDRESS` and `JIM_AD_LAB_TARGET_ADDRESS` (required for the instances the scenario uses), `JIM_AD_LAB_<PRIMARY|SOURCE|TARGET>_HOST` and `_VM` (defaults follow the topology), `JIM_AD_LAB_ADMIN_PASSWORD` and `JIM_AD_LAB_JIM_PASSWORD` (the same in all three forests).
+
+Scenarios 14, 19 and 22 are OpenLDAP only and are refused on `ActiveDirectory`, as on Samba AD. Scenario 017 and Scenario 023's Collision step run on it. The long-tail templates are refused.
 
 ### Phase 2 (profile: phase2)
 
