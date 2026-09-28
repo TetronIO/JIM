@@ -1085,12 +1085,14 @@ public interface IConnectedSystemRepository
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
+    /// <param name="afterId">Keyset cursor; see <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>.</param>
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId,
         DateTime modifiedSince,
         int page,
         int pageSize,
-        int? knownTotalCount = null);
+        int? knownTotalCount = null,
+        Guid? afterId = null);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
