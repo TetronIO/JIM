@@ -36,6 +36,7 @@ jobs:
       run: |
         set +e
         py='import socket
+        print("profile:", open("/proc/self/attr/current").read().strip())
         for fam, name in ((socket.AF_INET, "inet"), (socket.AF_INET6, "inet6")):
             try:
                 socket.socket(fam, socket.SOCK_STREAM).close(); print(name, "ok")
@@ -45,23 +46,24 @@ jobs:
         hard=(--cap-drop ALL --security-opt no-new-privileges --read-only --user 1654)
         sudo podman pull -q "$img" >/dev/null
         run() { label="$1"; shift; echo "== $label"; "$@" python3 -c "$py" 2>&1 | sed 's/^/   /'; }
-        echo "--- versions"; dpkg-query -W crun podman apparmor golang-github-containers-common 2>/dev/null || true
-        echo "--- /etc/apparmor.d/crun"; cat /etc/apparmor.d/crun 2>/dev/null
-        for f in crun runc podman buildah passt slirp4netns; do [ -e "/etc/apparmor.d/$f" ] && echo "profile file: $f"; done
-        run "rootful crun, hardened (as JIM)" sudo podman run --rm "${hard[@]}" "$img"
-        echo "runc: $(command -v runc) $(runc --version 2>/dev/null | head -1)"
-        run "rootful runc, hardened" sudo podman --runtime "$(command -v runc)" run --rm "${hard[@]}" "$img"
+        run "rootful, no hardening" sudo podman run --rm "$img"
+        run "rootful, hardened (as JIM)" sudo podman run --rm "${hard[@]}" "$img"
+        cat /etc/apparmor.d/podman
+        echo "--- local overrides: network for crun and podman"
+        echo 'network,' | sudo tee /etc/apparmor.d/local/crun /etc/apparmor.d/local/podman >/dev/null
+        sudo apparmor_parser -r /etc/apparmor.d/crun /etc/apparmor.d/podman && echo reloaded
+        run "rootful, hardened, local overrides" sudo podman run --rm "${hard[@]}" "$img"
+        sudo rm /etc/apparmor.d/local/crun /etc/apparmor.d/local/podman
+        sudo touch /etc/apparmor.d/local/crun /etc/apparmor.d/local/podman
+        sudo apparmor_parser -r /etc/apparmor.d/crun /etc/apparmor.d/podman
+        echo "--- both profiles removed"
+        sudo apparmor_parser -R /etc/apparmor.d/crun /etc/apparmor.d/podman && echo removed
+        run "rootful, hardened, no crun or podman profile" sudo podman run --rm "${hard[@]}" "$img"
+        run "rootful, no hardening, no crun or podman profile" sudo podman run --rm "$img"
         sudo useradd -m diag && sudo loginctl enable-linger diag && sleep 3
         uid=$(id -u diag)
         asdiag=(sudo -u diag env -i PATH=/usr/bin:/bin HOME=/home/diag XDG_RUNTIME_DIR="/run/user/$uid")
-        (cd / && "${asdiag[@]}" podman pull -q "$img" >/dev/null)
-        (cd / && run "rootless crun, hardened" "${asdiag[@]}" podman run --rm "${hard[@]}" "$img")
-        echo "--- removing the crun profile"
-        sudo apparmor_parser -R /etc/apparmor.d/crun && echo removed
-        run "rootful crun, hardened, no crun profile" sudo podman run --rm "${hard[@]}" "$img"
-        sudo podman inspect --latest --format 'profile={{.AppArmorProfile}}' 2>/dev/null || true
-        (cd / && run "rootless crun, hardened, no crun profile" "${asdiag[@]}" podman run --rm "${hard[@]}" "$img")
-        (cd / && run "rootless crun, default, no crun profile" "${asdiag[@]}" podman run --rm "$img")
+        (cd / && run "rootless, hardened, no crun or podman profile" "${asdiag[@]}" podman run --rm "${hard[@]}" "$img")
         echo "--- dmesg apparmor"; sudo dmesg | grep -i -E 'apparmor.*DENIED' | tail -6
 
   deployment-boot:
