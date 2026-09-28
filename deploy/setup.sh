@@ -785,9 +785,18 @@ as_jim_account() {
     fi
     local uid
     uid=$(id -u "$PODMAN_ACCOUNT")
+    # With a clean environment: the caller's own XDG_CONFIG_HOME, TMPDIR and the like would point Podman at
+    # folders the account cannot read. Proxy settings are kept, for a connected install behind a proxy.
+    local keep=() var
+    for var in LANG http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY; do
+        if [ -n "${!var:-}" ]; then
+            keep+=("${var}=${!var}")
+        fi
+    done
     # From the root folder, which the account can always read, rather than wherever this script was started.
-    (cd / && runuser -u "$PODMAN_ACCOUNT" -- env HOME="$(account_home)" XDG_RUNTIME_DIR="/run/user/${uid}" \
-        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" "$@")
+    (cd / && runuser -u "$PODMAN_ACCOUNT" -- env -i PATH="$PATH" HOME="$(account_home)" USER="$PODMAN_ACCOUNT" \
+        LOGNAME="$PODMAN_ACCOUNT" XDG_RUNTIME_DIR="/run/user/${uid}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" \
+        ${keep[@]+"${keep[@]}"} "$@")
 }
 
 # systemctl for the systemd manager that runs JIM: the system's when rootful, the account's when rootless.
