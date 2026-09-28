@@ -4507,6 +4507,13 @@ html[lang] .jim-picker-row > .mud-input-control {
     padding: 4rem 1.5rem;
 }
 
+/* An empty state standing in for a table in its own panel, with more of the page below it (the Metaverse Object's
+   Connections tab), has no header to sit under and no space to centre in, so it only needs a modest block. */
+.jim-empty-state-panel .jim-table-empty-state {
+    min-height: 0;
+    padding: 2rem 1.5rem;
+}
+
 /* Qualified with .mud-icon-root because MudBlazor's own size rule loads after site.css and wins ties. */
 .jim-table-empty-state-icon.mud-icon-root {
     font-size: 3rem;
