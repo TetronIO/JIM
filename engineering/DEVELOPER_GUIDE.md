@@ -218,7 +218,7 @@ JIM's images are runtime-neutral, and each production deployment is defined twic
 | Definition | `docker-compose.yml` + `deploy/docker-compose.production.yml` | `deploy/podman/`: pod files run by `podman kube play`, and Quadlet units that run them under systemd |
 | Settings | `.env` | `jim-config.yaml`, a ConfigMap with the same names |
 | Secrets | `.env` (root-only) | Podman secrets `jim-secrets` and `jim-tls`, referenced by `secretKeyRef` and a `secret` volume |
-| Supervision | The Docker daemon (`restart:` policies) | systemd, through Quadlet `.kube` units; rootless under a `jim` account by default |
+| Supervision | The Docker daemon (`restart:` policies) | systemd, through Quadlet `.kube` units; rootful by default, rootless under a `jim` account with `--rootless` |
 | Bundled database host name | `jim.database` | `jim-database` |
 
 Rules that keep the two in step:

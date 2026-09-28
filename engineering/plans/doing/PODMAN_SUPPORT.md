@@ -7,13 +7,13 @@
 
 ## Overview
 
-JIM gains a second deployment path, alongside Docker, for hosts that run Podman. The images do not change. The path is a small set of Kubernetes-style files run by Podman's built-in `podman kube play`, with Quadlet units so systemd starts JIM at boot. On Podman, JIM runs rootless by default under a dedicated `jim` account. On both runtimes, JIM serves HTTPS out of the box.
+JIM gains a second deployment path, alongside Docker, for hosts that run Podman. The images do not change. The path is a small set of Kubernetes-style files run by Podman's built-in `podman kube play`, with Quadlet units so systemd starts JIM at boot. On Podman, JIM runs rootful by default, as on Docker, or rootless under a dedicated `jim` account (D5, as amended in Phase 3). On both runtimes, JIM serves HTTPS out of the box.
 
 The work is in four phases:
 
 1. **Runtime-neutral start-up and cleanup.** Every JIM service waits for the database instead of crashing, the PostgreSQL image name is fully qualified, and the Worker drops two capabilities it never uses. This helps Docker as much as Podman, and the Podman path depends on it.
 2. **HTTPS by default, on both runtimes.** JIM serves HTTPS itself with the organisation's certificate or one the installer creates, so a fresh install can be signed into from any machine without first building a reverse proxy.
-3. **The Podman path.** Pod files, Quadlet units, secrets, rootless installation under a `jim` account, the installer, the release bundle and the documentation, including deployment with Ansible.
+3. **The Podman path.** Pod files, Quadlet units, secrets, rootful and rootless installation (rootless under a `jim` account), the installer, the release bundle and the documentation, including deployment with Ansible.
 4. **Proof.** A CI job that boots both paths from freshly built images on every pull request, and compares what each runtime actually runs.
 
 ## Business Value
@@ -65,7 +65,7 @@ References:
           docker compose ... up -d                 │              │
                                                    │              │
         Podman host ───────────────────────────────┘──────────────┘
-          systemd user manager of account "jim" (default), or the system manager (--rootful)
+          the system manager (default), or the systemd user manager of account "jim" (--rootless)
             ├► jim-database.service ─► pod "jim-database" (PostgreSQL, optional)
             └► jim.service ──────────► pod "jim" (web, worker, scheduler)
           both pods on network "jim"; JIM reaches PostgreSQL at host name "jim-database"
@@ -165,7 +165,7 @@ These answer the PRD's open questions (OQ). Each was chosen on the evidence abov
   - A reverse proxy as the default: it is a second product for the administrator to install, configure and patch, and a small or air-gapped server often has none.
   - A bare self-signed server certificate: every renewal would mean distributing trust again.
 
-**D5. Rootless (OQ5): the Podman default, under a dedicated `jim` account; rootful is an option.**
+**D5. Rootless (OQ5): the Podman default, under a dedicated `jim` account; rootful is an option.** *Amended in Phase 3: rootful is the default and rootless the option (`setup.sh --rootless`), because rootless networking loses the client's address; see Phase 3.*
 - **Why:** Red Hat's own containerized product installs rootless under a non-root account (scenario 1), and security teams in JIM's market increasingly require it (scenario 6). JIM's containers already run non-root with all capabilities dropped, so rootful Podman roughly matches today's Docker posture. Rootless adds protection on the host: a container escape lands in an unprivileged account rather than root.
 - **Install, with `setup.sh` run as root:**
   1. Creates the `jim` account as a regular account with no login shell. A `--system` account is not used, because it gets no subordinate ID ranges. The installer adds `/etc/subuid` and `/etc/subgid` ranges if they are missing.
@@ -317,10 +317,11 @@ Delivered as one PR: the files, the installer, the release and the documentation
     - The port check recognises JIM's own pod holding the port on a reinstall; `/etc/sysctl.d` is created if missing.
     - **Both runtimes:** a reinstall keeps the bundled database's password (from `.env`, or `podman secret inspect --showsecret`); with no password to keep and the database volume present, the installer stops and says how to go on. Previously a reinstall generated a new password, which the existing database rejected.
 4. **Release** as planned. `Build-ReleaseBundle.ps1` also refuses to build a bundle whose PostgreSQL archive lacks the registry manifest its digest needs (see below).
-5. **Documentation:** a new page, `docs/administration/podman.md` (how it runs, rootless or rootful, operating it, health checks, firewall and SELinux, installing by hand, without systemd), linked from the others rather than repeating them; `deploying-with-ansible.md`; and Podman content in deployment, configuration, upgrading, backup, troubleshooting, prerequisites, quick start and the File Connector.
+5. **Documentation:** a new page, `docs/administration/podman.md` (how it runs, rootful or rootless, operating it, health checks, firewall and SELinux, installing by hand, without systemd), linked from the others rather than repeating them; `deploying-with-ansible.md`; and Podman content in deployment, configuration, upgrading, backup, troubleshooting, prerequisites, quick start and the File Connector.
 
 **Found in implementation, and changed:**
 
+- **Rootful is the default; rootless is `--rootless`,** reversing D5. Rootless networking loses the client's address (measured below), so a rootless JIM's security audit events and its rate limiting of unauthenticated requests cannot tell clients apart, which audit requirements in JIM's market do not accept. Rootful keeps it, and matches Docker's posture: the containers still run non-root with every capability dropped. Rootless stays a supported option for policies that require it, with the trade-off documented. Run unprivileged, the installer now stops unless given `--rootless`, rather than quietly installing under the caller's account; a reinstall keeps an installation's mode and account, since its images, secrets and data are in that account's Podman storage, and the installer refuses to move one.
 - **Podman 5 restarts a container whose liveness probe fails** (Podman 4.9 and Docker only report it), and there is no pod-file setting to stop it. A readiness probe as liveness would restart `jim-web` throughout maintenance mode or a database outage; a strict `pg_isready` could kill a long crash recovery over and over. So each container has a `startupProbe` (Podman 4 ignores it) allowing any start-up time, and a liveness probe asking only whether the service is hung: `/api/v1/health/live` for `jim-web`, the heartbeat for the worker and scheduler, and any answer at all from PostgreSQL within five minutes.
 - **The worker's heartbeat went stale during migrations and cache warming**, which would have let Podman 5 kill a large installation's upgrade part-way. `HealthcheckFile.KeepFreshWhileAsync` keeps it fresh through those steps (TDD). On Docker, the worker now shows healthy during a long upgrade.
 - **Podman 4.9 lets `envFrom` replace an explicit `env` value** (the reverse of Kubernetes and Docker Compose), so the settings the pod file sets itself stay out of `jim-config.yaml`, which says so.
@@ -330,7 +331,8 @@ Delivered as one PR: the files, the installer, the release and the documentation
 
 **Verified**, in the cloud sandbox and a CentOS Stream 9 test host (systemd 252, Podman 5.8, firewalld) run as a privileged container:
 
-- Rootless, through the installer from a release bundle: account, subordinate IDs, lingering, port threshold, offline image load, secrets, Quadlet units, firewalld, start under the account's systemd manager, and readiness. Rootful (`--rootful`) the same way, under the system manager.
+- Rootful, the default, through the installer from a release bundle with no options: offline image load, secrets, Quadlet units in `/etc/containers/systemd/`, firewalld, start under the system manager, and readiness. Rootless (`--rootless`) the same way, plus the account, subordinate IDs, lingering and port threshold, under the account's systemd manager.
+- A reinstall of a rootless installation with no options kept it rootless; the installer refused `--rootless` over a rootful installation, another account over a rootless one, an account without `--rootless`, and an unprivileged run without `--rootless`, each with a message saying what to do.
 - Browser sign-in by server name over HTTPS (Secure cookies, `wss://` WebSocket).
 - Restart of the host: systemd started the network, database and JIM with nobody logged in, data kept.
 - Upgrade by replacing the pod file and restarting; `--renew-certificate` (new certificate served); a reinstall (password and CA kept).
@@ -338,9 +340,9 @@ Delivered as one PR: the files, the installer, the release and the documentation
 - Without systemd (Podman 4.9): the installer's rootful fallback, renewal, and an external PostgreSQL server.
 - Docker regression of the refactored installer: bundle install, reinstall keeping the password, the new certificate path.
 
-**Not verified here:** SELinux enforcing, the rootful client address on Podman 5 (measured on 4.9 only), and cgroup v2. The sandbox's hybrid cgroups could run pods under systemd only in the configuration used above (private cgroup namespace, `runc`, cgroup v1), and its kernel has no SELinux. Phase 4's CI job (on a real systemd host with cgroup v2) and the RHEL acceptance run cover them. The Ansible page follows the role's documented example and has not been run (D12).
+**Not verified here:** SELinux enforcing and cgroup v2. The sandbox's hybrid cgroups could run pods under systemd only in the configuration used above (private cgroup namespace, `runc`, cgroup v1), and its kernel has no SELinux. Phase 4's CI job (on a real systemd host with cgroup v2) and the RHEL acceptance run cover them. The Ansible page follows the role's documented example and has not been run (D12).
 
-**Measured, and open:** rootless networking hides the client's address on both Podman 4.9 (slirp4netns) and 5.8 (pasta): JIM recorded one internal address for a client in another network namespace, where rootful recorded the client's own. Security audit events and rate limiting of unauthenticated requests therefore cannot tell rootless clients apart. The documentation says so and recommends rootful where that matters; whether rootless stays the default is for the product owner.
+**Measured, and decided:** rootless networking hides the client's address on both Podman 4.9 (slirp4netns) and 5.8 (pasta): JIM recorded one internal address for a client in another network namespace. Rootful keeps it on both: JIM recorded the client's own address, on 5.8 for a client outside the CentOS Stream 9 host. Security audit events and rate limiting of unauthenticated requests therefore cannot tell rootless clients apart. The product owner chose rootful as the default (see above); the documentation warns against rootless where client addresses matter.
 
 ### Phase 4: Proof in CI
 
@@ -363,7 +365,7 @@ Delivered as one PR: the files, the installer, the release and the documentation
 - Every acceptance criterion in the PRD is met.
 - A default install on either runtime can be signed into from another machine, with no reverse proxy.
 - `deployment-boot` passes for Docker, Podman rootful and Podman rootless on every pull request, and has become a required check.
-- A fresh RHEL 9 or 10 host with SELinux enforcing and firewalld running installs JIM with `setup.sh --runtime podman`, rootless by default and rootful on request, and with the D12 playbook, and signs in over HTTPS from another machine.
+- A fresh RHEL 9 or 10 host with SELinux enforcing and firewalld running installs JIM with `setup.sh --runtime podman`, rootful by default and rootless on request, and with the D12 playbook, and signs in over HTTPS from another machine.
 - An air-gapped install needs only the release bundle.
 
 ## Benefits
@@ -373,7 +375,7 @@ Delivered as one PR: the files, the installer, the release and the documentation
 - **Resilience on both runtimes:** services no longer crash-loop while the database starts, and an external database outage no longer takes JIM.Web down.
 - **Security:**
   - HTTPS by default, with end-to-end encryption through a proxy as the recommended configuration.
-  - Rootless by default on Podman, under an account that owns nothing else.
+  - Rootless on Podman for policies that require it, under an account that owns nothing else.
   - The Worker loses two unused capabilities.
   - Health probes can no longer pass on a redirect.
 - **Confidence:** for the first time a CI check boots the production deployment of either runtime, so deployment regressions surface before release rather than at a customer.
@@ -395,7 +397,7 @@ Delivered as one PR: the files, the installer, the release and the documentation
 | The two deployment definitions drift | D7 runtime parity check on every pull request |
 | Probes pass on an HTTPS redirect | Health endpoints exempt from redirection, test-first (Phase 2) |
 | A generated certificate expires, and HSTS then blocks access with no click-through | One-year validity, expiry printed at install, `setup.sh --renew-certificate`, and renewal documented |
-| Rootless port forwarding hides the client's address, so JIM sees one gateway address for everyone. That weakens per-client rate limiting of unauthenticated API calls and makes the logs less useful | Measured in Phase 3 on Podman 4.9 and 5.x before release. If the address is lost, use a networking mode that keeps it. Never trust forwarded headers from that gateway address as a workaround: every client would share it, so any client could spoof its address |
+| Rootless port forwarding hides the client's address, so JIM sees one gateway address for everyone. That weakens per-client rate limiting of unauthenticated API calls and makes the logs less useful | Measured in Phase 3: lost rootless on Podman 4.9 and 5.8, kept rootful. Rootful is therefore the default, and the documentation warns against rootless where client addresses matter. Never trust forwarded headers from that gateway address as a workaround: every client would share it, so any client could spoof its address |
 | Docker mounts file-based compose secrets as bind mounts, so the key's host permissions decide whether UID 1654 can read it | The installer sets owner and mode; verified in Phase 2 |
 | PostgreSQL parallel queries starved of shared memory | D9 `mmap`; an integration scenario against the Podman database pod before release |
 | Secrets at rest in Podman's secret store | Same exposure class as `.env`, and documented. Podman's alternative secret drivers are noted as a hardening option |

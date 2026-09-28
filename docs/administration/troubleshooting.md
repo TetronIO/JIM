@@ -23,7 +23,7 @@ The database is not reachable yet (attempt 5, 18s elapsed): jim.database:5432: N
 
 **How to fix, if it keeps waiting.**
 
-1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag), or on Podman `jim-database-postgres` in `jim-podman ps` (see [Operating JIM](podman.md#operating-jim)); for an external server, ask whoever runs it.
+1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag), or on Podman `jim-database-postgres` in `sudo podman ps` (see [Operating JIM](podman.md#operating-jim)); for an external server, ask whoever runs it.
 2. Check that `JIM_DB_HOSTNAME` in `.env` (on Podman, `jim-config.yaml`) names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port.
 3. For an external server, check that a firewall allows the JIM host to reach it.
 
@@ -35,21 +35,21 @@ Waiting cannot fix rejected credentials, so the service does not wait for them: 
 
 ## Podman
 
-These use the `jim-podman` function from [Operating JIM](podman.md#operating-jim), for the default rootless installation.
+The commands here are for the default, rootful installation; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
 ### `podman ps` shows none of JIM's containers
 
-**What it means.** JIM runs rootless, as the `jim` account, and each account has its own containers: root's Podman, or yours, sees none of them. Nothing is wrong with JIM.
+**What it means.** Each account has its own Podman containers. A rootful JIM's belong to root, so `podman ps` run as yourself sees none of them; a rootless JIM's belong to the `jim` account, so root's Podman sees none either. Nothing is wrong with JIM.
 
-**How to fix.** Run Podman as the `jim` account, with `jim-podman ps`. Run as root from a folder the account cannot read, such as `/root`, Podman as `jim` fails with `cannot chdir to /root: Permission denied`; the `jim-podman` function starts from the root folder for that reason.
+**How to fix.** For a rootful JIM, run Podman as root: `sudo podman ps`. For a rootless one, run it as the `jim` account, with `jim-podman ps` (see [Rootless commands](podman.md#rootless-commands)). Run as root from a folder the account cannot read, such as `/root`, Podman as `jim` fails with `cannot chdir to /root: Permission denied`; the `jim-podman` function starts from the root folder for that reason.
 
-### JIM stops when you log out, or does not start after a reboot
+### A rootless JIM stops when you log out, or does not start after a reboot
 
-**What it means.** Lingering is not enabled for the account that runs JIM, so its systemd manager, and JIM with it, runs only while that account has a session. The installer enables it; an account set up by hand may lack it. Your data is unaffected.
+**What it means.** A rootless JIM runs under its account's own systemd manager, and lingering is not enabled for the account, so that manager, and JIM with it, runs only while the account has a session. The installer enables it; an account set up by hand may lack it. Your data is unaffected.
 
 **How to fix.** As root, `loginctl enable-linger jim`, then start JIM: `sudo systemctl --user -M jim@ start jim.service`.
 
-### `jim.service` fails with `rootlessport cannot expose privileged port 443`
+### A rootless `jim.service` fails with `rootlessport cannot expose privileged port 443`
 
 The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=443' to /etc/sysctl.conf (currently 1024), or choose a larger port number (>= 1024)`.
 
@@ -59,9 +59,9 @@ The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=44
 
 ### Other machines cannot reach JIM, but it answers on the server itself
 
-**What it means.** A firewall on the server blocks JIM's port. On RHEL, firewalld blocks it until you allow it; a rootless JIM's port is a program listening on the server, so firewalld governs it like any other.
+**What it means.** A firewall on the server blocks JIM's port: on RHEL, firewalld, until you allow the port.
 
-**How to fix.** `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port). If Docker is installed on the same server as a rootful Podman JIM, Docker's firewall rules also drop the traffic; see [Firewall and SELinux](podman.md#firewall-and-selinux).
+**How to fix.** `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port). If Docker is installed on the same server as a rootful Podman JIM, the default, Docker's firewall rules also drop the traffic; see [Firewall and SELinux](podman.md#firewall-and-selinux).
 
 ## HTTPS
 

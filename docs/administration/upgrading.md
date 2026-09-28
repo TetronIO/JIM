@@ -113,12 +113,12 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 
 ## 🦭 Upgrading on Podman
 
-On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. The commands are for the default rootless installation; for a rootful one, run `podman` as root and leave out `--user -M jim@`.
+On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. The commands are for the default, rootful installation, run as root; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
 1. **Stop JIM**, leaving the bundled database running, and **take your backup** per [Backup & Disaster Recovery](backup-recovery.md):
 
     ```bash
-    sudo systemctl --user -M jim@ stop jim.service
+    systemctl stop jim.service
     ```
 
 2. **Keep the current pod files**, for rolling back:
@@ -131,19 +131,18 @@ On Podman, an upgrade replaces the pod files, which name the release's images, a
 3. **Put the new release's files in place, and its images.** Connected, download the pod files from the release and pull the images they name:
 
     ```bash
-    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
     cd /opt/jim
     for f in jim.yaml jim-database.yaml setup.sh; do
       curl -fsSLO "https://github.com/TetronIO/JIM/releases/download/v0.14.0/$f"
     done
     chmod 755 setup.sh
-    for image in $(awk '$1 == "image:" { print $2 }' jim.yaml jim-database.yaml); do jim-podman pull "$image"; done
+    for image in $(awk '$1 == "image:" { print $2 }' jim.yaml jim-database.yaml); do podman pull "$image"; done
     ```
 
     Air-gapped, from the extracted bundle, load the images and copy the files:
 
     ```bash
-    for f in docker-images/*.tar; do jim-podman load < "$f"; done
+    for f in docker-images/*.tar; do podman load < "$f"; done
     cp podman/jim.yaml podman/jim-database.yaml setup.sh /opt/jim/
     ```
 
@@ -152,8 +151,8 @@ On Podman, an upgrade replaces the pod files, which name the release's images, a
 4. **Start JIM**, restarting the database first so it runs the release's PostgreSQL image:
 
     ```bash
-    sudo systemctl --user -M jim@ restart jim-database.service
-    sudo systemctl --user -M jim@ start jim.service
+    systemctl restart jim-database.service
+    systemctl start jim.service
     ```
 
 5. **Verify**, per [Verifying the upgrade](#verifying) below.

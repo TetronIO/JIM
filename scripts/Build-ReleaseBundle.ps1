@@ -288,8 +288,9 @@ You need:
 
    It uses Docker or Podman, whichever the server has. Where both are
    installed it asks which; name one with --runtime docker or --runtime podman.
-   On Podman, JIM runs rootless, under an account named jim that the installer
-   creates, and systemd starts it at boot; add --rootful to run it as root.
+   On Podman, JIM runs as root, as on Docker, and systemd starts it at boot;
+   add --rootless to run it instead under an account named jim, which the
+   installer creates.
 
    It installs JIM in /opt/jim and asks about:
 
@@ -338,18 +339,25 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml --profile 
 ``````
 
 On Podman, systemd runs JIM as jim.service (and the bundled PostgreSQL as
-jim-database.service), under the jim account's own systemd manager:
+jim-database.service):
+
+``````bash
+sudo systemctl status jim.service
+sudo systemctl restart jim.service
+sudo podman ps
+sudo podman logs jim-web
+``````
+
+Installed with --rootless, JIM belongs to the jim account: its own systemd
+manager runs JIM, and its own Podman holds JIM's containers.
 
 ``````bash
 sudo systemctl --user -M jim@ status jim.service
-sudo systemctl --user -M jim@ restart jim.service
 # Podman as the jim account, from the root folder, which the account can read
 jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman "`$@"); }
 jim-podman ps
 jim-podman logs jim-web
 ``````
-
-Installed with --rootful, leave out --user -M jim@, and run podman as root.
 
 ## Installing Without the Installer
 
@@ -395,9 +403,9 @@ JIM is ready when docker compose ... ps shows jim.web as healthy.
 
 ### With Podman
 
-These steps install JIM rootful, which takes the fewest steps. The Deployment
-Guide on the documentation site gives the rootless steps, which the installer
-follows. As root, in the extracted bundle:
+These steps install JIM rootful, as the installer does by default. Running
+on Podman, on the documentation site, also gives the rootless steps. As root,
+in the extracted bundle:
 
 ``````bash
 for f in docker-images/*.tar; do podman load -i "`$f"; done

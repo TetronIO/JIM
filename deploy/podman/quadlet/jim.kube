@@ -1,10 +1,10 @@
 # JIM on Podman: the systemd unit that runs JIM
 #
 # A Quadlet unit. From it, systemd generates jim.service, which starts JIM at boot and stops it at shutdown.
-# Installed in ~/.config/containers/systemd/ of the account that runs JIM (rootless), or in
-# /etc/containers/systemd/ (rootful). After editing it, reload systemd and restart JIM:
-#   rootless:  systemctl --user -M jim@ daemon-reload && systemctl --user -M jim@ restart jim.service
+# Installed in /etc/containers/systemd/ (rootful, the default), or in ~/.config/containers/systemd/ of the account
+# that runs JIM (rootless). After editing it, reload systemd and restart JIM:
 #   rootful:   systemctl daemon-reload && systemctl restart jim.service
+#   rootless:  systemctl --user -M jim@ daemon-reload && systemctl --user -M jim@ restart jim.service
 
 [Unit]
 Description=JIM (Junctional Identity Manager)

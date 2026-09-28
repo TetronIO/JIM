@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ JIM can now be deployed with Podman, rootless by default, with no Docker or other extra software, including air-gapped: the setup script installs it on RHEL and other Podman hosts, and systemd starts it at boot. Ansible can deploy it too. (#1808)
+- ✨ JIM can now be deployed with Podman, rootful or rootless, with no Docker or other extra software, including air-gapped: the setup script installs it on RHEL and other Podman hosts, and systemd starts it at boot. Ansible can deploy it too. (#1808)
 - ✨ Air-gapped installs use the same setup script: run it inside the extracted release bundle and it loads the images and installs without an internet connection. (#1808)
 - ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)

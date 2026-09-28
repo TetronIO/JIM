@@ -22,7 +22,7 @@
 # Options:
 #   --runtime docker|podman  The container runtime to install JIM on. Only needed where both are installed:
 #                         the script asks rather than guess.
-#   --rootful             Podman only: run JIM as root, instead of rootless under the jim account.
+#   --rootless            Podman only: run JIM rootless, under a dedicated account, instead of as root.
 #   --renew-certificate   Issue a new server certificate from the certificate authority this script created,
 #                         for the same names, and restart JIM's web service.
 #   --certificate         Create or install JIM's certificate again, for example to change its names or to
@@ -33,10 +33,11 @@
 # JIM serves HTTPS. The script either creates a certificate authority (CA) and a server certificate for this
 # server, or installs your organisation's certificate and key, in the tls folder of the installation.
 #
-# On Podman, run as root, JIM runs rootless by default: under a dedicated account, jim, which the script creates
-# with lingering enabled, so that systemd starts JIM at boot with nobody logged in. Run as any other account, the
-# script installs JIM rootless under that account instead. Podman 4.4 or later and systemd are needed; without
-# systemd, JIM still runs but does not start by itself after a reboot.
+# On Podman, JIM runs as root by default (rootful), as it does on Docker, so that it records each client's own
+# address. With --rootless, it runs under a dedicated account, jim, which the script creates with lingering
+# enabled, so that systemd starts JIM at boot with nobody logged in; run with --rootless by any other account,
+# the script installs JIM under that account. Podman 4.4 or later and systemd are needed; without systemd, JIM
+# still runs, as root, but does not start by itself after a reboot. A reinstall keeps the way JIM runs.
 #
 # Non-interactive mode (for automation):
 #   Set all required environment variables before running. The script will skip
@@ -64,8 +65,8 @@
 #     JIM_TRUSTED_PROXIES   - Address(es) of a reverse proxy or load balancer in front of JIM. Set it empty
 #                             for none (default: prompt)
 #     JIM_SETUP_RUNTIME     - "docker" or "podman", as --runtime (default: the one installed; prompt if both)
-#     JIM_SETUP_PODMAN_ROOTFUL - "true" to run JIM as root on Podman, as --rootful
-#     JIM_SETUP_PODMAN_ACCOUNT - The account that runs JIM rootless on Podman (default: jim)
+#     JIM_SETUP_PODMAN_ROOTLESS - "true" to run JIM rootless on Podman, as --rootless
+#     JIM_SETUP_PODMAN_ACCOUNT  - The account that runs JIM rootless, with --rootless (default: jim)
 #     JIM_SETUP_OPEN_FIREWALL  - "true" or "false": open the HTTPS port in firewalld, when it is running (default:
 #                             prompt). Podman only.
 
@@ -655,27 +656,57 @@ check_podman() {
     fi
 }
 
-# Decides which account runs JIM: by default a dedicated account, rootless; root with --rootful; or, run by any
-# other account, that account.
+# Decides which account runs JIM: root by default (rootful); with --rootless, a dedicated account, or the account
+# running this script when that is not root. A reinstall keeps the way the installation runs.
 choose_podman_account() {
+    local install_dir="$1"
+    local rootless="${JIM_SETUP_PODMAN_ROOTLESS:-false}"
+    local account="${JIM_SETUP_PODMAN_ACCOUNT:-}"
+    if [ -n "$account" ] && [ "$rootless" != "true" ]; then
+        fatal "JIM_SETUP_PODMAN_ACCOUNT names the account for a rootless installation: pass --rootless too, or leave it unset to run JIM as root"
+    fi
+
+    # An installation's images, secrets and data are in the Podman storage of the account that runs it, so a
+    # reinstall that moved it to another account would leave them all behind.
+    if [ -f "${install_dir}/install.conf" ]; then
+        local recorded
+        recorded=$(install_state JIM_PODMAN_ACCOUNT "$install_dir")
+        if [ -z "$recorded" ] && [ "$rootless" = "true" ]; then
+            fatal "The installation at ${install_dir} runs as root, and a reinstall cannot move it to rootless: run this without --rootless, or install into another folder (JIM_INSTALL_DIR)"
+        fi
+        if [ -n "$recorded" ] && [ -n "$account" ] && [ "$account" != "$recorded" ]; then
+            fatal "The installation at ${install_dir} runs as ${recorded}, and a reinstall cannot move it to ${account}: leave JIM_SETUP_PODMAN_ACCOUNT unset, or install into another folder (JIM_INSTALL_DIR)"
+        fi
+        if [ -n "$recorded" ]; then
+            rootless="true"
+            account="$recorded"
+            info "Keeping this installation rootless, as ${recorded}"
+        fi
+    fi
+
+    if [ "$rootless" != "true" ]; then
+        [ "$(id -u)" -eq 0 ] \
+            || fatal "On Podman, JIM runs as root unless you choose otherwise: run this script as root (sudo). To run JIM rootless under your own account instead, pass --rootless."
+        PODMAN_ACCOUNT=""
+        info "Installing JIM to run as root (rootful)"
+        return
+    fi
+
     if [ "$(id -u)" -ne 0 ]; then
-        [ "${JIM_SETUP_PODMAN_ROOTFUL:-}" = "true" ] && fatal "--rootful installs JIM to run as root: run this script as root (sudo)"
+        if [ -n "$account" ] && [ "$account" != "$(id -un)" ]; then
+            fatal "JIM runs as ${account} here: run this script as root (sudo), or as ${account}"
+        fi
         PODMAN_ACCOUNT=$(id -un)
         if [ "$PODMAN_SYSTEMD" = "true" ] && ! lingering_enabled "$PODMAN_ACCOUNT"; then
             fatal "JIM would stop when you log out, and not start at boot, because lingering is not enabled for ${PODMAN_ACCOUNT}. Ask your administrators to run: loginctl enable-linger ${PODMAN_ACCOUNT}"
         fi
-        info "Installing JIM to run rootless as ${PODMAN_ACCOUNT}"
-    elif [ "${JIM_SETUP_PODMAN_ROOTFUL:-}" = "true" ]; then
-        PODMAN_ACCOUNT=""
-        info "Installing JIM to run as root (rootful)"
-    elif [ "$PODMAN_SYSTEMD" != "true" ]; then
-        # Without systemd there is no manager to keep JIM running under another account.
-        PODMAN_ACCOUNT=""
-        info "Installing JIM to run as root (rootful), since this host has no systemd to run it under a dedicated account"
     else
-        PODMAN_ACCOUNT="${JIM_SETUP_PODMAN_ACCOUNT:-$DEFAULT_PODMAN_ACCOUNT}"
-        info "Installing JIM to run rootless as the account ${PODMAN_ACCOUNT}"
+        # Without systemd there is no manager to keep JIM running under another account.
+        [ "$PODMAN_SYSTEMD" = "true" ] \
+            || fatal "Running JIM rootless under a dedicated account needs systemd with Podman's Quadlet, which this host lacks: run this without --rootless to run JIM as root"
+        PODMAN_ACCOUNT="${account:-$DEFAULT_PODMAN_ACCOUNT}"
     fi
+    info "Installing JIM to run rootless as ${PODMAN_ACCOUNT}"
 }
 
 lingering_enabled() {
@@ -1874,7 +1905,7 @@ show_summary() {
 }
 
 show_help() {
-    echo "Usage: setup.sh [--runtime docker|podman] [--rootful]"
+    echo "Usage: setup.sh [--runtime docker|podman] [--rootless]"
     echo "       setup.sh --renew-certificate | --certificate | --help"
     echo
     echo "Installs JIM with Docker or Podman, asking for anything not set in the environment. Run from an"
@@ -1882,7 +1913,7 @@ show_help() {
     echo
     echo "  --runtime docker|podman  The container runtime to install JIM on. Only needed where both are"
     echo "                       installed: the script asks rather than guess."
-    echo "  --rootful            Podman only: run JIM as root, instead of rootless under the jim account."
+    echo "  --rootless           Podman only: run JIM rootless, under a dedicated account, instead of as root."
     echo "  --renew-certificate  Issue a new server certificate from the certificate authority this"
     echo "                       script created, for the same names, and restart JIM's web service."
     echo "  --certificate        Create or install JIM's certificate again, for example to change its"
@@ -1915,8 +1946,8 @@ main() {
                 JIM_SETUP_RUNTIME="${1#--runtime=}"
                 shift
                 ;;
-            --rootful)
-                JIM_SETUP_PODMAN_ROOTFUL="true"
+            --rootless)
+                JIM_SETUP_PODMAN_ROOTLESS="true"
                 shift
                 ;;
             --renew-certificate)
@@ -1965,7 +1996,7 @@ main() {
 
     check_prerequisites
     if [ "$RUNTIME" = "podman" ]; then
-        choose_podman_account
+        choose_podman_account "$install_dir"
         prepare_podman_account
     fi
 

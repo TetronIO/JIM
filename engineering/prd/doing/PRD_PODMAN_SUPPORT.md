@@ -113,7 +113,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 **Given**: a Fedora or RHEL host with Podman but no Docker
 **When**: the administrator runs `setup.sh`
-**Then**: the script detects Podman, asks the same configuration questions as on Docker, installs and starts the Podman definition (rootless under a dedicated `jim` account by default, per plan D5), and prints JIM's address, instead of stopping with "Docker is required"
+**Then**: the script detects Podman, asks the same configuration questions as on Docker, installs and starts the Podman definition (rootful by default, or rootless under a dedicated `jim` account with `--rootless`, per plan D5 as amended in Phase 3), and prints JIM's address, instead of stopping with "Docker is required"
 
 ### Scenario 3: Reboot
 

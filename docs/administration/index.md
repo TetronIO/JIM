@@ -26,7 +26,7 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     ---
 
-    JIM on Podman, the container engine Red Hat supports on RHEL: how it runs under systemd, rootless or rootful, day-to-day operation, firewall and SELinux, and installing by hand.
+    JIM on Podman, the container engine Red Hat supports on RHEL: how it runs under systemd, rootful or rootless, day-to-day operation, firewall and SELinux, and installing by hand.
 
 -   **[Deploying with Ansible](deploying-with-ansible.md)**
 

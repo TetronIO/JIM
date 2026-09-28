@@ -52,11 +52,11 @@ docker exec -i -u app jim.worker sh -c 'cat > /connector-files/Users.csv' < ./Us
 
 The `-u app` flag is important: it runs the shell inside the container as the JIM runtime user (UID 1654), so the file lands with the correct ownership. This matters when JIM will later rewrite the same file, for example in **Export Only** or **Bidirectional** mode, or whenever schema discovery is triggered on an existing file.
 
-On Podman, run the same through the `jim-podman` function from [Operating JIM](../administration/podman.md#operating-jim), which runs Podman as the account that runs JIM; the worker container is `jim-worker`, and its default user is already `app`:
+On Podman, the worker container is `jim-worker`, and its default user is already `app` (for a rootless installation, see [Rootless commands](../administration/podman.md#rootless-commands)):
 
 ```bash
-jim-podman exec -i jim-worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
-jim-podman cp jim-worker:/connector-files/Exports.csv - | tar -xf -   # pull an export out
+sudo podman exec -i jim-worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
+sudo podman cp jim-worker:/connector-files/Exports.csv - | tar -xf -   # pull an export out
 ```
 
 !!! warning "Don't use `docker cp` to push files JIM will rewrite"
@@ -115,18 +115,18 @@ On Podman, add the host folder to the pod file, `/opt/jim/jim.yaml`: a `hostPath
       hostPath: { path: /mnt/hr-extracts, type: Directory }
 ```
 
-Then restart JIM (`sudo systemctl --user -M jim@ restart jim.service`). An upgrade replaces `jim.yaml`, so carry the addition into each new release's copy.
+Then restart JIM: `sudo systemctl restart jim.service`, or for a rootless installation, `sudo systemctl --user -M jim@ restart jim.service`. An upgrade replaces `jim.yaml`, so carry the addition into each new release's copy.
 
-Two things differ from Docker:
+Two things can differ from Docker:
 
-- **Ownership, rootless**<br /> A rootless JIM runs as the `jim` account, and its container user, UID 1654, is a *subordinate* ID of that account on the host rather than UID 1654. Hand the folder to the container user from within the account's own user namespace, which picks the right host ID:
+- **Ownership, when rootless**<br /> A rootful JIM, the default, needs the folder owned by UID 1654, as on Docker. A rootless JIM runs as the `jim` account, and its container user, UID 1654, is a *subordinate* ID of that account on the host rather than UID 1654. Hand the folder to the container user from within the account's own user namespace, which picks the right host ID:
 
     ```bash
     chown jim: /mnt/hr-extracts
     jim-podman unshare chown 1654:1654 /mnt/hr-extracts
     ```
 
-    On the host, the folder then belongs to the account's first subordinate ID plus 1653 (for example `101653` when `/etc/subuid` gives `jim` the range from `100000`). For a network share, mount it with that ID as the owner (`uid=101653,gid=101653` for CIFS). Rootful, UID 1654 is UID 1654, as on Docker.
+    On the host, the folder then belongs to the account's first subordinate ID plus 1653 (for example `101653` when `/etc/subuid` gives `jim` the range from `100000`). For a network share, mount it with that ID as the owner (`uid=101653,gid=101653` for CIFS).
 
 - **SELinux**<br /> On a host with SELinux enforcing, as RHEL is by default, a container may read and write only files labelled for containers. Label the folder, persistently:
 
@@ -137,7 +137,7 @@ Two things differ from Docker:
 
     For an NFS or CIFS mount, set the label as a mount option instead: `context="system_u:object_r:container_file_t:s0"`.
 
-Where a network share cannot be mounted on the host with a suitable owner or label, a rootful installation can mount it as a Podman volume instead, which Podman mounts itself: `podman volume create --driver local --opt type=cifs --opt device=//fileserver/hr-extracts --opt o=username=jim-svc,uid=1654,gid=1654 hr-extracts`, then use `persistentVolumeClaim: { claimName: hr-extracts }` in place of `hostPath`. Mounting a share needs root, so this does not work rootless.
+Where a network share cannot be mounted on the host with a suitable owner or label, a rootful installation can mount it as a Podman volume instead, which Podman mounts itself: `sudo podman volume create --driver local --opt type=cifs --opt device=//fileserver/hr-extracts --opt o=username=jim-svc,uid=1654,gid=1654 hr-extracts`, then use `persistentVolumeClaim: { claimName: hr-extracts }` in place of `hostPath`. Mounting a share needs root, so this does not work rootless.
 
 ### Mounting both at once
 

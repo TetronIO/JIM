@@ -14,8 +14,8 @@
 # would let a value here replace the pod file's.
 #
 # Restart JIM after a change:
-#   rootless:  systemctl --user -M jim@ restart jim.service
-#   rootful:   systemctl restart jim.service
+#   rootful (the default):  systemctl restart jim.service
+#   rootless:               systemctl --user -M jim@ restart jim.service
 
 apiVersion: v1
 kind: ConfigMap

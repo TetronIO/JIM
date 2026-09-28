@@ -4,7 +4,7 @@ title: Deployment
 
 # Deployment Guide
 
-This guide covers deploying JIM to a production environment, with Docker or Podman, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, HTTPS certificates, and operational guidance. For what is particular to Podman, including operating a rootless installation, see [Running on Podman](podman.md).
+This guide covers deploying JIM to a production environment, with Docker or Podman, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, HTTPS certificates, and operational guidance. For what is particular to Podman, including rootless installations, see [Running on Podman](podman.md).
 
 !!! tip "Quick Start"
     The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes. This page covers production hardening, certificates, reverse proxies, upgrades, and operational best practices.
@@ -279,7 +279,7 @@ Then carry on at [After Installing](#after-installing).
 
 On Docker, it keeps `.env`, which holds the database password and your identity provider's client secret, readable by root only.
 
-On Podman, run as root, it runs JIM rootless under a dedicated account named `jim`, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; pass `--rootful` to run JIM as root instead, and read [Rootless or Rootful](podman.md#rootless-or-rootful) before choosing. It writes your settings to `jim-config.yaml` and stores the secrets in Podman's secret store, installs the systemd units, lets rootless containers use port 443, and offers to open the port in firewalld.
+On Podman, it runs JIM as root (rootful) by default, as Docker does. Pass `--rootless` to run JIM under a dedicated account named `jim` instead, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; read [Rootful or Rootless](podman.md#rootful-or-rootless) before choosing. It writes your settings to `jim-config.yaml`, stores the secrets in Podman's secret store, installs the systemd units, and offers to open the port in firewalld; rootless, it also lets unprivileged programs use port 443.
 
 It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do; if JIM is not ready within ten minutes, it says so and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
 
@@ -311,11 +311,10 @@ JIM prepares its database on first start, with no manual step, and does not serv
 === "Podman"
 
     ```bash
-    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
-    jim-podman healthcheck run jim-web && echo "JIM is ready"
+    sudo podman healthcheck run jim-web && echo "JIM is ready"
     ```
 
-    If it does not become ready, the worker's log names the problem, for example a database permission it lacks: `jim-podman logs jim-worker`. Installed with `--rootful`, run `podman` as root. [Operating JIM](podman.md#operating-jim) explains the `jim-podman` function.
+    If it does not become ready, the worker's log names the problem, for example a database permission it lacks: `sudo podman logs jim-worker`. For a rootless installation, see [Rootless commands](podman.md#rootless-commands).
 
 !!! warning "Always name the compose files"
     Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone, which leaves out the production settings, and silently adds any `docker-compose.override.yml` it finds in the directory.
@@ -339,14 +338,14 @@ To put files in or pull them out:
 === "Podman"
 
     ```bash
-    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
-
     # Push an import file into the volume, as the JIM runtime user, so that JIM can rewrite it later
-    jim-podman exec -i jim-worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
+    sudo podman exec -i jim-worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
 
-    # Pull an exported file out
-    jim-podman cp jim-worker:/connector-files/Exports.csv - | tar -xf -
+    # Pull an exported file out, as a stream, so that the copy is yours rather than root's
+    sudo podman cp jim-worker:/connector-files/Exports.csv - | tar -xf -
     ```
+
+    For a rootless installation, see [Rootless commands](podman.md#rootless-commands).
 
 Then configure the File Connector's **File Path** setting as `/connector-files/Users.csv`.
 
@@ -569,7 +568,7 @@ The address to trust depends on where the proxy runs:
     docker network inspect jim-network --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
     ```
 
-    Docker assigns this address when it creates the network, so check it again after anything that removes and recreates the network, such as `docker compose down`. On Podman, a rootful JIM sees the gateway of the `jim` network (`podman network inspect jim`); a rootless JIM sees every client at one internal address, so do not run a rootless JIM behind a proxy that needs `JIM_TRUSTED_PROXIES` (see [Rootless or Rootful](podman.md#rootless-or-rootful)).
+    Docker assigns this address when it creates the network, so check it again after anything that removes and recreates the network, such as `docker compose down`. On Podman, a rootful JIM sees the gateway of the `jim` network (`podman network inspect jim`); a rootless JIM sees every client at one internal address, so do not run a rootless JIM behind a proxy that needs `JIM_TRUSTED_PROXIES` (see [Rootful or Rootless](podman.md#rootful-or-rootless)).
 
 For example:
 
@@ -669,14 +668,14 @@ View logs with Docker Compose, or with Podman as the account that runs JIM:
 === "Podman"
 
     ```bash
-    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
-
     # Follow a service's logs
-    jim-podman logs -f jim-web
+    sudo podman logs -f jim-web
 
     # View recent logs for a specific service
-    jim-podman logs --tail=100 jim-worker
+    sudo podman logs --tail=100 jim-worker
     ```
+
+    For a rootless installation, see [Rootless commands](podman.md#rootless-commands).
 
 JIM also includes a Logs page in the web UI for viewing application and database logs.
 
@@ -771,7 +770,7 @@ Use this checklist before going live:
 - [ ] Log level set appropriately (`Information` for production)
 - [ ] Health endpoint monitored by your alerting system
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
-- [ ] Docker restart policy is `unless-stopped` (set by production override), or on Podman, `jim.service` starts at boot (`systemctl --user -M jim@ is-enabled jim.service` reports `generated`)
+- [ ] Docker restart policy is `unless-stopped` (set by production override), or on Podman, `jim.service` starts at boot (`sudo systemctl is-enabled jim.service` reports `generated`; rootless, `sudo systemctl --user -M jim@ is-enabled jim.service`)
 - [ ] Upgrade procedure documented and tested in staging (see [Upgrading](upgrading.md))
 - [ ] PowerShell module installed and connected (if using automation/IDaC)
 
