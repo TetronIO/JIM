@@ -1729,10 +1729,12 @@ html[lang] .mud-input-control-helper-container:not(:empty) {
 }
 
 /* A button beside an outlined field (a d-flex align-start row: the field, then its action, e.g. Discover...),
-   centred on the field's box rather than on the whole control. The control starts with an 8px margin that keeps
-   room for the floating label, and its dense box is 37.6px against the button's 32px: 8 + (37.6 - 32) / 2. */
+   the same height as the field's box and level with it, so the pair reads as one unit. The control starts with
+   an 8px margin that keeps room for the floating label, and its dense box is 37.6px (10.5px padding either side
+   of the 14px value's line); a 32px button beside it, even centred, looked undersized. */
 html[lang] .jim-field-action.mud-button-root {
-    margin-top: 11px;
+    margin-top: 8px;
+    height: 37.6px;
 }
 
 /* MudField content (e.g. a read-only Thumbprint or Serial Number) has no spaces to wrap at and is
