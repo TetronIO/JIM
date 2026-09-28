@@ -1,6 +1,6 @@
 # Active Directory Lab
 
-- **Status:** Planned
+- **Status:** Doing (probe tier scaffolded; lab, harness, scenarios and gate to follow)
 - **Created:** 2026-09-27
 - **Author:** Jay
 - **Issue:** [#1853](https://github.com/TetronIO/JIM/issues/1853) (sub-issue of [#518](https://github.com/TetronIO/JIM/issues/518), the release gate)

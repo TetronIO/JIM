@@ -2,10 +2,12 @@
 
 ## Overview
 
-JIM employs a five-tier testing approach to ensure quality at different levels of the application:
+JIM employs a six-tier testing approach to ensure quality at different levels of the application:
 
 ```
 Integration Tests (Full System, Docker stack + external directories)
+         ^
+Active Directory Lab Probes (a real Windows Server domain controller, .NET test host)
          ^
 LDAPS Certificate Validation Tests (real directory servers over TLS, .NET test host)
          ^
@@ -220,7 +222,48 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 - ❌ The rest of the LDAP Connector's behaviour (schema import, sync, password writes); that is covered by the Integration tier's Samba AD / OpenLDAP scenarios
 - ❌ Anything not reachable purely through the TLS handshake and certificate chain
 
-## 5. Integration Tests
+## 5. Active Directory Lab Probes
+
+**Location**: `test/JIM.Worker.Tests/Connectors/ActiveDirectory/`
+
+**Purpose**: Drive the LDAP Connector's Active Directory primitives against a real Windows Server domain controller, in the .NET test host. This tier exists because the connector treats Samba AD as a different directory type from Active Directory (`LdapConnectorRootDse.SupportsPaging` is the visible branch: the paged-results control is never sent to Samba and always sent to Active Directory), so the Samba-based Integration tier never executes the `ActiveDirectory` code paths, and because a Windows Server 2025 domain controller enforces defaults the Samba lab relaxes (LDAP signing, password complexity). See `engineering/prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md` (#1853).
+
+**Characteristics**:
+- One probe per primitive only a real Active Directory can prove: schema discovery over more than 1,000 `attributeSchema` entries (the directory's MaxPageSize), container enumeration over more than 1,000 organisational units, a Full Import of a group over MaxValRange (1,500 members, returned as `member;range=0-1499`), a duplicate member add on export, the order the directory lists `objectClass` values in, and `unicodePwd` over LDAPS and its refusal over plain LDAP
+- Fixtures are created idempotently under `OU=JIM Probes,<base DN>` by the raw platform LDAP client, never through the connector under test, so a connector defect cannot hide behind a fixture it failed to create
+- Each probe is written to fail against the domain controller for the right reason before its fix lands, and stays as the regression net afterwards
+
+**Gating**: Every fixture carries `[Category("RequiresActiveDirectory")]` and calls `Assert.Ignore` unless `JIM_TEST_AD_HOST` is set, so a normal `dotnet test` / `jim-test` run skips them.
+
+**Configuration (environment variables)**:
+
+| Variable | Purpose |
+|----------|---------|
+| `JIM_TEST_AD_HOST` | The domain controller's FQDN, as its certificate names it; **also the opt-in switch** (unset = skip) |
+| `JIM_TEST_AD_PORT` | LDAPS port (default `636`) |
+| `JIM_TEST_AD_PLAIN_PORT` | Plain LDAP port; optional, used only by the signing refusal probe |
+| `JIM_TEST_AD_BASE_DN` | The domain's naming context |
+| `JIM_TEST_AD_USERNAME` / `JIM_TEST_AD_PASSWORD` | The delegated account JIM binds as (`CN=svc-jim,...`) |
+| `JIM_TEST_AD_ADMIN_USERNAME` / `JIM_TEST_AD_ADMIN_PASSWORD` | An account allowed to create the probe fixtures; defaults to the JIM account |
+| `JIM_TEST_AD_CA_PATH` | PEM certificate to trust for LDAPS via the JIM certificate store; omit when the OS already trusts it |
+
+**Running locally** (from a machine with a route to the lab):
+
+```bash
+dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresActiveDirectory"
+```
+
+**Running in CI**: on the lab's own workflow (`ad-lab.yml`, self-hosted, never on pull requests), alongside the Active Directory leg of the Integration tier; see the PRD.
+
+**What Active Directory Lab Probes Are Good At**:
+- ✅ Exercising the connector branches Samba AD never reaches, in minutes rather than a scenario run
+- ✅ Turning "Samba differs from Active Directory here" from a belief into a failing test with the directory's own answer in it
+
+**What Active Directory Lab Probes Miss**:
+- ❌ End-to-end synchronisation behaviour (the Integration tier's Active Directory leg)
+- ❌ Anything outside the LDAP Connector
+
+## 6. Integration Tests
 
 **Location**: `test/integration/`
 
@@ -479,6 +522,6 @@ Because we cannot rely on unit/workflow tests to catch these bugs, we employ:
 - **LDAPS Certificate Validation Tests**: Real directory servers over TLS in the .NET test host, prove certificate validation genuinely refuses what it should and trusts what it should; fast enough to run on every PR
 - **Integration Tests**: Slow, test full system with Docker + external directories, validate production-like behaviour
 
-The five tiers complement each other. The watermark bug demonstrates why unit and workflow tests are not enough on their own; the Predefined Search silent-no-op bug (#849/#850) demonstrates why a real-PostgreSQL tier below the heavy Integration stack is worth having - it caught a persistence bug in ~30s that every in-memory test passed; the LDAPS certificate tier exists for the same reason one layer up the stack: JIM's own trust decision is untestable without a real TLS handshake, and the integration stacks used to paper over that entirely by disabling validation.
+The six tiers complement each other. The watermark bug demonstrates why unit and workflow tests are not enough on their own; the Predefined Search silent-no-op bug (#849/#850) demonstrates why a real-PostgreSQL tier below the heavy Integration stack is worth having - it caught a persistence bug in ~30s that every in-memory test passed; the LDAPS certificate tier exists for the same reason one layer up the stack: JIM's own trust decision is untestable without a real TLS handshake, and the integration stacks used to paper over that entirely by disabling validation; the Active Directory lab probes exist because the connector runs a different branch for Active Directory than for Samba AD, and no amount of Samba testing executes it.
 
 **⚠️ Critical Caveat**: Due to EF Core in-memory database limitations (see above), a real-PostgreSQL tier (Database-Backed Component or Integration) is the only reliable way to verify navigation property loading. Unit and workflow tests will PASS even when `.Include()` statements are missing.
