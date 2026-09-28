@@ -14,6 +14,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  diagnose:
+    # TEMPORARY: why a rootful Podman container cannot reach a service on the runner's own address.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+    - name: Use Docker's containerd image store
+      run: |
+        config=/etc/docker/daemon.json
+        current=$(sudo cat "$config" 2>/dev/null || echo '{}')
+        echo "daemon.json before: $current"
+        echo "$current" | jq '.features["containerd-snapshotter"] = true' | sudo tee "$config" > /dev/null
+        sudo systemctl restart docker
+    - name: Start the test identity provider
+      shell: pwsh
+      run: |
+        $authority = ./test/ci/deployment/Start-TestIdentityProvider.ps1
+        "AUTH=$authority" >> $env:GITHUB_ENV
+    - name: Probe
+      run: |
+        url="$AUTH/.well-known/openid-configuration"
+        podman --version
+        echo "XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-unset}"; sudo env | grep -E '^(XDG|HOME)' || true
+        curl -s -o /dev/null -w "host: %{http_code}\n" "$url"
+        docker run --rm curlimages/curl:8.11.1 -sS -m 5 -o /dev/null -w "docker bridge: %{http_code}\n" "$url" || echo "docker bridge: failed"
+        sudo podman network create jimdiag >/dev/null
+        for net in podman jimdiag; do
+          sudo podman run --rm --network $net docker.io/curlimages/curl:8.11.1 -sS -m 5 -o /dev/null -w "rootful $net: %{http_code}\n" "$url" || echo "rootful $net: failed"
+          sudo podman run --rm --network $net docker.io/curlimages/curl:8.11.1 -sS -m 5 -o /dev/null -w "rootful $net to github: %{http_code}\n" https://github.com || echo "rootful $net to github: failed"
+        done
+        gw=$(sudo podman network inspect jimdiag -f '{{range .Subnets}}{{.Gateway}}{{end}}')
+        sudo podman run --rm --network jimdiag docker.io/curlimages/curl:8.11.1 -sS -m 5 -o /dev/null -w "rootful via gateway $gw: %{http_code}\n" "http://$gw:8180/realms/jim/.well-known/openid-configuration" || echo "rootful via gateway: failed"
+        sudo podman run --rm --network jimdiag --security-opt apparmor=unconfined docker.io/curlimages/curl:8.11.1 -sS -m 5 -o /dev/null -w "rootful unconfined: %{http_code}\n" "$url" || echo "rootful unconfined: failed"
+        sudo podman info --format 'backend={{.Host.NetworkBackend}} apparmor={{.Host.Security.AppArmorEnabled}} cgroups={{.Host.CgroupsVersion}}'
+        echo "bridge-nf-call-iptables=$(cat /proc/sys/net/bridge/bridge-nf-call-iptables 2>/dev/null)"
+        echo "--- iptables"; sudo iptables-save | grep -v '^#' | head -120
+        echo "--- nft reject/drop"; sudo nft list ruleset | grep -n -i -E 'reject|drop|prohibit' | head -40
+        echo "--- apparmor"; sudo aa-status 2>/dev/null | head -30
+        echo "--- userns"; sysctl kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone 2>&1
+        sudo useradd -m diag && sudo loginctl enable-linger diag && sleep 3
+        uid=$(id -u diag)
+        (cd / && sudo -u diag env -i PATH=/usr/bin:/bin HOME=/home/diag XDG_RUNTIME_DIR="/run/user/$uid" podman run --rm docker.io/curlimages/curl:8.11.1 -sS -m 5 -o /dev/null -w "rootless default: %{http_code}\n" "$url") || echo "rootless default: failed"
+        (cd / && sudo -u diag env -i PATH=/usr/bin:/bin HOME=/home/diag XDG_RUNTIME_DIR="/run/user/$uid" podman network create jimdiag >/dev/null && sudo -u diag env -i PATH=/usr/bin:/bin HOME=/home/diag XDG_RUNTIME_DIR="/run/user/$uid" podman run --rm --network jimdiag docker.io/curlimages/curl:8.11.1 -sS -m 5 -o /dev/null -w "rootless jimdiag: %{http_code}\n" "$url") || echo "rootless jimdiag: failed"
+
   deployment-boot:
     # Installs JIM the way a customer does, three times over: from a release bundle built from this commit,
     # with the bundle's own setup.sh, offline, on Docker, on rootful Podman and on rootless Podman. Each leg
