@@ -111,6 +111,55 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 
 6. **Verify**, per [Verifying the upgrade](#verifying) below.
 
+## 🦭 Upgrading on Podman
+
+On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. The commands are for the default rootless installation; for a rootful one, run `podman` as root and leave out `--user -M jim@`.
+
+1. **Stop JIM**, leaving the bundled database running, and **take your backup** per [Backup & Disaster Recovery](backup-recovery.md):
+
+    ```bash
+    sudo systemctl --user -M jim@ stop jim.service
+    ```
+
+2. **Keep the current pod files**, for rolling back:
+
+    ```bash
+    cd /opt/jim
+    cp jim.yaml jim.yaml.previous && cp jim-database.yaml jim-database.yaml.previous
+    ```
+
+3. **Put the new release's files in place, and its images.** Connected, download the pod files from the release and pull the images they name:
+
+    ```bash
+    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
+    cd /opt/jim
+    for f in jim.yaml jim-database.yaml setup.sh; do
+      curl -fsSLO "https://github.com/TetronIO/JIM/releases/download/v0.14.0/$f"
+    done
+    chmod 755 setup.sh
+    for image in $(awk '$1 == "image:" { print $2 }' jim.yaml jim-database.yaml); do jim-podman pull "$image"; done
+    ```
+
+    Air-gapped, from the extracted bundle, load the images and copy the files:
+
+    ```bash
+    for f in docker-images/*.tar; do jim-podman load < "$f"; done
+    cp podman/jim.yaml podman/jim-database.yaml setup.sh /opt/jim/
+    ```
+
+    If you tuned PostgreSQL in `jim-database.yaml`, carry your settings into the new copy rather than losing them. Compare the release's `jim-config.yaml` with yours for new settings.
+
+4. **Start JIM**, restarting the database first so it runs the release's PostgreSQL image:
+
+    ```bash
+    sudo systemctl --user -M jim@ restart jim-database.service
+    sudo systemctl --user -M jim@ start jim.service
+    ```
+
+5. **Verify**, per [Verifying the upgrade](#verifying) below.
+
+To roll back on Podman, stop JIM, restore the pre-upgrade backup (see [Rolling back](#rolling-back)), put `jim.yaml.previous` and `jim-database.yaml.previous` back in place of the new files, and start JIM again.
+
 ## ⚙️ What happens during the upgrade window
 
 Understanding the startup sequence explains why the web interface is briefly unavailable after an upgrade:
@@ -221,7 +270,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
 - [ ] Running Activities allowed to complete.
 - [ ] Services stopped, then database **and** encryption keys backed up as a matched pair.
 - [ ] Previous images retained for rollback.
-- [ ] `.env` reconciled against the new `.env.example`.
+- [ ] `.env` reconciled against the new `.env.example`, or on Podman `jim-config.yaml` against the release's copy.
 - [ ] New version confirmed via `/api/v1/health/version`.
 - [ ] Readiness confirmed via `/api/v1/health/ready`.
 - [ ] A Connected System with a stored credential confirmed to connect (proves the keys survived).

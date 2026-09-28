@@ -20,7 +20,19 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     ---
 
-    Hardware requirements, architecture overview, connected and air-gapped installation procedures, TLS configuration, health monitoring, and the production readiness checklist.
+    Hardware requirements, architecture overview, connected and air-gapped installation procedures on Docker or Podman, TLS configuration, health monitoring, and the production readiness checklist.
+
+-   **[Running on Podman](podman.md)**
+
+    ---
+
+    JIM on Podman, the container engine Red Hat supports on RHEL: how it runs under systemd, rootless or rootful, day-to-day operation, firewall and SELinux, and installing by hand.
+
+-   **[Deploying with Ansible](deploying-with-ansible.md)**
+
+    ---
+
+    Deploying JIM across RHEL servers with Red Hat's podman system role, from the same files the installer uses.
 
 -   **[Single Sign-On Setup](sso-setup.md)**
 

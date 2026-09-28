@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ JIM can now be deployed with Podman, rootless by default, with no Docker or other extra software, including air-gapped: the setup script installs it on RHEL and other Podman hosts, and systemd starts it at boot. Ansible can deploy it too. (#1808)
 - ✨ Air-gapped installs use the same setup script: run it inside the extracted release bundle and it loads the images and installs without an internet connection. (#1808)
 - ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
@@ -21,10 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 JIM now serves HTTPS out of the box, with your organisation's certificate or one the setup script creates, so sign-in works from any machine without a reverse proxy. Before upgrading, put the certificate in the `tls` folder beside the compose files. (#1808)
 - 🔄 The production compose file now publishes the web UI and API over HTTPS on the standard port, 443, so JIM's address needs no port (set `JIM_WEB_PORT` to change it).
 - 🔄 The setup script installs in `/opt/jim` when run as root, waits until JIM is ready, and keeps a copy of itself there to renew (`--renew-certificate`) or change (`--certificate`) JIM's certificate. (#1808)
+- 🔄 The Worker now reports healthy while it upgrades the database or warms its caches at start-up, so a long upgrade no longer looks like a hung Worker. (#1808)
 - 🔄 JIM's services now wait for the database at start-up, logging each attempt, instead of exiting and restarting until it is available; an external database that is briefly unreachable no longer takes the web portal down. (#1808)
 
 ### Fixed
 
+- 🐛 Running the setup script again over an installation with the bundled PostgreSQL no longer locks JIM out of its database: it keeps the database's password instead of generating a new one. (#1808)
 - 🐛 Installing with the setup script's bundled PostgreSQL works: it pointed JIM at `localhost` instead of the bundled database, so JIM never started.
 - 🐛 The release bundle's PostgreSQL image now loads under its name, so an air-gapped install with the bundled database finds it.
 - 🐛 The setup script no longer stops at `Failed to download .env.example`, and the manual download commands in the Deployment Guide and Quick Start work again: releases publish the environment template as `default.env.example`.

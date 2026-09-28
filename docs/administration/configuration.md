@@ -4,10 +4,32 @@ title: Configuration Reference
 
 # Configuration Reference
 
-JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files. The automated setup script configures these automatically; for manual setup, edit `.env` directly.
+JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The automated setup script configures these automatically; for manual setup, edit the file directly. The settings and their names are the same on both runtimes.
 
 !!! tip
     A fully commented `.env.example` template is included with every release and is available in the [GitHub repository](https://github.com/TetronIO/JIM/releases).
+
+---
+
+## Podman
+
+On Podman, JIM reads its settings from `/opt/jim/jim-config.yaml`, a Kubernetes-style ConfigMap holding the same settings, with the same names, as `.env`; each one is on this page. Write each as `NAME: value`, indented under `data:`, and quote a value that is a number, `true` or `false`, or contains `: ` or ` #`:
+
+```yaml
+data:
+  JIM_SSO_AUTHORITY: https://login.microsoftonline.com/your-tenant-id/v2.0
+  JIM_SSO_MV_ATTRIBUTE: Subject Identifier
+  JIM_DB_LOG_MIN_DURATION: "1000"
+```
+
+Restart JIM after a change: `sudo systemctl --user -M jim@ restart jim.service` (rootless), or `sudo systemctl restart jim.service` (rootful).
+
+These settings differ on Podman:
+
+- **Secrets**<br /> `JIM_DB_PASSWORD`, `JIM_SSO_SECRET` and `JIM_INFRASTRUCTURE_API_KEY` are not in `jim-config.yaml`. They are the Podman secret `jim-secrets`, which only the account that runs JIM (or root, rootful) can read; see [Installing by Hand](podman.md#installing-by-hand) to store or change it.
+- **`DOCKER_REGISTRY`, `JIM_VERSION`, `JIM_WEB_PORT`**<br /> Not used: the pod file, `jim.yaml`, names JIM's images with their registry and version, and the HTTPS port is `PublishPort=` in the `jim.kube` unit.
+- **`JIM_DB_HOSTNAME`**<br /> `jim-database` for the bundled PostgreSQL, rather than Docker's `jim.database`.
+- **Settings the pod file sets itself**<br /> Leave `JIM_LOG_PATH`, `JIM_LOG_REQUESTS` and the `ASPNETCORE_` settings out of `jim-config.yaml`: Podman would let a value there replace the pod file's.
 
 ---
 
@@ -42,7 +64,7 @@ JIM's certificate is not set in `.env`. The production compose file reads it fro
 | `tls/tls.crt` | JIM's certificate, followed by any intermediate CA certificates                                 |
 | `tls/tls.key` | Its unencrypted private key, belonging to UID `1654` with mode `400`                            |
 
-To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. See [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) for providing, creating and renewing the certificate.
+To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. On Podman, the pod file sets the same settings, and JIM reads the pair from the Podman secret `jim-tls`, mounted at the same path. See [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) for providing, creating and renewing the certificate.
 
 ---
 

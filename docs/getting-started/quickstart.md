@@ -49,7 +49,7 @@ less setup.sh    # review the script
 sudo bash setup.sh
 ```
 
-The installer asks about your database, identity provider, HTTPS port and certificate, installs JIM in `/opt/jim`, starts it, and waits until it is ready.
+The installer uses Docker or Podman, whichever the server has, asking which where both are installed. It asks about your database, identity provider, HTTPS port and certificate, installs JIM in `/opt/jim`, starts it, and waits until it is ready. On Podman, JIM runs rootless under an account named `jim`, which the installer creates; see [Running on Podman](../administration/podman.md).
 
 ### Option 2: Air-Gapped
 

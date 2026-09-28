@@ -123,6 +123,8 @@ nav:
       - administration/index.md
       - Working with Lists: administration/portal-lists.md
       - Deployment: administration/deployment.md
+      - Running on Podman: administration/podman.md
+      - Deploying with Ansible: administration/deploying-with-ansible.md
       - SSO Setup:
           - administration/sso-setup.md
           - Microsoft Entra ID: administration/sso-setup/microsoft-entra-id.md

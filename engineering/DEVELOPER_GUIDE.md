@@ -205,8 +205,30 @@ Detailed Mermaid diagrams document the runtime behaviour of JIM's synchronisatio
 ### Infrastructure
 - **Docker**: Container platform
 - **Docker Compose**: Multi-service orchestration
+- **Podman**: The second supported runtime, for hosts where Red Hat's container engine is the one permitted
 - **Serilog**: Structured logging
 - **GitHub Actions**: CI/CD
+
+#### Deployment: two runtimes, one set of images
+
+JIM's images are runtime-neutral, and each production deployment is defined twice, by hand, for its runtime:
+
+| | Docker | Podman |
+|---|---|---|
+| Definition | `docker-compose.yml` + `deploy/docker-compose.production.yml` | `deploy/podman/`: pod files run by `podman kube play`, and Quadlet units that run them under systemd |
+| Settings | `.env` | `jim-config.yaml`, a ConfigMap with the same names |
+| Secrets | `.env` (root-only) | Podman secrets `jim-secrets` and `jim-tls`, referenced by `secretKeyRef` and a `secret` volume |
+| Supervision | The Docker daemon (`restart:` policies) | systemd, through Quadlet `.kube` units; rootless under a `jim` account by default |
+| Bundled database host name | `jim.database` | `jim-database` |
+
+Rules that keep the two in step:
+
+- **Services must not depend on start-up order.** A pod starts all its containers at once, so every service waits for the database itself (`JimApplication.WaitForDatabaseAsync`), and `jim.web` and `jim.scheduler` wait for readiness.
+- **Health checks mean liveness on Podman.** Podman 5 restarts a container whose liveness probe fails (Docker only reports it), so the pod file's liveness probes ask only whether a service is hung, behind startup probes that allow any start-up time. A long start-up step must keep its health heartbeat fresh (`HealthcheckFile.KeepFreshWhileAsync`), or Podman kills it part-way.
+- **A setting added to the compose files needs adding to the pod file.** Hardening, environment, mounts and volumes should match; `docker-compose.yml` stays the single source of the PostgreSQL image, which `scripts/Build-PodmanFiles.ps1` renders into the pod files at release.
+- **Nothing is mounted under `/run/secrets`.** On RHEL, Podman mounts a read-only `/run/secrets` of its own into every container, so JIM's certificate is at `/run/jim-tls` on both runtimes.
+
+See [Running on Podman](../docs/administration/podman.md) for the operator's view, and the [Podman support plan](plans/doing/PODMAN_SUPPORT.md) for the decisions behind the design.
 
 ### Testing
 - **NUnit**: Unit testing framework
@@ -538,7 +560,7 @@ _logger.LogInformation("Page: {Page}, Id: {Id}", page, objectId);
 ### 5. Secrets Management
 - **Environment variables**: All secrets configured via `.env` file (gitignored)
 - **No hardcoded secrets**: Never commit credentials, connection strings, API keys
-- **Docker secrets**: Use Docker secrets for production deployments
+- **Container runtime secrets**: Docker Compose file secrets hold the TLS pair in production; on Podman, the Podman secret store holds every secret
 
 ### 6. Commit Signing (Mandatory)
 

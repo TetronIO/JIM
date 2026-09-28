@@ -1,6 +1,6 @@
 # Podman Support - Implementation Plan
 
-- **Status:** Doing (Phases 1 and 2 complete)
+- **Status:** Doing (Phases 1, 2 and 3 complete)
 - **Created:** 2026-09-25
 - **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
 - **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/doing/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
@@ -151,7 +151,7 @@ These answer the PRD's open questions (OQ). Each was chosen on the evidence abov
   - The organisation's own certificate and key: recommended for production, typically issued by an internal certificate authority such as AD CS or IdM.
   - Otherwise the installer creates a local certificate authority and a server certificate for the host names and addresses the administrator gives it. It saves the certificate authority's certificate for the administrator to distribute to browsers and any proxy. A certificate authority is used rather than a bare self-signed certificate so that renewing the server certificate does not mean distributing trust again.
   - A generated server certificate is valid for one year, and `setup.sh --renew-certificate` issues a new one from the saved certificate authority. JIM already sends HSTS in production, so once browsers trust the certificate authority an expired certificate blocks access outright, with no click-through. The installer therefore prints the expiry date, and the documentation covers renewal.
-- **Where the certificate lives:** both runtimes mount the pair at `/run/secrets/jim-tls/tls.crt` and `tls.key`, so the Kestrel settings (`ASPNETCORE_Kestrel__Certificates__Default__Path` and `KeyPath`) are identical and need no D7 allowlist entry.
+- **Where the certificate lives:** both runtimes mount the pair at `/run/jim-tls/tls.crt` and `tls.key`, so the Kestrel settings (`ASPNETCORE_Kestrel__Certificates__Default__Path` and `KeyPath`) are identical and need no D7 allowlist entry. *Amended in Phase 3:* planned as `/run/secrets/jim-tls/`, but on RHEL and its derivatives Podman mounts a read-only `/run/secrets` of its own (subscription data, from `mounts.conf`) into every container, so a mount point beneath it cannot be created under a read-only root filesystem. Found booting on CentOS Stream 9; Ubuntu's Podman does not do this.
   - Docker: compose `secrets:` from files in the install directory, with an absolute `target`. Compose mounts file-based secrets as bind mounts, so the key file must be readable by UID 1654; the installer sets its owner to 1654 and its mode to 0400. Verified in Phase 2.
   - Podman: the `jim-tls` secret (D1), mounted as a secret volume.
 - **Behind a load balancer or reverse proxy:**
@@ -198,7 +198,7 @@ These answer the PRD's open questions (OQ). Each was chosen on the evidence abov
 - This tests what runs rather than parsing two YAML dialects, and needs no new dependency.
 - **Rejected:** generating the pod files from the compose files. The generator would be a third thing to maintain, and administrators read these files directly, so hand-written files serve them better.
 
-**D8. PRD requirement 12 withdrawn: health checks stay as commands in each definition.**
+**D8. PRD requirement 12 withdrawn: health checks stay as commands in each definition.** *Amended in Phase 3: the Podman probes are liveness checks behind startup probes; see Phase 3.*
 - The requirement assumed Quadlet `.container` units, where systemd treats `%` and `$` specially. In the pod design the probe is a YAML array that systemd never parses; tested, it reaches Podman unaltered.
 - Moving the checks into scripts would add shell scripts to the images against the repository's scripting rule, for no remaining benefit.
 - CI runs `podman healthcheck run` on every container, so a broken probe fails the check.
@@ -303,45 +303,44 @@ Runtime-neutral, so it ships on Docker without waiting for the Podman path, and 
    - The maintenance options from `/opt/jim/setup.sh`: renewal, moving to an organisation chain, new names (new CA, with the redistribution warning), and renewal refused for an organisation certificate.
 7. **Changelog:** 🔄 "JIM now serves HTTPS out of the box, with your organisation's certificate or one the setup script creates, so sign-in works from any machine without a reverse proxy."
 
-### Phase 3: The Podman path
+### Phase 3: The Podman path ✅
 
-Delivered as one PR, or two if review size demands: files, then installer, release and docs.
+Delivered as one PR: the files, the installer, the release and the documentation.
 
-1. **Pod and Quadlet files** in `deploy/podman/`, as tabled above, each with a header comment saying what it is for and what an administrator may edit. They are hand-written YAML using only fields that Podman 4.4 supports. `jim.web` mounts the `jim-tls` secret at `/run/secrets/jim-tls/` and uses the same listening settings as Phase 2.
-2. **Database pod:**
-   - The same tuning arguments as the production compose file, plus `dynamic_shared_memory_type=mmap` and `LANG=C.UTF-8`.
-   - The same log-directory entrypoint wrapper.
-   - The `jim-db` and `jim-logs` claims.
-3. **`deploy/setup.sh`:**
-   - Detect Docker and Podman, and add `--runtime docker|podman`. When both are present it asks rather than guessing.
-   - The Podman branch:
-     1. Checks the Podman version and systemd.
-     2. Creates the `jim` account and its subordinate ID ranges and enables lingering (D5), unless `--rootful` is given or it is run without root.
-     3. Asks the existing questions and writes `jim-config.yaml`.
-     4. Runs the Phase 2 certificate step, then plays the secrets and TLS documents as the account that runs JIM and removes the files.
-     5. Installs the units and configuration (D5 gives the locations).
-     6. If firewalld is running, offers to open the web port.
-     7. Reloads and starts `jim.service` through the right systemd manager.
-     8. Waits for `/api/v1/health/ready` over HTTPS and prints the address, the certificate authority's location, and the operations cheat sheet's commands.
-   - `setup.sh` stays bash: it is the existing customer-facing installer, and PowerShell cannot be assumed on a customer server.
-4. **Release:**
-   - `.github/workflows/release.yml` publishes the rendered Podman files as release assets alongside the compose files.
-   - `scripts/Build-ReleaseBundle.ps1` adds a `podman/` folder to the bundle, and the generated `INSTALL.md` gains Podman steps using the same image tarballs, rootless by default.
-5. **Documentation**, per the PRD's Documentation Impact table:
-   - Docker and Podman content tabs (`pymdownx.tabbed` is already enabled) in deployment, upgrading, backup and troubleshooting.
-   - The Podman secrets model in configuration.
-   - Operating a rootless install: the `jim` account, `systemctl --user -M jim@`, logs, where volumes live, and backup.
-   - Rootless and SELinux guidance for File Connector bind mounts, including a Podman volume backed by a CIFS share as the rootful alternative to a host bind mount.
-   - A new page, `docs/administration/deploying-with-ansible.md`, with the D12 example playbook, added to the site navigation.
-   - The two-runtime architecture in `engineering/DEVELOPER_GUIDE.md`.
-6. **Checks before merging:**
-   - A rootful boot in the cloud sandbox, and a rootless boot under a dedicated account on a host that supports it.
-   - Remote HTTPS sign-in by server name.
-   - A restart of the unit with data kept.
-   - Upgrade by replacing the pod file and restarting.
-   - The client address JIM logs for a remote request under rootless networking (see Risks).
-   - An air-gapped load of the bundle's PostgreSQL image, on Podman and on Docker's classic image store, resolves the digest-pinned reference without trying to pull. Phase 2 fixed the bundle to save the image by name and tag and verified the containerd store; the classic store and Podman are unverified. The Podman branch of the installer reuses the Docker branch's bundle mode.
-7. **Changelog:** ✨ "JIM can now be deployed with Podman, rootless by default, with no Docker or other extra software, including air-gapped."
+1. **Pod and Quadlet files** in `deploy/podman/`, as tabled above, except `jim-tls.yaml`: the installer, the by-hand steps and the Ansible page each build the TLS Secret document from the certificate files, so a template nobody should edit by hand was left out. `jim-secrets.yaml` uses `stringData`, so an administrator writes plain values. `scripts/Build-PodmanFiles.ps1` renders the image placeholders (Pester-tested).
+2. **Database pod** as planned, with the `JIM_DB_LOG_MIN_DURATION` default applied in the entrypoint wrapper.
+3. **`deploy/setup.sh`** as planned, with these changes found in implementation:
+    - **One installation folder for both runtimes, `/opt/jim`,** rather than D5's `~jim/.config/jim/` for Podman. The documentation, the installer's copy (`sudo /opt/jim/setup.sh --renew-certificate`) and the certificate authority are then in the same place on either runtime, and the CA key stays readable by root only: the `jim` account, which runs the containers, cannot read it. The Quadlet units still go in `~jim/.config/containers/systemd/` (rootful: `/etc/containers/systemd/`) and name the pod files by absolute path. `install.conf` records the runtime, account and port for the maintenance options.
+    - Secrets and the TLS pair are played from standard input (`podman kube play -`), so no secret reaches a file or the process list.
+    - `systemctl --user -M jim@` works on RHEL 9's systemd 252 without `systemd-container`. `journalctl --user -M jim@` does not (it needs `systemd-machined`), and `journalctl --user-unit` found nothing on the test host, so the documentation uses `podman logs`.
+    - Rootless Podman fails outright in a folder the account cannot read, such as `/root` (`cannot chdir to /root`), so every documented command runs Podman as `jim` from the root folder: `jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }`. `systemd-run -M jim@ --user` was tried and rejected: it expands `$` in arguments.
+    - The port check recognises JIM's own pod holding the port on a reinstall; `/etc/sysctl.d` is created if missing.
+    - **Both runtimes:** a reinstall keeps the bundled database's password (from `.env`, or `podman secret inspect --showsecret`); with no password to keep and the database volume present, the installer stops and says how to go on. Previously a reinstall generated a new password, which the existing database rejected.
+4. **Release** as planned. `Build-ReleaseBundle.ps1` also refuses to build a bundle whose PostgreSQL archive lacks the registry manifest its digest needs (see below).
+5. **Documentation:** a new page, `docs/administration/podman.md` (how it runs, rootless or rootful, operating it, health checks, firewall and SELinux, installing by hand, without systemd), linked from the others rather than repeating them; `deploying-with-ansible.md`; and Podman content in deployment, configuration, upgrading, backup, troubleshooting, prerequisites, quick start and the File Connector.
+
+**Found in implementation, and changed:**
+
+- **Podman 5 restarts a container whose liveness probe fails** (Podman 4.9 and Docker only report it), and there is no pod-file setting to stop it. A readiness probe as liveness would restart `jim-web` throughout maintenance mode or a database outage; a strict `pg_isready` could kill a long crash recovery over and over. So each container has a `startupProbe` (Podman 4 ignores it) allowing any start-up time, and a liveness probe asking only whether the service is hung: `/api/v1/health/live` for `jim-web`, the heartbeat for the worker and scheduler, and any answer at all from PostgreSQL within five minutes.
+- **The worker's heartbeat went stale during migrations and cache warming**, which would have let Podman 5 kill a large installation's upgrade part-way. `HealthcheckFile.KeepFreshWhileAsync` keeps it fresh through those steps (TDD). On Docker, the worker now shows healthy during a long upgrade.
+- **Podman 4.9 lets `envFrom` replace an explicit `env` value** (the reverse of Kubernetes and Docker Compose), so the settings the pod file sets itself stay out of `jim-config.yaml`, which says so.
+- **`emptyDir: {medium: Memory}` is an on-disk named volume on Podman 4.9,** hidden by the tmpfs Podman mounts on `/tmp` for a read-only container; on 5.8 it is a tmpfs. Kept, since `/tmp` would otherwise be read-only on a host that turns `read_only_tmpfs` off.
+- **A `secret` volume is a named volume** that Podman fills from the secret at each `kube play`, so a renewed certificate reaches `jim-web` on the next restart. Renewal therefore restarts the whole JIM pod on Podman (the worker and scheduler too); documented.
+- **The PostgreSQL archive:** Podman 4.9 and 5.8 resolve the digest-pinned reference after loading the bundle's archive (saved from Docker's containerd store, which keeps the registry manifest). Docker's classic image store does not: it loads the image with no repository digest, so the compose file's reference never resolves and the installer stops at its image check. That predates this work, affects only air-gapped Docker installs on the classic store, and is left for its own change.
+
+**Verified**, in the cloud sandbox and a CentOS Stream 9 test host (systemd 252, Podman 5.8, firewalld) run as a privileged container:
+
+- Rootless, through the installer from a release bundle: account, subordinate IDs, lingering, port threshold, offline image load, secrets, Quadlet units, firewalld, start under the account's systemd manager, and readiness. Rootful (`--rootful`) the same way, under the system manager.
+- Browser sign-in by server name over HTTPS (Secure cookies, `wss://` WebSocket).
+- Restart of the host: systemd started the network, database and JIM with nobody logged in, data kept.
+- Upgrade by replacing the pod file and restarting; `--renew-certificate` (new certificate served); a reinstall (password and CA kept).
+- Backup and restore of the database and keys with the documented commands, and File Connector copies and a rootless host folder mount.
+- Without systemd (Podman 4.9): the installer's rootful fallback, renewal, and an external PostgreSQL server.
+- Docker regression of the refactored installer: bundle install, reinstall keeping the password, the new certificate path.
+
+**Not verified here:** SELinux enforcing, the rootful client address on Podman 5 (measured on 4.9 only), and cgroup v2. The sandbox's hybrid cgroups could run pods under systemd only in the configuration used above (private cgroup namespace, `runc`, cgroup v1), and its kernel has no SELinux. Phase 4's CI job (on a real systemd host with cgroup v2) and the RHEL acceptance run cover them. The Ansible page follows the role's documented example and has not been run (D12).
+
+**Measured, and open:** rootless networking hides the client's address on both Podman 4.9 (slirp4netns) and 5.8 (pasta): JIM recorded one internal address for a client in another network namespace, where rootful recorded the client's own. Security audit events and rate limiting of unauthenticated requests therefore cannot tell rootless clients apart. The documentation says so and recommends rootful where that matters; whether rootless stays the default is for the product owner.
 
 ### Phase 4: Proof in CI
 

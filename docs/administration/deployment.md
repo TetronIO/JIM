@@ -4,7 +4,7 @@ title: Deployment
 
 # Deployment Guide
 
-This guide covers deploying JIM to a production environment, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, HTTPS certificates, and operational guidance.
+This guide covers deploying JIM to a production environment, with Docker or Podman, including prerequisites, architecture, installation procedures for both connected and air-gapped environments, HTTPS certificates, and operational guidance. For what is particular to Podman, including operating a rootless installation, see [Running on Podman](podman.md).
 
 !!! tip "Quick Start"
     The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes. This page covers production hardening, certificates, reverse proxies, upgrades, and operational best practices.
@@ -46,13 +46,13 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 
 ### Software Requirements
 
-- **Docker Engine** 24.0+ with **Docker Compose** v2.24+
+- **Docker Engine** 24.0+ with **Docker Compose** v2.24+, or **Podman** 4.4+ with systemd (RHEL 9 and 10 include Podman 5; see [Running on Podman](podman.md))
 - **OpenSSL**, to create or check JIM's HTTPS certificate (part of every mainstream Linux distribution's base install)
 - **An OIDC identity provider** (e.g. Entra ID, Keycloak, AD FS) -- see [SSO Setup](sso-setup.md)
 
 ### Network Requirements
 
-JIM's services communicate internally over a Docker bridge network (`jim-network`). The only port that needs to be exposed externally is the HTTPS port on `jim.web` (container port `8443`), which the production compose file publishes on host port `443`.
+JIM's services communicate internally over a private container network (`jim-network` on Docker, `jim` on Podman). The only port that needs to be exposed externally is the HTTPS port on `jim.web` (container port `8443`), which the installation publishes on host port `443`.
 
 | Direction | Port                                                  | Purpose                                        |
 |-----------|-------------------------------------------------------|------------------------------------------------|
@@ -65,7 +65,7 @@ In air-gapped environments, no outbound connectivity is required after initial d
 
 ## Architecture Overview
 
-JIM runs as a Docker Compose stack with four services:
+JIM runs as four services: a Docker Compose stack on Docker, or two pods on Podman (see [How JIM Runs on Podman](podman.md#how-jim-runs-on-podman)).
 
 --8<-- "assets/diagrams/deployment-stack.svg"
 
@@ -78,7 +78,9 @@ JIM runs as a Docker Compose stack with four services:
 | **jim.scheduler**  | Triggers synchronisation runs on cron or interval schedules                           |
 | **jim.database**   | PostgreSQL 18 (optional bundled container)                                            |
 
-### Docker Volumes
+On Podman, the containers are named `jim-web`, `jim-worker`, `jim-scheduler` and `jim-database-postgres`.
+
+### Volumes
 
 | Volume             | Purpose                          |
 |--------------------|----------------------------------|
@@ -93,10 +95,10 @@ JIM runs as a Docker Compose stack with four services:
 
 |                    | Bundled                                       | External                                    |
 |--------------------|-----------------------------------------------|---------------------------------------------|
-| **Setup**          | Automatic -- included in Docker stack         | You manage PostgreSQL separately            |
-| **Started with**   | `--profile with-db` flag                      | No profile flag needed                      |
+| **Setup**          | Automatic -- included in the installation     | You manage PostgreSQL separately            |
+| **Started with**   | `--profile with-db` (Docker), or the `jim-database` pod (Podman) | JIM alone                |
 | **Best for**       | Evaluations, small deployments                | Production, existing DBA team               |
-| **Backup**         | Docker volume snapshots                       | Your existing DB backup tooling             |
+| **Backup**         | Volume snapshots                              | Your existing DB backup tooling             |
 | **Tuning**         | Default settings in compose file              | Full control                                |
 
 !!! tip
@@ -141,11 +143,26 @@ less setup.sh
 sudo bash setup.sh
 ```
 
-The installer downloads the latest release and installs it in `/opt/jim`; see [What the Installer Does](#what-the-installer-does). Then carry on at [After Installing](#after-installing).
+The installer uses Docker or Podman, whichever the server has. Where both are installed it asks which; to name one, pass `--runtime`:
+
+```bash
+curl -fsSL https://junctional.io/get | sudo bash -s -- --runtime podman
+```
+
+It downloads the latest release and installs it in `/opt/jim`; see [What the Installer Does](#what-the-installer-does). Then carry on at [After Installing](#after-installing).
 
 ### By Hand
 
-As root:
+On Podman, follow [Installing by Hand](podman.md#installing-by-hand), with the Podman files from the latest release:
+
+```bash
+mkdir -p jim-podman && cd jim-podman
+for f in jim.yaml jim-database.yaml jim-config.yaml jim-secrets.yaml jim.network jim.kube jim-database.kube; do
+  curl -fsSLO "https://github.com/TetronIO/JIM/releases/latest/download/$f"
+done
+```
+
+On Docker, as root:
 
 ```bash
 mkdir -p /opt/jim/tls && chmod 700 /opt/jim/tls && cd /opt/jim
@@ -183,14 +200,20 @@ jim-release-X.Y.Z/
 +-- setup.sh                  # The installer; run inside the bundle, it installs from it
 +-- VERSION                   # The JIM version the bundle installs
 +-- docker-images/
-|   +-- jim-web.tar           # Docker image for web/API service
-|   +-- jim-worker.tar        # Docker image for worker service
-|   +-- jim-scheduler.tar     # Docker image for scheduler service
+|   +-- jim-web.tar           # Image for the web/API service (Docker and Podman both load these)
+|   +-- jim-worker.tar        # Image for the worker service
+|   +-- jim-scheduler.tar     # Image for the scheduler service
 |   +-- postgres-18.tar       # PostgreSQL image (if included)
 +-- compose/
 |   +-- docker-compose.yml
 |   +-- docker-compose.production.yml
 |   +-- .env.example
++-- podman/
+|   +-- jim.yaml              # The JIM pod
+|   +-- jim-database.yaml     # The bundled PostgreSQL pod
+|   +-- jim-config.yaml       # Settings template
+|   +-- jim-secrets.yaml      # Secrets template
+|   +-- quadlet/              # systemd units: jim.kube, jim-database.kube, jim.network
 +-- powershell/
 |   +-- JIM/                  # PowerShell module directory
 +-- docs/
@@ -215,11 +238,13 @@ sha256sum -c checksums.sha256
 sudo ./setup.sh
 ```
 
-Run inside the bundle, the installer loads JIM's images from it and starts JIM without trying the internet; otherwise it works exactly as it does connected (see [What the Installer Does](#what-the-installer-does)). Then carry on at [After Installing](#after-installing).
+Run inside the bundle, the installer loads JIM's images from it and starts JIM without trying the internet; otherwise it works exactly as it does connected, on Docker or Podman (see [What the Installer Does](#what-the-installer-does)). Then carry on at [After Installing](#after-installing).
 
 ### By Hand
 
-As root, in the extracted bundle:
+On Podman, follow [Installing by Hand](podman.md#installing-by-hand), with the files in the bundle's `podman` folder and the images in its `docker-images` folder.
+
+On Docker, as root, in the extracted bundle:
 
 ```bash
 for f in docker-images/*.tar; do docker load -i "$f"; done
@@ -244,7 +269,7 @@ Then carry on at [After Installing](#after-installing).
 
 ## What the Installer Does
 
-`setup.sh` installs JIM in `/opt/jim` (or `./jim` when not run as root) and asks, in turn:
+`setup.sh` installs JIM on Docker or Podman, whichever the server has, asking which where both are installed (or pass `--runtime docker` or `--runtime podman`). It installs in `/opt/jim` (or `./jim` when not run as root) and asks, in turn:
 
 1. **Database**: the bundled PostgreSQL, whose password it generates, or your own server
 2. **Identity provider**: the settings from your client registration
@@ -252,14 +277,18 @@ Then carry on at [After Installing](#after-installing).
 4. **Certificate**: one it creates, from a certificate authority of its own, or your organisation's certificate and key, which it checks before installing (see [TLS and Reverse Proxy](#tls-and-reverse-proxy))
 5. **Reverse proxy or load balancer**: whether one sits in front of JIM, and if so its address, so that JIM trusts it to report each client's address
 
-It keeps `.env`, which holds the database password and your identity provider's client secret, readable by root only. It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do; if JIM is not ready within ten minutes, it says so and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
+On Docker, it keeps `.env`, which holds the database password and your identity provider's client secret, readable by root only.
+
+On Podman, run as root, it runs JIM rootless under a dedicated account named `jim`, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; pass `--rootful` to run JIM as root instead, and read [Rootless or Rootful](podman.md#rootless-or-rootful) before choosing. It writes your settings to `jim-config.yaml` and stores the secrets in Podman's secret store, installs the systemd units, lets rootless containers use port 443, and offers to open the port in firewalld.
+
+It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do; if JIM is not ready within ten minutes, it says so and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
 
 ```bash
 sudo /opt/jim/setup.sh --renew-certificate   # a certificate the installer created, before it expires
 sudo /opt/jim/setup.sh --certificate         # change its names, or move to your organisation's certificate
 ```
 
-For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them. Running the installer again on an existing installation asks before replacing its configuration.
+For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them. Running the installer again on an existing installation asks before replacing its configuration, and keeps the bundled database's password, which the database was created with.
 
 ---
 
@@ -270,12 +299,23 @@ For automation, every question can be answered in advance with an environment va
 
 JIM prepares its database on first start, with no manual step, and does not serve requests until that has finished. The installer waits for it; after a manual start, `jim.web` shows as `healthy` once JIM is ready:
 
-```bash
-cd /opt/jim
-docker compose -f docker-compose.yml -f docker-compose.production.yml ps jim.web
-```
+=== "Docker"
 
-If it stays unhealthy, the worker's log names the problem, for example a database permission it lacks: `docker compose -f docker-compose.yml -f docker-compose.production.yml logs jim.worker`.
+    ```bash
+    cd /opt/jim
+    docker compose -f docker-compose.yml -f docker-compose.production.yml ps jim.web
+    ```
+
+    If it stays unhealthy, the worker's log names the problem, for example a database permission it lacks: `docker compose -f docker-compose.yml -f docker-compose.production.yml logs jim.worker`.
+
+=== "Podman"
+
+    ```bash
+    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
+    jim-podman healthcheck run jim-web && echo "JIM is ready"
+    ```
+
+    If it does not become ready, the worker's log names the problem, for example a database permission it lacks: `jim-podman logs jim-worker`. Installed with `--rootful`, run `podman` as root. [Operating JIM](podman.md#operating-jim) explains the `jim-podman` function.
 
 !!! warning "Always name the compose files"
     Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone, which leaves out the production settings, and silently adds any `docker-compose.override.yml` it finds in the directory.
@@ -286,23 +326,37 @@ The File Connector ships pre-configured to read and write at `/connector-files` 
 
 To put files in or pull them out:
 
-```bash
-# Push an import file into the volume
-docker cp ./Users.csv jim.worker:/connector-files/Users.csv
+=== "Docker"
 
-# Pull an exported file out
-docker cp jim.worker:/connector-files/Exports.csv ./Exports.csv
-```
+    ```bash
+    # Push an import file into the volume, as the JIM runtime user, so that JIM can rewrite it later
+    docker exec -i -u app jim.worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
+
+    # Pull an exported file out
+    docker cp jim.worker:/connector-files/Exports.csv ./Exports.csv
+    ```
+
+=== "Podman"
+
+    ```bash
+    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
+
+    # Push an import file into the volume, as the JIM runtime user, so that JIM can rewrite it later
+    jim-podman exec -i jim-worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
+
+    # Pull an exported file out
+    jim-podman cp jim-worker:/connector-files/Exports.csv - | tar -xf -
+    ```
 
 Then configure the File Connector's **File Path** setting as `/connector-files/Users.csv`.
 
-If you need to integrate with an external system that writes to a fixed network location (e.g. an SMB or NFS share), bind-mount that path over a subdirectory of `/connector-files`. See the [JIM File Connector documentation](../connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths.
+If you need to integrate with an external system that writes to a fixed network location (e.g. an SMB or NFS share), bind-mount that path over a subdirectory of `/connector-files`. See the [JIM File Connector documentation](../connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths, and what differs on Podman.
 
 ---
 
 ## TLS and Reverse Proxy
 
-JIM serves HTTPS itself. In production, `jim.web` listens for HTTPS on container port `8443`, which `docker-compose.production.yml` publishes on the standard HTTPS port, 443, so a fresh install can be signed into from any machine at `https://jim.example.com` with no reverse proxy.
+JIM serves HTTPS itself, on both runtimes. In production, `jim.web` listens for HTTPS on container port `8443`, which the installation publishes on the standard HTTPS port, 443, so a fresh install can be signed into from any machine at `https://jim.example.com` with no reverse proxy.
 
 !!! warning "Browsers on other machines must use HTTPS"
     JIM's sign-in cookies are HTTPS-only in a production deployment, and browsers discard HTTPS-only cookies sent over plain HTTP to any address other than `localhost`. Over plain HTTP from another machine, sign-in never completes: JIM stops it on a **Sign-in could not complete** page rather than send the browser back to your identity provider again (see [Troubleshooting](troubleshooting.md#sign-in-loops-between-jim-and-the-identity-provider)).
@@ -319,6 +373,8 @@ JIM reads its certificate and private key from two PEM files in the `tls` folder
 The certificate must name, as subject alternative names, every DNS name and IP address users and tools reach JIM at, including the name a reverse proxy uses to connect to it. JIM accepts TLS 1.2 and 1.3.
 
 Docker mounts both files into `jim.web` read-only, keeping their owner and mode, and JIM runs with every capability dropped: if the key does not belong to UID `1654`, `jim.web` cannot read it and fails to start. Until both files exist, `docker compose up` stops with an error naming the missing file.
+
+Podman reads the pair from the Podman secret `jim-tls` instead, which the installer stores from these files, so on Podman the key stays readable by root only and needs no change of owner. Installing by hand, store it as [Installing by Hand](podman.md#installing-by-hand) describes.
 
 The installer asks which of these two ways to provide them, and puts them in place:
 
@@ -377,7 +433,7 @@ JIM sends browsers an HSTS header, which tells them to refuse plain HTTP and cer
 openssl x509 -in /opt/jim/tls/tls.crt -noout -enddate
 ```
 
-- **A certificate the installer created**<br /> Run the installation's copy of the installer. It issues a new certificate from the same certificate authority, for the same names, and restarts `jim.web`; browsers that trust the CA carry on without a warning.
+- **A certificate the installer created**<br /> Run the installation's copy of the installer. It issues a new certificate from the same certificate authority, for the same names, and restarts `jim.web` (on Podman, the whole JIM pod, so do it outside a synchronisation run); browsers that trust the CA carry on without a warning.
 
     ```bash
     sudo /opt/jim/setup.sh --renew-certificate
@@ -393,9 +449,9 @@ To install a renewed certificate from your CA, move to your organisation's certi
 sudo /opt/jim/setup.sh --certificate
 ```
 
-It asks the same questions as at install, checks the certificate and key before installing them, and restarts `jim.web`. A created certificate for new names needs a new certificate authority, which you distribute again; the installer says so when it creates one.
+It asks the same questions as at install, checks the certificate and key before installing them, and restarts `jim.web` (on Podman, the whole JIM pod). A created certificate for new names needs a new certificate authority, which you distribute again; the installer says so when it creates one.
 
-To do the same by hand, as root:
+To do the same by hand on Docker, as root:
 
 ```bash
 cd /opt/jim
@@ -404,6 +460,8 @@ cp /path/to/new.key tls/tls.key.new && chmod 400 tls/tls.key.new && chown 1654:1
 mv -f tls/tls.key.new tls/tls.key
 docker compose -f docker-compose.yml -f docker-compose.production.yml restart jim.web
 ```
+
+On Podman, put the new files in `tls/` the same way (no `chown` needed), store them as the `jim-tls` secret again as in [Installing by Hand](podman.md#installing-by-hand), and restart `jim.service`.
 
 When you move away from a certificate the installer created, delete `tls/ca.key`, and remove the JIM certificate authority from the machines that trusted it.
 
@@ -497,7 +555,7 @@ setsebool -P httpd_can_network_connect 1
 
 ### Trusting the Reverse Proxy
 
-Set `JIM_TRUSTED_PROXIES` in `.env` to the address the proxy connects to JIM from, so that JIM reads each client's real IP address, and the original scheme, from the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers. Until you do:
+Set `JIM_TRUSTED_PROXIES` (in `.env` on Docker, `jim-config.yaml` on Podman) to the address the proxy connects to JIM from, so that JIM reads each client's real IP address, and the original scheme, from the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers. Until you do:
 
 - The security audit log and API rate limiting see the proxy's address instead of each client's, so every client shares one rate limit.
 - **With plain HTTP to JIM only:** sign-in fails, because JIM sends your identity provider an `http://` callback address that does not match the `https://` one you registered, and JIM refuses every REST API request that carries a password, because it cannot confirm the connection is encrypted.
@@ -511,7 +569,7 @@ The address to trust depends on where the proxy runs:
     docker network inspect jim-network --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
     ```
 
-    Docker assigns this address when it creates the network, so check it again after anything that removes and recreates the network, such as `docker compose down`.
+    Docker assigns this address when it creates the network, so check it again after anything that removes and recreates the network, such as `docker compose down`. On Podman, a rootful JIM sees the gateway of the `jim` network (`podman network inspect jim`); a rootless JIM sees every client at one internal address, so do not run a rootless JIM behind a proxy that needs `JIM_TRUSTED_PROXIES` (see [Rootless or Rootful](podman.md#rootless-or-rootful)).
 
 For example:
 
@@ -545,7 +603,7 @@ Add `-f docker-compose.local-proxy.yml` after the other two files in every `dock
 
 ### Port Mapping
 
-`jim.web` listens for HTTPS on port `8443` inside its container. `docker-compose.production.yml` publishes it on the standard HTTPS port, 443, on every interface, so JIM's address needs no port. The installer asks for the port; to change it afterwards, set `JIM_WEB_PORT` in `.env` and run your `docker compose ... up -d` command again:
+`jim.web` listens for HTTPS on port `8443` inside its container. The installation publishes it on the standard HTTPS port, 443, on every interface, so JIM's address needs no port. The installer asks for the port. To change it afterwards on Podman, edit `PublishPort=` in `jim.kube` (for example `PublishPort=8443:8443`), then reload systemd and restart `jim.service`; on Docker, set `JIM_WEB_PORT` in `.env` and run your `docker compose ... up -d` command again:
 
 ```bash
 JIM_WEB_PORT=8443
@@ -564,8 +622,8 @@ The base `docker-compose.yml` publishes no ports, so a deployment that leaves ou
 !!! note "Use `JIM_WEB_PORT` rather than a `ports` override"
     Docker Compose combines port mappings from every file, so a `ports` entry in an override of your own adds a second mapping instead of replacing the default one, unless it is marked `!override` as in [Plain HTTP for a proxy on the same host](#plain-http-for-a-proxy-on-the-same-host).
 
-!!! note "Rootless Docker and ports below 1024"
-    Docker running rootless cannot publish a port below the kernel's unprivileged-port threshold (1024 by default), which includes 443. The installer checks for this and gives the command that lowers the threshold; alternatively choose a port of 1024 or above.
+!!! note "Rootless Docker or Podman and ports below 1024"
+    A rootless container engine cannot publish a port below the kernel's unprivileged-port threshold (1024 by default), which includes 443. For rootless Podman, the installer lowers the threshold to the port you choose; for rootless Docker, it gives the command that does. Alternatively choose a port of 1024 or above.
 
 ---
 
@@ -583,9 +641,11 @@ The `jim.web` container includes a Docker healthcheck using the readiness endpoi
 
 The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monitoring. Each service writes a heartbeat file periodically during normal operation, and the Docker healthcheck verifies the file is recent. This means `docker compose ps` and orchestrators like Docker Swarm or Kubernetes can detect when a worker or scheduler has stalled, even if the process itself has not exited.
 
+On Podman, the same checks show in `podman ps`, and Podman 5 restarts a service whose check keeps failing; see [Health checks and restarts](podman.md#health-checks-and-restarts).
+
 ### Logging
 
-JIM writes structured logs to the `jim-logs-volume` Docker volume. Configure log level via `.env`:
+JIM writes structured logs to the `jim-logs-volume` volume. Configure log level via `.env` (Docker) or `jim-config.yaml` (Podman):
 
 ```text
 JIM_LOG_LEVEL=Information
@@ -593,16 +653,30 @@ JIM_LOG_LEVEL=Information
 
 Valid levels: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal`.
 
-View logs with Docker Compose:
+View logs with Docker Compose, or with Podman as the account that runs JIM:
 
-```bash
-# Follow all service logs
-docker compose -f docker-compose.yml -f docker-compose.production.yml logs -f
+=== "Docker"
 
-# View recent logs for a specific service
-docker compose -f docker-compose.yml -f docker-compose.production.yml \
-  logs jim.web --tail=100
-```
+    ```bash
+    # Follow all service logs
+    docker compose -f docker-compose.yml -f docker-compose.production.yml logs -f
+
+    # View recent logs for a specific service
+    docker compose -f docker-compose.yml -f docker-compose.production.yml \
+      logs jim.web --tail=100
+    ```
+
+=== "Podman"
+
+    ```bash
+    jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/$(id -u jim) podman "$@"); }
+
+    # Follow a service's logs
+    jim-podman logs -f jim-web
+
+    # View recent logs for a specific service
+    jim-podman logs --tail=100 jim-worker
+    ```
 
 JIM also includes a Logs page in the web UI for viewing application and database logs.
 
@@ -697,7 +771,7 @@ Use this checklist before going live:
 - [ ] Log level set appropriately (`Information` for production)
 - [ ] Health endpoint monitored by your alerting system
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
-- [ ] Docker restart policy is `unless-stopped` (set by production override)
+- [ ] Docker restart policy is `unless-stopped` (set by production override), or on Podman, `jim.service` starts at boot (`systemctl --user -M jim@ is-enabled jim.service` reports `generated`)
 - [ ] Upgrade procedure documented and tested in staging (see [Upgrading](upgrading.md))
 - [ ] PowerShell module installed and connected (if using automation/IDaC)
 
@@ -705,12 +779,12 @@ Use this checklist before going live:
 
 For air-gapped deployments, also verify:
 
-- [ ] All Docker images loaded successfully (`docker images | grep jim`)
+- [ ] All images loaded successfully (`docker images | grep jim`, or on Podman `podman images` as the account that runs JIM)
 - [ ] PostgreSQL is accessible and the database has been set up
 - [ ] SSO/OIDC identity provider is accessible from JIM server
 - [ ] DNS resolves JIM server name correctly
 - [ ] JIM's certificate is valid for its name and trusted by users' browsers
-- [ ] Firewall allows inbound traffic to JIM's HTTPS port only (443 by default, or your reverse proxy's port). The bundled PostgreSQL container publishes no host port; the database is reached only over the internal `jim-network` bridge
+- [ ] Firewall allows inbound traffic to JIM's HTTPS port only (443 by default, or your reverse proxy's port). The bundled PostgreSQL container publishes no host port; the database is reached only over the internal container network
 - [ ] *If using an external PostgreSQL server:* the JIM host can reach it on 5432 (outbound, allowed on the database server's firewall)
 - [ ] File connector volumes mounted (if using File Connector)
 - [ ] Encryption key set backed up and included in the offline backup routine (see [Backup & Disaster Recovery](backup-recovery.md))
