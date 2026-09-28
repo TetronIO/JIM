@@ -1869,6 +1869,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var result = connectedSystemObjectIds
+            .Where(csoId => _pendingExportsByCsoId.TryGetValue(csoId, out var peId) && _pendingExports.ContainsKey(peId))
+            .ToHashSet();
+        return Task.FromResult(result);
+    }
+
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
         var result = new HashSet<Guid>();

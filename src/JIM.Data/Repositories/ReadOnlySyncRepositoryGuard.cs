@@ -225,6 +225,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => _inner.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
 
+    /// <inheritdoc />
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsWithPendingExportsAsync(connectedSystemObjectIds);
+
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _inner.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 

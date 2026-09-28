@@ -285,6 +285,19 @@ public interface ISyncEngine
         List<PendingExportAttributeValueChange> newChanges);
 
     /// <summary>
+    /// Withdraws the changes staged on a Pending Export that an export evaluation has just found unnecessary,
+    /// because the target already holds what the evaluation's skipped (no-net-change) changes would set: the same
+    /// supersede rule as <see cref="MergeAttributeChangesIntoPendingExport"/>, applied when the answer for an
+    /// attribute is "no change". A change already sent and awaiting confirmation is kept. Pure in-memory mutation.
+    /// </summary>
+    /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
+    /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
+    /// <returns>How many staged changes were withdrawn.</returns>
+    int WithdrawChangesAlreadyCurrent(
+        PendingExport stagedPendingExport,
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges);
+
+    /// <summary>
     /// Creates the Pending Export attribute value changes an export Synchronisation Rule's Attribute Flow
     /// mappings produce for a Metaverse Object change (the outbound delta computation, #288 extraction):
     /// Create operations carry all mapped attributes, Update operations only what changed, with optional

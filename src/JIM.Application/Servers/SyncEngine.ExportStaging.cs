@@ -288,6 +288,41 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Withdraws the changes staged on <paramref name="stagedPendingExport"/> that an export evaluation has just
+    /// found unnecessary: <paramref name="alreadyCurrentChanges"/> are the changes the evaluation skipped because the
+    /// target Connected System Object already holds what they would set (no-net-change detection, #244). The
+    /// Metaverse and the target already agree on those, so any change still queued for the same attribute (or,
+    /// for a multi-valued attribute, the same value) no longer reflects the Metaverse and must not be exported:
+    /// a staged "set B" when the Metaverse has returned to the "A" the target holds, a staged clear when another
+    /// source has since supplied the value the target holds, a staged "remove cn=alice" when the Metaverse wants
+    /// cn=alice again. It is the same supersede rule <see cref="MergeAttributeChangesIntoPendingExport"/> applies to
+    /// a newly evaluated change (merge keys, and #1199's whole-attribute rule), applied when the evaluation's answer
+    /// for the attribute is "no change". A change already sent and awaiting its confirming import is kept: it is
+    /// the confirmation of what the target now holds. Mutates in place; returns how many staged changes were
+    /// withdrawn.
+    /// </summary>
+    public int WithdrawChangesAlreadyCurrent(
+        PendingExport stagedPendingExport,
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges)
+    {
+        ArgumentNullException.ThrowIfNull(stagedPendingExport);
+        ArgumentNullException.ThrowIfNull(alreadyCurrentChanges);
+
+        if (alreadyCurrentChanges.Count == 0 || stagedPendingExport.AttributeValueChanges.Count == 0)
+            return 0;
+
+        var survivors = SelectSurvivingDriftChanges([], stagedPendingExport.AttributeValueChanges, alreadyCurrentChanges);
+        if (survivors.Count == stagedPendingExport.AttributeValueChanges.Count)
+            return 0;
+
+        var withdrawn = stagedPendingExport.AttributeValueChanges.Except(survivors).ToList();
+        foreach (var change in withdrawn)
+            stagedPendingExport.AttributeValueChanges.Remove(change);
+
+        return withdrawn.Count;
+    }
+
+    /// <summary>
     /// Creates PendingExportAttributeValueChange objects based on export rule mappings.
     /// Maps MVO attributes → CSO attributes.
     /// For export rules:
@@ -1221,10 +1256,15 @@ public partial class SyncEngine
     /// </summary>
     /// <param name="incomingChanges">The newly evaluated export changes, which take precedence.</param>
     /// <param name="existingChanges">The changes already staged on the Pending Export being merged into.</param>
+    /// <param name="alreadyCurrentChanges">The changes the same evaluation skipped because the target already holds
+    /// what they would set (no-net-change detection). They supersede a staged change exactly as an incoming change
+    /// does, except one already sent and awaiting confirmation: the Metaverse and the target already agree, so a
+    /// queued change for the same attribute (or value) is stale. See <see cref="WithdrawChangesAlreadyCurrent"/>.</param>
     /// <returns>The existing changes that are not superseded, in their original order.</returns>
     internal static List<PendingExportAttributeValueChange> SelectSurvivingDriftChanges(
         IReadOnlyCollection<PendingExportAttributeValueChange> incomingChanges,
-        IEnumerable<PendingExportAttributeValueChange> existingChanges)
+        IEnumerable<PendingExportAttributeValueChange> existingChanges,
+        IReadOnlyCollection<PendingExportAttributeValueChange>? alreadyCurrentChanges = null)
     {
         ArgumentNullException.ThrowIfNull(incomingChanges);
         ArgumentNullException.ThrowIfNull(existingChanges);
@@ -1232,10 +1272,23 @@ public partial class SyncEngine
         var incomingKeys = incomingChanges.Select(GetAttributeChangeMergeKey).ToHashSet();
         var wholeAttributeReplacementIds = GetWholeAttributeReplacementAttributeIds(incomingChanges);
 
-        return existingChanges
+        var survivors = existingChanges
             .Where(existing => !incomingKeys.Contains(GetAttributeChangeMergeKey(existing)))
-            .Where(existing => !wholeAttributeReplacementIds.Contains(existing.AttributeId))
-            .ToList();
+            .Where(existing => !wholeAttributeReplacementIds.Contains(existing.AttributeId));
+
+        if (alreadyCurrentChanges is { Count: > 0 })
+        {
+            // A change already sent and awaiting its confirming import is left alone: it is what the target has
+            // just been told to hold (and, applied optimistically, what JIM already records it as holding), so
+            // it is the confirmation of that change, not a stale instruction.
+            var currentKeys = alreadyCurrentChanges.Select(GetAttributeChangeMergeKey).ToHashSet();
+            var wholeAttributeCurrentIds = GetWholeAttributeReplacementAttributeIds(alreadyCurrentChanges);
+            survivors = survivors.Where(existing =>
+                existing.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                (!currentKeys.Contains(GetAttributeChangeMergeKey(existing)) && !wholeAttributeCurrentIds.Contains(existing.AttributeId)));
+        }
+
+        return survivors.ToList();
     }
 
     /// <summary>
