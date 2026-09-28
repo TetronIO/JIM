@@ -40,11 +40,11 @@
       },
       "Moq": {
         "type": "Direct",
-        "requested": "[4.21.0, )",
-        "resolved": "4.21.0",
-        "contentHash": "HUjrhhzEJ/AfbSBCnR8lPkpveVGpV/dNuOlnpfqBNTME93izly1CRV4N5zBySqz4m2yCRlHLPy/PnPzYokbwIg==",
+        "requested": "[4.20.72, )",
+        "resolved": "4.20.72",
+        "contentHash": "EA55cjyNn8eTNWrgrdZJH5QLFp2L43oxl1tlkoYUKIE9pRwL784OWiTXeCV5ApS+AMYEAlt7Fo03A2XfouvHmQ==",
         "dependencies": {
-          "Castle.Core": "5.2.1"
+          "Castle.Core": "5.1.1"
         }
       },
       "NUnit": {
@@ -120,8 +120,8 @@
       },
       "Castle.Core": {
         "type": "Transitive",
-        "resolved": "5.2.1",
-        "contentHash": "wHARzQA695jwwKreOzNsq54KiGqKP38tv8hi8e2FXDEC/sA6BtrX90tVPDkOfVu13PbEzr00TCV8coikl+D1Iw==",
+        "resolved": "5.1.1",
+        "contentHash": "rpYtIczkzGpf+EkZgDr9CClTdemhsrwA/W5hMoPjLkRFnXzH44zDLoovXeKtmxb1ykXK9aJVODSpiJml8CTw2g==",
         "dependencies": {
           "System.Diagnostics.EventLog": "6.0.0"
         }
@@ -133,8 +133,8 @@
       },
       "DynamicExpresso.Core": {
         "type": "Transitive",
-        "resolved": "2.19.5",
-        "contentHash": "YusirfwxsmkxKLyTTb4deXq0nMs/r6qLWik6pFQtwti1RqlLjpFyewABiUKAlmS7uPdmZO5RZZsv42BBz7prvQ=="
+        "resolved": "2.19.6",
+        "contentHash": "xZHcSToy6c3111kiRcBZkkoEKpqDm6Td9q1VVCT2oEcFuGBH4c+Rf7iL3o1uvJByBh9hXwW2HiPvLXNhlF2qkA=="
       },
       "Humanizer.Core": {
         "type": "Transitive",
@@ -894,7 +894,7 @@
       "jim.application": {
         "type": "Project",
         "dependencies": {
-          "DynamicExpresso.Core": "[2.19.5, )",
+          "DynamicExpresso.Core": "[2.19.6, )",
           "JIM.Connectors": "[0.15.0, )",
           "JIM.Data": "[0.15.0, )",
           "JIM.Models": "[0.15.0, )",
