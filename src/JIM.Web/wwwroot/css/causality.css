@@ -1390,7 +1390,6 @@
     background: color-mix(in srgb, var(--tone) 12%, transparent);
     color: var(--tone-text, var(--tone));
     font-size: 0.8125rem;
-    font-weight: var(--jim-chip-font-weight);
     white-space: nowrap;
 }
 
