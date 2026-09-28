@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Created:** 2026-09-27
 - **Author:** Jay
-- **Issue:** to be created; parent [#518](https://github.com/TetronIO/JIM/issues/518) (release gate)
+- **Issue:** [#1853](https://github.com/TetronIO/JIM/issues/1853) (sub-issue of [#518](https://github.com/TetronIO/JIM/issues/518), the release gate)
 
 ## Problem Statement
 
