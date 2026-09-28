@@ -90,15 +90,24 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 
 2. **Stop the services** and **take your backup**, as in steps 1 and 2 above.
 
-3. **Load the new images:**
+3. **Load the new images**, PostgreSQL's included: a release can move the bundled database to a newer PostgreSQL 18 image, and its compose file then names that image, which only the bundle can supply.
 
     ```bash
-    docker load -i docker-images/jim-web.tar
-    docker load -i docker-images/jim-worker.tar
-    docker load -i docker-images/jim-scheduler.tar
+    for f in docker-images/*.tar; do docker load -i "$f"; done
     ```
 
 4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables. Copy the bundle's `setup.sh` over the installation's copy (`/opt/jim/setup.sh` by default), so that looking after JIM uses the new release's installer.
+
+    If your `.env` sets `JIM_DB_IMAGE` (the installer sets it on Docker's classic image store, which cannot find the bundled PostgreSQL by its pinned digest), point it at the new bundle's PostgreSQL image, after checking that image's ID is the one the bundle records. Otherwise JIM carries on running the previous release's PostgreSQL.
+
+    ```bash
+    # In the extracted bundle
+    image=$(docker load -i docker-images/postgres-18.tar | sed -n 's/^Loaded image: //p')
+    id=$(docker image inspect -f '{{.Id}}' "$image")
+    grep -qxF "$id" docker-images/postgres-18.image-ids \
+      && sed -i "s|^JIM_DB_IMAGE=.*|JIM_DB_IMAGE=$id|" /opt/jim/.env \
+      || echo "Not the PostgreSQL image this bundle ships: check it with sha256sum -c checksums.sha256"
+    ```
 
 5. **Pin the new version** in `.env` (`JIM_VERSION=0.14.0`) and start the services, using the same `-f` files and `--profile` flags you deployed with:
 
