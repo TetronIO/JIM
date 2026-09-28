@@ -17,8 +17,10 @@
 }
 else if (IsLoaded && Connections.Count == 0)
 {
-    <TableEmptyState Icon="@Icons.Material.Filled.Hub"
-                     PrimaryText="This Metaverse Object has no Connected System Objects joined to it." />
+    <MudPaper Outlined="true" Elevation="0">
+        <TableEmptyState Icon="@Icons.Material.Filled.Hub"
+                         PrimaryText="This Metaverse Object has no Connected System Objects joined to it." />
+    </MudPaper>
 }
 else if (IsLoaded)
 {
