@@ -1948,6 +1948,17 @@ try {
             $confirmSync = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $confirmSync.activityId -Name "LeaverCohort Target Confirming Sync"
 
+            # Step 7.9b: the Confirming Delta Sync must have processed every deleted cohort account. The Confirming
+            # Import marks each one Obsolete; the Delta Sync tears them down. An Obsolete leftover means Delta Sync
+            # skipped it, and its watermark has now moved past it, so only a Full Sync would ever clean it up. This
+            # is how OFFSET paging over the shrinking modified set went unnoticed: at Scale200k10kGroups 1,000 of the
+            # 2,000 obsolete accounts were skipped (every other page) while every other assertion here passed.
+            $obsoleteLeftovers = @(Get-JIMConnectedSystemObject -ConnectedSystemId $targetSystem.id -Status Obsolete -All)
+            if ($obsoleteLeftovers.Count -gt 0) {
+                throw "LeaverCohort failed: $($obsoleteLeftovers.Count) Target Connected System Object(s) are still Obsolete after the Confirming Delta Sync; Delta Sync skipped them."
+            }
+            Write-Host "  ✓ No Obsolete Target objects remain after the Confirming Delta Sync" -ForegroundColor Green
+
             # Step 7.10: Assert the Target directory end state.
             Write-Host "  Validating Target directory end state..." -ForegroundColor Gray
             $validationFailures = [System.Collections.Generic.List[string]]::new()

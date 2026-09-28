@@ -1586,7 +1586,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         DateTime modifiedSince,
         int page,
         int pageSize,
-        int? knownTotalCount = null)
+        int? knownTotalCount = null,
+        Guid? afterId = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1625,8 +1626,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                   (cso.Created > modifiedSince ||
                                    (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
 
+        // Keyset cursor (see ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync): delta sync deletes each
+        // page's obsolete CSOs at the page boundary, so an OFFSET into the shrinking modified set skips rows. The
+        // cursor must be the last row of the previous page exactly as returned; Guid.CompareTo translates to the
+        // native uuid comparison, matching the ORDER BY above.
         var offset = (page - 1) * pageSize;
-        var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
+        var afterIdValue = afterId ?? Guid.Empty;
+        var pagedCsoQuery = afterId.HasValue
+            ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
+            : csoQuery.Skip(offset).Take(pageSize);
 
         var results = await pagedCsoQuery.ToListAsync();
         await PopulateReferenceValuesAsync(results);

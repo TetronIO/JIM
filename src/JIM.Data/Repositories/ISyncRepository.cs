@@ -75,7 +75,12 @@ public interface ISyncRepository
     /// </summary>
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
     /// for paging metadata.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null);
+    /// <param name="afterId">Keyset cursor, as for <see cref="GetConnectedSystemObjectsAsync"/>: returns the page
+    /// of modified CSOs whose ID sorts after this value instead of using OFFSET. Delta sync must pass it, because
+    /// each page boundary deletes that page's obsolete CSOs; the modified set shrinks under an OFFSET, which then
+    /// skips the rows that moved up into the gap (every other page, when a whole page is deleted). Null behaves
+    /// as the offset-based page requested via <paramref name="page"/>.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null);
 
     /// <summary>
     /// Gets a single CSO by ID with full attribute values.
