@@ -9,12 +9,12 @@ Before deploying JIM, ensure you have the following in place.
 
 ## Container Runtime
 
-JIM runs as a Docker stack. You will need:
+JIM runs in containers, on either of two runtimes. You will need one of:
 
-- **Docker Engine** (20.10 or later recommended)
-- **Docker Compose v2**
+- **Docker Engine** 24.0 or later, with **Docker Compose** v2.24 or later
+- **Podman** 4.4 or later, with systemd: the container engine Red Hat ships and supports on RHEL, including RHEL 9 and 10 (see [Running on Podman](../administration/podman.md))
 
-Both Docker Desktop and standalone Docker Engine are supported. JIM runs on Linux, macOS, and Windows hosts.
+A production server runs Linux. For evaluation, Docker Desktop also runs JIM on macOS and Windows.
 
 ## Identity Provider
 
@@ -44,7 +44,7 @@ As a general guideline, JIM's resource requirements are modest. A small deployme
 
 JIM uses PostgreSQL as its database. You have two options:
 
-- **Bundled PostgreSQL:** A PostgreSQL container is included in the Docker Compose stack for simple deployments. No additional setup is required.
+- **Bundled PostgreSQL:** A PostgreSQL container is included with JIM, on Docker or Podman, for simple deployments. No additional setup is required.
 - **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable. Port 5432 is assumed; where your server listens elsewhere, append the port to the hostname (`db.example.org:5433`).
 
 ## For Developers

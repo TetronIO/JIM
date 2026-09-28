@@ -1,0 +1,19 @@
+# JIM on Podman: the systemd unit that runs the bundled PostgreSQL database (optional)
+#
+# A Quadlet unit. From it, systemd generates jim-database.service. Installed only when JIM uses the bundled
+# database, alongside jim.kube.
+
+[Unit]
+Description=JIM database (PostgreSQL)
+
+[Kube]
+Yaml=/opt/jim/jim-database.yaml
+ConfigMap=/opt/jim/jim-config.yaml
+Network=jim.network
+
+[Service]
+# The first start after an install or upgrade may download PostgreSQL's image.
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

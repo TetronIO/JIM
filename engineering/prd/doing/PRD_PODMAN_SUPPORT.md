@@ -1,6 +1,6 @@
 # Podman Support
 
-- **Status:** Doing (plan Phases 1 and 2 complete: start-up and cleanup, and HTTPS by default on Docker)
+- **Status:** Doing (plan Phases 1 to 3 complete: start-up and cleanup, HTTPS by default, and the Podman path; Phase 4, proof in CI, remains)
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
@@ -113,7 +113,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 **Given**: a Fedora or RHEL host with Podman but no Docker
 **When**: the administrator runs `setup.sh`
-**Then**: the script detects Podman, asks the same configuration questions as on Docker, installs and starts the Podman definition (rootless under a dedicated `jim` account by default, per plan D5), and prints JIM's address, instead of stopping with "Docker is required"
+**Then**: the script detects Podman, asks the same configuration questions as on Docker, installs and starts the Podman definition (rootful by default, or rootless under a dedicated `jim` account with `--rootless`, per plan D5 as amended in Phase 3), and prints JIM's address, instead of stopping with "Docker is required"
 
 ### Scenario 3: Reboot
 
@@ -207,20 +207,20 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 ### Phase 2: Podman path
 
-- [ ] `deploy/podman/` pod file and `.kube` unit boot JIM rootful on RHEL 9 and 10, with the same hardening as Docker
-- [ ] JIM restarts after a reboot under the `.kube` unit
-- [ ] Rootless install verified on a real RHEL host (or explicitly deferred per Open Question 5)
-- [ ] Secrets are not stored in plain text in the pod file
-- [ ] Bundled and external PostgreSQL both work
-- [ ] HTTPS remote sign-in works with a certificate file and behind a reverse proxy
-- [ ] `setup.sh` installs on a Podman-only host and refuses to guess on a host with both runtimes
-- [ ] The release bundle contains the Podman files; an air-gapped install needs nothing else
+- [ ] `deploy/podman/` pod file and `.kube` unit boot JIM rootful on RHEL 9 and 10, with the same hardening as Docker (verified on CentOS Stream 9 with Podman 5.8, and on Podman 4.9; awaiting the RHEL acceptance run)
+- [x] JIM restarts after a reboot under the `.kube` unit
+- [ ] Rootless install verified on a real RHEL host (verified on CentOS Stream 9; awaiting the RHEL acceptance run)
+- [x] Secrets are not stored in plain text in the pod file
+- [x] Bundled and external PostgreSQL both work
+- [x] HTTPS remote sign-in works with a certificate file and behind a reverse proxy (the proxy verified on Docker; a rootless Podman JIM cannot tell a proxy from a client, see the plan's Phase 3)
+- [x] `setup.sh` installs on a Podman-only host and refuses to guess on a host with both runtimes
+- [x] The release bundle contains the Podman files; an air-gapped install needs nothing else
 
 ### Phase 3: verification and documentation
 
 - [ ] CI boots both paths from freshly built images on every pull request and waits for readiness
-- [ ] Every page in the Documentation Impact table updated
-- [ ] Changelog entry for Podman support
+- [x] Every page in the Documentation Impact table updated
+- [x] Changelog entry for Podman support
 
 ## Design decision
 

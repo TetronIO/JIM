@@ -23,15 +23,45 @@ The database is not reachable yet (attempt 5, 18s elapsed): jim.database:5432: N
 
 **How to fix, if it keeps waiting.**
 
-1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag); for an external server, ask whoever runs it.
-2. Check that `JIM_DB_HOSTNAME` in `.env` names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port.
+1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag), or on Podman `jim-database-postgres` in `sudo podman ps` (see [Operating JIM](podman.md#operating-jim)); for an external server, ask whoever runs it.
+2. Check that `JIM_DB_HOSTNAME` in `.env` (on Podman, `jim-config.yaml`) names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port.
 3. For an external server, check that a firewall allows the JIM host to reach it.
 
-A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy starts it again, which begins a fresh five-minute wait.
+A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy, or Podman's, starts it again, which begins a fresh five-minute wait.
 
 ### A service stops with `password authentication failed`
 
 Waiting cannot fix rejected credentials, so the service does not wait for them: it stops straight away, with exit code 1 and PostgreSQL's own error, for example `28P01: password authentication failed for user "jim"`. Check `JIM_DB_USERNAME` and `JIM_DB_PASSWORD` in `.env` against the database server, then start JIM again.
+
+## Podman
+
+The commands here are for the default, rootful installation; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
+
+### `podman ps` shows none of JIM's containers
+
+**What it means.** Each account has its own Podman containers. A rootful JIM's belong to root, so `podman ps` run as yourself sees none of them; a rootless JIM's belong to the `jim` account, so root's Podman sees none either. Nothing is wrong with JIM.
+
+**How to fix.** For a rootful JIM, run Podman as root: `sudo podman ps`. For a rootless one, run it as the `jim` account, with `jim-podman ps` (see [Rootless commands](podman.md#rootless-commands)). Run as root from a folder the account cannot read, such as `/root`, Podman as `jim` fails with `cannot chdir to /root: Permission denied`; the `jim-podman` function starts from the root folder for that reason.
+
+### A rootless JIM stops when you log out, or does not start after a reboot
+
+**What it means.** A rootless JIM runs under its account's own systemd manager, and lingering is not enabled for the account, so that manager, and JIM with it, runs only while the account has a session. The installer enables it; an account set up by hand may lack it. Your data is unaffected.
+
+**How to fix.** As root, `loginctl enable-linger jim`, then start JIM: `sudo systemctl --user -M jim@ start jim.service`.
+
+### A rootless `jim.service` fails with `rootlessport cannot expose privileged port 443`
+
+The full message continues: `you can add 'net.ipv4.ip_unprivileged_port_start=443' to /etc/sysctl.conf (currently 1024), or choose a larger port number (>= 1024)`.
+
+**What it means.** A rootless container cannot publish a port below the kernel's unprivileged-port threshold. The installer lowers it in `/etc/sysctl.d/90-jim.conf`; that file is missing, or something set the threshold back.
+
+**How to fix.** As root: `echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-jim.conf && sysctl --system`, then `sudo systemctl --user -M jim@ restart jim.service`. Or move JIM to a port of 1024 or above (see [Port Mapping](deployment.md#port-mapping)).
+
+### Other machines cannot reach JIM, but it answers on the server itself
+
+**What it means.** A firewall on the server blocks JIM's port: on RHEL, firewalld, until you allow the port.
+
+**How to fix.** `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port). If Docker is installed on the same server as a rootful Podman JIM, the default, Docker's firewall rules also drop the traffic; see [Firewall and SELinux](podman.md#firewall-and-selinux).
 
 ## HTTPS
 
@@ -51,9 +81,9 @@ Docker Compose first warns that a `secret file ... does not exist`, then stops w
 
 **How to fix.** Run the installer's certificate step, which creates a certificate or installs your organisation's: `sudo /opt/jim/setup.sh --certificate` (from an installation made by hand, run the `setup.sh` you downloaded or the one in the release bundle, with `JIM_INSTALL_DIR=/opt/jim`). To place the files yourself instead, see [The certificate](deployment.md#the-certificate). Then run your `docker compose ... up -d` command again.
 
-### `jim.web` keeps restarting with `Access to the path '/run/secrets/jim-tls/tls.key' is denied`
+### `jim.web` keeps restarting with `Access to the path '/run/jim-tls/tls.key' is denied`
 
-The `jim.web` log shows `System.UnauthorizedAccessException: Access to the path '/run/secrets/jim-tls/tls.key' is denied`, and the container restarts again and again.
+The `jim.web` log shows `System.UnauthorizedAccessException: Access to the path '/run/jim-tls/tls.key' is denied`, and the container restarts again and again.
 
 **What it means.** JIM runs as UID `1654` with every capability dropped, and Docker mounts the key with the owner and mode it has on the host, so JIM cannot read a key that belongs to anyone else. The other services, and your data, are unaffected.
 

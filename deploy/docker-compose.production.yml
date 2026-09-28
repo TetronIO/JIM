@@ -22,19 +22,21 @@ services:
       # HTTPS on 8443 for every client. Plain HTTP stays on 8080 for the health check in docker-compose.yml,
       # bound to the container's loopback interface so that nothing outside the container can reach it.
       - ASPNETCORE_URLS=https://+:8443;http://localhost:8080
-      - ASPNETCORE_Kestrel__Certificates__Default__Path=/run/secrets/jim-tls/tls.crt
-      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/run/secrets/jim-tls/tls.key
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/run/jim-tls/tls.crt
+      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/run/jim-tls/tls.key
     # Publish HTTPS on the host, on the standard port so that JIM's address needs none. JIM_WEB_PORT in .env
     # changes the host port, and takes an address prefix to bind one interface only (e.g. 127.0.0.1:8443 behind
     # a reverse proxy on the same host).
     ports:
       - "${JIM_WEB_PORT:-443}:8443"
-    # Compose mounts file-based secrets read-only from the host, keeping the host file's owner and mode.
+    # Compose mounts file-based secrets read-only from the host, keeping the host file's owner and mode. The Podman
+    # pod file mounts the same pair at the same path, which is not under /run/secrets because Podman mounts a
+    # read-only /run/secrets of its own on RHEL and its derivatives.
     secrets:
       - source: jim-tls-certificate
-        target: /run/secrets/jim-tls/tls.crt
+        target: /run/jim-tls/tls.crt
       - source: jim-tls-key
-        target: /run/secrets/jim-tls/tls.key
+        target: /run/jim-tls/tls.key
 
   jim.worker:
     build: !reset null
