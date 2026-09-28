@@ -368,8 +368,14 @@ jobs:
       # the pinned binary directly removes the release-API lookup entirely and
       # lets us own the exit code. See PR #520 and #800.
       #
-      # github.token authenticates the vuln-DB pull from ghcr.io, avoiding the
-      # anonymous rate limit (the one external dependency left on the hot path).
+      # The vuln-DB download is the one external dependency left on the hot path, so
+      # it runs as its own retried phase before the scan, which then reads that DB
+      # with --skip-db-update. Trivy's built-in repository fallback does not cover
+      # every failure: on run 36450669448 mirror.gcr.io answered the manifest but
+      # 404'd a layer, Trivy exited FATAL without trying the next repository, and
+      # main went red on two of three images. GHCR is listed first because
+      # github.token authenticates it (no anonymous rate limit); mirror.gcr.io
+      # stays as the fallback.
       #
       # No severity filter on the scan: we emit every finding to the SARIF and
       # apply our own CVSS-based gate in the next step (more reliable than the
@@ -383,14 +389,42 @@ jobs:
         TRIVY_IMAGE: 'aquasec/trivy:0.70.0@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e'
         IMAGE_REF: ${{ matrix.image_name }}:scan
         GITHUB_TOKEN: ${{ github.token }}
+        DB_REPOSITORIES: 'ghcr.io/aquasecurity/trivy-db:2,mirror.gcr.io/aquasec/trivy-db:2'
       run: |
+        CACHE_DIR="$RUNNER_TEMP/trivy-cache"
+        mkdir -p "$CACHE_DIR"
+
+        for attempt in 1 2 3; do
+          # As the runner's own user, so the runner can empty RUNNER_TEMP afterwards.
+          if docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$CACHE_DIR:/trivy-cache" \
+            -e GITHUB_TOKEN \
+            "$TRIVY_IMAGE" image \
+            --cache-dir /trivy-cache \
+            --db-repository "$DB_REPOSITORIES" \
+            --no-progress \
+            --download-db-only; then
+            break
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            echo "::error title=Trivy DB download failed::Could not download the vulnerability DB after $attempt attempts."
+            exit 1
+          fi
+          echo "::warning title=Trivy DB download failed::Attempt $attempt failed; retrying in $((attempt * 15))s."
+          sleep $((attempt * 15))
+        done
+
         docker run --rm \
           -v /var/run/docker.sock:/var/run/docker.sock \
           -v "$GITHUB_WORKSPACE:/workspace" \
+          -v "$CACHE_DIR:/trivy-cache" \
           -w /workspace \
-          -e GITHUB_TOKEN \
           -e TRIVY_IGNORE_UNFIXED=true \
           "$TRIVY_IMAGE" image \
+          --cache-dir /trivy-cache \
+          --cache-backend memory \
+          --skip-db-update \
           --scanners vuln \
           --format sarif \
           --output trivy-results.sarif \
