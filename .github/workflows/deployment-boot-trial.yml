@@ -14,58 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  diagnose:
-    # TEMPORARY: why a rootful Podman container cannot reach a service on the runner's own address.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-    - name: Use Docker's containerd image store
-      run: |
-        config=/etc/docker/daemon.json
-        current=$(sudo cat "$config" 2>/dev/null || echo '{}')
-        echo "daemon.json before: $current"
-        echo "$current" | jq '.features["containerd-snapshotter"] = true' | sudo tee "$config" > /dev/null
-        sudo systemctl restart docker
-    - name: Start the test identity provider
-      shell: pwsh
-      run: |
-        $authority = ./test/ci/deployment/Start-TestIdentityProvider.ps1
-        "AUTH=$authority" >> $env:GITHUB_ENV
-    - name: Probe remedies
-      run: |
-        set +e
-        py='import socket
-        print("profile:", open("/proc/self/attr/current").read().strip())
-        for fam, name in ((socket.AF_INET, "inet"), (socket.AF_INET6, "inet6")):
-            try:
-                socket.socket(fam, socket.SOCK_STREAM).close(); print(name, "ok")
-            except OSError as e:
-                print(name, e.errno, e.strerror)'
-        img=docker.io/library/python:3.13-alpine
-        hard=(--cap-drop ALL --security-opt no-new-privileges --read-only --user 1654)
-        sudo podman pull -q "$img" >/dev/null
-        run() { label="$1"; shift; echo "== $label"; "$@" python3 -c "$py" 2>&1 | sed 's/^/   /'; }
-        run "rootful, no hardening" sudo podman run --rm "$img"
-        run "rootful, hardened (as JIM)" sudo podman run --rm "${hard[@]}" "$img"
-        cat /etc/apparmor.d/podman
-        echo "--- local overrides: network for crun and podman"
-        echo 'network,' | sudo tee /etc/apparmor.d/local/crun /etc/apparmor.d/local/podman >/dev/null
-        sudo apparmor_parser -r /etc/apparmor.d/crun /etc/apparmor.d/podman && echo reloaded
-        run "rootful, hardened, local overrides" sudo podman run --rm "${hard[@]}" "$img"
-        sudo rm /etc/apparmor.d/local/crun /etc/apparmor.d/local/podman
-        sudo touch /etc/apparmor.d/local/crun /etc/apparmor.d/local/podman
-        sudo apparmor_parser -r /etc/apparmor.d/crun /etc/apparmor.d/podman
-        echo "--- both profiles removed"
-        sudo apparmor_parser -R /etc/apparmor.d/crun /etc/apparmor.d/podman && echo removed
-        run "rootful, hardened, no crun or podman profile" sudo podman run --rm "${hard[@]}" "$img"
-        run "rootful, no hardening, no crun or podman profile" sudo podman run --rm "$img"
-        sudo useradd -m diag && sudo loginctl enable-linger diag && sleep 3
-        uid=$(id -u diag)
-        asdiag=(sudo -u diag env -i PATH=/usr/bin:/bin HOME=/home/diag XDG_RUNTIME_DIR="/run/user/$uid")
-        (cd / && run "rootless, hardened, no crun or podman profile" "${asdiag[@]}" podman run --rm "${hard[@]}" "$img")
-        echo "--- dmesg apparmor"; sudo dmesg | grep -i -E 'apparmor.*DENIED' | tail -6
-
   deployment-boot:
     # Installs JIM the way a customer does, three times over: from a release bundle built from this commit,
     # with the bundle's own setup.sh, offline, on Docker, on rootful Podman and on rootless Podman. Each leg

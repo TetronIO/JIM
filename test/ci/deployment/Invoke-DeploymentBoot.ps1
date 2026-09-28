@@ -251,6 +251,8 @@ try {
         "JIM_SETUP_TLS_NAMES=$hostName"
         'JIM_TRUSTED_PROXIES='
         'JIM_SETUP_OPEN_FIREWALL=false'
+        # On Ubuntu, GitHub's runners among them, the installer must add a network rule to Podman's AppArmor profiles.
+        'JIM_SETUP_FIX_APPARMOR=true'
     )
     $installLog = Join-Path $OutputPath "$leg-install.log"
     $started = Get-Date

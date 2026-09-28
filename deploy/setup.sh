@@ -67,6 +67,8 @@
 #     JIM_SETUP_RUNTIME     - "docker" or "podman", as --runtime (default: the one installed; prompt if both)
 #     JIM_SETUP_PODMAN_ROOTLESS - "true" to run JIM rootless on Podman, as --rootless
 #     JIM_SETUP_PODMAN_ACCOUNT  - The account that runs JIM rootless, with --rootless (default: jim)
+#     JIM_SETUP_FIX_APPARMOR   - "true" or "false": on a host whose AppArmor profiles for Podman stop JIM using
+#                             the network (Ubuntu 24.04), add the rule it needs (default: prompt). Podman only.
 #     JIM_SETUP_OPEN_FIREWALL  - "true" or "false": open the HTTPS port in firewalld, when it is running (default:
 #                             prompt). Podman only.
 
@@ -1033,6 +1035,56 @@ configure_firewall() {
             || fatal "Failed to open port ${port} in firewalld"
         success "Allowed port ${port} in firewalld"
     fi
+}
+
+# Ubuntu 24.04 gives crun and podman AppArmor profiles of their own. A container that sets no-new-privileges, as
+# JIM's do, cannot leave them for its own profile, so AppArmor stacks the two, and the stack allows no network
+# at all: JIM could reach neither its database nor its identity provider. A network rule in each profile's
+# local override, the place Ubuntu provides for site changes, restores it; the container keeps its own
+# profile. Rootless containers, and hosts without these profiles or already with the rule, are unaffected.
+apparmor_blocks_network() {
+    [ -z "$PODMAN_ACCOUNT" ] || return 1
+    [ "$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null)" = "Y" ] || return 1
+    local profile
+    for profile in crun podman; do
+        if [ -f "/etc/apparmor.d/${profile}" ] \
+            && ! grep -qsE '^[[:space:]]*network[[:space:],]' "/etc/apparmor.d/${profile}" "/etc/apparmor.d/local/${profile}"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+configure_apparmor() {
+    apparmor_blocks_network || return 0
+
+    local fix="${JIM_SETUP_FIX_APPARMOR:-}"
+    if [ -z "$fix" ]; then
+        echo
+        info "This host's AppArmor profiles for Podman stop JIM's containers using the network."
+        echo "  A network rule in their local overrides, /etc/apparmor.d/local/crun and podman, fixes it."
+        if prompt_yn "Add the rule?" "y"; then
+            fix="true"
+        else
+            fix="false"
+        fi
+    fi
+    if [ "$fix" != "true" ]; then
+        fatal "Without it JIM cannot reach its database or identity provider. Add a line reading network, to /etc/apparmor.d/local/crun and /etc/apparmor.d/local/podman, then reload both with apparmor_parser -r; or install JIM rootless (--rootless). See ${DOCS_BASE}/administration/podman/#firewall-selinux-and-apparmor"
+    fi
+
+    local profile
+    for profile in crun podman; do
+        [ -f "/etc/apparmor.d/${profile}" ] || continue
+        mkdir -p /etc/apparmor.d/local
+        if ! grep -qsE '^[[:space:]]*network[[:space:],]' "/etc/apparmor.d/local/${profile}"; then
+            echo "network," >> "/etc/apparmor.d/local/${profile}" \
+                || fatal "Failed to write /etc/apparmor.d/local/${profile}"
+        fi
+        apparmor_parser -r "/etc/apparmor.d/${profile}" \
+            || fatal "Failed to reload the AppArmor profile /etc/apparmor.d/${profile}"
+    done
+    success "Allowed JIM's containers to use the network under the AppArmor profiles for Podman (/etc/apparmor.d/local/crun and podman)"
 }
 
 # Starts JIM's pods, under systemd where it can.
@@ -2065,6 +2117,7 @@ main() {
             install_podman_units "$install_dir"
         fi
         write_install_state "$install_dir"
+        configure_apparmor
         configure_firewall
     fi
 
