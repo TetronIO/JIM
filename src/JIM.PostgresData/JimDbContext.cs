@@ -602,18 +602,22 @@ public class JimDbContext : DbContext
 
         // Inbound value processing defaults to TreatWhitespaceAsNoValue (JIM's opinionated default).
         // The store-level default backfills existing rows on migration so the whitespace-as-no-value
-        // behaviour applies to mappings created before this feature shipped (#843).
+        // behaviour applies to mappings created before this feature shipped (#843). The sentinel matches the default:
+        // left at the CLR default (None), EF would omit the column on insert whenever an admin turned every option
+        // off, and the store default would silently turn whitespace-as-no-value back on.
         modelBuilder.Entity<SyncRuleMapping>()
             .Property(srm => srm.InboundValueProcessing)
-            .HasDefaultValue(InboundValueProcessing.TreatWhitespaceAsNoValue);
+            .HasDefaultValue(InboundValueProcessing.TreatWhitespaceAsNoValue)
+            .HasSentinel(InboundValueProcessing.TreatWhitespaceAsNoValue);
 
         // Attribute priority (#91). Priority defaults to int.MaxValue (the safe-addition sentinel) so existing
         // import mappings, and any newly added one, never win resolution until an admin explicitly orders the
         // attribute's priority list. NullIsValue defaults to false (fallback behaviour). The store-level defaults
-        // backfill existing rows on migration.
+        // backfill existing rows on migration. The sentinel matches the default so a priority of 0 is stored as given.
         modelBuilder.Entity<SyncRuleMapping>()
             .Property(srm => srm.Priority)
-            .HasDefaultValue(int.MaxValue);
+            .HasDefaultValue(int.MaxValue)
+            .HasSentinel(int.MaxValue);
 
         modelBuilder.Entity<SyncRuleMapping>()
             .Property(srm => srm.NullIsValue)

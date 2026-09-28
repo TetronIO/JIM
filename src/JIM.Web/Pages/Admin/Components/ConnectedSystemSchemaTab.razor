@@ -17,30 +17,22 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<MudAlert Severity="ConnectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info">
-    @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
-    {
+@* How the tab opens depends on whether there is a schema. Without one, the only thing to say is how to start,
+   and that is a call to action, so it stays an alert with the button in it. With one, a status line says what the
+   schema holds and offers a refresh; what a refresh does is said in the info button, and again on the refresh
+   preview, which is where "before anything is applied" is actually true. It used to be an amber band on every
+   visit, which is the page-description anti-pattern JIM.Web/CLAUDE.md describes. *@
+@if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" data-testid="jim-schema-retrieve">
         <MudText>Retrieve the schema from the Connected System, to be able to select which object types and attributes you want to manage with JIM.</MudText>
-    }
-    else
-    {
-        <MudText>
-            Refreshing the schema retrieves the latest Object Types and Attributes from the Connected System and shows you what changed <strong>before anything is applied</strong>.
-            Nothing is deleted by a refresh: entries the Connected System no longer reports are retained in JIM and flagged for your attention. Ensure the Connected System
-            identity has the permissions needed to read the full schema; a partial read can make entries appear removed when they are not.
-        </MudText>
-    }
-    <MudButton
-        Color="ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
-        Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
-        Variant="Variant.Filled"
-
-        OnClick="HandleImportSchemaAsync"
-        Class="mt-5"
-        DropShadow="false">
-        @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
-        {
-            if (_schemaBeingRetrieved)
+        <MudButton Color="Color.Info"
+                   Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
+                   Variant="Variant.Filled"
+                   OnClick="HandleImportSchemaAsync"
+                   Class="mt-5"
+                   DropShadow="false">
+            @if (_schemaBeingRetrieved)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                 <span class="ms-2">Retrieving Schema</span>
@@ -49,21 +41,45 @@
             {
                 <text>Retrieve Schema</text>
             }
-        }
-        else
-        {
-            if (_schemaBeingRetrieved)
+        </MudButton>
+    </MudAlert>
+}
+else
+{
+    <MudPaper Outlined="true" Class="pa-4 d-flex align-center flex-wrap gap-3" data-testid="jim-schema-status">
+        <div class="d-flex align-center">
+            <MudText Typo="Typo.h6">Schema</MudText>
+            <InfoPopover Title="Schema">
+                The Object Types and Attributes JIM has read from the Connected System. Refreshing retrieves the
+                latest and shows you what changed before anything is applied. Nothing is deleted by a refresh:
+                entries the Connected System no longer reports are retained in JIM and flagged for your attention.
+                Ensure the Connected System identity has the permissions needed to read the full schema; a partial
+                read can make entries appear removed when they are not.
+            </InfoPopover>
+        </div>
+        @* The same count the Object Types tab's "All" chip shows, so the two never disagree: internal types the
+           Connector classified are held back from both until the administrator asks to see them. *@
+        <MudText Class="mud-text-secondary">
+            @($"{GetVisibleObjectTypes().Count():N0} Object Types, {GetSelectedObjectTypes().Count:N0} selected")
+        </MudText>
+        <MudButton Color="Color.Secondary"
+                   Variant="Variant.Filled"
+                   Class="ms-auto"
+                   Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
+                   OnClick="HandleImportSchemaAsync"
+                   DropShadow="false">
+            @if (_schemaBeingRetrieved)
             {
-                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" Size="Size.Small" />
                 <span class="ms-2">Refreshing Schema</span>
             }
             else
             {
                 <text>Refresh Schema</text>
             }
-        }
-    </MudButton>
-</MudAlert>
+        </MudButton>
+    </MudPaper>
+}
 
 @if (_schemaRefreshResult != null)
 {
@@ -332,58 +348,27 @@
            nullable-dereference rule in JIM.Web/CLAUDE.md). *@
         var selectedObjectType = _selectedObjectType;
 
-        @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
-        {
-            <MudPaper Outlined="true" Class="pa-4 mt-5">
-                <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
-                <MudSelect
-                    T="ConnectedSystemObjectTypeAttribute"
-                    Label="External ID Attribute"
-                    Variant="Variant.Outlined"
-                    Class="mt-5"
-                    Required="true"
-                    RequiredError="You must select an attribute as the External ID."
-                    Value="_selectedObjectType.Attributes.SingleOrDefault(q => q.IsExternalId)"
-                    ValueChanged="HandleMakeExternalIdAsync">
-                    @foreach (var objectTypeAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
-                    {
-                        <MudSelectItem Value="@objectTypeAttribute">@(objectTypeAttribute.Name)</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudPaper>
-        }
-
-        @if (ConnectedSystem.SupportsImportMode())
-        {
-            <MudPaper Outlined="true" Class="pa-4 mt-5">
-                <MudText Typo="Typo.h6" Class="mb-3">Settings</MudText>
-                <MudSwitch
-                    @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
-                    Color="@Color.Primary"
-                    Label="Remove contributed attributes when source objects are deleted" />
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    When enabled, this will remove attribute values on joined Metaverse Objects contributed by this system, for this object type when the source object is deleted.
-                </MudText>
-            </MudPaper>
-        }
-
-        @* Renders nothing unless the Connected System hands class membership to JIM to compute, which is what makes
-           merging an auxiliary class mean anything. *@
+        @* Panel order follows how often each is visited: what the Object Type is made of (one line), then the
+           attribute grid, which is what the tab exists for, then the settings, which are set once. Renders nothing
+           unless the Connected System hands class membership to JIM to compute, which is what makes merging an
+           auxiliary class mean anything. *@
         <AuxiliaryClassesPanel
             ConnectedSystem="ConnectedSystem"
             ObjectType="selectedObjectType"
             LatestDiscoveryRun="LatestAuxiliaryClassDiscoveryRun"
             OnSchemaChanged="OnConnectedSystemChanged" />
 
-        <MudPaper Outlined="true" Class="pa-4 mt-5">
+        <MudPaper Outlined="true" Class="pa-4 mt-5" data-testid="jim-schema-attribute-selection">
             <MudText Typo="Typo.h6" Class="mb-3">Attribute Selection</MudText>
             <MudText>
                 Select which attributes you would like JIM to import, or export for this object type. To maximise system performance, only select those you actually need.
             </MudText>
 
             @* Filtering by name is the grid's own search box, not a second one here: two boxes narrowing the same
-               table is exactly the confusion the shared search convention exists to prevent. *@
-            <MudGrid Class="mt-3">
+               table is exactly the confusion the shared search convention exists to prevent. The grid's own
+               negative top margin cancels its item padding; mt-0 replaces it so the fields sit one Spacing="4"
+               step (16px) below the description, rather than stacking an extra margin on the full item padding. *@
+            <MudGrid Spacing="4" Class="mt-0">
                 @if (_selectedObjectTypeHasClasses)
                 {
                     <MudItem xs="6">
@@ -512,7 +497,8 @@
                              LoadWindow="LoadAttributeWindowAsync"
                              SingularName="Attribute"
                              PluralName="Attributes"
-                             SearchPlaceholder="Search by name">
+                             SearchPlaceholder="Search by name"
+                             AlwaysDense="true">
             <Columns>
                 <TemplateColumn Title="Selected" Sortable="false">
                     <HeaderTemplate>
@@ -522,18 +508,18 @@
                         @if (CredentialAttributes.IsCredentialAttribute(context.Item.Name))
                         {
                             <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
-                                <MudSwitch Value="false" Color="@Color.Primary" Disabled="true" />
+                                <MudSwitch Value="false" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else if (context.Item.IsExternalId || context.Item.IsSecondaryExternalId)
                         {
                             <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
-                                <MudSwitch Value="@context.Item.Selected" Color="@Color.Primary" Disabled="true" />
+                                <MudSwitch Value="@context.Item.Selected" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else
                         {
-                            <MudSwitch @bind-Value="@context.Item.Selected" @bind-Value:after="OnAttributeSelectedChangedAsync" Color="@Color.Primary" />
+                            <MudSwitch @bind-Value="@context.Item.Selected" @bind-Value:after="OnAttributeSelectedChangedAsync" Color="@Color.Primary" Size="Size.Small" />
                         }
                     </CellTemplate>
                 </TemplateColumn>
@@ -544,11 +530,11 @@
                     <CellTemplate>
                         @if (context.Item.IsExternalId)
                         {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">External ID</MudChip>
                         }
                         else if (context.Item.IsSecondaryExternalId)
                         {
-                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text">Secondary ID</MudChip>
                         }
                         else
                         {
@@ -592,14 +578,14 @@
                         @if (referencedObjectTypeName != null)
                         {
                             <MudTooltip Text="@($"This Reference attribute declares that it points at the '{referencedObjectTypeName}' Object Type, so references resolve within that Object Type alone. Declared by the Connected System's schema; read-only.")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Text">
                                     @($"Reference ({referencedObjectTypeName})")
                                 </MudChip>
                             </MudTooltip>
                         }
                         else
                         {
-                            <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                            <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Text">
                                 @context.Item.Type.ToString().SplitOnCapitalLetters()
                             </MudChip>
                         }
@@ -623,7 +609,7 @@
                         <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Item.Writability)" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string"
                                      Color="@Helpers.GetAttributeWritabilityChipColour(context.Item.Writability)"
-                                     Variant="Variant.Outlined">
+                                     Variant="Variant.Text">
                                 @Helpers.GetAttributeWritabilityLabel(context.Item.Writability)
                             </MudChip>
                         </MudTooltip>
@@ -659,8 +645,8 @@
                         <CellTemplate>
                             <MudButton
                                 DropShadow="false"
-                                Color="Color.Primary"
-                                Variant="Variant.Outlined"
+                                Color="Color.Secondary"
+                                Variant="Variant.Filled"
                                 Size="Size.Small"
                                 OnClick="() => HandleShowEditAttributeDialogAsync(context.Item)"
                                 StartIcon="@Icons.Material.Filled.Edit">
@@ -699,6 +685,41 @@
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
+
+        @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId || ConnectedSystem.SupportsImportMode())
+        {
+            <MudPaper Outlined="true" Class="pa-4 mt-5" data-testid="jim-schema-object-type-settings">
+                <MudText Typo="Typo.h6" Class="mb-3">Settings</MudText>
+                @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+                {
+                    <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
+                    <MudSelect
+                        T="ConnectedSystemObjectTypeAttribute"
+                        Label="External ID Attribute"
+                        Variant="Variant.Outlined"
+                        Class="mt-3 mb-4"
+                        Required="true"
+                        RequiredError="You must select an attribute as the External ID."
+                        Value="_selectedObjectType.Attributes.SingleOrDefault(q => q.IsExternalId)"
+                        ValueChanged="HandleMakeExternalIdAsync">
+                        @foreach (var objectTypeAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
+                        {
+                            <MudSelectItem Value="@objectTypeAttribute">@(objectTypeAttribute.Name)</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                @if (ConnectedSystem.SupportsImportMode())
+                {
+                    <MudSwitch
+                        @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
+                        Color="@Color.Primary"
+                        Label="Remove contributed attributes when source objects are deleted" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        When enabled, this will remove attribute values on joined Metaverse Objects contributed by this system, for this object type when the source object is deleted.
+                    </MudText>
+                }
+            </MudPaper>
+        }
                     }
                 </MudTabPanel>
             }
@@ -710,8 +731,8 @@
            save (#1474), and deselecting an attribute has no visible effect at all. Either way this is the count an
            administrator needs before saving, not afterwards. *@
         <MudButton data-testid="jim-preview-schema-selection"
-                   Variant="Variant.Outlined"
-                   Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Color="Color.Secondary"
                    StartIcon="@Icons.Material.Filled.Visibility"
                    OnClick="PreviewSchemaSelectionAsync"
                    Disabled="@_startingSchemaPreview"

@@ -345,7 +345,7 @@
                                     <span class="jim-one-line-list-value">@GetAttributeValue(group.Values[0])</span>
                                     @if (group.TotalCount > 1)
                                     {
-                                        <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" Class="jim-attr-expand-btn"
                                                    OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.TotalCount))">
                                             +@((group.TotalCount - 1).ToString("N0")) more
                                         </MudButton>
@@ -405,7 +405,7 @@ else if (_notFound)
         removed once they are no longer waiting to be applied, so links to an individual one stop
         resolving after its export runs.
     </MudAlert>
-    <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
+    <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
         Back to List
     </MudButton>

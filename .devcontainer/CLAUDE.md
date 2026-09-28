@@ -38,7 +38,7 @@
 
 **Docker Builds (rebuild and start services):**
 - `jim-build` - Build all services and start the whole stack together. Use this to bring the stack up from zero (first boot, after `jim-stack-down`, or after `jim-reset`) and whenever you want a reliable full rebuild before verifying a change at runtime.
-- `jim-build-light` - Start db + Keycloak containers, run JIM.Web natively
+- `jim-build-light` - Start db + Keycloak containers, run JIM.Web natively under `dotnet watch` (`jim-web-watch`), so Razor, C# and CSS edits apply on save. Removes any `jim.web`, `jim.worker` or `jim.scheduler` container first (a leftover one holds port 5200); `jim-stack` or `jim-build` recreates them. If `dotnet watch` crashes (its polling watcher can throw when a `dotnet build` or `dotnet test` elsewhere rewrites `bin/` mid-scan), `jim-web-watch` starts it again; Ctrl+C still stops it.
 - `jim-build-web` - Rebuild and restart only jim.web. Incremental: use ONLY when the full stack is already running healthy. Not for starting from zero.
 - `jim-build-worker` - Rebuild and restart only jim.worker. Incremental (same caveat as `jim-build-web`).
 - `jim-build-scheduler` - Rebuild and restart only jim.scheduler. Incremental (same caveat as `jim-build-web`).
@@ -110,8 +110,8 @@ All dependency updates from Dependabot require human review before merging - the
 **Choose one of two workflows:**
 
 **Workflow 1 - Local Debugging (Recommended):**
-1. Run `jim-build-light` (starts db + Keycloak, waits for readiness, launches JIM.Web natively)
-2. Debug with breakpoints and hot reload
+1. Run `jim-build-light` (removes any JIM app containers, starts db + Keycloak, waits for readiness, launches JIM.Web natively)
+2. Edits apply on save through hot reload (`dotnet watch`). It uses file-change events where the workspace mount delivers them, and polls where it does not (a Windows host with the repo on a Windows drive, mounted over 9p; allow a couple of seconds per edit there). It says which at startup. An edit it cannot apply restarts JIM.Web by itself; Ctrl+R in its terminal forces one. To debug with breakpoints instead, run plain `jim-web` and attach.
 3. Services: Web + API (http://localhost:5200), API reference at `/api/reference`
 
 **Workflow 2 - Full Docker Stack:**

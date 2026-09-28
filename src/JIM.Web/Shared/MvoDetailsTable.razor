@@ -177,7 +177,7 @@
     /// </summary>
     private const int MvaInlineThreshold = 10;
 
-    private bool _dense;
+    private bool _dense = true;
     private bool _preferencesLoaded;
 
     /// <summary>
@@ -205,7 +205,7 @@
         {
             try
             {
-                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _dense = await PreferenceService.GetTableDenseAsync() != false;
                 _preferencesLoaded = true;
                 StateHasChanged();
             }

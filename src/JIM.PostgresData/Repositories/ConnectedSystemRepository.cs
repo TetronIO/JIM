@@ -524,11 +524,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Explicitly mark setting values as modified since UpdateDetachedSafe only marks the
         // parent entity without traversing the object graph. Without this, setting value changes
         // are silently discarded on save.
+        // A value with no Id is new: a setting the Connector gained after this Connected System was created, added on
+        // startup (ConnectedSystemServer.ReconcileSettingValues). It is inserted rather than marked Modified, which
+        // would issue an UPDATE of row 0. Only the value itself is marked Added, not the graph behind it, so its
+        // setting (and the Connector Definition beyond) is never re-inserted; the setting is attached as it stands if
+        // the caller loaded it in another context.
         if (connectedSystem.SettingValues != null)
         {
             foreach (var settingValue in connectedSystem.SettingValues)
             {
-                Repository.UpdateDetachedSafe(settingValue);
+                if (settingValue.Id == 0)
+                {
+                    if (Repository.Database.Entry(settingValue.Setting).State == EntityState.Detached)
+                        Repository.Database.Entry(settingValue.Setting).State = EntityState.Unchanged;
+                    Repository.Database.Entry(settingValue).State = EntityState.Added;
+                }
+                else
+                {
+                    Repository.UpdateDetachedSafe(settingValue);
+                }
             }
         }
 

@@ -31,18 +31,18 @@
     @* mt-2 combines with the breadcrumbs' own 16px padding for the 24px section gap; mb-6 because the
        following block's mt-2 alone collapses to 8px, same reasoning as the drift notice below. *@
     <MudStack Row Spacing="3" Class="mt-2 mb-6">
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Primary"
+        <MudButton Variant="Variant.Filled"
                    StartIcon="@Icons.Material.Filled.Storage"
                    DropShadow="false"
+                   Size="Size.Small"
                    Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space")">
             Connector Space
             <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
         </MudButton>
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Primary"
+        <MudButton Variant="Variant.Filled"
                    StartIcon="@Icons.Material.Filled.Outbox"
                    DropShadow="false"
+                   Size="Size.Small"
                    Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports")">
             Pending Exports
             <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>

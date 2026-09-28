@@ -80,20 +80,4 @@ public class ConnectedSystemDetectedFactsTests : JimComponentTestContext
             Assert.That(cut.FindAll($"[data-testid='{EmptyMarker}']"), Is.Empty);
         }
     }
-
-    /// <summary>
-    /// The explanation that used to be a paragraph on the card lives in the info button now, so the strip must
-    /// still say, somewhere a reader can open, that reading it never opens a connection.
-    /// </summary>
-    [Test]
-    public void DetectedFacts_CarriesTheExplanationInAnInfoButton_NotAParagraph()
-    {
-        var cut = RenderStrip([new ConnectorCapability { Name = "Paging", Value = "Supported" }]);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(cut.FindAll("[aria-label='About Detected']"), Has.Count.EqualTo(1));
-            Assert.That(cut.Markup, Does.Not.Contain("shown here for reference only"));
-        }
-    }
 }

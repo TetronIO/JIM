@@ -25,25 +25,26 @@
        build if either drifts under. Use these for text only; fills, borders and accent bars keep the raw
        palette colour. */
     --jim-chip-text-primary: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
-    --jim-chip-text-secondary: color-mix(in srgb, var(--mud-palette-secondary) 60%, var(--mud-palette-text-primary));
+    /* Secondary takes only 40%: every theme's secondary is a quiet slate chosen as a filled-button fill, a step
+       above the panel in dark mode, so at 60% it stays too close to a dark surface to read (Future Minimal dark
+       measured 3.8:1). Also the colour of secondary text, and of text and outlined secondary buttons, below. */
+    --jim-chip-text-secondary: color-mix(in srgb, var(--mud-palette-secondary) 40%, var(--mud-palette-text-primary));
     --jim-chip-text-tertiary: color-mix(in srgb, var(--mud-palette-tertiary) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-info: color-mix(in srgb, var(--mud-palette-info) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-success: color-mix(in srgb, var(--mud-palette-success) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-warning: color-mix(in srgb, var(--mud-palette-warning) 60%, var(--mud-palette-text-primary));
     --jim-chip-text-error: color-mix(in srgb, var(--mud-palette-error) 60%, var(--mud-palette-text-primary));
 
-    /* The SHAPE of a Text-variant chip, as against the label colours above. A compact pill with a semibold
-       label, promoted into the design system from the causality panel, where the outcome pills and the
+    /* The SHAPE of a Text-variant chip, as against the label colours above. A compact pill, promoted into the design system from the causality panel, where the outcome pills and the
        Table view's change chips had arrived at it independently of the portal and looked better than it.
        MudBlazor's own chip is a fixed-height box (24/32/40px per size) carrying a normal-weight label,
        which reads as a button rather than as a label and, in a table cell, outweighs the value beside it.
        Font size is deliberately NOT set here: it stays MudBlazor's per-size figure, so a call site passing
        Size.Small still gets a smaller chip and the Size parameter keeps its meaning. */
-    --jim-chip-padding-y: 3px;
+    --jim-chip-padding-y: 3.5px;
     --jim-chip-padding-x: 10px;
     --jim-chip-padding: var(--jim-chip-padding-y) var(--jim-chip-padding-x);
     --jim-chip-radius: 999px;
-    --jim-chip-font-weight: 600;
 }
 
 /* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
@@ -116,17 +117,16 @@ body.jim-dark-mode .mud-skeleton-wave::after {
 /* Header row stays compact regardless of dense/normal toggle */
 .mud-table-root .mud-table-head .mud-table-cell {
     font-weight: 500;
-    font-size: 0.875rem;
+    font-size: var(--mud-typography-body2-size);
     text-transform: uppercase;
     letter-spacing: 0.02857em;
     padding: 6px 16px;
 }
 
-/* Content/data links use --jim-link-color (softer than UI primary).
-   Transition on the base state so colour animates smoothly both ways. */
+/* Content/data links use --jim-link-color (softer than UI primary). The colour change is animated by the shared
+   hover motion rule (see "Hover motion" below). */
 a.mud-link.mud-primary-text {
     color: var(--jim-link-color) !important;
-    transition: color 0.25s ease !important;
 }
 
 /* Visited link styling is handled per-theme via a hardcoded a:visited rule
@@ -143,7 +143,12 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 .mud-link-underline-hover:hover {
     text-decoration: none !important;
     color: var(--jim-link-hover-color) !important;
-    transition: color 0.25s ease !important;
+}
+
+/* Medium chips follow the theme's Body2 size (13px) rather than MudBlazor's fixed 14px, so they sit level with
+   the table text they mostly appear in. */
+html[lang] .mud-chip.mud-chip-size-medium {
+    font-size: var(--mud-typography-body2-size);
 }
 
 /* Every Text-variant chip takes that shape. The height MudBlazor pins per size gives way to the padding, so
@@ -151,12 +156,27 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 
    The html[lang] qualifier is load-bearing, not decoration: MudBlazor's own `.mud-chip.mud-chip-size-medium`
    is (0,2,0), exactly what `.mud-chip.mud-chip-text` would be, and its stylesheet is loaded after this one,
-   so on a tie it wins and the height and radius below would silently do nothing. */
+   so on a tie it wins and the height and radius below would silently do nothing. The label keeps the chip's
+   normal weight: a semibold label, once part of this shape, stood out against Outlined chips once the type scale
+   and chip padding shrank. */
 html[lang] .mud-chip.mud-chip-text {
     height: auto;
     padding: var(--jim-chip-padding);
     border-radius: var(--jim-chip-radius);
-    font-weight: var(--jim-chip-font-weight);
+}
+
+/* Outlined and Filled chips take the same shape, so a chip is one height whichever variant it is. MudBlazor pins
+   them at 32px (medium) and 24px (small) with 12px side padding, as tall as a medium button, which read oversized
+   beside the Text chips and 14px body text. The Outlined chip's padding gives its 1px border back. Every variant
+   keeps MudBlazor's normal label weight, so Text and Outlined chips read as one family. */
+html[lang] .mud-chip:is(.mud-chip-outlined, .mud-chip-filled) {
+    height: auto;
+    padding: var(--jim-chip-padding);
+    border-radius: var(--jim-chip-radius);
+}
+
+html[lang] .mud-chip.mud-chip-outlined {
+    padding: calc(var(--jim-chip-padding-y) - 1px) calc(var(--jim-chip-padding-x) - 1px);
 }
 
 /* Text-variant chips: increase background opacity for better visibility on dark themes.
@@ -314,9 +334,10 @@ html[lang] .mud-chip.mud-chip-text {
     background-color: inherit !important;
 }
 
-/* Normalize MudTable text size to match body text */
+/* Table data is body text (Body1). Body2 is for auxiliary text that should not draw attention, which the
+   header labels and pagination below are and a table's data is not */
 .mud-table-root .mud-table-body .mud-table-cell {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body1-size);
 }
 
 /* Allow mud-text-secondary to override the default table cell text colour */
@@ -325,27 +346,27 @@ html[lang] .mud-chip.mud-chip-text {
 }
 
 .mud-table-root .mud-table-pagination-toolbar {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-toolbar * {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-select {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-caption {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-display {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 .mud-table-root .mud-table-pagination-information {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body2-size);
 }
 
 /* Consistent border radius for container elements (papers, tables, alerts, expansion panels).
@@ -941,7 +962,7 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     padding: 2px 10px 2px 3px;
     /* Normal body size, per JIM's "default sizing unless asked otherwise" UI rule: the object's name in a
        chip is the thing being linked to, so it reads at the same size as the text naming it. */
-    font-size: 1rem;
+    font-size: var(--mud-typography-body1-size);
     font-weight: 550;
     color: var(--mud-palette-text-primary);
     white-space: nowrap;
@@ -1672,6 +1693,49 @@ html[lang] .mud-alert-filled-normal {
     border-radius: var(--mud-default-borderradius);
 }
 
+/* Outlined fields are dense portal-wide: 10.5px above and below the value (a 38px field) rather than MudBlazor's
+   18.5px (54px), which suits a data-dense admin tool and matches the 14px type scale. MudBlazor has no global default
+   for Margin, and setting Margin.Dense on every field would mean touching some 230 of them, so these rules give the
+   default outlined field the metrics Margin.Dense would, mirroring MudBlazor's own margin-dense rules: the value's
+   padding, a textarea's top offset, and the resting position of the label, so an empty field's label stays centred.
+   MudBlazor's dense label rests at 12px, which centres it only at 16px text; at 14px the field is 37.6px tall and
+   the 18.4px label line centres at 9.6px, so the label is placed there rather than sitting 2px low. The floated label's rules outrank the resting-label rule here, so a
+   field with a value still shows its label on the border. MudField's no-padding slot has a more specific rule of
+   its own and is left alone. The html[lang] qualifier is needed because MudBlazor's stylesheet loads after this one. */
+html[lang] .mud-input > input.mud-input-root-outlined,
+html[lang] div.mud-input-slot.mud-input-root-outlined {
+    padding-top: 10.5px;
+    padding-bottom: 10.5px;
+}
+
+html[lang] .mud-input > textarea.mud-input-root-outlined {
+    margin-top: 10.5px;
+    padding-bottom: 10.5px;
+}
+
+html[lang] .mud-input-label-outlined {
+    transform: translate(14px, 9.6px) scale(1);
+}
+
+/* Help text belongs to the field above it, so it sits close under that field and clear of the next one. Whatever a
+   page sets between fields is measured to the next field's border, but that field's floating label rises above
+   the border, so the visible gap from help text to the next label came out barely 14px on the Settings tab, and
+   the text read as the next field's caption. This adds space after the help text (or a validation message, which
+   renders in the same place) wherever it appears, on top of the page's own spacing, and adds nothing to a field
+   with no help text. */
+html[lang] .mud-input-control-helper-container:not(:empty) {
+    padding-bottom: 8px;
+}
+
+/* A button beside an outlined field (a d-flex align-start row: the field, then its action, e.g. Discover...),
+   the same height as the field's box and level with it, so the pair reads as one unit. The control starts with
+   an 8px margin that keeps room for the floating label, and its dense box is 37.6px (10.5px padding either side
+   of the 14px value's line); a 32px button beside it, even centred, looked undersized. */
+html[lang] .jim-field-action.mud-button-root {
+    margin-top: 8px;
+    height: 37.6px;
+}
+
 /* MudField content (e.g. a read-only Thumbprint or Serial Number) has no spaces to wrap at and is
    a flex child by default, so a long unbroken value (min-width: auto) overflows past the outline
    instead of shrinking to fit. Let it wrap and shrink to the field's own width. */
@@ -1756,13 +1820,209 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
     max-height: unset;
 }
 
+/* A spinner inside a button (the "Processing", "Fetching" states) matches the label's size. MudProgressCircular
+   defaults to 40px, so a call site that forgot Size="Size.Small" grew the button taller while it was busy. */
+html[lang] .mud-button-root .mud-progress-circular {
+    width: 1.125rem !important;
+    height: 1.125rem !important;
+}
+
+/* Secondary as text. The palette's secondary is a slate fill for filled secondary buttons, sitting a step above the
+   panel in dark mode, so painted as text (a Color.Secondary MudText or icon, a Text or Outlined secondary button) it
+   all but vanishes against a dark surface. Such text takes the same readable blend secondary chips use. Filled
+   secondary buttons, avatars and chips keep the raw fill. */
+html[lang] .mud-secondary-text,
+html[lang] .mud-button-text.mud-button-text-secondary:not(:disabled),
+html[lang] .mud-button-outlined.mud-button-outlined-secondary:not(:disabled) {
+    color: var(--jim-chip-text-secondary) !important;
+}
+
+html[lang] .mud-button-outlined.mud-button-outlined-secondary:not(:disabled) {
+    border-color: color-mix(in srgb, var(--jim-chip-text-secondary) 60%, transparent);
+}
+
 /* Remove drop shadows from all MudBlazor buttons */
 .mud-button-root {
     box-shadow: none !important;
 }
 
+/* Button sizes, one step down from MudBlazor's, to sit with the 14px type scale. MudBlazor draws a medium button
+   36px tall in 14px uppercase, which read oversized beside 14px body text and dense form fields, and its small
+   button (31px) was barely a step below that. Medium is now 32px in 13px text and small 28px in 12px, each
+   variant's padding keeping the same height whether or not it carries a 1px border. Single-class selectors on
+   purpose: this sheet loads after MudBlazor's, so they win over its size rules at equal specificity, while a
+   component's own two-class sizing still wins over them. Large
+   is left at MudBlazor's size; no MudButton in the portal uses it. */
+:is(.mud-button-filled-size-medium, .mud-button-outlined-size-medium, .mud-button-text-size-medium) {
+    font-size: 13px;
+    line-height: 22px;
+}
+
+.mud-button-filled-size-medium { padding: 5px 14px; }
+.mud-button-outlined-size-medium { padding: 4px 13px; }
+.mud-button-text-size-medium { padding: 5px 8px; }
+
+:is(.mud-button-filled-size-small, .mud-button-outlined-size-small, .mud-button-text-size-small) {
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.mud-button-filled-size-small { padding: 4px 10px; }
+.mud-button-outlined-size-small { padding: 3px 9px; }
+.mud-button-text-size-small { padding: 4px 5px; }
+
 .mud-button-filled {
     box-shadow: none !important;
+}
+
+/* The Default-colour filled button: a surface-coloured face with a crisp 1px border, and only a faint tint on
+   hover. It replaced eight per-theme greys that ran from near-invisible against a light page to a flat mid-grey
+   pill that read as disabled. Built from the theme's tokens, so on a light theme it is a white button on a grey
+   page and on a dark one a face just lighter than the surface, defined by its border either way. html[lang] so
+   it outranks MudBlazor's own rule; the padding rules give the border's 1px back so the box stays the size of a
+   borderless filled button (4px 10px small, 5px 14px medium, 8px 22px large; see "Button sizes" above). */
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 4%, var(--mud-palette-surface));
+    color: var(--mud-palette-text-primary);
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 13%, var(--mud-palette-surface));
+    border-color: var(--jim-control-border-hover);
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):active {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 19%, var(--mud-palette-surface));
+    border-color: var(--jim-control-border-hover);
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default.mud-button-filled-size-small { padding: 3px 9px; }
+html[lang] .mud-button-filled.mud-button-filled-default:not(.mud-button-filled-size-small):not(.mud-button-filled-size-large) { padding: 4px 13px; }
+html[lang] .mud-button-filled.mud-button-filled-default.mud-button-filled-size-large { padding: 7px 21px; }
+
+/* ─── Hover and pressed states: the tonal step ───
+   A control that is hovered or pressed stays its own colour, one step further along its own ramp: deeper on a
+   light theme, brighter on a dark one. MudBlazor's filled hover swaps to the palette's -darken value, which in
+   every JIM theme is hand-picked and greyed out as well as darker (navy-o6 took a vivid #6135d7 to a dusty
+   #4e3b84, and on dark navy #764ce8 fell to #4e3c80, so a hovered button sank into the background instead of
+   lifting). Mixing in oklch keeps the hue and most of the chroma, and derives from the palette colour itself, so
+   every theme gets it with no per-theme hex. Each theme sets the mix: toward black on light, toward white on
+   dark, with the pressed state stepping back down so a click reads as pushing in.
+
+   Outlined and text buttons wash in their own label colour (currentColor, so a dark theme's lightened label
+   colours carry through) and their border goes solid; neutral controls (icon buttons, menus, selects, list
+   items) use --mud-palette-action-default-hover, which each theme sets to its neutral row-hover tint.
+
+   Hover rules sit inside MudBlazor's own hover media query so a touch device does not keep a stuck hover. The
+   Dark colour is left out: its filled face is overridden per theme (black on navy), and a mix from its palette
+   value would not match that face. */
+html[lang] {
+    --jim-state-hover-mix: black 20%;
+    --jim-state-press-mix: black 30%;
+    --jim-control-border-hover: var(--mud-palette-lines-inputs);
+    --jim-neutral-press: color-mix(in srgb, var(--mud-palette-action-default-hover), var(--mud-palette-text-primary) 6%);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    html[lang] :is(.mud-button-filled.mud-button-filled-primary, .mud-icon-button.mud-button-filled.mud-icon-button-color-primary):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-primary), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-secondary, .mud-icon-button.mud-button-filled.mud-icon-button-color-secondary):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-secondary), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-tertiary, .mud-icon-button.mud-button-filled.mud-icon-button-color-tertiary):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-tertiary), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-info, .mud-icon-button.mud-button-filled.mud-icon-button-color-info):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-info), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-success, .mud-icon-button.mud-button-filled.mud-icon-button-color-success):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-success), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-warning, .mud-icon-button.mud-button-filled.mud-icon-button-color-warning):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-warning), var(--jim-state-hover-mix));
+    }
+    html[lang] :is(.mud-button-filled.mud-button-filled-error, .mud-icon-button.mud-button-filled.mud-icon-button-color-error):not(:disabled):hover {
+        background-color: color-mix(in oklch, var(--mud-palette-error), var(--jim-state-hover-mix));
+    }
+
+    html[lang] :is(.mud-button-outlined, .mud-button-text):not(:disabled):hover {
+        background-color: color-mix(in srgb, currentColor 14%, transparent);
+    }
+
+    html[lang] .mud-button-outlined:not(:disabled):hover {
+        border-color: currentColor;
+    }
+}
+
+html[lang] :is(.mud-button-filled.mud-button-filled-primary, .mud-icon-button.mud-button-filled.mud-icon-button-color-primary):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-primary), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-secondary, .mud-icon-button.mud-button-filled.mud-icon-button-color-secondary):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-secondary), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-tertiary, .mud-icon-button.mud-button-filled.mud-icon-button-color-tertiary):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-tertiary), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-info, .mud-icon-button.mud-button-filled.mud-icon-button-color-info):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-info), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-success, .mud-icon-button.mud-button-filled.mud-icon-button-color-success):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-success), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-warning, .mud-icon-button.mud-button-filled.mud-icon-button-color-warning):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-warning), var(--jim-state-press-mix));
+}
+html[lang] :is(.mud-button-filled.mud-button-filled-error, .mud-icon-button.mud-button-filled.mud-icon-button-color-error):not(:disabled):active {
+    background-color: color-mix(in oklch, var(--mud-palette-error), var(--jim-state-press-mix));
+}
+
+html[lang] :is(.mud-button-outlined, .mud-button-text):not(:disabled):active {
+    background-color: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+html[lang] :is(.mud-icon-button:not(.mud-switch-base):not(.mud-button-filled):not(.mud-button-outlined), .mud-list-item-clickable):not(:disabled):active {
+    background-color: var(--jim-neutral-press);
+}
+
+/* ─── Hover motion ───
+   One motion for everything that responds to the pointer: buttons, icon buttons, menu and list items, nav links
+   and text links. Quick in, slower out: the state arrives almost with the pointer (90ms) and eases away over
+   220ms when it leaves, so moving across a toolbar or down a menu leaves a brief trail rather than a flicker.
+   The duration on :hover governs entering the state, the base one governs leaving it. MudBlazor's own curves
+   (150-250ms on the way in) lag behind the pointer in a dense UI.
+
+   The switch is excluded: its thumb is a .mud-button-root too, and animates its position through the transition
+   this would replace. Padding stays in the list because nav links animate it when the drawer collapses. Links in
+   alerts keep their own opacity transition (an !important rule above). */
+html[lang] {
+    --jim-motion-in: 90ms;
+    --jim-motion-out: 220ms;
+    --jim-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html[lang] :is(.mud-button-root:not(.mud-switch-base), .mud-list-item-clickable, .mud-nav-link, a.mud-link) {
+    transition-property: background-color, border-color, color, box-shadow, padding;
+    transition-duration: var(--jim-motion-out);
+    transition-timing-function: var(--jim-motion-ease);
+}
+
+html[lang] :is(.mud-button-root:not(.mud-switch-base), .mud-list-item-clickable, .mud-nav-link, a.mud-link):hover {
+    transition-duration: var(--jim-motion-in);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[lang] :is(.mud-button-root:not(.mud-switch-base), .mud-list-item-clickable, .mud-nav-link, a.mud-link) {
+        transition: none;
+    }
+}
+
+/* Keyboard focus gets a ring as well as MudBlazor's focus tint, which on a filled button is too close to the
+   hover colour to tell apart. */
+html[lang] .mud-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 .mud-button-group .mud-button-root {
@@ -2062,7 +2322,7 @@ html[lang] .jim-schema-change-table td {
 .jim-attribute-table tbody tr td {
     padding: 12px 16px !important;
     vertical-align: middle;
-    font-size: 1rem;
+    font-size: var(--mud-typography-body1-size);
 }
 
 /* Dense mode: reduce body cell padding while keeping header at normal height */
@@ -2086,18 +2346,6 @@ html[lang] .jim-schema-change-table td {
 .jim-attribute-table.mud-table-dense .mud-chip {
     font-size: 0.75rem;
     margin: 3px 4px 3px 0;
-}
-
-/* Filled and Outlined chips still need compacting by hand here, because MudBlazor sizes them from a fixed
-   height and a padding that does not follow it. A Text chip already sizes itself from the design system's
-   chip padding (see the chip tokens at the top of this file), so adding this on top would double its
-   horizontal padding, and pinning a height would undo the shape it gets everywhere else. */
-.jim-attribute-table.mud-table-dense .mud-chip:not(.mud-chip-text) {
-    height: 24px;
-}
-
-.jim-attribute-table.mud-table-dense .mud-chip:not(.mud-chip-text) .mud-chip-content {
-    padding: 0 8px;
 }
 
 /* MVA "show more" dialog table is always dense; tighten cell padding and chip
@@ -2270,12 +2518,12 @@ html[lang] .jim-schema-change-table td {
 
 /* Key/value detail tables (the label/value panels on detail pages).
    Two things need normalising. MudSimpleTable renders its cells at body2 (0.875rem)
-   while MudText/MudLink children render at body1 (1rem), so a panel ends up mixing
+   while MudText/MudLink children render at body1, so a panel ends up mixing
    two text sizes; and a MudChip carries its own 4px margin on top of its 32px height,
    so chip-bearing rows sit taller than plain-text rows and the panel looks unbalanced.
    A single cell height plus a zeroed chip margin makes every row identical. */
 .jim-detail-table tbody tr td {
-    font-size: 1rem;
+    font-size: var(--mud-typography-body1-size);
     line-height: 1.5rem;
     height: 44px;
     padding: 4px 16px !important;
@@ -2451,15 +2699,18 @@ html[lang] .jim-kv-table td:first-child {
 }
 
 .jim-fact-value {
-    font-size: 0.9375rem;
+    font-size: var(--mud-typography-body1-size);
     color: var(--mud-palette-text-primary);
     overflow-wrap: anywhere;
 }
 
 /* The heading item's info button sits inside a 0.75rem label; the button's own size is fixed in the
-   jim-info-button rule, so only the gap to the word before it is set here. */
+   jim-info-button rule, so only the gap to the word before it is set here. The negative block margin keeps the
+   26px button from growing the label's 17px line: left to size it, the label was centred in the taller box and
+   sat 4.5px below the fact labels beside it. The button still centres on the word. */
 .jim-fact-heading .jim-info-button {
     margin-left: 2px;
+    margin-block: -4.5px;
 }
 
 /* Password Synchronisation delivery fields (Passwords tab): a fixed width each, side by side. Qualified with
@@ -4087,44 +4338,83 @@ html[lang] .jim-password-guidance.mud-alert {
     align-items: center;
 }
 
-/* The two-segment scope control. Both states stay visible: scope decides what the next import
-   returns, so which one is active must be readable without hovering anything. Below the site-wide
-   "default sizes" rule (JIM.Web/CLAUDE.md > UI element sizing) because it sits on a ~32px row by
-   design; 0.75rem matches the object count beside it. It was 0.65rem (about 10px), which is small
-   text under WCAG and so needs the full 4.5:1 that the label colour below provides. */
-.jim-picker-seg .mud-button-root {
-    padding: 0 0.5rem;
-    min-width: 0;
-    font-size: 0.75rem;
-    line-height: 1.3rem;
-    text-transform: none;
-    letter-spacing: 0;
+/* ─── Segmented control (Shared/SegmentedToggle.razor) ───────────────────────────────────────
+   A recessed track with the chosen option raised as a card: the control for choosing a setting or view, as
+   opposed to a button group, which reads as a pair of actions. Neutral by design, so it can repeat down a list
+   (the Scope tab's per-container scope) without competing with the row's checkbox. Everything a host might
+   restyle is a custom property with a portal default, so the Causality view sets its own palette and size in
+   causality.css rather than overriding these rules. The chosen option carries the "on" class. */
+.jim-seg {
+    --jim-seg-track: var(--mud-palette-background);
+    --jim-seg-track-edge: var(--mud-palette-lines-default);
+    --jim-seg-on: var(--mud-palette-surface);
+    --jim-seg-on-shadow: 0 1px 2px rgba(18, 27, 41, 0.16), 0 0 0 1px rgba(18, 27, 41, 0.06);
+    --jim-seg-text: var(--mud-palette-text-secondary);
+    --jim-seg-text-on: var(--mud-palette-text-primary);
+    --jim-seg-font-size: 0.875rem;
+    --jim-seg-padding: 6px 13px;
+    --jim-seg-track-padding: 3px;
+    --jim-seg-radius: 9px;
+    --jim-seg-option-radius: 7px;
+    display: inline-flex;
+    gap: 2px;
+    padding: var(--jim-seg-track-padding);
+    border-radius: var(--jim-seg-radius);
+    background: var(--jim-seg-track);
+    box-shadow: inset 0 0 0 1px var(--jim-seg-track-edge);
 }
 
-/* .mud-button-root in these selectors too: MudBlazor's own group and hover rules (three classes) otherwise
-   outrank them, painting the active segment's text primary on a primary fill (invisible) and swapping that fill
-   for the faint text-button hover tint on hover (the control appears to lose its state). */
-html[lang] .jim-picker-seg .jim-picker-seg-on.mud-button-root {
-    background-color: var(--mud-palette-primary);
-    color: var(--mud-palette-primary-text);
-    border-color: var(--mud-palette-primary);
+/* In dark mode the surface is barely lighter than the page background the track uses, so the chosen option is
+   lifted a step further to still read as raised. */
+body.jim-dark-mode .jim-seg {
+    --jim-seg-on: color-mix(in srgb, var(--mud-palette-text-primary) 12%, var(--mud-palette-surface));
+    --jim-seg-on-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-html[lang] .jim-picker-seg .jim-picker-seg-on.mud-button-root:hover {
-    background-color: var(--mud-palette-primary-darken);
-    border-color: var(--mud-palette-primary-darken);
+/* Rows in a list or table: 0.75rem matches the counts and captions beside it, and the control stays well inside a
+   32px dense row. The dim label measures 6.2:1 (light) and 6.8:1 (dark) on the track in the default theme. */
+.jim-seg.jim-seg-dense {
+    --jim-seg-font-size: 0.75rem;
+    --jim-seg-padding: 3px 10px;
+    --jim-seg-track-padding: 2px;
+    --jim-seg-radius: 7px;
+    --jim-seg-option-radius: 5px;
 }
 
-/* The unselected segment's label takes the chip-label blend (60% accent over body text), not the raw accent: on
-   the selected row's 12% accent tint the raw accent measured 2.8:1 to 4.5:1 across the themes, and the blend
-   5.3:1 or better on every one (ThemeContrastTests covers the same blend on chips). It keeps the accent identity
-   so the pair still reads as one toggle; body text would read as an unrelated outlined button. */
-html[lang] .jim-picker-seg .jim-picker-seg-off.mud-button-root {
-    color: var(--jim-chip-text-primary);
+.jim-seg > button {
+    border: none;
+    background: transparent;
+    color: var(--jim-seg-text);
+    cursor: pointer;
+    padding: var(--jim-seg-padding);
+    font-family: inherit;
+    font-size: var(--jim-seg-font-size);
+    font-weight: 550;
+    line-height: 1.3;
+    border-radius: var(--jim-seg-option-radius);
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
 }
 
-html[lang] .jim-picker-seg .jim-picker-seg-off.mud-button-root:hover {
-    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+.jim-seg > button:hover {
+    color: var(--jim-seg-text-on);
+}
+
+.jim-seg > button.on {
+    background: var(--jim-seg-on);
+    color: var(--jim-seg-text-on);
+    box-shadow: var(--jim-seg-on-shadow);
+}
+
+.jim-seg > button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-seg > button {
+        transition: none;
+    }
 }
 
 /* The row's checkbox is a MudBlazor input control, which carries a bottom margin meant for a form; on a
@@ -4191,7 +4481,7 @@ html[lang] .jim-picker-row > .mud-input-control {
 
 .jim-scope-partition-name {
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 1.125rem;
+    font-size: var(--mud-typography-h6-size);
     font-weight: 600;
     color: var(--mud-palette-text-primary);
     overflow-wrap: anywhere;
@@ -4277,6 +4567,81 @@ html[lang] .jim-virtualised-list .mud-table-root>tbody>tr:nth-last-of-type(2)>.m
     border-bottom: none;
 }
 
+/* The row heights a virtualised grid is laid out at: RowHeight in VirtualisedDataGrid.razor, which is the
+   virtualiser's ItemSize and the scroll restore's estimate until a row renders (jimVirtualList.measuredRowHeight
+   then reads a real one). Left to the text, rows come out fractional (31.6px dense, 51.6px normal at the 13px table
+   size) and move with the type scale; pinning them keeps the estimate true. The two numbers must match RowHeight,
+   and the pin is a minimum: a cell's content taller than it grows the row, which is what the dense content rules
+   below exist to prevent. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row {
+    height: 52px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-row {
+    height: 36px;
+}
+
+/* Dense rows hold their content in 24px. A dense row is pinned at 36px above, and 5.5px of cell padding plus the
+   cell's 1px bottom border leave 24px for what is in it, which is a line of 13px text, a Text chip, or a small
+   control. MudBlazor sizes the controls a list puts in its cells past that (a chip carries a 4px margin, a small
+   button is 28px, an icon button 30-48px), and a row takes the height of its tallest cell, so dense lists came out
+   at 45-60px and dense barely differed from normal. These rules fit the common in-cell controls into the row
+   instead: chips lose their vertical margin, buttons give back vertical padding, icon buttons shrink to a 20px
+   icon in a 24px target. Scoped to the body of a dense virtualised list, so normal density and headers keep
+   MudBlazor's sizes. A control that cannot sit in 24px (a select, a full-size switch) still grows its row; use
+   the small size, or accept the taller row where the control earns it. The row was 32px with 3.5px of padding,
+   which left a column of chips a hair from touching; 36px gives each one 6px either side. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell {
+    padding-top: 5.5px;
+    padding-bottom: 5.5px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-chip {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* A chip's leading icon is 20px, which with the chip's own padding makes an icon chip 27px against the 24px of
+   every other chip; 17px brings it back to 24. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-chip .mud-chip-icon {
+    font-size: 1.0625rem;
+}
+
+/* An inline-block on a text line sits on the baseline, so the line box grows by the font's descent below it and a
+   24px chip or button makes a 27px line. Top alignment lets a 24px control make a 24px line. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell :is(.mud-tooltip-inline, .mud-menu, .mud-chip, .mud-button-root, .jim-object-chip) {
+    vertical-align: top;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body :is(.mud-button-filled-size-small, .mud-button-text-size-small) {
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-button-outlined-size-small {
+    padding-top: 1px;
+    padding-bottom: 1px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:not(.mud-switch-base) {
+    padding: 2px;
+}
+
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:not(.mud-switch-base) .mud-icon-root {
+    font-size: 1.25rem;
+}
+
+/* A filled or outlined icon button carries a 1px border, so it gives back one more pixel of padding. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:is(.mud-button-filled, .mud-button-outlined) {
+    padding: 1px;
+}
+
+/* The object chip (the CSO / MVO badge beside a name) is its 24px glyph plus 2px of padding either side. */
+html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-chip {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
 /* First-paint ceiling, before jimVirtualList.fit measures where the page footer lands. A grid whose container is
    not the page (a dialog, a cell) states its own ceiling instead, as the custom property, and skips the
    measurement; the property's fallback is what every ordinary list uses. */
@@ -4324,10 +4689,34 @@ html[lang] .jim-scope-text .mud-input-slot {
    the spare width evenly, so a short Name column is handed as much room as the Description beside it. No
    minimum: on a row whose other columns are wide (the Connected Systems list's Stats chips at a laptop width)
    the header clips before the table scrolls, and a clipped header beside a clipped value is the lesser fault
-   than an Action column pushed off the screen. */
+   than an Action column pushed off the screen.
+
+   Two fill columns share the spare width through --jim-fill-share, set on each column's HeaderStyle and CellStyle
+   (the Connector Space's External ID and Secondary External ID split it 40/60). Each shows in full once its share
+   is wide enough and clips below that, so a wide window shows both whole and a narrow one clips both, rather than
+   one column holding a fixed cap while the other soaks up the rest. */
 .mud-table-root .mud-table-cell.jim-fill-column {
-    width: 100%;
+    width: var(--jim-fill-share, 100%);
     max-width: 0;
+}
+
+/* A list's Columns menu (the Connector Space's identifier columns): a short checklist under a heading, with a hint
+   saying where the choice is kept. Checkboxes rather than menu items, so it stays open while several are set. */
+.jim-column-menu {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 12px 8px 4px;
+    min-width: 16rem;
+}
+
+.jim-column-menu-heading {
+    padding: 0 0 2px 10px;
+}
+
+.jim-column-menu-hint {
+    padding: 4px 0 0 10px;
+    margin-top: 4px;
+    border-top: 1px solid var(--mud-palette-lines-default);
 }
 
 /* A capped column: the wrapper inside a cell whose content would otherwise set the column's width. Auto layout

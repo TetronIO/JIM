@@ -80,7 +80,7 @@
             <CellTemplate>
                 @* Stop the click reaching the row, which would navigate to the detail page mid-toggle. *@
                 <div @onclick:stopPropagation="true">
-                    <MudSwitch T="bool" Value="context.Item.IsEnabled" Color="Color.Success"
+                    <MudSwitch T="bool" Value="context.Item.IsEnabled" Color="Color.Success" Size="Size.Small"
                                ValueChanged="async (bool val) => await ToggleEnabledAsync(context.Item, val)" />
                 </div>
             </CellTemplate>

@@ -80,7 +80,7 @@
                Color="Color.Error"
                Class="mt-4"
                DropShadow="false"
-               StartIcon="@Icons.Material.Filled.RestartAlt"
+               StartIcon="@(_resetInProgress ? null : Icons.Material.Filled.RestartAlt)"
                OnClick="HandleShowConfirmationAsync"
                Disabled="@(!IsConfirmValid() || _resetInProgress)">
         @if (_resetInProgress)

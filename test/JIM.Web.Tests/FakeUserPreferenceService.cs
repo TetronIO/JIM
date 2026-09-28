@@ -55,6 +55,10 @@ public sealed class FakeUserPreferenceService : IUserPreferenceService
 
     public Task SetCategoryExpandedAsync(int objectTypeId, string categoryName, bool expanded) => Task.CompletedTask;
 
+    public Task<bool> GetConnectorSpaceColumnVisibleAsync(int connectedSystemId, ConnectorSpaceColumn column) => Task.FromResult(true);
+
+    public Task SetConnectorSpaceColumnVisibleAsync(int connectedSystemId, ConnectorSpaceColumn column, bool visible) => Task.CompletedTask;
+
     public Task<string?> GetCausalityViewAsync() => Task.FromResult(StoredCausalityView);
 
     public Task SetCausalityViewAsync(string view)

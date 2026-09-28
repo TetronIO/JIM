@@ -430,26 +430,7 @@ public partial class ConnectedSystemServer
 
         // create the Connected System setting value objects from the Connected System definition settings
         foreach (var definitionSetting in connectorDefinition.Settings)
-        {
-            var settingValue = new ConnectedSystemSettingValue {
-                Setting = definitionSetting
-            };
-
-            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
-                settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
-
-            // Apply default string values for String, DropDown, and File settings
-            if ((definitionSetting.Type == ConnectedSystemSettingType.String ||
-                 definitionSetting.Type == ConnectedSystemSettingType.DropDown ||
-                 definitionSetting.Type == ConnectedSystemSettingType.File) &&
-                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
-                settingValue.StringValue = definitionSetting.DefaultStringValue.Trim();
-
-            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
-                settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
-
-            connectedSystem.SettingValues.Add(settingValue);
-        }
+            connectedSystem.SettingValues.Add(NewSettingValue(definitionSetting));
 
         SanitiseConnectedSystemUserInput(connectedSystem);
 
@@ -492,26 +473,7 @@ public partial class ConnectedSystemServer
 
         // create the Connected System setting value objects from the Connected System definition settings
         foreach (var definitionSetting in connectorDefinition.Settings)
-        {
-            var settingValue = new ConnectedSystemSettingValue {
-                Setting = definitionSetting
-            };
-
-            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
-                settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
-
-            // Apply default string values for String, DropDown, and File settings
-            if ((definitionSetting.Type == ConnectedSystemSettingType.String ||
-                 definitionSetting.Type == ConnectedSystemSettingType.DropDown ||
-                 definitionSetting.Type == ConnectedSystemSettingType.File) &&
-                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
-                settingValue.StringValue = definitionSetting.DefaultStringValue.Trim();
-
-            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
-                settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
-
-            connectedSystem.SettingValues.Add(settingValue);
-        }
+            connectedSystem.SettingValues.Add(NewSettingValue(definitionSetting));
 
         SanitiseConnectedSystemUserInput(connectedSystem);
 
@@ -1629,6 +1591,133 @@ public partial class ConnectedSystemServer
     #endregion
 
     #region Connected System Settings
+    /// <summary>
+    /// Creates a Connected System's value for a Connector Definition setting, carrying the setting's declared default.
+    /// Used when a Connected System is created and when <see cref="ReconcileSettingValues"/> adds a setting the
+    /// Connector gained later, so both apply defaults the same way.
+    /// </summary>
+    internal static ConnectedSystemSettingValue NewSettingValue(ConnectorDefinitionSetting definitionSetting)
+    {
+        var settingValue = new ConnectedSystemSettingValue { Setting = definitionSetting };
+
+        if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
+            settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
+
+        if (TakesStringDefault(definitionSetting))
+            settingValue.StringValue = definitionSetting.DefaultStringValue!.Trim();
+
+        if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
+            settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
+
+        return settingValue;
+    }
+
+    // String, DropDown and File settings take a declared string default; encrypted settings never declare one.
+    private static bool TakesStringDefault(ConnectorDefinitionSetting definitionSetting) =>
+        definitionSetting.Type is ConnectedSystemSettingType.String or ConnectedSystemSettingType.DropDown or ConnectedSystemSettingType.File &&
+        !string.IsNullOrEmpty(definitionSetting.DefaultStringValue);
+
+    /// <summary>
+    /// Brings a Connected System's setting values into line with its Connector Definition's settings, in memory, and
+    /// returns the names of the settings it changed. A Connected System receives a value per setting only when it is
+    /// created, so without this a setting its Connector gains in a later release never appears on it, and a default a
+    /// setting gains later never reaches its unset value.
+    /// </summary>
+    /// <remarks>
+    /// Two changes are made, both of which preserve what the Connector does:
+    /// <list type="bullet">
+    /// <item>A setting with no value gets one, carrying the setting's default (<see cref="NewSettingValue"/>).</item>
+    /// <item>An unset (null) string or integer value takes the setting's declared default. Connectors apply that same
+    /// default when the value is unset, so recording it changes what the portal shows, not the Connector's behaviour.
+    /// A checkbox is never unset, and an empty string is a value the administrator saved rather than the unset state a
+    /// Connector's fallback covers, so neither is touched; nor is any value the administrator set.</item>
+    /// </list>
+    /// Values are matched to settings by Id, because the Connected System and the Connector Definition are often
+    /// loaded by separate queries that hold separate instances of the same setting.
+    /// </remarks>
+    internal static List<string> ReconcileSettingValues(ConnectedSystem connectedSystem, IEnumerable<ConnectorDefinitionSetting> definitionSettings)
+    {
+        var changed = new List<string>();
+        foreach (var definitionSetting in definitionSettings)
+        {
+            var settingName = definitionSetting.Name ?? $"Setting {definitionSetting.Id}";
+            var value = connectedSystem.SettingValues.FirstOrDefault(v => v.Setting != null && v.Setting.Id == definitionSetting.Id);
+            if (value == null)
+            {
+                var added = NewSettingValue(definitionSetting);
+                added.ConnectedSystem = connectedSystem;
+                connectedSystem.SettingValues.Add(added);
+                changed.Add(settingName);
+                continue;
+            }
+
+            if (value.StringValue == null && TakesStringDefault(definitionSetting))
+            {
+                value.StringValue = definitionSetting.DefaultStringValue!.Trim();
+                changed.Add(settingName);
+            }
+            else if (value.IntValue == null && definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
+            {
+                value.IntValue = definitionSetting.DefaultIntValue.Value;
+                changed.Add(settingName);
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Brings the setting values of every Connected System built on <paramref name="connectorDefinition"/> into line
+    /// with its settings (see <see cref="ReconcileSettingValues"/>). Called on startup after the Connector Definition
+    /// itself is synchronised with its Connector, so a setting or default added in a new release reaches existing
+    /// Connected Systems as well as new ones. Each Connected System that changes is saved under a System-attributed
+    /// Update Activity with a configuration change recording what was added; one already in line is not written to
+    /// and records nothing, so an ordinary restart is a no-op.
+    /// </summary>
+    /// <param name="connectorDefinition">The Connector Definition, with its Settings loaded and saved.</param>
+    /// <param name="getParentActivityIdAsync">Supplies the Activity to group any changes under; only called when a
+    /// Connected System actually changes, so a converged database creates no parent Activity either.</param>
+    public async Task ReconcileConnectedSystemSettingValuesAsync(ConnectorDefinition connectorDefinition, Func<Task<Guid>> getParentActivityIdAsync)
+    {
+        var connectedSystemIds = (await Application.Repository.ConnectedSystems.GetConnectedSystemsAsync())
+            .Where(cs => cs.ConnectorDefinitionId == connectorDefinition.Id)
+            .Select(cs => cs.Id)
+            .ToList();
+
+        var updatedCount = 0;
+        foreach (var connectedSystemId in connectedSystemIds)
+        {
+            var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
+            if (connectedSystem == null)
+                continue;
+
+            var changed = ReconcileSettingValues(connectedSystem, connectorDefinition.Settings);
+            if (changed.Count == 0)
+                continue;
+
+            var activity = new Activity
+            {
+                TargetName = connectedSystem.Name,
+                TargetType = ActivityTargetType.ConnectedSystem,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                ConnectedSystemId = connectedSystem.Id,
+                ParentActivityId = await getParentActivityIdAsync()
+            };
+            await Application.Activities.CreateActivityWithTriadAsync(activity, ActivityInitiatorType.System, null, "System");
+            await PersistConnectedSystemUpdateAsync(connectedSystem, ActivityInitiatorType.System, null, "System");
+            await CaptureConfigurationChangeAsync(activity, connectedSystem,
+                $"Settings brought into line with the latest '{connectorDefinition.Name}' by JIM: {string.Join(", ", changed)}.");
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            updatedCount++;
+            Log.Information("ReconcileConnectedSystemSettingValuesAsync: Added or defaulted {Count} setting(s) on Connected System {Id} ({Name}): {Settings}",
+                changed.Count, connectedSystem.Id, connectedSystem.Name, string.Join(", ", changed));
+        }
+
+        Log.Information("ReconcileConnectedSystemSettingValuesAsync: '{Connector}': {Updated} of {Total} Connected System(s) updated",
+            connectorDefinition.Name, updatedCount, connectedSystemIds.Count);
+    }
+
     /// <summary>
     /// Use this when a connector is being parsed for persistence as a connector definition to create the connector definition settings from the connector instance.
     /// </summary>
