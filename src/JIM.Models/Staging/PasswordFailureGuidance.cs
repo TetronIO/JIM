@@ -66,11 +66,11 @@ public class PasswordFailureGuidance
             [
                 "The rules JIM discovered are a floor, not a guarantee. A policy that applies to only some accounts, or a custom password filter the system runs internally, is exposed over no protocol and cannot be read.",
                 "Password history is the other common cause: this account may have held this value before. Generating another is the quickest test.",
-                "If every generated password is refused, compare what JIM produces against the discovered policy on the Connected System's Schema tab."
+                "If every generated password is refused, compare what JIM produces against the discovered policy on the Connected System's Passwords tab."
             ],
             Verdict = PasswordRetryVerdict.RetryWithADifferentPassword,
-            ConnectedSystemTab = "schema",
-            ConnectedSystemTabLabel = "Schema (Password Channel)"
+            ConnectedSystemTab = "passwords",
+            ConnectedSystemTabLabel = "Passwords (Password Policy)"
         },
 
         PasswordSetFailureReason.Transient => new PasswordFailureGuidance
@@ -84,8 +84,8 @@ public class PasswordFailureGuidance
                 "A directory that has just been restarted, or a certificate that has just expired, produces this too."
             ],
             Verdict = PasswordRetryVerdict.RetryUnchanged,
-            ConnectedSystemTab = "schema",
-            ConnectedSystemTabLabel = "Schema (Check password channel)"
+            ConnectedSystemTab = "passwords",
+            ConnectedSystemTabLabel = "Passwords (Check password channel)"
         },
 
         PasswordSetFailureReason.ConfigurationFault => new PasswordFailureGuidance
@@ -99,8 +99,8 @@ public class PasswordFailureGuidance
                 "Accounts held in a directory's privileged groups have their permissions periodically overwritten from a template, so a delegation made on the container does not apply to them."
             ],
             Verdict = PasswordRetryVerdict.NeedsSomebodyElse,
-            ConnectedSystemTab = "schema",
-            ConnectedSystemTabLabel = "Schema (Check password channel)"
+            ConnectedSystemTab = "passwords",
+            ConnectedSystemTabLabel = "Passwords (Check password channel)"
         },
 
         PasswordSetFailureReason.TargetObjectNotFound => new PasswordFailureGuidance
@@ -114,8 +114,8 @@ public class PasswordFailureGuidance
                 "An account moved out of a managed container is present in the directory but out of JIM's reach."
             ],
             Verdict = PasswordRetryVerdict.RetryUnchanged,
-            ConnectedSystemTab = "partitions-containers",
-            ConnectedSystemTabLabel = "Partitions and Containers"
+            ConnectedSystemTab = "scope",
+            ConnectedSystemTabLabel = "Scope"
         },
 
         PasswordSetFailureReason.UnsupportedOperation => new PasswordFailureGuidance

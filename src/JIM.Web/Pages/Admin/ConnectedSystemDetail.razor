@@ -278,7 +278,10 @@ else if (_drift is { TrackingDisabled: true })
 
         @if (_connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
-            <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
+            @* "Scope" rather than "Partitions & Containers": the tab is where an administrator chooses what JIM manages
+               in this system, and the name holds whether the Connector offers partitions alone or partitions with
+               containers, where "hierarchy" or "containers" would each be wrong for one of them. *@
+            <MudTabPanel Text="Scope" Disabled="@AreSettingDependentTabsDisabled()">
                 <ConnectedSystemPartitionsTab ConnectedSystem="_connectedSystem"
                                               PartitionsAndHierarchiesText="@_partitionsAndHierarchiesText"
                                               PartitionAndHierarchyText="@_partitionAndHierarchyText"

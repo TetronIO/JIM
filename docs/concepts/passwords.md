@@ -108,7 +108,7 @@ A blank figure on the panel means that directory does not publish the rule, or h
 So treat what JIM discovered as a **floor, not a guarantee**, and read a blank value as "JIM could not find this out", never as "there is no such rule". That is also why the parked state above exists: handling a refusal is part of how this works, not a sign something went wrong.
 
 !!! tip "Check the channel before you rely on it"
-    **Check password channel**, on the Connected System's Schema tab, tests the things that usually stop a password being set: whether the connection is encrypted, whether the mechanism JIM needs is available, whether your service account may actually reset passwords in each container, and whether the policy could be read. It sets no password on anything, so it is safe to run against production whenever you like.
+    **Check password channel**, on the Connected System's Passwords tab, tests the things that usually stop a password being set: whether the connection is encrypted, whether the mechanism JIM needs is available, whether your service account may actually reset passwords in each container, and whether the policy could be read. It sets no password on anything, so it is safe to run against production whenever you like.
 
     It cannot prove the whole chain, and JIM deliberately offers nothing that does, because the only way to prove it end to end is to reset a real Connected System Object's password.
 

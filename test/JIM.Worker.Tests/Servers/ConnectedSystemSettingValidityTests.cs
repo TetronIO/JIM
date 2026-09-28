@@ -18,7 +18,7 @@ namespace JIM.Worker.Tests.Servers;
 /// What <see cref="ConnectedSystem.SettingValuesValid"/> is allowed to mean.
 /// </summary>
 /// <remarks>
-/// The flag is persisted, and the portal gates the Schema, Partitions &amp; Containers and Matching tabs on it, so it
+/// The flag is persisted, and the portal gates the Schema, Scope and Matching tabs on it, so it
 /// has to answer a question about the configuration: are the setting values complete and well-formed? It used to be
 /// recomputed on every save from the Connector's own validation, which opens a real connection to the target system.
 /// Saving anything at all while that system was unreachable, a container selection included, therefore persisted

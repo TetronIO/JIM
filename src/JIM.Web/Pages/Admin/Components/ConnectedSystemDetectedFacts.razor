@@ -1,0 +1,47 @@
+@using JIM.Models.Staging
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The facts a Connector detected about its target (an LDAP directory's type, vendor and paging support, say),
+   as a strip of label-over-value items under the Details form. These are read-only facts, not settings, so
+   they take the same treatment as the Created and Updated stamps in the page header rather than a card of
+   their own: a card, a heading, a paragraph and a striped table around three facts was chrome outweighing
+   content five to one. It sits at the top of the Details panel, above the form, separated by a rule. The
+   explanation lives in the info button, per the portal's page-description rule. *@
+@if (Capabilities != null)
+{
+    <div class="jim-facts" data-testid="jim-detected-facts">
+        <div class="jim-fact jim-fact-heading">
+            <span class="jim-fact-label d-flex align-center">
+                Detected
+                <InfoPopover Title="Detected">
+                    Facts the Connector detected about the target system during a previous connection, shown for
+                    reference. Nothing here can be changed, and reading it never opens a new connection.
+                </InfoPopover>
+            </span>
+            @if (Capabilities.Count == 0)
+            {
+                <span class="jim-fact-value mud-text-secondary" data-testid="jim-detected-facts-empty">
+                    Nothing detected yet; facts appear after the first successful connection.
+                </span>
+            }
+        </div>
+        @foreach (var capability in Capabilities)
+        {
+            <div class="jim-fact" data-testid="jim-detected-fact">
+                <span class="jim-fact-label">@capability.Name</span>
+                <span class="jim-fact-value">@capability.Value</span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The detected facts. Null when the Connector cannot detect any (nothing renders); empty when it can but has
+    /// not connected successfully yet (a single line says so).
+    /// </summary>
+    [Parameter]
+    public List<ConnectorCapability>? Capabilities { get; set; }
+}

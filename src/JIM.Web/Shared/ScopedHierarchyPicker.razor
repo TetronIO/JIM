@@ -125,7 +125,9 @@
                                                            : "This Container and every Container beneath it are imported. Choose This level to import only the objects held directly in it.")" />
                                 </TooltipContent>
                                 <ChildContent>
-                                    <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Class="jim-picker-seg">
+                                    @* Color.Primary on the group, so both segments share the accent and read as one
+                                       toggle; the active one is filled by .jim-picker-seg-on. *@
+                                    <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" Class="jim-picker-seg">
                                         <MudButton Class="@SegmentClass(!isOneLevel)" data-testid="jim-picker-scope-subtree"
                                                    OnClick="@(() => SetScopeAsync(container, ConnectedSystemContainerScope.Subtree))">
                                             Whole subtree
@@ -152,7 +154,9 @@
                         @* The figure follows the Scope control rather than sitting statically beside it: narrowing
                            a Container to This level changes which number is the relevant one, and showing the
                            subtree total next to a One Level statement would overstate what the row imports. *@
-                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                        @* RootClass, because the tooltip's own root is the grid cell: the width has to be on it, or
+                           each row's count column sizes to its own digits and the scope controls stagger. *@
+                        <MudTooltip Arrow="true" Placement="Placement.Top" RootClass="jim-picker-objects-cell">
                             <TooltipContent>
                                 <TooltipText Text="@CountExplanation(directCount, subtreeCount, isOneLevel)" />
                             </TooltipContent>

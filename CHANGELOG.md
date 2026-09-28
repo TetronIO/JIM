@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 The Connected System's **Partitions & Containers** tab is now called **Scope**: it is where you choose what JIM manages in a system, whatever shape that takes. Links to the old tab name open the Details tab.
+- 🔄 The Password Channel check and the discovered Password Policy now sit on the Connected System's **Passwords** tab, beneath the Password Synchronisation settings, rather than on the Schema tab.
+- 🔄 The Directory Capabilities card on a Connected System's Details tab is now a compact strip of detected facts beneath the form, with its explanation in an info button.
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
 - 🔄 JIM now serves HTTPS out of the box, with your organisation's certificate or one the setup script creates, so sign-in works from any machine without a reverse proxy. Before upgrading, put the certificate in the `tls` folder beside the compose files. (#1808)
@@ -28,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Installing with the setup script's bundled PostgreSQL works: it pointed JIM at `localhost` instead of the bundled database, so JIM never started.
 - 🐛 The release bundle's PostgreSQL image now loads under its name, so an air-gapped install with the bundled database finds it.
 - 🐛 The setup script no longer stops at `Failed to download .env.example`, and the manual download commands in the Deployment Guide and Quick Start work again: releases publish the environment template as `default.env.example`.
+- 🐛 Discover Domain Controllers, refused on a directory that is not Active Directory or Samba AD, now names the detected directory as the portal does elsewhere ("389 Directory Server") rather than by its internal identifier.
+- 🐛 An auxiliary class's contributed attribute count (portal, REST and PowerShell) no longer includes attributes the Object Type already carries, such as the directory's common entry attributes, which overstated every class by the same few.
 - 🐛 Opening JIM over plain HTTP from another machine no longer loops endlessly between JIM and the identity provider; sign-in stops on a page explaining that browser access from other machines requires HTTPS. A one-off lost sign-in cookie is still recovered automatically.
 - 🐛 `Get-JIMScheduleExecution -Status` and the REST API's Schedule Execution list now return only executions with the requested status, instead of every execution.
 - 🐛 A Schedule with a step that cannot be queued, for example because its Connected System is being deleted, no longer runs its earlier steps and then reports Complete; it runs nothing, fails naming the step, and each step shows why it did not run. (#1768)

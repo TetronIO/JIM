@@ -157,7 +157,7 @@ internal class LdapConnectorPreflight
         if (containerExternalIds.Count == 0)
             return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
                 "JIM cannot check whether the account it connects as is allowed to reset passwords, because it does not yet know where it would be provisioning.",
-                ["Select the containers to manage on the Partitions and Containers tab, then check again."]);
+                ["Select the containers to manage on the Scope tab, then check again."]);
 
         // Rights are read per container, and a Connected System can manage a great many. Checking every one of
         // them turns a diagnostic into a long-running directory scan, so the number is bounded and the bound is
