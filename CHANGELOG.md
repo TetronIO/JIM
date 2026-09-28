@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ Air-gapped installs use the same setup script: run it inside the extracted release bundle and it loads the images and installs without an internet connection. (#1808)
+- ✨ Adding an auxiliary class to a Connected System Object Type now lists the attributes each class would contribute, in a dialog that opens on the suggested classes and applies several at once; REST and `Get-JIMConnectedSystemAuxiliaryClass` return them too.
 - ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
 - ✨ A Schedule run that carried on past a failed step now ends **Complete With Error**, naming the failed steps, instead of a plain Complete, so the portal, PowerShell and monitoring scripts can tell it apart from a clean run. (#1787)
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 The Connected System's **Partitions & Containers** tab is now called **Scope**: it is where you choose what JIM manages in a system, whatever shape that takes. Links to the old tab name open the Details tab.
 - 🔄 The Password Channel check and the discovered Password Policy now sit on the Connected System's **Passwords** tab, beneath the Password Synchronisation settings, rather than on the Schema tab.
+- 🔄 The Auxiliary Classes panel on a Connected System Object Type now shows what the type is made of (its class plus the merged auxiliary classes) instead of listing every auxiliary class in the schema, so Attribute Selection is no longer pushed off the screen.
 - 🔄 The Directory Capabilities card on a Connected System's Details tab is now a compact strip of detected facts beneath the form, with its explanation in an info button.
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)

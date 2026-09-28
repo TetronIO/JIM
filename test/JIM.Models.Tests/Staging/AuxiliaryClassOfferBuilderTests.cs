@@ -172,6 +172,33 @@ public class AuxiliaryClassOfferBuilderTests
             Is.EqualTo(2));
     }
 
+    /// <summary>
+    /// The Connector gives every class the directory's common attributes (the entry's identity and class
+    /// membership, say), so an auxiliary class's own attribute list overlaps the structural class's. Counting
+    /// those as a contribution overstates every class by the same three or four, and listing them promises
+    /// attributes the Object Type already has. What merging contributes is what the Object Type lacks.
+    /// </summary>
+    [Test]
+    public void Build_WhatAClassContributes_ExcludesAttributesTheObjectTypeAlreadyCarries()
+    {
+        _inetOrgPerson.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "entryUUID" });
+        _inetOrgPerson.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "objectClass" });
+        _posixAccount.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "entryUUID" });
+        _posixAccount.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 11, Name = "ObjectClass" });
+        _posixAccount.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 12, Name = "uidNumber" });
+        _posixAccount.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 13, Name = "gidNumber" });
+
+        var offer = AuxiliaryClassOfferBuilder.Build(_inetOrgPerson, AllTypes())
+            .Single(candidate => candidate.ObjectType.Name == "posixAccount");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(offer.ContributedAttributeCount, Is.EqualTo(2));
+            Assert.That(offer.ContributedAttributes.Select(attribute => attribute.Name), Is.EqualTo(new[] { "gidNumber", "uidNumber" }),
+                "ordered by name, so every surface lists them the same way");
+        }
+    }
+
     #endregion
 
     #region CarrierCandidates

@@ -1714,6 +1714,7 @@ One object per auxiliary class, ordered merged first, then suggested, then the r
 | `Name` | `string` | The class as the directory spells it |
 | `Merged` | `bool` | Whether it is merged into this Object Type |
 | `ContributedAttributeCount` | `int` | How many attributes merging it would contribute |
+| `ContributedAttributes` | `object[]` | The attributes merging it would contribute, ordered by name. Each carries `Name`, `Type`, `AttributePlurality`, `Required` (the class's schema demands it) and `IsCredential` (JIM will never select it; passwords travel by the password channel) |
 | `PermittedByTheConnectedSystem` | `bool` | A DIT Content Rule says it may attach here |
 | `EntriesObservedOn` | `int?` | How many of the entries the last discovery run read carried it. `$null` when no run has observed it, which is different from `0` |
 | `IsSuggested` | `bool` | Whether either reason above applies |
@@ -1727,6 +1728,12 @@ Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5
 ```powershell title="Show only the classes JIM has a reason to suggest"
 Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -SuggestedOnly |
     Format-Table Name, ContributedAttributeCount, EntriesObservedOn
+```
+
+```powershell title="See what merging a class would bring"
+(Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 |
+    Where-Object Name -eq 'posixAccount').ContributedAttributes |
+    Format-Table Name, Type, Required, IsCredential
 ```
 
 ```powershell title="Name what the Object Type carries today"
