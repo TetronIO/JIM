@@ -33,6 +33,53 @@ A service waits for five minutes. Then it logs one final line, `The database was
 
 Waiting cannot fix rejected credentials, so the service does not wait for them: it stops straight away, with exit code 1 and PostgreSQL's own error, for example `28P01: password authentication failed for user "jim"`. Check `JIM_DB_USERNAME` and `JIM_DB_PASSWORD` in `.env` against the database server, then start JIM again.
 
+## HTTPS
+
+### The browser cannot connect at `http://<server>`
+
+The browser reports that the site cannot be reached or refused the connection, or, with a port in the address, that the page sent no data.
+
+**What it means.** JIM serves HTTPS only. Nothing answers plain HTTP on port 80, and JIM's own port does not answer plain HTTP either. Nothing is wrong with JIM.
+
+**How to fix.** Open JIM at its `https://` address, such as `https://jim.example.com`. After a first visit over HTTPS, browsers switch to `https://` for JIM's name on their own.
+
+### `docker compose up` fails with `bind source path does not exist: .../tls/tls.crt`
+
+Docker Compose first warns that a `secret file ... does not exist`, then stops without starting `jim.web`.
+
+**What it means.** JIM's certificate or key is missing from the installation's `tls` folder. Nothing has changed in your installation; `jim.web` has simply not been started.
+
+**How to fix.** Run the installer's certificate step, which creates a certificate or installs your organisation's: `sudo /opt/jim/setup.sh --certificate` (from an installation made by hand, run the `setup.sh` you downloaded or the one in the release bundle, with `JIM_INSTALL_DIR=/opt/jim`). To place the files yourself instead, see [The certificate](deployment.md#the-certificate). Then run your `docker compose ... up -d` command again.
+
+### `jim.web` keeps restarting with `Access to the path '/run/secrets/jim-tls/tls.key' is denied`
+
+The `jim.web` log shows `System.UnauthorizedAccessException: Access to the path '/run/secrets/jim-tls/tls.key' is denied`, and the container restarts again and again.
+
+**What it means.** JIM runs as UID `1654` with every capability dropped, and Docker mounts the key with the owner and mode it has on the host, so JIM cannot read a key that belongs to anyone else. The other services, and your data, are unaffected.
+
+**How to fix.** As root, in the installation folder:
+
+```bash
+cd /opt/jim
+chown 1654:1654 tls/tls.key && chmod 400 tls/tls.key
+docker compose -f docker-compose.yml -f docker-compose.production.yml restart jim.web
+```
+
+The installer's certificate step (`sudo /opt/jim/setup.sh --certificate`) sets the owner itself.
+
+### Signing in through nginx fails with `502 Bad Gateway`
+
+Sign-in reaches your identity provider, but the return to JIM (`/signin-oidc`) shows nginx's `502 Bad Gateway` page, and nginx's error log records `upstream sent too big header while reading response header from upstream`.
+
+**What it means.** JIM's response to a sign-in sets cookies larger than nginx's default buffer for a response's headers, so nginx gives up on it. Nothing is wrong with JIM or your identity provider.
+
+**How to fix.** Add these to the nginx `location` that proxies JIM, as the [nginx example](deployment.md#nginx-example) does, then reload nginx:
+
+```nginx
+proxy_buffer_size 16k;
+proxy_buffers 8 16k;
+```
+
 ## Authentication
 
 ### Sign-in loops between JIM and the identity provider
@@ -45,12 +92,12 @@ You open JIM, sign in at your identity provider, and land on a page titled **Sig
 
 and the [security audit log](security-audit-events.md) records a failed sign-in with the reason `OIDC correlation failed`.
 
-**What it means.** When sign-in starts, JIM sets short-lived cookies and checks for them when the identity provider sends the browser back; without them, JIM cannot match the identity provider's response to the sign-in it started. JIM's sign-in cookies are HTTPS-only in a production deployment, so a browser reaching JIM over plain HTTP at an address other than `localhost` discards them. That is typically `http://<server name or IP address>:5200` from another machine, and Safari can do the same even at `http://localhost:5200`. JIM restarts a sign-in once when its cookies go missing, which recovers a one-off loss such as cookies cleared mid-sign-in or the Back button onto the sign-in callback. When the connection means the cookies can never survive, or the restart fails the same way, JIM stops on this page instead of starting sign-in over and over. Nothing is lost when it stops: try again once the cause is fixed. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the HTTPS requirement.
+**What it means.** When sign-in starts, JIM sets short-lived cookies and checks for them when the identity provider sends the browser back; without them, JIM cannot match the identity provider's response to the sign-in it started. JIM's sign-in cookies are HTTPS-only in a production deployment, so a browser reaching JIM over plain HTTP at an address other than `localhost` discards them. A standard installation serves HTTPS only, so this happens when JIM's plain HTTP port has been published to other machines, typically by a compose override of your own or by starting JIM without `docker-compose.production.yml`. Safari can do the same even at `http://localhost`. JIM restarts a sign-in once when its cookies go missing, which recovers a one-off loss such as cookies cleared mid-sign-in or the Back button onto the sign-in callback. When the connection means the cookies can never survive, or the restart fails the same way, JIM stops on this page instead of starting sign-in over and over. Nothing is lost when it stops: try again once the cause is fixed. [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) explains the HTTPS requirement.
 
-**How to fix.** Serve JIM over HTTPS:
+**How to fix.**
 
-1. Put a TLS-terminating reverse proxy in front of JIM, as described in [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy), and [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS. Without it, JIM sees only the proxy's plain HTTP connection even though your address bar shows `https://`.
-2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added for the plain-HTTP address (see the [SSO Setup Guide](sso-setup.md)).
+1. Serve JIM over HTTPS: start it with `docker-compose.production.yml`, which does, and remove any override that publishes port `8080` beyond the host's loopback interface. If a reverse proxy in front of JIM forwards plain HTTP to it, [set `JIM_TRUSTED_PROXIES`](deployment.md#trusting-the-reverse-proxy) so JIM knows its requests arrived over HTTPS. Without it, JIM sees only the proxy's plain HTTP connection even though your address bar shows `https://`.
+2. Register JIM's `https://` sign-in and sign-out callback URLs at your identity provider, and remove any `http://` ones you added for a plain-HTTP address (see the [SSO Setup Guide](sso-setup.md)).
 3. Open JIM at its `https://` address.
 
 If JIM is already served over HTTPS and trusts its proxy but you still see the page, the browser is blocking cookies for JIM's address, or something between the browser and JIM is removing the `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site, and make sure any proxy or security appliance passes them through unchanged.

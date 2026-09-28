@@ -29,67 +29,45 @@ This page covers all the ways to get JIM up and running. Choose the option that 
 
 ## For Administrators
 
-### Option 1: Automated Setup (Recommended)
+### Before You Start
 
-The setup script downloads everything you need, walks you through configuration, and starts JIM:
+Register JIM as a client at your identity provider first; the installer asks for its details. See the [SSO Setup Guide](../administration/sso-setup.md), and [Before You Install](../administration/deployment.md#before-you-install) for everything else to have ready.
+
+### Option 1: The Installer (Recommended)
+
+On the server, as root:
 
 ```bash
-curl -fsSL https://junctional.io/get | bash
+curl -fsSL https://junctional.io/get | sudo bash
 ```
 
-Or download and inspect first:
+Or download it and read it first:
 
 ```bash
 curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/deploy/setup.sh
 less setup.sh    # review the script
-bash setup.sh
+sudo bash setup.sh
 ```
 
-### Option 2: Manual Setup
+The installer asks about your database, identity provider, HTTPS port and certificate, installs JIM in `/opt/jim`, starts it, and waits until it is ready.
 
-If you prefer to set things up manually using Docker Compose:
+### Option 2: Air-Gapped
+
+Each release includes a bundle (`jim-release-X.Y.Z.tar.gz`) holding everything an installation needs. Download it from the [releases page](https://github.com/TetronIO/JIM/releases) on a connected machine, transfer it to the server, then run the installer inside it, which installs from the bundle without the internet:
 
 ```bash
-mkdir jim && cd jim
-
-# Download compose files and environment template
-curl -fsSL -o docker-compose.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.yml
-curl -fsSL -o docker-compose.production.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.production.yml
-curl -fsSL -o .env https://github.com/TetronIO/JIM/releases/latest/download/.env.example
-
-# Configure - edit .env with your SSO settings (see SSO Setup Guide)
-# Set DOCKER_REGISTRY=ghcr.io/tetronio/ and JIM_VERSION to the latest release version
-
-# Start JIM with bundled PostgreSQL
-docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
-
-# Or without bundled PostgreSQL (set JIM_DB_HOSTNAME in .env to your external DB)
-docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+tar -xzf jim-release-X.Y.Z.tar.gz && cd jim-release-X.Y.Z
+sudo ./setup.sh
 ```
 
-!!! note "SSO configuration required"
-    Before starting JIM, you must configure your OpenID Connect identity provider settings in the `.env` file. See the [SSO Setup Guide](../administration/sso-setup.md) for step-by-step instructions.
-
-### Option 3: Air-Gapped Deployment
-
-For environments without internet connectivity, each release includes a downloadable bundle (`jim-release-X.Y.Z.tar.gz`) containing:
-
-- Pre-built Docker images
-- Docker Compose files
-- Environment template
-- PowerShell module
-- Installation instructions
-
-Download the bundle from the [releases page](https://github.com/TetronIO/JIM/releases) on a connected machine, transfer it to your air-gapped host, and follow the included instructions.
-
-For detailed air-gapped deployment guidance, see the [Deployment Guide](../administration/deployment.md).
+To install without the installer, connected or air-gapped, follow the [Deployment Guide](../administration/deployment.md).
 
 ### Accessing JIM
 
-Once running, open [http://localhost:5200](http://localhost:5200) in a browser on the JIM host and log in with your identity provider. Then use the **Example Data** feature to populate JIM with sample users and groups for testing. When you execute a template, a live progress bar appears on the template page so you can watch generation and persistence progress without leaving it; the same task is also visible on the Operations page.
+Once running, open `https://<JIM's name>` in a browser (the setup script prints the address) and log in with your identity provider. Then use the **Example Data** feature to populate JIM with sample users and groups for testing. When you execute a template, a live progress bar appears on the template page so you can watch generation and persistence progress without leaving it; the same task is also visible on the Operations page.
 
-!!! warning "Signing in from another machine needs HTTPS"
-    Over plain HTTP, sign-in works only from a browser on the JIM host itself, at `localhost`. From any other machine, JIM stops the sign-in and explains that HTTPS is required. Put JIM behind a TLS-terminating reverse proxy before anyone signs in from elsewhere; see [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
+!!! tip "A certificate warning on first visit"
+    If the setup script created JIM's certificate, browsers warn about it until the certificate authority it also created is trusted on that machine; see [Distributing the certificate authority](../administration/deployment.md#distributing-the-certificate-authority).
 
 For TLS, upgrades, monitoring and the rest of production deployment, see the [Deployment Guide](../administration/deployment.md).
 

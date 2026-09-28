@@ -32,7 +32,7 @@ Before deploying, configure your identity provider with a client registration fo
 
 ## TLS Certificate
 
-To use JIM from any machine other than the one it runs on, you need a TLS certificate for JIM's host name and a reverse proxy to serve JIM over HTTPS. Over plain HTTP, only a browser on the JIM host itself can sign in. See [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
+JIM serves HTTPS, which browsers need in order to sign in. Use a certificate for JIM's host name from your organisation's certificate authority, or let the setup script create one; creating one needs OpenSSL on the JIM host. See [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy).
 
 ## Hardware Requirements
 

@@ -146,8 +146,17 @@ try {
                 throw "Failed to pull PostgreSQL image"
             }
 
+            # Save it under its name and tag, never the digest reference itself. Saved by digest reference, the
+            # archive carries no image name, so docker load produces an anonymous image, and the compose file's
+            # digest-pinned reference then finds nothing: the bundled database never starts on an air-gapped host.
+            # Loaded by name, the image still has its digest, which is what the compose file's reference checks.
+            $postgresTagged = $PostgresImage -replace '@sha256:[0-9a-f]+$', ''
+            docker tag $PostgresImage $postgresTagged
             $postgresTar = Join-Path $bundlePath "docker-images/postgres-18.tar"
-            docker save -o $postgresTar $PostgresImage
+            docker save -o $postgresTar $postgresTagged
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to export the PostgreSQL image"
+            }
             Write-Host "  Exported: $postgresTar" -ForegroundColor Green
         }
     }
@@ -174,6 +183,14 @@ try {
             Write-Host "  Copied: $file" -ForegroundColor Gray
         }
     }
+
+    # The installer, which installs from this bundle when run inside it, and the version it installs.
+    Copy-Item (Join-Path $RepoRoot "deploy/setup.sh") -Destination "$bundlePath/setup.sh"
+    if (-not $IsWindows) {
+        chmod 755 "$bundlePath/setup.sh"
+    }
+    "$Version`n" | Set-Content -NoNewline "$bundlePath/VERSION"
+    Write-Host "  Copied: deploy/setup.sh, and wrote VERSION" -ForegroundColor Gray
 
     # Copy PowerShell module
     Write-Host "`nCopying PowerShell module..." -ForegroundColor Cyan
@@ -215,86 +232,128 @@ try {
 
 Version: $Version
 
-## Prerequisites
+This bundle installs JIM without an internet connection. Its installer, setup.sh,
+uses the images and files in this bundle and downloads nothing.
 
-- Docker Engine 24.0 or later
-- Docker Compose v2.20 or later
-- At least 4GB RAM available for containers
-- 10GB disk space
+## Before You Start
 
-## Installation Steps
+You need:
 
-### 1. Transfer the Release Bundle
+- A Linux server with Docker Engine 24.0 or later and Docker Compose v2.24 or
+  later, 4 GB of RAM or more, and 20 GB of free disk space
+- OpenSSL, which every mainstream Linux distribution installs by default
+- The DNS name users will reach JIM at
+- A client registration for JIM at your identity provider: its authority URL,
+  client ID and secret, API scope, and the claim value of the first
+  administrator. The SSO Setup Guide at https://docs.junctional.io describes
+  each provider; read it from a connected machine.
+- A PostgreSQL 18 server, unless you use the one in this bundle
+- Your organisation's certificate and key for JIM's name, unless the installer
+  creates them
 
-Transfer `jim-release-$Version.tar.gz` to your target system using your
-organisation's approved secure file transfer method.
+## Install
 
-### 2. Extract the Bundle
+1. Transfer jim-release-$Version.tar.gz to the server by your organisation's
+   approved method, then extract it and check it arrived intact; every line
+   should end in OK:
+
+    ``````bash
+    tar -xzf jim-release-$Version.tar.gz
+    cd jim-release-$Version
+    sha256sum -c checksums.sha256
+    ``````
+
+2. Run the installer as root:
+
+    ``````bash
+    sudo ./setup.sh
+    ``````
+
+   It installs JIM in /opt/jim and asks about:
+
+   - the database: the bundled PostgreSQL, or your own server
+   - your identity provider
+   - the HTTPS port: 443 unless you choose another
+   - the certificate: one it creates, with a certificate authority (CA) of its
+     own, or your organisation's certificate and key
+   - any reverse proxy or load balancer in front of JIM
+
+   It then loads JIM's images, starts JIM, and waits until JIM is ready.
+
+3. Do what the installer lists under Next steps:
+
+   - At your identity provider, register JIM's two redirect URIs,
+     https://jim.example.com/signin-oidc and
+     https://jim.example.com/signout-callback-oidc, with your JIM name (and
+     :port if you chose one other than 443).
+   - If the installer created the certificate, add /opt/jim/tls/ca.crt to the
+     trusted root certificate authorities of every machine whose browser or
+     tools use JIM, for example by Group Policy. Until then, browsers warn about
+     JIM's certificate.
+
+Then open https://jim.example.com and sign in.
+
+## Looking After JIM
+
+The installation keeps a copy of the installer:
 
 ``````bash
-tar -xzf jim-release-$Version.tar.gz
-cd jim-release-$Version
+# Renew a certificate the installer created, before it expires (it lasts a year)
+sudo /opt/jim/setup.sh --renew-certificate
+
+# Change the certificate's names, or move to your organisation's certificate
+sudo /opt/jim/setup.sh --certificate
 ``````
 
-### 3. Verify Integrity (Recommended)
+Run Docker Compose commands in /opt/jim, naming both compose files, and with
+--profile with-db if you use the bundled PostgreSQL:
 
 ``````bash
-sha256sum -c checksums.sha256
+cd /opt/jim
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db ps
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db logs jim.web
 ``````
 
-All files should report "OK".
+## Installing Without the Installer
 
-### 4. Load Docker Images
+If your organisation's policy requires every step by hand:
 
 ``````bash
-docker load -i docker-images/jim-web.tar
-docker load -i docker-images/jim-worker.tar
-docker load -i docker-images/jim-scheduler.tar
-docker load -i docker-images/postgres-18.tar
+# As root, in the extracted bundle
+for f in docker-images/*.tar; do docker load -i "`$f"; done
+mkdir -p /opt/jim/tls && chmod 700 /opt/jim/tls
+cp compose/docker-compose.yml compose/docker-compose.production.yml /opt/jim/
+cp compose/.env.example /opt/jim/.env && chmod 600 /opt/jim/.env
 ``````
 
-### 5. Configure Environment
+Edit /opt/jim/.env: set DOCKER_REGISTRY=ghcr.io/tetronio/ and
+JIM_VERSION=$Version, and the identity provider settings its comments
+describe. For the bundled PostgreSQL, set JIM_DB_HOSTNAME=jim.database (the
+template's localhost is for development) and choose a strong JIM_DB_PASSWORD;
+for your own server, give its name and JIM's credentials there.
+
+Put JIM's certificate and key in place. For your organisation's certificate:
 
 ``````bash
-cd compose
-cp .env.example .env
+cp /path/to/jim.crt /opt/jim/tls/tls.crt   # the certificate, followed by any intermediate CA certificates
+cp /path/to/jim.key /opt/jim/tls/tls.key   # its unencrypted private key
+chown 1654:1654 /opt/jim/tls/tls.key && chmod 400 /opt/jim/tls/tls.key
 ``````
 
-Edit `.env` with your configuration:
-- Database credentials
-- SSO/OIDC settings (if applicable)
-- Logging preferences
+For a certificate of JIM's own instead, run only the installer's certificate
+step: sudo JIM_INSTALL_DIR=/opt/jim ./setup.sh --certificate
 
-### 6. Start JIM
-
-With the bundled PostgreSQL container:
+Then start JIM. Leave out --profile with-db if you use your own PostgreSQL
+server, and --pull never stops Docker from trying the internet:
 
 ``````bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
+cd /opt/jim
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d --pull never
 ``````
 
-With an external PostgreSQL server (set JIM_DB_HOSTNAME in .env), leave out --profile with-db.
-
-Pass the same -f files and --profile to every later docker compose command (ps, logs, stop).
-
-### 7. Verify Installation
-
-Access JIM at http://localhost:5200 (set JIM_WEB_PORT in .env to use another port).
-
-Run the health check; it returns 200 once JIM is ready:
-``````bash
-curl -f http://localhost:5200/api/v1/health/ready
-``````
+JIM is ready when docker compose ... ps shows jim.web as healthy.
 
 ## Installing the PowerShell Module
-
-### Option A: Import Directly
-
-``````powershell
-Import-Module ./powershell/JIM/JIM.psd1
-``````
-
-### Option B: Install to Module Path
 
 ``````powershell
 `$modulePath = `$env:PSModulePath.Split([IO.Path]::PathSeparator)[0]
@@ -302,52 +361,23 @@ Copy-Item -Recurse ./powershell/JIM "`$modulePath/JIM"
 Import-Module JIM
 ``````
 
-### Verify Module
+The machine running the module must trust JIM's certificate, or the
+certificate authority the installer created.
 
 ``````powershell
-Get-Module JIM
-Get-Command -Module JIM
-``````
-
-## Connecting to JIM
-
-``````powershell
-# Connect using API key
-Connect-JIM -Server "http://localhost:5200" -ApiKey "your-api-key"
-
-# Test connection
+Connect-JIM -Url "https://jim.example.com" -ApiKey "your-api-key"
 Test-JIMConnection
-
-# List connected systems
-Get-JIMConnectedSystem
-``````
-
-## Troubleshooting
-
-### Container Logs
-``````bash
-docker compose logs jim.web
-docker compose logs jim.worker
-docker compose logs jim.scheduler
-``````
-
-### Database Connection
-``````bash
-docker compose exec jim.db psql -U jim -d jim -c "SELECT 1"
-``````
-
-### Restart Services
-``````bash
-docker compose restart
 ``````
 
 ## Support
 
-For issues and questions:
-- GitHub: https://github.com/TetronIO/JIM/issues
-- Documentation: https://github.com/TetronIO/JIM/wiki
+- Documentation: https://docs.junctional.io
+- Issues: https://github.com/TetronIO/JIM/issues
 "@
-    $installGuide | Set-Content "$bundlePath/docs/INSTALL.md"
+    # LF line endings: the guide is read, and its commands pasted, on Linux hosts. This script is checked out
+    # with CRLF (.gitattributes), so the here-string carries CRLF until converted, and a heredoc copied from
+    # it would write carriage returns into the configuration files it creates.
+    ($installGuide -replace "`r`n", "`n") + "`n" | Set-Content -NoNewline "$bundlePath/docs/INSTALL.md"
     Write-Host "  Created: INSTALL.md" -ForegroundColor Gray
 
     # Create README
@@ -355,28 +385,28 @@ For issues and questions:
 JIM (Junctional Identity Manager) - Release $Version
 =====================================================
 
-This bundle contains everything needed for an air-gapped deployment of JIM.
+This bundle installs JIM without an internet connection.
 
 Contents:
 ---------
+- setup.sh        : The installer; it installs from this bundle
+- VERSION         : The JIM version this bundle installs
 - docker-images/  : Pre-built Docker images (tar format)
 - compose/        : Docker Compose configuration files
 - powershell/     : JIM PowerShell module
-- docs/           : Documentation and changelog
+- docs/           : Installation guide, readme and changelog
 - checksums.sha256: SHA256 checksums for integrity verification
 
 Quick Start:
 ------------
-1. Verify checksums: sha256sum -c checksums.sha256
-2. Load images:      docker load -i docker-images/*.tar
-3. Configure:        cp compose/.env.example compose/.env && edit compose/.env
-4. Start:            cd compose && docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+1. Verify:  sha256sum -c checksums.sha256
+2. Install: sudo ./setup.sh
 
-For detailed instructions, see docs/INSTALL.md
+For details, including installing by hand, see docs/INSTALL.md.
 
 License: See https://junctional.io/license
 "@
-    $readme | Set-Content "$bundlePath/README.txt"
+    ($readme -replace "`r`n", "`n") + "`n" | Set-Content -NoNewline "$bundlePath/README.txt"
     Write-Host "  Created: README.txt" -ForegroundColor Gray
 
     # Generate checksums
