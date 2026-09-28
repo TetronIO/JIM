@@ -148,7 +148,7 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 is Samba AD only. Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand.
+In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). The directory-selectable scenarios also run against 389 Directory Server (`dirsrv-primary`) with `-DirectoryType DirectoryServer389` (see the directory type table below). Scenarios 014, 019 and 022 are OpenLDAP only; Scenario 017 is Samba AD only; Scenario 023 supports OpenLDAP and Samba AD only (it is skipped on the 389 Directory Server pass of a `-DirectoryType All` run). Scenario 016 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand. Scenarios 011, 015 and 016 are directory-agnostic (they accept `-DirectoryConfig` but never use it), so a `-DirectoryType All` run executes them once, in the first directory pass, rather than once per directory type with identical results each time; the per-scenario rules live in `utils/Get-ScenarioDirectoryTypes.ps1`.
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
@@ -187,7 +187,7 @@ See [Data Scale Templates](#data-scale-templates) for the full list: sizes, grou
 |----------------|-------------|---------|
 | `SambaAD` (default) | Samba Active Directory | LDAPS on port 636, `objectGUID`, AD schema discovery |
 | `OpenLDAP` | OpenLDAP with multi-suffix partitions | LDAP on port 1389, `entryUUID`, RFC 4512 schema, accesslog delta import |
-| `DirectoryServer389` | 389 Directory Server with the same two suffixes | LDAPS on port 3636 (JIM's Connected Systems; the harness's own `ldapsearch` checks use LDAP on 3389 inside the container), `entryUUID`, RFC 4512 schema, Retro Changelog delta import; every OpenLDAP scenario except 14, 19 and 22 |
+| `DirectoryServer389` | 389 Directory Server with the same two suffixes | LDAPS on port 3636 (JIM's Connected Systems; the harness's own `ldapsearch` checks use LDAP on 3389 inside the container), `entryUUID`, RFC 4512 schema, Retro Changelog delta import; every OpenLDAP scenario except 14, 19, 22 and 23 |
 | `All` | Every directory type (full regression) | Runs all scenarios against SambaAD first, then OpenLDAP, then DirectoryServer389 |
 
 ```powershell
