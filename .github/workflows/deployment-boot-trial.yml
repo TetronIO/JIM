@@ -32,7 +32,7 @@ jobs:
       run: |
         $authority = ./test/ci/deployment/Start-TestIdentityProvider.ps1
         "AUTH=$authority" >> $env:GITHUB_ENV
-    - name: Probe socket creation
+    - name: Probe remedies
       run: |
         py='import socket
         for fam, name in ((socket.AF_INET, "inet"), (socket.AF_INET6, "inet6")):
@@ -41,40 +41,27 @@ jobs:
             except OSError as e:
                 print(name, e.errno, e.strerror)'
         img=docker.io/library/python:3.13-alpine
+        hard=(--cap-drop ALL --security-opt no-new-privileges --read-only --user 1654)
         sudo podman pull -q "$img" >/dev/null
         run() { label="$1"; shift; echo "== $label"; "$@" python3 -c "$py" 2>&1 | sed 's/^/   /'; }
-        run "rootful default" sudo podman run --rm "$img"
-        run "rootful cap-drop ALL" sudo podman run --rm --cap-drop ALL "$img"
-        run "rootful cap-drop ALL, no-new-privileges, read-only, user 1654" sudo podman run --rm --cap-drop ALL --security-opt no-new-privileges --read-only --user 1654 "$img"
-        run "rootful cap-drop ALL, apparmor unconfined" sudo podman run --rm --cap-drop ALL --security-opt apparmor=unconfined "$img"
-        run "rootful cap-drop ALL, seccomp unconfined" sudo podman run --rm --cap-drop ALL --security-opt seccomp=unconfined "$img"
-        run "docker cap-drop ALL" docker run --rm --cap-drop ALL "$img"
-        echo "== ipv6 in a rootful container: $(sudo podman run --rm "$img" cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>&1)"
-        cat > /tmp/pod.yaml <<EOF
-        apiVersion: v1
-        kind: Pod
-        metadata:
-          name: diag
-        spec:
-          restartPolicy: Never
-          containers:
-            - name: probe
-              image: $img
-              command: ["python3", "-c"]
-              args:
-                - |
-        $(printf '%s\n' "$py" | sed 's/^/          /')
-              securityContext:
-                readOnlyRootFilesystem: true
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop: [ALL]
-        EOF
-        sudo podman kube play /tmp/pod.yaml >/dev/null && sleep 5
-        echo "== rootful kube play, JIM's securityContext"; sudo podman logs diag-probe 2>&1 | sed 's/^/   /'
-        sudo podman inspect diag-probe --format 'apparmor={{.AppArmorProfile}} seccomp={{.HostConfig.SecurityOpt}}'
-        sudo podman kube down /tmp/pod.yaml >/dev/null
-        echo "--- dmesg apparmor"; sudo dmesg | grep -i -E 'apparmor.*DENIED' | tail -10
+        echo "--- versions"; dpkg-query -W crun runc podman apparmor containers-common golang-github-containers-common 2>/dev/null
+        echo "--- /etc/apparmor.d/crun"; cat /etc/apparmor.d/crun 2>/dev/null
+        for f in crun runc podman buildah passt slirp4netns; do [ -e "/etc/apparmor.d/$f" ] && echo "profile file: $f"; done
+        run "rootful crun, hardened (as JIM)" sudo podman run --rm "${hard[@]}" "$img"
+        echo "runc: $(command -v runc) $(runc --version 2>/dev/null | head -1)"
+        run "rootful runc, hardened" sudo podman --runtime "$(command -v runc)" run --rm "${hard[@]}" "$img"
+        sudo useradd -m diag && sudo loginctl enable-linger diag && sleep 3
+        uid=$(id -u diag)
+        asdiag=(sudo -u diag env -i PATH=/usr/bin:/bin HOME=/home/diag XDG_RUNTIME_DIR="/run/user/$uid")
+        (cd / && "${asdiag[@]}" podman pull -q "$img" >/dev/null)
+        (cd / && run "rootless crun, hardened" "${asdiag[@]}" podman run --rm "${hard[@]}" "$img")
+        echo "--- removing the crun profile"
+        sudo apparmor_parser -R /etc/apparmor.d/crun && echo removed
+        run "rootful crun, hardened, no crun profile" sudo podman run --rm "${hard[@]}" "$img"
+        sudo podman inspect --latest --format 'profile={{.AppArmorProfile}}' 2>/dev/null || true
+        (cd / && run "rootless crun, hardened, no crun profile" "${asdiag[@]}" podman run --rm "${hard[@]}" "$img")
+        (cd / && run "rootless crun, default, no crun profile" "${asdiag[@]}" podman run --rm "$img")
+        echo "--- dmesg apparmor"; sudo dmesg | grep -i -E 'apparmor.*DENIED' | tail -6
 
   deployment-boot:
     # Installs JIM the way a customer does, three times over: from a release bundle built from this commit,

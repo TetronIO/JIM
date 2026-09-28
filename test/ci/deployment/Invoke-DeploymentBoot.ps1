@@ -90,8 +90,9 @@ function Write-Step {
     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ${leg}: $Message"
 }
 
-# Runs a native command, returning its output as text. Throws on a non-zero exit unless -AllowFailure, when
-# the exit code is left in $LASTEXITCODE for the caller.
+# Runs a native command, returning its standard output as text; its standard error, where the runtimes put
+# warnings, is kept out of what callers compare, and shown only if the command fails. Throws on a non-zero exit
+# unless -AllowFailure, when the exit code is left in $LASTEXITCODE for the caller.
 function Invoke-Native {
     param(
         [Parameter(Mandatory)]
@@ -101,9 +102,13 @@ function Invoke-Native {
     )
     $executable = $Command[0]
     $arguments = @($Command | Select-Object -Skip 1)
-    $output = & $executable @arguments 2>&1 | ForEach-Object { "$_" }
+    $output = [System.Collections.Generic.List[string]]::new()
+    $errors = [System.Collections.Generic.List[string]]::new()
+    & $executable @arguments 2>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { $errors.Add("$_") } else { $output.Add("$_") }
+    }
     if ($LASTEXITCODE -ne 0 -and -not $AllowFailure) {
-        throw "Failed (exit $LASTEXITCODE): $($Command -join ' ')`n$($output -join "`n")"
+        throw "Failed (exit $LASTEXITCODE): $($Command -join ' ')`n$((@($output) + @($errors)) -join "`n")"
     }
     $output -join "`n"
 }
