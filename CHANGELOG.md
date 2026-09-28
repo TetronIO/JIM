@@ -36,7 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Installing with the setup script's bundled PostgreSQL works: it pointed JIM at `localhost` instead of the bundled database, so JIM never started.
 - 🐛 The release bundle's PostgreSQL image now loads under its name, so an air-gapped install with the bundled database finds it.
 - 🐛 The setup script no longer stops at `Failed to download .env.example`, and the manual download commands in the Deployment Guide and Quick Start work again: releases publish the environment template as `default.env.example`.
-- 🐛 The LDAP Connector's Delete Behaviour setting now shows Delete as its default on new Connected Systems, matching what export does when it is left unset, instead of an empty dropdown.
 - 🐛 A Synchronisation Rule attribute flow created with every inbound value processing option turned off is now saved that way; previously it was saved with "treat whitespace as no value" switched back on.
 - 🐛 The LDAP Connector's Delete Behaviour setting now shows Delete, the value export uses when it is unset, instead of an empty dropdown.
 - 🐛 Connected Systems now receive settings their Connector gains in a later release, and unset settings take a newly declared default, when JIM starts; previously these reached only Connected Systems created afterwards, so a new setting never appeared on existing ones.
