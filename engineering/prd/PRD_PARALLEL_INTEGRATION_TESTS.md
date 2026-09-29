@@ -1,285 +1,210 @@
-# Parallel All-Scenarios Integration Test Execution
+# Parallel Directory Lanes for Pre-Release Integration Tests
 
 - **Status:** Planned
 - **Created:** 2026-04-22
+- **Revised:** 2026-09-29 (rescoped from per-scenario sharding plus a self-hosted CI matrix to three parallel directory lanes on one host)
 - **Author:** Jay
 - **Issue:** #636
 
 ## Problem Statement
 
-The Pre-Release all-scenarios integration run is the gate we use before cutting a release. At the current hardcoded template sizes (Samba AD: MediumLarge, OpenLDAP: Scale100K) it takes a very long time to complete because every scenario goes through a full stand-up and tear-down of the JIM stack, directory servers, and data population — effectively running a dozen large-scale initialisations back-to-back on a single host.
+Pre-Release is the regression gate before a release, and it now takes about 4 hours 40 minutes. It runs three directory passes back to back, and each pass runs the full scenario list against one directory:
 
-This:
+| Pass | Template | Duration (2026-09-29 run) |
+|------|----------|---------------------------|
+| Samba AD | Medium | 1h 24m |
+| OpenLDAP | Large | 1h 38m |
+| 389 Directory Server | Large | 1h 38m |
 
-- Slows our ability to release often.
-- Makes full regression after significant refactoring or bug-fix work prohibitively expensive.
-- Prevents us from making good use of spare resources on the test host when running Pre-Release locally.
-- Hardcodes the Pre-Release template sizes, so there is no way to dial the run down when iterating locally or up when stress-testing.
+The passes do not depend on each other, and the host has spare capacity: the dev host has 16 cores and 121 GB of memory, and a single pass uses a fraction of both. The passes still run one at a time because the harness assumes it owns the whole Docker host. It uses fixed container names, fixed host ports, fixed volume names, a shared `.env` file and fixed result and test-data paths, and several of its reset and clean-up steps act host-wide. The harness says so itself: `Clear-StaleIntegrationMonitors` justifies its host-wide sweep with "concurrent runner invocations are impossible on one host".
 
-The cache infrastructure is already in place (content-hash-keyed CSV tars, Samba AD / OpenLDAP snapshot images tagged per template) but the runner does not currently exploit it for parallel fan-out, and the Docker Compose project uses fixed container / volume names that prevent multiple scenarios running side-by-side on the same host.
+The long run slows releases, makes a full regression after a significant fix expensive enough to skip, and ties up the host for most of a working day.
+
+The original version of this PRD proposed sharding by scenario (N stacks, one scenario each) and a self-hosted GitHub Actions matrix. That design needs far more isolation work, a merge of per-scenario results, and runner infrastructure that does not exist yet. Running the three directory passes side by side gets most of the wall-clock saving for a fraction of that work, because the unit of parallelism already exists: the pass.
 
 ## Goals
 
-- Pre-Release mode can run multiple scenarios in parallel on a single host, with the degree of parallelism controlled by an explicit option; default behaviour is unchanged (serial).
-- Pre-Release mode can run with caller-chosen Samba AD and OpenLDAP template sizes via both CLI parameters and the interactive menu.
-- A deliberate "prepare" phase runs once per invocation, warming all shared artifacts (JIM image, directory snapshot images, CSV caches) before any scenario shard starts, so parallel shards do no redundant setup work.
-- A GitHub Actions workflow can run the Pre-Release suite as a matrix on a self-hosted runner pool, with access gated to authorised users on authorised triggers.
-- Scenario results from parallel shards are merged into a single regression report with the same shape as today's `full-regression-<timestamp>.json` — downstream tooling and the release skill are unaffected.
-- Wall-clock time for a Pre-Release run at MediumLarge/Scale100K is meaningfully shorter than today's serial baseline when run with `-Parallelism > 1` on a suitably-resourced host or across a matrix of runners.
+- Pre-Release can run its three directory passes at the same time on one host, each in its own isolated copy of the stack (a "lane").
+- A parallel Pre-Release run finishes in roughly the time of its slowest lane, targeting no more than 2 hours against today's 4 hours 40 minutes on the dev host.
+- Serial Pre-Release and every single-directory run behave exactly as today, and stay the default.
+- A failure in one lane cannot corrupt, reset or delete another lane's containers, volumes, data or results.
+- The run produces one combined summary covering all three lanes, as well as each lane's own `full-regression-*.json`.
 
 ## Non-Goals
 
-- Parallelising scenarios *within* a single JIM instance. Each shard still runs one scenario end-to-end.
-- Parallelising existing unit or API test projects (`test/JIM.*.Tests/`). This PRD is strictly about `test/integration/`.
-- Reducing the work a single scenario performs (population, sync runs, sync-rule evaluation). Time savings come from fan-out and cache reuse, not scenario-level optimisation.
-- Building a general-purpose test orchestrator. The runner stays a PowerShell script; fan-out is handled by `ForEach-Object -Parallel` locally and by GitHub Actions matrix jobs in CI.
-- Introducing a new cloud dependency for result storage. Reports continue to land in `test/integration/results/`.
-- Sharing a single Postgres or directory server between shards. Every shard gets a fully isolated stack.
+- **Sharding by scenario, or more than three lanes.** One lane per directory type only. Scenario-level fan-out stays a possible follow-up if lanes prove the isolation model.
+- **A GitHub Actions matrix on self-hosted runners.** Split out of this PRD; it depends on runner provisioning and security work that is not started. It should get its own issue.
+- **Running lanes across several hosts.** One host only.
+- **Changing what any scenario does or asserts.** No scenario logic changes beyond swapping fixed names, URLs and paths for lane-scoped ones.
+- **Sharing a JIM stack, Postgres or directory between lanes.** Every lane gets its own.
+- **Removing the duplicate runs of directory-agnostic scenarios.** Already done in #1851; this PRD builds on it.
 
 ## User Stories
 
-1. As a release engineer, I want to run `Run-IntegrationTests.ps1 -Scenario Pre-Release -Parallelism 4` on my workstation, so that the full regression suite completes in a fraction of the time while using the resources available on the host.
-2. As a developer iterating locally, I want to pick smaller Samba AD and OpenLDAP template sizes when running Pre-Release, so that I can get regression signal within my available time budget without being forced onto Scale100K.
-3. As a release engineer cutting a scheduled release, I want GitHub Actions to run the Pre-Release suite on self-hosted runners as a matrix, so that release gates run on dedicated hardware without blocking my workstation.
-4. As a maintainer, I want the self-hosted runner workflow to refuse to execute for untrusted contributors or untrusted triggers, so that our hardware is not exposed to malicious PR-driven code execution.
-5. As any developer, I want serial Pre-Release runs to behave exactly as they do today when I do not opt into parallelism, so that I can trust the default path is unchanged.
+1. As a release engineer, I want `Run-IntegrationTests.ps1 -PreRelease -Parallel` to run all three directory passes at once, so that the release gate takes under 2 hours instead of most of a day.
+2. As a developer after a significant fix, I want a full regression that finishes within an afternoon, so that I actually run it rather than skipping it.
+3. As any developer, I want a run without `-Parallel` to behave exactly as it does today, so that I can trust the default path.
+4. As a developer reading a failed parallel run, I want to see which lane failed, the tail of its log, and where its full log lives, without the three lanes' output interleaved on my console.
 
 ## Requirements
 
 ### Functional Requirements
 
-#### Parameter and menu surface
+#### Parameters and menu
 
-1. `Run-IntegrationTests.ps1` must accept a `-Parallelism` parameter, accepting integers >= 1 and the literal value `Max`. Default is `1` (serial).
-2. When `-Scenario Pre-Release` is selected, the runner must honour `-TemplateSambaAD` and `-TemplateOpenLDAP` parameters. If either is omitted, the current defaults apply (`MediumLarge` for Samba AD, `Scale100K` for OpenLDAP).
-3. The interactive menu's Pre-Release option must prompt, in order, for:
-   1. Samba AD template size (full `ValidateSet`, default `MediumLarge`)
-   2. OpenLDAP template size (full `ValidateSet`, default `Scale100K`)
-   3. Parallelism (`1`, `2`, `4`, `8`, `Max`, or custom integer; default `1`)
-   4. Existing options unchanged (log level, change tracking, etc.)
-4. `Max` parallelism resolves to the number of scenarios that will run in the current invocation.
-5. Invalid parameter combinations (e.g. `-Parallelism 0`, an unknown template name) must fail fast with a clear error before any setup begins.
+1. `Run-IntegrationTests.ps1` accepts a `-Parallel` switch. It is valid only with `-DirectoryType All` (including `-PreRelease`), and fails fast with a clear message otherwise.
+2. Without `-Parallel`, behaviour is unchanged: the three passes run one after another, in the current order, with the current console output.
+3. The interactive menu's Pre-Release entry asks whether to run the lanes in parallel (default: no), after the existing prompts.
+4. `-TemplateSambaAD`, `-TemplateOpenLDAP` and `-TemplateDirectoryServer389` keep working as today, per lane.
 
-#### Prepare-once phase
+#### Lane isolation
 
-6. Before any scenarios execute, the runner must run an explicit prepare phase that ensures the following artifacts are present and up-to-date for the chosen template sizes:
-   - JIM Docker image (via the existing build path).
-   - Samba AD snapshot image(s) for the chosen `-TemplateSambaAD`.
-   - OpenLDAP snapshot image(s) for the chosen `-TemplateOpenLDAP`.
-   - CSV cache tars for the chosen template(s).
-7. The prepare phase must reuse the existing content-hash cache keys unchanged — no new cache format.
-8. If the prepare phase fails, no scenario shards are launched and the runner exits with a non-zero code.
-9. The prepare phase must be idempotent: on a warm host where caches are present, it completes with minimal work (image/cache hash checks only).
+5. A lane is one directory pass (Samba AD, OpenLDAP or 389 Directory Server) with its own stack. No two lanes may share a container, volume, network, host port, or any file written during the run.
+6. Each lane runs in its own `pwsh` process, not a runspace. Several settings the harness relies on (`SAMBA_IMAGE_*`, `OPENLDAP_*`, `DIRSRV_*`, `JIM_DB_*`, `VERSION_SUFFIX`, `JIM_RUNPROFILE_ABORT_SENTINEL`) are process environment variables, which runspaces would share.
+7. Each lane has its own Docker Compose project name for both the JIM stack and the integration compose file. A serial run keeps today's project names (`jim` and `jim-integration`), so serial behaviour and container names are unchanged.
+8. Containers are reached by lane-scoped names wherever scripts use a fixed name today (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, the directory containers via `Get-DirectoryConfig`, and the fixed `docker rm -f` list). Scripts resolve the name for the current lane rather than hardcoding it.
+9. Each lane binds its own host port for the JIM API and web front end, and every script that calls `http://localhost:5200` today uses the lane's URL instead. Lanes publish no other host ports unless a scenario genuinely needs one.
+10. Each lane has its own named volumes (JIM database, logs, keys, connector files, and the `jim-integration-*` set) and its own Docker network.
+11. Each lane has its own settings file in place of the shared `.env` rewrite, and its own infrastructure API key. No lane edits the repository's `.env` during a parallel run.
+12. Each lane writes its test data (HR CSVs and scenario-specific files currently written to fixed names under `test/test-data/` and fixed `/tmp` paths) to a lane-scoped location. The shared CSV cache stays shared and read-mostly, with cache writes made atomic (unique temp file, then rename) so two lanes cannot corrupt one entry.
 
-#### Per-scenario isolation (Option B — always auto-named)
+#### Scoped reset and clean-up
 
-10. The integration Compose file must remove all explicit `container_name:` entries for services that vary per shard (Samba AD primary/source/target, OpenLDAP, JIM Web, JIM Worker, JIM Scheduler, JIM DB, CSVs helper). Compose auto-naming (`<project>-<service>-<replica>`) applies in all runs, serial and parallel.
-11. The runner must set `COMPOSE_PROJECT_NAME` per invocation:
-    - Serial runs: `jim-integration` (unchanged project name).
-    - Parallel runs: `jim-integration-s<N>` where `<N>` is the 1-based shard index.
-12. All scripts that currently reference containers or volumes by fixed name must be updated to look them up by Compose project + service name (e.g. `docker compose -p <project> ps -q <service>`), so the code path is identical regardless of project suffix.
-13. Host port mappings for Samba AD and OpenLDAP that are only required for in-stack test calls must be removed; the runner executes those calls via `docker compose exec`. Ports genuinely required for host-level debugging (e.g. JIM Web) remain, with documentation that only one shard can bind them at a time and the others run without them.
-14. Named volumes in the Compose file must not use explicit `name:` properties for per-shard volumes — Compose auto-prefixes with the project name. The previously shared `jim-connector-files-volume` becomes a per-shard volume.
-15. Between scenarios within the same shard, the existing lightweight reset behaviour must be preserved (DB volume wipe, directory OU cleanup, API key regeneration).
+13. Every reset step acts only on its own lane: `down -v`, volume removal, connector-volume clearing, the between-scenario reset, and directory OU clean-up. Removing volumes "matching `jim-integration`" or by a fixed global name is not allowed in a parallel run.
+14. The stale-monitor sweep (`Clear-StaleIntegrationMonitors`) reaps only the current lane's monitors and sidecars.
+15. Host-wide clean-up (the Step 7 image and build-cache prune) never runs inside a lane. In a parallel run it runs once, in the parent, after every lane has finished.
+16. The error watcher and the post-scenario error scan read only the current lane's JIM containers, and each lane's error sentinel file is its own.
+17. Docker stats and Docker events capture are filtered to the current lane's containers.
 
-#### Parallel execution (local)
+#### Prepare once, then fan out
 
-16. When `-Parallelism > 1`, the runner must launch up to that many scenario shards concurrently using `ForEach-Object -Parallel`.
-17. Each shard owns its own Compose project name, log file, and result file. Shards must not share mutable state on disk beyond the read-only cache directory and the Docker image store.
-18. The runner must stream a concise per-shard status line to the console (scenario name, shard index, state: running/passed/failed/skipped) so progress is visible without interleaving verbose scenario logs. Full per-shard logs are written to disk.
-19. If `-ContinueOnFailure` is not set, a shard failure causes the runner to stop launching new shards; already-running shards finish and their results are included in the final report.
-20. Total wall-clock time, per-shard durations, and prepare-phase duration must be recorded in the aggregated result.
+18. Before any lane starts, the parent runs a prepare phase that builds the JIM images once and makes sure every snapshot image and CSV cache entry the three lanes need exists. Lanes then start without building anything, so no two processes build or tag the same image at once.
+19. If the prepare phase fails, no lane starts and the run exits non-zero.
 
-#### Reporting and progress model
+#### Directory-agnostic scenarios and shared databases
 
-The runner separates output into three distinct channels so that parallel runs remain readable. Verbose scenario output never reaches the main console; the console is reserved for short lifecycle events per shard.
+20. Directory-agnostic scenarios (011, 015, 016) run in exactly one lane, as today. In a parallel run they go to the lane expected to finish first (Samba AD at the current templates), to keep the lanes balanced.
+21. Scenario 016's database containers (`sqlserver-hris-a`, `oracle-hris-b`) stay shared and preserved across runs. They must be reachable from whichever lane runs Scenario 016, and no other lane may start, stop or reseed them.
 
-21. Each shard's verbose output (scenario stdout, stderr, Docker output, assertion detail) must be redirected to a per-shard log file at `test/integration/results/run-<runId>/scenario-<N>.log`. Nothing from this channel appears on the main console during a parallel run.
-22. Each shard emits short lifecycle *status events* at defined points: `Launched`, `SetupComplete`, `ScenarioRunning`, `ScenarioComplete` (with outcome and duration), and `TeardownComplete`. Each event is a structured record carrying shard index, scenario name, event type, timestamp, and optional payload (duration, exit code, error message).
-23. Status events must be delivered to the parent runner via a shared `System.Collections.Concurrent.ConcurrentQueue[PSObject]` passed to each `ForEach-Object -Parallel` runspace via `$using:`. The parent drains the queue on a short interval (e.g. every 500 ms) and writes one prefixed line per event to the console, e.g. `[s2] Scenario 004 - setup complete (42s)`.
-24. When a shard launches, the parent must print the shard's log file path to the console so developers can `tail -f` it on demand for detailed progress.
-25. When a shard completes with a failure, the parent must print the outcome line plus a tail of the shard's log file (last 50 lines, configurable) to the console, so common failures can be diagnosed without opening the log file.
-26. The end-of-run summary must print: total wall-clock duration, prepare-phase duration, per-shard passed/failed/skipped counts, paths to the per-shard logs, and the path to the merged `full-regression-<timestamp>.json`.
-27. Serial runs (`-Parallelism 1`) must bypass the queue and status-event machinery entirely — console output falls back to today's inline behaviour. Only the result-file split (per-shard JSON written by the shard, merge step at the end) applies in serial mode, so the merged report shape is identical across serial and parallel runs.
-28. If the parent runner is interrupted (Ctrl+C), it must write a `run-interrupted.json` marker, attempt to collect any pending status events from the queue, best-effort tear down in-flight shards, and run the merge step against whatever shard results already exist on disk.
+#### Running, reporting and failure handling
 
-#### Result sharding and merge
-
-29. Each shard writes its result to `test/integration/results/run-<runId>/scenario-<N>.json` using the same per-scenario block shape produced today at [Run-IntegrationTests.ps1:1431-1439](../../test/integration/Run-IntegrationTests.ps1#L1431-L1439). Writing the result is the shard's responsibility — the parent only reads files, it never marshals result objects across runspaces.
-30. After all shards complete (success or failure), a merge step reads the shard directory and writes `test/integration/results/full-regression-<timestamp>.json` in the same shape currently written at [Run-IntegrationTests.ps1:1517-1544](../../test/integration/Run-IntegrationTests.ps1#L1517-L1544) — same field names, same nesting, same schema.
-31. The merge step must be invokable standalone (for the Actions matrix "merge" job) and also run automatically at the end of a local parallel run.
-32. If the runner is interrupted (Ctrl+C) mid-run, the merge step must still produce a report for any shards that completed and mark the run as interrupted (see requirement 28).
-
-#### GitHub Actions workflow
-
-33. A new workflow must run the Pre-Release suite as a matrix on self-hosted runners tagged for integration testing.
-34. The workflow must:
-    - Be triggered only by `workflow_dispatch` or by `pull_request_target` that carries a maintainer-applied label (exact label name TBD during implementation; proposed `integration:pre-release`).
-    - Require approval via a GitHub Environment with required reviewers before any job touches a self-hosted runner.
-    - Run a single "prepare" job on a self-hosted runner, producing warm caches and images on the shared pool.
-    - Fan out to a matrix of scenario jobs, each running one scenario shard.
-    - Finish with a merge job that aggregates shard results into a single artifact in the same shape as the local runner.
-35. The workflow file must be covered by CODEOWNERS so it cannot be modified without maintainer review.
-36. Self-hosted runners must be registered in ephemeral mode (`--ephemeral`) so the runner process exits after a single job.
-37. No repository-wide secrets may be exposed to integration test jobs; only job-scoped secrets strictly required for the run.
-
-#### Security controls for self-hosted runners
-
-38. The runner host environment must restrict outbound network egress to a documented allowlist (github.com, ghcr.io, package registries, internal artifact stores as needed). The exact allowlist is captured in a runbook in `engineering/` at implementation time.
-39. The self-hosted runner pool must not be used by any other workflow in the repository. Enforcement is via a runner label scoped to the Pre-Release workflow only.
-40. The implementation phase must produce an `engineering/SELF_HOSTED_RUNNER_SECURITY.md` runbook documenting: trigger gating, approval flow, runner provisioning, ephemeral lifecycle, egress allowlist, secret handling, and the incident response procedure if a compromise is suspected.
+22. The parent prints one short, prefixed status line per lane event (started, each scenario passed or failed with duration, lane finished), for example `[OpenLDAP] Scenario-008 passed (7m 32s)`. Each lane's verbose output goes to its own log file, whose path the parent prints when the lane starts.
+23. When a lane fails, the parent prints the failure and the last 50 lines of that lane's log. The other lanes run to completion, because their results remain valid and are the point of the run.
+24. Every result and log file a lane writes carries the lane's directory type in its name, so two lanes finishing in the same second cannot overwrite each other.
+25. After all lanes finish, the parent writes a combined summary (JSON plus console table) of each lane's outcome, duration and per-scenario results. Each lane still writes its own `full-regression-*.json` in today's shape, so existing tooling keeps working.
+26. On Ctrl+C the parent stops all lanes, and each lane cleans up only its own containers and volumes. If clean-up cannot finish, the parent prints the exact commands needed to finish it by hand.
+27. The run exits non-zero if any lane failed.
 
 ### Non-Functional Requirements
 
-- Serial (`-Parallelism 1`) runs must not regress in wall-clock time by more than 5% compared to today's baseline for the same template sizes.
-- The prepare phase must be observable: its duration and cache hit/miss decisions for each artifact are logged.
-- Per-shard logs must be retrievable after a run (on disk for local runs, as workflow artifacts for CI).
-- The runner must not leave orphaned Compose projects, containers, or volumes after a successful run. On failure, cleanup is best-effort but the runner must print the exact `docker compose -p <project> down -v` commands needed to clean up manually.
-- British English throughout, per CLAUDE.md.
+- A parallel Pre-Release on the dev host finishes within 15% of its slowest lane's serial duration.
+- A serial Pre-Release does not get slower by more than 5%.
+- Before starting a parallel run, the parent checks free memory and cores against a documented per-lane estimate, and warns if the host looks too small.
+- A successful parallel run leaves no orphaned lane containers, volumes or networks.
+- British English throughout.
 
 ## Examples and Scenarios
 
-### Scenario 1: Developer local Pre-Release at reduced scale
+### Scenario 1: Parallel Pre-Release
 
-**Given** a developer wants a quick regression pass before lunch
-**When** they run `./Run-IntegrationTests.ps1 -Scenario Pre-Release -TemplateSambaAD Small -TemplateOpenLDAP Medium -Parallelism 4`
-**Then** the prepare phase warms CSVs and snapshot images for `Small` / `Medium` only, four scenario shards run concurrently with Compose projects `jim-integration-s1` through `jim-integration-s4`, and a single aggregated report lands in `test/integration/results/full-regression-<timestamp>.json` in the same shape as today.
-
-### Scenario 2: Serial Pre-Release (default, unchanged behaviour)
-
-**Given** a developer runs `./Run-IntegrationTests.ps1 -Scenario Pre-Release`
-**When** no parallelism, template, or other new flags are passed
-**Then** the runner executes scenarios one at a time under the `jim-integration` Compose project, with Samba AD at MediumLarge and OpenLDAP at Scale100K — the only visible difference from today is that container names carry the Compose project prefix (e.g. `jim-integration-samba-ad-primary-1` instead of `samba-ad-primary`).
-
-### Scenario 3: Interactive menu selection
-
-**Given** a developer launches `./Run-IntegrationTests.ps1` with no parameters
-**When** they select the "Pre-Release" menu option
-**Then** the menu prompts for Samba AD template size (default MediumLarge), OpenLDAP template size (default Scale100K), parallelism (default 1), and existing options, then runs with their selections.
-
-### Scenario 4: GitHub Actions release gate
-
-**Given** a maintainer applies the `integration:pre-release` label to a release PR
-**When** the Pre-Release workflow is triggered and an authorised reviewer approves the environment
-**Then** one prepare job warms the self-hosted pool, N matrix jobs each run one scenario on an ephemeral runner, and a merge job produces a single regression artifact attached to the workflow run. An untrusted PR author cannot cause any of this to run because they cannot apply the label.
-
-### Scenario 5: Container naming under parallelism
-
-**Given** `-Parallelism 2` is active
-**When** the runner inspects Docker state mid-run
-**Then** `docker ps` shows containers named e.g. `jim-integration-s1-samba-ad-primary-1`, `jim-integration-s1-jim-openldap-1`, `jim-integration-s2-samba-ad-primary-1`, `jim-integration-s2-jim-openldap-1` — each shard's role is obvious from the name.
-
-### Scenario 6: Shard failure handling without `-ContinueOnFailure`
-
-**Given** four shards are running and shard 2 fails mid-scenario
-**When** the failure is detected
-**Then** no further shards are launched, the three shards that had already started complete their current scenario, each writes its result JSON, and the final report records the run as failed with shard 2's exit code and error surfaced clearly.
-
-### Scenario 7: Console output during a parallel run
-
-**Given** a developer runs `./Run-IntegrationTests.ps1 -Scenario Pre-Release -Parallelism 4`
-**When** scenarios are executing
-**Then** the console shows short, readable status lines prefixed with the shard index, with no interleaved verbose output — for example:
+**Given** a warm dev host
+**When** a developer runs `./test/integration/Run-IntegrationTests.ps1 -PreRelease -Parallel`
+**Then** the prepare phase builds the JIM images and checks the snapshot images once, three lanes start, and the console shows short prefixed lines:
 
 ```
-Launching 4 shards, logs at test/integration/results/run-20260422-143012/
-[s1] Scenario 001 -> scenario-1.log
-[s2] Scenario 004 -> scenario-2.log
-[s3] Scenario 005 -> scenario-3.log
-[s4] Scenario 006 -> scenario-4.log
-[s1] setup complete (38s)
-[s2] setup complete (41s)
-[s3] setup complete (44s)
-[s4] setup complete (45s)
-[s1] scenario running
-[s2] scenario running
+Prepare phase complete (3m 12s)
+[SambaAD]   started -> results/logs/lane-SambaAD-2026-09-29_101500.log
+[OpenLDAP]  started -> results/logs/lane-OpenLDAP-2026-09-29_101500.log
+[389DS]     started -> results/logs/lane-DirectoryServer389-2026-09-29_101500.log
+[SambaAD]   Scenario-001 passed (9m 40s)
+[OpenLDAP]  Scenario-001 passed (12m 09s)
 ...
-[s1] PASSED in 5m 18s
-[s3] FAILED (exit 1) in 6m 02s - last 50 lines of scenario-3.log:
-    <...tail dumped here...>
-[s2] PASSED in 5m 47s
-[s4] PASSED in 6m 11s
+[OpenLDAP]  Scenario-023 FAILED (11m 47s) - last 50 lines:
+    ...
+[389DS]     finished: 17 passed, 0 failed (1h 41m)
 
-Run complete: 3 passed, 1 failed, 0 skipped, total 6m 14s
-Merged report: test/integration/results/full-regression-20260422-143626.json
+Pre-Release: 2 of 3 lanes passed, 1h 44m total
+Summary: results/pre-release-2026-09-29_101500.json
 ```
 
-Developers wanting detailed progress on any specific shard `tail -f` its log file using the path printed at launch.
+### Scenario 2: Serial Pre-Release is unchanged
+
+**Given** a developer runs `./test/integration/Run-IntegrationTests.ps1 -PreRelease`
+**When** `-Parallel` is not passed
+**Then** the three passes run one after another, with today's container names, ports, `.env` handling and console output.
+
+### Scenario 3: One lane's reset leaves the others alone
+
+**Given** a parallel run in which the OpenLDAP lane has just finished a scenario
+**When** that lane runs its between-scenario reset (database volume removal, connector volume clear, `down -v`)
+**Then** only the OpenLDAP lane's containers and volumes are touched, and the Samba AD and 389 Directory Server lanes carry on without error.
+
+### Scenario 4: Invalid combination
+
+**Given** a developer runs `-Scenario Scenario-008-CrossDomainEntitlementSync -DirectoryType OpenLDAP -Parallel`
+**When** the runner validates its parameters
+**Then** it exits before any set-up with: `-Parallel runs the three directory passes side by side, so it needs -DirectoryType All (or -PreRelease).`
+
+### Scenario 5: Ctrl+C mid-run
+
+**Given** a parallel run with all three lanes mid-scenario
+**When** the developer presses Ctrl+C
+**Then** all three lanes stop, each removes its own containers, volumes and network, the parent writes the summary for what finished, and Scenario 016's database containers are left in place.
 
 ## Constraints
 
-- Must remain cross-platform PowerShell — no bash scripts, per CLAUDE.md.
-- Must work in air-gapped environments: no new cloud dependencies for result storage or orchestration.
-- Must not introduce new NuGet packages; no .NET code changes are expected (this is purely test harness).
-- Must preserve the existing `full-regression-<timestamp>.json` shape so the `/release` skill and any downstream tooling continue to work unchanged.
-- Must not expand the supported template size set; template names remain the existing `ValidateSet`.
-- Self-hosted runner workflow must follow the security controls listed under Functional Requirements; this is a hard gate.
+- PowerShell only; no bash scripts for the harness (per CLAUDE.md).
+- Air-gap friendly: no new cloud dependencies.
+- No new NuGet packages and no product code changes; this is test harness work only.
+- Each lane's `full-regression-*.json` keeps today's shape.
+- Template names stay the existing `ValidateSet`.
+- The harness keeps building from the working tree, and keeps refusing git worktrees unless `-AllowWorktree` is passed. All three lanes run from the same checkout.
+- Must also work on the devcontainer's inner Docker engine; never on the Windows host's Docker Desktop (per CLAUDE.md).
 
 ## Affected Areas
 
 | Area | Impact |
 |------|--------|
-| Runner script | `Run-IntegrationTests.ps1`: new `-Parallelism` parameter, new Pre-Release menu prompts, prepare phase extracted, parallel fan-out loop, shard result writing |
-| Runner helper | New `Merge-RegressionResults.ps1` script; all scripts referencing containers by fixed name updated to go via Compose project + service lookup |
-| Docker Compose | `test/integration/docker/docker-compose.integration-tests.yml`: remove `container_name:` entries, remove explicit `name:` on per-shard volumes, review host port mappings |
-| CI/CD | New workflow `.github/workflows/integration-pre-release.yml` for self-hosted matrix runs, plus CODEOWNERS entry |
-| Documentation | `test/integration/README.md` updated with parallelism guidance; new `engineering/SELF_HOSTED_RUNNER_SECURITY.md` runbook |
-| Release skill | No change required — relies on `full-regression-<timestamp>.json` shape which is preserved |
+| Runner | `Run-IntegrationTests.ps1`: `-Parallel` switch and menu prompt, prepare phase, lane launch as child processes, prefixed status output, combined summary, lane-scoped reset, parent-only image prune |
+| Helpers | `utils/Test-Helpers.ps1`: lane-aware container lookup, JIM URL, error watcher, stats/events capture, stale-monitor sweep, connector-volume clearing, CSV cache atomic writes |
+| Scenarios | Swap fixed container names, `http://localhost:5200` defaults and fixed test-data paths for lane-scoped ones; no logic changes |
+| Compose | Root `docker-compose.yml` / override and `test/integration/docker/docker-compose.integration-tests.yml`: project-name-scoped container names, volumes, network and JIM host port, with serial defaults unchanged |
+| Snapshot builders | `Build-SambaSnapshots.ps1`, `Build-OpenLDAPSnapshots.ps1`, `Build-DirsrvSnapshots.ps1`: called from the prepare phase only in a parallel run |
+| Scenario 016 | Shared database containers reachable from the lane that runs 016 |
+
+## Documentation Impact
+
+| Doc | Change |
+|------|--------|
+| `test/CLAUDE.md` | `-Parallel` usage, lane naming, and how to read and clean up a parallel run |
+| `engineering/INTEGRATION_TESTING.md` | Lane model, isolation rules, and the per-lane resource estimate |
+| `.devcontainer/CLAUDE.md` | Note that `jim-reset` does not clean up lane projects, and the command that does |
 
 ## Dependencies
 
-- Design, provisioning, and hardening of a self-hosted GitHub Actions runner with sufficient compute/memory/IO to host the Pre-Release matrix at MediumLarge / Scale100K templates. This work is tracked internally and is not detailed here. Phase 4 (GitHub Actions matrix) is blocked on it; Phases 1-3 (local parallelism) are independent and can land first.
-- Agreement on the exact PR label name that gates the self-hosted workflow.
+- #1851 (directory-agnostic scenarios run once per Pre-Release), merged.
 
 ## Open Questions
 
-1. Should `-Parallelism Max` cap at some sensible upper bound (e.g. scenario count, or CPU-count / 2) to avoid thrashing a small host, or trust the caller's input verbatim?
-2. For the CI matrix, do we want one scenario per runner (simplest, maximum wall-clock win) or N scenarios per runner with local parallelism inside (fewer runners required)? Recommend starting with one-scenario-per-runner and revisiting if the pool gets expensive.
-3. Do we need a way to run the Pre-Release workflow against a specific ref other than the PR head (e.g. re-run against `main` after a merge) in the same workflow, or is a separate `workflow_dispatch` path sufficient?
-4. Should host port mappings (currently used for some debugging) be emitted for shard 1 only when running parallel locally, so a developer can still browse the JIM UI in the first shard, or removed entirely for parallel runs?
+1. **Keycloak per lane.** Integration scenarios authenticate with an API key. Can lanes run without Keycloak entirely, or does `jim.web` need it to start? If it is needed, each lane needs its own, and the fixed `socat` bridge on host port 8181 must become lane-scoped or go.
+2. **Lane host ports.** Proposal: 5200 for the first lane (so the Samba AD lane is browsable at the usual address), 5201 and 5202 for the others. Is that acceptable, or should lanes publish nothing and scripts reach JIM through the Docker network instead?
+3. **Postgres sizing.** Each lane runs the 256 MB / 1 GB dev Postgres profile. Is that still right with three lanes at Large, or does a lane need more?
+4. **`-FullMatrix`.** Scenario 016's `-FullMatrix` switches the shared Postgres to the Scale500k profile. Should `-Parallel` refuse `-FullMatrix`, or scope it to the lane that runs 016?
 
 ## Acceptance Criteria
 
-### Phase 1 — Parameters, menu, prepare phase, result sharding (no parallelism yet)
-
-- [ ] `-Parallelism` parameter exists and is validated; default is 1 (serial).
-- [ ] Pre-Release honours `-TemplateSambaAD` / `-TemplateOpenLDAP` when supplied; hardcoded defaults apply otherwise.
-- [ ] Interactive Pre-Release menu prompts for Samba AD template, OpenLDAP template, and parallelism in addition to existing options.
-- [ ] Prepare phase is an explicit step in the runner with its own log output and timing; cache hits/misses are visible.
-- [ ] Each scenario writes its result to `test/integration/results/run-<runId>/scenario-<N>.json`; the merge step produces `full-regression-<timestamp>.json` in the same shape as today.
-- [ ] Serial run wall-clock time is within 5% of the pre-change baseline.
-
-### Phase 2 — De-hardcode Compose naming (Option B)
-
-- [ ] `container_name:` entries removed from `docker-compose.integration-tests.yml` for every per-shard service.
-- [ ] All runner scripts that look up containers or volumes do so via Compose project + service, not fixed names.
-- [ ] Serial runs pass a full Pre-Release regression with new auto-naming.
-- [ ] `README.md` in `test/integration/` documents the new container-name pattern.
-
-### Phase 3 — Local parallelism
-
-- [ ] `-Parallelism N` (N > 1) launches up to N shards concurrently under distinct `COMPOSE_PROJECT_NAME` values.
-- [ ] Per-shard logs and results land in distinct paths; no cross-shard collisions in Docker state or on disk.
-- [ ] A Pre-Release run at MediumLarge / Scale100K with `-Parallelism 4` on a suitably-resourced host completes in meaningfully less wall-clock time than serial (target: at least 2x speedup; exact ratio depends on host).
-- [ ] Console output during parallel runs is limited to prefixed status events; verbose scenario output is redirected to per-shard log files whose paths are printed at shard launch.
-- [ ] Failed shards print the tail of their log file (default 50 lines) to the console on completion.
-- [ ] Shard failure handling works with and without `-ContinueOnFailure`.
-- [ ] Interrupted runs still produce a merged report for completed shards and leave a `run-interrupted.json` marker.
-
-### Phase 4 — GitHub Actions self-hosted matrix
-
-- [ ] Workflow `integration-pre-release.yml` exists and runs only on authorised triggers (`workflow_dispatch` or labelled `pull_request_target`).
-- [ ] Workflow requires Environment approval before any self-hosted job runs.
-- [ ] Workflow file is covered by CODEOWNERS.
-- [ ] Self-hosted runners run in ephemeral mode and are scoped to this workflow via label.
-- [ ] Prepare / matrix / merge job topology produces a single regression artifact in the expected shape.
-- [ ] `engineering/SELF_HOSTED_RUNNER_SECURITY.md` runbook exists and covers the controls listed in Non-Functional Requirements.
+- [ ] `-Parallel` exists, is refused without `-DirectoryType All`, and is offered in the Pre-Release menu entry.
+- [ ] A serial Pre-Release passes with unchanged container names, ports and console output, and is no more than 5% slower.
+- [ ] A parallel Pre-Release on the dev host passes all three lanes and finishes within 15% of the slowest lane's serial duration (target: under 2 hours).
+- [ ] During a parallel run, `docker ps` shows three separate sets of JIM and directory containers, and no lane's reset, prune or monitor sweep touches another lane's containers, volumes or files.
+- [ ] A deliberately failed scenario in one lane leaves the other two lanes to finish and pass, and the parent prints the failing lane's log tail.
+- [ ] Ctrl+C stops all lanes and leaves no lane containers, volumes or networks behind, while Scenario 016's database containers remain.
+- [ ] Every result and log file name carries its lane's directory type; the combined summary lists all three lanes.
+- [ ] Docs in the table above are updated.
 
 ## Additional Context
 
-- Existing cache infrastructure: `test/integration/Get-OrGenerate-TestCSV.ps1`, `test/integration/Generate-TestCSV.ps1`, `test/integration/Build-SambaSnapshots.ps1`, `test/integration/Build-OpenLDAPSnapshots.ps1`, `test/integration/Test-CsvCache.ps1`.
-- Current Pre-Release hardcodes: [Run-IntegrationTests.ps1:1004-1005](../../test/integration/Run-IntegrationTests.ps1#L1004-L1005).
-- Current per-scenario result capture: [Run-IntegrationTests.ps1:1431-1439](../../test/integration/Run-IntegrationTests.ps1#L1431-L1439).
-- Current aggregated report shape: [Run-IntegrationTests.ps1:1517-1544](../../test/integration/Run-IntegrationTests.ps1#L1517-L1544).
+- Pre-Release defaults and the `-DirectoryType All` loop: `test/integration/Run-IntegrationTests.ps1` (`-PreRelease` block, and the loop that re-invokes the script once per directory type).
+- Host-wide operations to scope: the Step 1 reset, `Reset-JIMForNextScenario`, `Invoke-ImagePrunePreservingSnapshots` (Step 7) and `Clear-StaleIntegrationMonitors`.
+- Directory-agnostic scenario handling: `test/integration/utils/Get-ScenarioDirectoryTypes.ps1` (#1851).
 - GitHub issue: [#636](https://github.com/TetronIO/JIM/issues/636).
-- Related: supply chain / security hardening discussion lives alongside the existing Trivy / CVE policies in `engineering/DEVELOPER_GUIDE.md`.
