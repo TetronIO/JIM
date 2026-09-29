@@ -149,7 +149,7 @@ This single script handles everything:
 
 **-PreRelease preset**: shorthand for the full pre-release regression (`-Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large -TemplateDirectoryServer389 Large`): every implemented scenario against every directory type, with Samba AD at the Medium template and OpenLDAP and 389 Directory Server at the Large template. Use this as the recommended pre-release gate, the final sign-off before cutting a release.
 
-**-Parallel (directory lanes, #636)**: runs the directory passes of a `-DirectoryType All` run (including `-PreRelease`) side by side instead of one after another, so the run takes about as long as its slowest pass. Each pass runs in its own **lane**: its own runner process and its own complete copy of the stack (JIM, PostgreSQL, Keycloak and that directory's containers). The design is in [`PRD_PARALLEL_INTEGRATION_TESTS.md`](prd/doing/PRD_PARALLEL_INTEGRATION_TESTS.md).
+**-Parallel (directory lanes, #636)**: runs the directory passes of a `-DirectoryType All` run (including `-PreRelease`) side by side instead of one after another, so the run takes about as long as its slowest pass. Each pass runs in its own **lane**: its own runner process and its own complete copy of the stack (JIM, PostgreSQL, Keycloak and that directory's containers). The design is in [`PRD_PARALLEL_INTEGRATION_TESTS.md`](prd/done/PRD_PARALLEL_INTEGRATION_TESTS.md).
 
 - **What a lane owns.** `utils/IntegrationLane.ps1` resolves every name, port and Compose argument from one environment variable, `JIM_INTEGRATION_LANE`, which the parent sets on each lane process. Outside a lane (any serial run) everything resolves to the names the harness has always used, so serial runs are unchanged.
 

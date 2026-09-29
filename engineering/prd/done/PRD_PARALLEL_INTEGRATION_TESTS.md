@@ -1,6 +1,7 @@
 # Parallel Directory Lanes for Pre-Release Integration Tests
 
-- **Status:** Doing (implemented and verified on the dev host: parallel Pre-Release 1h 41m, all lanes passing; awaiting PR)
+- **Status:** Done
+- **Note:** Verified on the dev host with a full parallel Pre-Release (1h 41m, all 51 scenario runs passing) and a serial smoke run; a full serial Pre-Release on the branch was not re-run.
 - **Created:** 2026-04-22
 - **Revised:** 2026-09-29 (rescoped from per-scenario sharding plus a self-hosted CI matrix to three parallel directory lanes on one host)
 - **Author:** Jay
