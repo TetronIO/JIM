@@ -611,6 +611,12 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    # The builds' own post-job summaries and the builder's removal would reach for the Buildx builder
+    # after Docker has moved to its classic image store, which cannot see it; on a runner thrown away after
+    # the job, neither is worth anything.
+    env:
+      DOCKER_BUILD_SUMMARY: false
+      DOCKER_BUILD_RECORD_UPLOAD: false
 
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -624,7 +630,7 @@ jobs:
 
     # The bundle's PostgreSQL archive must carry the registry manifest its digest pin needs, or the image
     # would not resolve offline, and only Docker's containerd image store saves it: Build-ReleaseBundle.ps1
-    # refuses a bundle without it (#1854 is the classic store's side of this).
+    # refuses a bundle without it. The Docker leg installs on the classic store all the same (below).
     - name: Use Docker's containerd image store
       run: |
         config=/etc/docker/daemon.json
@@ -650,6 +656,8 @@ jobs:
     - name: Set up Docker Buildx
       id: buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      with:
+        cleanup: false
 
     # Built as scan-images builds them, with the same build arguments, so that they come from the cache
     # scan-images keeps; read-only here, since scan-images writes it. The tag is the bundle's version.
@@ -699,6 +707,25 @@ jobs:
     - name: Build the release bundle
       shell: pwsh
       run: ./scripts/Build-ReleaseBundle.ps1 -Version ci -SkipImageBuild -SkipArchive -OutputPath "$env:RUNNER_TEMP/bundle"
+
+    # The Docker leg installs on Docker's classic image store: the default wherever Docker predates the
+    # containerd store, and the harder one for an air-gapped install, since loading an image drops the
+    # registry digest the compose file pins PostgreSQL by (#1854). The images built above stay in the
+    # containerd store, out of the classic store's sight, so the leg can run only what the bundle carries.
+    # Before the identity provider, which a restart of Docker would stop.
+    - name: Switch Docker back to its classic image store
+      run: |
+        docker image prune -af > /dev/null
+        config=/etc/docker/daemon.json
+        sudo jq '.features["containerd-snapshotter"] = false' "$config" | sudo tee "$config.new" > /dev/null
+        sudo mv "$config.new" "$config"
+        sudo systemctl restart docker
+        driver=$(docker info -f '{{.Driver}}')
+        echo "Storage driver: $driver"
+        if [ "$driver" != overlay2 ]; then
+          echo "::error::Docker is not on its classic image store (storage driver $driver)"
+          exit 1
+        fi
 
     - name: Start the test identity provider
       id: idp

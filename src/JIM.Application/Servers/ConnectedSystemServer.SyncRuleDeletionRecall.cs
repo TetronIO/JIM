@@ -58,7 +58,7 @@ public partial class ConnectedSystemServer
             // the deleted rule's own contribution is ineligible (other rules of the same system are
             // legitimate survivors here, unlike the obsoletion path).
             var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
-            var priorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
+            var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
             var syncEngine = new SyncEngine();
             var expressionEvaluator = new DynamicExpressoEvaluator();
             var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);

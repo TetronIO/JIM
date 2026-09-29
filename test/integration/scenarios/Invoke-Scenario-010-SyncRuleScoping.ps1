@@ -83,7 +83,7 @@ param(
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -191,7 +191,7 @@ $users = $baseUsers | ForEach-Object { $_.PSObject.Copy() }
 
 function Write-HRCsv {
     param([object[]]$Users)
-    $csvPath = Join-Path ([IO.Path]::GetTempPath()) "scenario-010-hr-users.csv"
+    $csvPath = Get-IntegrationTempPath -Name "scenario-010-hr-users.csv"
     $Users | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
     Copy-CsvToConnectorFiles -SourcePath $csvPath
     Remove-Item $csvPath -Force -ErrorAction SilentlyContinue

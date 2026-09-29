@@ -61,12 +61,33 @@ public partial class SyncEngine
 
         foreach (var (syncRule, mapping) in toEvaluate)
         {
-            ProcessMapping(cso, mapping, objectTypes, expressionEvaluator,
-                contributingSystemId: cso.ConnectedSystemId,
-                errors: errors,
-                mvoObjectTypeId: syncRule.MetaverseObjectTypeId,
-                priorityContext: priorityContext,
-                metaverseAttributes: metaverseAttributes);
+            // A derived flow runs after the object's ordinary flows, from whichever of its rules hosts it, so every
+            // error it raises names that rule (plan Phase 3): the administrator has to know which rule to open. The
+            // error itself is surfaced exactly as an ordinary mapping's is (decision 10): a thrown one fails the object,
+            // a mapping-level one is returned for the caller to record.
+            var errorCountBefore = errors.Count;
+            try
+            {
+                ProcessMapping(cso, mapping, objectTypes, expressionEvaluator,
+                    contributingSystemId: cso.ConnectedSystemId,
+                    errors: errors,
+                    mvoObjectTypeId: syncRule.MetaverseObjectTypeId,
+                    priorityContext: priorityContext,
+                    metaverseAttributes: metaverseAttributes);
+            }
+            catch (SyncExpressionEvaluationException ex)
+            {
+                ex.SyncRuleName ??= syncRule.Name;
+                throw;
+            }
+            catch (SyncExpressionMissingInputException ex)
+            {
+                ex.SyncRuleName ??= syncRule.Name;
+                throw;
+            }
+
+            for (var i = errorCountBefore; i < errors.Count; i++)
+                errors[i].SyncRuleName ??= syncRule.Name;
         }
 
         Log.Verbose("EvaluateDerivedLevel: evaluated {Count} derived Attribute Flow(s) at level {Level} for MVO {MvoId} (CSO {CsoId}).",

@@ -15,6 +15,7 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 namespace JIM.PostgresData;
 
 public class JimDbContext : DbContext
@@ -683,6 +684,18 @@ public class JimDbContext : DbContext
             .Property(e => e.xmin)
             .IsRowVersion();
 
+        // Connected System Objects expose the xmin row version for reading only (#1750): the derived-input mark's
+        // clear is guarded by the xmin each synchronisation page load read, so a mark set concurrently after that
+        // read survives. Store-generated and never saved, and not a concurrency token: CSO rows are written by raw
+        // SQL in bulk, so an EF concurrency check would guard nothing and would fail every tracked save after one.
+        var csoXmin = modelBuilder.Entity<ConnectedSystemObject>()
+            .Property(e => e.xmin)
+            .HasColumnName("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate();
+        csoXmin.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+        csoXmin.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+
         // PendingExport: relationship to source MVO (Q1 decision)
         modelBuilder.Entity<PendingExport>()
             .HasOne(pe => pe.SourceMetaverseObject)
@@ -926,6 +939,16 @@ public class JimDbContext : DbContext
             .HasIndex(mvo => mvo.ScopeReviewPending)
             .HasDatabaseName("IX_MetaverseObjects_ScopeReviewPending")
             .HasFilter("\"ScopeReviewPending\"");
+
+        // Partial index on the Metaverse-Derived Attribute Flow mark (#1750). Delta synchronisation selects a Connected
+        // System's objects that are new, changed, OR marked (WHERE "ConnectedSystemId" = @cs AND ... OR
+        // "DerivedInputChangePending"); marks are rare and cleared once processed, so keying the partial index on
+        // ConnectedSystemId keeps the marked arm of that OR an O(marked) index scan rather than O(all CSOs). Mirrors
+        // IX_MetaverseObjects_ScopeReviewPending above.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.ConnectedSystemId)
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending")
+            .HasFilter("\"DerivedInputChangePending\"");
 
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created

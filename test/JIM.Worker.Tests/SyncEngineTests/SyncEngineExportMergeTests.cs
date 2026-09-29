@@ -152,6 +152,136 @@ public class SyncEngineExportMergeTests
         }
     }
 
+    // ---- Withdrawing staged changes an evaluation found already current ----
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_SingleValuedAttributeNowCurrent_WithdrawsTheStagedChange()
+    {
+        // A staged "set B" is stale once the target already holds the value the Metaverse now wants ("A").
+        var pe = PendingExportWith(SingleValuedChange(attributeId: 1, "B"));
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn, Is.EqualTo(1));
+            Assert.That(pe.AttributeValueChanges, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_OtherAttributes_AreKept()
+    {
+        var keep = SingleValuedChange(attributeId: 2, "Architect");
+        var pe = PendingExportWith(SingleValuedChange(attributeId: 1, "B"), keep);
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn, Is.EqualTo(1));
+            Assert.That(pe.AttributeValueChanges, Is.EqualTo(new[] { keep }));
+        }
+    }
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_StagedRemoveOfAValueTheTargetShouldKeep_IsWithdrawn()
+    {
+        // A staged "remove cn=alice" (from drift) is stale once the Metaverse wants cn=alice again and the target
+        // still holds it: the evaluation's "add cn=alice" is skipped as already current, and must withdraw the
+        // remove, or the export would take cn=alice out of the group.
+        var pe = PendingExportWith(MultiValuedRemove(attributeId: 7, "cn=alice"));
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [MultiValuedAdd(attributeId: 7, "cn=alice")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn, Is.EqualTo(1));
+            Assert.That(pe.AttributeValueChanges, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_StagedChangeForAnotherValueOfTheSameAttribute_IsKept()
+    {
+        var keep = MultiValuedAdd(attributeId: 7, "cn=bob");
+        var pe = PendingExportWith(keep);
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [MultiValuedAdd(attributeId: 7, "cn=alice")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn, Is.EqualTo(0));
+            Assert.That(pe.AttributeValueChanges, Is.EqualTo(new[] { keep }));
+        }
+    }
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_WholeAttributeAlreadyCurrent_WithdrawsEveryStagedChangeForIt()
+    {
+        // A RemoveAll already current (the target holds no values, and the Metaverse wants none) makes every staged
+        // per-value change for the attribute stale, whatever its value (#1199's whole-attribute rule).
+        var removeAll = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 7, ChangeType = PendingExportAttributeChangeType.RemoveAll,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Id = 7, Name = "attr7", AttributePlurality = AttributePlurality.MultiValued }
+        };
+        var pe = PendingExportWith(MultiValuedAdd(attributeId: 7, "cn=alice"), MultiValuedAdd(attributeId: 7, "cn=bob"));
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [removeAll]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn, Is.EqualTo(2));
+            Assert.That(pe.AttributeValueChanges, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_ChangeAlreadySentAndAwaitingConfirmation_IsKept()
+    {
+        // Sent, applied optimistically, and awaiting the confirming import: that is what makes the target "already
+        // current", so it is the confirmation of the change, not a stale instruction.
+        var sent = SingleValuedChange(attributeId: 1, "A");
+        sent.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = PendingExportWith(sent);
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, [SingleValuedChange(attributeId: 1, "A")]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn, Is.EqualTo(0));
+            Assert.That(pe.AttributeValueChanges, Is.EqualTo(new[] { sent }));
+        }
+    }
+
+    [Test]
+    public void WithdrawChangesAlreadyCurrent_NothingAlreadyCurrent_ChangesNothing()
+    {
+        var pe = PendingExportWith(SingleValuedChange(attributeId: 1, "B"));
+
+        var withdrawn = _engine.WithdrawChangesAlreadyCurrent(pe, []);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withdrawn, Is.EqualTo(0));
+            Assert.That(pe.AttributeValueChanges, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void SelectSurvivingDriftChanges_ChangeTheEvaluationFoundAlreadyCurrent_DoesNotSurvive()
+    {
+        // The database-merge counterpart: a persisted Pending Export's change for an attribute the evaluation found
+        // already current is dropped when the export is rebuilt, exactly as a newly evaluated change would drop it.
+        var stale = SingleValuedChange(attributeId: 1, "B");
+        var keep = SingleValuedChange(attributeId: 2, "Architect");
+
+        var survivors = SyncEngine.SelectSurvivingDriftChanges([], [stale, keep], alreadyCurrentChanges: [SingleValuedChange(attributeId: 1, "A")]);
+
+        Assert.That(survivors, Is.EqualTo(new[] { keep }));
+    }
+
     private static PendingExport PendingExportWith(params PendingExportAttributeValueChange[] changes)
     {
         var pe = new PendingExport

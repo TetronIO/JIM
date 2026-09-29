@@ -61,7 +61,7 @@ public class ObjectMatchingModeTests
             SupportsExport = true
         };
 
-        _jim = new JimApplication(_mockRepository.Object);
+        _jim = new JimApplication(_mockRepository.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository());
         _initiatedBy = TestUtilities.GetInitiatedBy();
     }
 

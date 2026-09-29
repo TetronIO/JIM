@@ -79,7 +79,9 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         _csvPath = Path.Join(Path.GetTempPath(), $"jim-schema-rest-preview-{Guid.NewGuid():N}.csv");
         File.WriteAllText(_csvPath, "id,displayName\n1,Test User\n");
 
-        _application = new JimApplication(_repository.Object);
+        // A sync repository is passed, as every host passes one: saving an export Synchronisation Rule checks the export
+        // queue for changes the save left without authority, which reads through it. An empty in-memory store finds nothing.
+        _application = new JimApplication(_repository.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
         _controller = new SynchronisationController(new Mock<ILogger<SynchronisationController>>().Object, _application,
             new DynamicExpressoEvaluator(), new Mock<ICredentialProtectionService>().Object);
 

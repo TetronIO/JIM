@@ -73,7 +73,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -275,7 +275,7 @@ try {
     # to discover columns, so the file must exist before setup. Each scenario seeds its own data so
     # scenario ordering is irrelevant.
     Write-Host "Seeding CSV test data..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$(Get-IntegrationTestDataPath)"
     Write-Host "  ✓ CSV test data seeded" -ForegroundColor Green
 
     # Setup scenario configuration (reuse the Scenario 001 fixture: CSV source, LDAP target)
@@ -296,7 +296,7 @@ try {
     Write-Host "  LDAP System ID: $($config.LDAPSystemId)" -ForegroundColor Gray
     Write-Host "  ✓ JIM configured for Scenario 021" -ForegroundColor Green
 
-    $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+    $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
     # =============================================================================================================
     # Test 1: Export limits, one change type at a time

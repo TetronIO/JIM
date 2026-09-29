@@ -142,6 +142,9 @@ This single script handles everything:
 
 # Full pre-release regression suite (all scenarios, every directory type: Samba AD at Medium, OpenLDAP and 389 Directory Server at Large)
 ./test/integration/Run-IntegrationTests.ps1 -PreRelease
+
+# The same regression with the three directory passes side by side, one isolated stack each
+./test/integration/Run-IntegrationTests.ps1 -PreRelease -Parallel
 ```
 
 **Scenario names:** `-Scenario` takes the full name (`Scenario-005-MatchingRules`) or a short form that resolves to it: the number (`5` or `005`), `Scenario-NNN` (`Scenario-005`) or the descriptive part (`MatchingRules`), case-insensitively. Numbers match exactly, never as a prefix, so `1` is Scenario 001 and not Scenario 010. An unknown name fails immediately, before any container starts, and lists the valid names (`utils/Resolve-IntegrationScenarioName.ps1`). The runner's scenario-specific branches (snapshot selection, directory-type restrictions, template relevance) compare the resolved scenario number rather than matching the name with wildcards, which used to make the unpadded names' `*Scenario1*` match Scenarios 010-019 as well (#1762).
@@ -149,6 +152,25 @@ This single script handles everything:
 **Strict-mode hardening:** the runner uses `Set-StrictMode -Version Latest`, so local debugging must treat uninitialised variables and missing properties as errors. This matches CI behaviour and prevents drift between the two environments.
 
 **-PreRelease preset**: shorthand for the full pre-release regression (`-Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large -TemplateDirectoryServer389 Large`): every implemented scenario against every directory type, with Samba AD at the Medium template and OpenLDAP and 389 Directory Server at the Large template. Use this as the recommended pre-release gate, the final sign-off before cutting a release.
+
+**-Parallel (directory lanes, #636)**: runs the directory passes of a `-DirectoryType All` run (including `-PreRelease`) side by side instead of one after another, so the run takes about as long as its slowest pass. Each pass runs in its own **lane**: its own runner process and its own complete copy of the stack (JIM, PostgreSQL, Keycloak and that directory's containers). The design is in [`PRD_PARALLEL_INTEGRATION_TESTS.md`](prd/done/PRD_PARALLEL_INTEGRATION_TESTS.md).
+
+- **What a lane owns.** `utils/IntegrationLane.ps1` resolves every name, port and Compose argument from one environment variable, `JIM_INTEGRATION_LANE`, which the parent sets on each lane process. Outside a lane (any serial run) everything resolves to the names the harness has always used, so serial runs are unchanged.
+
+  | Lane | JIM (web and API) | PostgreSQL | Container and volume names | Compose projects |
+  |------|-------------------|------------|----------------------------|------------------|
+  | Samba AD | `localhost:5200` | 5432 | unchanged (`jim.web`, `jim-db-volume`, ...) | `jim`, `jim-integration` |
+  | OpenLDAP | `localhost:5300` | 5433 | suffixed `-openldap` (`jim.web-openldap`, ...) | `jim-openldap`, `jim-integration-openldap` |
+  | 389 Directory Server | `localhost:5400` | 5434 | suffixed `-dirsrv` | `jim-dirsrv`, `jim-integration-dirsrv` |
+
+  The suffixed lanes apply two Compose override files, `docker/jim-lane.override.yml` and `docker/integration-lane.override.yml`, which rename every container, volume and the network. **Every** volume in the integration Compose file is renamed, not only the lane's own: `docker compose down -v` removes the explicitly named volumes a file declares whichever project created them, so a lane resetting against the base names would delete another lane's directory data. The directory containers themselves (`samba-ad-*`, `openldap-primary`, `dirsrv-primary`) keep their names, because each belongs to one directory type and so to one lane; a lane starts its directory by service name so that the profile-less `samba-ad-primary` is never created twice.
+- **Only the Samba AD lane can be signed in to from a browser.** The suffixed lanes publish no Keycloak port: two stacks behind one browser-facing sign-in address is what produces `invalid_grant: Code not valid`. Scenarios authenticate with the infrastructure API key, so they are unaffected. Each lane still runs its own Keycloak, because JIM.Web fetches the OIDC discovery document at startup and will not start without one.
+- **Nothing shared is written by two lanes.** A lane never edits `.env` (its API key is set in its process environment, which Compose prefers when interpolating `JIM_INFRASTRUCTURE_API_KEY`), writes its generated CSVs to `test/test-data/lanes/<DirectoryType>/` (the CSV cache lives there too), uses lane-suffixed scratch files under the temp directory, and resets, sweeps monitors and records `docker stats` for its own stack only. Result and log files carry the directory type (`full-regression-OpenLDAP-<timestamp>.json`, `Scenario-001-...-Large-OpenLDAP-<timestamp>.log`).
+- **Prepare once, clean up once.** The parent reaps stale monitors, applies `-LogLevel` to `.env` and builds the JIM images before any lane starts (lanes run with `-SkipBuild`), and prunes images only after every lane has finished. The directory-agnostic scenarios run in the first lane only, as in a serial run; that is the Samba AD lane, whose unsuffixed network Scenario 016's shared database containers join.
+- **Reading a run.** The console shows one line per lane event (`[OpenLDAP] Scenario-008-CrossDomainEntitlementSync passed (7m 32s)`); each lane's full output is in `results/logs/lane-<DirectoryType>-<timestamp>.log`. A failing lane does not stop the others; the parent prints its last 50 log lines when it finishes. The combined summary is written to `results/parallel-lanes-<timestamp>.json`.
+- **Afterwards.** When every lane passes, the parent removes all three stacks. A failed lane is left running for diagnosis (its JIM, database and logs are the evidence) and the parent prints the command to remove it; the next run, serial or parallel, removes it anyway, and so does `jim-reset`. Ctrl+C stops every lane process and removes every lane's stack. Scenario 016's database containers are never touched.
+- **Not for performance data.** Lanes compete for one host, so their timings are not nominal. Lanes never stream to or submit results to JIM-Bench (the parent says so when `JIM_BENCH_*` is configured), and a serial run's local performance baseline lookup skips lane result files (which carry the directory type in their names). Use serial runs for performance measurement.
+- **Refused with** `-SetupOnly` and `-SkipReset`, and without `-DirectoryType All`. The parent warns when the host has less than about 20 GB of available memory or fewer than 12 cores (one lane at Large peaks at about 5 GB and 4 cores).
 
 **Available Scenarios (`-Scenario` parameter):**
 
@@ -326,6 +348,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 - `-Template <Size>` - Data scale template; see [Data Scale Templates](#data-scale-templates) for the full list
 - `-TemplateSambaAD <Size>` - Override `-Template` for Samba AD when using `-DirectoryType All`
 - `-TemplateOpenLDAP <Size>` - Override `-Template` for OpenLDAP when using `-DirectoryType All`
+- `-Parallel` - Run the directory passes of a `-DirectoryType All` run side by side, one isolated stack each (see **-Parallel** under Quick Start above)
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
 
@@ -460,6 +483,7 @@ All templates generate realistic enterprise data following normal distribution p
 | Runner option | Directory | Template(s) | Time (cached) | Notes |
 |---------------|-----------|-------------|---------------|-------|
 | `-PreRelease` | Samba AD + OpenLDAP + 389 Directory Server | Medium + Large + Large | **~5h 10m** (Samba AD ~1h 32m, OpenLDAP ~1h 43m, 389 Directory Server ~1h 52m) | measured 2026-09-23 with snapshots already built; first run +~15 min |
+| `-PreRelease -Parallel` | Samba AD + OpenLDAP + 389 Directory Server, side by side | Medium + Large + Large | **~1h 41m** (Samba AD 1h 29m, OpenLDAP 1h 40m, 389 Directory Server 1h 31m) | measured 2026-09-29, all 51 scenario runs passing; the run ends with its slowest lane, plus ~1-5 min to build the images once |
 | `-Scenario All` | Samba AD | Medium | ~1h 00m | first run +~10 min |
 | `-Scenario All` | Samba AD | MediumLarge | ~2h 40m | first run +~10 min |
 | `-Scenario All` | OpenLDAP | Large | ~1h 45m | first run +~15 min |

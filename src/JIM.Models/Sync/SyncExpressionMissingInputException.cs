@@ -33,6 +33,13 @@ public class SyncExpressionMissingInputException : Exception
     public string? TargetAttributeName { get; }
 
     /// <summary>
+    /// The Synchronisation Rule hosting the failing mapping, set when the mapping is a Metaverse-Derived Attribute Flow
+    /// (#1750), so the error names the rule to open; null for an ordinary mapping. Administrator-authored: sanitise
+    /// before logging (CWE-117).
+    /// </summary>
+    public string? SyncRuleName { get; set; }
+
+    /// <summary>
     /// The inputs the object had no value for, as the Expression addresses them (for example
     /// <c>cs["lastName"]</c>).
     /// </summary>

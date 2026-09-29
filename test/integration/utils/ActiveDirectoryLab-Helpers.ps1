@@ -45,6 +45,10 @@ function Get-JimComposeArgument {
     .PARAMETER DirectoryType
         The run's directory type.
 
+    .PARAMETER BaseArguments
+        The arguments that address the JIM stack before the lab overlay is appended. Defaults to the two
+        ordinary compose files; the runner passes Get-JimComposeArgs (IntegrationLane.ps1), so a lane's
+        project name and override file are kept and the overlay follows them.
     .OUTPUTS
         string[]: arguments to splat after "docker compose".
     #>
@@ -52,10 +56,13 @@ function Get-JimComposeArgument {
     [OutputType([string[]])]
     param(
         [Parameter(Mandatory=$true)]
-        [string]$DirectoryType
+        [string]$DirectoryType,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$BaseArguments = @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
     )
 
-    $composeArguments = @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
+    $composeArguments = @($BaseArguments)
     if ($DirectoryType -eq 'ActiveDirectory') {
         $composeArguments += @('-f', 'test/integration/docker/docker-compose.ad-lab.yml')
     }

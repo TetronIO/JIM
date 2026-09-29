@@ -120,6 +120,7 @@ public class ExportEvaluationServer
             cache.CsoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
             cache.CsoAttributeValues = Array.Empty<ConnectedSystemObjectAttributeValue>()
                 .ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId));
+            cache.CsoIdsWithPersistedPendingExports = [];
             return;
         }
 
@@ -134,11 +135,13 @@ public class ExportEvaluationServer
             var csoAttributeValues = await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
             cache.CsoAttributeValues = csoAttributeValues
                 .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+            cache.CsoIdsWithPersistedPendingExports = await SyncRepo.GetConnectedSystemObjectIdsWithPendingExportsAsync(targetCsoIds);
         }
         else
         {
             cache.CsoAttributeValues = Array.Empty<ConnectedSystemObjectAttributeValue>()
                 .ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId));
+            cache.CsoIdsWithPersistedPendingExports = [];
         }
 
         Log.Verbose("RefreshExportEvaluationCacheForPageAsync: Loaded {CsoCount} CSOs with attribute values for {MvoCount} MVOs across {SystemCount} target systems",
@@ -2490,6 +2493,10 @@ public class ExportEvaluationServer
         // for detecting no-net-change on exports to target systems.
         List<PendingExportAttributeValueChange> attributeChanges;
         int csoAlreadyCurrentCount;
+        // The changes no-net-change detection skipped because the target already holds what they would set. They
+        // withdraw any change still queued for the same attribute (or value), below: the Metaverse and the target
+        // already agree, so a queued change there no longer reflects the Metaverse and must not be exported.
+        var alreadyCurrentChanges = new List<PendingExportAttributeValueChange>();
         using (var attrSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateAttributeValueChanges"))
         {
             attrSpan.SetTag("mappingCount", exportRule.AttributeFlowRules.Count);
@@ -2498,7 +2505,8 @@ public class ExportEvaluationServer
             attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
                 existingCso: existingCso, csoAttributeCache: cache.CsoAttributeValues, out csoAlreadyCurrentCount,
                 removedAttributes: removedAttributes, mvAttributeDictionary: mvAttributeDictionary,
-                preResolvedReferenceValues: preResolvedReferenceValues, flowErrors: flowErrors);
+                preResolvedReferenceValues: preResolvedReferenceValues, flowErrors: flowErrors,
+                noNetChangeSkipped: alreadyCurrentChanges);
 
             attrSpan.SetTag("changeCount", attributeChanges.Count);
             attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
@@ -2509,6 +2517,11 @@ public class ExportEvaluationServer
         {
             Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: No attribute changes for MVO {MvoId} to system {SystemId} (skipped {SkippedCount} no-net-change attributes)",
                 mvo.Id, exportRule.ConnectedSystemId, csoAlreadyCurrentCount);
+
+            // Nothing new to stage, but a change queued earlier for one of these attributes may now be stale.
+            if (existingCso != null)
+                await WithdrawQueuedChangesAlreadyCurrentAsync(existingCso.Id, alreadyCurrentChanges, cache, existingPendingExports, mvo.Id);
+
             return (null, null, null, csoAlreadyCurrentCount);
         }
 
@@ -2548,6 +2561,7 @@ public class ExportEvaluationServer
                     .SetTag("newChangeCount", attributeChanges.Count);
 
                 var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(existingPendingExport, attributeChanges);
+                _syncEngine.WithdrawChangesAlreadyCurrent(existingPendingExport, alreadyCurrentChanges);
 
                 if (mergeResult.ReplacedCount > 0 || mergeResult.AddedCount > 0)
                 {
@@ -2685,7 +2699,7 @@ public class ExportEvaluationServer
                 // child rows via raw SQL and then detaches their tracked instances from the change tracker
                 // (DetachPendingExportGraphs; #1818), so dbPendingExport.AttributeValueChanges no longer
                 // holds live, attachable entities by the time the new PE is built.
-                var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges)
+                var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges)
                     .Select(avc => new PendingExportAttributeValueChange
                     {
                         Id = Guid.NewGuid(),
@@ -2987,6 +3001,69 @@ public class ExportEvaluationServer
         => SyncEngine.GetAttributeChangeMergeKey(change);
 
     /// <summary>
+    /// Withdraws the changes queued for <paramref name="csoId"/> that an evaluation needing nothing new has just
+    /// found stale (<see cref="SyncEngine.WithdrawChangesAlreadyCurrent"/>): first from the run's in-memory batch
+    /// (a change staged earlier this page, typically by drift detection), then from a Pending Export persisted by an
+    /// earlier run or page. The persisted lookup is made only for an object the page's cache says has one
+    /// (<see cref="ExportEvaluationCache.CsoIdsWithPersistedPendingExports"/>), so an object that needs nothing
+    /// costs no database round trip. A Pending Export left with no changes is removed; only Update exports are
+    /// touched (a Create's changes provision the object), and never one a connector is executing right now.
+    /// </summary>
+    private async Task WithdrawQueuedChangesAlreadyCurrentAsync(
+        Guid csoId,
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ExportEvaluationCache cache,
+        List<PendingExport>? existingPendingExports,
+        Guid mvoId)
+    {
+        if (alreadyCurrentChanges.Count == 0)
+            return;
+
+        var inMemory = existingPendingExports?.FirstOrDefault(pe => pe.ConnectedSystemObjectId == csoId);
+        if (inMemory is { ChangeType: PendingExportChangeType.Update })
+        {
+            var withdrawn = _syncEngine.WithdrawChangesAlreadyCurrent(inMemory, alreadyCurrentChanges);
+            if (withdrawn > 0)
+            {
+                if (inMemory.AttributeValueChanges.Count == 0)
+                    existingPendingExports!.Remove(inMemory);
+
+                Log.Information("WithdrawQueuedChangesAlreadyCurrentAsync: Withdrew {Count} staged change(s) from the in-memory Pending Export for CSO {CsoId}; " +
+                    "the target already holds the values the Metaverse now wants{Removed}. Source: MVO {MvoId}",
+                    withdrawn, csoId, inMemory.AttributeValueChanges.Count == 0 ? " (Pending Export removed)" : string.Empty, mvoId);
+            }
+        }
+
+        if (cache.CsoIdsWithPersistedPendingExports != null && !cache.CsoIdsWithPersistedPendingExports.Contains(csoId))
+            return;
+
+        var persisted = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId);
+        if (persisted is not { ChangeType: PendingExportChangeType.Update } || persisted.Status == PendingExportStatus.Executing)
+            return;
+
+        var survivors = SelectSurvivingDriftChanges([], persisted.AttributeValueChanges, alreadyCurrentChanges);
+        if (survivors.Count == persisted.AttributeValueChanges.Count)
+            return;
+
+        if (survivors.Count == 0)
+        {
+            await SyncRepo.DeletePendingExportAsync(persisted);
+            cache.CsoIdsWithPersistedPendingExports?.Remove(csoId);
+        }
+        else
+        {
+            var survivorIds = survivors.Select(c => c.Id).ToHashSet();
+            var withdrawnIds = persisted.AttributeValueChanges.Where(c => !survivorIds.Contains(c.Id)).Select(c => c.Id).ToList();
+            await SyncRepo.AppendAttributeChangesToPendingExportAsync(persisted.Id, [], withdrawnIds);
+        }
+
+        Log.Information("WithdrawQueuedChangesAlreadyCurrentAsync: Withdrew {Count} queued change(s) from Pending Export {PendingExportId} for CSO {CsoId}; " +
+            "the target already holds the values the Metaverse now wants{Removed}. Source: MVO {MvoId}",
+            persisted.AttributeValueChanges.Count - survivors.Count, persisted.Id, csoId,
+            survivors.Count == 0 ? " (Pending Export removed)" : string.Empty, mvoId);
+    }
+
+    /// <summary>
     /// Selects the changes on an existing (stale, typically drift-staged) Pending Export that survive a merge with a
     /// newly evaluated set of export changes. Export evaluation always wins on a collision, because it derives from
     /// the latest Metaverse Object state.
@@ -2996,8 +3073,9 @@ public class ExportEvaluationServer
     /// <returns>The existing changes that are not superseded, in their original order.</returns>
     internal static List<PendingExportAttributeValueChange> SelectSurvivingDriftChanges(
         IReadOnlyCollection<PendingExportAttributeValueChange> incomingChanges,
-        IEnumerable<PendingExportAttributeValueChange> existingChanges)
-        => SyncEngine.SelectSurvivingDriftChanges(incomingChanges, existingChanges);
+        IEnumerable<PendingExportAttributeValueChange> existingChanges,
+        IReadOnlyCollection<PendingExportAttributeValueChange>? alreadyCurrentChanges = null)
+        => SyncEngine.SelectSurvivingDriftChanges(incomingChanges, existingChanges, alreadyCurrentChanges);
 
     /// <summary>
     /// The attribute ids among a set of changes whose change type sets the attribute's ENTIRE value set rather than

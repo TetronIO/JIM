@@ -726,6 +726,17 @@ _jim_reset() {
   docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 --profile scenario-008 --profile dirsrv down --volumes --remove-orphans 2>/dev/null || true
   docker rm -f samba-ad-primary samba-ad-source samba-ad-target postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
 
+  # The OpenLDAP and 389 Directory Server lanes of a parallel Pre-Release (Run-IntegrationTests.ps1
+  # -Parallel) run under their own Compose projects, with suffixed container, volume and network names.
+  # Remove their containers by project label, then their networks; their volumes go with the rest below.
+  local lane_project
+  for lane_project in jim-openldap jim-integration-openldap jim-dirsrv jim-integration-dirsrv; do
+    docker ps -aq --filter "label=com.docker.compose.project=$lane_project" | xargs -r docker rm -f >/dev/null 2>&1 || true
+  done
+  docker network rm jim-network-openldap jim-network-dirsrv >/dev/null 2>&1 || true
+  docker volume rm -f jim-db-volume-openldap jim-logs-volume-openldap jim-keys-volume-openldap jim-connector-files-volume-openldap \
+    jim-db-volume-dirsrv jim-logs-volume-dirsrv jim-keys-volume-dirsrv jim-connector-files-volume-dirsrv >/dev/null 2>&1 || true
+
   local keep_volumes_pattern='^$'
   if [ "$mode" = "all" ]; then
     docker rm -f "${_JIM_PHASE2_CONTAINERS[@]}" 2>/dev/null || true

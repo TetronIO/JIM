@@ -3048,6 +3048,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateJoined")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("DerivedInputChangePending")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("ExternalIdAttributeId")
                         .HasColumnType("integer");
 
@@ -3084,7 +3087,16 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("TypeId")
                         .HasColumnType("integer");
 
+                    b.Property<uint>("xmin")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId")
+                        .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending")
+                        .HasFilter("\"DerivedInputChangePending\"");
 
                     b.HasIndex("MetaverseObjectId");
 

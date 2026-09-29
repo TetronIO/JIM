@@ -225,6 +225,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => _inner.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
 
+    /// <inheritdoc />
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsWithPendingExportsAsync(connectedSystemObjectIds);
+
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _inner.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 
@@ -392,6 +396,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
         => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectScopeReviewPendingAsync));
 
+    public Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks)
+        => throw new PreviewWriteAttemptedException(nameof(MarkConnectedSystemObjectsDerivedInputChangePendingAsync));
+
+    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
+        => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectDerivedInputChangePendingAsync));
+
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectsWithNewAttributeValuesAsync));
 
@@ -558,6 +568,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
         IReadOnlyList<Guid> changeIdsToRemove)
         => throw new PreviewWriteAttemptedException(nameof(AppendAttributeChangesToPendingExportAsync));
+
+    public Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
+        => _inner.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(connectedSystemId, classMembershipAttributeIds);
+
+    public Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds)
+        => throw new PreviewWriteAttemptedException(nameof(WithdrawPendingExportAttributeChangesAsync));
 
     public Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(DisconnectConnectedSystemObjectsAsync));

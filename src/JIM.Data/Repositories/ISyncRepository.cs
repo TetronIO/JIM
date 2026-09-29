@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -51,8 +52,8 @@ public interface ISyncRepository
     Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
 
     /// <summary>
-    /// Gets the count of CSOs modified since the specified date.
-    /// Used by delta sync to calculate page count.
+    /// Gets the count of CSOs created or modified since the specified date, or marked
+    /// <c>DerivedInputChangePending</c> (#1750). Used by delta sync to calculate page count.
     /// </summary>
     Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince);
 
@@ -70,8 +71,9 @@ public interface ISyncRepository
     Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
-    /// Loads a page of CSOs modified since the specified date, with full attribute values.
-    /// Used by delta sync to process only recently changed objects.
+    /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
+    /// (#1750: a Metaverse attribute a derived flow on this system reads changed elsewhere), with full attribute
+    /// values. Used by delta sync to process only recently changed objects.
     /// </summary>
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
     /// for paging metadata.</param>
@@ -328,6 +330,30 @@ public interface ISyncRepository
     /// (issue #892). Called at page flush. No-op when <paramref name="ids"/> is empty.
     /// </summary>
     Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
+    /// Sets <c>DerivedInputChangePending</c> (#1750, "Position 2") on the Connected System Objects joined to each
+    /// mark's Metaverse Object in the mark's Connected System: those systems' import Synchronisation Rules host a
+    /// Metaverse-Derived Attribute Flow reading a Metaverse attribute that changed, so their next synchronisation,
+    /// delta included, must re-evaluate the object. Every matched row is written, already-marked ones included, so its
+    /// <c>xmin</c> moves: a hosting-system run that loaded the object before this mark then cannot clear it (see
+    /// <see cref="ClearConnectedSystemObjectDerivedInputChangePendingAsync"/>). One bulk statement for the whole batch,
+    /// called at page flush; duplicate marks are harmless and an unjoined system has nothing to mark. Tracked instances
+    /// of the marked rows are brought into line so a later save cannot write the stale value back. No-op when
+    /// <paramref name="marks"/> is empty.
+    /// </summary>
+    /// <returns>The number of objects newly marked (rows already marked are re-marked but not counted).</returns>
+    Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks);
+
+    /// <summary>
+    /// Clears <c>DerivedInputChangePending</c> (#1750) on Connected System Objects whose synchronisation processing
+    /// completed without error, each only while the row's <c>xmin</c> still equals the version the synchronisation
+    /// read when it loaded the object. A row re-marked (or otherwise rewritten) since then keeps its mark and is
+    /// re-evaluated by the next run: fail-safe, never a lost input change. One bulk statement, called at page flush;
+    /// tracked instances of the cleared rows are brought into line. No-op when <paramref name="clears"/> is empty.
+    /// </summary>
+    /// <returns>The number of objects whose mark was cleared.</returns>
+    Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears);
 
     /// <summary>
     /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).
@@ -943,6 +969,13 @@ public interface ISyncRepository
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Which of the given Connected System Objects have a Pending Export persisted, as ids only: one indexed
+    /// query per page, so export evaluation's no-net-change path can tell which objects might carry a queued
+    /// change it has just made stale without a database round trip for every object that needs nothing.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets CSO IDs that have Pending Exports for a Connected System.
     /// Used during import reconciliation to identify which CSOs have outstanding exports.
     /// </summary>
@@ -1298,6 +1331,27 @@ public interface ISyncRepository
         Guid pendingExportId,
         IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
         IReadOnlyList<Guid> changeIdsToRemove);
+
+    /// <summary>
+    /// Retrieves the Update Pending Exports of a Connected System (not being executed) that carry at least one queued
+    /// change (Pending or ExportedNotConfirmed) attributed to an export Synchronisation Rule which may no longer
+    /// authorise it: the account is no longer joined, the rule is missing or disabled, or (for an attribute that is not
+    /// a class membership attribute) the rule has no enabled Attribute Flow for the change's attribute. A candidate
+    /// filter only; <c>ISyncEngine.SelectQueuedChangesWithoutAuthority</c> makes the decision. Loaded untracked with
+    /// their attribute changes and their Connected System Object (without its attribute values).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose exports are about to run.</param>
+    /// <param name="classMembershipAttributeIds">The Connected System's class membership attribute ids, which have no
+    /// Attribute Flow of their own and so are not candidates on that ground alone.</param>
+    Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds);
+
+    /// <summary>
+    /// Withdraws queued Pending Export attribute changes by id, then deletes every Update Pending Export (not being
+    /// executed) they belonged to that is left with no attribute changes at all.
+    /// </summary>
+    /// <param name="attributeChangeIds">The attribute changes to withdraw.</param>
+    /// <returns>How many attribute changes were withdrawn and how many emptied Pending Exports were deleted.</returns>
+    Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds);
 
     #endregion
 

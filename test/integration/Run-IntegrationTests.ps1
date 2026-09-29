@@ -118,6 +118,16 @@
     controllers, every other scenario only the Primary. The long-tail templates are refused, as on
     Samba AD.
 
+.PARAMETER Parallel
+    Runs the directory passes of a -DirectoryType All run (including -PreRelease) side by side instead
+    of one after another, each in its own isolated copy of the stack (a "lane"), so the run takes about
+    as long as its slowest pass (#636). JIM's images are built once before the lanes start. The Samba AD
+    lane keeps the usual ports (JIM on 5200); the OpenLDAP lane's JIM is on 5300 and the 389 Directory
+    Server lane's on 5400, and only the Samba AD lane can be signed in to from a browser. The console
+    shows one short line per lane event; each lane's full output goes to
+    results/logs/lane-<DirectoryType>-<timestamp>.log. A failing lane does not stop the others.
+    Requires -DirectoryType All; refused with -SetupOnly or -SkipReset.
+
 .PARAMETER TemplateSambaAD
     Template for the Samba AD leg of a -DirectoryType All run. Falls back to -Template.
 
@@ -223,6 +233,12 @@
     directory type, with Samba AD at the Medium template and OpenLDAP and 389 Directory
     Server at Large. Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Medium
     -TemplateOpenLDAP Large -TemplateDirectoryServer389 Large.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -PreRelease -Parallel
+
+    Runs the same pre-release regression with the three directory passes side by side, one isolated
+    stack each. Takes about as long as the slowest pass rather than the sum of all three.
 #>
 
 param(
@@ -297,6 +313,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$ContinueOnFailure,
+
+    # Run the directory passes of a -DirectoryType All run side by side, one isolated stack each (#636).
+    [Parameter(Mandatory=$false)]
+    [switch]$Parallel,
 
     # ─── Scenario 011 (Scoping Criteria Matrix) — coverage and shape options ───
     # Mutually exclusive: pick one tier, or neither for Default. Ignored by every
@@ -375,6 +395,22 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 . "$scriptRoot/utils/Invoke-LabControl.ps1"
 . "$scriptRoot/utils/ActiveDirectoryLab-Helpers.ps1"
 . "$scriptRoot/utils/Get-ScenarioDirectoryTypes.ps1"
+. "$scriptRoot/utils/Invoke-IntegrationLanes.ps1"
+
+# The lane this process belongs to (#636). Outside a -Parallel run there is none, and every name, port
+# and Compose argument below resolves to what the harness has always used. Inside one, the parent sets
+# JIM_INTEGRATION_LANE on this process and everything this run creates, resets or removes is its own.
+$script:Lane = Get-IntegrationLane
+Set-IntegrationLaneComposeEnvironment -RepoRoot $repoRoot
+$script:JimComposeArgs = @(Get-JimComposeArgs)
+$script:IntegrationComposeArgs = @(Get-IntegrationComposeArgs)
+# Result and log file names carry the lane's directory type, so two lanes finishing the same scenario
+# at the same template in the same second cannot overwrite each other's files. Serial names are unchanged.
+$script:ResultNameTag = if ($script:Lane.Active) { "-$($script:Lane.Name)" } else { "" }
+# A serial run's performance baseline must be a serial run too: a lane's files (named with the tag above)
+# were measured on a contended host, so the baseline lookups skip them. A lane compares like with like, as
+# its own lookup pattern already includes its tag.
+$script:LaneResultNamePattern = "-(" + ((Get-IntegrationLaneNames) -join '|') + ")(-durable)?-\d{4}-\d{2}-\d{2}_\d{6}\.json$"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -1193,6 +1229,76 @@ function Show-ChangeTrackingMenu {
     return ($selectedIndex -eq 1)
 }
 
+function Show-ParallelMenu {
+    # Pre-Release only: run the three directory passes one after another (the default) or side by side
+    # in isolated lanes (#636). Returns $true for side by side.
+    $options = @(
+        @{
+            Name = "One after another"
+            Description = "Run the directory passes in turn (default)"
+            Details = "One stack at a time; JIM on http://localhost:5200 throughout"
+        }
+        @{
+            Name = "Side by side"
+            Description = "Run the three directory passes at the same time (-Parallel)"
+            Details = "About as long as the slowest pass; needs ~20 GB free memory and 12 cores"
+        }
+    )
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Pre-Release Directory Passes${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            for ($i = 0; $i -lt $options.Count; $i++) {
+                $opt = $options[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($opt.Name)${NC} ${GRAY}- $($opt.Description)${NC}"
+                    Write-Host "${GRAY}  $($opt.Details)${NC}"
+                }
+                else {
+                    Write-Host "  $($opt.Name) ${GRAY}- $($opt.Description)${NC}"
+                    Write-Host "${GRAY}  $($opt.Details)${NC}"
+                }
+                Write-Host ""
+            }
+
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { $selectedIndex = [Math]::Max(0, $selectedIndex - 1) }
+                40 { $selectedIndex = [Math]::Min($options.Count - 1, $selectedIndex + 1) }
+                13 { $exitMenu = $true }
+                27 {
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return ($selectedIndex -eq 1)
+}
+
 function Show-Scenario11CoverageMenu {
     # Scenario 011 (Scoping Criteria Matrix) coverage tier picker.
     # Returns one of 'Quick', 'Default', or 'Exhaustive'.
@@ -1276,6 +1382,7 @@ $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
 $DirectoryTypeWasExplicitlySet = $PSBoundParameters.ContainsKey('DirectoryType')
 $LogLevelWasExplicitlySet = $PSBoundParameters.ContainsKey('LogLevel')
 $ChangeTrackingWasExplicitlySet = $PSBoundParameters.ContainsKey('DisableChangeTracking')
+$ParallelWasExplicitlySet = $PSBoundParameters.ContainsKey('Parallel')
 $Scenario11CoverageWasExplicitlySet = $Quick -or $Exhaustive
 
 # Scenarios that provision their own fixed test data and don't use the Template parameter
@@ -1350,6 +1457,10 @@ if (-not $Scenario) {
         $TemplateDirectoryServer389    = "Large"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
+
+        if (-not $ParallelWasExplicitlySet) {
+            $Parallel = Show-ParallelMenu
+        }
     }
     $scenarioNumber = Get-IntegrationScenarioNumber -Scenario $Scenario
 
@@ -1455,11 +1566,34 @@ if ($scenarioNumber -eq 23) {
 # adds the lab overlay, which gives jim.web, jim.worker and jim.scheduler extra_hosts entries for the
 # domain controllers' FQDNs (their names are in no DNS the containers can see, and their LDAPS certificates
 # name the FQDN). Decided here, after the directory type has been chosen by parameter, menu or coercion.
-$script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType
+$script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType -BaseArguments (Get-JimComposeArgs)
 
 # ---------------------------------------------------------------------------
 # Handle "-DirectoryType All": run the suite for each directory type
 # ---------------------------------------------------------------------------
+
+# -Parallel (#636) runs the directory passes of a -DirectoryType All run side by side. Validate it here,
+# after the scenario and directory type are resolved (from parameters or the menu) and before anything
+# touches Docker.
+if ($Parallel) {
+    $parallelRefusal = $null
+    if ($script:Lane.Active) {
+        $parallelRefusal = "-Parallel cannot be used inside a lane (JIM_INTEGRATION_LANE=$($script:Lane.Name))."
+    }
+    elseif ($DirectoryType -ne "All") {
+        $parallelRefusal = "-Parallel runs the three directory passes side by side, so it needs -DirectoryType All (or -PreRelease)."
+    }
+    elseif ($SetupOnly) {
+        $parallelRefusal = "-Parallel cannot be combined with -SetupOnly: set-up leaves one environment running for you to explore, so run it against a single directory type."
+    }
+    elseif ($SkipReset) {
+        $parallelRefusal = "-Parallel cannot be combined with -SkipReset: each lane must start from its own clean stack."
+    }
+    if ($parallelRefusal) {
+        Write-Host "${RED}ERROR: $parallelRefusal${NC}"
+        exit 1
+    }
+}
 
 if ($DirectoryType -eq "All") {
     $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
@@ -1521,6 +1655,23 @@ if ($DirectoryType -eq "All") {
         SambaAD            = $templateForSambaAD
         OpenLDAP           = $templateForOpenLDAP
         DirectoryServer389 = $templateForDirectoryServer389
+    }
+
+    if ($Parallel) {
+        # Side by side: one lane process per directory type, each with its own isolated stack. The
+        # directory-agnostic scenarios run in the first lane only, exactly as the serial loop below does.
+        $laneOutcome = Invoke-IntegrationLanes -RunnerScript $selfScript -RepoRoot $repoRoot -ScriptRoot $scriptRoot `
+            -DirectoryTypes $directoryTypesToRun -TemplateForDirectoryType $templateForDirectoryType `
+            -PassThruParams $passThruParams -Scenario $Scenario -LogLevel $LogLevel
+
+        # Host-wide clean-up runs once, here, after every lane has finished: inside a lane it could
+        # remove an image another lane is about to start a container from.
+        Write-Host ""
+        Write-Host "${GRAY}Pruning unused images and build cache (preserving snapshots)...${NC}"
+        Invoke-ImagePrunePreservingSnapshots | Out-Null
+        docker builder prune -af 2>&1 | Out-Null
+
+        exit $laneOutcome.ExitCode
     }
 
     $allStart = Get-Date
@@ -1692,10 +1843,10 @@ function Invoke-ActiveDirectoryLabToolbox {
     if ($Action -eq "Up") {
         # The certificates folder is bind-mounted into the toolbox; create it first, or Docker creates it as root.
         New-Item -ItemType Directory -Path (Join-Path $scriptRoot "ad-lab-certs") -Force | Out-Null
-        $toolboxResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile ad-lab up -d ldap-toolbox 2>&1
+        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab up -d ldap-toolbox 2>&1
     }
     else {
-        $toolboxResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile ad-lab stop ldap-toolbox 2>&1
+        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab stop ldap-toolbox 2>&1
     }
     if ($LASTEXITCODE -ne 0) {
         throw "Could not $($Action.ToLower()) the LDAP toolbox (jim-ldap-toolbox): $($toolboxResult | Out-String)"
@@ -1759,7 +1910,7 @@ function Reset-JIMForNextScenario {
 
     # 2. Remove JIM database volume (ensures clean schema + data)
     Write-Host "${GRAY}  Removing JIM database volume...${NC}"
-    docker volume rm jim-db-volume 2>&1 | Out-Null
+    docker volume rm $script:Lane.DbVolume 2>&1 | Out-Null
 
     # 3. Active Directory lab: nothing to do here. No container runs, and every scenario in a sweep is a child
     # process whose own Step 1 reverts the domain controllers it uses, Step 3 starts the toolbox and Step 4 waits
@@ -1768,6 +1919,8 @@ function Reset-JIMForNextScenario {
     # skipped for an Active Directory run.
     if ($DirectoryType -ne "ActiveDirectory") {
     # 3. Clean Samba AD test data (delete OUs with --force-subtree-delete; much faster than container restart)
+    # A -Parallel lane for another directory type must never reach into the Samba AD lane's containers.
+    if (-not $script:Lane.Active -or $script:Lane.Name -eq "SambaAD") {
     Write-Host "${GRAY}  Cleaning Samba AD test data...${NC}"
 
     # Primary (panoply.local) — used by Scenarios 001, 004, 005, 006
@@ -1794,6 +1947,7 @@ function Reset-JIMForNextScenario {
             docker exec samba-ad-target samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
     }
+    } # end: Samba AD clean-up (a lane other than Samba AD has no Samba containers to clean)
     } # end: not an Active Directory run (Samba AD data cleaning)
 
     # 3b. No OpenLDAP cleanup is needed here, and none belongs here. The same holds for 389 Directory
@@ -1827,25 +1981,33 @@ function Reset-JIMForNextScenario {
     $randomString = [Convert]::ToBase64String($randomBytes).Replace("+", "").Replace("/", "").Replace("=", "")
     $newApiKey = "jim_ak_$randomString"
 
-    $envFilePath = Join-Path $RepoRoot ".env"
-    $envContent = Get-Content $envFilePath -Raw
-    if ($null -eq $envContent) { $envContent = "" }
-    if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
-        # Strip any leading comment marker (# ) so a commented-out line becomes active
-        $envContent = $envContent -replace "(?m)^#\s*JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
-        $envContent = $envContent -replace "(?m)^JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
-    } else {
-        $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
-        $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$newApiKey`n"
+    if ($script:Lane.Active) {
+        # A lane never writes the shared .env (three lanes would race on it). Compose prefers the process
+        # environment over .env when interpolating JIM_INFRASTRUCTURE_API_KEY, so the lane's own key reaches
+        # its own JIM from here, and the scenario receives it as -ApiKey.
+        $env:JIM_INFRASTRUCTURE_API_KEY = $newApiKey
     }
-    $envContent | Set-Content $envFilePath -NoNewline
+    else {
+        $envFilePath = Join-Path $RepoRoot ".env"
+        $envContent = Get-Content $envFilePath -Raw
+        if ($null -eq $envContent) { $envContent = "" }
+        if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
+            # Strip any leading comment marker (# ) so a commented-out line becomes active
+            $envContent = $envContent -replace "(?m)^#\s*JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
+            $envContent = $envContent -replace "(?m)^JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
+        } else {
+            $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
+            $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$newApiKey`n"
+    }
+        $envContent | Set-Content $envFilePath -NoNewline
 
-    $keyFilePath = Join-Path $ScriptRoot ".api-key"
-    $newApiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
+        $keyFilePath = Join-Path $ScriptRoot ".api-key"
+        $newApiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
+    }
 
     # 5. Pre-create the worker log bind-mount directory so Docker doesn't create it as root
     # (see utils/Initialize-WorkerLogDirectories.ps1 and docker-compose.override.yml).
-    Initialize-WorkerLogDirectories -LogDirectory (Join-Path $ScriptRoot "results" "logs")
+    Initialize-WorkerLogDirectories -LogDirectory (Join-Path $ScriptRoot "results" "logs") -WorkerDirectoryName $script:Lane.WorkerLogDirectoryName
 
     # 6. Restart JIM containers
     Write-Host "${GRAY}  Starting JIM containers...${NC}"
@@ -1855,7 +2017,7 @@ function Reset-JIMForNextScenario {
     Write-Host "${GRAY}  Waiting for JIM API...${NC}"
     $jimApiReady = $false
     $jimApiElapsed = 0
-    $jimApiUrl = "http://localhost:5200/api/v1/health"
+    $jimApiUrl = "$($script:Lane.JimUrl)/api/v1/health"
     while (-not $jimApiReady -and $jimApiElapsed -lt $TimeoutSeconds) {
         try {
             $healthResponse = Invoke-WebRequest -Uri $jimApiUrl -Method GET -TimeoutSec 5 -ErrorAction SilentlyContinue
@@ -2029,7 +2191,8 @@ if ($Scenario -eq "All") {
         if (-not (Test-TemplateRelevant -ScenarioName $scenarioName)) {
             $scenarioParams.Template = "Nano"
         }
-        if ($i -gt 0) {
+        # A -Parallel lane arrives with -SkipBuild because the parent built the images once for every lane.
+        if ($i -gt 0 -or $SkipBuild) {
             $scenarioParams.SkipBuild = $true
         }
 
@@ -2176,7 +2339,7 @@ if ($Scenario -eq "All") {
     }
 
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-    $resultsFile = Join-Path $resultsDir "full-regression-$timestamp.json"
+    $resultsFile = Join-Path $resultsDir "full-regression$($script:ResultNameTag)-$timestamp.json"
     $regressionResults | ConvertTo-Json -Depth 10 | Set-Content $resultsFile
     Write-Host "${GRAY}Results saved to: $resultsFile${NC}"
     Write-Host ""
@@ -2352,7 +2515,10 @@ if (Test-Path $envFilePath) {
         }
     }
 }
-$metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
+# A -Parallel lane never streams to JIM-Bench: its timings are taken while two other stacks compete for
+# the same host, and the submission carries nothing that would let JIM-Bench tell them apart from a
+# nominal run. Parallel runs are a correctness gate; performance data comes from serial runs.
+$metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY -and -not $script:Lane.Active
 # Pre-declare metrics tracking vars so the resolved-config banner and the
 # post-scenario submission block can reference them under Set-StrictMode
 # even on code paths where streaming is disabled or never started.
@@ -2362,6 +2528,8 @@ $metricsHostFingerprint = $null
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
     Write-Host "                           ${GRAY}$($env:JIM_BENCH_API_URL)${NC}"
+} elseif ($script:Lane.Active) {
+    Write-Host "  Metrics Streaming:       ${GRAY}Disabled (a -Parallel lane's timings are not nominal)${NC}"
 } else {
     Write-Host "  Metrics Streaming:       ${GRAY}Disabled (set JIM_BENCH_API_URL and JIM_BENCH_API_KEY to enable)${NC}"
 }
@@ -2373,7 +2541,11 @@ Set-Location $repoRoot
 # Reap monitor processes/containers leaked by a previous crashed or hard-killed runner
 # (#918). Runs for every invocation, including each -Scenario All child: between scenarios
 # no monitors are live, so anything matched is a genuine stray.
-Clear-StaleIntegrationMonitors -ResultsPath (Join-Path $scriptRoot 'results')
+# A -Parallel lane skips it: the other lanes' monitors are live, and the parent swept once before any
+# lane started.
+if (-not $script:Lane.Active) {
+    Clear-StaleIntegrationMonitors -ResultsPath (Join-Path $scriptRoot 'results')
+}
 
 # Step 0: Ensure Samba AD images exist
 $step0Start = Get-Date
@@ -2542,6 +2714,11 @@ if (-not $SkipReset) {
     Write-Section "Step 1: Resetting JIM Environment"
 
     Write-Step "Stopping all containers and removing volumes..."
+    # A serial run also takes down any lane stacks a previous -Parallel run left behind (#636): they
+    # would otherwise keep their containers, ports and volumes indefinitely. A lane touches only itself.
+    if (-not $script:Lane.Active) {
+        Remove-SuffixedIntegrationLaneStacks
+    }
     docker compose @script:JimComposeArgs --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario-002, scenario-008, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
@@ -2552,11 +2729,11 @@ if (-not $SkipReset) {
     # New-Scenario-016-TestDatabase.ps1 rather than by their being new: it drops and recreates its whole
     # schema, and a content hash of the generated script decides whether it needs to. A stale Scenario 016
     # database is therefore not reachable. Everything else here stays ephemeral.
-    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
+    docker compose @script:IntegrationComposeArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
     if ($isActiveDirectoryRun) {
         # The ad-lab profile (the LDAP toolbox) is named only for an Active Directory run: taking it down for
         # every run would also release its image to the end-of-run prune, and rebuild it next time.
-        docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile ad-lab down -v --remove-orphans 2>&1 | Out-Null
+        docker compose @script:IntegrationComposeArgs --profile ad-lab down -v --remove-orphans 2>&1 | Out-Null
     }
 
     # Force-remove any leftover integration test containers by name.
@@ -2564,7 +2741,8 @@ if (-not $SkipReset) {
     # (e.g., 'jim' instead of 'jim-integration') and are therefore not cleaned up by 'down -v'.
     # The phase2 databases are excluded for the reason above.
     Write-Step "Removing any leftover integration test containers..."
-    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "dirsrv-primary", "postgres-target", "mysql-test")
+    # A lane force-removes only its own directory's containers; a serial run keeps its historic list.
+    $integrationContainers = $script:Lane.DirectoryContainers
     foreach ($container in $integrationContainers) {
         docker rm -f $container 2>&1 | Out-Null
     }
@@ -2573,13 +2751,13 @@ if (-not $SkipReset) {
     # This ensures a completely clean state even if volume naming has changed
     Write-Step "Removing any orphan integration test volumes..."
     $preservedVolumes = @("jim-integration-oracle-data", "jim-integration-sqlserver-data")
-    $orphanVolumes = docker volume ls --format '{{.Name}}' | Where-Object { $_ -match 'jim-integration' -and $preservedVolumes -notcontains $_ }
+    $orphanVolumes = docker volume ls --format '{{.Name}}' | Where-Object { Test-VolumeBelongsToIntegrationLane -VolumeName $_ -PreservedVolumes $preservedVolumes }
     foreach ($vol in $orphanVolumes) {
         docker volume rm $vol 2>&1 | Out-Null
     }
 
     # Remove the JIM database volume to ensure completely fresh state
-    docker volume rm jim-db-volume 2>&1 | Out-Null
+    docker volume rm $script:Lane.DbVolume 2>&1 | Out-Null
 
     # Remove the connector-files volume. With the containers force-rm'd above, no
     # one should be holding this volume anymore; `docker volume rm` removes it
@@ -2587,9 +2765,9 @@ if (-not $SkipReset) {
     # an unrelated Docker project), fall back to an in-place wipe so the next
     # scenario doesn't inherit stale CSVs. This mirrors the Reset-JIMForNextScenario
     # strategy where Samba/LDAP stay up and the volume must be emptied in place.
-    $rmResult = docker volume rm jim-connector-files-volume 2>&1
+    $rmResult = docker volume rm $script:Lane.ConnectorFilesVolume 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "${GRAY}  jim-connector-files-volume could not be removed (${rmResult}); wiping in place instead...${NC}"
+        Write-Host "${GRAY}  $($script:Lane.ConnectorFilesVolume) could not be removed (${rmResult}); wiping in place instead...${NC}"
         Clear-ConnectorFilesVolume
     }
 
@@ -2658,6 +2836,15 @@ $randomString = [Convert]::ToBase64String($randomBytes).Replace("+", "").Replace
 $apiKey = "jim_ak_$randomString"
 Write-Success "Generated key prefix: $($apiKey.Substring(0, 12))"
 
+$script:OriginalLogLevel = $null
+if ($script:Lane.Active) {
+    # A lane never writes the shared .env: three lanes would race on it, and the -Parallel parent has
+    # already set the run's log level there. Compose prefers the process environment over .env when
+    # interpolating JIM_INFRASTRUCTURE_API_KEY, so this lane's key reaches only this lane's JIM.
+    $env:JIM_INFRASTRUCTURE_API_KEY = $apiKey
+    Write-Success "Set this lane's API key in its process environment (.env untouched)"
+}
+else {
 # Update .env file
 Write-Step "Updating .env file..."
 $envFilePath = Join-Path $repoRoot ".env"
@@ -2691,6 +2878,7 @@ Write-Success "Updated .env file"
 $keyFilePath = Join-Path $scriptRoot ".api-key"
 $apiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
 Write-Success "Saved API key to .api-key"
+} # end: serial .env and .api-key update
 
 # Step 3: Start services
 $step3Start = Get-Date
@@ -2701,7 +2889,7 @@ Write-Section "Step 3: Starting Services"
 # (1654, baked into JIM.Worker/Dockerfile). Fails fast with a remediation if a prior
 # non-runner stack-up (jim-stack/jim-reset) already created it as root and we cannot repair
 # it. See utils/Initialize-WorkerLogDirectories.ps1 for the full rationale.
-Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "logs")
+Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "logs") -WorkerDirectoryName $script:Lane.WorkerLogDirectoryName
 
 # Scale PostgreSQL with template size (mirrors the per-template OpenLDAP memory scaling
 # further below). docker-compose.override.yml parameterises the database's command with
@@ -2757,7 +2945,8 @@ Write-Success "JIM stack started"
 # Docker-in-Docker proxy ports aren't forwarded by VS Code Dev Containers automatically.
 # Uses setsid + disown to fully detach socat from the PowerShell process tree,
 # so the bridge survives after this script exits (e.g. -SetupOnly mode).
-if (Get-Command socat -ErrorAction SilentlyContinue) {
+# Only the stack that publishes Keycloak gets the bridge (a suffixed -Parallel lane publishes none).
+if ($script:Lane.PublishesKeycloak -and (Get-Command socat -ErrorAction SilentlyContinue)) {
     $bridgeScript = "#!/bin/bash`npkill -f 'socat.*TCP:127.0.0.1:8180' 2>/dev/null || true`nsetsid socat TCP-LISTEN:8181,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:8180 </dev/null >/dev/null 2>&1 &`ndisown`n"
     $bridgePath = [System.IO.Path]::GetTempPath() + "jim-keycloak-bridge.sh"
     [System.IO.File]::WriteAllText($bridgePath, $bridgeScript)
@@ -2900,7 +3089,12 @@ if ($DirectoryType -eq "OpenLDAP") {
     }
 
     Write-Step "Starting OpenLDAP (Primary)..."
-    $openldapResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile openldap up -d 2>&1
+    # A lane names the service: samba-ad-primary carries no profile, so an unqualified `up -d` would also
+    # try to create it, a container the Samba AD lane already owns under that fixed name.
+    # @(...) around the whole if is load-bearing: a one-element array returned from an if is unwrapped to
+    # a bare string, and splatting a string passes it one character at a time ("no such service: o").
+    $openldapServices = @(if ($script:Lane.Active) { "openldap-primary" })
+    $openldapResult = docker compose @script:IntegrationComposeArgs --profile openldap up -d @openldapServices 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start OpenLDAP"
         Write-Host "${GRAY}$openldapResult${NC}"
@@ -2987,7 +3181,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     }
 
     Write-Step "Starting 389 Directory Server (Primary)..."
-    $dirsrvResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile dirsrv up -d dirsrv-primary 2>&1
+    $dirsrvResult = docker compose @script:IntegrationComposeArgs --profile dirsrv up -d dirsrv-primary 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start 389 Directory Server"
         Write-Host "${GRAY}$dirsrvResult${NC}"
@@ -3011,7 +3205,7 @@ elseif ($isActiveDirectoryRun) {
 }
 else {
     Write-Step "Starting Samba AD (Primary)..."
-    $sambaResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d 2>&1
+    $sambaResult = docker compose @script:IntegrationComposeArgs up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start Samba AD"
         Write-Host "${GRAY}$sambaResult${NC}"
@@ -3025,7 +3219,8 @@ else {
 # current connector code is exactly the masked-bug class the no-SkipBuild rule exists to prevent.
 if ($scenarioNumber -eq 15) {
     Write-Step "Building and starting the SCIM test service provider..."
-    $scimProviderResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scim up -d --build 2>&1
+    $scimServices = @(if ($script:Lane.Active) { "scim-provider" })
+    $scimProviderResult = docker compose @script:IntegrationComposeArgs --profile scim up -d --build @scimServices 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start the SCIM test service provider"
         Write-Host "${GRAY}$scimProviderResult${NC}"
@@ -3053,7 +3248,7 @@ if ($scenarioNumber -eq 15) {
 # For OpenLDAP and 389 Directory Server, S002 uses the two suffixes of the single container (already started above)
 if ($scenarioNumber -eq 2 -and $usesSambaContainers) {
     Write-Step "Starting Samba AD (Source and Target for Scenario 002)..."
-    $scenario2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 up -d 2>&1
+    $scenario2Result = docker compose @script:IntegrationComposeArgs --profile scenario-002 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start Scenario 002 Samba AD containers"
         Write-Host "${GRAY}$scenario2Result${NC}"
@@ -3100,7 +3295,7 @@ if ($scenarioNumber -eq 8 -and $usesSambaContainers) {
         Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
     }
     Write-Step "Starting Samba AD (Source and Target for Scenario 008)..."
-    $scenario8Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-008 up -d 2>&1
+    $scenario8Result = docker compose @script:IntegrationComposeArgs --profile scenario-008 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start Scenario 008 Samba AD containers"
         Write-Host "${GRAY}$scenario8Result${NC}"
@@ -3125,7 +3320,7 @@ if ($scenarioNumber -eq 16) {
     })
 
     Write-Step "Starting database containers for Scenario 016 ($($phase2Services -join ', '))..."
-    $phase2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d @phase2Services 2>&1
+    $phase2Result = docker compose @script:IntegrationComposeArgs --profile phase2 up -d @phase2Services 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start the Scenario 016 database containers"
         Write-Host "${GRAY}$phase2Result${NC}"
@@ -3282,7 +3477,7 @@ if ($scenarioNumber -in 2, 8 -and $usesSambaContainers) {
 Write-Step "Waiting for JIM Web API to be ready..."
 $jimApiReady = $false
 $jimApiElapsed = 0
-$jimApiUrl = "http://localhost:5200/api/v1/health"
+$jimApiUrl = "$($script:Lane.JimUrl)/api/v1/health"
 
 while (-not $jimApiReady -and $jimApiElapsed -lt $TimeoutSeconds) {
     try {
@@ -3307,7 +3502,7 @@ while (-not $jimApiReady -and $jimApiElapsed -lt $TimeoutSeconds) {
 
 if (-not $jimApiReady) {
     Write-Failure "JIM Web API did not become ready within ${TimeoutSeconds}s"
-    Write-Host "${YELLOW}  Check logs: docker compose logs jim.web${NC}"
+    Write-Host "${YELLOW}  Check logs: docker logs $($script:Lane.WebContainer)${NC}"
     exit 1
 }
 
@@ -3326,7 +3521,7 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 if ($DirectoryType -eq "SambaAD") {
     Write-Section "Step 4a: Trusting Samba AD Certificates"
 
-    Add-SambaCertificateToJimStore -ContainerName "samba-ad-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    Add-SambaCertificateToJimStore -ContainerName "samba-ad-primary" -JIMUrl $script:Lane.JimUrl -ApiKey $apiKey
 
     # samba-ad-source / samba-ad-target only run under the scenario-002 / scenario-008 Compose profiles, and
     # may be left running across scenarios in -Scenario All mode (see Get-DirectoryConfig and
@@ -3336,7 +3531,7 @@ if ($DirectoryType -eq "SambaAD") {
     foreach ($otherSambaContainer in @("samba-ad-source", "samba-ad-target")) {
         $otherSambaRunning = docker ps --filter "name=^/${otherSambaContainer}$" --format '{{.Names}}' 2>$null
         if ($otherSambaRunning) {
-            Add-SambaCertificateToJimStore -ContainerName $otherSambaContainer -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+            Add-SambaCertificateToJimStore -ContainerName $otherSambaContainer -JIMUrl $script:Lane.JimUrl -ApiKey $apiKey
         }
     }
 }
@@ -3344,7 +3539,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     Write-Section "Step 4a: Trusting the 389 Directory Server Lab CA"
 
     # One container hosts both suffixes, so one CA covers Primary, Source and Target alike.
-    Add-DirsrvCertificateToJimStore -ContainerName "dirsrv-primary" -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    Add-DirsrvCertificateToJimStore -ContainerName "dirsrv-primary" -JIMUrl $script:Lane.JimUrl -ApiKey $apiKey
 }
 elseif ($isActiveDirectoryRun) {
     Write-Section "Step 4a: Trusting the Active Directory Domain Controller Certificates"
@@ -3513,7 +3708,7 @@ if ($DisableChangeTracking) {
     $modulePath = Join-Path $repoRoot "src" "JIM.PowerShell" "JIM.psd1"
     Remove-Module JIM -Force -ErrorAction SilentlyContinue
     Import-Module $modulePath -Force -ErrorAction Stop
-    Connect-JIM -Url "http://localhost:5200" -ApiKey $apiKey | Out-Null
+    Connect-JIM -Url $script:Lane.JimUrl -ApiKey $apiKey | Out-Null
 
     Set-JIMServiceSetting -Key "ChangeTracking.CsoChanges.Enabled" -Value "false"
     Set-JIMServiceSetting -Key "ChangeTracking.MvoChanges.Enabled" -Value "false"
@@ -3551,7 +3746,7 @@ if ($SetupOnly) {
         if ($templateRelevant) {
             Write-Step "Generating test data (Template: $Template)..."
             try {
-                & "$scriptRoot/Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
+                & "$scriptRoot/Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath (Get-IntegrationTestDataPath)
                 Write-Success "Test data generated"
             }
             catch {
@@ -3563,7 +3758,7 @@ if ($SetupOnly) {
         # Run the scenario setup script to configure connected systems, sync rules, and run profiles
         Write-Step "Running scenario setup: Setup-Scenario$scenarioNumber.ps1..."
         $setupParams = @{
-            JIMUrl = "http://localhost:5200"
+            JIMUrl = $script:Lane.JimUrl
             ApiKey = $apiKey
             Template = $Template
             DirectoryConfig = $script:DirectoryConfig
@@ -3689,7 +3884,7 @@ if (-not (Test-Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }
 $logTimestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-$scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
+$scenarioLogFile = Join-Path $logDir "$Scenario-$Template$($script:ResultNameTag)-$logTimestamp.log"
 
 Start-Transcript -Path $scenarioLogFile -Append | Out-Null
 $transcriptActive = $true
@@ -3834,7 +4029,7 @@ if ($metricsStreamingEnabled) {
     # bench server-side parser (a port of the runner's Step 6 regex) cannot
     # ingest; the docker logs plaintext output matches the parser format.
     $metricsStreamJob = Start-Job -FilePath "$scriptRoot/Stream-WorkerLogs.ps1" -ArgumentList @(
-        "jim.worker",
+        $script:Lane.WorkerContainer,
         $env:JIM_BENCH_API_URL,
         $env:JIM_BENCH_API_KEY,
         $metricsRunId,
@@ -3856,27 +4051,34 @@ if ($metricsStreamingEnabled) {
 $dockerStatsProcess = $null
 $dockerStatsPath = $null
 if (Get-Command docker -ErrorAction SilentlyContinue) {
-    $dockerStatsPath = Join-Path $scriptRoot "results" "docker-stats-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').csv"
+    $dockerStatsPath = Join-Path $scriptRoot "results" "docker-stats-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').csv"
     Write-Step "Starting docker stats capture -> $dockerStatsPath"
-    $dockerStatsProcess = Start-Process -FilePath 'pwsh' -ArgumentList @(
+    $dockerStatsArgs = @(
         "-NoProfile", "-File", "$scriptRoot/Capture-DockerStats.ps1",
         "-OutputPath", $dockerStatsPath, "-IntervalSeconds", "2",
         "-ParentPid", "$PID"
-    ) -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
+    )
+    if ($script:Lane.Active) {
+        # A lane records its own stack only: its JIM containers and its directory's containers.
+        $laneStatsContainers = @($script:Lane.WebContainer, $script:Lane.WorkerContainer, $script:Lane.SchedulerContainer,
+            $script:Lane.DatabaseContainer, $script:Lane.KeycloakContainer) + @($script:Lane.DirectoryContainers)
+        $dockerStatsArgs += @("-Containers", ($laneStatsContainers -join ','))
+    }
+    $dockerStatsProcess = Start-Process -FilePath 'pwsh' -ArgumentList $dockerStatsArgs -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
 }
 
 # Start the connector-files volume auditor. inotifywait sidecar logs every
 # write/create/delete/rename to jim-connector-files-volume so we can pin down
 # any out-of-band writers that the transcript can't name. See the 08:47:22
 # Scale100k50Groups incident for the failure mode this was added to diagnose.
-$volumeAuditLogPath = Join-Path $scriptRoot "results" "volume-audit-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+$volumeAuditLogPath = Join-Path $scriptRoot "results" "volume-audit-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
 Write-Step "Starting connector-files volume auditor -> $volumeAuditLogPath"
 $volumeAuditor = Start-ConnectorVolumeAuditor -LogPath $volumeAuditLogPath
 
 # Start the docker events capture. Streams all container/image/volume lifecycle
 # events to disk so throwaway `docker run` calls (our busybox seed helper,
 # rogue calls from other sessions) can be identified retroactively.
-$dockerEventsLogPath = Join-Path $scriptRoot "results" "docker-events-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+$dockerEventsLogPath = Join-Path $scriptRoot "results" "docker-events-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
 Write-Step "Starting docker events capture -> $dockerEventsLogPath"
 $dockerEventsProcess = Start-DockerEventsCapture -LogPath $dockerEventsLogPath
 
@@ -3886,7 +4088,7 @@ $dockerEventsProcess = Start-DockerEventsCapture -LogPath $dockerEventsLogPath
 # sentinel file. Start-JIMRunProfile -Wait loops check the sentinel between polls
 # (via the JIM_RUNPROFILE_ABORT_SENTINEL env var) so a stalled activity
 # accompanied by an error aborts immediately rather than polling forever.
-$errWatcherSentinel = Join-Path $scriptRoot "results" "errors-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+$errWatcherSentinel = Join-Path $scriptRoot "results" "errors-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
 Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
 $errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
@@ -4056,14 +4258,15 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
 
     # Save current wall-clock metrics
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
     $wallClockMetrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
-    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
+    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
 
     # Find most recent previous baseline (excluding current run)
-    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:PerfModeSuffix)-*.json" |
-        Where-Object { $_.Name -ne "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json" } |
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json" } |
         Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
+        Where-Object { $script:ResultNameTag -ne "" -or $_.Name -notmatch $script:LaneResultNamePattern } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -4125,14 +4328,14 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     else {
         Write-Host ""
         Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
-        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:PerfModeSuffix) on $hostname${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix) on $hostname${NC}"
     }
 }
 else {
 Write-Step "Extracting diagnostic timing from worker logs..."
 
 # Capture worker logs with diagnostic output
-$workerLogs = docker logs jim.worker 2>&1 | Where-Object { $_ -match "DiagnosticListener:" }
+$workerLogs = docker logs $script:Lane.WorkerContainer 2>&1 | Where-Object { $_ -match "DiagnosticListener:" }
 
 # Parse metrics into structured data using parallel processing
 $metrics = @{
@@ -4340,14 +4543,15 @@ else {
 
     # Save current metrics
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
     $metrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
-    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
+    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
 
     # Find most recent previous baseline (excluding current run)
-    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:PerfModeSuffix)-*.json" |
-        Where-Object { $_.Name -ne "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json" } |
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json" } |
         Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
+        Where-Object { $script:ResultNameTag -ne "" -or $_.Name -notmatch $script:LaneResultNamePattern } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -4386,7 +4590,7 @@ else {
     else {
         Write-Host ""
         Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
-        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:PerfModeSuffix) on $hostname${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix) on $hostname${NC}"
     }
 }
 } # end else (metrics not skipped)
@@ -4440,6 +4644,12 @@ if ($script:OriginalLogLevel) {
 $step7Start = Get-Date
 Write-Section "Step 7: Docker Cleanup"
 
+if ($script:Lane.Active) {
+    # Host-wide: pruning here could remove an image another lane is about to use. The -Parallel parent
+    # prunes once, after every lane has finished.
+    Write-Step "Skipped in a -Parallel lane (the parent prunes once all lanes finish)"
+}
+else {
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
 $imagePrune = Invoke-ImagePrunePreservingSnapshots
 $builderPrune = docker builder prune -af 2>&1
@@ -4453,6 +4663,7 @@ if ($parts.Count -gt 0) {
 }
 else {
     Write-Success "Docker cleanup complete (nothing to reclaim)"
+}
 }
 
 $timings["7. Docker Cleanup"] = (Get-Date) - $step7Start

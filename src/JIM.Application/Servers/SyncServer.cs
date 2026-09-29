@@ -54,6 +54,15 @@ public class SyncServer : ISyncServer
 
     #endregion
 
+    #region Metaverse-Derived Attribute Flows
+
+    // The rules come from the worker's all-rules load, which includes each rule's Metaverse Object Type with its
+    // attributes, so the graph resolves mv["..."] names from those navigations without another query.
+    public Task<DerivedFlowGraph?> CreateDerivedFlowGraphAsync(IReadOnlyCollection<SyncRule> allSyncRules)
+        => DerivedFlowGraphFactory.CreateAsync(_jim.FeatureFlags, allSyncRules, []);
+
+    #endregion
+
     #region CSO Lookup Cache
 
     public void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId)

@@ -51,7 +51,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -116,7 +116,7 @@ try {
     # setup runs. We then overlay Scenario 005's minimal HR CSV on top of the baseline.
     # Prior to this the scenario relied on files leaking from Scenario 001's volume.
     Write-Host "Seeding baseline CSVs for Scenario 005..." -ForegroundColor Gray
-    $testDataPath = "$PSScriptRoot/../../test-data"
+    $testDataPath = "$(Get-IntegrationTestDataPath)"
     $scenarioDataPath = "$PSScriptRoot/data"
 
     if (-not (Test-Path $testDataPath)) {
@@ -242,7 +242,7 @@ try {
         $testUser.DisplayName = "Test Projection User"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -311,7 +311,7 @@ try {
         $testUser.DisplayName = "Test Join User"
 
         # DN is calculated dynamically by the export sync rule expression
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -400,7 +400,7 @@ try {
         # 2. The import detects the duplicate and rejects BOTH rows
         # 3. Neither CSO is created - the data owner must fix the source data
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Create first user with unique hrId
         $testUser1 = New-TestUser -Index 9003
@@ -586,7 +586,7 @@ try {
                 $testUser1.DisplayName = "Test MultiRule First"
 
                 # DN is calculated dynamically by the export sync rule expression
-                $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+                $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
                 $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -730,7 +730,7 @@ try {
         # 3. Matching rule on employeeId finds the MVO
         # 4. CSO #2 tries to join → ERROR: MVO already has a connector from this CS
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Create first user - will project to create MVO
         $testUser1 = New-TestUser -Index 9020
@@ -872,7 +872,7 @@ try {
         Write-Host "Testing: after a seed MVO exists, re-keying it so two new same-system CSOs both match it in" -ForegroundColor Gray
         Write-Host "  ONE sync page must not collide on the unique index; the second match fails cleanly" -ForegroundColor Gray
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $spEmployeeId = "EMP900022"  # shared matching key: the seed and both re-keyed CSOs all carry it
 
         # Local helper: append a fully-populated HR CSV row for the given identifiers.
@@ -1014,7 +1014,7 @@ try {
                 -DeletionTriggerMode SpecificSourcesDisconnect `
                 -DeletionGracePeriod ([TimeSpan]::FromHours(1)) | Out-Null
 
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $srpEmployeeId = "EMP900050"
             $srpSam = "test.samepage.rejoin"
             $srpDisplayName = "Test SamePage Rejoin"
@@ -1171,7 +1171,7 @@ try {
             Set-JIMMetaverseObjectType @srpRestoreParams | Out-Null
 
             # Clean up test user rows from the CSV so later steps start from the scenario baseline.
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             if (Test-Path $csvPath) {
                 $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.samepage.rejoin" }
                 $csvContent | Set-Content $csvPath
@@ -1233,7 +1233,7 @@ try {
                 $testUser1.Email = "test.casesens.upper@panoply.local"
                 $testUser1.DisplayName = "Test Case Upper"
 
-                $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+                $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
                 $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 $csv = Import-Csv $csvPath
@@ -1389,7 +1389,7 @@ try {
         # "Information Technology" is one of the department OUs Scenario 005 pre-creates for Samba AD (see
         # above); using it keeps the out-of-band DN and the CSV-driven export DN identical.
         $omjDepartment = "Information Technology"
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         Write-Host "  Creating out-of-band directory account (not provisioned by JIM)..." -ForegroundColor Gray
 

@@ -58,6 +58,14 @@ BeforeAll {
 }
 
 Describe 'Get-JimComposeArgument' {
+    It 'keeps the base arguments it is given in front of the lab overlay, so a lane''s project name and override survive' {
+        $base = @('-p', 'jim-openldap', '-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'test/integration/docker/jim-lane.override.yml')
+        $composeArgs = @(Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -BaseArguments $base)
+        $composeArgs[0..($base.Count - 1)] | Should -Be $base
+        $composeArgs[-2..-1] | Should -Be @('-f', 'test/integration/docker/docker-compose.ad-lab.yml')
+        @(Get-JimComposeArgument -DirectoryType 'SambaAD' -BaseArguments $base) | Should -Be $base
+    }
+
     It 'is the two JIM compose files, and nothing else, for a container lab' {
         foreach ($type in 'SambaAD', 'OpenLDAP', 'DirectoryServer389') {
             $composeArgs = Get-JimComposeArgument -DirectoryType $type

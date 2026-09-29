@@ -132,7 +132,7 @@ public class SyncRuleUpdateDatabaseTests
             MetaverseObjectType = mvType
         };
 
-        var jim = new JimApplication(new PostgresDataRepository(ctx));
+        var jim = NewJimApplication(ctx);
         var ok = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator);
         Assert.That(ok, Is.True, "Failed to create the rule the update tests need.");
         return rule.Id;
@@ -148,7 +148,7 @@ public class SyncRuleUpdateDatabaseTests
         // Load -> mutate -> save through a single JimApplication/DbContext, exactly as the rebuilt editor now does.
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var rule = await jim.ConnectedSystems.GetSyncRuleAsync(ruleId);
             Assert.That(rule, Is.Not.Null);
             rule!.Enabled = false;
@@ -173,7 +173,7 @@ public class SyncRuleUpdateDatabaseTests
         SyncRule detachedRule;
         await using (var loadCtx = NewContext())
         {
-            var loadJim = new JimApplication(new PostgresDataRepository(loadCtx));
+            var loadJim = NewJimApplication(loadCtx);
             detachedRule = (await loadJim.ConnectedSystems.GetSyncRuleAsync(ruleId))!;
         }
         Assert.That(detachedRule, Is.Not.Null);
@@ -183,7 +183,7 @@ public class SyncRuleUpdateDatabaseTests
         // persisted nothing and reported success, losing the change.
         await using (var saveCtx = NewContext())
         {
-            var saveJim = new JimApplication(new PostgresDataRepository(saveCtx));
+            var saveJim = NewJimApplication(saveCtx);
             Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await saveJim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(detachedRule, initiator));
         }
@@ -226,7 +226,7 @@ public class SyncRuleUpdateDatabaseTests
         };
         rule.AttributeFlowRules.Add(mapping);
 
-        var jim = new JimApplication(new PostgresDataRepository(ctx));
+        var jim = NewJimApplication(ctx);
         var ok = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator);
         Assert.That(ok, Is.True, $"Failed to create the rule '{name}' the attribute priority tests need.");
         return (rule.Id, mapping.Id);
@@ -251,7 +251,7 @@ public class SyncRuleUpdateDatabaseTests
         int addedMappingId;
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var rule = await jim.ConnectedSystems.GetSyncRuleAsync(second.RuleId);
             Assert.That(rule, Is.Not.Null);
 
@@ -290,7 +290,7 @@ public class SyncRuleUpdateDatabaseTests
 
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var rule = await jim.ConnectedSystems.GetSyncRuleAsync(mover.RuleId);
             Assert.That(rule, Is.Not.Null);
 
@@ -312,5 +312,13 @@ public class SyncRuleUpdateDatabaseTests
             Assert.That(await GetPersistedPriorityAsync(first.MappingId), Is.EqualTo(int.MaxValue),
                 "the attribute it left is back to a sole contributor, so it resets to the safe-addition sentinel");
         }
+    }
+
+    // The sync repository is passed explicitly, as every host passes it: saving a Synchronisation Rule checks the export
+    // queue for changes the save left without authority, which reads through it.
+    private static JimApplication NewJimApplication(JimDbContext context)
+    {
+        var repository = new PostgresDataRepository(context);
+        return new JimApplication(repository, syncRepository: repository.Sync);
     }
 }

@@ -47,7 +47,7 @@ public class ObjectTypeDeselectionGuardTests
 
         var repository = new Mock<IRepository>();
         var activityRepository = new Mock<IActivityRepository>();
-        var syncRepository = new Mock<ISyncRepository>();
+        var syncRepository = TestUtilities.StubQueuedChangeWithdrawal(new Mock<ISyncRepository>());
         _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
         repository.Setup(r => r.Activity).Returns(activityRepository.Object);
         repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);

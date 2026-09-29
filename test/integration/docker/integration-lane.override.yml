@@ -1,0 +1,56 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# Integration systems for a suffixed -Parallel lane (#636): the OpenLDAP and 389 Directory Server lanes.
+# Applied by Get-IntegrationComposeArgs (test/integration/utils/IntegrationLane.ps1) on top of
+# docker-compose.integration-tests.yml, under the lane's own project name. Never used by a serial run or
+# by the Samba AD lane, which keep the base file's names.
+#
+# Every volume is renamed, not only the ones the lane's own directory uses: `docker compose down -v`
+# removes the explicitly named volumes the file declares whichever project created them, so a lane
+# reset against the base names would delete another lane's directory data. The directory containers
+# keep their names (each belongs to one directory type, and so to one lane).
+#
+# JIM_LANE_SUFFIX is set by Set-IntegrationLaneComposeEnvironment (for example "-openldap").
+
+volumes:
+  samba-primary-data:
+    name: jim-integration-samba-primary-var${JIM_LANE_SUFFIX:?lane suffix not set}
+  samba-primary-private:
+    name: jim-integration-samba-primary-private${JIM_LANE_SUFFIX}
+  samba-primary-etc:
+    name: jim-integration-samba-primary-etc${JIM_LANE_SUFFIX}
+  samba-source-data:
+    name: jim-integration-samba-source-var${JIM_LANE_SUFFIX}
+  samba-source-private:
+    name: jim-integration-samba-source-private${JIM_LANE_SUFFIX}
+  samba-source-etc:
+    name: jim-integration-samba-source-etc${JIM_LANE_SUFFIX}
+  samba-target-data:
+    name: jim-integration-samba-target-var${JIM_LANE_SUFFIX}
+  samba-target-private:
+    name: jim-integration-samba-target-private${JIM_LANE_SUFFIX}
+  samba-target-etc:
+    name: jim-integration-samba-target-etc${JIM_LANE_SUFFIX}
+  jim-connector-files-volume:
+    name: jim-connector-files-volume${JIM_LANE_SUFFIX}
+    external: true
+  scim-provider-certificates:
+    name: jim-integration-scim-provider-certificates${JIM_LANE_SUFFIX}
+  openldap-primary-data:
+    name: jim-integration-openldap-primary-data${JIM_LANE_SUFFIX}
+  dirsrv-primary-data:
+    name: jim-integration-dirsrv-primary-data${JIM_LANE_SUFFIX}
+  sqlserver-data:
+    name: jim-integration-sqlserver-data${JIM_LANE_SUFFIX}
+  postgres-test-data:
+    name: jim-integration-postgres-test-data${JIM_LANE_SUFFIX}
+  mysql-data:
+    name: jim-integration-mysql-data${JIM_LANE_SUFFIX}
+  oracle-data:
+    name: jim-integration-oracle-data${JIM_LANE_SUFFIX}
+
+networks:
+  jim-network:
+    external: true
+    name: jim-network${JIM_LANE_SUFFIX}

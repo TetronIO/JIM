@@ -87,8 +87,12 @@ public interface ISyncEngine
     /// <param name="objectTypes">CSO object types for attribute lookup.</param>
     /// <param name="expressionEvaluator">Expression evaluator for the derived expressions.</param>
     /// <param name="priorityContext">The run's attribute priority context, carrying the derived flow graph.</param>
-    /// <returns>The errors raised, empty if none.</returns>
+    /// <returns>The errors raised, empty if none; each names its hosting rule in <see cref="AttributeFlowError.SyncRuleName"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="priorityContext"/> carries no derived flow graph.</exception>
+    /// <exception cref="SyncExpressionEvaluationException">A derived expression threw; fails the object as for an
+    /// ordinary flow, with <see cref="SyncExpressionEvaluationException.SyncRuleName"/> naming the hosting rule.</exception>
+    /// <exception cref="SyncExpressionMissingInputException">A derived mapping's Missing Input Behaviour is to fail the
+    /// object; <see cref="SyncExpressionMissingInputException.SyncRuleName"/> names the hosting rule.</exception>
     List<AttributeFlowError> EvaluateDerivedLevel(
         ConnectedSystemObject cso,
         int level,
@@ -329,6 +333,19 @@ public interface ISyncEngine
         List<PendingExportAttributeValueChange> newChanges);
 
     /// <summary>
+    /// Withdraws the changes staged on a Pending Export that an export evaluation has just found unnecessary,
+    /// because the target already holds what the evaluation's skipped (no-net-change) changes would set: the same
+    /// supersede rule as <see cref="MergeAttributeChangesIntoPendingExport"/>, applied when the answer for an
+    /// attribute is "no change". A change already sent and awaiting confirmation is kept. Pure in-memory mutation.
+    /// </summary>
+    /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
+    /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
+    /// <returns>How many staged changes were withdrawn.</returns>
+    int WithdrawChangesAlreadyCurrent(
+        PendingExport stagedPendingExport,
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges);
+
+    /// <summary>
     /// Creates the Pending Export attribute value changes an export Synchronisation Rule's Attribute Flow
     /// mappings produce for a Metaverse Object change (the outbound delta computation, #288 extraction):
     /// Create operations carry all mapped attributes, Update operations only what changed, with optional
@@ -407,4 +424,36 @@ public interface ISyncEngine
     /// </summary>
     /// <param name="exportRule">The export Synchronisation Rule about to provision.</param>
     IReadOnlyList<ObjectMatchingRule> SelectExportMatchingRules(SyncRule exportRule);
+
+    /// <summary>
+    /// Flush-time reconciliation (#218): pairs each deferred Create or Update Pending Export with a Pending
+    /// Delete already persisted for the same Connected System Object. Create + Delete cancel each other; an
+    /// Update is dropped in favour of the Delete. Deferred exports that are not Pending, persisted exports that
+    /// are not Pending Deletes, and objects with no persisted export are left alone. Pure; mutates nothing.
+    /// </summary>
+    /// <param name="deferredPendingExports">The page's deferred (not yet persisted) Pending Exports.</param>
+    /// <param name="persistedPendingExportsByCsoId">Pending Exports already persisted, keyed by Connected System Object id.</param>
+    IReadOnlyList<DeferredDeleteReconciliation> ReconcileDeferredExportsAgainstPersistedDeletes(
+        IReadOnlyCollection<PendingExport> deferredPendingExports,
+        IReadOnlyDictionary<Guid, PendingExport> persistedPendingExportsByCsoId);
+
+    /// <summary>
+    /// Selects the queued changes on an Update Pending Export that no longer have a reason to be sent: a change attributed to an export Synchronisation Rule is withdrawn when that rule no longer exists or is
+    /// disabled, when it has no enabled Attribute Flow for the change's attribute, or when the account is no longer
+    /// joined (it left the rule's scope with the Disconnect action). Class membership changes have no Attribute Flow of
+    /// their own and are withdrawn with their rule, the join, or any of that rule's attribute changes on the export
+    /// (the classes were planned for those attributes; the next evaluation replans them). Only changes awaiting a send
+    /// (Pending or ExportedNotConfirmed) are considered; changes with no rule attribution, Create and Delete exports,
+    /// and exports a connector is executing are never selected. Pure; mutates nothing.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to examine, with its attribute changes loaded.</param>
+    /// <param name="connectedSystemObjectIsJoined">Whether the account is still joined to a Metaverse Object.</param>
+    /// <param name="syncRulesById">The Connected System's Synchronisation Rules (enabled and disabled), with their
+    /// Attribute Flows loaded. A rule id missing from it means the rule was deleted.</param>
+    /// <param name="classMembershipAttributeIds">The Connected System's class membership attribute ids.</param>
+    IReadOnlyList<PendingExportAttributeValueChange> SelectQueuedChangesWithoutAuthority(
+        PendingExport pendingExport,
+        bool connectedSystemObjectIsJoined,
+        IReadOnlyDictionary<int, SyncRule> syncRulesById,
+        IReadOnlySet<int> classMembershipAttributeIds);
 }

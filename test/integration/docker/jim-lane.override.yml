@@ -1,0 +1,54 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# The JIM stack for a suffixed -Parallel lane (#636): the OpenLDAP and 389 Directory Server lanes.
+# Applied by Get-JimComposeArgs (test/integration/utils/IntegrationLane.ps1) after docker-compose.yml and
+# docker-compose.override.yml, under the lane's own project name. Never used by a serial run or by the
+# Samba AD lane, which keep the base files' names and ports.
+#
+# It renames every container, volume and the network with the lane's suffix, moves the JIM and
+# PostgreSQL host ports, and publishes no Keycloak port: only the unsuffixed stack is signed in to from
+# a browser, because two stacks behind one browser-facing Keycloak address produce invalid_grant sign-in
+# failures. Services still reach each other by service name (jim.database, jim.keycloak) on the lane's
+# own network.
+#
+# The variables are set by Set-IntegrationLaneComposeEnvironment.
+
+services:
+  jim.web:
+    container_name: jim.web${JIM_LANE_SUFFIX:?lane suffix not set}
+    ports: !override
+      - "${JIM_LANE_WEB_PORT:?lane web port not set}:8080"
+
+  jim.worker:
+    container_name: jim.worker${JIM_LANE_SUFFIX}
+    volumes:
+      # Each lane's worker writes its log files to its own directory; the base override bind-mounts one
+      # shared directory, and mounts are merged by target path, so this replaces it.
+      - ${JIM_LANE_WORKER_LOG_DIR:?lane worker log directory not set}:/var/log/jim
+
+  jim.scheduler:
+    container_name: jim.scheduler${JIM_LANE_SUFFIX}
+
+  jim.database:
+    container_name: jim.database${JIM_LANE_SUFFIX}
+    ports: !override
+      - "${JIM_LANE_DB_PORT:?lane database port not set}:5432"
+
+  jim.keycloak:
+    container_name: jim.keycloak${JIM_LANE_SUFFIX}
+    ports: !reset []
+
+networks:
+  jim-network:
+    name: jim-network${JIM_LANE_SUFFIX}
+
+volumes:
+  jim-db-volume:
+    name: jim-db-volume${JIM_LANE_SUFFIX}
+  jim-logs-volume:
+    name: jim-logs-volume${JIM_LANE_SUFFIX}
+  jim-keys-volume:
+    name: jim-keys-volume${JIM_LANE_SUFFIX}
+  jim-connector-files-volume:
+    name: jim-connector-files-volume${JIM_LANE_SUFFIX}

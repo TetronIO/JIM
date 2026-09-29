@@ -69,7 +69,7 @@ param(
     [string]$Template = "Micro",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -100,7 +100,7 @@ if (-not $ApiKey) {
 }
 
 $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
-$csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+$csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
 $script:TestResults = @()
 $startTime = Get-Date
@@ -423,7 +423,7 @@ Write-Host "Step:        $Step (steps are cumulative)" -ForegroundColor Gray
 Write-Host ""
 
 Write-TestSection "Step 0: Generating the HR CSV without IT-owned attributes"
-& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data" -OmitItOwnedAttributes
+& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$(Get-IntegrationTestDataPath)" -OmitItOwnedAttributes
 Write-Host "  ✓ hr-users.csv generated without samAccountName/email/userPrincipalName" -ForegroundColor Green
 
 Write-TestSection "Step 0b: Configuring JIM (Setup-Scenario-023.ps1)"
