@@ -299,12 +299,6 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
-                await _phases.EnterAsync(RunPhaseKeys.ImportConnect);
-                using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
-                {
-                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, _connectedSystem.PersistedConnectorData, Log.Logger);
-                }
-
                 // Tracks whether the import phase below completed without throwing. Read from the
                 // finally block to decide whether a failure while persisting CloseImportConnection's
                 // return value may safely propagate on its own, or must be logged and swallowed so it
@@ -312,12 +306,24 @@ public class SyncImportTaskProcessor
                 // finally block (see the finally block below for the full rationale).
                 var importPhaseSucceeded = false;
 
-                // Every page is read under this step, however many the Connected System returns, so
-                // it stays the step running for as long as objects are arriving.
-                await _phases.EnterAsync(RunPhaseKeys.ImportFetch);
+                await _phases.EnterAsync(RunPhaseKeys.ImportConnect);
 
                 try
                 {
+                    // Opened inside the try, so a connection that fails to open is still closed by the
+                    // finally block below (#1875). Failing to connect is exactly when a connector has state
+                    // to hand back at close, such as a pinned domain controller the failure invalidated
+                    // (issue #230); opened outside, that state was never persisted and every later run
+                    // failed against the same unreachable server.
+                    using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
+                    {
+                        callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, _connectedSystem.PersistedConnectorData, Log.Logger);
+                    }
+
+                    // Every page is read under this step, however many the Connected System returns, so
+                    // it stays the step running for as long as objects are arriving.
+                    await _phases.EnterAsync(RunPhaseKeys.ImportFetch);
+
                     var initialPage = true;
                     var paginationTokens = new List<ConnectedSystemPaginationToken>();
                     var pageNumber = 0;
@@ -459,11 +465,11 @@ public class SyncImportTaskProcessor
 
                     // Persist connector state the connector chose to override at close, e.g. because
                     // opening/using the connection invalidated a previously persisted pin (issue #230).
-                    // It is persisted here, even when reading the pages failed, and it always wins over
-                    // whatever the pages themselves reported. The page watermark is only recorded at the
-                    // end of the run (#1868), after this, so it is dropped rather than left to overwrite
-                    // the value the connector chose. Null (the overwhelmingly common case) means "nothing
-                    // to override" and must not persist.
+                    // It is persisted here, even when opening the connection (#1875) or reading the pages
+                    // failed, and it always wins over whatever the pages themselves reported. The page
+                    // watermark is only recorded at the end of the run (#1868), after this, so it is
+                    // dropped rather than left to overwrite the value the connector chose. Null (the
+                    // overwhelmingly common case) means "nothing to override" and must not persist.
                     if (closeReturn != null)
                     {
                         watermarkToRecord = null;

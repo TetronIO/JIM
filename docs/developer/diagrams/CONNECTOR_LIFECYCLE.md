@@ -74,6 +74,7 @@ flowchart TD
     SetCred --> Open[Connecting step<br/>OpenImportConnection<br/>with system settings]
 
     Open --> PageLoop{More pages?<br/>initialPage OR<br/>tokens present}
+    Open -->|Fails to connect, #1875| Close
     PageLoop -->|Yes| CallImport[connector.ImportAsync<br/>Pass ORIGINAL persisted data<br/>for consistent watermark<br/>plus IConnectorProgress]
     CallImport --> CaptureWatermark{First page with<br/>new persisted data?}
     CaptureWatermark -->|Yes| SaveNewWatermark[Capture new watermark<br/>Don't persist yet]
@@ -194,7 +195,7 @@ flowchart TD
 
 - **Parallel connector isolation**<br /> Each parallel export batch gets its own connector instance created via factory. This avoids shared connection state between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections.
 
-- **Close in finally, on every channel**<br /> The export connection is always closed, even if an exception occurs during export. The import connection is too, so an import that fails part-way still releases its connection and any temporary trust directory prepared for it, and the password channel likewise. This prevents connection leaks in long-running worker processes.
+- **Close in finally, on every channel**<br /> The export connection is always closed, even if an exception occurs during export. The import connection is too, so an import that fails part-way still releases its connection and any temporary trust directory prepared for it, and the password channel likewise. This prevents connection leaks in long-running worker processes. Each connection is opened inside the block that closes it, including a parallel export batch's own connector, so a connection that fails to open is closed too (#1875): failing to connect is exactly when a connector has state to return at close, such as a pinned domain controller the failure invalidated.
 
 - **Connector state returned at close wins**<br /> `CloseImportConnection` may return persisted connector data, persisted when the connection closes (even if the import failed) in place of the page watermark, which is then not persisted at all; the LDAP Connector uses this when using the connection invalidated a previously persisted domain controller pin (#1169). Null, the usual case, means nothing to override.
 
