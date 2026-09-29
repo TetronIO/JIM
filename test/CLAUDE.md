@@ -19,6 +19,8 @@ JIM requires TDD. The workflow is **Red → Green → Refactor**:
 
 **NEVER** write the implementation first and then write a test to match it. The test must fail before the fix to be meaningful.
 
+**Not for cosmetic or text-only UI changes.** Separators, spacing, alignment, colour, CSS, icons and wording need no test, and tests must not pin them (see root `CLAUDE.md` > "Cosmetic and text-only UI changes need no tests").
+
 ## Test Projects
 
 - `test/JIM.Models.Tests/` - domain model unit tests

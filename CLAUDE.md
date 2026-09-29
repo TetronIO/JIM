@@ -41,6 +41,8 @@ Always use Context7 MCP when you need library/API documentation, code generation
 
 Never retrofit a test after the fix; never commit new functionality without tests. See `test/CLAUDE.md` for patterns.
 
+**Cosmetic and text-only UI changes need no tests.** Glyphs, separators, spacing, alignment, colour, CSS, icons, and wording or copy changes are verified by eye (screenshot plus artefact), not by writing, updating, or running a test for them. Tests likewise never assert on presentation (which separator character is used, the order of styling spans, a hard-coded label's wording), so the next visual or wording tweak does not break them; assert on behaviour and on text that logic produces. TDD applies once a UI change carries logic: what is shown under which condition, grouping, sorting, filtering, state. (Rule added after a one-character separator swap was written test-first and a later swap then broke that test.)
+
 **Ask before significant changes:** New features, architectural choices, or any non-trivial change with multiple sensible approaches - present the options with trade-offs and let the user decide. Do not assume.
 
 **Commit without asking once approved:** When the user has said "yes" or context is clear, just commit. Do not ask "would you like me to commit?".
