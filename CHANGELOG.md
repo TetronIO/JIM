@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A Run Profile execution that fails while saving its changes to the database is now recorded as failed, with its error, instead of Complete. (#1874)
 - 🐛 When a pinned domain controller stops answering, JIM now clears the pin as documented, so the next run re-discovers a domain controller instead of failing against the same unreachable one every time. (#1875)
 - 🐛 An import that fails after reading its changes no longer moves the Connected System's change watermark on, so the next Delta Import reads those changes again instead of silently skipping them. (#1868)
 - 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image by its pinned digest: the setup script checks the loaded image against the ID the bundle records and runs it by that ID. (#1854)
