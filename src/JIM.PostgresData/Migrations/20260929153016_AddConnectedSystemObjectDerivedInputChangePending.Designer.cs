@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260929140724_AddConnectedSystemObjectDerivedInputChangePending")]
+    [Migration("20260929153016_AddConnectedSystemObjectDerivedInputChangePending")]
     partial class AddConnectedSystemObjectDerivedInputChangePending
     {
         /// <inheritdoc />
@@ -3089,6 +3089,11 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("TypeId")
                         .HasColumnType("integer");
+
+                    b.Property<uint>("xmin")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id");
 

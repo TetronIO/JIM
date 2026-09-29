@@ -4,6 +4,9 @@
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace JIM.PostgresData.Repositories;
 
@@ -14,6 +17,13 @@ namespace JIM.PostgresData.Repositories;
 /// (exempt from the bulk column list rule, like the ScopeReviewPending flag's), and both fix up tracked instances:
 /// the worker's context lives for the whole run, and a whole-entity save of a stale tracked instance would silently
 /// undo the write.
+/// <para>
+/// The two statements cooperate through the row version (<c>xmin</c>) so that runs of different systems in parallel
+/// cannot lose a mark. The mark writes every matched row, already-marked ones included, so each mark moves the row's
+/// xmin; the clear applies only where the xmin still equals the version the hosting system's run read when it loaded
+/// the object. A mark set after that read, which the run's evaluation therefore may not have seen, survives the clear
+/// and the object is re-evaluated next run.
+/// </para>
 /// </summary>
 public partial class SyncRepository
 {
@@ -23,43 +33,89 @@ public partial class SyncRepository
             return 0;
 
         var distinct = marks.Distinct().ToList();
-        var metaverseObjectIds = distinct.Select(m => m.MetaverseObjectId).ToArray();
-        var connectedSystemIds = distinct.Select(m => m.ConnectedSystemId).ToArray();
 
         // One statement for the page, joined on (ConnectedSystemId, MetaverseObjectId), which the unique join index
-        // IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique serves. Already-marked rows are left
-        // alone, so the count is of new marks only (the page summary reports it) and no row is rewritten needlessly.
-        var marked = await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" AS cso
-              SET ""DerivedInputChangePending"" = true
-              FROM unnest({0}::uuid[], {1}::integer[]) AS m(""MetaverseObjectId"", ""ConnectedSystemId"")
-              WHERE cso.""MetaverseObjectId"" = m.""MetaverseObjectId""
-                AND cso.""ConnectedSystemId"" = m.""ConnectedSystemId""
-                AND NOT cso.""DerivedInputChangePending""",
-            metaverseObjectIds, connectedSystemIds);
+        // IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique serves. Every matched row is written,
+        // ALREADY-MARKED ROWS INCLUDED: the write is what moves the row's xmin, and the moved xmin is what stops a
+        // hosting-system run that loaded the object before this mark from clearing it (see the clear below). Skipping
+        // already-marked rows would let a concurrent clear wipe a change its run never evaluated. The count of rows
+        // that were not already marked is taken from the pre-update snapshot in the same statement, for the summary.
+        const string sql = """
+            WITH marks AS (
+                SELECT DISTINCT m."MetaverseObjectId", m."ConnectedSystemId"
+                FROM unnest(@metaverseObjectIds, @connectedSystemIds) AS m("MetaverseObjectId", "ConnectedSystemId")
+            ),
+            targets AS (
+                SELECT cso."Id", cso."DerivedInputChangePending" AS "WasMarked"
+                FROM "ConnectedSystemObjects" AS cso
+                JOIN marks ON cso."MetaverseObjectId" = marks."MetaverseObjectId"
+                          AND cso."ConnectedSystemId" = marks."ConnectedSystemId"
+            ),
+            updated AS (
+                UPDATE "ConnectedSystemObjects" AS cso
+                SET "DerivedInputChangePending" = true
+                FROM targets
+                WHERE cso."Id" = targets."Id"
+                RETURNING targets."WasMarked"
+            )
+            SELECT count(*) FILTER (WHERE NOT "WasMarked")::integer FROM updated
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
+            { Value = distinct.Select(m => m.MetaverseObjectId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemIds", NpgsqlDbType.Array | NpgsqlDbType.Integer)
+            { Value = distinct.Select(m => m.ConnectedSystemId).ToArray() });
+        var newlyMarked = (int)(await command.ExecuteScalarAsync() ?? 0);
 
         var markSet = distinct.ToHashSet();
         FixUpTrackedDerivedInputChangePending(
             cso => cso.MetaverseObjectId.HasValue && markSet.Contains(new DerivedInputChangeMark(cso.MetaverseObjectId.Value, cso.ConnectedSystemId)),
             value: true);
 
-        return marked;
+        return newlyMarked;
     }
 
-    public async Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<Guid> ids)
+    public async Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
     {
-        if (ids.Count == 0)
+        if (clears.Count == 0)
             return 0;
 
-        var cleared = await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""DerivedInputChangePending"" = false
-              WHERE ""Id"" = ANY({0}) AND ""DerivedInputChangePending""",
-            ids.ToArray());
+        // Clear only rows whose xmin still equals the version the run read when it loaded the object. A row whose
+        // xmin has moved was written since: most importantly re-marked by another system's run, whose input change
+        // this run's evaluation may not have seen. Leaving that row marked is fail-safe; the next run re-evaluates it
+        // (and a row rewritten for any other reason, such as this run's own join update, simply converges one run
+        // later, since that write does not recur). Only rows actually cleared are returned and fixed up.
+        const string sql = """
+            UPDATE "ConnectedSystemObjects" AS cso
+            SET "DerivedInputChangePending" = false
+            FROM unnest(@ids, @seenRowVersions) AS c("Id", "SeenRowVersion")
+            WHERE cso."Id" = c."Id"
+              AND cso.xmin = c."SeenRowVersion"
+              AND cso."DerivedInputChangePending"
+            RETURNING cso."Id"
+            """;
 
-        var idSet = ids.ToHashSet();
-        FixUpTrackedDerivedInputChangePending(cso => idSet.Contains(cso.Id), value: false);
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
+            { Value = clears.Select(c => c.ConnectedSystemObjectId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("seenRowVersions", NpgsqlDbType.Array | NpgsqlDbType.Xid)
+            { Value = clears.Select(c => c.SeenRowVersion).ToArray() });
 
-        return cleared;
+        var clearedIds = new HashSet<Guid>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                clearedIds.Add(reader.GetGuid(0));
+        }
+
+        FixUpTrackedDerivedInputChangePending(cso => clearedIds.Contains(cso.Id), value: false);
+
+        return clearedIds.Count;
     }
 
     /// <summary>

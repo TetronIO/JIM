@@ -10,6 +10,7 @@ using JIM.Models.Enums;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.TestSupport;
@@ -335,6 +336,8 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
             Assert.That(activity.ErrorMessage, Does.Contain("cycle"), "the cycle is named on the Activity, never silent");
             Assert.That(activity.ErrorMessage, Does.Contain("Email").And.Contain("User Principal Name").And.Contain("HR Import"),
                 "every attribute and Synchronisation Rule on the cycle is named");
+            Assert.That(activity.ErrorStackTrace, Is.Null,
+                "a cycle is a configuration fault the administrator fixes, recorded as a clean message without a stack trace");
             Assert.That(activity.RunProfileExecutionItems, Is.Empty, "no object is processed on a guessed order");
             Assert.That(SyncRepo.MetaverseObjects, Is.Empty);
         }
@@ -359,6 +362,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         {
             Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
             Assert.That(activity.ErrorMessage, Does.Contain("cycle").And.Contain("HR Import"));
+            Assert.That(activity.ErrorStackTrace, Is.Null);
             Assert.That(activity.RunProfileExecutionItems, Is.Empty, "the changed object is not processed");
         }
     }
@@ -407,6 +411,144 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
             Assert.That(errors.Single().ErrorMessage, Does.Contain("mv[\"Region\"]").And.Contain("Synchronisation Rule 'HR Import'"));
             Assert.That(Text(mvo, ctx.AccountName), Is.EqualTo("jbloggs"), "the object's other attributes still flow");
             Assert.That(Text(mvo, ctx.Email), Is.Null);
+        }
+    }
+
+    // ---- Keeping the mark: derived-flow errors and the row-version guard ----
+
+    [Test]
+    public async Task DeltaSync_MarkedObjectWhoseDerivedMappingFails_KeepsItsMarkAndReportsAgainUntilItSucceedsAsync()
+    {
+        // Missing Input Behaviour "Fail the mapping" on the derived Email: the object's other attributes flow, but the
+        // derived flow failed (decision 10), so the mark is kept and every run re-evaluates and re-reports it.
+        var ctx = await SetUpScenario2Async(emailMissingInputBehaviour: MissingInputBehaviour.FailMapping);
+        var hrCso = SeedHr(ctx, "E1", "jbloggs");
+        var adCso = SeedAd(ctx, "E1", "EMEA");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Ad!);
+        await RunDeltaSyncAsync(ctx.Hr);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(Text(mvo, ctx.Email), Is.EqualTo("jbloggs@emea.corp.local"), "precondition: converged");
+
+        RemoveText(adCso, ctx.AdRegion!);
+        await ModifyCsoAsync(adCso);
+        await RunDeltaSyncAsync(ctx.Ad!);
+        Assert.That(hrCso.DerivedInputChangePending, Is.True, "precondition: withdrawing Region marks HR");
+
+        var first = await RunDeltaSyncAsync(ctx.Hr);
+        var second = await RunDeltaSyncAsync(ctx.Hr);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.RunProfileExecutionItems.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput), Is.EqualTo(1),
+                "the derived mapping failed");
+            Assert.That(second.RunProfileExecutionItems.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput), Is.EqualTo(1),
+                "the mark was kept, so the next delta selected the object again and reported the error again");
+            Assert.That(hrCso.DerivedInputChangePending, Is.True, "still marked while the derived flow keeps failing");
+        }
+
+        SetText(adCso, ctx.AdRegion!, "APAC");
+        await ModifyCsoAsync(adCso);
+        await RunDeltaSyncAsync(ctx.Ad!);
+        await RunDeltaSyncAsync(ctx.Hr);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Text(mvo, ctx.Email), Is.EqualTo("jbloggs@apac.corp.local"));
+            Assert.That(hrCso.DerivedInputChangePending, Is.False, "cleared once the derived pass succeeds");
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_MarkedObjectWithOnlyAnOrdinaryMappingError_IsClearedAsBeforeAsync()
+    {
+        // An ordinary (non-derived) mapping's error keeps today's ScopeReviewPending-style behaviour: the object was
+        // processed, its derived flows evaluated cleanly, so the mark is cleared.
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountNameAndRegion, withUpn: false, withAd: true,
+            emailMissingInputBehaviour: MissingInputBehaviour.ContributeNoValue, withOrdinaryFailingMapping: true);
+        var hrCso = SeedHr(ctx, "E1", "jbloggs");
+        SeedAd(ctx, "E1", "EMEA");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Ad!);
+        Assert.That(hrCso.DerivedInputChangePending, Is.True, "precondition: marked");
+
+        var activity = await RunDeltaSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput), Is.True,
+                "precondition: the ordinary mapping failed");
+            Assert.That(Text(SyncRepo.MetaverseObjects.Values.Single(), ctx.Email), Is.EqualTo("jbloggs@emea.corp.local"));
+            Assert.That(hrCso.DerivedInputChangePending, Is.False, "an ordinary mapping error does not keep the mark");
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_ObjectReMarkedAfterThePageLoad_StaysMarkedAndTheNextDeltaSeesTheNewInputAsync()
+    {
+        // In-memory model of two runs in parallel: after HR's delta has loaded and evaluated the object, AD's run
+        // persists a new Region and re-marks the object, just before HR's page flush clears the marks it processed.
+        var ctx = await SetUpScenario2Async();
+        var hrCso = SeedHr(ctx, "E1", "jbloggs");
+        var adCso = SeedAd(ctx, "E1", "EMEA");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Ad!);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(hrCso.DerivedInputChangePending, Is.True, "precondition: marked");
+
+        var raced = false;
+        var racingRepository = InterceptingSyncRepositoryProxy.Create(SyncRepo,
+            nameof(ISyncRepository.ClearConnectedSystemObjectDerivedInputChangePendingAsync), () =>
+            {
+                if (raced)
+                    return;
+                raced = true;
+                // AD's concurrent run: its Region change reaches the Metaverse, then it marks HR's object.
+                SetText(adCso, ctx.AdRegion!, "AMER");
+                mvo.AttributeValues.Single(av => av.AttributeId == ctx.Region.Id).StringValue = "AMER";
+                SyncRepo.MarkConnectedSystemObjectsDerivedInputChangePendingAsync([new DerivedInputChangeMark(mvo.Id, ctx.Hr.Id)]).GetAwaiter().GetResult();
+            });
+
+        await RunDeltaSyncAsync(ctx.Hr, racingRepository);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(raced, Is.True, "precondition: the concurrent re-mark happened between load and clear");
+            Assert.That(Text(mvo, ctx.Email), Is.EqualTo("jbloggs@emea.corp.local"), "HR evaluated the Region it had read");
+            Assert.That(hrCso.DerivedInputChangePending, Is.True, "the re-mark moved the row version, so HR's clear left it in place");
+        }
+
+        await RunDeltaSyncAsync(ctx.Hr);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Text(mvo, ctx.Email), Is.EqualTo("jbloggs@amer.corp.local"), "the next delta re-derives from the newer Region");
+            Assert.That(hrCso.DerivedInputChangePending, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_MarkedObjectAlsoWrittenByItsOwnRun_ConvergesOnTheNextRunAsync()
+    {
+        // The run's own write to the row (here the Temporal Scope Reconciler flag's clear, at the same page flush and
+        // before the derived clear) also moves the row version, so the first run leaves the mark in place. That write
+        // does not recur, so the next run clears it: one extra evaluation, never a loop.
+        var ctx = await SetUpScenario2Async();
+        var hrCso = SeedHr(ctx, "E1", "jbloggs");
+        SeedAd(ctx, "E1", "EMEA");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Ad!);
+        hrCso.ScopeReviewPending = true;
+
+        await RunDeltaSyncAsync(ctx.Hr);
+        var afterFirst = (Marked: hrCso.DerivedInputChangePending, ScopeFlag: hrCso.ScopeReviewPending);
+        await RunDeltaSyncAsync(ctx.Hr);
+        var afterSecond = hrCso.DerivedInputChangePending;
+        var third = await RunDeltaSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(afterFirst.ScopeFlag, Is.False, "precondition: the first run cleared the scope flag, writing the row");
+            Assert.That(afterFirst.Marked, Is.True, "that write moved the row version, so the derived clear was skipped (fail-safe)");
+            Assert.That(afterSecond, Is.False, "the next run writes nothing else to the row, so the clear applies");
+            Assert.That(third.RunProfileExecutionItems, Is.Empty, "and the object is not selected again: it has converged");
+            Assert.That(Text(SyncRepo.MetaverseObjects.Values.Single(), ctx.Email), Is.EqualTo("jbloggs@emea.corp.local"));
         }
     }
 
@@ -466,7 +608,8 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         bool flagOn = true,
         MissingInputBehaviour emailMissingInputBehaviour = MissingInputBehaviour.EvaluateAnyway,
         string? generatedAccountNameBase = null,
-        bool adContributesEmail = false)
+        bool adContributesEmail = false,
+        bool withOrdinaryFailingMapping = false)
     {
         if (flagOn)
             await EnableAllFeatureFlagsAsync();
@@ -483,7 +626,8 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         {
             new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
             new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true },
-            new() { Name = "accountName", Type = AttributeDataType.Text, Selected = true }
+            new() { Name = "accountName", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "department", Type = AttributeDataType.Text, Selected = true }
         });
         var hrEmployeeId = hrType.Attributes.Single(a => a.Name == "employeeId");
         var hrAccountName = hrType.Attributes.Single(a => a.Name == "accountName");
@@ -520,6 +664,13 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
             emailMapping.Priority = 2;
         if (withUpn)
             FromExpression(hrImport, upn, UpnFromEmail);
+        if (withOrdinaryFailingMapping)
+        {
+            // An ordinary (non-derived) flow whose Connected System input no seeded object carries, failing only
+            // the mapping on every evaluation.
+            var department = await AddMvAttributeAsync(mvType, "Department");
+            FromExpression(hrImport, department, "cs[\"department\"]").Sources[0].MissingInputBehaviour = MissingInputBehaviour.FailMapping;
+        }
         await DbContext.SaveChangesAsync();
 
         ConnectedSystem? ad = null;
@@ -733,9 +884,9 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         return activity;
     }
 
-    private async Task<Activity> RunDeltaSyncAsync(ConnectedSystem connectedSystem)
+    private async Task<Activity> RunDeltaSyncAsync(ConnectedSystem connectedSystem, ISyncRepository? repository = null)
     {
-        var (run, activity) = await PrepareDeltaSyncAsync(connectedSystem);
+        var (run, activity) = await PrepareDeltaSyncAsync(connectedSystem, repository);
         await run();
         return activity;
     }
@@ -752,12 +903,12 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         return (processor.PerformFullSyncAsync, activity);
     }
 
-    private async Task<(Func<Task> Run, Activity Activity)> PrepareDeltaSyncAsync(ConnectedSystem connectedSystem)
+    private async Task<(Func<Task> Run, Activity Activity)> PrepareDeltaSyncAsync(ConnectedSystem connectedSystem, ISyncRepository? repository = null)
     {
         var reloaded = await ReloadEntityAsync(connectedSystem);
         var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
         var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.DeltaSynchronisation);
-        var processor = new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource());
+        var processor = new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), repository ?? SyncRepo, reloaded, profile, activity, new CancellationTokenSource());
         return (processor.PerformDeltaSyncAsync, activity);
     }
 

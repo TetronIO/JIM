@@ -200,6 +200,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
 
+            // Metaverse-Derived Attribute Flows (#1750): the row version of every marked object as this load read it,
+            // before this run writes anything; it guards the mark's clear at page flush (see the method for why).
+            CaptureDerivedInputRowVersions(csoPagedResult.Results);
+
             // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
             // run has no generated mappings.
             await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);

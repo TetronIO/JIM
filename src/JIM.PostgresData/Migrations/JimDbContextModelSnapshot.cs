@@ -3087,6 +3087,11 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("TypeId")
                         .HasColumnType("integer");
 
+                    b.Property<uint>("xmin")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemId")

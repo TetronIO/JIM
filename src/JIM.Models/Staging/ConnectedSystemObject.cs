@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 namespace JIM.Models.Staging;
@@ -148,6 +149,16 @@ public class ConnectedSystemObject
     /// the Temporal Scope Reconciler rewrites for every object it evaluates.
     /// </summary>
     public bool DerivedInputChangePending { get; set; }
+
+    /// <summary>
+    /// PostgreSQL's <c>xmin</c> system column: the row version, as read by the statement that loaded this instance.
+    /// Store-generated and never written by JIM, and deliberately NOT a concurrency token (Connected System Objects
+    /// are written in bulk by raw SQL, not through xmin-guarded EF updates). It exists so the derived-input mark
+    /// (#1750) can be cleared only when nobody re-marked the row after this synchronisation read it: the clear
+    /// compares it with the row's current xmin. Not part of the API.
+    /// </summary>
+    [JsonIgnore]
+    public uint xmin { get; set; }
 
     /// <summary>
     /// UTC watermark of when the Temporal Scope Reconciler last evaluated this object's relative-date scope.

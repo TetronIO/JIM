@@ -125,6 +125,12 @@ public class DerivedInputChangePendingDatabaseTests
         return await read.ConnectedSystemObjects.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.DerivedInputChangePending);
     }
 
+    private async Task<uint> ReadRowVersionAsync(Guid csoId)
+    {
+        await using var read = NewContext();
+        return await read.ConnectedSystemObjects.AsNoTracking().Where(c => c.Id == csoId).Select(c => c.xmin).SingleAsync();
+    }
+
     [Test]
     public async Task MarkConnectedSystemObjectsDerivedInputChangePendingAsync_MarksOnlyTheNamedSystemsJoinedObjectAsync()
     {
@@ -158,13 +164,17 @@ public class DerivedInputChangePendingDatabaseTests
 
         var first = await repository.Sync.MarkConnectedSystemObjectsDerivedInputChangePendingAsync(
             [new DerivedInputChangeMark(s.FirstMvoId, s.AdSystemId), new DerivedInputChangeMark(s.FirstMvoId, s.AdSystemId)]);
+        var versionAfterFirst = await ReadRowVersionAsync(s.AdFirstCsoId);
         var second = await repository.Sync.MarkConnectedSystemObjectsDerivedInputChangePendingAsync(
             [new DerivedInputChangeMark(s.FirstMvoId, s.AdSystemId)]);
+        var versionAfterSecond = await ReadRowVersionAsync(s.AdFirstCsoId);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(first, Is.EqualTo(1), "a duplicate mark in one batch still marks one row");
-            Assert.That(second, Is.Zero, "re-marking a marked row changes nothing, so the summary counts only new marks");
+            Assert.That(second, Is.Zero, "a re-mark is not a new mark, so the summary does not count it");
+            Assert.That(versionAfterSecond, Is.Not.EqualTo(versionAfterFirst),
+                "a re-mark must still write the row, moving its xmin, or a run that loaded it earlier could clear it");
         }
     }
 
@@ -214,7 +224,8 @@ public class DerivedInputChangePendingDatabaseTests
             var tracked = await ctx.ConnectedSystemObjects.AsTracking().SingleAsync(c => c.Id == s.AdFirstCsoId);
             Assert.That(tracked.DerivedInputChangePending, Is.True, "precondition: loaded marked");
 
-            cleared = await new PostgresDataRepository(ctx).Sync.ClearConnectedSystemObjectDerivedInputChangePendingAsync([s.AdFirstCsoId]);
+            cleared = await new PostgresDataRepository(ctx).Sync.ClearConnectedSystemObjectDerivedInputChangePendingAsync(
+                [new DerivedInputChangeClear(s.AdFirstCsoId, tracked.xmin)]);
 
             Assert.That(tracked.DerivedInputChangePending, Is.False, "the tracked instance must reflect the cleared row");
             ctx.Entry(tracked).State = EntityState.Modified;
@@ -282,6 +293,80 @@ public class DerivedInputChangePendingDatabaseTests
             Assert.That(marked.IsUnchangedSinceLastSync, Is.False, "the full synchronisation's unchanged skip must not skip a marked object");
             Assert.That(marked.AttributeValues, Has.Count.EqualTo(1), "a marked object's attribute values are loaded");
             Assert.That(unmarked.IsUnchangedSinceLastSync, Is.True, "control: an unchanged, unmarked object is still skipped");
+        }
+    }
+
+    /// <summary>
+    /// The race the row-version guard exists for: the hosting system's delta loads a marked object (reading its
+    /// xmin), another system's run then re-marks it because a derived input changed again, and only then does the
+    /// hosting run clear the objects it processed. Its evaluation may not have seen that second change, so the mark
+    /// must survive the clear and the next run re-evaluate the object.
+    /// </summary>
+    [Test]
+    public async Task ClearConnectedSystemObjectDerivedInputChangePendingAsync_RowReMarkedAfterThePageLoad_StaysMarkedAsync()
+    {
+        var s = await SeedAsync();
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        await using (var mark = NewContext())
+        {
+            await new PostgresDataRepository(mark).Sync.MarkConnectedSystemObjectsDerivedInputChangePendingAsync(
+                [new DerivedInputChangeMark(s.FirstMvoId, s.AdSystemId)]);
+        }
+
+        await using var hostingRun = NewContext();
+        var hostingRepository = new PostgresDataRepository(hostingRun);
+        var page = await hostingRepository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(s.AdSystemId, watermark, 1, 100, null, Guid.Empty);
+        var loaded = page.Results.Single(c => c.Id == s.AdFirstCsoId);
+        var seenRowVersion = loaded.xmin;
+        Assert.That(seenRowVersion, Is.EqualTo(await ReadRowVersionAsync(s.AdFirstCsoId)),
+            "precondition: the delta page load reads the row's current xmin in the Connected System Object statement");
+
+        // Another system's synchronisation re-marks the object on its own connection.
+        await using (var otherRun = NewContext())
+        {
+            await new PostgresDataRepository(otherRun).Sync.MarkConnectedSystemObjectsDerivedInputChangePendingAsync(
+                [new DerivedInputChangeMark(s.FirstMvoId, s.AdSystemId)]);
+        }
+
+        var cleared = await hostingRepository.Sync.ClearConnectedSystemObjectDerivedInputChangePendingAsync(
+            [new DerivedInputChangeClear(s.AdFirstCsoId, seenRowVersion)]);
+
+        var flags = await ReadFlagsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cleared, Is.Zero, "the row was re-marked after this run read it, so it is not cleared");
+            Assert.That(flags[s.AdFirstCsoId], Is.True, "the mark survives, so the next run re-evaluates the object");
+            Assert.That(loaded.DerivedInputChangePending, Is.True, "a row the clear skipped is not fixed up to false in memory");
+        }
+    }
+
+    [Test]
+    public async Task ClearConnectedSystemObjectDerivedInputChangePendingAsync_RowUnchangedSinceTheFullSyncPageLoad_IsClearedAsync()
+    {
+        var s = await SeedAsync();
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        await using (var mark = NewContext())
+        {
+            await new PostgresDataRepository(mark).Sync.MarkConnectedSystemObjectsDerivedInputChangePendingAsync(
+                [new DerivedInputChangeMark(s.FirstMvoId, s.AdSystemId)]);
+        }
+
+        await using var hostingRun = NewContext();
+        var hostingRepository = new PostgresDataRepository(hostingRun);
+        var page = await hostingRepository.Sync.GetConnectedSystemObjectsAsync(
+            s.AdSystemId, 1, 100, knownTotalCount: 3, lastSyncTimestamp: watermark, afterId: Guid.Empty);
+        var loaded = page.Results.Single(c => c.Id == s.AdFirstCsoId);
+
+        var cleared = await hostingRepository.Sync.ClearConnectedSystemObjectDerivedInputChangePendingAsync(
+            [new DerivedInputChangeClear(s.AdFirstCsoId, loaded.xmin)]);
+
+        var flags = await ReadFlagsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(loaded.xmin, Is.Not.Zero, "the full synchronisation's scalar page query reads the xmin too");
+            Assert.That(cleared, Is.EqualTo(1));
+            Assert.That(flags[s.AdFirstCsoId], Is.False, "nobody wrote the row after the load, so the clear applies");
+            Assert.That(loaded.DerivedInputChangePending, Is.False, "and the tracked instance is fixed up");
         }
     }
 }

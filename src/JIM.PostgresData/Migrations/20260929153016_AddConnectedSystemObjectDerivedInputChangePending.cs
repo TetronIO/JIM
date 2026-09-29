@@ -17,6 +17,13 @@ namespace JIM.PostgresData.Migrations
                 nullable: false,
                 defaultValue: false);
 
+            migrationBuilder.AddColumn<uint>(
+                name: "xmin",
+                table: "ConnectedSystemObjects",
+                type: "xid",
+                nullable: false,
+                defaultValue: 0u);
+
             migrationBuilder.CreateIndex(
                 name: "IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending",
                 table: "ConnectedSystemObjects",
@@ -33,6 +40,10 @@ namespace JIM.PostgresData.Migrations
 
             migrationBuilder.DropColumn(
                 name: "DerivedInputChangePending",
+                table: "ConnectedSystemObjects");
+
+            migrationBuilder.DropColumn(
+                name: "xmin",
                 table: "ConnectedSystemObjects");
         }
     }

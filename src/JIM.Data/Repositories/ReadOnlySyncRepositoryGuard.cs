@@ -395,7 +395,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks)
         => throw new PreviewWriteAttemptedException(nameof(MarkConnectedSystemObjectsDerivedInputChangePendingAsync));
 
-    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<Guid> ids)
+    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
         => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectDerivedInputChangePendingAsync));
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)

@@ -15,6 +15,7 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 namespace JIM.PostgresData;
 
 public class JimDbContext : DbContext
@@ -682,6 +683,18 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObject>()
             .Property(e => e.xmin)
             .IsRowVersion();
+
+        // Connected System Objects expose the xmin row version for reading only (#1750): the derived-input mark's
+        // clear is guarded by the xmin each synchronisation page load read, so a mark set concurrently after that
+        // read survives. Store-generated and never saved, and not a concurrency token: CSO rows are written by raw
+        // SQL in bulk, so an EF concurrency check would guard nothing and would fail every tracked save after one.
+        var csoXmin = modelBuilder.Entity<ConnectedSystemObject>()
+            .Property(e => e.xmin)
+            .HasColumnName("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate();
+        csoXmin.Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+        csoXmin.Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 
         // PendingExport: relationship to source MVO (Q1 decision)
         modelBuilder.Entity<PendingExport>()

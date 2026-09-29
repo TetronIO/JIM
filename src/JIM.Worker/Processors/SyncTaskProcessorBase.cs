@@ -131,13 +131,26 @@ public abstract class SyncTaskProcessorBase
     // it; resolved and applied there as one bulk mark (MarkConnectedSystemObjectsDerivedInputChangePendingAsync).
     private readonly List<(MetaverseObject Mvo, int ConnectedSystemId)> _pendingDerivedInputMarks = [];
 
-    // Ids of this system's Connected System Objects that carried the derived-input mark and whose Pass 2 processing
-    // completed without error; cleared in bulk at page flush (the ScopeReviewPending fail-safe pattern).
-    private readonly List<Guid> _pendingDerivedInputClears = [];
+    // This system's Connected System Objects that carried the derived-input mark and whose Pass 2 processing
+    // completed without error, each with the row version (xmin) its page load read; cleared in bulk at page flush
+    // (the ScopeReviewPending fail-safe pattern), and only while the row version is unchanged.
+    private readonly List<DerivedInputChangeClear> _pendingDerivedInputClears = [];
+
+    // The row version (xmin) of each marked Connected System Object on the current page, as the page load read it.
+    // Captured by CaptureDerivedInputRowVersions straight after the load, before this run writes anything, because
+    // an EF save of a tracked object refreshes its xmin to this run's own write, which would defeat the guard.
+    private readonly Dictionary<Guid, uint> _derivedInputSeenRowVersions = [];
+
+    // Connected System Objects on the current page whose derived pass returned an Attribute Flow error (for example
+    // Missing Input Behaviour "Fail the mapping" on an mv input). Decision 10: a derived-flow error fails the object,
+    // so its mark is kept and the next run re-evaluates it and reports the error again, rather than leaving a stale
+    // derived value that nothing revisits.
+    private readonly HashSet<Guid> _derivedFlowErroredCsoIds = [];
 
     // Run totals for the end-of-run summary (Synchronisation Integrity: summary statistics for every batch operation).
     private int _derivedInputMarksSet;
     private int _derivedInputMarksCleared;
+    private int _derivedInputMarksKept;
 
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
@@ -1048,8 +1061,14 @@ public abstract class SyncTaskProcessorBase
 
             // Same fail-safe for the derived-input mark (#1750): cleared only once the object's derived flows have been
             // re-evaluated without error. An object that errors keeps its mark and is selected again next run.
-            if (connectedSystemObject.DerivedInputChangePending)
-                _pendingDerivedInputClears.Add(connectedSystemObject.Id);
+            // Kept, too, when the object's derived pass reported an Attribute Flow error (decision 10), unlike an
+            // ordinary flow's mapping-level error, which follows the ScopeReviewPending behaviour above.
+            if (connectedSystemObject.DerivedInputChangePending &&
+                !_derivedFlowErroredCsoIds.Contains(connectedSystemObject.Id) &&
+                _derivedInputSeenRowVersions.TryGetValue(connectedSystemObject.Id, out var seenRowVersion))
+            {
+                _pendingDerivedInputClears.Add(new DerivedInputChangeClear(connectedSystemObject.Id, seenRowVersion));
+            }
         }
         catch (SyncJoinException joinEx)
         {
@@ -2062,6 +2081,8 @@ public abstract class SyncTaskProcessorBase
             // expression error propagates to ProcessActiveConnectedSystemObjectAsync and fails the object, as an
             // ordinary one does. Each names its hosting Synchronisation Rule.
             RecordInboundAttributeFlowErrors(cso, levelErrors);
+            if (levelErrors.Count > 0)
+                _derivedFlowErroredCsoIds.Add(cso.Id);
 
             outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, outcomes);
         }
@@ -2168,9 +2189,41 @@ public abstract class SyncTaskProcessorBase
         {
             var cleared = await _syncRepo.ClearConnectedSystemObjectDerivedInputChangePendingAsync(_pendingDerivedInputClears);
             _derivedInputMarksCleared += cleared;
-            Log.Debug("FlushDerivedInputMarksAsync: cleared the derived-input mark on {Cleared} re-evaluated Connected System Object(s).", cleared);
+            _derivedInputMarksKept += _pendingDerivedInputClears.Count - cleared;
+            Log.Debug("FlushDerivedInputMarksAsync: cleared the derived-input mark on {Cleared} of {Requested} re-evaluated Connected System Object(s); " +
+                "the rest were written since their page load (for example re-marked by another run) and stay marked for the next run.",
+                cleared, _pendingDerivedInputClears.Count);
             _pendingDerivedInputClears.Clear();
         }
+
+        _derivedInputSeenRowVersions.Clear();
+        _derivedFlowErroredCsoIds.Clear();
+    }
+
+    /// <summary>
+    /// Records the row version (<c>xmin</c>) of each marked Connected System Object on a freshly loaded page, so the
+    /// mark can later be cleared only if nobody re-marked the row after this run read it (#1750). Call straight after
+    /// the page load, before anything on the page is written.
+    /// <para>
+    /// Why this version is early enough: the clear must be guarded by a row version read NO LATER than the Metaverse
+    /// values the derived flows evaluate. Both page loaders (<c>GetConnectedSystemObjectsModifiedSinceAsync</c> for
+    /// delta, <c>GetConnectedSystemObjectsAsync</c> for full) read the Connected System Object rows, xmin included,
+    /// in their first statement (a single query, not split; for full synchronisation the scalar partition query), and
+    /// only afterwards load the joined Metaverse Objects and their attribute values in a separate statement
+    /// (<c>LoadMetaverseObjectsForCsosAsync</c>). Under READ COMMITTED each statement sees everything committed before
+    /// it started, so the Metaverse values are at least as new as the xmin. Another system's run persists its
+    /// Metaverse changes before it marks, so either this load saw the mark's xmin, in which case the later Metaverse
+    /// read sees the change it signals, or the mark lands later and moves the xmin, and the clear leaves it in place.
+    /// A Metaverse Object this run already held from an earlier read would be older than the xmin, but the tracker and
+    /// the page identity map are cleared at every page boundary, and nothing before the first page loads Metaverse
+    /// Objects tracked; a Connected System Object already tracked from before the load keeps its older xmin, which
+    /// can only make the clear skip (fail-safe), never succeed wrongly.
+    /// </para>
+    /// </summary>
+    protected void CaptureDerivedInputRowVersions(IEnumerable<ConnectedSystemObject> loadedPage)
+    {
+        foreach (var cso in loadedPage.Where(cso => cso.DerivedInputChangePending))
+            _derivedInputSeenRowVersions[cso.Id] = cso.xmin;
     }
 
     /// <summary>
@@ -2184,8 +2237,9 @@ public abstract class SyncTaskProcessorBase
             return;
 
         Log.Information("Derived Attribute Flow marks for {ConnectedSystemName}: {Marked} Connected System Object(s) in other systems marked for " +
-            "re-evaluation; {Cleared} of this system's marked object(s) re-evaluated and cleared.",
-            _connectedSystem.Name, _derivedInputMarksSet, _derivedInputMarksCleared);
+            "re-evaluation; {Cleared} of this system's marked object(s) re-evaluated and cleared; {Kept} re-evaluated but kept marked because " +
+            "the row was written after it was loaded.",
+            _connectedSystem.Name, _derivedInputMarksSet, _derivedInputMarksCleared, _derivedInputMarksKept);
     }
 
     /// <summary>

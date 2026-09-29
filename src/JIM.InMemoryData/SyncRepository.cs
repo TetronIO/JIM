@@ -173,6 +173,7 @@ public class SyncRepository : ISyncRepository
 
     public void SeedConnectedSystemObject(ConnectedSystemObject cso)
     {
+        BumpRowVersion(cso);
         _csos[cso.Id] = cso;
         if (!_csosByConnectedSystem.TryGetValue(cso.ConnectedSystemId, out var csSet))
         {
@@ -878,6 +879,7 @@ public class SyncRepository : ISyncRepository
                 cso.Id = Guid.NewGuid();
 
             FixupCsoNavigationProperties(cso);
+            BumpRowVersion(cso);
             _csos[cso.Id] = cso;
             AddToCsIndex(cso);
         }
@@ -926,11 +928,13 @@ public class SyncRepository : ISyncRepository
                 stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
                 stored.AttributeValues = cso.AttributeValues;
                 FixupCsoNavigationProperties(stored);
+                BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
             }
             else
             {
                 FixupCsoNavigationProperties(cso);
+                BumpRowVersion(cso);
                 _csos[cso.Id] = cso;
                 UpdateMvoIndex(cso);
             }
@@ -988,6 +992,7 @@ public class SyncRepository : ISyncRepository
                 stored.MetaverseObject = cso.MetaverseObject;
                 stored.JoinType = cso.JoinType;
                 stored.Status = cso.Status;
+                BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
             }
         }
@@ -997,7 +1002,10 @@ public class SyncRepository : ISyncRepository
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
     {
         foreach (var stored in ids.Select(id => _csos.TryGetValue(id, out var cso) ? cso : null).Where(cso => cso != null))
+        {
             stored!.ScopeReviewPending = false;
+            BumpRowVersion(stored);
+        }
         return Task.CompletedTask;
     }
 
@@ -1016,28 +1024,46 @@ public class SyncRepository : ISyncRepository
         // Scans _csos rather than the _csosByMvo index, for the reason GetConnectedSystemObjectCountByMvoAsync gives:
         // the index can lag a join made earlier in the same page.
         var markSet = marks.ToHashSet();
+        // Every matched row is written, already-marked ones included, so its row version moves, as the production
+        // statement's does: that is what stops a run that loaded the object earlier from clearing this mark.
         var toMark = _csos.Values
-            .Where(cso => !cso.DerivedInputChangePending &&
-                          (cso.MetaverseObjectId ?? cso.MetaverseObject?.Id) is { } mvoId &&
+            .Where(cso => (cso.MetaverseObjectId ?? cso.MetaverseObject?.Id) is { } mvoId &&
                           markSet.Contains(new DerivedInputChangeMark(mvoId, cso.ConnectedSystemId)))
             .ToList();
+        var newlyMarked = toMark.Count(cso => !cso.DerivedInputChangePending);
         foreach (var cso in toMark)
+        {
             cso.DerivedInputChangePending = true;
+            BumpRowVersion(cso);
+        }
 
-        return Task.FromResult(toMark.Count);
+        return Task.FromResult(newlyMarked);
     }
 
-    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<Guid> ids)
+    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
     {
+        // Mirrors the production xmin guard: a row whose version moved since the run loaded it keeps its mark.
         var cleared = 0;
-        foreach (var stored in ids.Select(id => _csos.TryGetValue(id, out var cso) ? cso : null).Where(cso => cso is { DerivedInputChangePending: true }))
+        foreach (var (stored, _) in clears
+                     .Select(clear => (Cso: _csos.TryGetValue(clear.ConnectedSystemObjectId, out var cso) ? cso : null, clear.SeenRowVersion))
+                     .Where(x => x.Cso is { DerivedInputChangePending: true } && x.Cso.xmin == x.SeenRowVersion))
         {
             stored!.DerivedInputChangePending = false;
+            BumpRowVersion(stored);
             cleared++;
         }
 
         return Task.FromResult(cleared);
     }
+
+    private uint _lastRowVersion;
+
+    /// <summary>
+    /// Models PostgreSQL's <c>xmin</c> on the stored Connected System Object: every write through this repository
+    /// gives the row a new version, so the derived-input mark's version-guarded clear (#1750) behaves as it does
+    /// against the database.
+    /// </summary>
+    private void BumpRowVersion(ConnectedSystemObject cso) => cso.xmin = ++_lastRowVersion;
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
@@ -1064,6 +1090,7 @@ public class SyncRepository : ISyncRepository
                 {
                     stored.ImportStateHash = null;
                     stored.ImportStateFingerprint = null;
+                    BumpRowVersion(stored);
                 }
             }
         }
@@ -1490,6 +1517,7 @@ public class SyncRepository : ISyncRepository
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
         cso.DateJoined = dateJoined;
         cso.Status = ConnectedSystemObjectStatus.Normal;
+        BumpRowVersion(cso);
         return Task.FromResult(true);
     }
 
@@ -2539,6 +2567,7 @@ public class SyncRepository : ISyncRepository
             cso.MetaverseObject = null;
             cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
             cso.DateJoined = null;
+            BumpRowVersion(cso);
             UpdateMvoIndex(cso);
         }
         return Task.CompletedTask;
