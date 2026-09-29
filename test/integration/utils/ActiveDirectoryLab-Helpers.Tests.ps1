@@ -645,119 +645,12 @@ Describe 'Invoke-ActiveDirectoryLdifDelivery' {
     }
 }
 
-Describe 'Test-ActiveDirectoryOnlyScenario' {
-    It 'is true for Scenarios 24 and 25, which need real Windows domain controllers' {
-        Test-ActiveDirectoryOnlyScenario -ScenarioNumber 24 | Should -BeTrue
-        Test-ActiveDirectoryOnlyScenario -ScenarioNumber 25 | Should -BeTrue
-    }
-
-    It 'is false for every other scenario, the OpenLDAP-only and Samba AD-only ones included' {
-        foreach ($number in (1..23) + 26) {
-            Test-ActiveDirectoryOnlyScenario -ScenarioNumber $number | Should -BeFalse -Because "Scenario $number runs on a container directory"
-        }
-    }
-
-    It 'is false when there is no scenario number (a sweep, or a name that is not a numbered scenario)' {
-        Test-ActiveDirectoryOnlyScenario -ScenarioNumber $null | Should -BeFalse
-    }
-}
-
-Describe 'Get-ActiveDirectoryOnlyScenarioNumber' {
-    It 'lists Scenarios 24 and 25' {
-        @(Get-ActiveDirectoryOnlyScenarioNumber) | Should -Be @(24, 25)
-    }
-
-    It 'agrees with Test-ActiveDirectoryOnlyScenario for every scenario number the suite could reach' {
-        $listed = @(Get-ActiveDirectoryOnlyScenarioNumber)
-        foreach ($number in 1..40) {
-            (Test-ActiveDirectoryOnlyScenario -ScenarioNumber $number) | Should -Be ($number -in $listed)
-        }
-    }
-}
-
-Describe 'Resolve-ActiveDirectoryOnlyScenarioDirectoryType' {
-    Context 'a scenario that runs on a container directory' {
-        It 'leaves whatever directory type was chosen alone, asked for or not' {
-            foreach ($number in 1, 14, 17, 22, 23) {
-                foreach ($type in 'SambaAD', 'OpenLDAP', 'DirectoryServer389', 'ActiveDirectory', 'All') {
-                    foreach ($explicit in $true, $false) {
-                        $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $number -DirectoryType $type -DirectoryTypeWasExplicitlySet $explicit
-
-                        $decision.DirectoryType | Should -Be $type
-                        $decision.Coerced | Should -BeFalse
-                        $decision.Refusal | Should -BeNullOrEmpty
-                    }
-                }
-            }
-        }
-
-        It 'leaves the directory type alone when there is no scenario number' {
-            $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $null -DirectoryType 'SambaAD' -DirectoryTypeWasExplicitlySet $false
-
-            $decision.DirectoryType | Should -Be 'SambaAD'
-            $decision.Coerced | Should -BeFalse
-            $decision.Refusal | Should -BeNullOrEmpty
-        }
-    }
-
-    Context 'a scenario that runs on the Active Directory lab only' {
-        It 'accepts ActiveDirectory as it is' {
-            foreach ($number in 24, 25) {
-                $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $number -DirectoryType 'ActiveDirectory' -DirectoryTypeWasExplicitlySet $true
-
-                $decision.DirectoryType | Should -Be 'ActiveDirectory'
-                $decision.Coerced | Should -BeFalse
-                $decision.Refusal | Should -BeNullOrEmpty
-            }
-        }
-
-        It 'refuses a container directory type that was asked for, naming it and the way out' {
-            foreach ($number in 24, 25) {
-                foreach ($type in 'SambaAD', 'OpenLDAP', 'DirectoryServer389') {
-                    $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $number -DirectoryType $type -DirectoryTypeWasExplicitlySet $true
-
-                    $decision.Refusal | Should -BeLike "*Rejected -DirectoryType $type*"
-                    $decision.Refusal | Should -BeLike '*Use -DirectoryType ActiveDirectory*'
-                    $decision.Refusal | Should -BeLike '*24*25*'
-                    $decision.Coerced | Should -BeFalse
-                }
-            }
-        }
-
-        It 'refuses -DirectoryType All, which never includes the lab, and says so' {
-            $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber 24 -DirectoryType 'All' -DirectoryTypeWasExplicitlySet $true
-
-            $decision.Refusal | Should -BeLike '*Rejected -DirectoryType All*'
-            $decision.Refusal | Should -BeLike '*never includes ActiveDirectory*'
-            $decision.Refusal | Should -BeLike '*Use -DirectoryType ActiveDirectory*'
-        }
-
-        It 'moves a directory type nobody asked for (the runner default, or a menu choice) to ActiveDirectory' {
-            foreach ($type in 'SambaAD', 'OpenLDAP', 'DirectoryServer389', 'All') {
-                $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber 25 -DirectoryType $type -DirectoryTypeWasExplicitlySet $false
-
-                $decision.DirectoryType | Should -Be 'ActiveDirectory'
-                $decision.Coerced | Should -BeTrue
-                $decision.Refusal | Should -BeNullOrEmpty
-            }
-        }
-
-        It 'writes its messages without an em dash, as every text in this repository must' {
-            $refusals = foreach ($type in 'SambaAD', 'All') {
-                (Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber 24 -DirectoryType $type -DirectoryTypeWasExplicitlySet $true).Refusal
-            }
-
-            foreach ($refusal in $refusals) {
-                $refusal | Should -Not -Match ([string][char]0x2014)
-            }
-        }
-    }
-}
-
-Describe 'Run-IntegrationTests.ps1 gating of the Active Directory only scenarios' {
+Describe 'Run-IntegrationTests.ps1 handling of the Active Directory only scenarios' {
     BeforeAll {
-        # The runner cannot be run without Docker and the lab, so what is proven here is that it is wired to the
-        # tested decisions above, in the places the OpenLDAP-only Scenarios 14, 19 and 22 are gated.
+        # The runner cannot be run without Docker and the lab. Which directory types Scenarios 24 and 25 (and
+        # every other scenario) run on is decided by the table in utils/Get-ScenarioDirectoryTypes.ps1, and the
+        # runner's wiring to it is proven in Get-ScenarioDirectoryTypes.Tests.ps1; what is left here is that the
+        # runner parses and treats the two as independent of the template.
         $script:runnerPath = Join-Path $PSScriptRoot '..' 'Run-IntegrationTests.ps1'
         $script:runnerText = Get-Content -LiteralPath $script:runnerPath -Raw
     }
@@ -768,29 +661,6 @@ Describe 'Run-IntegrationTests.ps1 gating of the Active Directory only scenarios
         [System.Management.Automation.Language.Parser]::ParseFile($script:runnerPath, [ref]$tokens, [ref]$parseErrors) | Out-Null
 
         @($parseErrors).Count | Should -Be 0
-    }
-
-    It 'resolves the directory type through the tested function before the -DirectoryType All handler runs' {
-        $resolve = $script:runnerText.IndexOf('Resolve-ActiveDirectoryOnlyScenarioDirectoryType')
-        $allHandler = [regex]::Match($script:runnerText, '(?m)^if \(\$DirectoryType -eq "All"\) \{')
-
-        $resolve | Should -BeGreaterThan 0
-        $allHandler.Success | Should -BeTrue
-        $resolve | Should -BeLessThan $allHandler.Index
-    }
-
-    It 'stops a refused combination with the message the function wrote' {
-        # A boolean rather than Should -Match on the text, which would print the whole runner when it failed.
-        ($script:runnerText -match '\.Refusal') | Should -BeTrue -Because 'the runner throws the Refusal the function returns'
-    }
-
-    It 'skips the Active Directory only scenarios in a -Scenario All sweep on every directory type but ActiveDirectory' {
-        ($script:runnerText -match 'Test-ActiveDirectoryOnlyScenario') | Should -BeTrue
-        ($script:runnerText -match 'Skipping Active Directory lab-only scenario') | Should -BeTrue
-    }
-
-    It 'chooses ActiveDirectory itself when the scenario is picked from the interactive menu' {
-        ($script:runnerText -match '(?s)Test-ActiveDirectoryOnlyScenario -ScenarioNumber \$scenarioNumber\)\s*\{\s*(?:#[^\r\n]*\s*)*\$DirectoryType = "ActiveDirectory"') | Should -BeTrue
     }
 
     It 'treats Scenarios 24 and 25 as independent of the template, like the other scenarios with fixed data' {

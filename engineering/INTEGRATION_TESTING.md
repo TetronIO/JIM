@@ -1357,7 +1357,7 @@ Samba AD and OpenLDAP.
 
 **`-Template` is ignored.** The scenario asserts against one Micro export.
 
-**Runner handling.** `Run-IntegrationTests.ps1` treats 24 and 25 as Active Directory lab only (`Resolve-ActiveDirectoryOnlyScenarioDirectoryType` in `utils/ActiveDirectoryLab-Helpers.ps1`, with Pester tests): an explicit `-DirectoryType` other than ActiveDirectory is refused with a message, `-DirectoryType All` is refused (it never includes the lab), a directory type nobody asked for (the SambaAD default, or the interactive menu) is moved to ActiveDirectory, and a `-Scenario All` sweep of Samba AD, OpenLDAP or 389 Directory Server skips them and one of ActiveDirectory keeps them. Both are template independent. Scenario 024 uses Primary only.
+**Runner handling.** `Run-IntegrationTests.ps1` treats 24 and 25 as Active Directory lab only by reading the same table as every other scenario (`Get-ScenarioSupportedDirectoryTypes` in `utils/Get-ScenarioDirectoryTypes.ps1`, with Pester tests), where their only supported type is ActiveDirectory: an explicit `-DirectoryType` other than ActiveDirectory is refused with a message naming the scenario, the supported type and the rejected type, `-DirectoryType All` is refused (it expands to the container directory types, `Get-ContainerDirectoryType`, and never includes the lab), a directory type nobody asked for (the SambaAD default, or the interactive menu) is moved to ActiveDirectory, and a `-Scenario All` sweep of Samba AD, OpenLDAP or 389 Directory Server skips them (by the same rule that skips 14, 19 and 22 on Samba AD) and one of ActiveDirectory keeps them. Both are template independent. Scenario 024 uses Primary only.
 
 #### Scenario 025: Active Directory Delta Import Integrity
 
