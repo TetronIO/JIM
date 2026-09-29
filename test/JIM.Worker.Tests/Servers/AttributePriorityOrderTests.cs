@@ -70,7 +70,7 @@ public class AttributePriorityOrderTests
             .Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<SyncRuleMapping>());
 
-        _jim = new JimApplication(_mockRepository.Object);
+        _jim = new JimApplication(_mockRepository.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository());
 
         _user = new MetaverseObject { Id = Guid.NewGuid(), CachedDisplayName = "Test Admin" };
     }

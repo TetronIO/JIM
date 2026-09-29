@@ -58,7 +58,9 @@ public class SynchronisationControllerUpdateSyncRuleTests
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
-        _application = new JimApplication(_mockRepository.Object);
+        // A sync repository is passed, as every host passes one: saving an export Synchronisation Rule checks the export
+        // queue for changes the save left without authority, which reads through it. An empty in-memory store finds nothing.
+        _application = new JimApplication(_mockRepository.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
         _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator, _mockCredentialProtection.Object);
 
         var apiKeyId = Guid.NewGuid();

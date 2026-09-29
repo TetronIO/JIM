@@ -153,6 +153,13 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
+    /// Test support: removes a previously seeded Synchronisation Rule, for scenarios where the configuration side
+    /// deletes it. In production both sides read one database; here the rule deletion is written to the DbContext
+    /// only, so a test mirrors it into this store.
+    /// </summary>
+    public void RemoveSyncRule(int syncRuleId) => _syncRules.Remove(syncRuleId);
+
+    /// <summary>
     /// Test support: removes a previously seeded CSO, for scenarios that need the object gone again
     /// (for example previewing provisioning after removing the joined object).
     /// </summary>

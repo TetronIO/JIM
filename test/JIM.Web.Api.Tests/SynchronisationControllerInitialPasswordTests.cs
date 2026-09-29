@@ -59,6 +59,11 @@ public class SynchronisationControllerInitialPasswordTests
         _mockSyncRepo.Setup(r => r.GetParkedProvisionedPasswordReasonsAsync(It.IsAny<int>())).ReturnsAsync([]);
         _mockSyncRepo.Setup(r => r.GetProvisionedPasswordAttentionBySyncRuleAsync(It.IsAny<IReadOnlyCollection<int>>()))
             .ReturnsAsync([]);
+        // Saving an export Synchronisation Rule also checks the export queue for changes the save left without
+        // authority; nothing is queued here, so both reads answer empty.
+        _mockSyncRepo.Setup(r => r.GetSyncRulesAsync(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>())).ReturnsAsync([]);
+        _mockSyncRepo.Setup(r => r.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync([]);
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);

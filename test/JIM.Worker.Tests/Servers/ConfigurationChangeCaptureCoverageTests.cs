@@ -70,7 +70,7 @@ public class ConfigurationChangeCaptureCoverageTests
         _csRepo.Setup(r => r.GetConnectedSystemAsync(1, It.IsAny<bool>())).ReturnsAsync(BuildConnectedSystem);
 
         _protection = new FakeProtection();
-        _jim = new JimApplication(_repo.Object) { CredentialProtection = _protection };
+        _jim = new JimApplication(_repo.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository()) { CredentialProtection = _protection };
 
         SetupTrackingSetting(enabled: true);
         SetupHashKeySetting();

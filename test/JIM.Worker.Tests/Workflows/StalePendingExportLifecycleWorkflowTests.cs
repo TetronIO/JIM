@@ -13,6 +13,7 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Worker.Processors;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -127,6 +128,88 @@ public class StalePendingExportLifecycleWorkflowTests : WorkflowTestBase
         AssertNoDisplayNameChangeQueued(ctx);
     }
 
+    // ---- At configuration save: the queue reflects the change at once, not only at the next export ----
+
+    [Test]
+    public async Task UpdateSyncRuleMappingSettingsAsync_DisablingTheExportAttributeFlow_WithdrawsItsQueuedChangeAtOnceAsync()
+    {
+        var ctx = await SetUpWithQueuedDisplayNameChangeAsync();
+
+        await Jim.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(ctx.DisplayNameExportMapping.Id,
+            new SyncRuleMappingSettingsUpdate { Enabled = false }, ctx.Administrator);
+
+        AssertNoDisplayNameChangeQueued(ctx);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingSettingsAsync_DisablingAnotherAttributeFlow_KeepsTheQueuedChangeAsync()
+    {
+        var ctx = await SetUpWithQueuedDisplayNameChangeAsync();
+        var departmentMapping = ctx.ExportRule.AttributeFlowRules.Single(m => m != ctx.DisplayNameExportMapping);
+
+        await Jim.ConnectedSystems.UpdateSyncRuleMappingSettingsAsync(departmentMapping.Id,
+            new SyncRuleMappingSettingsUpdate { Enabled = false }, ctx.Administrator);
+
+        Assert.That(QueuedAttributeNames(ctx), Is.EqualTo(new[] { "DisplayName" }),
+            "only a change the configuration change left without authority is withdrawn");
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_DisablingTheExportAttributeFlow_WithdrawsItsQueuedChangeAtOnceAsync()
+    {
+        var ctx = await SetUpWithQueuedDisplayNameChangeAsync();
+
+        ctx.DisplayNameExportMapping.Enabled = false;
+        await Jim.ConnectedSystems.UpdateSyncRuleMappingAsync(ctx.DisplayNameExportMapping, ctx.Administrator);
+
+        AssertNoDisplayNameChangeQueued(ctx);
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_TheExportAttributeFlow_WithdrawsItsQueuedChangeAtOnceAsync()
+    {
+        var ctx = await SetUpWithQueuedDisplayNameChangeAsync();
+
+        await Jim.ConnectedSystems.DeleteSyncRuleMappingAsync(ctx.DisplayNameExportMapping, ctx.Administrator);
+
+        AssertNoDisplayNameChangeQueued(ctx);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_DisablingTheExportRule_WithdrawsItsQueuedChangeAtOnceAsync()
+    {
+        var ctx = await SetUpWithQueuedDisplayNameChangeAsync();
+
+        ctx.ExportRule.Enabled = false;
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+
+        AssertNoDisplayNameChangeQueued(ctx);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_SavingTheExportRuleUnchanged_KeepsTheQueuedChangeAsync()
+    {
+        var ctx = await SetUpWithQueuedDisplayNameChangeAsync();
+
+        await Jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+
+        Assert.That(QueuedAttributeNames(ctx), Is.EqualTo(new[] { "DisplayName" }));
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleAsync_TheExportRule_WithdrawsItsQueuedChangeAtOnceAsync()
+    {
+        var ctx = await SetUpWithQueuedDisplayNameChangeAsync();
+
+        // The deletion is written to the DbContext only; in production the synchronisation side reads the same
+        // database, so mirror it into the in-memory store first. Nothing reads that store in between except the
+        // withdrawal under test, and without it the queued change stays put.
+        SyncRepo.RemoveSyncRule(ctx.ExportRule.Id);
+        await Jim.ConnectedSystems.DeleteSyncRuleAsync(ctx.ExportRule, ctx.Administrator);
+
+        AssertNoDisplayNameChangeQueued(ctx);
+    }
+
     // ---- Topology ----
 
     private sealed record Context(
@@ -135,7 +218,8 @@ public class StalePendingExportLifecycleWorkflowTests : WorkflowTestBase
         ConnectedSystemObject HrCso,
         ConnectedSystemObject DirectoryCso,
         SyncRule ExportRule,
-        SyncRuleMapping DisplayNameExportMapping);
+        SyncRuleMapping DisplayNameExportMapping,
+        MetaverseObject Administrator);
 
     /// <summary>
     /// Changes HR's Department and synchronises, queuing a second change (for Department, whose export Attribute Flow
@@ -148,6 +232,36 @@ public class StalePendingExportLifecycleWorkflowTests : WorkflowTestBase
         await RunFullSyncAsync(ctx.Hr);
         Assert.That(PendingExportsFor(ctx.Directory).SelectMany(pe => pe.AttributeValueChanges).Select(c => c.StringValue),
             Is.EquivalentTo(new[] { "Alicia", department }), "arrange: both changes are queued for the account");
+    }
+
+    private List<string> QueuedAttributeNames(Context ctx) =>
+        PendingExportsFor(ctx.Directory).SelectMany(pe => pe.AttributeValueChanges)
+            .Where(c => c.Status is PendingExportAttributeChangeStatus.Pending or PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+            .Select(c => c.Attribute.Name)
+            .ToList();
+
+    /// <summary>
+    /// The initiating user the audited configuration paths need. Created after the synchronisations, so it first
+    /// settles what the processors modified on instances shared with the DbContext (the WorkflowTestBase pattern):
+    /// objects whose rows were never written to the DbContext are detached, since saving them would fail, while the
+    /// configuration the DbContext does hold stays tracked as it is, so the configuration paths under test mutate
+    /// the very instances the synchronisation side reads (in production both are one database).
+    /// </summary>
+    private async Task<MetaverseObject> NewAdministratorAsync()
+    {
+        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == EntityState.Modified).ToList())
+            entry.State = entry.Entity is SyncRule or SyncRuleMapping or SyncRuleMappingSource or ConnectedSystem
+                or ConnectedSystemObjectType or ConnectedSystemObjectTypeAttribute or ConnectedSystemRunProfile
+                ? EntityState.Unchanged
+                : EntityState.Detached;
+
+        var administrator = new MetaverseObject
+        {
+            Id = Guid.NewGuid(), Type = DbContext.MetaverseObjectTypes.First(), Created = DateTime.UtcNow, CachedDisplayName = "Test Administrator"
+        };
+        DbContext.MetaverseObjects.Add(administrator);
+        await DbContext.SaveChangesAsync();
+        return administrator;
     }
 
     private void AssertNoDisplayNameChangeQueued(Context ctx) =>
@@ -247,7 +361,18 @@ public class StalePendingExportLifecycleWorkflowTests : WorkflowTestBase
         Assert.That(PendingExportsFor(directory).SelectMany(pe => pe.AttributeValueChanges).Select(c => c.StringValue), Is.EqualTo(new[] { "Alicia" }),
             "arrange: the DisplayName change is queued for the account");
 
-        return new Context(hr, directory, hrCso, directoryCso, exportRule, displayNameMapping);
+        var administrator = await NewAdministratorAsync();
+
+        // The harness detaches what the synchronisations modified, the export rule included, so the DbContext and the
+        // in-memory synchronisation store would each hold their own copy of the rule. Load it back through the
+        // configuration side and hand that tracked instance to the synchronisation store too: one rule, as in
+        // production, where both read the same database.
+        var trackedExportRule = await Jim.ConnectedSystems.GetSyncRuleAsync(exportRule.Id)
+            ?? throw new InvalidOperationException("arrange: the export rule reloads");
+        SyncRepo.SeedSyncRule(trackedExportRule);
+        var trackedDisplayNameMapping = trackedExportRule.AttributeFlowRules.Single(m => m.Id == displayNameMapping.Id);
+
+        return new Context(hr, directory, hrCso, directoryCso, trackedExportRule, trackedDisplayNameMapping, administrator);
     }
 
     private static List<ConnectedSystemObjectTypeAttribute> Attributes() =>
