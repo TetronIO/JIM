@@ -143,7 +143,10 @@ services:
   jim.database:
     container_name: jim.database
     # Fully qualified: Podman refuses a short name like "postgres" unless the host defines an alias for it.
-    image: docker.io/library/postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    # JIM_DB_IMAGE is for air-gapped installations only. Docker's classic image store drops the registry digest when
+    # it loads the release bundle's image, so the pinned reference never resolves; the installer then checks the
+    # loaded image's ID against the one the bundle recorded and sets JIM_DB_IMAGE to that ID. Leave it unset otherwise.
+    image: ${JIM_DB_IMAGE:-docker.io/library/postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722}
     profiles:
       - with-db
     # PostgreSQL tuning - customise for your environment using https://pgtune.leopard.in.ua/
