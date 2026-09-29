@@ -238,6 +238,7 @@ public partial class SyncRepository
             // The only legitimate stamp is StampImportStateAsync, run after values commit (D7/D8).
             await writer.WriteNullAsync();
             await writer.WriteNullAsync();
+            await writer.WriteAsync(cso.DerivedInputChangePending, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();

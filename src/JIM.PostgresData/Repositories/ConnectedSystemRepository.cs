@@ -1450,6 +1450,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     // reference values are loaded; otherwise Pass 2 Attribute Flow would run against an empty attribute
                     // set. The flag is cleared once the object has been re-evaluated.
                     !cso.ScopeReviewPending &&
+                    // Likewise a CSO marked because a Metaverse-Derived Attribute Flow input changed in another
+                    // system's synchronisation (#1750): its own data is unchanged, but its derived flows must be
+                    // re-evaluated, so its attribute values must be loaded. Cleared once it has been processed.
+                    !cso.DerivedInputChangePending &&
                     (cso.LastUpdated == null ? cso.Created <= watermark : cso.LastUpdated.Value <= watermark);
 
                 if (isUnchanged)
@@ -1613,9 +1617,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
         // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         //
-        // We check BOTH Created AND LastUpdated because:
+        // We check Created, LastUpdated AND the derived-input mark because:
         // - Created > watermark: Captures newly created CSOs that haven't been modified yet
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
+        // - DerivedInputChangePending (#1750): an unchanged CSO whose Metaverse-Derived Attribute Flow input was
+        //   changed by another system's synchronisation; without it a delta would never re-derive the value.
+        //   Served by the partial index IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending.
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
         // must identity-fix with already-tracked instances from the Connected System/Synchronisation Rule queries.
@@ -1626,7 +1633,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
-                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
+                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
+                          cso.DerivedInputChangePending))
             .OrderBy(cso => cso.Id);
 
         // Get count with lightweight query (no includes)
@@ -1635,7 +1643,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             ?? await Repository.Database.ConnectedSystemObjects
                 .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId &&
                                   (cso.Created > modifiedSince ||
-                                   (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+                                   (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
+                                   cso.DerivedInputChangePending));
 
         // Keyset cursor (see ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync): delta sync deletes each
         // page's obsolete CSOs at the page boundary, so an OFFSET into the shrinking modified set skips rows. The
@@ -1913,12 +1922,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="modifiedSince">Only count CSOs where Created or LastUpdated is greater than this timestamp.</param>
     public async Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
-        // Count CSOs that are either newly created OR have been modified since the watermark.
-        // This ensures delta sync counts both new and updated objects.
+        // Count CSOs that are newly created, modified since the watermark, or marked for re-evaluation because a
+        // Metaverse-Derived Attribute Flow input changed elsewhere (#1750). Must match the page query exactly.
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
             cso.ConnectedSystemId == connectedSystemId &&
             (cso.Created > modifiedSince ||
-             (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+             (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
+             cso.DerivedInputChangePending));
     }
 
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
@@ -7773,6 +7783,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // The only legitimate stamp is StampImportStateAsync, run after values commit.
                 parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(cso.DerivedInputChangePending);
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
