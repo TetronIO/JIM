@@ -276,7 +276,7 @@ Each phase is a PR off `main`, TDD throughout, `dotnet build JIM.sln` and `dotne
 
 #### Phase 5: Metaverse-Derived Attribute Flows
 
-Delivered under its own PRD and issue (see header). Once landed: generated base expressions may read `mv["..."]`; `ResolveAsync` runs per level, interleaved with the derived pass; the #892 review processing runs the derived pass after generation.
+Delivered under its own PRD, issue and plan ([`../METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)). Once landed: generated base expressions may read `mv["..."]`; `ResolveAsync` runs per level, interleaved with the derived pass, in the hosting system's synchronisation. A value revised outside synchronisation (Phase 8's remediation) sets the derived-input mark on the hosting systems' Connected System Objects rather than re-deriving in the #892 review processing (decided 2026-09-29).
 
 #### Phase 6: Retired values register and Scenario 001 completion
 
