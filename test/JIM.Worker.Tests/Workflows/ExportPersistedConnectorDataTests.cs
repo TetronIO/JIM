@@ -93,6 +93,46 @@ public class ExportPersistedConnectorDataTests : WorkflowTestBase
             "A non-null CloseExportConnection return must be persisted even when the export run failed");
     }
 
+    /// <summary>
+    /// #1875: the export side of the same fault. <c>OpenExportConnection</c> was called outside the block that closes
+    /// the connection, so a connector that failed to connect was never closed and the state it returned at close (a
+    /// pin the failure invalidated) was never persisted.
+    /// </summary>
+    [Test]
+    public async Task Export_OpenExportConnectionFails_StillClosesTheConnectionAndPersistsItsCloseReturnAsync()
+    {
+        // Arrange
+        var connectedSystem = await CreateConnectedSystemAsync("Target System");
+        connectedSystem.PersistedConnectorData = "pinned-state";
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var displayNameAttr = csoType.Attributes.Single(a => a.Name == "DisplayName");
+        var cso = await CreateCsoAsync(connectedSystem.Id, csoType, "Original Name");
+        CreatePendingExport(connectedSystem, cso, displayNameAttr);
+
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Export", ConnectedSystemRunType.Export);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.Export);
+
+        var openFailure = new InvalidOperationException("simulated connection failure");
+        var connector = new MockCallConnector { OpenExportExceptionToThrow = openFailure };
+        connector.WithCloseExportConnectionReturnValue("pin-invalidated-state");
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+        var processor = new SyncExportTaskProcessor(
+            new SyncServer(Jim), SyncRepo, connector, connectedSystem, runProfile, workerTask,
+            new CancellationTokenSource());
+
+        // Act: the run still fails, on the open failure itself.
+        var thrown = Assert.ThrowsAsync<InvalidOperationException>(async () => await processor.PerformExportAsync());
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown, Is.SameAs(openFailure), "the open failure must be what fails the run");
+            Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("pin-invalidated-state"),
+                "the connection must be closed after a failed open, and what the connector returned at close persisted");
+        }
+    }
+
     [Test]
     public async Task Export_DoesNotPersist_WhenCloseExportConnectionReturnsNullAsync()
     {

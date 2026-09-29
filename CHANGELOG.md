@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 When a pinned domain controller stops answering, JIM now clears the pin as documented, so the next run re-discovers a domain controller instead of failing against the same unreachable one every time. (#1875)
 - 🐛 An import that fails after reading its changes no longer moves the Connected System's change watermark on, so the next Delta Import reads those changes again instead of silently skipping them. (#1868)
 - 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image by its pinned digest: the setup script checks the loaded image against the ID the bundle records and runs it by that ID. (#1854)
 - 🐛 Drift Correction now reverts an attribute edited in a Connected System whose import Attribute Flow reads a different attribute (a `displayName` edit where Display Name comes from `givenName` and `sn`), instead of leaving the two out of step. (#1864)
