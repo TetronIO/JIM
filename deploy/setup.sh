@@ -779,6 +779,45 @@ prepare_podman_account() {
     success "Enabled lingering for ${account}: JIM runs with nobody logged in, and starts at boot"
 }
 
+# Stops a rootless installation whose systemd manager would look for JIM in the wrong folders. The manager runs
+# Quadlet and Podman with its own environment, which takes settings made for every account (in /etc/environment,
+# say); a folder setting that points elsewhere leaves Quadlet generating no units from the ones this script
+# installs, or Podman using storage or a runtime folder that is not the account's, and JIM never starts.
+check_account_environment() {
+    [ -n "$PODMAN_ACCOUNT" ] && [ "$PODMAN_SYSTEMD" = "true" ] || return 0
+    local uid home
+    uid=$(id -u "$PODMAN_ACCOUNT")
+    home=$(account_home)
+
+    local environment
+    environment=$(jim_systemctl show-environment) \
+        || fatal "Could not read the environment of the systemd manager of ${PODMAN_ACCOUNT}. See: systemctl status user@${uid}.service"
+
+    local problems=() name expected actual
+    for name in XDG_CONFIG_HOME XDG_DATA_HOME XDG_RUNTIME_DIR; do
+        case "$name" in
+            XDG_CONFIG_HOME) expected="${home}/.config" ;;
+            XDG_DATA_HOME) expected="${home}/.local/share" ;;
+            XDG_RUNTIME_DIR) expected="/run/user/${uid}" ;;
+        esac
+        actual=$(printf '%s\n' "$environment" | sed -n "s/^${name}=//p" | tail -n 1)
+        if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
+            problems+=("${name}=${actual}, where JIM needs ${expected} or nothing")
+        fi
+    done
+    [ "${#problems[@]}" -eq 0 ] && return 0
+
+    error "The systemd manager of ${PODMAN_ACCOUNT}, which runs JIM, has folder settings meant for another account:"
+    local problem
+    for problem in "${problems[@]}"; do
+        error "  ${problem}"
+    done
+    error "They are usually set for every account in /etc/environment, /etc/environment.d/ or"
+    error "/etc/security/pam_env.conf, or for ${PODMAN_ACCOUNT} alone in ${home}/.config/environment.d/. Remove them,"
+    error "or limit them to the accounts they are meant for, then run: systemctl restart user@${uid}.service"
+    fatal "Then run this again. Or run JIM as root, which they do not affect: leave out --rootless."
+}
+
 # Runs a command as the account that runs JIM: that account's Podman sees JIM's images, secrets and containers.
 as_jim_account() {
     if [ -z "$PODMAN_ACCOUNT" ] || [ "$(id -un)" = "$PODMAN_ACCOUNT" ]; then
@@ -2059,6 +2098,7 @@ main() {
     if [ "$RUNTIME" = "podman" ]; then
         choose_podman_account "$install_dir"
         prepare_podman_account
+        check_account_environment
     fi
 
     if [ -n "$BUNDLE_DIR" ]; then
@@ -2130,4 +2170,7 @@ main() {
     fi
 }
 
-main "$@"
+# Run, it installs JIM; sourced, as its tests do, it only defines its functions.
+if ! (return 0 2>/dev/null); then
+    main "$@"
+fi
