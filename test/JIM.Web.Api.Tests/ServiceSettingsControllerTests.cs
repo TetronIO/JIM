@@ -11,6 +11,7 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using Microsoft.AspNetCore.Http;
@@ -81,6 +82,29 @@ public class ServiceSettingsControllerTests
     public void TearDown()
     {
         _application?.Dispose();
+    }
+
+    /// <summary>
+    /// Re-authenticates the controller as a signed-in (JWT) user and wires the SSO claim lookup so
+    /// GetCurrentUserAsync resolves that user to a Metaverse Object.
+    /// </summary>
+    private MetaverseObject AuthenticateAsInteractiveUser()
+    {
+        var metaverseRepo = new Mock<IMetaverseRepository>();
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
+        var ssoAttribute = new MetaverseAttribute { Id = 1, Name = "SsoId" };
+        _mockServiceSettingsRepo.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync(new ServiceSettings
+        {
+            SSOUniqueIdentifierClaimType = "sub",
+            SSOUniqueIdentifierMetaverseAttribute = ssoAttribute
+        });
+        var userType = new MetaverseObjectType { Id = 1, Name = "User" };
+        metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(It.IsAny<string>(), false, It.IsAny<bool>())).ReturnsAsync(userType);
+        var user = new MetaverseObject { Id = Guid.NewGuid(), Type = userType, CachedDisplayName = "Admin User" };
+        metaverseRepo.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(userType, ssoAttribute, It.IsAny<string>())).ReturnsAsync(user);
+        var identity = new ClaimsIdentity(new List<Claim> { new("sub", user.Id.ToString()), new(ClaimTypes.Name, "Admin User") }, "TestAuth");
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } };
+        return user;
     }
 
     #region GetAllAsync tests
@@ -299,6 +323,32 @@ public class ServiceSettingsControllerTests
         Assert.That(dto.IsOverridden, Is.True);
     }
 
+    [Test]
+    public async Task UpdateAsync_InteractiveUser_RecordsTheUserAndReturnsOkAsync()
+    {
+        // A signed-in administrator calling the REST API (JWT, not an API key) is resolved to their Metaverse Object,
+        // so the change is attributed to them rather than refused for having no initiator.
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync("Test.Setting")).ReturnsAsync(new ServiceSetting
+        {
+            Key = "Test.Setting",
+            DisplayName = "Test",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false
+        });
+        _mockServiceSettingsRepo.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>())).Returns(Task.CompletedTask);
+        var user = AuthenticateAsInteractiveUser();
+        Activity? recorded = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Callback<Activity>(a => recorded = a).Returns(Task.CompletedTask);
+
+        var result = await _controller.UpdateAsync("Test.Setting", new ServiceSettingUpdateRequestDto { Value = "false" });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>(), () => System.Text.Json.JsonSerializer.Serialize((result as ObjectResult)?.Value));
+        Assert.That(recorded?.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+        Assert.That(recorded?.InitiatedById, Is.EqualTo(user.Id));
+    }
+
     #endregion
 
     #region RevertAsync tests
@@ -354,6 +404,33 @@ public class ServiceSettingsControllerTests
         var result = await _controller.RevertAsync("SSO.Authority");
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task RevertAsync_InteractiveUser_RecordsTheUserAndReturnsOkAsync()
+    {
+        // A signed-in administrator calling the REST API (JWT, not an API key) is resolved to their Metaverse Object,
+        // so the revert is attributed to them rather than refused for having no initiator.
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync("Test.Setting")).ReturnsAsync(new ServiceSetting
+        {
+            Key = "Test.Setting",
+            DisplayName = "Test",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            Value = "false",
+            IsReadOnly = false
+        });
+        _mockServiceSettingsRepo.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>())).Returns(Task.CompletedTask);
+        var user = AuthenticateAsInteractiveUser();
+        Activity? recorded = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Callback<Activity>(a => recorded = a).Returns(Task.CompletedTask);
+
+        var result = await _controller.RevertAsync("Test.Setting");
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>(), () => System.Text.Json.JsonSerializer.Serialize((result as ObjectResult)?.Value));
+        Assert.That(recorded?.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+        Assert.That(recorded?.InitiatedById, Is.EqualTo(user.Id));
     }
 
     #endregion
