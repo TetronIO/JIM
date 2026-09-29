@@ -68,8 +68,8 @@ $IntendedDifferences = @(
         Reason = 'Settings of the Compose files themselves (the images and the published port), which env_file also passes into the containers, where nothing reads them. The pod files name the images, and jim.kube publishes the port.'
     }
     @{
-        Service = 'database'; Property = 'environment variable'; On = 'Docker'; Values = @('JIM_*', 'DOCKER_REGISTRY')
-        Reason = 'Docker Compose''s env_file passes the whole .env into the database container too, and PostgreSQL reads none of it; the Podman database pod is given only its own settings. To be removed with #1862.'
+        Service = 'database'; Property = 'environment variable'; On = 'Podman'; Values = @('JIM_DB_LOG_MIN_DURATION')
+        Reason = 'The database pod''s command reads the slow query threshold from its environment; Compose puts it into the command itself.'
     }
     @{
         Service = 'web'; Property = 'mount'; On = 'Docker'; Values = @('/run/jim-tls/tls.crt', '/run/jim-tls/tls.key')

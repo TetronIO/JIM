@@ -361,11 +361,11 @@ Delivered as one PR: the files, the installer, the release and the documentation
    - Compose's own settings, which `env_file` also passes into the containers;
    - the certificate, mounted as two files on Docker and as a secret folder on Podman;
    - the database's default capabilities, where Docker's set is larger;
-   - the whole `.env` in Docker's database container (below).
+   - the slow query threshold, which Podman's database command reads from its environment and Compose puts into the command itself.
 
    **Found on its first run:**
    - `.env.example` set `JIM_SSO_VALID_ISSUERS` to the development Keycloak's issuer, so every Docker installation trusted that issuer too. Fixed in this phase: the value moved into `docker-compose.override.yml`.
-   - Docker Compose's `env_file` gives the database container every JIM setting and secret, which it never needed ([#1862](https://github.com/TetronIO/JIM/issues/1862)). It is listed as intended until that is fixed.
+   - Docker Compose's `env_file` gave the database container every JIM setting and secret, which it never needed ([#1862](https://github.com/TetronIO/JIM/issues/1862)). Fixed after this phase: the service no longer has `env_file`, and the parity check now fails if JIM's settings come back. `test/ci/deployment/Tests/ComposeFiles.Tests.ps1` also checks the rendered Compose files on every pull request.
 
    **Found on GitHub's Ubuntu runner (Podman 4.9), and fixed in this phase:**
    - **Rootful JIM on Ubuntu 24.04 had no network at all.** Ubuntu gives `crun` and `podman` AppArmor profiles of their own; a container that sets no-new-privileges cannot leave them for `containers-default`, so AppArmor stacks the two (`containers-default//&crun`), and the stack denies every socket (`failed af match`). JIM reached neither PostgreSQL nor its identity provider, while its health checks stayed green: the worker was deliberately waiting. Rootless Podman, Docker and RHEL are unaffected. `setup.sh` now offers, as it does for the firewall, to add a network rule to each profile's local override in `/etc/apparmor.d/local/`; the container keeps its own profile. Removing the two profiles instead was measured and rejected: it breaks rootless Podman for every account on the host.

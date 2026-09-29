@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔒 The setup script makes `.env`, which holds the database password and the identity provider's client secret, readable by its owner only. (#1808)
 - 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
+- 🔒 On Docker, the bundled database container no longer receives JIM's settings and secrets, such as the identity provider's client secret, which PostgreSQL never used. (#1862)
 
 ### Performance
 
