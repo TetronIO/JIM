@@ -105,21 +105,15 @@ public partial class ConnectedSystemServer
     // A configuration change can take away the reason a queued Pending Export change exists: an export Synchronisation
     // Rule or Attribute Flow disabled, removed or deleted. Withdrawing those changes as the change is saved keeps the
     // Pending Exports page truthful at once, rather than until the next export (which runs the same check first, as the
-    // backstop). Import rules queue nothing, so they are passed over.
-    private async Task WithdrawQueuedExportChangesAsync(SyncRule syncRule)
-    {
-        var connectedSystemId = syncRule.ConnectedSystem?.Id ?? syncRule.ConnectedSystemId;
-        if (syncRule.Direction != SyncRuleDirection.Export || connectedSystemId <= 0)
-            return;
-
-        await Application.ExportExecution.WithdrawQueuedChangesWithoutAuthorityAsync(connectedSystemId, syncRule.ConnectedSystem?.Name);
-    }
+    // backstop). It runs for every rule save, import rules included, and deliberately takes no cue from the rule the
+    // caller handed over (its direction, say): the check re-reads the Connected System's rules and queue from the
+    // database and decides from those alone, so an import rule's system simply has nothing to withdraw.
+    private Task WithdrawQueuedExportChangesAsync(SyncRule syncRule) =>
+        Application.ExportExecution.WithdrawQueuedChangesWithoutAuthorityAsync(
+            syncRule.ConnectedSystem?.Id ?? syncRule.ConnectedSystemId, syncRule.ConnectedSystem?.Name);
 
     private async Task WithdrawQueuedExportChangesAsync(int syncRuleId)
     {
-        if (syncRuleId <= 0)
-            return;
-
         var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (rule != null)
             await WithdrawQueuedExportChangesAsync(rule);
@@ -2548,9 +2542,9 @@ public partial class ConnectedSystemServer
                 await RecordSyncRuleDisableActivityAsync(rule, connectedSystem, refreshActivity, initiatedBy, initiatedByApiKey);
         }
 
-        // Changes queued by the export rules and Attribute Flows just disabled have nothing left to authorise them.
-        if (dependents.InvalidatedSyncRules.Count > 0 || mappingsToDisable.Count > 0)
-            await Application.ExportExecution.WithdrawQueuedChangesWithoutAuthorityAsync(connectedSystem.Id, connectedSystem.Name);
+        // Changes queued by the export rules and Attribute Flows just disabled have nothing left to authorise them. The
+        // check decides from the database alone, so it runs whatever the plan named.
+        await Application.ExportExecution.WithdrawQueuedChangesWithoutAuthorityAsync(connectedSystem.Id, connectedSystem.Name);
     }
 
     private static void StampUpdated(IAuditable entity, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
