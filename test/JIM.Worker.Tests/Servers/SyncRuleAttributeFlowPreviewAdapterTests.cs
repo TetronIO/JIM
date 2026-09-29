@@ -605,14 +605,51 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
-    public async Task ValidateAsync_FeatureOff_ReportsNoDerivedFlowFindingsAsync()
+    public async Task ValidateAsync_FeatureOffAndProposalNewlyReadsTheMetaverse_BlocksAsTheSaveWouldAsync()
     {
+        // With the flag off, saving an import mapping that newly reads mv["..."] is refused with FeatureDisabledException
+        // (plan Phase 1); the preview predicts that refusal rather than previewing a save that cannot happen.
         GivenADerivedFlowOnAnotherSystem(OtherSystemRuleId, "Directory Import", OtherSystemId, _mvAlternateEmail, "mv[\"Email\"] + \".alt\"");
 
         var findings = await NewAdapterWithFeatureOff().ValidateAsync(Context(ProposalWithExpression("mv[\"Alternate Email\"]", MissingInputBehaviour.EvaluateAnyway)));
 
-        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty,
-            "the flag off leaves the preview exactly as it was: no graph, no derived flow findings");
+        var blocking = findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).ToList();
+        Assert.That(blocking, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(blocking[0].Message, Is.EqualTo(
+                "The 'Metaverse-Derived Attribute Flows' feature is currently disabled. The proposal makes the Attribute Flow " +
+                "to 'Email' read Metaverse attributes, so saving it would be refused until the feature is enabled."));
+            Assert.That(blocking[0].MetaverseAttributeName, Is.EqualTo("Email"));
+        }
+        _connectedSystemRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never,
+            "the flag off assesses nothing else: no graph, no other findings");
+    }
+
+    [Test]
+    public async Task ValidateAsync_FeatureOffAndTheMappingAlreadyReadTheMetaverse_DoesNotBlockAsync()
+    {
+        // The gate refuses only a mapping that NEWLY reads mv: editing one that already did (saved while the flag was on)
+        // is allowed, so the preview must not block it.
+        var stored = _rule.AttributeFlowRules.Single();
+        stored.Sources.Clear();
+        stored.Sources.Add(new SyncRuleMappingSource { Id = MappingId, Order = 1, Expression = "mv[\"Alternate Email\"]" });
+
+        var findings = await NewAdapterWithFeatureOff().ValidateAsync(Context(ProposalWithExpression("mv[\"Alternate Email\"] + \".x\"", MissingInputBehaviour.EvaluateAnyway)));
+
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
+    }
+
+    [Test]
+    public async Task ValidateAsync_FeatureOffAndNoProposedMappingReadsTheMetaverse_ReadsNothingAndAddsNothingAsync()
+    {
+        GivenADerivedFlowOnAnotherSystem(OtherSystemRuleId, "Directory Import", OtherSystemId, _mvAlternateEmail, "mv[\"Email\"] + \".alt\"");
+
+        var findings = await NewAdapterWithFeatureOff().ValidateAsync(Context(new SyncRuleAttributeFlowProposal([])));
+
+        Assert.That(findings.Where(f => f.Message.Contains("feature is currently disabled", StringComparison.Ordinal)
+            || f.Message.Contains("missing an input", StringComparison.Ordinal)), Is.Empty,
+            "the flag off leaves the preview exactly as it was");
         _connectedSystemRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never,
             "and reads nothing to find out");
     }

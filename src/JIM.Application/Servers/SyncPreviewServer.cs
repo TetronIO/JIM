@@ -915,7 +915,7 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                    Detail = missingInputEx.Message + DescribeDerivedHost(missingInputEx.SyncRuleName),
+                    Detail = missingInputEx.DescribeForAdministrator(),
                     SyncRuleId = FindHostingRule(inScopeRules, missingInputEx.SyncRuleName)?.Id,
                     SyncRuleName = missingInputEx.SyncRuleName,
                     ConnectedSystemId = context.ConnectedSystemId,

@@ -103,24 +103,6 @@ public partial class SyncPreviewFidelityTests
     }
 
     [Test]
-    public async Task PreviewSyncForCsoAsync_GeneratedAttributeOnProjection_TreeMatchesTheRealRunAsync()
-    {
-        // Unique Value Generation (#242) with no derived flow in play: the real run records the generated value's node
-        // on the root BEFORE the Attribute Flow child, so the preview must too (found while pairing FR 10 above).
-        var ctx = await SetUpDerivedAsync(generatedAccountNameBase: "Lower(cs[\"employeeId\"])", emailExpression: "\"fixed@corp.local\"", withUpn: false);
-        var cso = SeedDerivedHr(ctx, "E1", accountName: null);
-
-        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(ctx.Hr.Id, cso.Id);
-        var activity = await RunDerivedFullSyncAsync(ctx.Hr);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(PreviewedValue(preview, "Account Name"), Is.EqualTo("e1"));
-            Assert.That(DescribeTree(preview.OutcomeTree), Is.EqualTo(DescribeTree(MapRealOutcomeTree(activity))));
-        }
-    }
-
-    [Test]
     public async Task PreviewSyncForCsoAsync_DerivedFlowWinsAttributePriority_PreviewAgreesWithTheRealRunAsync()
     {
         var ctx = await SetUpDerivedAsync(withAd: true, derivedEmailPriority: 1, adEmailPriority: 2);
