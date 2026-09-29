@@ -125,7 +125,7 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
             if (apiKey != null)
                 await _application.ServiceSettings.UpdateSettingValueAsync(key, request.Value, apiKey, request.ChangeReason);
             else
-                await _application.ServiceSettings.UpdateSettingValueAsync(key, request.Value, (JIM.Models.Core.MetaverseObject?)null, request.ChangeReason);
+                await _application.ServiceSettings.UpdateSettingValueAsync(key, request.Value, await GetCurrentUserAsync(), request.ChangeReason);
         }
         catch (InvalidOperationException ex)
         {
@@ -178,7 +178,7 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
             if (apiKey != null)
                 await _application.ServiceSettings.RevertSettingToDefaultAsync(key, apiKey, changeReason);
             else
-                await _application.ServiceSettings.RevertSettingToDefaultAsync(key, (JIM.Models.Core.MetaverseObject?)null, changeReason);
+                await _application.ServiceSettings.RevertSettingToDefaultAsync(key, await GetCurrentUserAsync(), changeReason);
         }
         catch (InvalidOperationException ex)
         {

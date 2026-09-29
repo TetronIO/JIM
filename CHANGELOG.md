@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 A group with more members than Active Directory returns in one read (MaxValRange, 1,500 by default) now imports with every member, instead of failing as a configuration error naming `member;range=0-1499`. (#1853)
 - 🐛 Schema, container and domain controller discovery on Active Directory now read page by page, so a forest with more attributes, organisational units or domain controllers than MaxPageSize (1,000 by default) no longer fails with "size limit exceeded". (#1853)
+- 🐛 A signed-in administrator can now update or revert a Service Setting through the REST API (`PUT`/`DELETE api/v1/service-settings/{key}`); the change is attributed to them instead of being refused with a misleading 400. API key callers and the portal were unaffected. (#1802)
 - 🐛 A queued Pending Export change is withdrawn, not exported, once its reason has gone: its export Attribute Flow or Synchronisation Rule was disabled, removed or deleted (withdrawn on save), or the object left scope with the Disconnect action (withdrawn at the next export).
 - 🐛 A queued Pending Export change is withdrawn once the Connected System already holds the value the Metaverse wants (for example, a value changed and changed back before an export), instead of being exported and overwriting the correct value.
 - 🐛 A Run Profile execution that fails while saving its changes to the database is now recorded as failed, with its error, instead of Complete. (#1874)
