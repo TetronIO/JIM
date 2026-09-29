@@ -101,37 +101,24 @@ public class SynchronisationControllerClearTests
     }
 
     /// <summary>
-    /// Authenticates the controller as an interactive user, wiring up the SSO claim-to-Metaverse-Object
-    /// resolution that <c>GetCurrentUserAsync</c> depends on.
+    /// Authenticates the controller as an interactive user, shaped as the bearer pipeline leaves it: the token's
+    /// identity plus JIM's own identity carrying the resolved Metaverse Object id that <c>GetCurrentUserAsync</c> reads.
     /// </summary>
     private MetaverseObject SetUpUserAuthentication(Guid userId, string userName)
     {
-        var ssoAttribute = new MetaverseAttribute { Id = 1, Name = "SsoId" };
-        _mockServiceSettingsRepo.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync(new ServiceSettings
-        {
-            SSOUniqueIdentifierClaimType = "sub",
-            SSOUniqueIdentifierMetaverseAttribute = ssoAttribute
-        });
-
-        var userType = new MetaverseObjectType { Id = 1, Name = "User" };
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(It.IsAny<string>(), false, It.IsAny<bool>()))
-            .ReturnsAsync(userType);
-
-        var user = new MetaverseObject { Id = userId, Type = userType };
+        var user = new MetaverseObject { Id = userId, Type = new MetaverseObjectType { Id = 1, Name = "User" } };
         // NameOrId falls back to Id.ToString() when Name is unset; the test only needs it to round-trip.
-        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(userType, ssoAttribute, It.IsAny<string>()))
-            .ReturnsAsync(user);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectAsync(userId)).ReturnsAsync(user);
 
-        var claims = new List<Claim>
+        var tokenIdentity = new ClaimsIdentity(new List<Claim>
         {
-            new Claim("sub", userId.ToString()),
+            new Claim("sub", "idp-subject"),
             new Claim(ClaimTypes.Name, userName)
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
+        }, "TestAuth");
+        var jimIdentity = new ClaimsIdentity(new List<Claim> { new Claim(Constants.BuiltInClaims.MetaverseObjectId, userId.ToString()) });
         _controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext { User = principal }
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new[] { tokenIdentity, jimIdentity }) }
         };
 
         return user;
