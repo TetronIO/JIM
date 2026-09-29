@@ -102,12 +102,23 @@ public static class DerivedFlowValidator
     /// </summary>
     private static string DescribeCycle(DerivedFlowCycle cycle, HashSet<SyncRuleMapping> proposed)
     {
+        var startIndex = cycle.Members.ToList().FindIndex(member => proposed.Contains(member.Mapping));
+        return "Saving would create a dependency cycle: " + DescribeCyclePath(cycle, Math.Max(startIndex, 0));
+    }
+
+    /// <summary>
+    /// "A (Synchronisation Rule 'R1') reads B, which (Synchronisation Rule 'R2') reads A.", naming every attribute and
+    /// Synchronisation Rule on <paramref name="cycle"/>, read from the member at <paramref name="startIndex"/>, followed
+    /// by any further flows caught in the same knot of dependencies. Shared by save-time validation and the run-start
+    /// refusal (<see cref="DerivedFlowGraphFactory"/>), so a cycle reads the same wherever it is reported.
+    /// </summary>
+    internal static string DescribeCyclePath(DerivedFlowCycle cycle, int startIndex = 0)
+    {
         var members = cycle.Members;
-        var startIndex = members.ToList().FindIndex(member => proposed.Contains(member.Mapping));
         if (startIndex > 0)
             members = members.Skip(startIndex).Concat(members.Take(startIndex)).ToList();
 
-        var message = new StringBuilder("Saving would create a dependency cycle: ");
+        var message = new StringBuilder();
         message.Append($"{members[0].MetaverseAttributeName} (Synchronisation Rule '{members[0].SyncRule.Name}') reads {members[0].ReadsMetaverseAttributeName}");
         foreach (var member in members.Skip(1))
             message.Append($", which (Synchronisation Rule '{member.SyncRule.Name}') reads {member.ReadsMetaverseAttributeName}");

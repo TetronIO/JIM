@@ -1,6 +1,6 @@
 # Metaverse-Derived Attribute Flows
 
-- **Status:** Doing (Phases 0 and 1 delivered)
+- **Status:** Doing (Phases 0 to 2 delivered)
 - **Issue:** [#1750](https://github.com/TetronIO/JIM/issues/1750)
 - **PRD:** [`../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
 - **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (release 2 depends on this plan; see [`UNIQUE_VALUE_GENERATION.md`](UNIQUE_VALUE_GENERATION.md) decision 7 and Phases 5 and 6), [#1864](https://github.com/TetronIO/JIM/issues/1864) drift contributor fix (the bottom layer of this stack), [#1861](https://github.com/TetronIO/JIM/issues/1861) Reference inputs (deferred), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler, [#1781](https://github.com/TetronIO/JIM/issues/1781) feature flags, [#614](https://github.com/TetronIO/JIM/issues/614) internally managed Metaverse Objects
@@ -155,7 +155,17 @@ Delivered by [#1872](https://github.com/TetronIO/JIM/pull/1872) (2026-09-29), as
 3. Wire validation and `EnsureDerivedFlowAllowedAsync` into the `ConnectedSystemServer` mapping paths; validation loads all import rules of the Metaverse Object Type and substitutes the proposal.
 4. Tests: graph per type, levels, tie-break, generated mapping as a node, case-insensitive names, unknown name, self-reference, two-rule cycle with either rule saved (Scenario 3), three-node cycle message, disabled mapping included in validation and excluded at run time, permutation yields identical levels (FR 4), Reference rejection, non-repeatable warning; server tests on every path; API 400 and warning tests; Pester tests asserting the same text; flag-off refusal.
 
-### Phase 2: The derived pass in the engine
+### Phase 2: The derived pass in the engine ✅
+
+**Delivered (2026-09-29), with these specifics the plan left open.**
+- The engine API is on `ISyncEngine`: `EvaluateDerivedLevel(cso, level, syncRules, objectTypes, evaluator, priorityContext)` returns the level's `AttributeFlowError`s (as `FlowInboundAttributes` does) rather than filling an `errors` argument, and takes the Connected System Object rather than the Metaverse Object, since `ProcessMapping` needs both. `EvaluateDerivedLevels` runs levels 1 to `MaxLevel` with nothing in between, for callers that do not interleave generation; it is a no-op when the context has no graph, whereas `EvaluateDerivedLevel` throws `ArgumentException` without one (a caller evaluating a level it has no graph for is a bug).
+- The derived mappings of a level are taken from the graph in canonical order and matched to the caller's own in-scope rule and mapping instances (by reference, else persisted id). An in-scope rule the graph says hosts a derived mapping it does not hold as an enabled mapping throws `InvalidOperationException`: graph and rules built from different configuration.
+- The effective dictionary is built once per level, when the level starts: a mapping reads only lower levels, never its own.
+- `BuildAttributeDictionary` was split so the persisted and effective dictionaries share one builder (keys, typing, `NullValue` exclusion, last value of a multi-valued attribute). `DriftDetectionService` keeps its own copy, untouched.
+- Missing inputs, when a Metaverse view is supplied, are the Connected System side's then the Metaverse side's, in accessor form. Without one (the ordinary pass, and the flag off) only the Connected System side counts, as before.
+- The factory throws `DerivedFlowCycleException : InvalidOperationException`, carrying the cycles and a message naming the Metaverse Object Type and every attribute and Synchronisation Rule on each (the wording is shared with save-time validation through `DerivedFlowValidator.DescribeCyclePath`). It reads the flag through `FeatureFlagServer`, so a caller passes its unit of work's `jim.FeatureFlags`.
+- The reference-only pass needed the skip for a reason worth recording: `ProcessMapping` evaluates expression sources in every pass, the reference-only one included, so without it a derived flow would have been evaluated there too, with no Metaverse view.
+- Re-election needed no change of its own: `ContributorReElectionService` re-flows survivors through `FlowInboundAttributes` with the run's priority context, so the skip applies there. A test pins it.
 
 1. `DerivedFlowGraphFactory`; graph on `AttributePriorityContext`; `FlowInboundAttributes` skips derived mappings when a graph is present.
 2. `BuildEffectiveAttributeDictionary`; `EvaluateExpressionSource` takes the `mv` dictionary and applies Missing Input Behaviour to both sides; `ProcessGeneratedMapping` accepts it.
