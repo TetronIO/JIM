@@ -701,8 +701,12 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | `Analyze (actions)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of GitHub Actions workflows |
 | `Analyze (csharp)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of C# code |
 | `Analyze (javascript-typescript)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of JavaScript/TypeScript code |
+| `database-tests` | CI workflow | The `RequiresPostgres` NUnit tier against a real PostgreSQL server |
+| `ldaps-tests` | CI workflow | The `RequiresLdaps` NUnit tier against real directory servers over TLS |
+| `deployment-boot` | CI workflow | JIM installed from a release bundle built from the commit, with its own installer, on Docker, rootful Podman and rootless Podman, and what the runtimes run compared (see `engineering/TESTING_STRATEGY.md` > Deployment Boot Tests) |
+| `changelog-lint` | Changelog lint workflow (`.github/workflows/changelog-lint.yml`) | Changelog entries, docs coupling for user-facing entries, and PowerShell documentation examples |
 
-**Informational checks:** `deployment-boot` (CI workflow) installs JIM from a release bundle built from the commit, with its own installer, on Docker, rootful Podman and rootless Podman, and compares what the runtimes run (see `engineering/TESTING_STRATEGY.md` > Deployment Boot Tests). It joins the required checks once it has passed ten consecutive runs.
+The ruleset itself is the authority; `gh api repos/TetronIO/JIM/rulesets/12062449 --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'` lists what it requires.
 
 **Why `scan-base-images-summary` exists:** the `scan-images` job uses a dynamic matrix generated from the production Dockerfiles, and matrix leg names are unsuitable as required status checks (a leg appears or disappears with the Dockerfiles, and the original base-image matrix embedded digests that changed with every bump). The summary job aggregates all matrix legs into a single stable check name. The name predates the move from scanning base images to scanning the built JIM images and is kept because the ruleset names it.
 

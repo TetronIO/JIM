@@ -314,7 +314,7 @@ Beside the five tiers, which test JIM's code, one check tests how JIM is deploye
 
 **Running it locally**: each leg needs a host where it may create an account, change a sysctl and take port 443, so it is meant for CI's throwaway runners. For a leg on a test host, build a bundle, start `Start-TestIdentityProvider.ps1`, and run `Invoke-DeploymentBoot.ps1` with `-KeepRunning` to look around afterwards.
 
-**Status**: informational until it has passed ten consecutive runs, then a required check (plan D6 in `engineering/plans/doing/PODMAN_SUPPORT.md`).
+**Status**: a required check on `main` since 2026-09-29, after 40 green runs and none failed (plan D6 in `engineering/plans/doing/PODMAN_SUPPORT.md`). It pulls Keycloak from quay.io and PostgreSQL from Docker Hub on every run, so an outage at either blocks merges while it lasts; an administrator can take it out of the ruleset for the duration.
 
 ## The Watermark Bug: A Case Study
 
