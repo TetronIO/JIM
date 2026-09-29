@@ -1,6 +1,6 @@
 # Podman Support
 
-- **Status:** Doing (plan Phases 1 to 3 complete: start-up and cleanup, HTTPS by default, and the Podman path; Phase 4, proof in CI, remains)
+- **Status:** Doing (plan Phases 1 to 3 complete, and Phase 4's CI check in place; the check becoming required, and the RHEL acceptance run, remain)
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
@@ -218,7 +218,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 ### Phase 3: verification and documentation
 
-- [ ] CI boots both paths from freshly built images on every pull request and waits for readiness
+- [x] CI boots both paths from freshly built images on every pull request and waits for readiness (`deployment-boot`, through the installer and the release bundle; becomes a required check after ten consecutive passes, per plan D6)
 - [x] Every page in the Documentation Impact table updated
 - [x] Changelog entry for Podman support
 
