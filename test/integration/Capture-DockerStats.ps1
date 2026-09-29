@@ -24,13 +24,20 @@
     PID of the launching process. When supplied, the sampler exits on its own once that
     process no longer exists, so a crashed or hard-killed runner cannot leak a sampler
     that appends to the CSV forever (#918). 0 (the default) disables the check.
+
+.PARAMETER Containers
+    Comma-separated container names to record. Empty (the default) records every container on the
+    host. A -Parallel lane passes its own containers so its CSV describes its own stack only (#636).
 #>
 
 param(
     [Parameter(Mandatory = $true)][string]$OutputPath,
     [int]$IntervalSeconds = 2,
-    [int]$ParentPid = 0
+    [int]$ParentPid = 0,
+    [string]$Containers = ''
 )
+
+$containerFilter = @($Containers -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 $ErrorActionPreference = 'Continue'
 
@@ -95,6 +102,7 @@ while ($true) {
             if ($parts.Length -lt 7) { continue }
 
             $container = $parts[0]
+            if ($containerFilter.Count -gt 0 -and $containerFilter -notcontains $container.Trim()) { continue }
             $cpuPerc = ($parts[1] -replace '%', '').Trim()
             $memParts = $parts[2] -split '/'
             $memUsage = if ($memParts.Length -ge 1) { ConvertTo-Bytes $memParts[0] } else { 0 }

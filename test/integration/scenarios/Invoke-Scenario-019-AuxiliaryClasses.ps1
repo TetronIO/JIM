@@ -108,7 +108,7 @@ param(
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -575,7 +575,7 @@ try {
 
         # The header DTO does not carry the message, so read it where it is stored, per the established
         # psql pattern for state the API does not expose (see Assert-MvoAttributeValue's history).
-        $refusalMessage = docker exec jim.database psql -U jim -d jim -t -A -c "SELECT ""ErrorMessage"" FROM ""ActivityRunProfileExecutionItems"" WHERE ""ActivityId"" = '$($exportResult.activityId)' AND ""ErrorMessage"" IS NOT NULL LIMIT 1;"
+        $refusalMessage = docker exec (Get-IntegrationLane).DatabaseContainer psql -U jim -d jim -t -A -c "SELECT ""ErrorMessage"" FROM ""ActivityRunProfileExecutionItems"" WHERE ""ActivityId"" = '$($exportResult.activityId)' AND ""ErrorMessage"" IS NOT NULL LIMIT 1;"
         Assert-Condition -Condition ("$refusalMessage" -match 'jimBadgeNumber') `
             -Message "The refusal names the missing attribute (jimBadgeNumber)"
         Assert-Condition -Condition ("$refusalMessage" -match 'jimBadgeHolder') `

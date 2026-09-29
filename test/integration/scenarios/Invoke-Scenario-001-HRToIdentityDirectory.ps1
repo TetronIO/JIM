@@ -60,7 +60,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -352,7 +352,7 @@ try {
     # NOTE: This is necessary even after database reset because CSV files persist
     # on the host filesystem and are mounted into containers.
     Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$(Get-IntegrationTestDataPath)"
     Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
     # Clean up test-specific directory users from previous test runs
@@ -532,9 +532,9 @@ try {
         # and once before Training Full Import (the specific read that failed in
         # the 08:47:22 Scale100k50Groups incident). See Assert-ConnectorVolumeCsvParity.
         $csvParityPairs = @(
-            @{ HostPath = "$PSScriptRoot/../../test-data/hr-users.csv";         ContainerPath = '/connector-files/test-data/hr-users.csv' }
-            @{ HostPath = "$PSScriptRoot/../../test-data/training-records.csv"; ContainerPath = '/connector-files/test-data/training-records.csv' }
-            @{ HostPath = "$PSScriptRoot/../../test-data/departments.csv";      ContainerPath = '/connector-files/test-data/departments.csv' }
+            @{ HostPath = "$(Get-IntegrationTestDataPath)/hr-users.csv";         ContainerPath = '/connector-files/test-data/hr-users.csv' }
+            @{ HostPath = "$(Get-IntegrationTestDataPath)/training-records.csv"; ContainerPath = '/connector-files/test-data/training-records.csv' }
+            @{ HostPath = "$(Get-IntegrationTestDataPath)/departments.csv";      ContainerPath = '/connector-files/test-data/departments.csv' }
         )
 
         # Parity probe: confirm the volume still has the files we seeded at setup.
@@ -772,7 +772,7 @@ try {
         # Update CSV - change the first user's title (user provisioned in Joiner test)
         # NOTE: We change Title (not Department) because Department now affects DN/OU placement.
         # This test validates simple attribute updates that don't trigger DN changes.
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Parse CSV properly to update the correct column
         # CSV columns: employeeId,firstName,lastName,email,department,title,company,samAccountName,displayName,status,userPrincipalName,employeeType,employeeEndDate
@@ -837,7 +837,7 @@ try {
 
         # The DN is computed from displayName: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=..."
         # So changing firstName in CSV will change displayName, which changes DN
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Parse CSV properly to update the correct columns
         $csv = Import-Csv $csvPath
@@ -918,7 +918,7 @@ try {
         # The DN is computed from Department: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=panoply,DC=local"
         # User at index 1 is assigned to Marketing department (1 % 12 = 1)
         # This should trigger an LDAP move to OU=Finance
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Parse CSV properly to update the correct column
         $csv = Import-Csv $csvPath
@@ -1012,7 +1012,7 @@ try {
 
         # Update the status field to "Archived" - this will set the ACCOUNTDISABLE bit via DisableUser()
         # The expression is: IIF(Eq(mv["Status"], "Archived"), DisableUser(cs["userAccountControl"]), EnableUser(cs["userAccountControl"]))
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         $csv = Import-Csv $csvPath
         $targetUser = $csv | Where-Object { $_.samAccountName -eq $disableSamAccountName }
@@ -1086,7 +1086,7 @@ try {
         Write-Host "Setting user status back to Active in CSV (triggers AD account enable)..." -ForegroundColor Gray
 
         # Update the status field back to "Active" - this will change userAccountControl from 514 to 512
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         $csv = Import-Csv $csvPath
         $targetUser = $csv | Where-Object { $_.samAccountName -eq $enableSamAccountName }
@@ -1165,7 +1165,7 @@ try {
             # Capture the live HR values before removal (a prior Mover test run may have changed
             # title/displayName/department) - these are what must be preserved on the Metaverse
             # Object, and on the directory account, throughout the grace period.
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $csv = Import-Csv $csvPath
             $leaverRow = $csv | Where-Object { $_.samAccountName -eq $userToRemove }
             if (-not $leaverRow) { throw "Could not find $userToRemove in the HR CSV before removal" }
@@ -1308,7 +1308,7 @@ try {
             $reconnectUser.Title = "Developer"
 
             # Add to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $upn = "$($reconnectUser.SamAccountName)@$($DirectoryConfig.Domain)"
 
             # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -1472,7 +1472,7 @@ try {
             $withdrawnUser.LastName = "Withdrawn"
             $withdrawnDisplayName = "Test Withdrawn"
 
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $csv = Import-Csv $csvPath
             $csv = @($csv) + [PSCustomObject]@{
                 employeeId = $withdrawnUser.EmployeeId
@@ -1611,7 +1611,7 @@ try {
             $withdrawnLateUser.LastName = "Withdrawnlate"
             $withdrawnLateDisplayName = "Test Withdrawnlate"
 
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $csv = Import-Csv $csvPath
             $csv = @($csv) + [PSCustomObject]@{
                 employeeId = $withdrawnLateUser.EmployeeId
@@ -1798,7 +1798,7 @@ try {
             $scale = Get-TemplateScale -Template $Template
             $ieoUser = New-TestUser -Index ($scale.Users + 15)
             $ieoSamAccountName = $ieoUser.SamAccountName
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
             Write-Host "Adding fresh joiner $ieoSamAccountName to HR CSV (title='$($ieoUser.Title)', employeeType='$($ieoUser.EmployeeType)')..." -ForegroundColor Gray
             $csv = Import-Csv $csvPath

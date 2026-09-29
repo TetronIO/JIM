@@ -46,7 +46,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -111,7 +111,7 @@ try {
 
     Write-TestStep "Step 0" "Seeding the HR and Control CSVs"
 
-    $stage = Join-Path ([IO.Path]::GetTempPath()) "scenario-018"
+    $stage = Get-IntegrationTempPath -Name "scenario-018"
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
     # 'writeback' is present but empty for every row: the value JIM should put there has to be a
