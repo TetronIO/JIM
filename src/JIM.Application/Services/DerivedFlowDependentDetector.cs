@@ -47,7 +47,7 @@ public static class DerivedFlowDependentDetector
         ArgumentNullException.ThrowIfNull(metaverseObjectTypes);
 
         var after = syncRulesAfter.ToList();
-        var contributorsBefore = CountContributors(syncRulesBefore);
+        var contributedBefore = GetContributors(syncRulesBefore).Keys.ToHashSet();
         var contributorsAfter = GetContributors(after);
 
         // The derived flows that will run after the change: enabled mappings on enabled rules.
@@ -68,9 +68,11 @@ public static class DerivedFlowDependentDetector
         do
         {
             changed = false;
-            foreach (var (key, countBefore) in contributorsBefore)
+            // Only attributes that had a contributor before the change: one that had none was already missing, and
+            // the change is not what caused it.
+            foreach (var key in contributedBefore)
             {
-                if (countBefore == 0 || starved.ContainsKey(key))
+                if (starved.ContainsKey(key))
                     continue;
 
                 var remaining = contributorsAfter.GetValueOrDefault(key) ?? [];
@@ -133,7 +135,4 @@ public static class DerivedFlowDependentDetector
 
         return contributors;
     }
-
-    private static Dictionary<(int TypeId, int AttributeId), int> CountContributors(IEnumerable<SyncRule> syncRules) =>
-        GetContributors(syncRules).ToDictionary(pair => pair.Key, pair => pair.Value.Count);
 }

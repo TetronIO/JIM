@@ -551,6 +551,49 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ProposalChangesTheInputOfADerivedFlow_ReportsTheDerivedValueChangingTooAsync()
+    {
+        // The rule also derives Alternate Email from Email. Retargeting Email's source changes Email, and the preview
+        // engine's derived pass (evaluated against the proposal's own graph) changes Alternate Email with it.
+        var derived = new SyncRuleMapping
+        {
+            Id = MappingId + 1,
+            SyncRule = _rule,
+            SyncRuleId = _rule.Id,
+            TargetMetaverseAttribute = _mvAlternateEmail,
+            TargetMetaverseAttributeId = _mvAlternateEmail.Id
+        };
+        derived.Sources.Add(new SyncRuleMappingSource { Id = MappingId + 1, Order = 1, Expression = "mv[\"Email\"] + \".alt\"" });
+        _rule.AttributeFlowRules.Add(derived);
+        var cso = GivenJoinedCso(email: "ada@corp.local", currentMetaverseEmail: "ada@corp.local", firstName: "ada.lovelace@corp.local");
+        _mvos.Single(m => m.Id == cso.MetaverseObjectId).AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.CreateVersion7(),
+            Attribute = _mvAlternateEmail,
+            AttributeId = _mvAlternateEmail.Id,
+            StringValue = "ada@corp.local.alt",
+            ContributedBySystemId = SystemId,
+            ContributedBySyncRuleId = RuleId
+        });
+
+        var proposal = new SyncRuleAttributeFlowProposal(
+        [
+            ProposalWritingEmailFrom(CsFirstNameAttributeId).Mappings.Single(),
+            SyncRuleMappingProposal.FromMapping(derived)
+        ]);
+        var deltas = await EvaluateAsync(proposal);
+
+        var alternate = deltas.SingleOrDefault(d => d.AttributeName == "Alternate Email");
+        Assert.That(alternate, Is.Not.Null, "the derived result appears in the Attribute Flow changes like any other flow's");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(alternate!.OldValue, Is.EqualTo("ada@corp.local.alt"));
+            Assert.That(alternate!.NewValue, Is.EqualTo("ada.lovelace@corp.local.alt"));
+            Assert.That(deltas.Single(d => d.AttributeName == "Email").NewValue, Is.EqualTo("ada.lovelace@corp.local"));
+        }
+    }
+
+    [Test]
     public async Task ValidateAsync_NoDerivedFlowsAnywhere_AddsNoFindingsBeyondTheExistingOnesAsync()
     {
         var proposal = ProposalWritingEmailFrom(CsFirstNameAttributeId);
