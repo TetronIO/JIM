@@ -1,0 +1,399 @@
+# Active Directory lab: the monthly rebuild after Patch Tuesday.
+#
+# The lab's domain controllers are patched by rebuild and never in place (PRD_ACTIVE_DIRECTORY_LAB.md, requirement 8).
+# The Wednesday after Patch Tuesday, this workflow builds three new domain controllers from the newest Windows Server
+# media plus the newest cumulative update, runs the full suite against them once, and only if it passes lets the
+# nightly adopt them; the old set is kept for a week as the rollback copy. A failure after a rebuild is then
+# attributable to the Windows update or to JIM, because the domain controller OS build is recorded with every run.
+#
+# It drives test/integration/ad-lab/host/Invoke-LabRebuild.ps1 on the Hyper-V host over the control plane, one phase
+# at a time (the decisions and their tests are in the lab module; the README's "Monthly rebuild" section has the
+# details, the recovery from a killed run, and why the live domain controllers are off while a candidate is built):
+#
+#   Prune     remove any previous set demoted a week or more ago (frees the disk first)
+#   Build     for each of dc-primary, dc-source, dc-target: build dc-<role>-candidate at the live one's address
+#   Stage     stop the live set, start the candidates from their baseline checkpoints
+#   (suite)   the full integration suite and the connector probes, with JIM_AD_LAB_<ROLE>_VM pointed at the
+#             candidates for this run only; the nightly's configuration never changes
+#   Promote   green: live -> dc-<role>-prev (kept a week), candidate -> dc-<role>
+#   Rollback  anything failed and Promote has not succeeded: stop the candidates (kept for diagnosis), start the
+#             live set again
+#
+# Schedule: GitHub cron treats day-of-month and day-of-week as OR when both are restricted, so "the Wednesday after
+# the second Tuesday" cannot be written in cron. It runs every Wednesday at 03:00 UTC and the first job decides:
+# it lets the rebuild proceed only when the UTC day of the month is 9 to 15 (the day after the second Tuesday,
+# which falls on the 8th to 14th, is always the 9th to 15th). workflow_dispatch does the same unless `force` is set.
+# The decision is its own job on a GitHub-hosted runner, so an ordinary Wednesday neither occupies the lab runner
+# nor queues in the ad-lab concurrency group (where it could displace a waiting nightly or dispatched run).
+#
+# Same trust model, runner, environment, secrets, SSH key handling and concurrency group as ad-lab.yml (read its
+# header: split-trust, the configuration, and why the runner is alone in a dedicated `ad-lab` runner group whose
+# workflow allowlist holds this file and ad-lab.yml, both at refs/heads/main only); the shared concurrency group
+# means the nightly and the rebuild never overlap. It never touches the runner VM or the
+# hypervisor host itself: patching the host is a manual, announced event because it restarts every virtual machine
+# (test/integration/ad-lab/README.md, Monthly rebuild). Unlike ad-lab.yml it posts no commit status: the nightly
+# does, on the rebuilt set, the night after.
+
+name: ad-lab-rebuild
+
+on:
+  schedule:
+    - cron: '0 3 * * 3'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild now even if this is not the Wednesday after Patch Tuesday (the day of the month is not 9 to 15)'
+        type: boolean
+        default: false
+      fresh:
+        description: 'Replace a candidate that already exists (from an earlier or red run) instead of reusing a recent one'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  window:
+    name: Is it the week after Patch Tuesday?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Decide
+        id: decide
+        shell: pwsh
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          $day = [datetime]::UtcNow.Day
+          if (($env:FORCE -eq 'true') -or (($day -ge 9) -and ($day -le 15))) {
+            'run=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "Rebuilding: UTC day of month $day (forced: $($env:FORCE -eq 'true'))."
+          }
+          else {
+            'run=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "::notice title=No rebuild this week::The UTC day of the month is $day, and the Wednesday after Patch Tuesday falls on the 9th to 15th. Nothing to do; run with force to rebuild anyway."
+          }
+
+  rebuild:
+    name: Rebuild the lab
+    needs: window
+    if: ${{ needs.window.outputs.run == 'true' }}
+    runs-on: [self-hosted, ad-lab]
+    environment: ad-lab
+    # Three builds of 40 to 60 minutes each, then the full suite (four hours at most), with margin.
+    timeout-minutes: 720
+    # One lab run at a time, and never cancelled (see ad-lab.yml). Held by this job, not the workflow, so that an
+    # ordinary Wednesday, which stops at the first job, takes no place in the queue.
+    concurrency:
+      group: ad-lab
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      JIM_AD_LAB_CONTROL_HOST: ${{ vars.AD_LAB_CONTROL_HOST }}
+      JIM_AD_LAB_CONTROL_USER: ${{ vars.AD_LAB_CONTROL_USER || 'jim-lab' }}
+      JIM_AD_LAB_CONTROL_PORT: ${{ vars.AD_LAB_CONTROL_PORT || '22' }}
+      JIM_AD_LAB_SCRIPT_ROOT: ${{ vars.AD_LAB_SCRIPT_ROOT || 'C:\jim-ad-lab' }}
+      JIM_AD_LAB_PRIMARY_ADDRESS: ${{ vars.AD_LAB_PRIMARY_ADDRESS }}
+      JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.AD_LAB_SOURCE_ADDRESS }}
+      JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.AD_LAB_TARGET_ADDRESS }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Check the lab configuration
+        env:
+          HAS_SSH_KEY: ${{ secrets.AD_LAB_CONTROL_SSH_KEY != '' }}
+          HAS_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD != '' }}
+          HAS_JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD != '' }}
+        run: |
+          $missing = @()
+          $variables = [ordered]@{
+            AD_LAB_CONTROL_HOST     = 'JIM_AD_LAB_CONTROL_HOST'
+            AD_LAB_PRIMARY_ADDRESS  = 'JIM_AD_LAB_PRIMARY_ADDRESS'
+            AD_LAB_SOURCE_ADDRESS   = 'JIM_AD_LAB_SOURCE_ADDRESS'
+            AD_LAB_TARGET_ADDRESS   = 'JIM_AD_LAB_TARGET_ADDRESS'
+          }
+          foreach ($name in $variables.Keys) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($variables[$name]))) { $missing += "variable $name" }
+          }
+          $secrets = [ordered]@{
+            AD_LAB_CONTROL_SSH_KEY = $env:HAS_SSH_KEY
+            AD_LAB_ADMIN_PASSWORD  = $env:HAS_ADMIN_PASSWORD
+            AD_LAB_JIM_PASSWORD    = $env:HAS_JIM_PASSWORD
+          }
+          foreach ($name in $secrets.Keys) {
+            if ($secrets[$name] -ne 'true') { $missing += "secret $name" }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "::error title=The ad-lab environment is not configured::Missing: $($missing -join ', '). See the header of .github/workflows/ad-lab.yml."
+            exit 1
+          }
+
+      # As in ad-lab.yml: LDAPTLS_REQCERT would disable certificate validation and void the probes.
+      - name: Assert LDAPTLS_REQCERT is not in scope
+        run: |
+          if ($env:LDAPTLS_REQCERT) {
+            Write-Host '::error::LDAPTLS_REQCERT is set; it would disable certificate validation and void this run.'
+            exit 1
+          }
+
+      - name: Write the control-plane SSH key
+        env:
+          SSH_KEY: ${{ secrets.AD_LAB_CONTROL_SSH_KEY }}
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'ad-lab-control-key'
+          New-Item -ItemType File -Path $path -Force | Out-Null
+          chmod 600 $path
+          [System.IO.File]::WriteAllText($path, (($env:SSH_KEY -replace "`r`n", "`n").TrimEnd() + "`n"))
+          "JIM_AD_LAB_CONTROL_KEY=$path" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Create the stack's .env
+        run: |
+          $bytes = New-Object byte[] 24
+          [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+          $password = [Convert]::ToBase64String($bytes).Replace('+', 'A').Replace('/', 'B').Replace('=', '')
+          $text = (Get-Content -LiteralPath .env.example -Raw) -replace '(?m)^JIM_DB_PASSWORD=.*$', "JIM_DB_PASSWORD=$password"
+          Set-Content -LiteralPath .env -Value $text -NoNewline
+
+      - name: Pull sidecar and stack images
+        run: |
+          . ./test/integration/utils/ActiveDirectoryLab-Helpers.ps1
+          $compose = Get-JimComposeArgument -DirectoryType ActiveDirectory
+          $stack = @(docker compose @compose --profile with-db config --images | Where-Object { $_ -and ($_ -notmatch '(^|/)jim-(web|worker|scheduler)(:|$)') })
+          foreach ($image in (@('busybox:1.37.0', 'alpine:3.20') + $stack | Sort-Object -Unique)) {
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              docker pull $image
+              if ($LASTEXITCODE -eq 0) { break }
+              if ($attempt -eq 3) {
+                Write-Host "::error::Failed to pull $image after 3 attempts."
+                exit 1
+              }
+              Start-Sleep -Seconds 30
+            }
+          }
+
+      # --- The rebuild: every phase is idempotent, and reports one JSON document -----------------------------------
+
+      # Frees the previous set's disk before three new ones are built. Touches nothing that is live.
+      - name: 'Phase: Prune the set demoted a week or more ago'
+        id: prune
+        run: |
+          . ./test/integration/utils/Invoke-LabControl.ps1
+          $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Prune', '-AsJson') -TimeoutSeconds 3600
+          Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-prune.json') -Value $json
+          (ConvertFrom-Json $json).roles | ForEach-Object { Write-Host ('{0,-8} {1,-14} {2}' -f $_.role, $_.action, $_.detail) }
+
+      # One control-plane call per domain controller (each is 40 to 60 minutes), so each is its own log group and
+      # its own timeout. From the first call the live domain controller is off: the candidate is built with its
+      # address. The newest .msu in the host's cumulativeUpdateDirectory is installed in each.
+      - name: 'Phase: Build the candidates'
+        id: build
+        env:
+          FRESH: ${{ inputs.fresh }}
+        run: |
+          . ./test/integration/utils/Invoke-LabControl.ps1
+          $extra = @()
+          if ($env:FRESH -eq 'true') { $extra += '-Fresh' }
+          $built = @()
+          foreach ($role in 'dc-primary', 'dc-source', 'dc-target') {
+            Write-Host "::group::Build $role-candidate"
+            try {
+              $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments (@('-Phase', 'Build', '-Role', $role, '-AsJson') + $extra) -TimeoutSeconds 10800
+            }
+            finally {
+              Write-Host '::endgroup::'
+            }
+            $result = (ConvertFrom-Json $json).roles
+            $built += $result
+            Write-Host ('{0,-8} {1,-8} {2}  [guest build {3}]' -f $result.role, $result.action, $result.detail, $result.guestBuild)
+          }
+          $built | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-build.json')
+
+      - name: 'Phase: Stage the candidates on the live addresses'
+        id: stage
+        run: |
+          . ./test/integration/utils/Invoke-LabControl.ps1
+          $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Stage', '-AsJson') -TimeoutSeconds 3600
+          Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-stage.json') -Value $json
+          (ConvertFrom-Json $json).roles | ForEach-Object { Write-Host ('{0,-8} {1,-8} {2}  [guest build {3}]' -f $_.role, $_.action, $_.detail, $_.guestBuild) }
+
+      # The suite, once, against the candidates: the same command as the nightly, with the three VM variables
+      # pointing at the candidates for this step only. The candidates have the live addresses, so JIM_AD_LAB_*_ADDRESS,
+      # the /etc/hosts entries on the runner and the domain controller names in every certificate are unchanged.
+      - name: Run the integration suite against the candidates
+        id: suite
+        env:
+          JIM_AD_LAB_PRIMARY_VM: dc-primary-candidate
+          JIM_AD_LAB_SOURCE_VM: dc-source-candidate
+          JIM_AD_LAB_TARGET_VM: dc-target-candidate
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
+          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Medium -DirectoryType ActiveDirectory -ContinueOnFailure
+          exit $LASTEXITCODE
+
+      # The connector probes, against the candidate, even when the suite was red: the candidates are staged either way,
+      # and a second result is worth having before the rollback. They gate the promotion like the suite does.
+      - name: Setup .NET
+        if: ${{ !cancelled() && steps.stage.outcome == 'success' }}
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore dependencies
+        if: ${{ !cancelled() && steps.stage.outcome == 'success' }}
+        run: dotnet restore JIM.sln --locked-mode
+      - name: Build the probe tier
+        if: ${{ !cancelled() && steps.stage.outcome == 'success' }}
+        run: dotnet build test/JIM.Worker.Tests/ --no-restore
+      - name: Run the Active Directory probes (RequiresActiveDirectory)
+        id: probes
+        if: ${{ !cancelled() && steps.stage.outcome == 'success' }}
+        env:
+          JIM_TEST_AD_HOST: dc1.panoply.local
+          JIM_TEST_AD_PORT: '636'
+          JIM_TEST_AD_PLAIN_PORT: '389'
+          JIM_TEST_AD_BASE_DN: DC=panoply,DC=local
+          JIM_TEST_AD_USERNAME: CN=svc-jim,OU=Services,DC=panoply,DC=local
+          JIM_TEST_AD_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          JIM_TEST_AD_ADMIN_USERNAME: CN=Administrator,CN=Users,DC=panoply,DC=local
+          JIM_TEST_AD_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
+          # The integration run writes <VM name>.pem, and the VM is the candidate for this run.
+          JIM_TEST_AD_CA_PATH: ${{ github.workspace }}/test/integration/ad-lab-certs/dc-primary-candidate.pem
+        run: |
+          if (-not (Test-Path -LiteralPath $env:JIM_TEST_AD_CA_PATH)) {
+            Write-Host "::error::$env:JIM_TEST_AD_CA_PATH does not exist: the integration run did not reach the domain controller, so there is no certificate to trust."
+            exit 1
+          }
+          dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresActiveDirectory" --verbosity normal `
+            --logger "trx;LogFileName=ad-probes.trx" --results-directory "$env:GITHUB_WORKSPACE/test/integration/results/probes"
+          exit $LASTEXITCODE
+
+      # Green only when every step above passed (the default condition): the suite and the probes both gate the
+      # promotion. Renames only; the candidate is already running and keeps running as the live domain controller.
+      - name: 'Phase: Promote the candidates'
+        id: promote
+        run: |
+          . ./test/integration/utils/Invoke-LabControl.ps1
+          $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Promote', '-AsJson') -TimeoutSeconds 3600
+          Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-promote.json') -Value $json
+          (ConvertFrom-Json $json).roles | ForEach-Object { Write-Host ('{0,-8} {1,-16} {2}  [guest build {3}]' -f $_.role, $_.action, $_.detail, $_.guestBuild) }
+
+      # Red, or cancelled, or the runner stopped: put the live set back in service. It runs whenever the build has
+      # started (the live domain controllers are off from then) and the promotion has not succeeded. Best effort
+      # on a cancellation, where GitHub gives the job a short time; the README says how to run it by hand.
+      - name: 'Phase: Roll back to the live set'
+        id: rollback
+        if: ${{ always() && steps.build.outcome != 'skipped' && steps.promote.outcome != 'success' }}
+        run: |
+          . ./test/integration/utils/Invoke-LabControl.ps1
+          $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Rollback', '-AsJson') -TimeoutSeconds 3600
+          Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-rollback.json') -Value $json
+          (ConvertFrom-Json $json).roles | ForEach-Object { Write-Host ('{0,-8} {1,-10} {2}  [guest build {3}]' -f $_.role, $_.action, $_.detail, $_.guestBuild) }
+          Write-Host '::error title=The rebuild was rolled back::The candidates did not pass; the previous domain controllers are live again and the candidates are stopped, left in place for diagnosis. Their names and builds are in the job summary.'
+
+      # Where every virtual machine stands now, whatever happened, for the summary.
+      - name: 'Phase: Report the lab state'
+        id: status
+        if: ${{ always() && steps.build.outcome != 'skipped' }}
+        run: |
+          . ./test/integration/utils/Invoke-LabControl.ps1
+          $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Status', '-AsJson') -TimeoutSeconds 3600
+          Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-status.json') -Value $json
+
+      # The new guest OS build strings and the outcome, for the job summary; dc-builds.json carries the builds the
+      # suite recorded (by VM name, the candidates') as an artefact. The logic is Get-LabRunSummary in the lab module.
+      - name: Summarise the rebuild
+        if: ${{ always() && steps.build.outcome != 'skipped' }}
+        env:
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+          PROBES_OUTCOME: ${{ steps.probes.outcome }}
+          PROMOTE_OUTCOME: ${{ steps.promote.outcome }}
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+        run: |
+          Import-Module ./test/integration/ad-lab/guest/LabDomainController.psm1 -Force
+          $results = Join-Path (Get-Location) 'test/integration/results'
+          $summary = Get-LabRunSummary -ResultsDirectory $results -Success ($env:SUITE_OUTCOME -eq 'success')
+          New-Item -ItemType Directory -Path $results -Force | Out-Null
+          $summary.Builds | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $results 'dc-builds.json')
+          Copy-Item -Path (Join-Path $env:RUNNER_TEMP 'rebuild-*.json') -Destination $results -ErrorAction SilentlyContinue
+
+          function Read-Phase($name) {
+            $path = Join-Path $env:RUNNER_TEMP "rebuild-$name.json"
+            if (Test-Path -LiteralPath $path) { return @((Get-Content -LiteralPath $path -Raw | ConvertFrom-Json).roles) }
+            return @()
+          }
+          $outcome = 'the rebuild did not finish'
+          if ($env:PROMOTE_OUTCOME -eq 'success') { $outcome = 'promoted: the candidates are now the live set' }
+          elseif ($env:ROLLBACK_OUTCOME -eq 'success') { $outcome = 'rolled back: the previous domain controllers are live again, the candidates are left for diagnosis' }
+
+          $lines = @('### Active Directory lab rebuild', '', "**Outcome: $outcome.**", '', "Suite: $($env:SUITE_OUTCOME). Probes: $($env:PROBES_OUTCOME). $(Get-LabRunStatusDescription -Summary $summary)", '')
+          $lines += '| Domain controller | Candidate | Guest OS build (candidate) | Live guest OS build now |'
+          $lines += '|---|---|---|---|'
+          $staged = Read-Phase 'stage'
+          $now = if ((Read-Phase 'promote').Count -gt 0) { Read-Phase 'promote' } else { Read-Phase 'status' }
+          foreach ($role in $staged) {
+            $live = @($now | Where-Object { $_.live -eq $role.live })
+            $liveBuild = if ($live.Count -gt 0) { $live[0].guestBuild } else { '' }
+            $lines += "| $($role.live) | $($role.candidate) | $($role.guestBuild) | $liveBuild |"
+          }
+          if ($summary.FailedScenarios.Count -gt 0) {
+            $lines += ''
+            $lines += 'Failed scenarios: ' + (($summary.FailedScenarios | ForEach-Object { "``$_``" }) -join ', ')
+          }
+          $lines += ''
+          foreach ($role in (Read-Phase 'status')) { $lines += "- $($role.role): $($role.detail)" }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Scrub secrets from the results
+        if: ${{ always() }}
+        env:
+          ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
+          JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+        run: |
+          $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD) | Where-Object { $_ }
+          $files = @(Get-ChildItem -LiteralPath 'test/integration/results', 'test/integration/ad-lab-certs' -Recurse -File -ErrorAction SilentlyContinue)
+          foreach ($file in $files) {
+            foreach ($secret in $secrets) {
+              if (Select-String -LiteralPath $file.FullName -SimpleMatch $secret -Quiet) {
+                if ($file.Length -gt 200MB) {
+                  Remove-Item -LiteralPath $file.FullName -Force
+                  Write-Host "::warning::Removed $($file.Name) from the artefacts: it held a secret and is too large to scrub."
+                  break
+                }
+                $text = [System.IO.File]::ReadAllText($file.FullName).Replace($secret, '***')
+                [System.IO.File]::WriteAllText($file.FullName, $text)
+                Write-Host "::warning::A secret was found in $($file.Name) and replaced before upload."
+              }
+            }
+          }
+
+      - name: Upload the rebuild's artefacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: ad-lab-rebuild-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test/integration/results/
+            !test/integration/results/README.md
+            !test/integration/results/docker-stats-*
+            !test/integration/results/docker-events-*
+            test/integration/ad-lab-certs/*.pem
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Stop the stack and the LDAP toolbox, and delete the key
+        if: ${{ always() }}
+        run: |
+          . ./test/integration/utils/ActiveDirectoryLab-Helpers.ps1
+          $compose = Get-JimComposeArgument -DirectoryType ActiveDirectory
+          docker compose @compose --profile with-db down -v
+          docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile ad-lab down
+          if ($env:JIM_AD_LAB_CONTROL_KEY) { Remove-Item -LiteralPath $env:JIM_AD_LAB_CONTROL_KEY -Force -ErrorAction SilentlyContinue }
+          exit 0

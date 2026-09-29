@@ -1117,6 +1117,1239 @@ function Resolve-LabLayout {
 }
 
 # ---------------------------------------------------------------------------------------------
+# Rebuild: names, settings and decisions (pure)
+# ---------------------------------------------------------------------------------------------
+#
+# The monthly rebuild (host/Invoke-LabRebuild.ps1) builds a candidate set beside the live set, runs the suite
+# against it, and only then swaps names. Everything it decides is here as a pure function, and the phases that
+# drive Hyper-V are one orchestrator (Invoke-LabRebuildPhase) that reaches the host only through an adapter, so the
+# ordering and the recovery from an interrupted run are tested on any platform.
+
+function Get-LabSettingValue {
+    # Internal: reads one setting from a hashtable or a parsed JSON object, or returns $null when it is not there.
+    # Not exported; it keeps the settings readers free of StrictMode property errors.
+    param(
+        [AllowNull()]
+        [object]$Object,
+
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) {
+            return $Object[$Name]
+        }
+        return $null
+    }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+    return $property.Value
+}
+
+function Get-LabSettingName {
+    # Internal: the names of the settings an object or hashtable holds.
+    param(
+        [AllowNull()]
+        [object]$Object
+    )
+
+    if ($null -eq $Object) {
+        return @()
+    }
+    if ($Object -is [System.Collections.IDictionary]) {
+        return @($Object.Keys | ForEach-Object { [string]$_ })
+    }
+    return @($Object.PSObject.Properties | ForEach-Object { $_.Name })
+}
+
+function Join-LabPathText {
+    # Internal: a child folder beneath a root, by text, using the separator the root already uses. Join-Path is not
+    # used because it needs the drive to exist, and the rebuild's settings hold host paths (D:\...) that the tests
+    # read on Linux.
+    param(
+        [Parameter(Mandatory)]
+        [string]$Root,
+
+        [Parameter(Mandatory)]
+        [string]$Child
+    )
+
+    $separator = '/'
+    if (($Root.Contains('\')) -or ($Root -match '^[A-Za-z]:')) {
+        $separator = '\'
+    }
+    return ($Root.TrimEnd('\', '/') + $separator + $Child)
+}
+
+function Get-LabRebuildVmName {
+    <#
+    .SYNOPSIS
+        The name of the live, candidate or previous VM of one domain controller: dc-primary, dc-primary-candidate,
+        dc-primary-prev.
+
+    .DESCRIPTION
+        The live name is what the nightly run's configuration always uses. The rebuild builds
+        <live>-candidate, and on success renames the live VM to <live>-prev and the candidate to <live>.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$LiveName,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('Live', 'Candidate', 'Prev')]
+        [string]$Kind
+    )
+
+    if (-not (Test-LabVmName -Name $LiveName)) {
+        throw "'$LiveName' is not a valid VM name here: letters, digits and hyphens only."
+    }
+    if ($LiveName -match '-(candidate|prev)$') {
+        throw "'$LiveName' already ends in -candidate or -prev; the rebuild names its VMs from the live name."
+    }
+
+    if ($Kind -eq 'Candidate') {
+        $name = "$LiveName-candidate"
+    }
+    elseif ($Kind -eq 'Prev') {
+        $name = "$LiveName-prev"
+    }
+    else {
+        $name = $LiveName
+    }
+    if (-not (Test-LabVmName -Name $name)) {
+        throw "'$name' is not a valid VM name here (too long?): the live name must leave room for its suffix."
+    }
+    return $name
+}
+
+function Get-LabRebuildGenerationName {
+    <#
+    .SYNOPSIS
+        The folder name a rebuild builds its candidate disks under: rebuild-yyyyMMdd (UTC).
+
+    .DESCRIPTION
+        New-LabDomainController.ps1 puts a VM's files in <VhdDirectory>\<VM name>\. A candidate is later renamed to
+        the live name and keeps its folder, so a second rebuild's candidate (same name again) would find its disk
+        already there and refuse. Each rebuild therefore passes a fresh VhdDirectory, this name beneath the
+        configured one.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [datetime]$NowUtc
+    )
+
+    return ('rebuild-' + $NowUtc.ToUniversalTime().ToString('yyyyMMdd', [System.Globalization.CultureInfo]::InvariantCulture))
+}
+
+function Get-LabRebuildRoleEntry {
+    # Internal: one domain controller's names, and the parameters of its candidate build when there are any.
+    param(
+        [Parameter(Mandatory)]
+        [string]$LiveName,
+
+        [AllowNull()]
+        [hashtable]$BuildParameters
+    )
+
+    $roleName = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($LiveName.Substring(3))
+    return [pscustomobject][ordered]@{
+        Role                = $roleName
+        LiveName            = $LiveName
+        CandidateName       = (Get-LabRebuildVmName -LiveName $LiveName -Kind Candidate)
+        PrevName            = (Get-LabRebuildVmName -LiveName $LiveName -Kind Prev)
+        EnvironmentVariable = ('JIM_AD_LAB_{0}_VM' -f $LiveName.Substring(3).ToUpperInvariant())
+        BuildParameters     = $BuildParameters
+    }
+}
+
+function ConvertFrom-LabRebuildSetting {
+    <#
+    .SYNOPSIS
+        Validates settings.json (parsed) and maps it onto what a rebuild does: the three domain controllers, their
+        VM names and the parameters of New-LabDomainController.ps1 for each candidate.
+
+    .DESCRIPTION
+        The settings hold the paths, network and time source shared by every domain controller and one entry per
+        domain controller:
+
+            isoPath, cumulativeUpdateDirectory (optional), vhdDirectory, switchName, ntpServer,
+            dnsForwarder (optional), domainControllers: { dc-primary|dc-source|dc-target: { domain, ipAddress, prefixLength, gateway,
+                                                                    enableRecycleBin (optional) } }
+
+        Exactly the three lab names are accepted, because the runner reads JIM_AD_LAB_PRIMARY_VM, _SOURCE_VM and
+        _TARGET_VM and nothing else. A candidate is built with the live domain controller's own address (its
+        checkpoints carry it, so it cannot be changed later); the live VM is therefore off while the candidate
+        is built.
+
+        Returns Roles (ordered Primary, Source, Target), each with LiveName, CandidateName, PrevName, Role,
+        EnvironmentVariable (the JIM_AD_LAB_<ROLE>_VM variable that points the runner at a candidate) and
+        BuildParameters (a hashtable for New-LabDomainController.ps1).
+
+        With -NamesOnly nothing is validated and the roles carry no BuildParameters. Every phase except Build only
+        needs the names, and a rollback must never be blocked by a settings file that is wrong for building.
+
+    .PARAMETER Settings
+        The parsed settings: ConvertFrom-Json output or a hashtable.
+
+    .PARAMETER GenerationName
+        The folder beneath vhdDirectory that receives this rebuild's disks (Get-LabRebuildGenerationName).
+
+    .PARAMETER CumulativeUpdatePath
+        A .msu to pass to every build, when one exists.
+
+    .PARAMETER NamesOnly
+        Return the roles without validating the settings or preparing builds.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Settings,
+
+        [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9-]*$')]
+        [string]$GenerationName,
+
+        [string]$CumulativeUpdatePath,
+
+        [switch]$NamesOnly
+    )
+
+    $liveNames = @('dc-primary', 'dc-source', 'dc-target')
+
+    if ($NamesOnly) {
+        $vhdDirectory = $null
+        $configured = Get-LabSettingValue -Object $Settings -Name 'vhdDirectory'
+        if (-not [string]::IsNullOrWhiteSpace([string]$configured)) {
+            $vhdDirectory = ([string]$configured).Trim()
+        }
+        return [pscustomobject][ordered]@{
+            VhdDirectory = $vhdDirectory
+            Generation   = $null
+            Roles        = @($liveNames | ForEach-Object { Get-LabRebuildRoleEntry -LiveName $_ -BuildParameters $null })
+        }
+    }
+
+    if ([string]::IsNullOrEmpty($GenerationName)) {
+        throw 'A generation name is needed to build (Get-LabRebuildGenerationName).'
+    }
+
+    $ipv4 = '^\d{1,3}(\.\d{1,3}){3}$'
+    $shared = @{}
+    foreach ($key in @('isoPath', 'vhdDirectory', 'switchName', 'ntpServer')) {
+        $value = Get-LabSettingValue -Object $Settings -Name $key
+        if ([string]::IsNullOrWhiteSpace([string]$value)) {
+            throw "settings.json has no '$key'. Every value in settings.example.json is needed."
+        }
+        $shared[$key] = ([string]$value).Trim()
+    }
+    # The forwarder is optional: the lab network has no uplink, and the build script accepts none. When there is
+    # one it must be an address, and it is passed on.
+    $shared['dnsForwarder'] = $null
+    $forwarderValue = Get-LabSettingValue -Object $Settings -Name 'dnsForwarder'
+    if (-not [string]::IsNullOrWhiteSpace([string]$forwarderValue)) {
+        $forwarder = $null
+        $forwarderText = ([string]$forwarderValue).Trim()
+        if (($forwarderText -notmatch $ipv4) -or (-not [System.Net.IPAddress]::TryParse($forwarderText, [ref]$forwarder))) {
+            throw "settings.json 'dnsForwarder' is '$forwarderText', which is not an IPv4 address."
+        }
+        $shared['dnsForwarder'] = $forwarderText
+    }
+
+    $controllers = Get-LabSettingValue -Object $Settings -Name 'domainControllers'
+    if ($null -eq $controllers) {
+        throw "settings.json has no 'domainControllers'."
+    }
+    foreach ($name in (Get-LabSettingName -Object $controllers)) {
+        if ($liveNames -notcontains $name) {
+            throw "settings.json domainControllers holds '$name'; this lab has exactly dc-primary, dc-source and dc-target."
+        }
+    }
+
+    $roles = New-Object System.Collections.Generic.List[object]
+    $addresses = @{}
+    $domains = @{}
+    foreach ($liveName in $liveNames) {
+        $dc = Get-LabSettingValue -Object $controllers -Name $liveName
+        if ($null -eq $dc) {
+            throw "settings.json domainControllers has no '$liveName'."
+        }
+
+        $domain = [string](Get-LabSettingValue -Object $dc -Name 'domain')
+        $address = [string](Get-LabSettingValue -Object $dc -Name 'ipAddress')
+        $gateway = [string](Get-LabSettingValue -Object $dc -Name 'gateway')
+        $prefixText = [string](Get-LabSettingValue -Object $dc -Name 'prefixLength')
+
+        if ($domain -notmatch '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$') {
+            throw "settings.json $liveName 'domain' is '$domain', which is not a DNS domain name."
+        }
+        foreach ($pair in @(@('ipAddress', $address), @('gateway', $gateway))) {
+            $parsed = $null
+            if (($pair[1] -notmatch $ipv4) -or (-not [System.Net.IPAddress]::TryParse($pair[1], [ref]$parsed))) {
+                throw "settings.json $liveName '$($pair[0])' is '$($pair[1])', which is not an IPv4 address."
+            }
+        }
+        $prefix = 0
+        if ((-not [int]::TryParse($prefixText, [ref]$prefix)) -or ($prefix -lt 8) -or ($prefix -gt 30)) {
+            throw "settings.json $liveName 'prefixLength' is '$prefixText'; it must be a number from 8 to 30."
+        }
+        if ($addresses.ContainsKey($address)) {
+            throw "settings.json gives $liveName the address $address, which $($addresses[$address]) already has."
+        }
+        $addresses[$address] = $liveName
+        if ($domains.ContainsKey($domain.ToLowerInvariant())) {
+            throw "settings.json gives $liveName the domain $domain, which $($domains[$domain.ToLowerInvariant()]) already has."
+        }
+        $domains[$domain.ToLowerInvariant()] = $liveName
+
+        $recycleBin = $false
+        $recycleBinValue = Get-LabSettingValue -Object $dc -Name 'enableRecycleBin'
+        if ($null -ne $recycleBinValue) {
+            $recycleBin = [bool]$recycleBinValue
+        }
+
+        $parameters = @{
+            Name         = (Get-LabRebuildVmName -LiveName $liveName -Kind Candidate)
+            Domain       = $domain
+            IsoPath      = $shared['isoPath']
+            VhdDirectory = (Join-LabPathText -Root $shared['vhdDirectory'] -Child $GenerationName)
+            SwitchName   = $shared['switchName']
+            IPAddress    = $address
+            PrefixLength = $prefix
+            Gateway      = $gateway
+            NtpServer    = $shared['ntpServer']
+        }
+        if ($null -ne $shared['dnsForwarder']) {
+            $parameters['DnsForwarder'] = $shared['dnsForwarder']
+        }
+        if ($recycleBin) {
+            $parameters['EnableRecycleBin'] = $true
+        }
+        if (-not [string]::IsNullOrEmpty($CumulativeUpdatePath)) {
+            $parameters['CumulativeUpdatePath'] = $CumulativeUpdatePath
+        }
+        $roles.Add((Get-LabRebuildRoleEntry -LiveName $liveName -BuildParameters $parameters))
+    }
+
+    return [pscustomobject][ordered]@{
+        VhdDirectory = $shared['vhdDirectory']
+        Generation   = $GenerationName
+        Roles        = $roles.ToArray()
+    }
+}
+
+function Get-LabNewestCumulativeUpdate {
+    <#
+    .SYNOPSIS
+        Picks the newest .msu (by last write time) from a list of files, or nothing when there is none.
+
+    .DESCRIPTION
+        The rebuild installs one cumulative update, the newest in cumulativeUpdateDirectory. Keep only the update
+        wanted in that folder: "newest" is the file's modification time, and a servicing stack update saved later
+        than the cumulative update would win.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [AllowEmptyCollection()]
+        [object[]]$File
+    )
+
+    $candidates = @($File | Where-Object { ($null -ne $_) -and (([string]$_.Name) -match '\.msu$') })
+    if ($candidates.Count -eq 0) {
+        return $null
+    }
+    return ($candidates |
+            Sort-Object -Property @{ Expression = { [datetime]$_.LastWriteTimeUtc }; Descending = $true }, @{ Expression = { [string]$_.Name }; Descending = $true } |
+            Select-Object -First 1)
+}
+
+function Get-LabRebuildBuildAction {
+    <#
+    .SYNOPSIS
+        What the Build phase does about one candidate: Build, Resume, Reuse or Replace.
+
+    .DESCRIPTION
+        Build phase re-runs must converge, and a candidate a red run left behind for diagnosis must never be mistaken
+        for this month's:
+
+          none there                                 Build   (create it)
+          -Fresh                                     Replace (remove it, build again)
+          older than MaxAgeHours                     Replace (a leftover from an earlier rebuild)
+          recent, has its baseline checkpoint        Reuse   (this run's, or a retry's; already built)
+          recent, no baseline checkpoint yet         Resume  (a build that failed part way; the build script converges)
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [bool]$CandidateExists,
+
+        [datetime]$CandidateCreatedUtc = [datetime]::MinValue,
+
+        [bool]$CandidateHasBaseline = $false,
+
+        [Parameter(Mandatory)]
+        [datetime]$NowUtc,
+
+        [ValidateRange(1, 720)]
+        [int]$MaxAgeHours = 24,
+
+        [switch]$Fresh
+    )
+
+    if (-not $CandidateExists) {
+        return 'Build'
+    }
+    if ($Fresh) {
+        return 'Replace'
+    }
+    $age = $NowUtc.ToUniversalTime() - $CandidateCreatedUtc.ToUniversalTime()
+    if ($age.TotalHours -gt $MaxAgeHours) {
+        return 'Replace'
+    }
+    if ($CandidateHasBaseline) {
+        return 'Reuse'
+    }
+    return 'Resume'
+}
+
+function Get-LabPromotePlan {
+    <#
+    .SYNOPSIS
+        The ordered steps that turn the candidate into the live VM, from which VMs exist: RemovePrev,
+        RenameLiveToPrev, RenameCandidateToLive.
+
+    .DESCRIPTION
+        Written so that a Promote interrupted at any point and run again finishes the job:
+
+          candidate, live, prev     RemovePrev, RenameLiveToPrev, RenameCandidateToLive   (prev is an older set)
+          candidate, live           RenameLiveToPrev, RenameCandidateToLive
+          candidate, prev           RenameCandidateToLive                                 (interrupted after the live VM was demoted)
+          live only, or live, prev  nothing (already promoted, or nothing was staged)
+          candidate only, or none   an error: there is no live VM to demote or to keep
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [bool]$LiveExists,
+
+        [Parameter(Mandatory)]
+        [bool]$CandidateExists,
+
+        [Parameter(Mandatory)]
+        [bool]$PrevExists
+    )
+
+    if (-not $CandidateExists) {
+        if ($LiveExists) {
+            return [string[]]@()
+        }
+        throw 'There is no live VM and no candidate: nothing to promote, and nothing to keep.'
+    }
+    if ($LiveExists) {
+        if ($PrevExists) {
+            return [string[]]@('RemovePrev', 'RenameLiveToPrev', 'RenameCandidateToLive')
+        }
+        return [string[]]@('RenameLiveToPrev', 'RenameCandidateToLive')
+    }
+    if ($PrevExists) {
+        return [string[]]@('RenameCandidateToLive')
+    }
+    throw 'There is a candidate but no live VM and no previous VM: the live set is gone, so there is nothing to demote. Restore it by hand.'
+}
+
+function Get-LabRollbackPlan {
+    <#
+    .SYNOPSIS
+        The ordered steps that put the live VM back in service after a failed rebuild: StopCandidate,
+        RenamePrevToLive, StartLive.
+
+    .DESCRIPTION
+        The candidate is stopped and left in place for diagnosis. If a Promote was interrupted after it demoted the
+        live VM (no live VM, a previous one, and the candidate), the previous VM is named live again first.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [bool]$LiveExists,
+
+        [Parameter(Mandatory)]
+        [bool]$CandidateExists,
+
+        [Parameter(Mandatory)]
+        [bool]$PrevExists
+    )
+
+    $steps = New-Object System.Collections.Generic.List[string]
+    if ($CandidateExists) {
+        $steps.Add('StopCandidate')
+    }
+    if (-not $LiveExists) {
+        if (-not $PrevExists) {
+            throw 'There is no live VM and no previous VM to put back in service. Restore the lab by hand.'
+        }
+        $steps.Add('RenamePrevToLive')
+    }
+    $steps.Add('StartLive')
+    return [string[]]$steps.ToArray()
+}
+
+function Get-LabPrunePlan {
+    <#
+    .SYNOPSIS
+        Which previous-set VMs the Prune phase removes: those demoted at least MinAgeDays days ago.
+
+    .DESCRIPTION
+        A previous VM whose Notes carry no demotion time (renamed by hand, say) is kept and reported, never guessed
+        at: deleting a rollback copy on a guess is the wrong way to be wrong.
+
+    .PARAMETER Prev
+        Objects with Name and DemotedUtc (a datetime, or null when unknown).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Prev,
+
+        [Parameter(Mandatory)]
+        [datetime]$NowUtc,
+
+        [ValidateRange(1, 365)]
+        [int]$MinAgeDays = 7
+    )
+
+    $plan = New-Object System.Collections.Generic.List[object]
+    foreach ($item in $Prev) {
+        $demoted = $item.DemotedUtc
+        if ($null -eq $demoted) {
+            $plan.Add([pscustomobject][ordered]@{ Name = [string]$item.Name; Remove = $false; Reason = 'kept: no demotion time is recorded on it, so its age is unknown' })
+            continue
+        }
+        $age = $NowUtc.ToUniversalTime() - ([datetime]$demoted).ToUniversalTime()
+        $ageDays = [math]::Floor($age.TotalDays)
+        if ($age.TotalDays -ge $MinAgeDays) {
+            $plan.Add([pscustomobject][ordered]@{ Name = [string]$item.Name; Remove = $true; Reason = "removed: demoted $ageDays days ago (at least $MinAgeDays)" })
+        }
+        else {
+            $plan.Add([pscustomobject][ordered]@{ Name = [string]$item.Name; Remove = $false; Reason = "kept: demoted $ageDays days ago (removed at $MinAgeDays)" })
+        }
+    }
+    return $plan.ToArray()
+}
+
+function Get-LabVmNoteValue {
+    <#
+    .SYNOPSIS
+        Reads one key=value line from a lab VM's Notes, or returns nothing.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Notes,
+
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[a-z][a-z0-9-]*$')]
+        [string]$Key
+    )
+
+    if (-not (Test-LabVmNote -Notes $Notes)) {
+        return $null
+    }
+    foreach ($line in ($Notes -split "`r?`n")) {
+        $index = $line.IndexOf('=')
+        if (($index -gt 0) -and ($line.Substring(0, $index).Trim() -ceq $Key)) {
+            return $line.Substring($index + 1).Trim()
+        }
+    }
+    return $null
+}
+
+function Set-LabVmNoteValue {
+    <#
+    .SYNOPSIS
+        Returns the Notes text with one key=value line set (or removed, with an empty value). The marker line and
+        the other lines are kept.
+
+    .DESCRIPTION
+        The rebuild stamps demoted=<UTC time> on a live VM as it renames it to <name>-prev, so the Prune phase knows
+        how long the set has been the rollback copy. ConvertFrom-LabVmNote ignores keys it does not know, so the
+        stamp does not disturb the other scripts.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Returns text; changes no state.')]
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Notes,
+
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[a-z][a-z0-9-]*$')]
+        [string]$Key,
+
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    if (-not (Test-LabVmNote -Notes $Notes)) {
+        throw 'The Notes carry no lab marker; refusing to edit them.'
+    }
+    $kept = New-Object System.Collections.Generic.List[string]
+    foreach ($line in ($Notes -split "`r?`n")) {
+        if ($line.Trim() -eq '') {
+            continue
+        }
+        $index = $line.IndexOf('=')
+        if (($index -gt 0) -and ($line.Substring(0, $index).Trim() -ceq $Key)) {
+            continue
+        }
+        $kept.Add($line)
+    }
+    if (-not [string]::IsNullOrEmpty($Value)) {
+        if ($Value -match '[\r\n]') {
+            throw 'A Notes value cannot span lines.'
+        }
+        $kept.Add("$Key=$Value")
+    }
+    return ($kept -join "`n")
+}
+
+function ConvertTo-LabChildArgument {
+    <#
+    .SYNOPSIS
+        Turns a parameter hashtable into the argument list for running a script in a child process:
+        -Key value pairs, and a bare -Key for a switch that is true (one that is false is left out).
+
+    .DESCRIPTION
+        The rebuild runs each lab script in its own process so the script's own module import, StrictMode and exit
+        code cannot disturb the rebuild. Only scalar values are accepted; text with a line break is refused.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Parameter
+    )
+
+    $arguments = New-Object System.Collections.Generic.List[string]
+    foreach ($key in ($Parameter.Keys | Sort-Object)) {
+        if ($key -notmatch '^[A-Za-z][A-Za-z0-9]*$') {
+            throw "'$key' is not a parameter name."
+        }
+        $value = $Parameter[$key]
+        if ($value -is [bool]) {
+            if ($value) {
+                $arguments.Add("-$key")
+            }
+            continue
+        }
+        if (($null -eq $value) -or ($value -is [System.Collections.IEnumerable] -and $value -isnot [string])) {
+            throw "The value of -$key must be a single value."
+        }
+        $text = [string]$value
+        if ($text -match '[\r\n\0]') {
+            throw "The value of -$key holds a line break."
+        }
+        $arguments.Add("-$key")
+        $arguments.Add($text)
+    }
+    return [string[]]$arguments.ToArray()
+}
+
+function Test-LabOwnedVmFolder {
+    <#
+    .SYNOPSIS
+        Whether a VM's folder is one the rebuild may delete after removing the VM: strictly beneath the configured
+        VHD directory, and named for one of the lab's VMs.
+
+    .DESCRIPTION
+        Remove-LabDomainController.ps1 only deletes a VM's folder when the folder has the VM's name, and a renamed
+        VM keeps the folder of the name it was built under, so the rebuild clears such folders itself. The check is
+        on path segments (either slash, case-insensitive), so it needs no file system and refuses anything with a
+        dot segment.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$Root,
+
+        [Parameter(Mandatory)]
+        [string[]]$Name
+    )
+
+    $pathParts = @((($Path -replace '\\', '/').Trim('/')) -split '/' | Where-Object { $_ -ne '' })
+    $rootParts = @((($Root -replace '\\', '/').Trim('/')) -split '/' | Where-Object { $_ -ne '' })
+    if (($rootParts.Count -eq 0) -or ($pathParts.Count -le $rootParts.Count)) {
+        return $false
+    }
+    foreach ($part in @($pathParts) + @($rootParts)) {
+        if (($part -eq '..') -or ($part -eq '.')) {
+            return $false
+        }
+    }
+    for ($index = 0; $index -lt $rootParts.Count; $index++) {
+        if ($pathParts[$index] -ne $rootParts[$index]) {
+            return $false
+        }
+    }
+    return ($Name -contains $pathParts[$pathParts.Count - 1])
+}
+
+# ---------------------------------------------------------------------------------------------
+# Rebuild: reading a run's results (for the workflows)
+# ---------------------------------------------------------------------------------------------
+
+function Get-LabRunSummary {
+    <#
+    .SYNOPSIS
+        Reads what Run-IntegrationTests.ps1 left in test/integration/results and summarises it: how many scenarios
+        passed and which domain controller OS builds the run was against.
+
+    .DESCRIPTION
+        A -Scenario All run writes results/full-regression-<time>.json (Scenarios with Success and Skipped,
+        DomainControllerBuilds by VM name). A single-scenario run writes no such report, only
+        results/performance/<host>/<scenario>-<template>-<time>.json, which carries DomainControllerBuilds too; it
+        is then counted as one scenario, passed when -Success says the run passed. The newest file of each kind is
+        used. A results folder with neither gives zero scenarios and no builds.
+
+        Returns Total, Passed, Failed, Skipped, FailedScenarios (the names of those that failed, from a regression
+        report), Builds (an ordered map of VM name to build such as 26100.4652) and Report (the file the counts came
+        from, or null).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ResultsDirectory,
+
+        [bool]$Success = $false
+    )
+
+    $builds = [ordered]@{}
+    $total = 0
+    $passed = 0
+    $skipped = 0
+    $failedNames = New-Object System.Collections.Generic.List[string]
+    $reportPath = $null
+
+    $reportFile = $null
+    $performanceFile = $null
+    if (Test-Path -LiteralPath $ResultsDirectory -PathType Container) {
+        $reportFile = Get-ChildItem -LiteralPath $ResultsDirectory -Filter 'full-regression-*.json' -File -ErrorAction SilentlyContinue |
+            Sort-Object -Property LastWriteTimeUtc, Name -Descending | Select-Object -First 1
+        $performanceDirectory = Join-Path $ResultsDirectory 'performance'
+        if (Test-Path -LiteralPath $performanceDirectory -PathType Container) {
+            $performanceFile = Get-ChildItem -LiteralPath $performanceDirectory -Filter '*.json' -File -Recurse -ErrorAction SilentlyContinue |
+                Sort-Object -Property LastWriteTimeUtc, Name -Descending | Select-Object -First 1
+        }
+    }
+
+    if ($null -ne $reportFile) {
+        $report = Get-Content -LiteralPath $reportFile.FullName -Raw | ConvertFrom-Json
+        $reportPath = $reportFile.FullName
+        foreach ($scenario in @(Get-LabSettingValue -Object $report -Name 'Scenarios')) {
+            if ($null -eq $scenario) {
+                continue
+            }
+            $total++
+            if ([bool](Get-LabSettingValue -Object $scenario -Name 'Skipped')) {
+                $skipped++
+            }
+            elseif ([bool](Get-LabSettingValue -Object $scenario -Name 'Success')) {
+                $passed++
+            }
+            else {
+                $failedNames.Add([string](Get-LabSettingValue -Object $scenario -Name 'Name'))
+            }
+        }
+        $reported = Get-LabSettingValue -Object $report -Name 'DomainControllerBuilds'
+        foreach ($vmName in (Get-LabSettingName -Object $reported)) {
+            $builds[$vmName] = [string](Get-LabSettingValue -Object $reported -Name $vmName)
+        }
+    }
+    elseif ($null -ne $performanceFile) {
+        $total = 1
+        if ($Success) {
+            $passed = 1
+        }
+        $reportPath = $performanceFile.FullName
+    }
+
+    if (($builds.Count -eq 0) -and ($null -ne $performanceFile)) {
+        $performance = Get-Content -LiteralPath $performanceFile.FullName -Raw | ConvertFrom-Json
+        $reported = Get-LabSettingValue -Object $performance -Name 'DomainControllerBuilds'
+        foreach ($vmName in (Get-LabSettingName -Object $reported)) {
+            $builds[$vmName] = [string](Get-LabSettingValue -Object $reported -Name $vmName)
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        Total           = $total
+        Passed          = $passed
+        Failed          = ($total - $passed - $skipped)
+        Skipped         = $skipped
+        FailedScenarios = $failedNames.ToArray()
+        Builds          = $builds
+        Report          = $reportPath
+    }
+}
+
+function Get-LabRunStatusDescription {
+    <#
+    .SYNOPSIS
+        The one-line description of the ad-lab commit status: scenario counts and the domain controller OS build,
+        for example "23/23 scenarios passed; DC build 26100.4652".
+
+    .DESCRIPTION
+        GitHub caps a status description at 140 characters, and a longer one is refused outright, which would lose
+        the status. The text is cut with an ellipsis rather than risk that.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Summary,
+
+        [ValidateRange(20, 140)]
+        [int]$MaxLength = 140
+    )
+
+    $total = [int](Get-LabSettingValue -Object $Summary -Name 'Total')
+    $passed = [int](Get-LabSettingValue -Object $Summary -Name 'Passed')
+    $skipped = [int](Get-LabSettingValue -Object $Summary -Name 'Skipped')
+
+    if ($total -eq 0) {
+        $counts = 'no scenarios ran'
+    }
+    else {
+        $noun = 'scenarios'
+        if ($total -eq 1) {
+            $noun = 'scenario'
+        }
+        $counts = "$passed/$total $noun passed"
+        if ($skipped -gt 0) {
+            $counts += ", $skipped skipped"
+        }
+    }
+
+    $buildValues = @()
+    $builds = Get-LabSettingValue -Object $Summary -Name 'Builds'
+    foreach ($vmName in (Get-LabSettingName -Object $builds)) {
+        $value = [string](Get-LabSettingValue -Object $builds -Name $vmName)
+        if ((-not [string]::IsNullOrWhiteSpace($value)) -and ($value -ne 'unknown')) {
+            $buildValues += $value
+        }
+    }
+    $distinct = @($buildValues | Sort-Object -Unique)
+    if ($distinct.Count -eq 0) {
+        $buildText = 'DC build unknown'
+    }
+    elseif ($distinct.Count -eq 1) {
+        $buildText = 'DC build ' + $distinct[0]
+    }
+    else {
+        $buildText = 'DC builds ' + ($distinct -join ', ')
+    }
+
+    $text = "$counts; $buildText"
+    if ($text.Length -gt $MaxLength) {
+        $text = $text.Substring(0, $MaxLength - 3) + '...'
+    }
+    return $text
+}
+
+# ---------------------------------------------------------------------------------------------
+# Rebuild: the phases (orchestration over an adapter)
+# ---------------------------------------------------------------------------------------------
+#
+# Invoke-LabRebuildPhase decides and sequences; everything that touches Hyper-V is an adapter operation, supplied by
+# host/Invoke-LabRebuild.ps1 (and by a fake in the tests). The adapter is a hashtable of script blocks:
+#
+#   GetVm         { param($Name) }                 -> $null, or an object with Name, State ('Running', 'Off', ...),
+#                                                     Notes, CreatedUtc (datetime) and HasBaseline (bool)
+#   StopVm        { param($Name) }                 shut the VM down (turn it off if it will not stop)
+#   RestoreVm     { param($Name, $Checkpoint) }    apply the checkpoint, start the VM, wait until it answers
+#   RenameVm      { param($Name, $NewName) }
+#   SetNotes      { param($Name, $Notes) }
+#   RemoveVm      { param($Name) }                 remove the VM, its checkpoints, its disk and its folder
+#   BuildVm       { param($Parameters) }           New-LabDomainController.ps1 with these parameters (a hashtable)
+#   GetGuestBuild { param($Name) }                 -> the guest OS build string, or $null
+#   NowUtc        { }                              -> the current UTC time
+#   Log           { param($Text) }
+
+function Assert-LabRebuildVm {
+    # Internal: the rebuild only ever touches VMs this lab created.
+    param(
+        [AllowNull()]
+        [object]$Vm,
+
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    if (($null -ne $Vm) -and (-not (Test-LabVmNote -Notes ([string]$Vm.Notes)))) {
+        throw "'$Name' exists but was not created by this lab (its Notes carry no lab marker); refusing to touch it."
+    }
+}
+
+function ConvertTo-LabRebuildResult {
+    # Internal: one role's outcome, in the shape the phase's JSON reports.
+    param(
+        [Parameter(Mandatory)]
+        [object]$Role,
+
+        [Parameter(Mandatory)]
+        [string]$Action,
+
+        [string]$Detail = '',
+
+        [AllowNull()]
+        [object]$GuestBuild
+    )
+
+    return [pscustomobject][ordered]@{
+        role       = $Role.Role
+        live       = $Role.LiveName
+        candidate  = $Role.CandidateName
+        prev       = $Role.PrevName
+        action     = $Action
+        detail     = $Detail
+        guestBuild = $GuestBuild
+    }
+}
+
+function Get-LabRebuildGuestBuild {
+    # Internal: the guest OS build of a VM, or $null when it cannot be read (an off VM, a guest still booting).
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Adapter,
+
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    try {
+        $build = & $Adapter.GetGuestBuild $Name
+        if ([string]::IsNullOrWhiteSpace([string]$build)) {
+            return $null
+        }
+        return [string]$build
+    }
+    catch {
+        & $Adapter.Log "Could not read the guest OS build of ${Name}: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Invoke-LabRebuildRole {
+    # Internal: one phase for one domain controller.
+    param(
+        [Parameter(Mandatory)]
+        [string]$Phase,
+
+        [Parameter(Mandatory)]
+        [object]$Role,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Adapter,
+
+        [bool]$Fresh,
+        [int]$MaxCandidateAgeHours,
+        [int]$PrevRetentionDays
+    )
+
+    $live = & $Adapter.GetVm $Role.LiveName
+    $candidate = & $Adapter.GetVm $Role.CandidateName
+    $prev = & $Adapter.GetVm $Role.PrevName
+    Assert-LabRebuildVm -Vm $live -Name $Role.LiveName
+    Assert-LabRebuildVm -Vm $candidate -Name $Role.CandidateName
+    Assert-LabRebuildVm -Vm $prev -Name $Role.PrevName
+    $now = ([datetime](& $Adapter.NowUtc)).ToUniversalTime()
+
+    switch ($Phase) {
+        'Build' {
+            $createdUtc = [datetime]::MinValue
+            $hasBaseline = $false
+            if ($null -ne $candidate) {
+                $createdUtc = [datetime]$candidate.CreatedUtc
+                $hasBaseline = [bool]$candidate.HasBaseline
+            }
+            $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
+                -CandidateHasBaseline $hasBaseline -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh
+
+            # The candidate is built with the live domain controller's address, so the live one must be off first.
+            if (($null -ne $live) -and ($live.State -ne 'Off')) {
+                & $Adapter.Log "Stopping $($Role.LiveName): its address is the candidate's."
+                & $Adapter.StopVm $Role.LiveName
+            }
+
+            if ($action -eq 'Reuse') {
+                $detail = "$($Role.CandidateName) is recent and already has its baseline checkpoint; reusing it."
+            }
+            else {
+                if ($action -eq 'Replace') {
+                    & $Adapter.Log "Removing the earlier $($Role.CandidateName) before building a new one."
+                    & $Adapter.RemoveVm $Role.CandidateName
+                }
+                elseif ($action -eq 'Resume') {
+                    & $Adapter.Log "Resuming the unfinished build of $($Role.CandidateName)."
+                }
+                & $Adapter.BuildVm $Role.BuildParameters
+                $built = & $Adapter.GetVm $Role.CandidateName
+                if (($null -eq $built) -or (-not [bool]$built.HasBaseline)) {
+                    throw "The build of '$($Role.CandidateName)' finished but it has no baseline checkpoint."
+                }
+                $detail = "$($Role.CandidateName) built and checkpointed as baseline."
+            }
+            return (ConvertTo-LabRebuildResult -Role $Role -Action $action -Detail $detail -GuestBuild (Get-LabRebuildGuestBuild -Adapter $Adapter -Name $Role.CandidateName))
+        }
+
+        'Stage' {
+            if ($null -eq $candidate) {
+                throw "'$($Role.CandidateName)' does not exist; run the Build phase first."
+            }
+            if (-not [bool]$candidate.HasBaseline) {
+                throw "'$($Role.CandidateName)' has no baseline checkpoint; run the Build phase again."
+            }
+            if (($null -ne $live) -and ($live.State -ne 'Off')) {
+                & $Adapter.Log "Stopping $($Role.LiveName)."
+                & $Adapter.StopVm $Role.LiveName
+            }
+            & $Adapter.Log "Starting $($Role.CandidateName) from its baseline checkpoint."
+            & $Adapter.RestoreVm $Role.CandidateName 'baseline'
+            return (ConvertTo-LabRebuildResult -Role $Role -Action 'Staged' -Detail "$($Role.LiveName) is off and $($Role.CandidateName) is running on its address." -GuestBuild (Get-LabRebuildGuestBuild -Adapter $Adapter -Name $Role.CandidateName))
+        }
+
+        'Promote' {
+            $steps = @(Get-LabPromotePlan -LiveExists ($null -ne $live) -CandidateExists ($null -ne $candidate) -PrevExists ($null -ne $prev))
+            if ($steps.Count -eq 0) {
+                return (ConvertTo-LabRebuildResult -Role $Role -Action 'AlreadyPromoted' -Detail "There is no $($Role.CandidateName) to promote; $($Role.LiveName) is already the live set." -GuestBuild (Get-LabRebuildGuestBuild -Adapter $Adapter -Name $Role.LiveName))
+            }
+            if (-not [bool]$candidate.HasBaseline) {
+                throw "'$($Role.CandidateName)' has no baseline checkpoint; refusing to promote it."
+            }
+            $notes = @()
+            foreach ($step in $steps) {
+                if ($step -eq 'RemovePrev') {
+                    $earlier = Get-LabVmNoteValue -Notes ([string]$prev.Notes) -Key 'demoted'
+                    $notes += "removed the earlier $($Role.PrevName) (demoted $earlier)"
+                    & $Adapter.Log "Removing the earlier $($Role.PrevName) to make way."
+                    & $Adapter.RemoveVm $Role.PrevName
+                }
+                elseif ($step -eq 'RenameLiveToPrev') {
+                    if ($live.State -ne 'Off') {
+                        & $Adapter.StopVm $Role.LiveName
+                    }
+                    $stamped = Set-LabVmNoteValue -Notes ([string]$live.Notes) -Key 'demoted' -Value ($now.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture))
+                    & $Adapter.SetNotes $Role.LiveName $stamped
+                    & $Adapter.Log "Renaming $($Role.LiveName) to $($Role.PrevName)."
+                    & $Adapter.RenameVm $Role.LiveName $Role.PrevName
+                    $notes += "$($Role.LiveName) is now $($Role.PrevName)"
+                }
+                elseif ($step -eq 'RenameCandidateToLive') {
+                    & $Adapter.Log "Renaming $($Role.CandidateName) to $($Role.LiveName)."
+                    & $Adapter.RenameVm $Role.CandidateName $Role.LiveName
+                    $notes += "$($Role.CandidateName) is now $($Role.LiveName)"
+                }
+            }
+            if (($null -eq (& $Adapter.GetVm $Role.LiveName)) -or ($null -ne (& $Adapter.GetVm $Role.CandidateName))) {
+                throw "After promoting, expected $($Role.LiveName) to exist and $($Role.CandidateName) not to; the lab is in an unexpected state."
+            }
+            return (ConvertTo-LabRebuildResult -Role $Role -Action 'Promoted' -Detail ($notes -join '; ') -GuestBuild (Get-LabRebuildGuestBuild -Adapter $Adapter -Name $Role.LiveName))
+        }
+
+        'Rollback' {
+            $steps = @(Get-LabRollbackPlan -LiveExists ($null -ne $live) -CandidateExists ($null -ne $candidate) -PrevExists ($null -ne $prev))
+            foreach ($step in $steps) {
+                if ($step -eq 'StopCandidate') {
+                    if ($candidate.State -ne 'Off') {
+                        & $Adapter.Log "Stopping $($Role.CandidateName); it is left in place for diagnosis."
+                        & $Adapter.StopVm $Role.CandidateName
+                    }
+                }
+                elseif ($step -eq 'RenamePrevToLive') {
+                    $cleared = Set-LabVmNoteValue -Notes ([string]$prev.Notes) -Key 'demoted' -Value ''
+                    & $Adapter.SetNotes $Role.PrevName $cleared
+                    & $Adapter.Log "Renaming $($Role.PrevName) back to $($Role.LiveName)."
+                    & $Adapter.RenameVm $Role.PrevName $Role.LiveName
+                }
+                elseif ($step -eq 'StartLive') {
+                    & $Adapter.Log "Starting $($Role.LiveName) from its baseline checkpoint."
+                    & $Adapter.RestoreVm $Role.LiveName 'baseline'
+                }
+            }
+            return (ConvertTo-LabRebuildResult -Role $Role -Action 'RolledBack' -Detail "$($Role.LiveName) is running again; $($Role.CandidateName) is stopped and left for diagnosis." -GuestBuild (Get-LabRebuildGuestBuild -Adapter $Adapter -Name $Role.LiveName))
+        }
+
+        'Prune' {
+            if ($null -eq $prev) {
+                return (ConvertTo-LabRebuildResult -Role $Role -Action 'NothingToPrune' -Detail "There is no $($Role.PrevName).")
+            }
+            $demoted = $null
+            $stamp = Get-LabVmNoteValue -Notes ([string]$prev.Notes) -Key 'demoted'
+            if (-not [string]::IsNullOrEmpty($stamp)) {
+                $parsed = [datetime]::MinValue
+                if ([datetime]::TryParseExact($stamp, 'yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture, ([System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal), [ref]$parsed)) {
+                    $demoted = $parsed
+                }
+            }
+            $plan = @(Get-LabPrunePlan -Prev @([pscustomobject]@{ Name = $Role.PrevName; DemotedUtc = $demoted }) -NowUtc $now -MinAgeDays $PrevRetentionDays)[0]
+            if ($plan.Remove) {
+                & $Adapter.Log "Removing $($Role.PrevName): $($plan.Reason)."
+                & $Adapter.RemoveVm $Role.PrevName
+                return (ConvertTo-LabRebuildResult -Role $Role -Action 'Pruned' -Detail "$($Role.PrevName) $($plan.Reason)")
+            }
+            return (ConvertTo-LabRebuildResult -Role $Role -Action 'Kept' -Detail "$($Role.PrevName) $($plan.Reason)")
+        }
+
+        'Status' {
+            $parts = @()
+            foreach ($pair in @(@('live', $live, $Role.LiveName), @('candidate', $candidate, $Role.CandidateName), @('prev', $prev, $Role.PrevName))) {
+                if ($null -eq $pair[1]) {
+                    $parts += "$($pair[0]) $($pair[2]): absent"
+                }
+                else {
+                    $baseline = 'no baseline'
+                    if ([bool]$pair[1].HasBaseline) {
+                        $baseline = 'baseline'
+                    }
+                    $parts += "$($pair[0]) $($pair[2]): $($pair[1].State), $baseline"
+                }
+            }
+            $build = $null
+            if (($null -ne $live) -and ($live.State -eq 'Running')) {
+                $build = Get-LabRebuildGuestBuild -Adapter $Adapter -Name $Role.LiveName
+            }
+            return (ConvertTo-LabRebuildResult -Role $Role -Action 'Reported' -Detail ($parts -join '; ') -GuestBuild $build)
+        }
+    }
+}
+
+function Invoke-LabRebuildPhase {
+    <#
+    .SYNOPSIS
+        Runs one phase of the monthly rebuild over the domain controllers of a plan, through an adapter, and returns
+        one result per domain controller.
+
+    .DESCRIPTION
+        Every phase can be run again and converges:
+
+          Prune     removes each <live>-prev demoted at least PrevRetentionDays ago (run first, so its disk is free
+                    before three new ones are built)
+          Build     stops the live VM (the candidate takes its address), then builds <live>-candidate, taking the
+                    baseline checkpoint; reuses, resumes or replaces one that is already there
+                    (Get-LabRebuildBuildAction)
+          Stage     stops the live VM and starts the candidate from its baseline checkpoint, waiting until it answers
+          Promote   names the live VM <live>-prev (stamping when) and the candidate <live>
+                    (Get-LabPromotePlan); interrupted, it finishes on the next run
+          Rollback  stops the candidate (left for diagnosis) and starts the live VM again (Get-LabRollbackPlan)
+          Status    reports which VMs exist and what state they are in
+
+        Nothing here touches a VM the lab did not create (its Notes must carry the lab marker), and a failure throws
+        naming the domain controller and step.
+
+    .PARAMETER Plan
+        ConvertFrom-LabRebuildSetting output.
+
+    .PARAMETER Adapter
+        The operations that reach Hyper-V; see the notes above this function.
+
+    .PARAMETER Role
+        Limit the phase to these live VM names (a comma-separated list is accepted). Default: all three.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject[]])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('Prune', 'Build', 'Stage', 'Promote', 'Rollback', 'Status')]
+        [string]$Phase,
+
+        [Parameter(Mandatory)]
+        [object]$Plan,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Adapter,
+
+        [string[]]$Role = @(),
+
+        [switch]$Fresh,
+
+        [ValidateRange(1, 720)]
+        [int]$MaxCandidateAgeHours = 24,
+
+        [ValidateRange(1, 365)]
+        [int]$PrevRetentionDays = 7
+    )
+
+    foreach ($operation in @('GetVm', 'StopVm', 'RestoreVm', 'RenameVm', 'SetNotes', 'RemoveVm', 'BuildVm', 'GetGuestBuild', 'NowUtc', 'Log')) {
+        if (-not $Adapter.ContainsKey($operation)) {
+            throw "The rebuild adapter has no '$operation' operation."
+        }
+    }
+
+    $roles = @($Plan.Roles)
+    $wanted = @($Role | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+    if ($wanted.Count -gt 0) {
+        $known = @($roles | ForEach-Object { $_.LiveName })
+        $unknown = @($wanted | Where-Object { $known -notcontains $_ })
+        if ($unknown.Count -gt 0) {
+            throw "Unknown domain controller '$($unknown -join ', ')'; the settings define $($known -join ', ')."
+        }
+        $roles = @($roles | Where-Object { $wanted -contains $_.LiveName })
+    }
+
+    if ($Phase -eq 'Promote') {
+        # Check every domain controller before renaming any of them: a promotion that stopped after the first would
+        # leave the three forests on different builds.
+        foreach ($item in $roles) {
+            try {
+                $liveVm = & $Adapter.GetVm $item.LiveName
+                $candidateVm = & $Adapter.GetVm $item.CandidateName
+                $prevVm = & $Adapter.GetVm $item.PrevName
+                Assert-LabRebuildVm -Vm $liveVm -Name $item.LiveName
+                Assert-LabRebuildVm -Vm $candidateVm -Name $item.CandidateName
+                Assert-LabRebuildVm -Vm $prevVm -Name $item.PrevName
+                $steps = @(Get-LabPromotePlan -LiveExists ($null -ne $liveVm) -CandidateExists ($null -ne $candidateVm) -PrevExists ($null -ne $prevVm))
+                if (($steps.Count -gt 0) -and (-not [bool]$candidateVm.HasBaseline)) {
+                    throw "'$($item.CandidateName)' has no baseline checkpoint; refusing to promote it."
+                }
+            }
+            catch {
+                throw "Promote failed for $($item.LiveName) before anything was renamed: $($_.Exception.Message)"
+            }
+        }
+    }
+
+    $results = New-Object System.Collections.Generic.List[object]
+    foreach ($item in $roles) {
+        try {
+            $results.Add((Invoke-LabRebuildRole -Phase $Phase -Role $item -Adapter $Adapter -Fresh ([bool]$Fresh) -MaxCandidateAgeHours $MaxCandidateAgeHours -PrevRetentionDays $PrevRetentionDays))
+        }
+        catch {
+            throw "$Phase failed for $($item.LiveName): $($_.Exception.Message)"
+        }
+    }
+    return $results.ToArray()
+}
+
+# ---------------------------------------------------------------------------------------------
 # Windows only: ISO creation (host)
 # ---------------------------------------------------------------------------------------------
 
@@ -1947,5 +3180,9 @@ Export-ModuleMember -Function @(
     'Get-LabGuestOsBuild', 'Wait-LabTcpPort', 'Send-LabKeyPress',
     'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
-    'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused'
+    'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused',
+    'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
+    'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
+    'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
+    'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase'
 )

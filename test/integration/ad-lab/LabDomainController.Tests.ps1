@@ -822,3 +822,1091 @@ Describe 'Module surface' {
         (Get-Content -LiteralPath $PSCommandPath -Raw).Contains($emDash) | Should -BeFalse
     }
 }
+
+# ---------------------------------------------------------------------------------------------
+# The monthly rebuild (host/Invoke-LabRebuild.ps1): names, settings, decisions, results, phases
+# ---------------------------------------------------------------------------------------------
+
+Describe 'Get-LabRebuildVmName' {
+    It 'names the live, candidate and previous VM of a domain controller' {
+        Get-LabRebuildVmName -LiveName 'dc-primary' -Kind Live | Should -Be 'dc-primary'
+        Get-LabRebuildVmName -LiveName 'dc-primary' -Kind Candidate | Should -Be 'dc-primary-candidate'
+        Get-LabRebuildVmName -LiveName 'dc-primary' -Kind Prev | Should -Be 'dc-primary-prev'
+    }
+
+    It 'refuses a live name that already carries a suffix, so a name is never doubled' {
+        { Get-LabRebuildVmName -LiveName 'dc-primary-candidate' -Kind Candidate } | Should -Throw '*already ends in*'
+        { Get-LabRebuildVmName -LiveName 'dc-primary-prev' -Kind Prev } | Should -Throw '*already ends in*'
+    }
+
+    It 'refuses a name Hyper-V cannot be given safely' {
+        { Get-LabRebuildVmName -LiveName 'dc*' -Kind Live } | Should -Throw '*not a valid VM name*'
+        { Get-LabRebuildVmName -LiveName 'dc primary' -Kind Live } | Should -Throw '*not a valid VM name*'
+    }
+
+    It 'refuses a live name with no room for its suffix' {
+        $long = 'a' * 60
+        Get-LabRebuildVmName -LiveName $long -Kind Live | Should -Be $long
+        { Get-LabRebuildVmName -LiveName $long -Kind Candidate } | Should -Throw '*too long*'
+    }
+}
+
+Describe 'Get-LabRebuildGenerationName' {
+    It 'is rebuild- and the UTC date' {
+        Get-LabRebuildGenerationName -NowUtc ([datetime]::new(2026, 9, 30, 23, 59, 0, [System.DateTimeKind]::Utc)) | Should -Be 'rebuild-20260930'
+    }
+
+    It 'converts a local time to UTC first' {
+        $local = [datetime]::new(2026, 10, 1, 0, 30, 0, [System.DateTimeKind]::Utc).ToLocalTime()
+        Get-LabRebuildGenerationName -NowUtc $local | Should -Be 'rebuild-20261001'
+    }
+}
+
+Describe 'ConvertFrom-LabRebuildSetting' {
+    BeforeAll {
+        function Get-RebuildSetting {
+            return @{
+                isoPath                   = 'D:\media\WindowsServer2025.iso'
+                cumulativeUpdateDirectory = 'D:\media\updates'
+                vhdDirectory              = 'D:\Hyper-V\Virtual Hard Disks'
+                switchName                = 'Lab'
+                ntpServer                 = 'time.example.internal'
+                dnsForwarder              = '10.0.0.1'
+                domainControllers         = @{
+                    'dc-primary' = @{ domain = 'PANOPLY.LOCAL'; ipAddress = '10.99.0.11'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $true }
+                    'dc-source'  = @{ domain = 'RESURGAM.LOCAL'; ipAddress = '10.99.0.12'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $false }
+                    'dc-target'  = @{ domain = 'GENTIAN.LOCAL'; ipAddress = '10.99.0.13'; prefixLength = 24; gateway = '10.99.0.1' }
+                }
+            }
+        }
+    }
+
+    It 'maps the three domain controllers onto candidate builds that keep the live address' {
+        $plan = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'rebuild-20260930'
+
+        @($plan.Roles).Count | Should -Be 3
+        @($plan.Roles | ForEach-Object { $_.LiveName }) | Should -Be @('dc-primary', 'dc-source', 'dc-target')
+        @($plan.Roles | ForEach-Object { $_.Role }) | Should -Be @('Primary', 'Source', 'Target')
+        @($plan.Roles | ForEach-Object { $_.EnvironmentVariable }) | Should -Be @('JIM_AD_LAB_PRIMARY_VM', 'JIM_AD_LAB_SOURCE_VM', 'JIM_AD_LAB_TARGET_VM')
+
+        $primary = $plan.Roles[0]
+        $primary.CandidateName | Should -Be 'dc-primary-candidate'
+        $primary.PrevName | Should -Be 'dc-primary-prev'
+        $primary.BuildParameters.Name | Should -Be 'dc-primary-candidate'
+        $primary.BuildParameters.Domain | Should -Be 'PANOPLY.LOCAL'
+        $primary.BuildParameters.IPAddress | Should -Be '10.99.0.11'
+        $primary.BuildParameters.PrefixLength | Should -Be 24
+        $primary.BuildParameters.Gateway | Should -Be '10.99.0.1'
+        $primary.BuildParameters.IsoPath | Should -Be 'D:\media\WindowsServer2025.iso'
+        $primary.BuildParameters.SwitchName | Should -Be 'Lab'
+        $primary.BuildParameters.NtpServer | Should -Be 'time.example.internal'
+        $primary.BuildParameters.DnsForwarder | Should -Be '10.0.0.1'
+    }
+
+    It 'builds each candidate beneath a fresh folder of the generation, never over an existing disk' {
+        $plan = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'rebuild-20260930'
+        $plan.Generation | Should -Be 'rebuild-20260930'
+        $plan.Roles[0].BuildParameters.VhdDirectory | Should -Be 'D:\Hyper-V\Virtual Hard Disks\rebuild-20260930'
+    }
+
+    It 'passes -EnableRecycleBin only for a domain controller that has it on' {
+        $plan = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
+        $plan.Roles[0].BuildParameters.ContainsKey('EnableRecycleBin') | Should -BeTrue
+        $plan.Roles[0].BuildParameters.EnableRecycleBin | Should -BeTrue
+        $plan.Roles[1].BuildParameters.ContainsKey('EnableRecycleBin') | Should -BeFalse
+        $plan.Roles[2].BuildParameters.ContainsKey('EnableRecycleBin') | Should -BeFalse
+    }
+
+    It 'passes the cumulative update to every build when there is one, and to none when there is not' {
+        $with = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1' -CumulativeUpdatePath 'D:\media\updates\kb1.msu'
+        @($with.Roles | ForEach-Object { $_.BuildParameters.CumulativeUpdatePath }) | Should -Be @('D:\media\updates\kb1.msu', 'D:\media\updates\kb1.msu', 'D:\media\updates\kb1.msu')
+
+        $without = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
+        foreach ($role in $without.Roles) { $role.BuildParameters.ContainsKey('CumulativeUpdatePath') | Should -BeFalse }
+    }
+
+    It 'reads settings parsed from JSON as well as a hashtable' {
+        $json = (Get-RebuildSetting | ConvertTo-Json -Depth 6) | ConvertFrom-Json
+        $plan = ConvertFrom-LabRebuildSetting -Settings $json -GenerationName 'g1'
+        $plan.Roles[1].BuildParameters.Domain | Should -Be 'RESURGAM.LOCAL'
+        $plan.Roles[0].BuildParameters.EnableRecycleBin | Should -BeTrue
+    }
+
+    It 'names the missing setting: <Key>' -TestCases @(
+        @{ Key = 'isoPath' }, @{ Key = 'vhdDirectory' }, @{ Key = 'switchName' }, @{ Key = 'ntpServer' }
+    ) {
+        $settings = Get-RebuildSetting
+        $settings.Remove($Key)
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*'$Key'*"
+    }
+
+    It 'passes the DNS forwarder on when there is one, and leaves it out when there is none (the lab has no uplink)' {
+        $with = ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -GenerationName 'g1'
+        $with.Roles[0].BuildParameters.DnsForwarder | Should -Be '10.0.0.1'
+
+        foreach ($empty in $null, '', '  ') {
+            $settings = Get-RebuildSetting
+            $settings.dnsForwarder = $empty
+            $plan = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1'
+            foreach ($role in $plan.Roles) { $role.BuildParameters.ContainsKey('DnsForwarder') | Should -BeFalse }
+        }
+
+        $absent = Get-RebuildSetting
+        $absent.Remove('dnsForwarder')
+        foreach ($role in (ConvertFrom-LabRebuildSetting -Settings $absent -GenerationName 'g1').Roles) { $role.BuildParameters.ContainsKey('DnsForwarder') | Should -BeFalse }
+    }
+
+    It 'refuses a DNS forwarder that is not an IPv4 address' {
+        $settings = Get-RebuildSetting
+        $settings.dnsForwarder = 'dns.example.internal'
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*'dnsForwarder'*not an IPv4 address*"
+    }
+
+    It 'refuses a domain controller missing from the settings' {
+        $settings = Get-RebuildSetting
+        $settings.domainControllers.Remove('dc-target')
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw "*no 'dc-target'*"
+    }
+
+    It 'refuses a domain controller the lab does not have, because the runner only reads three VM variables' {
+        $settings = Get-RebuildSetting
+        $settings.domainControllers['dc-extra'] = @{ domain = 'EXTRA.LOCAL'; ipAddress = '10.99.0.14'; prefixLength = 24; gateway = '10.99.0.1' }
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*dc-extra*'
+    }
+
+    It 'refuses two domain controllers with one address' {
+        $settings = Get-RebuildSetting
+        $settings.domainControllers['dc-source'].ipAddress = '10.99.0.11'
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*already has*'
+    }
+
+    It 'refuses two domain controllers with one domain' {
+        $settings = Get-RebuildSetting
+        $settings.domainControllers['dc-source'].domain = 'panoply.local'
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*domain*already has*'
+    }
+
+    It 'refuses an address that is not IPv4: <Value>' -TestCases @(
+        @{ Value = 'dc1' }, @{ Value = '10.99.0' }, @{ Value = '10' }, @{ Value = '10.99.0.11.5' }, @{ Value = '999.1.1.1' }
+    ) {
+        $settings = Get-RebuildSetting
+        $settings.domainControllers['dc-primary'].ipAddress = $Value
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*not an IPv4 address*'
+    }
+
+    It 'refuses a prefix length outside 8 to 30' {
+        $settings = Get-RebuildSetting
+        $settings.domainControllers['dc-primary'].prefixLength = 31
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*prefixLength*'
+    }
+
+    It 'refuses a domain that is not a DNS name' {
+        $settings = Get-RebuildSetting
+        $settings.domainControllers['dc-primary'].domain = 'PANOPLY'
+        { ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' } | Should -Throw '*not a DNS domain name*'
+    }
+
+    It 'refuses to build without a generation name' {
+        { ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) } | Should -Throw '*generation name*'
+    }
+
+    It 'gives just the names, whatever the settings hold, with -NamesOnly, so a rollback is never blocked by a bad settings file' {
+        $plan = ConvertFrom-LabRebuildSetting -Settings @{ isoPath = '' } -NamesOnly
+        @($plan.Roles | ForEach-Object { $_.LiveName }) | Should -Be @('dc-primary', 'dc-source', 'dc-target')
+        @($plan.Roles | ForEach-Object { $_.CandidateName }) | Should -Be @('dc-primary-candidate', 'dc-source-candidate', 'dc-target-candidate')
+        @($plan.Roles | ForEach-Object { $_.PrevName }) | Should -Be @('dc-primary-prev', 'dc-source-prev', 'dc-target-prev')
+        $plan.Roles[0].BuildParameters | Should -BeNullOrEmpty
+        $plan.VhdDirectory | Should -BeNullOrEmpty
+        (ConvertFrom-LabRebuildSetting -Settings $null -NamesOnly).Roles.Count | Should -Be 3
+    }
+
+    It 'still reports the VHD directory with -NamesOnly when the settings have one' {
+        (ConvertFrom-LabRebuildSetting -Settings (Get-RebuildSetting) -NamesOnly).VhdDirectory | Should -Be 'D:\Hyper-V\Virtual Hard Disks'
+    }
+}
+
+Describe 'Get-LabNewestCumulativeUpdate' {
+    BeforeAll {
+        function Get-FakeFile {
+            param([string]$Name, [datetime]$WrittenUtc)
+            return [pscustomobject]@{ Name = $Name; FullName = "D:\media\updates\$Name"; LastWriteTimeUtc = $WrittenUtc }
+        }
+    }
+
+    It 'picks the newest .msu by modification time' {
+        $files = @(
+            (Get-FakeFile 'old.msu' ([datetime]::new(2026, 8, 1, 0, 0, 0, [System.DateTimeKind]::Utc))),
+            (Get-FakeFile 'new.msu' ([datetime]::new(2026, 9, 10, 0, 0, 0, [System.DateTimeKind]::Utc))),
+            (Get-FakeFile 'mid.msu' ([datetime]::new(2026, 8, 20, 0, 0, 0, [System.DateTimeKind]::Utc)))
+        )
+        (Get-LabNewestCumulativeUpdate -File $files).Name | Should -Be 'new.msu'
+    }
+
+    It 'ignores anything that is not an .msu, even when newer' {
+        $files = @(
+            (Get-FakeFile 'kb.msu' ([datetime]::new(2026, 8, 1, 0, 0, 0, [System.DateTimeKind]::Utc))),
+            (Get-FakeFile 'notes.txt' ([datetime]::new(2026, 9, 10, 0, 0, 0, [System.DateTimeKind]::Utc))),
+            (Get-FakeFile 'kb.msu.bak' ([datetime]::new(2026, 9, 11, 0, 0, 0, [System.DateTimeKind]::Utc)))
+        )
+        (Get-LabNewestCumulativeUpdate -File $files).Name | Should -Be 'kb.msu'
+    }
+
+    It 'is case-insensitive about the extension and breaks a tie by name' {
+        $when = [datetime]::new(2026, 9, 1, 0, 0, 0, [System.DateTimeKind]::Utc)
+        $files = @((Get-FakeFile 'a.MSU' $when), (Get-FakeFile 'b.msu' $when))
+        (Get-LabNewestCumulativeUpdate -File $files).Name | Should -Be 'b.msu'
+    }
+
+    It 'returns nothing for an empty or null list, or one with no update in it' {
+        Get-LabNewestCumulativeUpdate -File @() | Should -BeNullOrEmpty
+        Get-LabNewestCumulativeUpdate -File $null | Should -BeNullOrEmpty
+        Get-LabNewestCumulativeUpdate -File @((Get-FakeFile 'readme.txt' ([datetime]::UtcNow))) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-LabRebuildBuildAction' {
+    BeforeAll {
+        $script:BuildNow = [datetime]::new(2026, 9, 30, 12, 0, 0, [System.DateTimeKind]::Utc)
+    }
+
+    It 'builds when there is no candidate' {
+        Get-LabRebuildBuildAction -CandidateExists $false -NowUtc $script:BuildNow | Should -Be 'Build'
+    }
+
+    It 'reuses a recent candidate that has its baseline (a retry, or this run''s own)' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-3) -CandidateHasBaseline $true -NowUtc $script:BuildNow | Should -Be 'Reuse'
+    }
+
+    It 'resumes a recent candidate whose build stopped before the baseline' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-3) -CandidateHasBaseline $false -NowUtc $script:BuildNow | Should -Be 'Resume'
+    }
+
+    It 'replaces a candidate older than the age limit, so last month''s red leftover is never mistaken for this month''s' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddDays(-30) -CandidateHasBaseline $true -NowUtc $script:BuildNow | Should -Be 'Replace'
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddDays(-30) -CandidateHasBaseline $false -NowUtc $script:BuildNow | Should -Be 'Replace'
+    }
+
+    It 'treats exactly the age limit as still recent, and one hour more as stale' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-24) -CandidateHasBaseline $true -NowUtc $script:BuildNow | Should -Be 'Reuse'
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-25) -CandidateHasBaseline $true -NowUtc $script:BuildNow | Should -Be 'Replace'
+    }
+
+    It 'honours a different age limit' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-30) -CandidateHasBaseline $true -NowUtc $script:BuildNow -MaxAgeHours 48 | Should -Be 'Reuse'
+    }
+
+    It 'replaces a recent candidate when asked for a fresh one' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-1) -CandidateHasBaseline $true -NowUtc $script:BuildNow -Fresh | Should -Be 'Replace'
+    }
+
+    It 'does not mind a candidate stamped slightly in the future (clock skew)' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddMinutes(5) -CandidateHasBaseline $true -NowUtc $script:BuildNow | Should -Be 'Reuse'
+    }
+}
+
+Describe 'Get-LabPromotePlan' {
+    It 'demotes the live VM and promotes the candidate: live=<Live> candidate=<Candidate> prev=<Prev>' -TestCases @(
+        @{ Live = $true; Candidate = $true; Prev = $false; Expected = @('RenameLiveToPrev', 'RenameCandidateToLive') }
+        @{ Live = $true; Candidate = $true; Prev = $true; Expected = @('RemovePrev', 'RenameLiveToPrev', 'RenameCandidateToLive') }
+        @{ Live = $false; Candidate = $true; Prev = $true; Expected = @('RenameCandidateToLive') }
+        @{ Live = $true; Candidate = $false; Prev = $false; Expected = @() }
+        @{ Live = $true; Candidate = $false; Prev = $true; Expected = @() }
+    ) {
+        $plan = @(Get-LabPromotePlan -LiveExists $Live -CandidateExists $Candidate -PrevExists $Prev)
+        $plan.Count | Should -Be $Expected.Count
+        for ($index = 0; $index -lt $Expected.Count; $index++) { $plan[$index] | Should -Be $Expected[$index] }
+    }
+
+    It 'throws when there is nothing to keep: live=<Live> candidate=<Candidate> prev=<Prev>' -TestCases @(
+        @{ Live = $false; Candidate = $false; Prev = $false }
+        @{ Live = $false; Candidate = $false; Prev = $true }
+        @{ Live = $false; Candidate = $true; Prev = $false }
+    ) {
+        { Get-LabPromotePlan -LiveExists $Live -CandidateExists $Candidate -PrevExists $Prev } | Should -Throw
+    }
+
+    It 'never renames the candidate before the live VM has stepped aside' {
+        foreach ($prev in $true, $false) {
+            $plan = @(Get-LabPromotePlan -LiveExists $true -CandidateExists $true -PrevExists $prev)
+            [array]::IndexOf($plan, 'RenameLiveToPrev') | Should -BeLessThan ([array]::IndexOf($plan, 'RenameCandidateToLive'))
+        }
+    }
+}
+
+Describe 'Get-LabRollbackPlan' {
+    It 'stops the candidate and starts the live VM: live=<Live> candidate=<Candidate> prev=<Prev>' -TestCases @(
+        @{ Live = $true; Candidate = $true; Prev = $false; Expected = @('StopCandidate', 'StartLive') }
+        @{ Live = $true; Candidate = $true; Prev = $true; Expected = @('StopCandidate', 'StartLive') }
+        @{ Live = $true; Candidate = $false; Prev = $false; Expected = @('StartLive') }
+        @{ Live = $false; Candidate = $true; Prev = $true; Expected = @('StopCandidate', 'RenamePrevToLive', 'StartLive') }
+        @{ Live = $false; Candidate = $false; Prev = $true; Expected = @('RenamePrevToLive', 'StartLive') }
+    ) {
+        $plan = @(Get-LabRollbackPlan -LiveExists $Live -CandidateExists $Candidate -PrevExists $Prev)
+        $plan.Count | Should -Be $Expected.Count
+        for ($index = 0; $index -lt $Expected.Count; $index++) { $plan[$index] | Should -Be $Expected[$index] }
+    }
+
+    It 'throws when there is no live VM and no previous one to put back' {
+        { Get-LabRollbackPlan -LiveExists $false -CandidateExists $true -PrevExists $false } | Should -Throw '*by hand*'
+        { Get-LabRollbackPlan -LiveExists $false -CandidateExists $false -PrevExists $false } | Should -Throw '*by hand*'
+    }
+}
+
+Describe 'Get-LabPrunePlan' {
+    BeforeAll {
+        $script:PruneNow = [datetime]::new(2026, 9, 30, 12, 0, 0, [System.DateTimeKind]::Utc)
+    }
+
+    It 'removes a previous VM demoted 7 or more days ago and keeps a younger one' {
+        $prev = @(
+            [pscustomobject]@{ Name = 'dc-primary-prev'; DemotedUtc = $script:PruneNow.AddDays(-7) },
+            [pscustomobject]@{ Name = 'dc-source-prev'; DemotedUtc = $script:PruneNow.AddDays(-7).AddMinutes(1) },
+            [pscustomobject]@{ Name = 'dc-target-prev'; DemotedUtc = $script:PruneNow.AddDays(-30) }
+        )
+        $plan = @(Get-LabPrunePlan -Prev $prev -NowUtc $script:PruneNow)
+        $plan.Count | Should -Be 3
+        $plan[0].Remove | Should -BeTrue
+        $plan[1].Remove | Should -BeFalse
+        $plan[2].Remove | Should -BeTrue
+        $plan[2].Reason | Should -BeLike '*30 days*'
+    }
+
+    It 'keeps a previous VM whose age is unknown rather than guess' {
+        $plan = @(Get-LabPrunePlan -Prev @([pscustomobject]@{ Name = 'dc-primary-prev'; DemotedUtc = $null }) -NowUtc $script:PruneNow)
+        $plan[0].Remove | Should -BeFalse
+        $plan[0].Reason | Should -BeLike '*age is unknown*'
+    }
+
+    It 'honours a different retention' {
+        $prev = @([pscustomobject]@{ Name = 'dc-primary-prev'; DemotedUtc = $script:PruneNow.AddDays(-3) })
+        @(Get-LabPrunePlan -Prev $prev -NowUtc $script:PruneNow -MinAgeDays 2)[0].Remove | Should -BeTrue
+        @(Get-LabPrunePlan -Prev $prev -NowUtc $script:PruneNow -MinAgeDays 4)[0].Remove | Should -BeFalse
+    }
+
+    It 'plans nothing for nothing' {
+        @(Get-LabPrunePlan -Prev @() -NowUtc $script:PruneNow).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-LabVmNoteValue and Set-LabVmNoteValue' {
+    BeforeAll {
+        $script:Note = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.11'
+    }
+
+    It 'reads a key that is there and nothing for one that is not' {
+        Get-LabVmNoteValue -Notes $script:Note -Key 'ip' | Should -Be '10.99.0.11'
+        Get-LabVmNoteValue -Notes $script:Note -Key 'demoted' | Should -BeNullOrEmpty
+    }
+
+    It 'reads nothing from Notes that carry no lab marker' {
+        Get-LabVmNoteValue -Notes "ip=10.0.0.1" -Key 'ip' | Should -BeNullOrEmpty
+        Get-LabVmNoteValue -Notes '' -Key 'ip' | Should -BeNullOrEmpty
+    }
+
+    It 'adds a line and keeps the marker and the other lines, so the other scripts still read the Notes' {
+        $stamped = Set-LabVmNoteValue -Notes $script:Note -Key 'demoted' -Value '2026-09-30T04:00:00Z'
+        Test-LabVmNote -Notes $stamped | Should -BeTrue
+        Get-LabVmNoteValue -Notes $stamped -Key 'demoted' | Should -Be '2026-09-30T04:00:00Z'
+        $meta = ConvertFrom-LabVmNote -Notes $stamped
+        $meta.Domain | Should -Be 'PANOPLY.LOCAL'
+        $meta.NetBiosName | Should -Be 'PANOPLY'
+        $meta.ComputerName | Should -Be 'dc1'
+        $meta.IPAddress | Should -Be '10.99.0.11'
+    }
+
+    It 'replaces a line rather than adding a second one' {
+        $first = Set-LabVmNoteValue -Notes $script:Note -Key 'demoted' -Value 'one'
+        $second = Set-LabVmNoteValue -Notes $first -Key 'demoted' -Value 'two'
+        @($second -split "`n" | Where-Object { $_ -like 'demoted=*' }).Count | Should -Be 1
+        Get-LabVmNoteValue -Notes $second -Key 'demoted' | Should -Be 'two'
+    }
+
+    It 'removes a line when the value is empty' {
+        $stamped = Set-LabVmNoteValue -Notes $script:Note -Key 'demoted' -Value 'one'
+        $cleared = Set-LabVmNoteValue -Notes $stamped -Key 'demoted' -Value ''
+        $cleared | Should -Be $script:Note
+    }
+
+    It 'refuses to edit Notes that carry no lab marker, or a value with a line break' {
+        { Set-LabVmNoteValue -Notes 'something else' -Key 'demoted' -Value 'x' } | Should -Throw '*no lab marker*'
+        { Set-LabVmNoteValue -Notes $script:Note -Key 'demoted' -Value "a`nb" } | Should -Throw '*span lines*'
+    }
+}
+
+Describe 'ConvertTo-LabChildArgument' {
+    It 'turns a hashtable into named arguments, in a stable order' {
+        $arguments = ConvertTo-LabChildArgument -Parameter @{ Name = 'dc-primary-candidate'; PrefixLength = 24; IPAddress = '10.99.0.11' }
+        $arguments | Should -Be @('-IPAddress', '10.99.0.11', '-Name', 'dc-primary-candidate', '-PrefixLength', '24')
+    }
+
+    It 'passes a true switch as a bare flag and leaves a false one out' {
+        $arguments = ConvertTo-LabChildArgument -Parameter @{ EnableRecycleBin = $true; Force = $false; Name = 'x' }
+        $arguments | Should -Be @('-EnableRecycleBin', '-Name', 'x')
+    }
+
+    It 'keeps a value with spaces as one argument' {
+        $arguments = ConvertTo-LabChildArgument -Parameter @{ VhdDirectory = 'D:\Hyper-V\Virtual Hard Disks\g1' }
+        $arguments | Should -Be @('-VhdDirectory', 'D:\Hyper-V\Virtual Hard Disks\g1')
+    }
+
+    It 'refuses a bad parameter name, a list, a null and a line break' {
+        { ConvertTo-LabChildArgument -Parameter @{ 'Name; calc' = 'x' } } | Should -Throw '*not a parameter name*'
+        { ConvertTo-LabChildArgument -Parameter @{ Name = @('a', 'b') } } | Should -Throw '*single value*'
+        { ConvertTo-LabChildArgument -Parameter @{ Name = $null } } | Should -Throw '*single value*'
+        { ConvertTo-LabChildArgument -Parameter @{ Name = "a`nb" } } | Should -Throw '*line break*'
+    }
+
+    It 'accepts what a real plan produces' {
+        $settings = @{
+            isoPath = 'D:\iso.iso'; vhdDirectory = 'D:\vm'; switchName = 'Lab'; ntpServer = 'ntp'; dnsForwarder = '10.0.0.1'
+            domainControllers = @{
+                'dc-primary' = @{ domain = 'PANOPLY.LOCAL'; ipAddress = '10.99.0.11'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $true }
+                'dc-source'  = @{ domain = 'RESURGAM.LOCAL'; ipAddress = '10.99.0.12'; prefixLength = 24; gateway = '10.99.0.1' }
+                'dc-target'  = @{ domain = 'GENTIAN.LOCAL'; ipAddress = '10.99.0.13'; prefixLength = 24; gateway = '10.99.0.1' }
+            }
+        }
+        $plan = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'g1' -CumulativeUpdatePath 'D:\u\kb.msu'
+        $arguments = ConvertTo-LabChildArgument -Parameter $plan.Roles[0].BuildParameters
+        $arguments | Should -Contain '-EnableRecycleBin'
+        $arguments | Should -Contain '-CumulativeUpdatePath'
+        $arguments | Should -Contain 'dc-primary-candidate'
+    }
+}
+
+Describe 'Test-LabOwnedVmFolder' {
+    It 'accepts a folder named for a lab VM beneath the VHD directory, with either slash and any case' {
+        $names = 'dc-primary', 'dc-primary-candidate', 'dc-primary-prev'
+        Test-LabOwnedVmFolder -Path 'D:\Hyper-V\Virtual Hard Disks\rebuild-20260930\dc-primary-candidate' -Root 'D:\Hyper-V\Virtual Hard Disks' -Name $names | Should -BeTrue
+        Test-LabOwnedVmFolder -Path 'D:\Hyper-V\Virtual Hard Disks\dc-primary' -Root 'D:\Hyper-V\Virtual Hard Disks' -Name $names | Should -BeTrue
+        Test-LabOwnedVmFolder -Path 'd:/hyper-v/virtual hard disks/DC-Primary-Prev/' -Root 'D:\Hyper-V\Virtual Hard Disks\' -Name $names | Should -BeTrue
+    }
+
+    It 'refuses the VHD directory itself, a folder outside it and a folder named for something else' {
+        $names = 'dc-primary'
+        Test-LabOwnedVmFolder -Path 'D:\Hyper-V\Virtual Hard Disks' -Root 'D:\Hyper-V\Virtual Hard Disks' -Name $names | Should -BeFalse
+        Test-LabOwnedVmFolder -Path 'D:\Other\dc-primary' -Root 'D:\Hyper-V\Virtual Hard Disks' -Name $names | Should -BeFalse
+        Test-LabOwnedVmFolder -Path 'D:\Hyper-V\Virtual Hard Disks\backups' -Root 'D:\Hyper-V\Virtual Hard Disks' -Name $names | Should -BeFalse
+        Test-LabOwnedVmFolder -Path 'D:\Hyper-V\Virtual Hard Disks-old\dc-primary' -Root 'D:\Hyper-V\Virtual Hard Disks' -Name $names | Should -BeFalse
+    }
+
+    It 'refuses a path that climbs out with dot segments, and an empty root' {
+        Test-LabOwnedVmFolder -Path 'D:\Hyper-V\Virtual Hard Disks\..\..\dc-primary' -Root 'D:\Hyper-V\Virtual Hard Disks' -Name 'dc-primary' | Should -BeFalse
+        Test-LabOwnedVmFolder -Path 'D:\dc-primary' -Root '\' -Name 'dc-primary' | Should -BeFalse
+    }
+}
+
+Describe 'Get-LabRunSummary and Get-LabRunStatusDescription' {
+    BeforeAll {
+        function Get-ResultsFolder {
+            $folder = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $folder | Out-Null
+            return $folder
+        }
+
+        function Write-Regression {
+            param([string]$Folder, [string]$Name, [object[]]$Scenarios, $Builds)
+            $report = [ordered]@{ Mode = 'FullRegression'; DirectoryType = 'ActiveDirectory'; Scenarios = @($Scenarios) }
+            if ($null -ne $Builds) { $report.DomainControllerBuilds = $Builds }
+            $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $Folder $Name)
+        }
+    }
+
+    It 'counts a full run from its regression report and reads the builds' {
+        $folder = Get-ResultsFolder
+        Write-Regression -Folder $folder -Name 'full-regression-2026-09-30_020000.json' -Builds ([ordered]@{ 'dc-primary' = '26100.4652'; 'dc-source' = '26100.4652' }) -Scenarios @(
+            @{ Name = 'Scenario-001'; Success = $true; Skipped = $false },
+            @{ Name = 'Scenario-002'; Success = $true; Skipped = $false },
+            @{ Name = 'Scenario-003'; Success = $false; Skipped = $false },
+            @{ Name = 'Scenario-004'; Success = $false; Skipped = $true }
+        )
+        $summary = Get-LabRunSummary -ResultsDirectory $folder
+        $summary.Total | Should -Be 4
+        $summary.Passed | Should -Be 2
+        $summary.Failed | Should -Be 1
+        $summary.Skipped | Should -Be 1
+        @($summary.FailedScenarios) | Should -Be @('Scenario-003')
+        $summary.Builds['dc-primary'] | Should -Be '26100.4652'
+        $summary.Builds.Count | Should -Be 2
+        $summary.Report | Should -BeLike '*full-regression-2026-09-30_020000.json'
+    }
+
+    It 'uses the newest regression report when there are several' {
+        $folder = Get-ResultsFolder
+        Write-Regression -Folder $folder -Name 'full-regression-old.json' -Scenarios @(@{ Success = $false; Skipped = $false })
+        (Get-Item (Join-Path $folder 'full-regression-old.json')).LastWriteTimeUtc = [datetime]::new(2026, 1, 1, 0, 0, 0, [System.DateTimeKind]::Utc)
+        Write-Regression -Folder $folder -Name 'full-regression-new.json' -Scenarios @(@{ Success = $true; Skipped = $false }, @{ Success = $true; Skipped = $false })
+        $summary = Get-LabRunSummary -ResultsDirectory $folder
+        $summary.Total | Should -Be 2
+        $summary.Passed | Should -Be 2
+    }
+
+    It 'counts a single-scenario run as one scenario and reads its builds from the performance file' {
+        $folder = Get-ResultsFolder
+        $performance = Join-Path (Join-Path $folder 'performance') 'runner01'
+        New-Item -ItemType Directory -Path $performance -Force | Out-Null
+        [ordered]@{ Scenario = 'Scenario-001'; DomainControllerBuilds = [ordered]@{ 'dc-primary' = '26100.1742' } } |
+            ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $performance 'Scenario-001-Medium-2026-09-30_020000.json')
+
+        $passing = Get-LabRunSummary -ResultsDirectory $folder -Success $true
+        $passing.Total | Should -Be 1
+        $passing.Passed | Should -Be 1
+        $passing.Builds['dc-primary'] | Should -Be '26100.1742'
+
+        $failing = Get-LabRunSummary -ResultsDirectory $folder -Success $false
+        $failing.Total | Should -Be 1
+        $failing.Passed | Should -Be 0
+        $failing.Failed | Should -Be 1
+    }
+
+    It 'falls back to the performance file for the builds when the report has none' {
+        $folder = Get-ResultsFolder
+        Write-Regression -Folder $folder -Name 'full-regression-a.json' -Scenarios @(@{ Success = $true; Skipped = $false })
+        $performance = Join-Path (Join-Path $folder 'performance') 'runner01'
+        New-Item -ItemType Directory -Path $performance -Force | Out-Null
+        [ordered]@{ DomainControllerBuilds = [ordered]@{ 'dc-primary' = '26100.1' } } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $performance 'x.json')
+        (Get-LabRunSummary -ResultsDirectory $folder).Builds['dc-primary'] | Should -Be '26100.1'
+    }
+
+    It 'reports nothing for a folder with no results, or one that is not there' {
+        $empty = Get-LabRunSummary -ResultsDirectory (Get-ResultsFolder)
+        $empty.Total | Should -Be 0
+        $empty.Builds.Count | Should -Be 0
+        (Get-LabRunSummary -ResultsDirectory (Join-Path $TestDrive 'missing')).Total | Should -Be 0
+    }
+
+    It 'describes a green run in one short line' {
+        $summary = [pscustomobject]@{ Total = 23; Passed = 23; Skipped = 0; Builds = [ordered]@{ 'dc-primary' = '26100.4652'; 'dc-source' = '26100.4652'; 'dc-target' = '26100.4652' } }
+        Get-LabRunStatusDescription -Summary $summary | Should -Be '23/23 scenarios passed; DC build 26100.4652'
+    }
+
+    It 'says so when the domain controllers are on different builds, and lists each once' {
+        $summary = [pscustomobject]@{ Total = 2; Passed = 1; Skipped = 0; Builds = [ordered]@{ 'a' = '26100.2'; 'b' = '26100.1'; 'c' = '26100.2' } }
+        Get-LabRunStatusDescription -Summary $summary | Should -Be '1/2 scenarios passed; DC builds 26100.1, 26100.2'
+    }
+
+    It 'mentions skipped scenarios, and uses the singular for one' {
+        Get-LabRunStatusDescription -Summary ([pscustomobject]@{ Total = 5; Passed = 2; Skipped = 2; Builds = [ordered]@{ 'a' = '26100.1' } }) | Should -Be '2/5 scenarios passed, 2 skipped; DC build 26100.1'
+        Get-LabRunStatusDescription -Summary ([pscustomobject]@{ Total = 1; Passed = 1; Skipped = 0; Builds = [ordered]@{ 'a' = '26100.1' } }) | Should -Be '1/1 scenario passed; DC build 26100.1'
+    }
+
+    It 'says the build is unknown when it is, and that nothing ran when nothing did' {
+        Get-LabRunStatusDescription -Summary ([pscustomobject]@{ Total = 3; Passed = 3; Skipped = 0; Builds = [ordered]@{ 'a' = 'unknown' } }) | Should -Be '3/3 scenarios passed; DC build unknown'
+        Get-LabRunStatusDescription -Summary ([pscustomobject]@{ Total = 0; Passed = 0; Skipped = 0; Builds = [ordered]@{} }) | Should -Be 'no scenarios ran; DC build unknown'
+    }
+
+    It 'never exceeds the 140 characters GitHub allows, cutting with an ellipsis' {
+        $builds = [ordered]@{}
+        1..30 | ForEach-Object { $builds["dc$_"] = "26100.$($_ * 1111)" }
+        $text = Get-LabRunStatusDescription -Summary ([pscustomobject]@{ Total = 9; Passed = 9; Skipped = 0; Builds = $builds })
+        $text.Length | Should -BeLessOrEqual 140
+        $text | Should -BeLike '*...'
+    }
+}
+
+Describe 'Invoke-LabRebuildPhase' {
+    BeforeAll {
+        function Get-Utc {
+            param([int]$Day, [int]$Hour = 4)
+            return [datetime]::new(2026, 9, $Day, $Hour, 0, 0, [System.DateTimeKind]::Utc)
+        }
+
+        function Get-FakePlan {
+            $settings = @{
+                isoPath = 'D:\iso.iso'; vhdDirectory = 'D:\vm'; switchName = 'Lab'; ntpServer = 'ntp'; dnsForwarder = '10.0.0.1'
+                domainControllers = @{
+                    'dc-primary' = @{ domain = 'PANOPLY.LOCAL'; ipAddress = '10.99.0.11'; prefixLength = 24; gateway = '10.99.0.1'; enableRecycleBin = $true }
+                    'dc-source'  = @{ domain = 'RESURGAM.LOCAL'; ipAddress = '10.99.0.12'; prefixLength = 24; gateway = '10.99.0.1' }
+                    'dc-target'  = @{ domain = 'GENTIAN.LOCAL'; ipAddress = '10.99.0.13'; prefixLength = 24; gateway = '10.99.0.1' }
+                }
+            }
+            return (ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName 'rebuild-20260930')
+        }
+
+        # An in-memory Hyper-V: VMs by name, every adapter call recorded in order, and the address rule that
+        # makes the ordering matter (two running VMs cannot share an address).
+        function Get-FakeLab {
+            param([datetime]$Now = (Get-Utc -Day 30))
+
+            $lab = @{
+                Vms           = @{}
+                Calls         = (New-Object System.Collections.ArrayList)
+                Now           = $Now
+                FailBuildFor  = $null
+                FailRestoreOf = $null
+                Builds        = @{}
+                BuildIndex    = 0
+            }
+            $lab.Adapter = @{
+                GetVm         = { param($Name) if ($lab.Vms.ContainsKey($Name)) { return $lab.Vms[$Name] } return $null }.GetNewClosure()
+                StopVm        = { param($Name) [void]$lab.Calls.Add("StopVm $Name"); $lab.Vms[$Name].State = 'Off' }.GetNewClosure()
+                RestoreVm     = {
+                    param($Name, $Checkpoint)
+                    [void]$lab.Calls.Add("RestoreVm $Name $Checkpoint")
+                    if ($lab.FailRestoreOf -eq $Name) { throw "simulated restore failure of $Name" }
+                    if (-not $lab.Vms[$Name].HasBaseline) { throw "no checkpoint $Checkpoint on $Name" }
+                    $address = (Get-LabVmNoteValue -Notes $lab.Vms[$Name].Notes -Key 'ip')
+                    foreach ($other in $lab.Vms.Values) {
+                        if (($other.Name -ne $Name) -and ($other.State -eq 'Running') -and ((Get-LabVmNoteValue -Notes $other.Notes -Key 'ip') -eq $address)) { throw "address $address is in use by $($other.Name)" }
+                    }
+                    $lab.Vms[$Name].State = 'Running'
+                }.GetNewClosure()
+                RenameVm      = {
+                    param($Name, $NewName)
+                    [void]$lab.Calls.Add("RenameVm $Name $NewName")
+                    if ($lab.Vms.ContainsKey($NewName)) { throw "a VM called $NewName already exists" }
+                    $lab.Vms[$NewName] = $lab.Vms[$Name]
+                    $lab.Vms[$NewName].Name = $NewName
+                    $lab.Vms.Remove($Name)
+                }.GetNewClosure()
+                SetNotes      = { param($Name, $Notes) [void]$lab.Calls.Add("SetNotes $Name"); $lab.Vms[$Name].Notes = $Notes }.GetNewClosure()
+                RemoveVm      = { param($Name) [void]$lab.Calls.Add("RemoveVm $Name"); $lab.Vms.Remove($Name) }.GetNewClosure()
+                BuildVm       = {
+                    param($Parameters)
+                    [void]$lab.Calls.Add("BuildVm $($Parameters.Name)")
+                    if ($lab.FailBuildFor -eq $Parameters.Name) { throw "simulated build failure of $($Parameters.Name)" }
+                    foreach ($other in $lab.Vms.Values) {
+                        if (($other.State -eq 'Running') -and ((Get-LabVmNoteValue -Notes $other.Notes -Key 'ip') -eq $Parameters.IPAddress)) { throw "address $($Parameters.IPAddress) is in use by $($other.Name)" }
+                    }
+                    $lab.BuildIndex++
+                    $lab.Vms[$Parameters.Name] = @{
+                        Name        = $Parameters.Name
+                        State       = 'Running'
+                        Notes       = (ConvertTo-LabVmNote -Domain $Parameters.Domain -ShortName 'dc1' -NetBiosName ($Parameters.Domain.Split('.')[0]) -IPAddress $Parameters.IPAddress)
+                        CreatedUtc  = $lab.Now
+                        HasBaseline = $true
+                        Build       = "26100.$(4000 + $lab.BuildIndex)"
+                    }
+                }.GetNewClosure()
+                GetGuestBuild = {
+                    param($Name)
+                    if ($lab.Vms.ContainsKey($Name) -and ($lab.Vms[$Name].State -eq 'Running')) { return $lab.Vms[$Name].Build }
+                    return $null
+                }.GetNewClosure()
+                NowUtc        = { return $lab.Now }.GetNewClosure()
+                Log           = { param($Text) $null = $Text }.GetNewClosure()
+            }
+            return $lab
+        }
+
+        # A lab as it stands before a rebuild: the three live VMs, running, with a baseline, on build 26100.1000.
+        function Add-FakeLiveSet {
+            param($Lab)
+            foreach ($entry in @(@('dc-primary', 'PANOPLY.LOCAL', '10.99.0.11'), @('dc-source', 'RESURGAM.LOCAL', '10.99.0.12'), @('dc-target', 'GENTIAN.LOCAL', '10.99.0.13'))) {
+                $Lab.Vms[$entry[0]] = @{
+                    Name        = $entry[0]
+                    State       = 'Running'
+                    Notes       = (ConvertTo-LabVmNote -Domain $entry[1] -ShortName 'dc1' -NetBiosName ($entry[1].Split('.')[0]) -IPAddress $entry[2])
+                    CreatedUtc  = (Get-Utc -Day 1)
+                    HasBaseline = $true
+                    Build       = '26100.1000'
+                }
+            }
+        }
+
+        function Get-CallIndex {
+            param($Lab, [string]$Call)
+            return $Lab.Calls.IndexOf($Call)
+        }
+    }
+
+    Context 'Build' {
+        It 'stops the live domain controller before building the candidate on its address' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+
+            $results.Count | Should -Be 1
+            $results[0].action | Should -Be 'Build'
+            $results[0].candidate | Should -Be 'dc-primary-candidate'
+            $results[0].guestBuild | Should -Be '26100.4001'
+            (Get-CallIndex $lab 'StopVm dc-primary') | Should -BeGreaterOrEqual 0
+            (Get-CallIndex $lab 'StopVm dc-primary') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm dc-primary-candidate')
+            $lab.Vms['dc-primary'].State | Should -Be 'Off'
+            $lab.Vms['dc-primary-candidate'].HasBaseline | Should -BeTrue
+        }
+
+        It 'builds all three when no role is named, leaving every live domain controller off' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            $results.Count | Should -Be 3
+            @($results | ForEach-Object { $_.action }) | Should -Be @('Build', 'Build', 'Build')
+            foreach ($name in 'dc-primary', 'dc-source', 'dc-target') {
+                $lab.Vms[$name].State | Should -Be 'Off'
+                $lab.Vms["$name-candidate"].State | Should -Be 'Running'
+            }
+        }
+
+        It 'reuses a recent finished candidate without building again (a retry)' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $lab.Calls.Clear()
+            $lab.Now = $lab.Now.AddHours(2)
+
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results[0].action | Should -Be 'Reuse'
+            @($lab.Calls | Where-Object { $_ -like 'BuildVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
+        }
+
+        It 'replaces last month''s leftover candidate, and does not reuse it' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $lab.Calls.Clear()
+            $lab.Now = $lab.Now.AddDays(30)
+
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results[0].action | Should -Be 'Replace'
+            (Get-CallIndex $lab 'RemoveVm dc-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm dc-primary-candidate')
+            $lab.Vms['dc-primary-candidate'].CreatedUtc | Should -Be $lab.Now
+        }
+
+        It 'replaces a recent candidate when a fresh one is asked for' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary' -Fresh)
+            $results[0].action | Should -Be 'Replace'
+        }
+
+        It 'resumes a candidate whose build stopped before its baseline checkpoint' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.Vms['dc-primary'].State = 'Off'
+            $lab.Vms['dc-primary-candidate'] = @{
+                Name = 'dc-primary-candidate'; State = 'Off'; CreatedUtc = $lab.Now.AddHours(-2); HasBaseline = $false; Build = '26100.4000'
+                Notes = (ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.11')
+            }
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results[0].action | Should -Be 'Resume'
+            (Get-CallIndex $lab 'BuildVm dc-primary-candidate') | Should -BeGreaterOrEqual 0
+            $lab.Vms['dc-primary-candidate'].HasBaseline | Should -BeTrue
+        }
+
+        It 'names the domain controller and the step when a build fails' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.FailBuildFor = 'dc-source-candidate'
+            { Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw '*Build failed for dc-source*simulated build failure*'
+        }
+
+        It 'refuses a VM the lab did not create' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.Vms['dc-primary-candidate'] = @{ Name = 'dc-primary-candidate'; State = 'Off'; Notes = 'someone else''s VM'; CreatedUtc = $lab.Now; HasBaseline = $true; Build = '1' }
+            { Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary' } | Should -Throw '*not created by this lab*'
+            @($lab.Calls | Where-Object { $_ -like 'BuildVm*' -or $_ -like 'RemoveVm*' -or $_ -like 'StopVm*' }).Count | Should -Be 0
+        }
+
+        It 'still builds when there is no live VM at all (the first rebuild of a new lab)' {
+            $lab = Get-FakeLab
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results[0].action | Should -Be 'Build'
+        }
+    }
+
+    Context 'Stage' {
+        It 'starts the candidate from its baseline on the address the live one has stopped using' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            foreach ($name in 'dc-primary', 'dc-source', 'dc-target') { $lab.Vms["$name-candidate"].State = 'Off' }
+            $lab.Calls.Clear()
+
+            $results = @(Invoke-LabRebuildPhase -Phase Stage -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { $_.action }) | Should -Be @('Staged', 'Staged', 'Staged')
+            foreach ($name in 'dc-primary', 'dc-source', 'dc-target') {
+                $lab.Vms[$name].State | Should -Be 'Off'
+                $lab.Vms["$name-candidate"].State | Should -Be 'Running'
+            }
+            $lab.Calls | Should -Contain 'RestoreVm dc-primary-candidate baseline'
+            $results[0].guestBuild | Should -Be '26100.4001'
+        }
+
+        It 'stops a live VM that is still running before starting the candidate, or the address would clash' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.Vms['dc-primary-candidate'] = @{
+                Name = 'dc-primary-candidate'; State = 'Off'; CreatedUtc = $lab.Now; HasBaseline = $true; Build = '26100.4001'
+                Notes = (ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName 'dc1' -NetBiosName 'PANOPLY' -IPAddress '10.99.0.11')
+            }
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            (Get-CallIndex $lab 'StopVm dc-primary') | Should -BeLessThan (Get-CallIndex $lab 'RestoreVm dc-primary-candidate baseline')
+        }
+
+        It 'fails, saying to build first, when there is no candidate' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            { Invoke-LabRebuildPhase -Phase Stage -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary' } | Should -Throw '*run the Build phase first*'
+        }
+
+        It 'fails when the candidate has no baseline checkpoint' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.Vms['dc-primary-candidate'] = @{ Name = 'dc-primary-candidate'; State = 'Off'; CreatedUtc = $lab.Now; HasBaseline = $false; Build = '1'; Notes = $lab.Vms['dc-primary'].Notes }
+            { Invoke-LabRebuildPhase -Phase Stage -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary' } | Should -Throw '*no baseline checkpoint*'
+        }
+    }
+
+    Context 'Promote' {
+        BeforeEach {
+            $script:Lab = Get-FakeLab
+            Add-FakeLiveSet $script:Lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $script:Lab.Adapter)
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan (Get-FakePlan) -Adapter $script:Lab.Adapter)
+            $script:Lab.Calls.Clear()
+        }
+
+        It 'names the live VM previous and the candidate live, and keeps the candidate''s own machine' {
+            $candidateBuild = $script:Lab.Vms['dc-primary-candidate'].Build
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $script:Lab.Adapter)
+
+            @($results | ForEach-Object { $_.action }) | Should -Be @('Promoted', 'Promoted', 'Promoted')
+            foreach ($name in 'dc-primary', 'dc-source', 'dc-target') {
+                $script:Lab.Vms.ContainsKey("$name-candidate") | Should -BeFalse
+                $script:Lab.Vms[$name].State | Should -Be 'Running'
+                $script:Lab.Vms["$name-prev"].State | Should -Be 'Off'
+            }
+            $script:Lab.Vms['dc-primary'].Build | Should -Be $candidateBuild
+            $script:Lab.Vms['dc-primary-prev'].Build | Should -Be '26100.1000'
+            $results[0].guestBuild | Should -Be $candidateBuild
+        }
+
+        It 'stamps when the live VM was demoted, in Notes the other scripts still read' {
+            [void](Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $script:Lab.Adapter -Role 'dc-primary')
+            $stamp = Get-LabVmNoteValue -Notes $script:Lab.Vms['dc-primary-prev'].Notes -Key 'demoted'
+            $stamp | Should -Be '2026-09-30T04:00:00Z'
+            (ConvertFrom-LabVmNote -Notes $script:Lab.Vms['dc-primary-prev'].Notes).IPAddress | Should -Be '10.99.0.11'
+            Get-LabVmNoteValue -Notes $script:Lab.Vms['dc-primary'].Notes -Key 'demoted' | Should -BeNullOrEmpty
+        }
+
+        It 'steps the live VM aside before renaming the candidate to its name' {
+            [void](Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $script:Lab.Adapter -Role 'dc-primary')
+            (Get-CallIndex $script:Lab 'RenameVm dc-primary dc-primary-prev') | Should -BeLessThan (Get-CallIndex $script:Lab 'RenameVm dc-primary-candidate dc-primary')
+            (Get-CallIndex $script:Lab 'RenameVm dc-primary dc-primary-prev') | Should -BeGreaterOrEqual 0
+        }
+
+        It 'can be run again: the second run changes nothing and says so' {
+            [void](Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $script:Lab.Adapter)
+            $script:Lab.Calls.Clear()
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $script:Lab.Adapter)
+            @($results | ForEach-Object { $_.action }) | Should -Be @('AlreadyPromoted', 'AlreadyPromoted', 'AlreadyPromoted')
+            @($script:Lab.Calls | Where-Object { $_ -like 'RenameVm*' -or $_ -like 'RemoveVm*' -or $_ -like 'SetNotes*' }).Count | Should -Be 0
+        }
+
+        It 'finishes a promotion that stopped after the live VM was demoted' {
+            $lab = $script:Lab
+            $stamped = Set-LabVmNoteValue -Notes $lab.Vms['dc-primary'].Notes -Key 'demoted' -Value '2026-09-30T03:59:00Z'
+            $lab.Vms['dc-primary'].Notes = $stamped
+            $lab.Vms['dc-primary-prev'] = $lab.Vms['dc-primary']
+            $lab.Vms['dc-primary-prev'].Name = 'dc-primary-prev'
+            $lab.Vms.Remove('dc-primary')
+
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results[0].action | Should -Be 'Promoted'
+            $lab.Vms.ContainsKey('dc-primary') | Should -BeTrue
+            $lab.Vms.ContainsKey('dc-primary-candidate') | Should -BeFalse
+            $lab.Vms['dc-primary-prev'].Build | Should -Be '26100.1000'
+        }
+
+        It 'removes an older previous set to make way, and says so' {
+            $lab = $script:Lab
+            $lab.Vms['dc-primary-prev'] = @{
+                Name = 'dc-primary-prev'; State = 'Off'; CreatedUtc = (Get-Utc -Day 1); HasBaseline = $true; Build = '26100.900'
+                Notes = (Set-LabVmNoteValue -Notes $lab.Vms['dc-primary'].Notes -Key 'demoted' -Value '2026-09-02T04:00:00Z')
+            }
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results[0].detail | Should -BeLike '*removed the earlier dc-primary-prev (demoted 2026-09-02T04:00:00Z)*'
+            $lab.Vms['dc-primary-prev'].Build | Should -Be '26100.1000'
+        }
+
+        It 'renames nothing at all when any one candidate cannot be promoted' {
+            $lab = $script:Lab
+            $lab.Vms['dc-target-candidate'].HasBaseline = $false
+            { Invoke-LabRebuildPhase -Phase Promote -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw '*before anything was renamed*dc-target*'
+            @($lab.Calls | Where-Object { $_ -like 'RenameVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
+            $lab.Vms.ContainsKey('dc-primary-candidate') | Should -BeTrue
+        }
+    }
+
+    Context 'Rollback' {
+        It 'stops the candidates and starts the live domain controllers again, leaving the candidates for diagnosis' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            $lab.Calls.Clear()
+
+            $results = @(Invoke-LabRebuildPhase -Phase Rollback -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { $_.action }) | Should -Be @('RolledBack', 'RolledBack', 'RolledBack')
+            foreach ($name in 'dc-primary', 'dc-source', 'dc-target') {
+                $lab.Vms[$name].State | Should -Be 'Running'
+                $lab.Vms["$name-candidate"].State | Should -Be 'Off'
+            }
+            (Get-CallIndex $lab 'StopVm dc-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'RestoreVm dc-primary baseline')
+            $results[0].guestBuild | Should -Be '26100.1000'
+        }
+
+        It 'recovers after a build that failed part way, when only some live domain controllers were stopped' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.FailBuildFor = 'dc-target-candidate'
+            { Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw
+            $lab.Vms['dc-primary'].State | Should -Be 'Off'
+
+            [void](Invoke-LabRebuildPhase -Phase Rollback -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            foreach ($name in 'dc-primary', 'dc-source', 'dc-target') { $lab.Vms[$name].State | Should -Be 'Running' }
+            $lab.Vms['dc-primary-candidate'].State | Should -Be 'Off'
+            $lab.Vms.ContainsKey('dc-target-candidate') | Should -BeFalse
+        }
+
+        It 'can be run again' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            [void](Invoke-LabRebuildPhase -Phase Rollback -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            { Invoke-LabRebuildPhase -Phase Rollback -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Not -Throw
+            $lab.Vms['dc-primary'].State | Should -Be 'Running'
+        }
+
+        It 'puts the previous VM back in service when a promotion was interrupted after demoting the live one' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $lab.Vms['dc-primary'].Notes = Set-LabVmNoteValue -Notes $lab.Vms['dc-primary'].Notes -Key 'demoted' -Value '2026-09-30T04:00:00Z'
+            $lab.Vms['dc-primary-prev'] = $lab.Vms['dc-primary']
+            $lab.Vms['dc-primary-prev'].Name = 'dc-primary-prev'
+            $lab.Vms.Remove('dc-primary')
+
+            [void](Invoke-LabRebuildPhase -Phase Rollback -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $lab.Vms.ContainsKey('dc-primary-prev') | Should -BeFalse
+            $lab.Vms['dc-primary'].State | Should -Be 'Running'
+            $lab.Vms['dc-primary'].Build | Should -Be '26100.1000'
+            Get-LabVmNoteValue -Notes $lab.Vms['dc-primary'].Notes -Key 'demoted' | Should -BeNullOrEmpty
+            $lab.Vms['dc-primary-candidate'].State | Should -Be 'Off'
+        }
+
+        It 'fails loudly, naming the domain controller, when the live VM will not start' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.FailRestoreOf = 'dc-source'
+            { Invoke-LabRebuildPhase -Phase Rollback -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw '*Rollback failed for dc-source*simulated restore failure*'
+        }
+    }
+
+    Context 'Prune' {
+        It 'removes a previous VM demoted a week ago and keeps a younger one' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $note = $lab.Vms['dc-primary'].Notes
+            $lab.Vms['dc-primary-prev'] = @{ Name = 'dc-primary-prev'; State = 'Off'; CreatedUtc = (Get-Utc -Day 1); HasBaseline = $true; Build = '1'; Notes = (Set-LabVmNoteValue -Notes $note -Key 'demoted' -Value '2026-09-23T04:00:00Z') }
+            $lab.Vms['dc-source-prev'] = @{ Name = 'dc-source-prev'; State = 'Off'; CreatedUtc = (Get-Utc -Day 1); HasBaseline = $true; Build = '1'; Notes = (Set-LabVmNoteValue -Notes $lab.Vms['dc-source'].Notes -Key 'demoted' -Value '2026-09-24T04:00:00Z') }
+
+            $results = @(Invoke-LabRebuildPhase -Phase Prune -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { $_.action }) | Should -Be @('Pruned', 'Kept', 'NothingToPrune')
+            $lab.Vms.ContainsKey('dc-primary-prev') | Should -BeFalse
+            $lab.Vms.ContainsKey('dc-source-prev') | Should -BeTrue
+            $lab.Vms.ContainsKey('dc-primary') | Should -BeTrue
+        }
+
+        It 'keeps a previous VM with no demotion stamp, and one with a stamp it cannot read' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.Vms['dc-primary-prev'] = @{ Name = 'dc-primary-prev'; State = 'Off'; CreatedUtc = (Get-Utc -Day 1); HasBaseline = $true; Build = '1'; Notes = $lab.Vms['dc-primary'].Notes }
+            $lab.Vms['dc-source-prev'] = @{ Name = 'dc-source-prev'; State = 'Off'; CreatedUtc = (Get-Utc -Day 1); HasBaseline = $true; Build = '1'; Notes = (Set-LabVmNoteValue -Notes $lab.Vms['dc-source'].Notes -Key 'demoted' -Value 'last tuesday') }
+            $results = @(Invoke-LabRebuildPhase -Phase Prune -Plan (Get-FakePlan) -Adapter $lab.Adapter)
+            $results[0].action | Should -Be 'Kept'
+            $results[1].action | Should -Be 'Kept'
+            $lab.Vms.ContainsKey('dc-primary-prev') | Should -BeTrue
+            $lab.Vms.ContainsKey('dc-source-prev') | Should -BeTrue
+        }
+    }
+
+    Context 'A whole rebuild' {
+        It 'runs prune, build, stage, promote, then prunes the replaced set a week later' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $plan = Get-FakePlan
+            foreach ($phase in 'Prune', 'Build', 'Stage', 'Promote') {
+                [void](Invoke-LabRebuildPhase -Phase $phase -Plan $plan -Adapter $lab.Adapter)
+            }
+            foreach ($name in 'dc-primary', 'dc-source', 'dc-target') {
+                $lab.Vms[$name].State | Should -Be 'Running'
+                $lab.Vms[$name].Build | Should -Not -Be '26100.1000'
+                $lab.Vms["$name-prev"].Build | Should -Be '26100.1000'
+                $lab.Vms.ContainsKey("$name-candidate") | Should -BeFalse
+            }
+
+            $lab.Now = $lab.Now.AddDays(3)
+            [void](Invoke-LabRebuildPhase -Phase Prune -Plan $plan -Adapter $lab.Adapter)
+            $lab.Vms.ContainsKey('dc-primary-prev') | Should -BeTrue
+
+            $lab.Now = $lab.Now.AddDays(5)
+            [void](Invoke-LabRebuildPhase -Phase Prune -Plan $plan -Adapter $lab.Adapter)
+            $lab.Vms.ContainsKey('dc-primary-prev') | Should -BeFalse
+            $lab.Vms['dc-primary'].State | Should -Be 'Running'
+        }
+
+        It 'survives a second month: the new candidate is built while the first rebuild''s previous set is gone' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $plan = Get-FakePlan
+            foreach ($phase in 'Prune', 'Build', 'Stage', 'Promote') { [void](Invoke-LabRebuildPhase -Phase $phase -Plan $plan -Adapter $lab.Adapter) }
+            $firstBuild = $lab.Vms['dc-primary'].Build
+
+            $lab.Now = $lab.Now.AddDays(28)
+            foreach ($phase in 'Prune', 'Build', 'Stage', 'Promote') { [void](Invoke-LabRebuildPhase -Phase $phase -Plan $plan -Adapter $lab.Adapter) }
+            $lab.Vms['dc-primary'].Build | Should -Not -Be $firstBuild
+            $lab.Vms['dc-primary-prev'].Build | Should -Be $firstBuild
+            $lab.Vms.ContainsKey('dc-primary-candidate') | Should -BeFalse
+        }
+
+        It 'promotes over an older previous set when a second rebuild is forced inside the week' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $plan = Get-FakePlan
+            foreach ($phase in 'Prune', 'Build', 'Stage', 'Promote') { [void](Invoke-LabRebuildPhase -Phase $phase -Plan $plan -Adapter $lab.Adapter) }
+            $lab.Now = $lab.Now.AddDays(2)
+            foreach ($phase in 'Prune', 'Build', 'Stage', 'Promote') { [void](Invoke-LabRebuildPhase -Phase $phase -Plan $plan -Adapter $lab.Adapter) }
+            $lab.Vms.ContainsKey('dc-primary-prev') | Should -BeTrue
+            $lab.Vms.ContainsKey('dc-primary-candidate') | Should -BeFalse
+        }
+    }
+
+    Context 'Status and arguments' {
+        It 'reports what exists and in what state, and the live build when it is running' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.Vms['dc-primary-candidate'] = @{ Name = 'dc-primary-candidate'; State = 'Off'; CreatedUtc = $lab.Now; HasBaseline = $true; Build = '2'; Notes = $lab.Vms['dc-primary'].Notes }
+            $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            $results[0].action | Should -Be 'Reported'
+            $results[0].detail | Should -BeLike '*live dc-primary: Running, baseline*'
+            $results[0].detail | Should -BeLike '*candidate dc-primary-candidate: Off, baseline*'
+            $results[0].detail | Should -BeLike '*prev dc-primary-prev: absent*'
+            $results[0].guestBuild | Should -Be '26100.1000'
+        }
+
+        It 'accepts a comma-separated role list, and refuses a role the settings do not define' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary,dc-target').Count | Should -Be 2
+            { Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-other' } | Should -Throw '*Unknown domain controller*dc-other*'
+        }
+
+        It 'refuses an adapter that lacks an operation, naming it' {
+            $lab = Get-FakeLab
+            $lab.Adapter.Remove('RenameVm')
+            { Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw "*no 'RenameVm' operation*"
+        }
+
+        It 'still reports a run whose guest build cannot be read, as no build rather than an error' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $lab.Adapter.GetGuestBuild = { param($Name) throw "PowerShell Direct is not available for $Name" }
+            $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter -Role 'dc-primary')
+            ($null -eq $results[0].guestBuild) | Should -BeTrue
+        }
+    }
+}

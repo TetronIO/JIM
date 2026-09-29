@@ -147,7 +147,7 @@ The UK Government's Software Security Code of Practice defines 14 principles acr
 
 | Principle | Requirement | JIM Alignment | Status |
 |-----------|-------------|---------------|--------|
-| 8 | Deploy securely | Docker containerisation, deployment best practices in SECURITY.md. **Planned**: pre-release integration test gate so no release can be cut unless the full integration test suite has passed (tracked in #518). | Aligned |
+| 8 | Deploy securely | Docker containerisation, deployment best practices in SECURITY.md. **Implemented for Active Directory**: no release can be cut unless the tagged commit has a green `ad-lab` commit status, the nightly and on-demand run of every Active Directory scenario against real Windows Server domain controllers; the `/release` skill and the `ad-lab-gate` job in `release.yml` both enforce it, with no override (see `engineering/RELEASE_PROCESS.md`). **Planned**: the remaining legs of the pre-release integration test gate, so no release can be cut unless the full integration test suite has passed against every directory type (tracked in #518). | Aligned |
 | 9 | Provide timely security updates | SECURITY.md defines 30-day critical vulnerability resolution SLA | Aligned |
 | 10 | Manage end of life securely | Only latest version supported, clear update guidance | Aligned |
 
@@ -232,7 +232,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
-| SA-11 | Developer Testing and Evaluation | Mandatory build/test before commit, security test requirements. **Planned**: pre-release integration test gate enforcing that no release can be cut unless the full integration test suite has passed (tracked in #518). |
+| SA-11 | Developer Testing and Evaluation | Mandatory build/test before commit, security test requirements. **Implemented for Active Directory**: a release is refused unless the tagged commit has a green `ad-lab` commit status (the Hyper-V Active Directory lab, run nightly and on demand), enforced by the `/release` skill and by the `ad-lab-gate` job in `release.yml` with no override. **Planned**: the remaining legs of the pre-release integration test gate, enforcing that no release can be cut unless the full integration test suite has passed against every directory type (tracked in #518). |
 | SA-15 | Development Process | Secure SDLC documented in CLAUDE.md |
 | SA-22 | Unsupported System Components | Dependency management, outdated package monitoring |
 
