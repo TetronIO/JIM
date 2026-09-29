@@ -10,7 +10,9 @@ using JIM.Models.Enums;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.TestSupport;
 using JIM.Worker.Processors;
 using JIM.Worker.Tests.UniqueValues;
 using NUnit.Framework;
@@ -322,13 +324,19 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         var ctx = await SetUpAsync(emailExpression: "mv[\"User Principal Name\"]", withUpn: true);
         SeedHr(ctx, "E1", "jbloggs");
 
-        var thrown = Assert.ThrowsAsync<DerivedFlowCycleException>(async () => await RunFullSyncAsync(ctx.Hr));
+        var (run, activity) = await PrepareFullSyncAsync(ctx.Hr);
+
+        var thrown = Assert.ThrowsAsync<DerivedFlowCycleException>(async () => await run());
+        await FailRunLikeTheWorkerAsync(activity, thrown!);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(thrown!.Message, Does.Contain("cycle"));
-            Assert.That(thrown.Message, Does.Contain("Email").And.Contain("User Principal Name").And.Contain("HR Import"));
-            Assert.That(SyncRepo.MetaverseObjects, Is.Empty, "no object is processed on a guessed order");
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError), "the run fails hard");
+            Assert.That(activity.ErrorMessage, Does.Contain("cycle"), "the cycle is named on the Activity, never silent");
+            Assert.That(activity.ErrorMessage, Does.Contain("Email").And.Contain("User Principal Name").And.Contain("HR Import"),
+                "every attribute and Synchronisation Rule on the cycle is named");
+            Assert.That(activity.RunProfileExecutionItems, Is.Empty, "no object is processed on a guessed order");
+            Assert.That(SyncRepo.MetaverseObjects, Is.Empty);
         }
     }
 
@@ -342,8 +350,17 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         ctx.EmailMapping.Sources[0].Expression = "mv[\"User Principal Name\"]";
         await ModifyCsoAsync(hrCso);
 
-        var thrown = Assert.ThrowsAsync<DerivedFlowCycleException>(async () => await RunDeltaSyncAsync(ctx.Hr));
-        Assert.That(thrown!.Message, Does.Contain("cycle"));
+        var (run, activity) = await PrepareDeltaSyncAsync(ctx.Hr);
+
+        var thrown = Assert.ThrowsAsync<DerivedFlowCycleException>(async () => await run());
+        await FailRunLikeTheWorkerAsync(activity, thrown!);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(activity.ErrorMessage, Does.Contain("cycle").And.Contain("HR Import"));
+            Assert.That(activity.RunProfileExecutionItems, Is.Empty, "the changed object is not processed");
+        }
     }
 
     // ---- Attribute Flow error parity ----
@@ -393,6 +410,31 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         }
     }
 
+    // ---- Server recall paths: re-election skips derived flows ----
+
+    [Test]
+    public async Task ExecuteSyncRuleDeletionRecallAsync_DerivedFlowIsTheSurvivingContributor_IsNotReFlowedWithoutAMetaverseViewAsync()
+    {
+        // AD contributes Email directly (priority 1) over HR's derived Email (priority 2). Deleting AD's rule with
+        // recall re-elects the surviving contributor. A derived flow must never be re-flowed there as an ordinary
+        // one: it would read no mv["..."] inputs and write "@corp.local" over the Metaverse (decision 5).
+        var ctx = await SetUpAsync(emailExpression: EmailFromAccountName, withUpn: false, withAd: true, adContributesEmail: true);
+        SeedHr(ctx, "E1", "jbloggs");
+        SeedAd(ctx, "E1", "EMEA", mail: "joe.bloggs@ad.corp.local");
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Ad!);
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(Text(mvo, ctx.Email), Is.EqualTo("joe.bloggs@ad.corp.local"), "precondition: AD's higher-priority Email wins");
+
+        var task = await DisableRuleAndBuildRecallTaskAsync(ctx.AdImport!);
+        await Jim.ConnectedSystems.ExecuteSyncRuleDeletionRecallAsync(task);
+
+        mvo = SyncRepo.MetaverseObjects.Values.Single();
+        Assert.That(Text(mvo, ctx.Email), Is.Null,
+            "the derived Email must not be evaluated by re-election, where no Metaverse view exists (it would write " +
+            "\"@corp.local\"); it is re-derived by HR's own synchronisation, which Phase 4's marking schedules");
+    }
+
     // ---- Helpers ----
 
     private sealed record Context(
@@ -408,6 +450,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         ConnectedSystem? Ad,
         ConnectedSystemObjectType? AdType,
         ConnectedSystemObjectTypeAttribute? AdRegion,
+        SyncRule? AdImport,
         ConnectedSystem? Directory,
         ConnectedSystemObjectTypeAttribute? DirectoryMail,
         ConnectedSystemObjectTypeAttribute? DirectoryUpn);
@@ -422,10 +465,11 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         bool withDirectoryExport = false,
         bool flagOn = true,
         MissingInputBehaviour emailMissingInputBehaviour = MissingInputBehaviour.EvaluateAnyway,
-        string? generatedAccountNameBase = null)
+        string? generatedAccountNameBase = null,
+        bool adContributesEmail = false)
     {
         if (flagOn)
-            await EnableDerivedFlowsFlagAsync();
+            await EnableAllFeatureFlagsAsync();
 
         var mvType = await CreateMvObjectTypeAsync("Person");
         var employeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -472,6 +516,8 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
 
         var emailMapping = FromExpression(hrImport, email, emailExpression);
         emailMapping.Sources[0].MissingInputBehaviour = emailMissingInputBehaviour;
+        if (adContributesEmail)
+            emailMapping.Priority = 2;
         if (withUpn)
             FromExpression(hrImport, upn, UpnFromEmail);
         await DbContext.SaveChangesAsync();
@@ -479,6 +525,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         ConnectedSystem? ad = null;
         ConnectedSystemObjectType? adType = null;
         ConnectedSystemObjectTypeAttribute? adRegion = null;
+        SyncRule? adImportRule = null;
         if (withAd)
         {
             ad = await CreateConnectedSystemAsync("AD");
@@ -486,13 +533,17 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
             {
                 new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
                 new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true },
-                new() { Name = "region", Type = AttributeDataType.Text, Selected = true }
+                new() { Name = "region", Type = AttributeDataType.Text, Selected = true },
+                new() { Name = "mail", Type = AttributeDataType.Text, Selected = true }
             });
             var adEmployeeId = adType.Attributes.Single(a => a.Name == "employeeId");
             adRegion = adType.Attributes.Single(a => a.Name == "region");
 
             var adImport = await CreateImportSyncRuleAsync(ad.Id, adType, mvType, "AD Import", enableProjection: false);
+            adImportRule = adImport;
             FromAttribute(adImport, region, adRegion);
+            if (adContributesEmail)
+                FromAttribute(adImport, email, adType.Attributes.Single(a => a.Name == "mail")).Priority = 1;
             adImport.ObjectMatchingRules.Add(new ObjectMatchingRule
             {
                 SyncRule = adImport,
@@ -531,20 +582,17 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         }
 
         return new Context(hr, hrType, hrAccountName, hrImport, emailMapping, accountName, region, email, upn,
-            ad, adType, adRegion, directory, directoryMail, directoryUpn);
+            ad, adType, adRegion, adImportRule, directory, directoryMail, directoryUpn);
     }
 
-    private async Task EnableDerivedFlowsFlagAsync()
+    /// <summary>
+    /// Tests run as though the features had shipped (test/CLAUDE.md): every catalogued flag on, taken from the
+    /// shared <see cref="InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled"/> fixture. The workflow harness
+    /// reads Service Settings from its database, so the rows are stored there rather than substituting a repository.
+    /// </summary>
+    private async Task EnableAllFeatureFlagsAsync()
     {
-        DbContext.ServiceSettingItems.Add(new ServiceSetting
-        {
-            Key = FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key,
-            DisplayName = FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.DisplayName,
-            Category = ServiceSettingCategory.FeatureFlags,
-            ValueType = ServiceSettingValueType.Boolean,
-            DefaultValue = "false",
-            Value = "true"
-        });
+        DbContext.ServiceSettingItems.AddRange(await InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync());
         await DbContext.SaveChangesAsync();
     }
 
@@ -565,15 +613,19 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         return attribute;
     }
 
-    private static void FromAttribute(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source) =>
-        rule.AttributeFlowRules.Add(new SyncRuleMapping
+    private static SyncRuleMapping FromAttribute(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source)
+    {
+        var mapping = new SyncRuleMapping
         {
             SyncRule = rule,
             SyncRuleId = rule.Id,
             TargetMetaverseAttribute = target,
             TargetMetaverseAttributeId = target.Id,
             Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = source, ConnectedSystemAttributeId = source.Id } }
-        });
+        };
+        rule.AttributeFlowRules.Add(mapping);
+        return mapping;
+    }
 
     private static SyncRuleMapping FromExpression(SyncRule rule, MetaverseAttribute target, string expression)
     {
@@ -602,8 +654,8 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
     private ConnectedSystemObject SeedHr(Context ctx, string employeeId, string? accountName) =>
         SeedCso(ctx.Hr, ctx.HrType, ("employeeId", employeeId), ("accountName", accountName));
 
-    private ConnectedSystemObject SeedAd(Context ctx, string employeeId, string? region) =>
-        SeedCso(ctx.Ad!, ctx.AdType!, ("employeeId", employeeId), ("region", region));
+    private ConnectedSystemObject SeedAd(Context ctx, string employeeId, string? region, string? mail = null) =>
+        SeedCso(ctx.Ad!, ctx.AdType!, ("employeeId", employeeId), ("region", region), ("mail", mail));
 
     private ConnectedSystemObject SeedCso(ConnectedSystem system, ConnectedSystemObjectType type, params (string Name, string? Value)[] values)
     {
@@ -647,23 +699,73 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         await DbContext.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Disables <paramref name="rule"/> and builds its deletion recall task, as TaskingServer does at queue time
+    /// (the SyncRuleDeletionRecallWorkflowTests pattern).
+    /// </summary>
+    private async Task<DeleteSyncRuleWorkerTask> DisableRuleAndBuildRecallTaskAsync(SyncRule rule)
+    {
+        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified).ToList())
+            entry.State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+
+        rule.Enabled = false;
+        rule.DisabledReason = "Deletion in progress: contributed attribute values are being recalled.";
+        DbContext.Entry(rule).State = Microsoft.EntityFrameworkCore.EntityState.Modified;
+        var activity = new Activity
+        {
+            TargetName = rule.Name,
+            TargetType = ActivityTargetType.SynchronisationRule,
+            TargetOperationType = ActivityTargetOperationType.RecallAttributeValues,
+            Status = ActivityStatus.InProgress,
+            ConnectedSystemId = rule.ConnectedSystemId,
+            Executed = DateTime.UtcNow
+        };
+        DbContext.Activities.Add(activity);
+        await DbContext.SaveChangesAsync();
+
+        return new DeleteSyncRuleWorkerTask(rule.Id, recallContributedValues: true) { Activity = activity };
+    }
+
     private async Task<Activity> RunFullSyncAsync(ConnectedSystem connectedSystem, ISyncRepository? repository = null)
     {
-        var reloaded = await ReloadEntityAsync(connectedSystem);
-        var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
-        var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), repository ?? SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
-            .PerformFullSyncAsync();
+        var (run, activity) = await PrepareFullSyncAsync(connectedSystem, repository);
+        await run();
         return activity;
     }
 
     private async Task<Activity> RunDeltaSyncAsync(ConnectedSystem connectedSystem)
     {
+        var (run, activity) = await PrepareDeltaSyncAsync(connectedSystem);
+        await run();
+        return activity;
+    }
+
+    /// <summary>
+    /// A Full Synchronisation ready to run, with its Activity, so a test can inspect the Activity of a run that throws.
+    /// </summary>
+    private async Task<(Func<Task> Run, Activity Activity)> PrepareFullSyncAsync(ConnectedSystem connectedSystem, ISyncRepository? repository = null)
+    {
+        var reloaded = await ReloadEntityAsync(connectedSystem);
+        var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), repository ?? SyncRepo, reloaded, profile, activity, new CancellationTokenSource());
+        return (processor.PerformFullSyncAsync, activity);
+    }
+
+    private async Task<(Func<Task> Run, Activity Activity)> PrepareDeltaSyncAsync(ConnectedSystem connectedSystem)
+    {
         var reloaded = await ReloadEntityAsync(connectedSystem);
         var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
         var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.DeltaSynchronisation);
-        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
-            .PerformDeltaSyncAsync();
-        return activity;
+        var processor = new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource());
+        return (processor.PerformDeltaSyncAsync, activity);
     }
+
+    /// <summary>
+    /// Fails <paramref name="activity"/> with <paramref name="exception"/> exactly as the Worker's sync-run boundary
+    /// does (Worker.SafeFailActivityAsync's first and ordinary attempt), so a test can assert what an administrator
+    /// sees on the Activity.
+    /// </summary>
+    private async Task FailRunLikeTheWorkerAsync(Activity activity, Exception exception) =>
+        await Jim.Activities.FailActivityWithErrorAsync(activity, exception);
 }

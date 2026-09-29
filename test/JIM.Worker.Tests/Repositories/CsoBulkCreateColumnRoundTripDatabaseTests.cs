@@ -319,5 +319,69 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
     /// Truncates to PostgreSQL's timestamptz microsecond precision (1 microsecond = 10 ticks), so a
     /// value built from <see cref="DateTime.UtcNow"/> round-trips byte-for-byte through the database.
     /// </summary>
+    /// <summary>
+    /// The import path's own raw writer (<c>ConnectedSystemRepository.CreateConnectedSystemObjectsAsync</c>, a
+    /// parameterised multi-row INSERT beside the sync path's COPY): every Connected System Object column must
+    /// round-trip, so a parameter written out of <c>CsoBulkColumns</c> order, or with the wrong type, fails here.
+    /// </summary>
+    [Test]
+    public async Task ConnectedSystemsCreateConnectedSystemObjectsAsync_EveryColumnPopulated_RoundTripsExactlyAsync()
+    {
+        var s = await SeedGraphAsync();
+        var dateJoined = TruncateToMicroseconds(DateTime.UtcNow.AddHours(-2));
+        var lastScopeEvaluatedAt = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-30));
+        var lastUpdated = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-5));
+        var created = TruncateToMicroseconds(DateTime.UtcNow.AddMinutes(-10));
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = s.SystemId,
+            TypeId = s.TypeId,
+            ExternalIdAttributeId = s.ExtIdAttrId,
+            SecondaryExternalIdAttributeId = s.SecondaryExtIdAttrId,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            MetaverseObjectId = s.MvoId,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            DateJoined = dateJoined,
+            PartitionId = s.PartitionId,
+            ScopeReviewPending = true,
+            LastScopeEvaluatedAt = lastScopeEvaluatedAt,
+            DerivedInputChangePending = true,
+            Created = created,
+            LastUpdated = lastUpdated
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs" });
+
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            await repository.ConnectedSystems.CreateConnectedSystemObjectsAsync([cso]);
+        }
+
+        await using var readContext = NewContext();
+        var storedCso = await readContext.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(storedCso.ConnectedSystemId, Is.EqualTo(s.SystemId));
+            Assert.That(storedCso.Created, Is.EqualTo(created));
+            Assert.That(storedCso.LastUpdated, Is.EqualTo(lastUpdated));
+            Assert.That(storedCso.TypeId, Is.EqualTo(s.TypeId));
+            Assert.That(storedCso.ExternalIdAttributeId, Is.EqualTo(s.ExtIdAttrId));
+            Assert.That(storedCso.SecondaryExternalIdAttributeId, Is.EqualTo(s.SecondaryExtIdAttrId));
+            Assert.That(storedCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning));
+            Assert.That(storedCso.MetaverseObjectId, Is.EqualTo(s.MvoId));
+            Assert.That(storedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned));
+            Assert.That(storedCso.DateJoined, Is.EqualTo(dateJoined));
+            Assert.That(storedCso.PartitionId, Is.EqualTo(s.PartitionId));
+            Assert.That(storedCso.ScopeReviewPending, Is.True);
+            Assert.That(storedCso.LastScopeEvaluatedAt, Is.EqualTo(lastScopeEvaluatedAt));
+            Assert.That(storedCso.ImportStateHash, Is.Null, "SPEC-1082 D6: a newly created CSO must never carry a pre-stamped content hash");
+            Assert.That(storedCso.ImportStateFingerprint, Is.Null, "SPEC-1082 D6: a newly created CSO must never carry a pre-stamped fingerprint");
+            Assert.That(storedCso.DerivedInputChangePending, Is.True, "#1750: the derived-input mark must round-trip through the import path's writer");
+        }
+    }
+
     private static DateTime TruncateToMicroseconds(DateTime value) => new(value.Ticks / 10 * 10, value.Kind);
 }

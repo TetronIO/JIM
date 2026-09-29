@@ -1226,7 +1226,6 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     private static string DescribeDerivedHost(string? syncRuleName) =>
         syncRuleName == null ? string.Empty : $" (derived by Synchronisation Rule '{syncRuleName}')";
-    }
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
