@@ -25,9 +25,16 @@ public class AuxiliaryClassOffer
     public bool Merged { get; init; }
 
     /// <summary>
-    /// How many attributes merging this class would contribute.
+    /// How many attributes merging this class would contribute: <see cref="ContributedAttributes"/>, counted.
     /// </summary>
-    public int ContributedAttributeCount { get; init; }
+    public int ContributedAttributeCount => ContributedAttributes.Count;
+
+    /// <summary>
+    /// The attributes merging this class would contribute, ordered by name: the class's own attributes, less any
+    /// the Object Type already carries. The Connector gives every class the directory's common attributes (the
+    /// entry's identity and class membership, say), and counting those would overstate every class alike.
+    /// </summary>
+    public IReadOnlyList<ConnectedSystemObjectTypeAttribute> ContributedAttributes { get; init; } = [];
 
     /// <summary>
     /// Whether the Connected System itself says this class may attach to the Object Type, i.e. an RFC 4512 DIT

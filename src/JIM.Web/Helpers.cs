@@ -855,7 +855,7 @@ public static class Helpers
     /// <summary>
     /// Gets the in-app link for a Connected System activity target, or null when the system id is unknown.
     /// Operations whose subject lives on a specific tab deep-link there: schema imports to the Schema tab, hierarchy
-    /// imports to the Partitions &amp; Containers tab.
+    /// imports to the Scope tab.
     /// </summary>
     public static string? GetConnectedSystemActivityHref(int? connectedSystemId, ActivityTargetOperationType operationType)
     {
@@ -865,7 +865,7 @@ public static class Helpers
         return operationType switch
         {
             ActivityTargetOperationType.ImportSchema => basePath + "?t=schema",
-            ActivityTargetOperationType.ImportHierarchy => basePath + "?t=partitions-containers",
+            ActivityTargetOperationType.ImportHierarchy => basePath + "?t=scope",
             _ => basePath
         };
     }

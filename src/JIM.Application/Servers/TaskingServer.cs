@@ -436,7 +436,7 @@ namespace JIM.Application.Servers
             var validationMode = await Application.ServiceSettings.GetPartitionValidationModeAsync();
             var diagnostic = connectedSystem.BuildPartitionSelectionDiagnostic();
             var message = $"Connected System '{connectedSystem.Name}' has incomplete partition configuration: {diagnostic}. " +
-                          "Import operations will return no objects. Please configure partition and container selections on the Connected System's Partitions & Containers tab.";
+                          "Import operations will return no objects. Please configure partition and container selections on the Connected System's Scope tab.";
 
             if (validationMode == PartitionValidationMode.Error)
             {
@@ -472,7 +472,7 @@ namespace JIM.Application.Servers
             var partitionName = runProfile.Partition!.Name;
             var message = $"Run Profile '{runProfile.Name}' targets partition '{partitionName}' on Connected System " +
                           $"'{connectedSystem.Name}', which is no longer selected. A deselected partition is not managed by JIM, so " +
-                          "this Run Profile cannot run. Either select the partition again on the Partitions & Containers tab, or " +
+                          "this Run Profile cannot run. Either select the partition again on the Scope tab, or " +
                           "point this Run Profile at a partition that is selected.";
 
             Log.Warning("CreateWorkerTaskAsync: Blocking execution - {Message}", message);

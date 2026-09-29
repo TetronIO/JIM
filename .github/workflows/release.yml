@@ -707,6 +707,15 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
 
+          # GitHub renames an uploaded file whose name starts with a dot, so ".env.example" would be
+          # published as "default.env.example" anyway. Upload it under that name explicitly: setup.sh
+          # and the deployment guide download it by name, and every earlier release carries it too.
+          cp ./.env.example ./default.env.example
+
+          # The Podman files, with this release's image references filled in. setup.sh and the deployment
+          # guide download them by name, so each is published under its own name, flat.
+          pwsh -NoProfile -File ./scripts/Build-PodmanFiles.ps1 -Version "${VERSION}" -OutputPath ./podman-release
+
           gh release create "v${VERSION}" \
             --title "JIM v${VERSION}" \
             --notes-file ./release-notes.md \
@@ -715,7 +724,15 @@ jobs:
             ./artifacts/sbom/*.spdx.json \
             ./docker-compose.yml \
             ./deploy/docker-compose.production.yml \
-            ./.env.example
+            ./default.env.example \
+            ./deploy/setup.sh \
+            ./podman-release/jim.yaml \
+            ./podman-release/jim-database.yaml \
+            ./podman-release/jim-config.yaml \
+            ./podman-release/jim-secrets.yaml \
+            ./podman-release/quadlet/jim.kube \
+            ./podman-release/quadlet/jim-database.kube \
+            ./podman-release/quadlet/jim.network
 
   # Job 6: Notify the junctional.io marketing site to rebuild.
   # The site fetches the current JIM version from GitHub at build time, so a

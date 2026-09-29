@@ -6,7 +6,7 @@ namespace JIM.Models.Staging;
 /// <summary>
 /// A human-readable fact about a Connected System's target directory/system, detected by the Connector from
 /// data it persisted about a previous connection (for example, an LDAP directory's type, vendor, and paging
-/// support, discovered from its rootDSE). Purely a display concern for the "Directory Capabilities" card on
+/// support, discovered from its rootDSE). Purely a display concern for the detected facts strip on
 /// the Connected System details page; never consulted by the synchronisation engine.
 /// </summary>
 public class ConnectorCapability

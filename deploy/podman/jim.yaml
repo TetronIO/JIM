@@ -1,0 +1,196 @@
+# JIM on Podman: the JIM pod (web, worker and scheduler)
+#
+# Run by the jim.kube Quadlet unit, which starts it at boot with systemd. On a host without Quadlet or systemd,
+# `podman kube play --network jim --configmap jim-config.yaml jim.yaml` starts it too, but it will not restart after
+# a reboot. See the Deployment Guide: https://docs.junctional.io/administration/deployment/
+#
+# Nothing in this file is specific to your installation, so an upgrade replaces it with the new release's copy.
+# Your settings live elsewhere:
+#   - jim-config.yaml     the settings, with the same names as the Docker path's .env
+#   - Podman secrets      jim-secrets (the database password, the identity provider's client secret and the
+#                         optional infrastructure API key) and jim-tls (JIM's certificate and private key)
+#   - jim.kube            the HTTPS port users reach JIM on (PublishPort=)
+#
+# The hardening matches docker-compose.yml: each container runs as the image's non-root user, with a read-only
+# root filesystem, every capability dropped, no privilege escalation, and its own in-memory /tmp. The containers
+# must not share /tmp: the worker and scheduler each write their health heartbeat to /tmp/healthcheck.
+#
+# Health checks: Podman 5 restarts a container whose liveness check fails, where Docker only reports it. So each
+# liveness check asks only whether a service is hung, and starts once its startup check has passed, however long
+# the first start or an upgrade's migrations take. (Podman 4 ignores the startup checks and never restarts.)
+#
+# JIM reaches PostgreSQL at JIM_DB_HOSTNAME from jim-config.yaml: jim-database, the pod in jim-database.yaml, for
+# the bundled database, or your own server's name.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jim
+  labels:
+    app: jim
+spec:
+  restartPolicy: Always
+  containers:
+    - name: web
+      image: __JIM_REGISTRY__jim-web:__JIM_VERSION__
+      envFrom:
+        - configMapRef:
+            name: jim-config
+      env:
+        - name: JIM_LOG_PATH
+          value: /var/log/jim
+        - name: JIM_LOG_REQUESTS
+          value: "true"
+        # HTTPS on 8443 for every client. Plain HTTP stays on 8080 for the health check below, bound to the
+        # loopback interface so that nothing outside the pod can reach it.
+        - name: ASPNETCORE_URLS
+          value: https://+:8443;http://localhost:8080
+        - name: ASPNETCORE_Kestrel__Certificates__Default__Path
+          value: /run/jim-tls/tls.crt
+        - name: ASPNETCORE_Kestrel__Certificates__Default__KeyPath
+          value: /run/jim-tls/tls.key
+        - name: JIM_DB_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_DB_PASSWORD }
+        - name: JIM_SSO_SECRET
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_SSO_SECRET }
+        - name: JIM_INFRASTRUCTURE_API_KEY
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_INFRASTRUCTURE_API_KEY, optional: true }
+      ports:
+        # jim.kube's PublishPort= replaces this host port.
+        - containerPort: 8443
+          hostPort: 443
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      # jim.web listens once JIM is ready, after the worker's migrations.
+      startupProbe:
+        exec:
+          command: ["curl", "-f", "http://localhost:8080/api/v1/health/ready"]
+        periodSeconds: 10
+        timeoutSeconds: 10
+        failureThreshold: 8640
+      # Whether jim.web answers, not whether JIM is ready: in maintenance mode, or while the database is unreachable,
+      # JIM is not ready, but restarting jim.web would not help.
+      livenessProbe:
+        exec:
+          command: ["curl", "-f", "http://localhost:8080/api/v1/health/live"]
+        initialDelaySeconds: 40
+        periodSeconds: 30
+        timeoutSeconds: 10
+        failureThreshold: 3
+      volumeMounts:
+        - { name: tmp-web, mountPath: /tmp }
+        - { name: jim-logs, mountPath: /var/log/jim }
+        - { name: jim-keys, mountPath: /data/keys }
+        - { name: jim-connector-files, mountPath: /connector-files }
+        # Not under /run/secrets: on RHEL and its derivatives, Podman mounts a read-only /run/secrets of its own.
+        - { name: jim-tls, mountPath: /run/jim-tls, readOnly: true }
+
+    - name: worker
+      image: __JIM_REGISTRY__jim-worker:__JIM_VERSION__
+      envFrom:
+        - configMapRef:
+            name: jim-config
+      env:
+        - name: JIM_LOG_PATH
+          value: /var/log/jim
+        - name: JIM_LOG_REQUESTS
+          value: "false"
+        - name: JIM_DB_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_DB_PASSWORD }
+        - name: JIM_SSO_SECRET
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_SSO_SECRET }
+        - name: JIM_INFRASTRUCTURE_API_KEY
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_INFRASTRUCTURE_API_KEY, optional: true }
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      startupProbe:
+        exec:
+          command: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/healthcheck) )) -lt 60"]
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 8640
+      livenessProbe:
+        exec:
+          command: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/healthcheck) )) -lt 60"]
+        initialDelaySeconds: 60
+        periodSeconds: 30
+        timeoutSeconds: 5
+        failureThreshold: 3
+      volumeMounts:
+        - { name: tmp-worker, mountPath: /tmp }
+        - { name: jim-logs, mountPath: /var/log/jim }
+        - { name: jim-keys, mountPath: /data/keys }
+        - { name: jim-connector-files, mountPath: /connector-files }
+
+    - name: scheduler
+      image: __JIM_REGISTRY__jim-scheduler:__JIM_VERSION__
+      envFrom:
+        - configMapRef:
+            name: jim-config
+      env:
+        - name: JIM_LOG_PATH
+          value: /var/log/jim
+        - name: JIM_LOG_REQUESTS
+          value: "false"
+        - name: JIM_DB_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_DB_PASSWORD }
+        - name: JIM_SSO_SECRET
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_SSO_SECRET }
+        - name: JIM_INFRASTRUCTURE_API_KEY
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_INFRASTRUCTURE_API_KEY, optional: true }
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      startupProbe:
+        exec:
+          command: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/healthcheck) )) -lt 120"]
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 8640
+      livenessProbe:
+        exec:
+          command: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/healthcheck) )) -lt 120"]
+        initialDelaySeconds: 120
+        periodSeconds: 30
+        timeoutSeconds: 5
+        failureThreshold: 3
+      volumeMounts:
+        - { name: tmp-scheduler, mountPath: /tmp }
+        - { name: jim-logs, mountPath: /var/log/jim }
+        - { name: jim-keys, mountPath: /data/keys }
+
+  volumes:
+    - name: tmp-web
+      emptyDir: { medium: Memory }
+    - name: tmp-worker
+      emptyDir: { medium: Memory }
+    - name: tmp-scheduler
+      emptyDir: { medium: Memory }
+    # Named volumes, with the same names as on Docker. Podman creates each on first use, owned by the image's user.
+    - name: jim-logs
+      persistentVolumeClaim: { claimName: jim-logs-volume }
+    # The encryption keys. Back this volume up with the database: each is useless without the other.
+    - name: jim-keys
+      persistentVolumeClaim: { claimName: jim-keys-volume }
+    # File Connector storage. See the File Connector guide for mounting a host folder or a network share here.
+    - name: jim-connector-files
+      persistentVolumeClaim: { claimName: jim-connector-files-volume }
+    - name: jim-tls
+      secret: { secretName: jim-tls }

@@ -119,6 +119,13 @@
                                 j++;
                             }
                         }
+                        @* The certificate belongs to the connection, so any Connector that can read its endpoint's
+                           certificate gets this at the end of its Connectivity settings; nothing here knows which
+                           Connector it is. *@
+                        @if (_supportsCertificateFetch && settingCategory == ConnectedSystemSettingCategory.Connectivity)
+                        {
+                            @CertificateFetch
+                        }
                     </ChildContent>
                 </MudExpansionPanel>
             }
@@ -244,28 +251,6 @@
         }
     }
 
-    @* The same capability from the other direction (#1139): the certificate can be looked at before anything has
-       failed, so configuring a new system is not a cycle of save, fail, come back. Fetching only reads and shows;
-       nothing is stored until the trust action on the card below is confirmed. *@
-    @if (_fetchedCertificate != null)
-    {
-        <MudAlert Severity="Severity.Info" Class="mt-5">
-            @if (_fetchedCertificate.FailureReason == ServerCertificateFailureReason.None)
-            {
-                <text>JIM already trusts this certificate. Nothing needs adding.</text>
-            }
-            else
-            {
-                <text>JIM does not yet trust this certificate. Nothing has been saved; trusting it is a separate step.</text>
-            }
-        </MudAlert>
-
-        <ServerCertificateCard Diagnostic="_fetchedCertificate" Compact="true"
-                               ConnectedSystemId="@(ConnectedSystem.Id > 0 ? ConnectedSystem.Id : null)"
-                               ConnectedSystemName="@ConnectedSystem.Name"
-                               DraftSettingValues="@DraftSettingValues()"
-                               OnTrusted="FetchServerCertificateAsync" />
-    }
 </MudForm>
 <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
     @if (_settingsBeingSaved)
@@ -279,24 +264,71 @@
     }
 </MudButton>
 
-@if (_supportsCertificateFetch)
-{
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-5 ml-2" DropShadow="false"
-               StartIcon="@Icons.Material.Filled.Search" Disabled="_fetchingCertificate"
-               OnClick="FetchServerCertificateAsync" data-testid="jim-fetch-server-certificate">
-        @if (_fetchingCertificate)
-        {
-            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-            <span class="ms-2">Fetching</span>
-        }
-        else
-        {
-            <text>Fetch certificate</text>
-        }
-    </MudButton>
-}
-
 @code {
+    /// <summary>
+    /// Fetch certificate, and whatever it found, as a Server Certificate section closing the Connectivity panel, for
+    /// any Connector implementing <c>IConnectorSecureEndpoint</c> (see <see cref="_supportsCertificateFetch"/>). It
+    /// used to sit beside Save Settings, where it read as unrelated to the page.
+    /// The same capability as the card shown on a failed save (#1139), from the other direction: the certificate
+    /// can be looked at before anything has failed. Fetching only reads and shows; nothing is stored until the
+    /// trust action on the card is confirmed. A read that fails stays on the page until dismissed or fetched
+    /// again, rather than a toast that disappears while the administrator is still reading it.
+    /// </summary>
+    private RenderFragment CertificateFetch => __builder =>
+    {
+        <div data-testid="jim-certificate-fetch">
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.h6">Server Certificate</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Read the certificate the endpoint above presents, to check JIM trusts it before saving. Nothing is
+                stored until you choose to trust it.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small" DropShadow="false"
+                       StartIcon="@(_fetchingCertificate ? null : Icons.Material.Filled.Search)"
+                       Disabled="_fetchingCertificate"
+                       OnClick="FetchServerCertificateAsync" data-testid="jim-fetch-server-certificate">
+                @if (_fetchingCertificate)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <span class="ms-2">Fetching certificate</span>
+                }
+                else
+                {
+                    <text>Fetch certificate</text>
+                }
+            </MudButton>
+
+            @if (_certificateFetchMessage != null)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-3" ShowCloseIcon="true"
+                          CloseIconClicked="@(() => _certificateFetchMessage = null)"
+                          data-testid="jim-certificate-fetch-failed">
+                    @_certificateFetchMessage
+                </MudAlert>
+            }
+
+            @if (_fetchedCertificate != null)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-3">
+                    @if (_fetchedCertificate.FailureReason == ServerCertificateFailureReason.None)
+                    {
+                        <text>JIM already trusts this certificate. Nothing needs adding.</text>
+                    }
+                    else
+                    {
+                        <text>JIM does not yet trust this certificate. Nothing has been saved; trusting it is a separate step.</text>
+                    }
+                </MudAlert>
+
+                <ServerCertificateCard Diagnostic="_fetchedCertificate" Compact="true"
+                                       ConnectedSystemId="@(ConnectedSystem.Id > 0 ? ConnectedSystem.Id : null)"
+                                       ConnectedSystemName="@ConnectedSystem.Name"
+                                       DraftSettingValues="@DraftSettingValues()"
+                                       OnTrusted="FetchServerCertificateAsync" />
+            }
+        </div>
+    };
+
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
@@ -330,6 +362,11 @@
     private bool _supportsCertificateFetch;
 
     private bool _fetchingCertificate;
+
+    /// <summary>
+    /// Why the last Fetch certificate read nothing, shown in place until dismissed or fetched again.
+    /// </summary>
+    private string? _certificateFetchMessage;
     private bool _settingsBeingSaved;
     private MudForm? _settingsForm;
 
@@ -477,6 +514,7 @@
 
         _fetchingCertificate = true;
         _fetchedCertificate = null;
+        _certificateFetchMessage = null;
 
         try
         {
@@ -486,7 +524,7 @@
             if (result.Outcome == ServerCertificateReadOutcome.Read)
                 _fetchedCertificate = result.Diagnostic;
             else
-                Snackbar.Add(result.Message ?? "JIM could not read a certificate from this endpoint.", Severity.Warning);
+                _certificateFetchMessage = result.Message ?? "JIM could not read a certificate from this endpoint.";
         }
         finally
         {

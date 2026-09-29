@@ -12,7 +12,7 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
 
-    The Schema, Partitions &amp; Containers and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
+    The Schema, Scope and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
@@ -82,6 +82,8 @@ Independently of any one clear, every armed sweep (and Connected System deletion
 
 ## Partitions and containers
 
+Partitions and containers are chosen on the Connected System's **Scope** tab, which appears only where the Connector has them: the tab is where you choose what JIM manages in the system, whatever shape that takes.
+
 A **partition** is a top-level logical division of a connector space that mirrors a boundary defined by the external system. Partitions exist in JIM primarily to service LDAP-style directories and their naming contexts (NCs): the discrete directory trees that an LDAP server hosts. The separate domain partitions within an Active Directory forest, or the distinct naming contexts exposed by an OpenLDAP server, each surface as a partition in JIM.
 
 Most Connected Systems do not support partitions. A flat file, a SQL table, or a SCIM endpoint has no concept of multiple naming contexts, so its connector space has no partitions.
@@ -124,7 +126,7 @@ Selection is how you tell JIM which parts of a system it manages, and it binds e
 
 ### Stating Container Scope as text (Advanced Mode)
 
-The Partitions & Containers tab offers two ways to edit the same Container Scope, switched with **Simple** and **Advanced**:
+The Scope tab offers two ways to edit the same Container Scope, switched with **Simple** and **Advanced**:
 
 - **Simple** is the tree: tick the Containers you manage, and set each one's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).
 - **Advanced** is the same scope written out, one statement per line. It is for the hierarchy that is impractical to click through, and for keeping a scope under version control, reviewing it as a diff, or copying it between Connected Systems.
@@ -160,7 +162,7 @@ Automation has the same surface: [`Get-JIMConnectedSystemContainerScopeText`](..
 
 ### Previewing a partition or container change
 
-Because narrowing scope is silently destructive, the Partitions & Containers tab offers a **Preview Changes** button beside **Save Changes**. It answers what your edited selection would do, without saving it.
+Because narrowing scope is silently destructive, the Scope tab offers a **Preview Changes** button beside **Save Changes**. It answers what your edited selection would do, without saving it.
 
 The preview reports:
 
@@ -190,7 +192,7 @@ JIM identifies partitions and containers by the system's own immutable identifie
 
 Containers selected before this behaviour shipped record their identifier at their next hierarchy refresh, and continue to be matched on Distinguished Name until then. Refresh the hierarchy once after upgrading to pick it up.
 
-A container that genuinely disappears from the source system is still reported as removed, and the Partitions & Containers tab warns when a removed container was one you had selected.
+A container that genuinely disappears from the source system is still reported as removed, and the Scope tab warns when a removed container was one you had selected.
 
 ## Unresolved reference handling
 
@@ -411,13 +413,13 @@ If the attribute *does* carry a password, the answer is [Password Synchronisatio
 
 ## Password policy and the password channel
 
-Where a Connected System can accept passwords, its Schema tab carries a Password Channel panel. It has two jobs: showing you the password rules JIM read from the system itself, and letting you check the channel works before you rely on it.
+Where a Connected System can accept passwords, its **Passwords** tab carries two panels beneath the Password Synchronisation settings: Password Channel, which lets you check the channel works before you rely on it, and Password Policy, which shows you the password rules JIM read from the system itself.
 
 [Passwords](../concepts/passwords.md) explains the channel as a whole: why passwords do not travel through attribute flow, what discovery can and cannot tell you, and how a refused password is resolved.
 
 ### Discovered password policy
 
-JIM reads the target's password policy whenever it retrieves or refreshes the Connected System's schema, and records it, so that configuring a generated password does not mean retyping rules the system already publishes. If a policy is missing, **Refresh Schema** on the Schema tab reads it again. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
+JIM reads the target's password policy whenever it retrieves or refreshes the Connected System's schema, and records it, so that configuring a generated password does not mean retyping rules the system already publishes. The policy is read during a schema retrieval, so if it is missing, **Refresh Schema** on the Schema tab reads it again; the panel says when it was last read. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
 
 Which directories publish which rules, and where each keeps them, is on [Passwords](../concepts/passwords.md#discovering-the-targets-rules); the LDAP Connector reads Active Directory, Samba AD, OpenLDAP (with the `ppolicy` overlay) and 389 Directory Server, and each publishes a different subset.
 
@@ -457,7 +459,7 @@ Each check returns passed, warning, failed, or **could not tell**, and the last 
 A preflight is not stored. Reachability, permissions and policy all change without JIM being told, so a result kept on file would go on reassuring you long after it stopped being true.
 
 !!! note "The reset rights check needs somewhere to look"
-    Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Partitions and Containers tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
+    Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Scope tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
 
 ### Setting the password on one Connected System Object
 
@@ -530,11 +532,11 @@ Every change to these settings reaches the Connected System's configuration chan
 
 For automation, `Get-JIMConnectedSystemPasswordSynchronisation` and `Set-JIMConnectedSystemPasswordSynchronisation` do the same over the REST API; `ConnectorSupportsPasswordSet` on the response tells you whether a system can be configured at all.
 
-## Directory Capabilities
+## Detected facts
 
-The Details tab carries a Directory Capabilities card: read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing the card never opens a new connection. Before the first successful connection, the card shows a hint rather than an error.
+At the top of the Details tab, above the form, a **Detected** strip lists read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing them never opens a new connection. Before the first successful connection, the strip says nothing has been detected yet.
 
-Today only the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) detects and surfaces capabilities (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect capabilities, the card is not shown at all.
+Today only the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#detected-facts) detects and surfaces facts (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect facts, the strip is not shown at all.
 
 ## Pending Exports
 

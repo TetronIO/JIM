@@ -146,42 +146,50 @@ else
                     "Arial"
                 ],
                 FontWeight = "400",
-                FontSize = "16px"
+                FontSize = "14px"
             },
+            // A 14px base, the norm for data-dense admin tools, rather than the 16px of reading pages. Tabs, nav links,
+            // breadcrumbs and inputs inherit the default size; tables and chips use Body2 (and Subtitle2 for headers),
+            // one step down. Buttons and captions keep MudBlazor's sizes. The html root stays at 16px, so the rem-based
+            // sizes and spacing in site.css are unaffected.
+            Body1 = new Body1Typography { FontSize = "14px" },
+            Body2 = new Body2Typography { FontSize = "13px" },
+            Subtitle1 = new Subtitle1Typography { FontSize = "14px" },
+            Subtitle2 = new Subtitle2Typography { FontSize = "13px" },
             // MudBlazor 9 defaults (from Material Design 1.0) mix weights 300-500
             // across H1-H6 with large, uneven size jumps between levels (H1 alone
             // ships at 96px). Override the whole scale with a uniform 2px step,
-            // starting from H6 at 2px above body text size (16px), so it stays
+            // starting from H6 at 2px above body text size (14px), so it stays
             // visually close to surrounding text while remaining distinguishable
             // via weight alone.
             H1 = new H1Typography()
             {
-                FontSize = "28px",
+                FontSize = "26px",
                 FontWeight = "450"
             },
             H2 = new H2Typography()
             {
-                FontSize = "26px",
+                FontSize = "24px",
                 FontWeight = "450"
             },
             H3 = new H3Typography()
             {
-                FontSize = "24px",
+                FontSize = "22px",
                 FontWeight = "450"
             },
             H4 = new H4Typography()
             {
-                FontSize = "22px",
+                FontSize = "20px",
                 FontWeight = "500"
             },
             H5 = new H5Typography()
             {
-                FontSize = "20px",
+                FontSize = "18px",
                 FontWeight = "500"
             },
             H6 = new H6Typography()
             {
-                FontSize = "18px",
+                FontSize = "16px",
                 FontWeight = "500"
             }
         },
@@ -228,9 +236,17 @@ else
         }
     }
 
-    // Default to closed/unpinned - will be set based on screen size or saved preference in OnAfterRenderAsync
+    // Starts from the state the host page read from the drawer cookie (closed when there is none), then is set from
+    // the saved preference, or the screen size, in OnAfterRenderAsync.
     private bool IsDrawerOpen { get; set; }
     private bool IsDrawerPinned { get; set; }
+
+    /// <summary>
+    /// The drawer's open state as the user last left it, from the host page's cookie, so the first render draws it
+    /// that way rather than sliding it open once the saved preference has been read. See <see cref="App"/>.
+    /// </summary>
+    [CascadingParameter(Name = "InitialDrawerOpen")]
+    public bool? InitialDrawerOpen { get; set; }
     private bool _drawerPinnedInitialised;
     private bool _isDarkMode;
     private bool _darkModeInitialised;
@@ -286,6 +302,7 @@ else
                     IsDrawerPinned = isLargeScreen;
                 }
                 _drawerPinnedInitialised = true;
+                await MirrorDrawerStateAsync();
 
                 StateHasChanged();
             }
@@ -298,6 +315,12 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        if (InitialDrawerOpen is { } initialDrawerOpen)
+        {
+            IsDrawerOpen = initialDrawerOpen;
+            IsDrawerPinned = initialDrawerOpen;
+        }
+
         using var jim = JimFactory.Create();
         _serviceName = await jim.ServiceSettings.GetSettingValueAsync<string>(
             JIM.Models.Core.Constants.SettingKeys.ServiceName);
@@ -344,6 +367,23 @@ else
         if (_drawerPinnedInitialised)
         {
             _ = PreferenceService.SetDrawerPinnedAsync(IsDrawerPinned);
+            _ = MirrorDrawerStateAsync();
+        }
+    }
+
+    /// <summary>
+    /// Copies the drawer's pinned state, whether saved or defaulted from the screen size, into the cookie the host
+    /// page reads, so the next full load draws the drawer in this state from its first render.
+    /// </summary>
+    private async Task MirrorDrawerStateAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("jimPreferences.mirrorToCookie", "drawerOpen", IsDrawerPinned ? "true" : "false");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; the cookie keeps its previous value.
         }
     }
 

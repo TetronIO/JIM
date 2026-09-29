@@ -73,6 +73,13 @@ public class SyncRuleMappingDto
     /// </summary>
     public SyncRuleMappingGenerationDto? Generation { get; set; }
 
+    /// <summary>
+    /// Non-blocking warnings the create or update call that returned this mapping raised about it, for example that
+    /// an Attribute Flow deriving a Metaverse attribute calls a function returning a different value each time it is
+    /// evaluated. The save went ahead regardless. Always present; empty on every ordinary read.
+    /// </summary>
+    public List<string> Warnings { get; set; } = new();
+
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
     {
         return new SyncRuleMappingDto
@@ -92,7 +99,8 @@ public class SyncRuleMappingDto
             Enabled = entity.Enabled,
             DisabledReason = entity.DisabledReason,
             Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList(),
-            Generation = entity.Generation == null ? null : SyncRuleMappingGenerationDto.FromEntity(entity.Generation)
+            Generation = entity.Generation == null ? null : SyncRuleMappingGenerationDto.FromEntity(entity.Generation),
+            Warnings = entity.SaveWarnings.ToList()
         };
     }
 }

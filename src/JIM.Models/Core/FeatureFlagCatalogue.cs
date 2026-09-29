@@ -27,12 +27,25 @@ public static class FeatureFlagCatalogue
         TrackingIssueNumber: 242);
 
     /// <summary>
+    /// An import Attribute Flow expression may read the same object's Metaverse attributes with <c>mv["..."]</c>,
+    /// deriving one Metaverse attribute from others in dependency order (#1750). In development: on only in
+    /// development and in the integration harness, never surfaced to administrators. Removal is tracked by #1878.
+    /// </summary>
+    public static readonly FeatureFlagDefinition MetaverseDerivedAttributeFlows = new(
+        Key: "Features.MetaverseDerivedAttributeFlows",
+        DisplayName: "Metaverse-Derived Attribute Flows",
+        Description: "Import Attribute Flow expressions can read the same object's Metaverse attributes, deriving one Metaverse attribute from others in dependency order.",
+        Tier: FeatureFlagTier.InDevelopment,
+        TrackingIssueNumber: 1878);
+
+    /// <summary>
     /// Every declared flag. The seeding pass converges the database to exactly this set: creating a row for a
     /// flag added here, and removing any <see cref="ServiceSettingCategory.FeatureFlags"/> row whose key is no
     /// longer present, so deleting a flag from this list leaves nothing behind.
     /// </summary>
     public static readonly IReadOnlyList<FeatureFlagDefinition> All =
     [
-        UniqueValueGeneration
+        UniqueValueGeneration,
+        MetaverseDerivedAttributeFlows
     ];
 }

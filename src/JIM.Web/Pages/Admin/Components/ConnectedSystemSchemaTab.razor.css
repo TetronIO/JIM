@@ -30,3 +30,24 @@
     border-color: var(--mud-palette-primary) !important;
     background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
 }
+
+/* Object Type names are identifiers (jimGroup, inetOrgPerson), so the sub-tabs show them as the Connected System
+   spells them rather than upper-cased like the page's own tabs; the difference also marks the second level. */
+.schema-tabs ::deep .mud-tabs-tabbar .mud-tab {
+    text-transform: none;
+}
+
+/* Without the "Object Type: <name>" heading (the selected tab already says it), an Object Type's first panel leads
+   the tab panel, so its mt-5 would stack on the panel's own padding. mt-5 is !important in MudBlazor. */
+.schema-tabs ::deep .mud-tabs-panels > .mud-tab-panel > .mud-paper:first-child {
+    margin-top: 0 !important;
+}
+
+/* The schema status after the Object Type tabs. MudTabs gives the tab area width: 100%, which squeezes the header
+   until its text and button wrap; it keeps its natural width instead, and sits centred in the bar rather than
+   stretched to its height. The tab area still scrolls when the types outgrow what is left. */
+.schema-tabs ::deep .mud-tabs-header-after {
+    flex: 0 0 auto;
+    align-items: center;
+    white-space: nowrap;
+}

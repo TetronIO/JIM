@@ -58,9 +58,9 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Authentication types**<br /> Simple bind or NTLM authentication.
 - **Automatic retry**<br /> Configurable retry with exponential backoff for transient failures.
 
-### Directory Capabilities Card
+### Detected facts
 
-The Connected System's **Details** tab shows a **Directory Capabilities** card with the facts JIM has detected about the target directory:
+The Connected System's **Details** tab shows a **Detected** strip above the form with the facts JIM has detected about the target directory:
 
 | Fact | Shown when |
 |------|------------|
@@ -71,7 +71,7 @@ The Connected System's **Details** tab shows a **Directory Capabilities** card w
 | Pinned Directory Server | A domain controller has been [pinned](#domain-controller-discovery-and-pinning) |
 | Invocation Id | JIM could read the pinned domain controller's invocationId |
 
-These are read from data JIM already captured during a previous connection; viewing the card never opens a new connection to the directory. Before the first successful connection, the card shows a hint rather than an error. It is read-only: there is nothing here to configure.
+These are read from data JIM already captured during a previous connection; viewing them never opens a new connection to the directory. Before the first successful connection, the strip says nothing has been detected yet. It is read-only: there is nothing here to configure.
 
 Available to automation via `GET /connected-systems/{id}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
@@ -85,13 +85,17 @@ This section applies only to directories that publish an RFC 4512 subschema sube
 
 ### Merging a class into an Object Type
 
-On a Connected System's **Schema** tab, open a structural Object Type's sub-tab. Between **Settings** and **Attribute Selection** is an **Auxiliary Classes** panel listing every auxiliary class the directory's schema defines, with:
+On a Connected System's **Schema** tab, open a structural Object Type's sub-tab. Its **Auxiliary Classes** panel shows what the Object Type is made of: its own class, then each auxiliary class merged into it as a chip you can remove, and an **Add auxiliary class** button.
+
+The button opens a dialog listing the directory's auxiliary classes, with:
 
 - a switch saying whether it is merged into this Object Type
-- how many attributes merging it would contribute
+- how many attributes merging it would contribute, which opens to list them by name, marking the ones the class requires and any credential attribute (which can never be selected, however the class is merged)
 - a chip for each reason JIM has to suggest it (see [Suggestions](#suggestions) below)
 
-Turning a class on records your choice. Its attributes join the Object Type's attribute table at the next **Refresh Schema**, carrying the class's name in the existing **Class** column, and you select and flow them like any other attribute.
+The dialog opens on the **Suggested** classes where there are any, with **In use** (what a discovery run saw) and **All** one click away, and a search box for a class you know the name of. Change as many switches as you like, then **Apply** records the whole set at once.
+
+A merged class's attributes join the Object Type's attribute table at the next **Refresh Schema**, carrying the class's name in the existing **Class** column, and you select and flow them like any other attribute.
 
 Only what you enable is persisted, so a schema refresh can never silently change what an Object Type carries. A class the directory has removed disappears from the list, and the removal surfaces through the existing schema refresh confirmation rather than quietly.
 
@@ -108,7 +112,7 @@ Every auxiliary class in the schema is listed whether or not anything suggests i
 
 ### Discovery
 
-The **Discover in-use auxiliary classes** control on the same panel reads the directory's entries and records which auxiliary classes they carry. It changes no configuration.
+The classes the dialog lists come from the schema. **Discover classes in use**, at the foot of the same dialog, is a separate read, of the directory's entries, recording which auxiliary classes they actually carry. It changes no configuration.
 
 | Scope | Reads | Trade-off |
 |-------|-------|-----------|
@@ -119,7 +123,7 @@ LDAP cannot random-sample: paged searches return entries in server order, so a u
 
 A run is queued as a worker task and reports against an Activity, so you can watch its progress and cancel it like any other long-running operation. A cancelled run keeps what it found: those classes are genuinely in use, and the ones it never reached are simply unknown. One run at a time per Connected System, because a full scan reads every object and two would double the load on a directory that is probably still serving authentication.
 
-The panel's status strip shows whichever applies: never run, running (with a link to its Activity and a **Cancel**), last completed, or cancelled with partial results.
+The panel shows whichever applies: never run, running (with a link to its Activity and a **Cancel**), last completed, or cancelled with partial results.
 
 ### How objectClass is written on export
 
@@ -229,7 +233,7 @@ In practice this affects Partition discovery on Active Directory and Samba AD, w
 
 ### Container Scope
 
-Each selected Container carries a scope, set with the two-segment control on its row in the Container tree on the Connected System's **Partitions & Containers** tab:
+Each selected Container carries a scope, set with the two-segment control on its row in the Container tree on the Connected System's **Scope** tab:
 
 | Scope | What is imported | Containers beneath it |
 |-------|------------------|-----------------------|
@@ -444,7 +448,7 @@ Active Directory decides for itself regardless. It refuses a password write unle
 
 Active Directory and Samba AD use `unicodePwd`, which the Connector encodes correctly on your behalf.
 
-**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the directory's password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
+**Check the channel before relying on it.** The Connected System's Passwords tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the directory's password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
 
 There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
 

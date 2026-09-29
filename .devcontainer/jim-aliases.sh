@@ -19,6 +19,7 @@ alias jim='echo "JIM Development Aliases:
   jim-clean          - dotnet clean && build
   jim-msbuild-purge  - Kill cached MSBuild worker nodes (reclaims RAM)
   jim-web            - Run JIM.Web locally (sources .env)
+  jim-web-watch      - Run JIM.Web locally with hot reload (dotnet watch)
   jim-worker         - Run JIM.Worker locally (sources .env)
   jim-scheduler      - Run JIM.Scheduler locally (sources .env)
 
@@ -43,7 +44,7 @@ Docker Stack Management (auto-kills local JIM processes):
 
 Docker Builds (auto-kills local JIM processes, rebuild + start):
   jim-build          - Rebuild all services + start
-  jim-build-light    - Start db + Keycloak, run JIM.Web natively
+  jim-build-light    - Start db + Keycloak, run JIM.Web natively with hot reload
   jim-build-web      - Rebuild jim.web + start
   jim-build-worker   - Rebuild jim.worker + start
   jim-build-scheduler - Rebuild jim.scheduler + start
@@ -52,7 +53,8 @@ Docker Builds (auto-kills local JIM processes, rebuild + start):
         when API surface changes.
 
 Reset:
-  jim-reset          - Full reset (containers, images, volumes)
+  jim-reset          - Full reset (containers, images, volumes); keeps Scenario 016's database servers
+  jim-reset-all      - jim-reset, and also removes Scenario 016's database servers (slow to recreate)
   jim-wipe           - Wipe JIM data (reset CSOs/MVOs/config, keep schema)
   jim-cleanup        - Free disk space (prune orphaned volumes and unused images)
 
@@ -259,21 +261,168 @@ alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = Ne
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 
 # Kill a specific locally-running JIM .NET project before restarting it
+# PIDs of JIM .NET processes running natively in this devcontainer, matching the given pgrep pattern.
+#
+# The devcontainer's inner Docker engine shares its process view with this shell, so a plain pgrep for
+# "dotnet.*JIM.Web" also matches the dotnet process inside the jim.web container. Killing that does not
+# free port 5200 (Docker's port mapping holds it) and the container's `restart: always` policy brings it
+# straight back, so it only produced a misleading "Stopping ..." line. Anything whose parent is a
+# containerd shim is a container's process and is left to the container helpers below.
+_jim_native_pids() {
+  local pid parent
+  for pid in $(pgrep -f "$1" 2>/dev/null); do
+    parent=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -n "$parent" ] || continue
+    case "$(ps -o comm= -p "$parent" 2>/dev/null)" in
+      containerd-shim*) ;;
+      *) echo "$pid" ;;
+    esac
+  done
+}
+
+# Stop and remove the named JIM application containers (e.g. jim.web) if they exist, so a native run can
+# bind their ports. Removed rather than stopped: with `restart: always` a stopped container comes back when
+# the Docker daemon restarts. jim-stack and jim-build recreate them.
+_jim_stop_app_containers() {
+  local running=()
+  local service
+  for service in "$@"; do
+    [ -n "$(docker ps -aq --filter "name=^${service}\$" 2>/dev/null)" ] && running+=("$service")
+  done
+  [ ${#running[@]} -gt 0 ] || return 0
+  echo "Removing Docker container(s) so they run natively instead: ${running[*]}..."
+  docker compose $(_jim_compose) rm -s -f "${running[@]}" >/dev/null
+}
+
 _jim_kill_project() {
   local project="$1"
   local pids
-  pids=$(pgrep -f "dotnet.*JIM\.${project}" 2>/dev/null || true)
+  pids=$(_jim_native_pids "dotnet.*JIM\.${project}")
   if [ -n "$pids" ]; then
     echo "Stopping existing JIM.${project} (PIDs: $(echo $pids | tr '\n' ' '))..."
-    echo "$pids" | xargs kill 2>/dev/null || true
-    sleep 1
+    _jim_stop_pids $(echo $pids)
   fi
+  [ "$project" = Web ] && _jim_free_ports 5200 5210
+  return 0
 }
 
-# Local run aliases - source .env and override DB hostname for local access
-jim-web()       { _jim_kill_project Web       && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Web); }
-jim-worker()    { _jim_kill_project Worker    && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker); }
-jim-scheduler() { _jim_kill_project Scheduler && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler); }
+# Stop the given PIDs and wait for them to exit, escalating to SIGKILL after 10 seconds. A plain `kill` is not
+# enough: dotnet watch run with --non-interactive (as jim-web-watch does) can outlive SIGTERM, keep holding its
+# ports, and make the next run fail with "address already in use".
+_jim_stop_pids() {
+  local pid alive i
+  kill "$@" 2>/dev/null || true
+  for i in $(seq 1 20); do
+    alive=""
+    for pid in "$@"; do kill -0 "$pid" 2>/dev/null && alive="$alive $pid"; done
+    [ -z "$alive" ] && return 0
+    sleep 0.5
+  done
+  echo "Process(es)$alive did not exit on SIGTERM; forcing them to stop."
+  kill -9 $(echo $alive) 2>/dev/null || true
+  sleep 1
+}
+
+# Stop any native (non-container) dotnet process still listening on the given ports, e.g. a dotnet watch orphaned by
+# a closed terminal or another session, which the name-based search can miss.
+_jim_free_ports() {
+  local port pid
+  for port in "$@"; do
+    for pid in $(ss -ltnpH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); do
+      [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = dotnet ] || continue
+      echo "Port $port is still held by dotnet (PID $pid); stopping it..."
+      _jim_stop_pids "$pid"
+    done
+  done
+}
+
+# Local run aliases - source .env and override DB hostname for local access. Each removes its own Docker
+# container first: a jim.web container left over from a Docker session holds port 5200, and the native
+# JIM.Web would otherwise fail with "address already in use".
+jim-web()       { _jim_stop_app_containers jim.web       && _jim_kill_project Web       && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Web); }
+jim-worker()    { _jim_stop_app_containers jim.worker    && _jim_kill_project Worker    && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker); }
+jim-scheduler() { _jim_stop_app_containers jim.scheduler && _jim_kill_project Scheduler && (set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler); }
+
+# Whether file-change events reach this process for files under the workspace. dotnet watch's default watcher
+# relies on them; without them it never sees an edit and has to poll instead. Whether they arrive depends on what
+# the host mounts at /workspaces/JIM, not on the container: a Windows host with the repo on a Windows drive mounts
+# it over 9p, which raises no inotify events even for writes made inside the container, while a repo cloned inside
+# WSL, macOS Docker Desktop (virtiofs), a Linux host and Codespaces all deliver them. Probed rather than guessed from
+# the filesystem type: create a file in a watched scratch directory and see whether an event arrives. Returns 0 when
+# events arrive. Any failure to probe (no python3, an unwritable workspace) reports "no", so the caller falls back
+# to polling, which works everywhere.
+_jim_file_events_work() {
+  command -v python3 >/dev/null 2>&1 || return 1
+  local probe_dir
+  probe_dir=$(mktemp -d "${PWD}/.jim-inotify-probe-XXXXXX" 2>/dev/null) || return 1
+  python3 - "$probe_dir" <<'PY'
+import ctypes, os, select, sys
+d = sys.argv[1]
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+fd = libc.inotify_init1(os.O_NONBLOCK)
+if fd < 0 or libc.inotify_add_watch(fd, d.encode(), 0x100 | 0x2) < 0:  # IN_CREATE | IN_MODIFY
+    sys.exit(1)
+with open(os.path.join(d, "probe"), "w") as f:
+    f.write("x")
+ready, _, _ = select.select([fd], [], [], 1.0)
+sys.exit(0 if ready else 1)
+PY
+  local result=$?
+  rm -rf "$probe_dir"
+  return $result
+}
+
+# JIM.Web under dotnet watch: Razor markup, C# method bodies and CSS apply to the running app on save, keeping the
+# page where it is; an edit hot reload cannot apply restarts the app on its own (--non-interactive, and
+# DOTNET_WATCH_RESTART_ON_RUDE_EDIT). Ctrl+R in the terminal forces a full restart when hot-reloaded state looks
+# stale. jim-web stays the plain `dotnet run`, for attaching a debugger.
+#
+# Polling (DOTNET_USE_POLLING_FILE_WATCHER) is switched on only where _jim_file_events_work says the workspace
+# delivers no change events. It works everywhere but costs a pass over the ~1,600 watched files per check (about
+# 2 s on a 9p mount), which is the delay between saving and the change applying, and constant background reads.
+# DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER stops it trying to open a browser inside the container (launchSettings.json
+# sets launchBrowser for Visual Studio).
+#
+# DOTNET_WATCH_AUTO_RELOAD_WS_PORT pins the WebSocket that dotnet watch uses to push CSS changes to the browser and
+# to reload it after a restart. Left alone it picks a random port each run, which the browser on the host reaches
+# only if VS Code happens to auto-forward it; 5210 is forwarded explicitly in devcontainer.json. Razor and C# edits
+# do not depend on it: they reach the page over Blazor's own connection on 5200. (Undocumented, but read by the
+# .NET 10 SDK's dotnet watch alongside the documented DOTNET_WATCH_AUTO_RELOAD_WS_HOSTNAME.)
+jim-web-watch() {
+  local polling=0
+  if _jim_file_events_work; then
+    echo "File change events arrive on this workspace; dotnet watch will use them."
+  else
+    polling=1
+    echo "File change events do not arrive on this workspace (a host drive mounted over 9p, typically); dotnet watch will poll, so allow a couple of seconds per edit."
+  fi
+  _jim_stop_app_containers jim.web && _jim_kill_project Web && (set -a && source .env \
+    && export JIM_DB_HOSTNAME=localhost \
+              DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER=1 \
+              DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1 \
+              DOTNET_WATCH_AUTO_RELOAD_WS_PORT=5210 \
+    && { [ "$polling" = 1 ] && export DOTNET_USE_POLLING_FILE_WATCHER=1 || true; } \
+    && _jim_watch_until_stopped)
+}
+
+# Runs dotnet watch, starting it again whenever it dies of an unhandled exception (exit 134, SIGABRT). Its polling
+# watcher throws "An item with the same key has already been added" when a build elsewhere (a dotnet build or test
+# from another terminal) rewrites bin/ mid-scan, and the watcher is gone with it. Ctrl+C exits cleanly and ends the
+# loop, as does any other failure, so a genuine startup error is not retried forever.
+_jim_watch_until_stopped() {
+  local rc
+  while :; do
+    dotnet watch --project src/JIM.Web --non-interactive
+    rc=$?
+    [ "$rc" -eq 134 ] || return "$rc"
+    echo "dotnet watch crashed (exit 134, usually a build elsewhere rewriting files mid-scan); starting it again in 2 seconds. Ctrl+C to stop."
+    # The crash takes the watcher down but not the app it launched, which is left running as an orphan on port
+    # 5200 with nothing watching it: the page keeps loading while edits never reach it, and the new watcher's app
+    # cannot bind the port. Stop it before starting again.
+    _jim_kill_project Web
+    sleep 2
+  done
+}
 
 # Database management
 alias jim-migrate='dotnet ef database update --project src/JIM.PostgresData'
@@ -376,12 +525,12 @@ _jim_wait_keycloak() {
 # so they don't hold ports that Docker containers need to bind
 _jim_kill_local() {
   local pids
-  pids=$(pgrep -f 'dotnet.*JIM\.(Web|Worker|Scheduler)' 2>/dev/null || true)
+  pids=$(_jim_native_pids 'dotnet.*JIM\.(Web|Worker|Scheduler)')
   if [ -n "$pids" ]; then
     echo "Stopping local JIM process(es) (PIDs: $(echo $pids | tr '\n' ' '))..."
-    echo "$pids" | xargs kill 2>/dev/null || true
-    sleep 1
+    _jim_stop_pids $(echo $pids)
   fi
+  _jim_free_ports 5200 5210
 }
 
 # Self-heal stale Docker credential helper references at command time.
@@ -416,7 +565,7 @@ _jim_heal_docker_creds() {
 }
 
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
-unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-light jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
+unalias jim-stack jim-stack-logs jim-stack-down jim-restart jim-build jim-build-light jim-build-web jim-build-worker jim-build-scheduler jim-cleanup jim-reset jim-reset-all jim-db jim-db-stop jim-db-logs jim-keycloak jim-keycloak-stop jim-keycloak-logs 2>/dev/null || true
 
 # Docker stack management
 jim-stack() {
@@ -476,10 +625,13 @@ jim-build-scheduler() {
 jim-build-light() {
   _jim_heal_docker_creds
   _jim_kill_local
+  # The light stack is db + Keycloak in Docker and JIM.Web native, nothing else: a web, worker or scheduler
+  # container left from a Docker session would hold port 5200 or process work with stale code.
+  _jim_stop_app_containers jim.web jim.worker jim.scheduler
   docker compose $(_jim_compose) up -d jim.database jim.keycloak
   _jim_keycloak_bridge
   _jim_wait_keycloak
-  jim-web
+  jim-web-watch
 }
 
 # Cleanup orphaned Docker resources to free disk space
@@ -504,9 +656,11 @@ jim-cleanup() {
 # NOTE: docker image prune --filter "label!=X" with multiple filters is broken —
 # it deletes labelled images despite the exclusion. Work around this by collecting
 # the IDs of images to preserve, pruning everything, then checking nothing was lost.
+# Any arguments are extra image references to preserve as well (jim-reset passes Scenario 016's database images).
 _jim_prune_images_preserving_snapshots() {
   local preserve_ids
-  preserve_ids=$(docker images --filter "label=jim.samba.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
+  preserve_ids=$(for ref in "$@"; do docker images -q "$ref" 2>/dev/null; done; \
+                 docker images --filter "label=jim.samba.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.samba.build-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.openldap.snapshot-hash" --filter "dangling=false" -q 2>/dev/null; \
                  docker images --filter "label=jim.openldap.build-hash" --filter "dangling=false" -q 2>/dev/null; \
@@ -533,7 +687,29 @@ _jim_prune_images_preserving_snapshots() {
 }
 
 # Reset (preserves Samba AD, OpenLDAP and 389 Directory Server snapshot and build images; they take a long time to build)
+# Scenario 016's two database servers (the integration compose file's phase2 profile). Oracle's image is 13.6GB and its
+# first boot creates the database from scratch (tens of minutes), so the integration runner's reset deliberately keeps
+# them (Run-IntegrationTests.ps1, Step 1) and Scenario 016 recreates its schema every run, so a kept one is never stale.
+# jim-reset keeps them for the same reason; jim-reset-all removes them too. Volume names mirror the runner's
+# $preservedVolumes; image names come from the compose file.
+_JIM_PHASE2_CONTAINERS=(sqlserver-hris-a oracle-hris-b)
+_JIM_PHASE2_VOLUMES=(jim-integration-sqlserver-data jim-integration-oracle-data)
+
+_jim_phase2_images() {
+  docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 config --images \
+    "${_JIM_PHASE2_CONTAINERS[@]}" 2>/dev/null
+}
+
 jim-reset() {
+  _jim_reset keep-phase2
+}
+
+jim-reset-all() {
+  _jim_reset all
+}
+
+_jim_reset() {
+  local mode="$1"
   # Stop any natively-run JIM.Web/Worker/Scheduler processes so they don't squat on host ports (e.g. 5200)
   local native_pids
   native_pids=$(pgrep -f '/JIM\.(Web|Worker|Scheduler)$' 2>/dev/null || true)
@@ -548,11 +724,28 @@ jim-reset() {
 
   docker compose $(_jim_compose) down --volumes
   docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario-002 --profile scenario-008 --profile dirsrv down --volumes --remove-orphans 2>/dev/null || true
-  docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
-  _jim_prune_images_preserving_snapshots
-  docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true
+  docker rm -f samba-ad-primary samba-ad-source samba-ad-target postgres-target openldap-test dirsrv-primary mysql-test 2>/dev/null || true
+
+  local keep_volumes_pattern='^$'
+  if [ "$mode" = "all" ]; then
+    docker rm -f "${_JIM_PHASE2_CONTAINERS[@]}" 2>/dev/null || true
+    _jim_prune_images_preserving_snapshots
+  else
+    # Keep the containers themselves (stopped or running), their images and their volumes.
+    local phase2_images
+    mapfile -t phase2_images < <(_jim_phase2_images)
+    _jim_prune_images_preserving_snapshots "${phase2_images[@]}"
+    keep_volumes_pattern="^($(IFS='|'; echo "${_JIM_PHASE2_VOLUMES[*]}"))\$"
+  fi
+
+  docker volume ls --format "{{.Name}}" | grep jim-integration | grep -Ev "$keep_volumes_pattern" | xargs -r docker volume rm 2>/dev/null || true
   docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true
-  echo "JIM reset complete. Containers, images, and volumes removed (Samba AD, OpenLDAP and 389 Directory Server snapshot and build images preserved). Run jim-build to rebuild."
+
+  if [ "$mode" = "all" ]; then
+    echo "JIM reset complete. Containers, images, and volumes removed, including Scenario 016's database servers (Samba AD, OpenLDAP and 389 Directory Server snapshot and build images preserved). Run jim-build to rebuild."
+  else
+    echo "JIM reset complete. Containers, images, and volumes removed (Samba AD, OpenLDAP and 389 Directory Server snapshot and build images preserved; Scenario 016's database servers kept, use jim-reset-all to remove them too). Run jim-build to rebuild."
+  fi
 }
 
 # Documentation preview (MkDocs Material)

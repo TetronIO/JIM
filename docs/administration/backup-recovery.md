@@ -13,8 +13,8 @@ JIM stores two pieces of state that must be backed up **together as a matched pa
 
 | Item | Where it lives | Backup source |
 |------|----------------|---------------|
-| **Database** | PostgreSQL (`jim.database` bundled container, or your external server) | `pg_dump` / volume snapshot, or your existing DBA tooling |
-| **Encryption keys** | `jim-keys-volume` Docker volume, mounted at `/data/keys`; or the path in `JIM_ENCRYPTION_KEY_PATH` | Copy the whole key directory |
+| **Database** | PostgreSQL (the bundled container, `jim.database` on Docker or `jim-database-postgres` on Podman, or your external server) | `pg_dump` / volume snapshot, or your existing DBA tooling |
+| **Encryption keys** | The `jim-keys-volume` volume, mounted at `/data/keys`; or the path in `JIM_ENCRYPTION_KEY_PATH` | Copy the whole key directory |
 
 These two are a pair. Every backup schedule that captures the database must capture the key set at the same cadence, and a restore must bring back both.
 
@@ -28,28 +28,44 @@ JIM encrypts credentials with [ASP.NET Core Data Protection](https://learn.micro
 
 ## 🗄️ Taking a backup
 
-The commands below assume the bundled PostgreSQL container and the default volume names. Confirm your actual volume name with `docker volume ls | grep keys` (Compose may prefix it with the project name).
+The commands below assume the bundled PostgreSQL container and the default volume names. Confirm your actual volume name with `docker volume ls | grep keys` (Compose may prefix it with the project name). The Podman commands are for the default, rootful installation; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
 ### 1. Back up the database
 
 Bundled PostgreSQL:
 
-```bash
-docker exec jim.database pg_dump -U jim -d jim -Fc -f /tmp/jim.dump
-docker cp jim.database:/tmp/jim.dump ./jim-db-2026-07-09.dump
-docker exec jim.database rm /tmp/jim.dump
-```
+=== "Docker"
+
+    ```bash
+    docker exec jim.database pg_dump -U jim -d jim -Fc -f /tmp/jim.dump
+    docker cp jim.database:/tmp/jim.dump ./jim-db-2026-07-09.dump
+    docker exec jim.database rm /tmp/jim.dump
+    ```
+
+=== "Podman"
+
+    ```bash
+    sudo podman exec jim-database-postgres pg_dump -U jim -d jim -Fc > jim-db-2026-07-09.dump
+    ```
 
 External PostgreSQL: use your existing database backup tooling against the JIM database.
 
 ### 2. Back up the encryption keys
 
-```bash
-docker run --rm \
-  -v jim-keys-volume:/keys:ro \
-  -v "$(pwd)":/backup \
-  alpine tar czf /backup/jim-keys-2026-07-09.tar.gz -C /keys .
-```
+=== "Docker"
+
+    ```bash
+    docker run --rm \
+      -v jim-keys-volume:/keys:ro \
+      -v "$(pwd)":/backup \
+      alpine tar czf /backup/jim-keys-2026-07-09.tar.gz -C /keys .
+    ```
+
+=== "Podman"
+
+    ```bash
+    sudo podman volume export jim-keys-volume | gzip > jim-keys-2026-07-09.tar.gz
+    ```
 
 If you set `JIM_ENCRYPTION_KEY_PATH` to a bind-mounted host directory instead of using the managed volume, simply back up that directory.
 
@@ -63,26 +79,55 @@ Restore both artefacts from the **same backup set**, then start the services.
 
 1. **Restore the encryption keys first** (or at least before starting `jim.web`/`jim.worker`/`jim.scheduler`), so the services find their keys on first boot:
 
-    ```bash
-    docker run --rm \
-      -v jim-keys-volume:/keys \
-      -v "$(pwd)":/backup \
-      alpine sh -c "rm -rf /keys/* && tar xzf /backup/jim-keys-2026-07-09.tar.gz -C /keys"
-    ```
+    === "Docker"
+
+        ```bash
+        docker run --rm \
+          -v jim-keys-volume:/keys \
+          -v "$(pwd)":/backup \
+          alpine sh -c "rm -rf /keys/* && tar xzf /backup/jim-keys-2026-07-09.tar.gz -C /keys"
+        ```
+
+    === "Podman"
+
+        Restore onto an installation that has started once, so that its volumes exist, with JIM stopped (`sudo systemctl stop jim.service`). The first command empties the key volume, from a container of JIM's own image, which is already on the server:
+
+        ```bash
+        sudo podman run --rm --user 0 --entrypoint sh -v jim-keys-volume:/keys \
+          "$(awk '$1 == "image:" { print $2; exit }' /opt/jim/jim.yaml)" -c 'rm -rf /keys/*'
+        gunzip -c jim-keys-2026-07-09.tar.gz | sudo podman volume import jim-keys-volume -
+        ```
 
 2. **Restore the database** from the matching dump (bundled example):
 
-    ```bash
-    docker cp ./jim-db-2026-07-09.dump jim.database:/tmp/jim.dump
-    docker exec jim.database pg_restore -U jim -d jim --clean --if-exists /tmp/jim.dump
-    docker exec jim.database rm /tmp/jim.dump
-    ```
+    === "Docker"
+
+        ```bash
+        docker cp ./jim-db-2026-07-09.dump jim.database:/tmp/jim.dump
+        docker exec jim.database pg_restore -U jim -d jim --clean --if-exists /tmp/jim.dump
+        docker exec jim.database rm /tmp/jim.dump
+        ```
+
+    === "Podman"
+
+        ```bash
+        sudo podman exec -i jim-database-postgres pg_restore -U jim -d jim --clean --if-exists < jim-db-2026-07-09.dump
+        ```
 
 3. **Start the stack** and verify:
 
-    ```bash
-    docker compose up -d
-    ```
+    === "Docker"
+
+        ```bash
+        cd /opt/jim
+        docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
+        ```
+
+    === "Podman"
+
+        ```bash
+        sudo systemctl start jim.service
+        ```
 
 4. **Confirm secrets decrypt.** Open a Connected System that uses a password (for example an LDAP Connector) and run an import, or trigger a synchronisation run. Successful connection confirms the keys and database match. A decryption error in the logs ("Failed to decrypt credential") means the key set does not match the database; restore the correct keys before proceeding.
 
@@ -111,7 +156,7 @@ There is no way to recover the original secret values without the keys; this is 
 ## ✅ Checklist
 
 - [ ] Database backup scheduled and tested.
-- [ ] Encryption key set (`jim-keys-volume` / `JIM_ENCRYPTION_KEY_PATH`) backed up at the same cadence as the database.
+- [ ] Encryption key set (`jim-keys-volume` / `JIM_ENCRYPTION_KEY_PATH`) backed up at the same cadence as the database. On Podman, the volume is in Podman's storage, so a file-level backup of the server must include `/var/lib/containers`, or for a rootless installation `/home/jim/.local/share/containers`.
 - [ ] Database and key backups stored together as a labelled, matched pair.
 - [ ] Key backups protected with the same access controls as database backups.
 - [ ] Full restore (database plus keys) rehearsed in a scratch environment, with a Connected System confirmed to reconnect.

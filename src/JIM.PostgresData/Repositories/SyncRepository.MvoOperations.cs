@@ -4,6 +4,7 @@
 using System.Text;
 using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -149,7 +150,7 @@ public partial class SyncRepository
             {
                 entry.State = EntityState.Unchanged;
                 // Set shadow FK for the Type relationship
-                entry.Property("TypeId").CurrentValue = mvo.Type.Id;
+                SetShadowForeignKeyAsPersisted(entry.Property("TypeId"), mvo.Type.Id);
             }
 
             foreach (var av in mvo.AttributeValues)
@@ -159,10 +160,27 @@ public partial class SyncRepository
                 {
                     avEntry.State = EntityState.Unchanged;
                     // Set shadow FK for the MetaverseObject relationship
-                    avEntry.Property("MetaverseObjectId").CurrentValue = mvo.Id;
+                    SetShadowForeignKeyAsPersisted(avEntry.Property("MetaverseObjectId"), mvo.Id);
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Sets a shadow foreign key on an entry just attached as Unchanged to the value the bulk write already
+    /// persisted, without leaving the property (and so the entity) Modified. Setting only
+    /// <c>CurrentValue</c> is not enough: when the principal is not tracked by this context (every sync page
+    /// after the first, because the page boundary clears the tracker), relationship fix-up has not filled the
+    /// shadow value in, so the attach snapshot holds an empty original value and the assignment registers as a
+    /// change. For a Metaverse Object that means the next EF <c>SaveChangesAsync</c> on the context issues an
+    /// xmin-guarded UPDATE with the unknown COPY-assigned xmin (tracked as 0), which matches no rows and throws
+    /// DbUpdateConcurrencyException (Pre-Release Scenario-023-UniqueValueGeneration, page 2 of 2).
+    /// </summary>
+    private static void SetShadowForeignKeyAsPersisted(PropertyEntry property, object value)
+    {
+        property.CurrentValue = value;
+        property.OriginalValue = value;
+        property.IsModified = false;
     }
 
     /// <summary>

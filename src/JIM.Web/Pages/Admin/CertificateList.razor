@@ -152,7 +152,7 @@
             HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
             <CustomContent>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary"
                     StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-5"
                     OnClick="@context.OpenFilePickerAsync">
                     @(_uploadFile != null ? _uploadFile.Name : "Select Certificate File")

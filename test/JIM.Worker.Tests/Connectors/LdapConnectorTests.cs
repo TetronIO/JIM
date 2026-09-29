@@ -340,6 +340,17 @@ public class LdapConnectorTests
     }
 
     [Test]
+    public void GetSettings_DeleteBehaviour_DefaultsToDelete()
+    {
+        // Export treats an unset Delete Behaviour as Delete, so the setting declares that default and a new Connected
+        // System shows the behaviour it will actually get rather than an empty dropdown.
+        var settings = _connector.GetSettings();
+        var deleteBehaviourSetting = settings.Single(s => s.Name == "Delete Behaviour");
+
+        Assert.That(deleteBehaviourSetting.DefaultStringValue, Is.EqualTo(LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE));
+    }
+
+    [Test]
     public void GetSettings_ContainsDisableAttributeSetting()
     {
         var settings = _connector.GetSettings();

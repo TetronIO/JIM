@@ -41,7 +41,7 @@ namespace JIM.Models.Interfaces;
 /// </item>
 /// </list>
 ///
-/// Not implementing it is a valid answer. The Partitions and Containers tab simply shows no counts, which is
+/// Not implementing it is a valid answer. The Scope tab simply shows no counts, which is
 /// honest, rather than showing zeroes that read as "every Container is empty".
 /// </remarks>
 public interface IConnectorContainerObjectCounts

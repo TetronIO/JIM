@@ -42,16 +42,29 @@ public sealed class AttributePriorityContext
     public bool HonourNullAssertions { get; }
 
     /// <summary>
+    /// The run's Metaverse-Derived Attribute Flow dependency graph (#1750), or null when the feature is off. When
+    /// present, derived mappings (import mappings whose expression reads <c>mv["..."]</c>) are excluded from the
+    /// ordinary inbound pass, and so from the reference-only pass and contributor re-election re-flows, which all
+    /// route through <c>FlowInboundAttributes</c>; they are evaluated instead by the engine's derived pass, level by
+    /// level. Null reproduces the behaviour before the feature exactly: such a mapping flows in the ordinary pass
+    /// and reads nothing from <c>mv</c>. Built by <see cref="DerivedFlowGraphFactory.CreateAsync"/>, the one place
+    /// the feature flag is read at run time.
+    /// </summary>
+    public DerivedFlowGraph? DerivedFlowGraph { get; }
+
+    /// <summary>
     /// Builds the contributor cache from all Synchronisation Rules across every Connected System. Only enabled
     /// import rules with a target Metaverse Attribute and a persisted Synchronisation Rule id contribute.
     /// </summary>
     /// <param name="allSyncRules">Every Synchronisation Rule across all Connected Systems.</param>
     /// <param name="honourNullAssertions">See <see cref="HonourNullAssertions"/>. Defaults to true for the resolution
     /// semantics; the worker passes false until the <c>NullValue</c> read-query filter is in place.</param>
-    public AttributePriorityContext(IEnumerable<SyncRule> allSyncRules, bool honourNullAssertions = true)
+    /// <param name="derivedFlowGraph">See <see cref="DerivedFlowGraph"/>. Null (the default) is the legacy engine.</param>
+    public AttributePriorityContext(IEnumerable<SyncRule> allSyncRules, bool honourNullAssertions = true, DerivedFlowGraph? derivedFlowGraph = null)
     {
         ArgumentNullException.ThrowIfNull(allSyncRules);
         HonourNullAssertions = honourNullAssertions;
+        DerivedFlowGraph = derivedFlowGraph;
 
         foreach (var rule in allSyncRules.Where(r => r.Direction == SyncRuleDirection.Import))
         {

@@ -141,6 +141,17 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public Exception? ExportExceptionToThrow { get; set; }
 
     /// <summary>
+    /// Configures the connector to throw this exception from <see cref="OpenImportConnection"/>, as a connector does
+    /// when it cannot connect (for example to a pinned domain controller that no longer answers).
+    /// </summary>
+    public Exception? OpenImportExceptionToThrow { get; set; }
+
+    /// <summary>
+    /// Configures the connector to throw this exception from <see cref="OpenExportConnection"/>.
+    /// </summary>
+    public Exception? OpenExportExceptionToThrow { get; set; }
+
+    /// <summary>
     /// Configures the value <see cref="CloseImportConnection"/> returns. Defaults to null (the
     /// normal case: leave persisted connector state unchanged). Set to a non-null value to simulate
     /// a connector that needs JIM to persist updated state when the connection closes.
@@ -253,6 +264,9 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
     {
         LastOpenImportPersistedConnectorData = persistedConnectorData;
+
+        if (OpenImportExceptionToThrow != null)
+            throw OpenImportExceptionToThrow;
     }
 
     public Task<ConnectedSystemImportResult> ImportAsync(
@@ -295,6 +309,9 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
         LastOpenExportPersistedConnectorData = persistedConnectorData;
+
+        if (OpenExportExceptionToThrow != null)
+            throw OpenExportExceptionToThrow;
     }
 
     public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)

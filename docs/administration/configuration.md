@@ -4,10 +4,32 @@ title: Configuration Reference
 
 # Configuration Reference
 
-JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files. The automated setup script configures these automatically; for manual setup, edit `.env` directly.
+JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The automated setup script configures these automatically; for manual setup, edit the file directly. The settings and their names are the same on both runtimes.
 
 !!! tip
     A fully commented `.env.example` template is included with every release and is available in the [GitHub repository](https://github.com/TetronIO/JIM/releases).
+
+---
+
+## Podman
+
+On Podman, JIM reads its settings from `/opt/jim/jim-config.yaml`, a Kubernetes-style ConfigMap holding the same settings, with the same names, as `.env`; each one is on this page. Write each as `NAME: value`, indented under `data:`, and quote a value that is a number, `true` or `false`, or contains `: ` or ` #`:
+
+```yaml
+data:
+  JIM_SSO_AUTHORITY: https://login.microsoftonline.com/your-tenant-id/v2.0
+  JIM_SSO_MV_ATTRIBUTE: Subject Identifier
+  JIM_DB_LOG_MIN_DURATION: "1000"
+```
+
+Restart JIM after a change: `sudo systemctl restart jim.service`, or for a rootless installation, `sudo systemctl --user -M jim@ restart jim.service`.
+
+These settings differ on Podman:
+
+- **Secrets**<br /> `JIM_DB_PASSWORD`, `JIM_SSO_SECRET` and `JIM_INFRASTRUCTURE_API_KEY` are not in `jim-config.yaml`. They are the Podman secret `jim-secrets`, which only root (or, rootless, the account that runs JIM) can read; see [Installing by Hand](podman.md#installing-by-hand) to store or change it.
+- **`DOCKER_REGISTRY`, `JIM_VERSION`, `JIM_WEB_PORT`**<br /> Not used: the pod file, `jim.yaml`, names JIM's images with their registry and version, and the HTTPS port is `PublishPort=` in the `jim.kube` unit.
+- **`JIM_DB_HOSTNAME`**<br /> `jim-database` for the bundled PostgreSQL, rather than Docker's `jim.database`.
+- **Settings the pod file sets itself**<br /> Leave `JIM_LOG_PATH`, `JIM_LOG_REQUESTS` and the `ASPNETCORE_` settings out of `jim-config.yaml`: Podman would let a value there replace the pod file's.
 
 ---
 
@@ -29,7 +51,20 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 |-------------------|-----------------------------------------------------------------------------|---------|-----------------------------|
 | `DOCKER_REGISTRY` | Container registry prefix for pulling images. Leave empty for local builds. | *(empty)* | `ghcr.io/tetronio/`        |
 | `JIM_VERSION`     | Release version tag. Leave empty for local builds.                          | *(empty)* | `0.10.0`                   |
-| `JIM_WEB_PORT`    | Host port the production compose file publishes the web UI and API on (the container listens on `8080`). Prefix an address to bind one interface only. | `5200` | `127.0.0.1:5200` |
+| `JIM_WEB_PORT`    | Host port the production compose file publishes the web UI and API on, over HTTPS (the container listens on `8443`). Prefix an address to bind one interface only. | `443` | `127.0.0.1:8443` |
+
+---
+
+## HTTPS Certificate
+
+JIM's certificate is not set in `.env`. The production compose file reads it from two PEM files in the `tls` folder next to the compose files, which `setup.sh` creates:
+
+| File          | Contents                                                                                        |
+|---------------|-------------------------------------------------------------------------------------------------|
+| `tls/tls.crt` | JIM's certificate, followed by any intermediate CA certificates                                 |
+| `tls/tls.key` | Its unencrypted private key, belonging to UID `1654` with mode `400`                            |
+
+To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URLS` (HTTPS on `8443`, plus plain HTTP on the container's loopback interface for its health check) and `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__KeyPath` (the files, mounted at `/run/jim-tls/`). A compose file's settings take precedence over `.env`, so setting these in `.env` has no effect. On Podman, the pod file sets the same settings, and JIM reads the pair from the Podman secret `jim-tls`, mounted at the same path. See [TLS and Reverse Proxy](deployment.md#tls-and-reverse-proxy) for providing, creating and renewing the certificate.
 
 ---
 
@@ -43,6 +78,7 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 | `JIM_DB_PASSWORD`          | Database password. **Use a strong, unique value in production.**                                                    | *(none)*    | *(generate a strong password)* |
 | `JIM_DB_LOG_SENSITIVE_INFO` | When `true`, includes parameter values in database query logs. **Do not enable in production.**                    | `false`     | `false`                    |
 | `JIM_DB_LOG_MIN_DURATION`  | Slow query log threshold in milliseconds. Queries exceeding this duration are logged. Set to `-1` to disable, `0` to log all queries. | `1000`  | `500`                      |
+| `JIM_DB_IMAGE`             | Docker only: the bundled PostgreSQL's image. Leave it unset: the installer sets it to the image's ID for an air-gapped install on Docker's classic image store, which cannot find the pinned image by its digest (see [By Hand](deployment.md#by-hand)). | *(the image `docker-compose.yml` pins by digest)* | `sha256:662db3da…` |
 
 ### Connecting to a non-default port
 
@@ -160,7 +196,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 | Variable              | Description                                                                                                                                                                                                                     | Default              |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
-| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Required when TLS terminates at a reverse proxy: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](deployment.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)* -- forwarded headers are not trusted; the connecting socket's address is used as-is |
+| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Set it whenever a reverse proxy or load balancer sits in front of JIM. It is required when the proxy forwards plain HTTP to JIM: without it, sign-in fails and the REST API refuses requests that carry a password (see [Trusting the Reverse Proxy](deployment.md#trusting-the-reverse-proxy)). Also used for unauthenticated API [rate limiting](../api/rate-limiting.md), the security audit log, logging, and HTTPS redirection. | *(unset)* -- forwarded headers are not trusted; the connecting socket's address is used as-is |
 
 !!! warning "Only set this behind a trusted reverse proxy"
     Trusting forwarded headers from an address you do not control lets a client spoof its own IP, defeating IP-based rate limiting and polluting logs. Only list proxies (or the proxy network) that terminate connections in front of JIM.

@@ -81,6 +81,22 @@ public class SeedingServerFeatureFlagsTests
     }
 
     [Test]
+    public async Task SyncServiceSettings_MetaverseDerivedAttributeFlows_SeededAsAgreedAsync()
+    {
+        ServiceSetting? captured = null;
+        _mockServiceSettingsRepo.Setup(r => r.CreateSettingAsync(It.Is<ServiceSetting>(s => s.Key == FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key)))
+            .Callback<ServiceSetting>(s => captured = s)
+            .Returns(Task.CompletedTask);
+
+        await _application.Seeding.SyncServiceSettingsAsync();
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.DisplayName, Is.EqualTo("Metaverse-Derived Attribute Flows"));
+        Assert.That(captured!.Category, Is.EqualTo(ServiceSettingCategory.FeatureFlags));
+        Assert.That(captured!.DefaultValue, Is.EqualTo("false"), "every flag defaults off");
+    }
+
+    [Test]
     public async Task SyncServiceSettings_ExistingFlagSettings_AreNotRecreatedAsync()
     {
         foreach (var flag in FeatureFlagCatalogue.All)

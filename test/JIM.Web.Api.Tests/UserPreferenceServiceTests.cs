@@ -1133,4 +1133,156 @@ public class UserPreferenceServiceTests
     }
 
     #endregion
+
+    #region ConnectorSpaceColumnVisible tests
+
+    [Test]
+    public async Task GetConnectorSpaceColumnVisibleAsync_WhenNoValueStored_ReturnsTrueAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync((string?)null);
+
+        // Act
+        var result = await _service.GetConnectorSpaceColumnVisibleAsync(3, ConnectorSpaceColumn.ExternalId);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceColumnVisibleAsync_WhenFalseStored_ReturnsFalseAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync("false");
+
+        // Act
+        var result = await _service.GetConnectorSpaceColumnVisibleAsync(3, ConnectorSpaceColumn.ExternalId);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    [TestCase("true")]
+    [TestCase("")]
+    [TestCase("invalid")]
+    [TestCase("0")]
+    public async Task GetConnectorSpaceColumnVisibleAsync_WhenAnythingButFalseStored_ReturnsTrueAsync(string storedValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(storedValue);
+
+        // Act
+        var result = await _service.GetConnectorSpaceColumnVisibleAsync(3, ConnectorSpaceColumn.SecondaryExternalId);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceColumnVisibleAsync_ReadsKeyScopedToConnectedSystemAndColumnAsync()
+    {
+        // Arrange
+        object[]? capturedArgs = null;
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .Callback<string, object[]>((_, args) => capturedArgs = args)
+            .ReturnsAsync((string?)null);
+
+        // Act
+        await _service.GetConnectorSpaceColumnVisibleAsync(7, ConnectorSpaceColumn.SecondaryExternalId);
+
+        // Assert
+        Assert.That(capturedArgs, Is.Not.Null);
+        Assert.That(capturedArgs![0], Is.EqualTo("connectorSpaceColumnVisible_7_SecondaryExternalId"));
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceColumnVisibleAsync_WhenJsDisconnected_ReturnsTrueAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act
+        var result = await _service.GetConnectorSpaceColumnVisibleAsync(3, ConnectorSpaceColumn.ExternalId);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task GetConnectorSpaceColumnVisibleAsync_WhenJsInteropUnavailable_ReturnsTrueAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act
+        var result = await _service.GetConnectorSpaceColumnVisibleAsync(3, ConnectorSpaceColumn.ExternalId);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    [TestCase(true, "true")]
+    [TestCase(false, "false")]
+    public async Task SetConnectorSpaceColumnVisibleAsync_StoresValueUnderScopedKeyAsync(bool visible, string expectedValue)
+    {
+        // Arrange
+        object[]? capturedArgs = null;
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .Callback<string, object[]>((_, args) => capturedArgs = args)
+            .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+
+        // Act
+        await _service.SetConnectorSpaceColumnVisibleAsync(12, ConnectorSpaceColumn.ExternalId, visible);
+
+        // Assert
+        Assert.That(capturedArgs, Is.Not.Null);
+        Assert.That(capturedArgs![0], Is.EqualTo("connectorSpaceColumnVisible_12_ExternalId"));
+        Assert.That(capturedArgs[1], Is.EqualTo(expectedValue));
+    }
+
+    [Test]
+    public void SetConnectorSpaceColumnVisibleAsync_WhenJsDisconnected_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act & Assert
+        Assert.DoesNotThrowAsync(() => _service.SetConnectorSpaceColumnVisibleAsync(3, ConnectorSpaceColumn.ExternalId, false));
+    }
+
+    [Test]
+    public void SetConnectorSpaceColumnVisibleAsync_WhenJsInteropUnavailable_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act & Assert
+        Assert.DoesNotThrowAsync(() => _service.SetConnectorSpaceColumnVisibleAsync(3, ConnectorSpaceColumn.ExternalId, false));
+    }
+
+    #endregion
 }

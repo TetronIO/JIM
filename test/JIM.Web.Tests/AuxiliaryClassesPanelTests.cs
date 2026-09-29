@@ -49,8 +49,13 @@ public class AuxiliaryClassesPanelTests : JimComponentTestContext
         Assert.That(component.Markup.Trim(), Is.Empty);
     }
 
+    /// <summary>
+    /// The panel is a composition strip: the class the Object Type is, the classes merged into it, and a way to
+    /// add more. The schema's other auxiliary classes are in the dialog, not listed here, because on a real
+    /// directory that list runs to eighty rows and buried Attribute Selection beneath it.
+    /// </summary>
     [Test]
-    public void AuxiliaryClassesPanel_StructuralObjectType_OffersTheSchemasAuxiliaryClasses()
+    public void AuxiliaryClassesPanel_StructuralObjectType_ShowsWhatItIsMadeOfAndOffersToAddClasses()
     {
         var connectedSystem = ConnectedSystemWithAuxiliaryClass();
         var objectType = connectedSystem.ObjectTypes!.Single(ot => ot.Name == "inetOrgPerson");
@@ -60,8 +65,27 @@ public class AuxiliaryClassesPanelTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(component.Markup, Does.Contain("Auxiliary Classes"));
-            Assert.That(component.Markup, Does.Contain("posixAccount"));
+            Assert.That(component.FindAll("[data-testid='jim-aux-add']"), Has.Count.EqualTo(1));
+            Assert.That(component.FindAll("[data-testid='jim-aux-merged']"), Is.Empty, "nothing is merged yet");
+            Assert.That(component.Markup, Does.Not.Contain("posixAccount"), "an unmerged class is offered in the dialog, not listed on the strip");
             Assert.That(component.Markup, Does.Not.Contain("Structural Carrier Class"));
+        }
+    }
+
+    [Test]
+    public void AuxiliaryClassesPanel_AMergedClass_AppearsInTheComposition()
+    {
+        var connectedSystem = ConnectedSystemWithAuxiliaryClass();
+        var objectType = connectedSystem.ObjectTypes!.Single(ot => ot.Name == "inetOrgPerson");
+        objectType.Extensions.Add(new ConnectedSystemObjectTypeExtension { BaseObjectTypeId = objectType.Id, ExtensionObjectTypeId = 2 });
+
+        var component = RenderPanel(connectedSystem, objectType);
+
+        var merged = component.FindAll("[data-testid='jim-aux-merged']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(merged, Has.Count.EqualTo(1));
+            Assert.That(merged[0].TextContent, Does.Contain("posixAccount"));
         }
     }
 
@@ -101,7 +125,7 @@ public class AuxiliaryClassesPanelTests : JimComponentTestContext
 
         var component = RenderPanel(connectedSystem, objectType);
 
-        Assert.That(component.Markup, Does.Contain("Discovery has never been run"));
+        Assert.That(component.Markup, Does.Contain("entries to find which auxiliary classes are in use"));
     }
 
     [Test]
@@ -125,34 +149,6 @@ public class AuxiliaryClassesPanelTests : JimComponentTestContext
             Assert.That(component.Markup, Does.Contain("Cancelled, partial"));
             Assert.That(component.Markup, Does.Contain("412,380"));
         }
-    }
-
-    [Test]
-    public void AuxiliaryClassesPanel_ClassADiscoveryRunObserved_CarriesItsUsageAsASuggestion()
-    {
-        var connectedSystem = ConnectedSystemWithAuxiliaryClass();
-        var objectType = connectedSystem.ObjectTypes!.Single(ot => ot.Name == "inetOrgPerson");
-        var run = new AuxiliaryClassDiscoveryRun
-        {
-            ConnectedSystemId = connectedSystem.Id,
-            Scope = AuxiliaryClassDiscoveryScope.QuickSample,
-            SampleSizePerObjectType = 5000,
-            Status = AuxiliaryClassDiscoveryStatus.Complete,
-            EntriesRead = 5000,
-            Results =
-            [
-                new AuxiliaryClassDiscoveryResult
-                {
-                    StructuralObjectTypeId = objectType.Id,
-                    AuxiliaryClassName = "posixAccount",
-                    EntryCount = 1204
-                }
-            ]
-        };
-
-        var component = RenderPanel(connectedSystem, objectType, run);
-
-        Assert.That(component.Markup, Does.Contain("in use on 1,204 entries"));
     }
 
     #region Helpers

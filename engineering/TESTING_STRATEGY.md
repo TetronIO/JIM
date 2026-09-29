@@ -296,6 +296,26 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresActiveDirectory"
 - ❌ Isolation (failures could be infrastructure, not code)
 - ❌ Fine-grained debugging (too many moving parts)
 
+## Deployment Boot Tests
+
+Beside the five tiers, which test JIM's code, one check tests how JIM is deployed.
+
+**Location**: `test/ci/deployment/`, run by the `deployment-boot` job in `.github/workflows/ci.yml` on every pull request and push to `main`.
+
+**Purpose**: Prove that what a customer installs works, on every runtime JIM supports. The integration tests run the development stack, which is not what ships.
+
+**What it does**: builds the images and a release bundle from the commit (`Build-ReleaseBundle.ps1 -SkipImageBuild -SkipArchive`), then installs JIM from that bundle with its own `setup.sh`, offline, three times: on Docker, on rootful Podman and on rootless Podman (`Invoke-DeploymentBoot.ps1`). Each leg:
+- waits for JIM to answer ready over HTTPS, trusting only the certificate authority the installer created;
+- waits for every container's own health check to pass;
+- writes a marker to the database and the File Connector volume, stops and starts JIM (Compose down and up; the Quadlet units stopped and started), and checks that JIM came back in new containers with both markers;
+- saves the containers' inspect output.
+
+`Compare-RuntimeParity.ps1` then compares what the two runtimes actually run, per service: environment variable names, mounts, read-only root, capabilities kept, no-new-privileges and user. A difference fails the check unless its `$IntendedDifferences` list explains it, with a reason. Its comparison logic has Pester tests in `test/ci/deployment/Tests/`, which `build-and-test` runs.
+
+**Running it locally**: each leg needs a host where it may create an account, change a sysctl and take port 443, so it is meant for CI's throwaway runners. For a leg on a test host, build a bundle, start `Start-TestIdentityProvider.ps1`, and run `Invoke-DeploymentBoot.ps1` with `-KeepRunning` to look around afterwards.
+
+**Status**: informational until it has passed ten consecutive runs, then a required check (plan D6 in `engineering/plans/doing/PODMAN_SUPPORT.md`).
+
 ## The Watermark Bug: A Case Study
 
 **The Bug**: Delta Sync processed ALL 10,000 CSOs instead of just the 1 modified CSO

@@ -899,3 +899,23 @@ Describe 'Grant-JimAdDelegation' {
         }
     }
 }
+
+Describe 'Test-TemplateSpansSyncPages' {
+    # A run whose users all fit in one synchronisation page never crosses a page boundary, so the code the
+    # worker runs between pages (tracker clear, cross-page reference fix-up, re-attaching bulk-created rows)
+    # goes unexercised; Scenario 023 passed at Micro and failed at Pre-Release's Medium for exactly that reason.
+    It 'returns <Expected> for <Template> at the default page size of 500' -ForEach @(
+        @{ Template = 'Nano';   Expected = $false }
+        @{ Template = 'Micro';  Expected = $false }
+        @{ Template = 'Small';  Expected = $false }
+        @{ Template = 'Medium'; Expected = $true }
+        @{ Template = 'Large';  Expected = $true }
+    ) {
+        Test-TemplateSpansSyncPages -Template $Template | Should -Be $Expected
+    }
+
+    It 'honours a non-default page size' {
+        Test-TemplateSpansSyncPages -Template 'Small' -SyncPageSize 50 | Should -BeTrue
+        Test-TemplateSpansSyncPages -Template 'Medium' -SyncPageSize 1000 | Should -BeFalse
+    }
+}

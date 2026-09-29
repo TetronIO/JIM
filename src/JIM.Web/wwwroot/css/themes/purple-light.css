@@ -2,9 +2,9 @@
  * JIM Colour Theme: Mid-Purple Light
  *
  * A cool lavender-white light theme paired with the same dark sidebar
- * as the mid-purple dark variant. Primary, secondary, and tertiary
- * colours are drawn from the JIM logo palette: vibrant purple, warm
- * orange, and teal.
+ * as the mid-purple dark variant. Primary and tertiary
+ * colours are drawn from the JIM logo palette: vibrant purple and teal;
+ * secondary is a quiet violet-grey slate, for filled secondary actions.
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -20,12 +20,11 @@ html[lang] {
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette === */
-    --mud-palette-secondary: #E8750A;
-    --mud-palette-secondary-rgb: 232,117,10;
-    --mud-palette-secondary-darken: #C96208;
-    --mud-palette-secondary-lighten: #F09030;
-    /* Dark, not white: white on this orange measures 3.01:1, below the 4.5:1 AA floor. */
-    --mud-palette-secondary-text: #000000dd;
+    --mud-palette-secondary: #5c5c78;
+    --mud-palette-secondary-rgb: 92,92,120;
+    --mud-palette-secondary-darken: #4b4b64;
+    --mud-palette-secondary-lighten: #72728e;
+    --mud-palette-secondary-text: #ffffff;
 
     /* === Tertiary Palette === */
     /* One step darker than the teal this was (#00897B), because that shade sits at the luminance where

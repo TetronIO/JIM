@@ -90,9 +90,10 @@ public class SyncRepositoryCsoReadTests
     public async Task GetConnectedSystemObjectModifiedSinceCountAsync_FiltersCorrectlyAsync()
     {
         var cutoff = DateTime.UtcNow.AddHours(-1);
-        _repo.SeedConnectedSystemObject(CreateCso(lastUpdated: DateTime.UtcNow));
-        _repo.SeedConnectedSystemObject(CreateCso(lastUpdated: DateTime.UtcNow.AddHours(-2)));
-        _repo.SeedConnectedSystemObject(CreateCso()); // No LastUpdated
+        var beforeCutoff = DateTime.UtcNow.AddHours(-3);
+        _repo.SeedConnectedSystemObject(CreateCso(created: beforeCutoff, lastUpdated: DateTime.UtcNow));
+        _repo.SeedConnectedSystemObject(CreateCso(created: beforeCutoff, lastUpdated: DateTime.UtcNow.AddHours(-2)));
+        _repo.SeedConnectedSystemObject(CreateCso(created: beforeCutoff)); // No LastUpdated, created before the cutoff
 
         var count = await _repo.GetConnectedSystemObjectModifiedSinceCountAsync(CsId, cutoff);
         Assert.That(count, Is.EqualTo(1));
@@ -125,11 +126,35 @@ public class SyncRepositoryCsoReadTests
         var cutoff = DateTime.UtcNow.AddHours(-1);
         for (var i = 0; i < 3; i++)
             _repo.SeedConnectedSystemObject(CreateCso(lastUpdated: DateTime.UtcNow, created: DateTime.UtcNow.AddMinutes(i)));
-        _repo.SeedConnectedSystemObject(CreateCso(lastUpdated: DateTime.UtcNow.AddHours(-2)));
+        _repo.SeedConnectedSystemObject(CreateCso(lastUpdated: DateTime.UtcNow.AddHours(-2), created: DateTime.UtcNow.AddHours(-3)));
 
         var result = await _repo.GetConnectedSystemObjectsModifiedSinceAsync(CsId, cutoff, 1, 10);
         Assert.That(result.TotalResults, Is.EqualTo(3));
         Assert.That(result.Results, Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectModifiedSinceCountAsync_NewlyCreatedWithoutLastUpdated_CountsItAsync()
+    {
+        // A freshly imported CSO has no LastUpdated; the production query counts it by Created, so must this.
+        var cutoff = DateTime.UtcNow.AddHours(-1);
+        _repo.SeedConnectedSystemObject(CreateCso(created: DateTime.UtcNow));
+
+        var count = await _repo.GetConnectedSystemObjectModifiedSinceCountAsync(CsId, cutoff);
+        Assert.That(count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsModifiedSinceAsync_KeysetCursor_ReturnsRowsAfterCursorInIdOrderAsync()
+    {
+        var cutoff = DateTime.UtcNow.AddHours(-1);
+        var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).OrderBy(g => g).ToList();
+        foreach (var id in ids)
+            _repo.SeedConnectedSystemObject(CreateCso(id: id, lastUpdated: DateTime.UtcNow));
+
+        var result = await _repo.GetConnectedSystemObjectsModifiedSinceAsync(CsId, cutoff, 2, 2, afterId: ids[1]);
+
+        Assert.That(result.Results.Select(c => c.Id), Is.EqualTo(ids.Skip(2).Take(2)));
     }
 
     #endregion

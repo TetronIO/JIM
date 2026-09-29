@@ -36,6 +36,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
+| `<AttributeTable TItem="X" Items="@xs" ... />` | A table of ONE object's attributes (Connected System Object, Pending Export, Metaverse Object Table view) | "Attribute tables" below |
+| `<AttributeValuesCell TValue="X" Values="@vs" TotalCount="@n">` | An attribute table's value cell: stacks up to 10 values, nests a virtualised table beyond | "Attribute tables" below |
 | `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
 | `<OverflowList TItem="X" Items="@xs" ItemTemplate="..." Title="Roles" />` | A cell holding a list: the first item, then "+n more" | "One line per row" below |
 | `<SyncRuleIdentityStrip Direction="@d" MetaverseObjectTypeName="@mv" ConnectedSystemObjectTypeName="@cs" ConnectedSystemId="@id" ConnectedSystemName="@n" />` | A Synchronisation Rule's Connected System, direction and object types, beneath the page's breadcrumbs | "Synchronisation Rule identity strip" below |
@@ -191,6 +193,8 @@ Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTot
 
 **Every cell of a virtualised grid must render to exactly one line, in both densities.** The virtualiser positions rows arithmetically from a single fixed `ItemSize` (50px comfortable, 36px dense), so one taller row drifts the scroll position, the row index written to the URL and the reserved scroll space away from what is on screen, for every row below it. This is not a styling preference; it is what makes the grid able to place a row without having drawn the rows above it.
 
+A table of one object's attributes is the one exception, because it is not virtualised at all; see "Attribute tables" below.
+
 Three shapes break it, and each has one answer:
 
 | Shape | Answer |
@@ -204,6 +208,15 @@ Three shapes break it, and each has one answer:
 - **`.jim-one-line` and `.jim-one-line-list` are the primitives** (`site.css`), and are used directly where a cell's content is markup rather than a string: a linkified description, an icon beside a name, a target chip followed by modifier chips. On `.jim-one-line-list`, only the child carrying `.jim-one-line-list-value` gives way; everything else on the row holds its size, so an affordance or a modifier chip can never be what a long value pushes out.
 - **`<OneLineText>` uses the element's `title`, not a `MudTooltip`, and that is deliberate** rather than an oversight of the Tooltips rule below: a `MudTooltip` wraps its child in an inline-flex box of its own, which is exactly the box the ellipsis needs to be the block container, so the wrapper silently defeats the clipping it was added to explain. Do not "fix" it by migrating it.
 - **Do not solve a too-tall row by raising `ItemSize`, turning virtualisation off, or dropping data.** The height is shared by every grid in the portal, and a cell's content is not the thing that should decide it.
+
+## Attribute tables
+
+**A table of one object's attributes is an `<AttributeTable />`, not a `VirtualisedDataGrid`, and is the one sanctioned exception to "One line per row".** An object's attributes are bounded by its schema (tens, at most a few hundred), so there is nothing to virtualise; forcing them into a virtualised grid is what once put a second telephone number behind a "+n more" dialog. The table draws every row, owns the density toggle, the count and the search box, filters and sorts the loaded rows in memory through the page's `Matches` and `Sort` functions, and keeps `q`/`sort`/`desc` in the URL (with a `UrlParameterPrefix`) exactly as the grid did. Sortable headers are `<VirtualisedSortHeader />`s inside `MudTh`, reaching the table through the same `IVirtualisedSortable` cascade.
+
+- **The value cell is an `<AttributeValuesCell />`.** It stacks up to `InlineLimit` (10) values, matching the detail loads' per-attribute cap, and hands anything larger, or anything not loaded whole, to the page's `OverflowContent`: the nested table (`CsoMvaTable`, `MvoMvaTable`, `PendingExportMvaTable`). Never stack a capped sample, and never reintroduce a "+n more" dialog on these tables.
+- **The nested table is a `VirtualisedDataGrid` with `Embedded="true"` and `MaxHeight="@NestedValueTable.MaxHeight"`.** Embedded because one sits on the page per large attribute (no URL state, no per-table density toggle); a stated height because its container is a cell, not the page.
+- **A row stacking several values takes `jim-attr-row-mva`** (via `RowClassFunc`) so its cells align to the top of the stack.
+- **The exception is scoped to single-object attribute tables.** A list of many objects or configuration items can grow without bound and stays a virtualised grid with one line per row and `<OverflowList>` for anything multi-valued.
 
 ## Object counts in table toolbars
 
@@ -405,6 +418,9 @@ That is exactly what `ConnectedSystemSettingsTab` did (found by driving the port
 - **Section headers**: Use box-drawing delimiters: `@* ─── Section Title ─── *@` (U+2500 horizontal box-drawing character). One line, standing alone between markup blocks, to visually separate major page sections.
 - **Inline comments**: Use plain comments: `@* Explanation of what follows *@`. Brief, contextual, placed immediately above or beside the relevant markup.
 - Do NOT use multi-line banner comments (`===`, `amamam`, or similar filler characters). One line is enough.
+
+## Razor directive names in markup
+- **Never name a loop variable or local `attribute` in a `.razor` file.** Razor reads `@attribute` as its directive wherever it meets the token, including `@attribute.Name` inside a `@foreach (var attribute in ...)`, and fails with a misleading trio (`RZ9979` code blocks for attributes, `RZ2005` directive must start the line, `RZ1011`) pointing at the line rather than the variable. The same holds for the other directive names (`@page`, `@layout`, `@inject`, `@typeparam`, `@implements`, `@inherits`, `@using`, `@namespace`, `@preservewhitespace`, `@rendermode`). Pick `contributed`, `objectTypeAttribute`, and so on; `AuxiliaryClassesDialog.razor` is the worked example. (Rule added after that dialog cost three builds to diagnose.)
 
 ## Nullable dereference in Razor
 - When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions.

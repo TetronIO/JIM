@@ -154,6 +154,14 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         var throughput = new ThroughputTracker();
 
+        // Keyset cursor, as in full sync, and here it is a correctness requirement rather than a speed-up: each page
+        // boundary deletes that page's obsolete CSOs (FlushObsoleteCsoOperationsAsync), so the modified set shrinks
+        // while we page through it. An OFFSET into it skips the rows that move up into the gap: with a whole page of
+        // obsolete CSOs, every other page (Scenario 008 LeaverCohort: 1,000 of 2,000 obsolete target accounts never
+        // processed, and the watermark then moved past them). The cursor must advance to the last row of each page
+        // exactly as the repository returned it.
+        var csoPageCursor = Guid.Empty;
+
         for (var page = 1; page <= totalCsoPages; page++)
         {
 
@@ -167,8 +175,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     lastSyncTimestamp,
                     page,
                     pageSize,
-                    totalCsosToProcess);
+                    totalCsosToProcess,
+                    csoPageCursor);
             }
+
+            if (csoPagedResult.Results.Count > 0)
+                csoPageCursor = csoPagedResult.Results[^1].Id;
 
             // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
             // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve
