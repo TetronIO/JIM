@@ -11,7 +11,7 @@ This page covers connected and air-gapped upgrades, what happens during the upgr
 !!! danger "Take a backup first, and make sure it includes the encryption keys"
     A JIM backup is **two artefacts**: the PostgreSQL database *and* the encryption key set (`jim-keys-volume`, or the path in `JIM_ENCRYPTION_KEY_PATH`). A database backup taken without its matching keys is not a recoverable backup; every stored secret (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) becomes permanently undecryptable when it is restored. If an upgrade goes wrong and you fall back to your pre-upgrade backup, you need both halves. See [Backup & Disaster Recovery](backup-recovery.md).
 
-## 📋 Before you upgrade
+## 📋 Before you upgrade {#before-you-upgrade}
 
 - [ ] **Read the release notes.** Check the `CHANGELOG.md` for the target release (on the [releases page](https://github.com/TetronIO/JIM/releases), or under `docs/` in an air-gapped bundle) for breaking changes, new configuration variables, and security fixes.
 - [ ] **Rehearse in staging** against a copy of production data where practical.
@@ -45,7 +45,38 @@ If you do stop the worker part-way through a Run Profile execution anyway, the w
 
 Draining properly therefore avoids noise in your Activity history and a needlessly long first run afterwards, but an interrupted upgrade does not put your data at risk.
 
+## ⬆️ Upgrading with the installer {#with-the-installer}
+
+On Docker, the installer upgrades an installation it made, connected or air-gapped, keeping its settings. Do the steps in [Before you upgrade](#before-you-upgrade) first, then:
+
+=== "Connected"
+
+    ```bash
+    # Upgrades to the latest release
+    curl -fsSL https://junctional.io/get | sudo bash -s -- --upgrade
+    ```
+
+=== "Air-gapped"
+
+    ```bash
+    # In the new release's extracted bundle; upgrades to that release
+    sha256sum -c checksums.sha256
+    sudo ./setup.sh --upgrade
+    ```
+
+It upgrades `/opt/jim`, or the folder `JIM_INSTALL_DIR` names. In order, it:
+
+1. Stops if the new release is not newer than the one JIM runs, and asks you to confirm the database and encryption keys are backed up (set `JIM_SETUP_BACKUP_CONFIRMED=true` to answer in advance; a "no" cancels the upgrade).
+2. Stops if `docker-compose.yml` or `docker-compose.production.yml` has been edited since it installed them, because it replaces them. Put changes of your own in a compose file of your own beside them, such as `docker-compose.local.yml`, and start JIM once with it added (`-f docker-compose.local.yml`): the upgrade starts JIM with every compose file it was last started with. Nothing changes when it stops at this step or the one before. It records the files it installs in `compose-files.sha256`; an installation made before it kept that record is upgraded with a warning instead.
+3. Installs the release's compose files, keeping the previous ones and `.env` beside them as `docker-compose.yml.previous`, `docker-compose.production.yml.previous` and `.env.previous`, sets `JIM_VERSION`, and saves the release's `.env.example` beside `.env`, naming any setting it adds that your `.env` does not mention.
+4. Loads the release's images from the bundle, or downloads them, while the current version keeps running. With the bundled PostgreSQL, it moves JIM onto the release's PostgreSQL image, checking it against the ID the bundle records where Docker's classic image store needs `JIM_DB_IMAGE`.
+5. Restarts JIM on the new version, which applies any database upgrade as it starts, and waits until JIM is ready. It keeps the release's copy of `setup.sh` in the installation.
+
+Anything that fails before the restart puts the previous compose files and `.env` back, leaving JIM running as it was. Then carry on at [Verifying the upgrade](#verifying).
+
 ## 🔄 Upgrading a connected deployment
+
+The same upgrade by hand. On Podman, see [Upgrading on Podman](#upgrading-on-podman).
 
 1. **Stop the services**, leaving the database running if it is the bundled container:
 
@@ -78,7 +109,7 @@ Draining properly therefore avoids noise in your Activity history and a needless
 
 ## 📦 Upgrading an air-gapped deployment
 
-The procedure mirrors a first-time air-gapped deployment, minus the initial configuration steps.
+The same upgrade as [the installer's](#with-the-installer), by hand. The procedure mirrors a first-time air-gapped deployment, minus the initial configuration steps.
 
 1. **Transfer and verify the new release bundle** via your approved process:
 
@@ -90,15 +121,24 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 
 2. **Stop the services** and **take your backup**, as in steps 1 and 2 above.
 
-3. **Load the new images:**
+3. **Load the new images**, PostgreSQL's included: a release can move the bundled database to a newer PostgreSQL 18 image, and its compose file then names that image, which only the bundle can supply.
 
     ```bash
-    docker load -i docker-images/jim-web.tar
-    docker load -i docker-images/jim-worker.tar
-    docker load -i docker-images/jim-scheduler.tar
+    for f in docker-images/*.tar; do docker load -i "$f"; done
     ```
 
 4. **Reconcile the compose files.** The bundle ships its own `compose/` directory. Diff it against your deployed copies rather than overwriting them, so local customisations (volumes, ports, reverse-proxy wiring) survive, and check `compose/.env.example` for new variables. Copy the bundle's `setup.sh` over the installation's copy (`/opt/jim/setup.sh` by default), so that looking after JIM uses the new release's installer.
+
+    If your `.env` sets `JIM_DB_IMAGE` (the installer sets it on Docker's classic image store, which cannot find the bundled PostgreSQL by its pinned digest), point it at the new bundle's PostgreSQL image, after checking that image's ID is the one the bundle records. Otherwise JIM carries on running the previous release's PostgreSQL.
+
+    ```bash
+    # In the extracted bundle
+    image=$(docker load -i docker-images/postgres-18.tar | sed -n 's/^Loaded image: //p')
+    id=$(docker image inspect -f '{{.Id}}' "$image")
+    grep -qxF "$id" docker-images/postgres-18.image-ids \
+      && sed -i "s|^JIM_DB_IMAGE=.*|JIM_DB_IMAGE=$id|" /opt/jim/.env \
+      || echo "Not the PostgreSQL image this bundle ships: check it with sha256sum -c checksums.sha256"
+    ```
 
 5. **Pin the new version** in `.env` (`JIM_VERSION=0.14.0`) and start the services, using the same `-f` files and `--profile` flags you deployed with:
 
@@ -111,7 +151,7 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 
 6. **Verify**, per [Verifying the upgrade](#verifying) below.
 
-## 🦭 Upgrading on Podman
+## 🦭 Upgrading on Podman {#upgrading-on-podman}
 
 On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. The commands are for the default, rootful installation, run as root; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
@@ -247,6 +287,13 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
     JIM_VERSION=0.13.0
     ```
 
+    After an upgrade by the installer, put its `.previous` files back instead, which also returns the compose files and any `JIM_DB_IMAGE` to the previous release's:
+
+    ```bash
+    cd /opt/jim
+    for f in docker-compose.yml docker-compose.production.yml .env; do cp -p "$f.previous" "$f"; done
+    ```
+
 4. **Start the services:**
 
     ```bash
@@ -269,7 +316,7 @@ Rolling back means putting **both** halves of JIM back to their pre-upgrade stat
 - [ ] Running Activities allowed to complete.
 - [ ] Services stopped, then database **and** encryption keys backed up as a matched pair.
 - [ ] Previous images retained for rollback.
-- [ ] `.env` reconciled against the new `.env.example`, or on Podman `jim-config.yaml` against the release's copy.
+- [ ] `.env` reconciled against the new `.env.example` (the installer's upgrade names new settings for you), or on Podman `jim-config.yaml` against the release's copy.
 - [ ] New version confirmed via `/api/v1/health/version`.
 - [ ] Readiness confirmed via `/api/v1/health/ready`.
 - [ ] A Connected System with a stored credential confirmed to connect (proves the keys survived).
