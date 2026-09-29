@@ -146,6 +146,47 @@ public class MetaverseControllerProvenanceTests
         }
     }
 
+    [Test]
+    public async Task GetObjectProvenanceAsync_GeneratedValue_ReportsTheGeneratedValueKindWithItsSystemAndRuleAsync()
+    {
+        var model = new MetaverseObjectProvenance { MetaverseObjectId = _mvoId };
+        model.Attributes.Add(new MetaverseAttributeOriginSummary
+        {
+            AttributeId = AttributeId,
+            AttributeName = "Employee ID",
+            Origins = { new ValueOrigin { Kind = ValueOriginKind.SynchronisationRule, ConnectedSystemId = 1, ConnectedSystemName = "HR", SyncRuleId = 2, SyncRuleName = "HR Import" } }
+        });
+        _metaverseRepo.Setup(r => r.GetMetaverseObjectProvenanceAsync(_mvoId)).ReturnsAsync(model);
+        _metaverseRepo.Setup(r => r.GetGeneratedValueOwnershipsAsync(_mvoId)).ReturnsAsync(new List<GeneratedValueOwnership>
+        {
+            new() { AttributeId = AttributeId, SyncRuleId = 2, SyncRuleMappingId = 7, Value = "E1001", Corrected = true }
+        });
+
+        var payload = await OkPayload<MetaverseObjectProvenanceDto>(_controller.GetObjectProvenanceAsync(_mvoId));
+
+        var origin = payload.Attributes.Single().Origins.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.GeneratedValue));
+            Assert.That(origin.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(origin.SyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(origin.Corrected, Is.True);
+        }
+    }
+
+    [Test]
+    public void AttributeSourceCandidateDto_And_AttributeHistoryEntryDto_CarryIsGeneratedValue()
+    {
+        var source = AttributeSourceCandidateDto.FromModel(new AttributeSourceCandidate { SyncRuleName = "HR Import", ConnectedSystemName = "HR", IsGeneratedValue = true });
+        var history = AttributeHistoryEntryDto.FromModel(new AttributeHistoryEntry { IsGeneratedValue = true });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(source.IsGeneratedValue, Is.True);
+            Assert.That(history.IsGeneratedValue, Is.True);
+        }
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static async Task<T> OkPayload<T>(Task<IActionResult> action) where T : class

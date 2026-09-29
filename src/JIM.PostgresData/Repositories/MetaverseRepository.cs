@@ -1977,6 +1977,23 @@ public class MetaverseRepository : IMetaverseRepository
         return change;
     }
 
+    public async Task<List<GeneratedValueOwnership>> GetGeneratedValueOwnershipsAsync(Guid metaverseObjectId)
+    {
+        return await Repository.Database.GeneratedValueAssignments
+            .AsNoTracking()
+            .Where(a => a.MetaverseObjectId == metaverseObjectId && a.MetaverseAttributeId != null)
+            .Select(a => new GeneratedValueOwnership
+            {
+                AttributeId = a.MetaverseAttributeId!.Value,
+                SyncRuleId = a.SyncRuleMappingGeneration!.SyncRuleMapping!.SyncRuleId,
+                SyncRuleMappingId = a.SyncRuleMappingGeneration.SyncRuleMappingId,
+                Value = a.Value,
+                PreviousValue = a.PreviousValue,
+                Corrected = a.RemediationCount > 0
+            })
+            .ToListAsync();
+    }
+
     public async Task<List<MetaverseAttributeHistoryRawEntry>> GetAttributeHistoryRawEntriesAsync(
         Guid metaverseObjectId, int attributeId, int rawCap)
     {

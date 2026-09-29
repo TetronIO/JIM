@@ -7,6 +7,7 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -147,6 +148,97 @@ public class MetaverseProvenanceDatabaseTests
             Assert.That(mapping.Sources[0].ConnectedSystemAttribute!.Id, Is.EqualTo(csAttribute.Id));
             Assert.That(mapping.GetSourceType(), Is.EqualTo(SyncRuleMappingSourcesType.AttributeMapping));
         }
+    }
+
+    #endregion
+
+    #region GetGeneratedValueOwnershipsAsync
+
+    /// <summary>
+    /// Makes the seeded mapping a Generated Value Attribute Flow and gives the Metaverse Object an assignment from
+    /// it, written through foreign key scalars only so no navigation graph is walked back into the insert.
+    /// </summary>
+    private async Task<Guid> SeedGeneratedValueAsync(SyncRuleMapping mapping, MetaverseAttribute mvAttribute, Guid mvoId,
+        GeneratedValueAssignmentState state, string value, string? previousValue = null, int remediationCount = 0)
+    {
+        await using var ctx = NewContext();
+        var generation = new SyncRuleMappingGeneration { SyncRuleMappingId = mapping.Id, TokenKind = GeneratedValueTokenKind.Sequence };
+        ctx.SyncRuleMappingGenerations.Add(generation);
+        await ctx.SaveChangesAsync();
+
+        var assignment = new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = mvoId,
+            MetaverseAttributeId = mvAttribute.Id,
+            Value = value,
+            NormalisedValue = value.ToLowerInvariant(),
+            PreviousValue = previousValue,
+            RemediationCount = remediationCount,
+            State = state,
+            SyncRuleMappingGenerationId = generation.Id
+        };
+        ctx.GeneratedValueAssignments.Add(assignment);
+        await ctx.SaveChangesAsync();
+        return assignment.Id;
+    }
+
+    [Test]
+    public async Task GetGeneratedValueOwnershipsAsync_HeldGeneratedValue_ResolvesItsRuleMappingAndValuesAsync()
+    {
+        var (_, _, _, mvType, mvAttribute, rule, mapping) = await SeedSchemaAsync();
+        Guid mvoId;
+        await using (var ctx = NewContext())
+            mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+        await SeedGeneratedValueAsync(mapping, mvAttribute, mvoId, GeneratedValueAssignmentState.Committed, "E1001", previousValue: "E1000", remediationCount: 1);
+
+        await using var readCtx = NewContext();
+        var result = await new PostgresDataRepository(readCtx).Metaverse.GetGeneratedValueOwnershipsAsync(mvoId);
+
+        var ownership = result.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ownership.AttributeId, Is.EqualTo(mvAttribute.Id));
+            Assert.That(ownership.SyncRuleId, Is.EqualTo(rule.Id));
+            Assert.That(ownership.SyncRuleMappingId, Is.EqualTo(mapping.Id));
+            Assert.That(ownership.Value, Is.EqualTo("E1001"));
+            Assert.That(ownership.PreviousValue, Is.EqualTo("E1000"));
+            Assert.That(ownership.Corrected, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetGeneratedValueOwnershipsAsync_ProposedAssignment_IsIncludedAsync()
+    {
+        var (_, _, _, mvType, mvAttribute, _, mapping) = await SeedSchemaAsync();
+        Guid mvoId;
+        await using (var ctx = NewContext())
+            mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+        await SeedGeneratedValueAsync(mapping, mvAttribute, mvoId, GeneratedValueAssignmentState.Proposed, "E1001");
+
+        await using var readCtx = NewContext();
+        var result = await new PostgresDataRepository(readCtx).Metaverse.GetGeneratedValueOwnershipsAsync(mvoId);
+
+        // An import-mode assignment stays Proposed once written, so leaving Proposed out would hide every
+        // Generated Value.
+        Assert.That(result.Single().Value, Is.EqualTo("E1001"));
+    }
+
+    [Test]
+    public async Task GetGeneratedValueOwnershipsAsync_AnotherObjectsGeneratedValue_IsLeftOutAsync()
+    {
+        var (_, _, _, mvType, mvAttribute, _, mapping) = await SeedSchemaAsync();
+        Guid mvoId, otherMvoId;
+        await using (var ctx = NewContext())
+            mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+        await using (var ctx = NewContext())
+            otherMvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+        await SeedGeneratedValueAsync(mapping, mvAttribute, otherMvoId, GeneratedValueAssignmentState.Committed, "E1001");
+
+        await using var readCtx = NewContext();
+        var result = await new PostgresDataRepository(readCtx).Metaverse.GetGeneratedValueOwnershipsAsync(mvoId);
+
+        Assert.That(result, Is.Empty);
     }
 
     #endregion

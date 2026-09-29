@@ -164,6 +164,12 @@ public class AttributeSourceCandidateDto
 
     public bool IsExpression { get; set; }
 
+    /// <summary>
+    /// True when the Attribute Flow's Source Type is Generated Value. Its candidate value is the value it
+    /// generated for this Metaverse Object, if any.
+    /// </summary>
+    public bool IsGeneratedValue { get; set; }
+
     public string? Expression { get; set; }
 
     public AttributeSourceState State { get; set; }
@@ -183,6 +189,7 @@ public class AttributeSourceCandidateDto
             ConnectedSystemId = model.ConnectedSystemId,
             ConnectedSystemName = model.ConnectedSystemName,
             IsExpression = model.IsExpression,
+            IsGeneratedValue = model.IsGeneratedValue,
             Expression = model.Expression,
             State = model.State,
             CandidateValues = model.CandidateValues,
@@ -204,6 +211,9 @@ public class AttributeHistoryEntryDto
 
     public string? SyncRuleName { get; set; }
 
+    /// <summary>True when a Generated Value Attribute Flow produced the value, rather than reading it from the Connected System.</summary>
+    public bool IsGeneratedValue { get; set; }
+
     public ProvenanceChangeDto Change { get; set; } = null!;
 
     public static AttributeHistoryEntryDto FromModel(AttributeHistoryEntry model)
@@ -215,6 +225,7 @@ public class AttributeHistoryEntryDto
             PreviousValue = model.PreviousValue,
             SyncRuleId = model.SyncRuleId,
             SyncRuleName = model.SyncRuleName,
+            IsGeneratedValue = model.IsGeneratedValue,
             Change = ProvenanceChangeDto.FromModel(model.Change)
         };
     }

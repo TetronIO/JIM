@@ -206,6 +206,14 @@ public interface IMetaverseRepository
     public Task<List<MetaverseAttributeHistoryRawEntry>> GetAttributeHistoryRawEntriesAsync(
         Guid metaverseObjectId, int attributeId, int rawCap);
 
+    /// <summary>
+    /// The Generated Values a Metaverse Object holds (#399): one per attribute a Generated Value Attribute Flow is
+    /// responsible for, in every assignment state. An import-mode assignment is persisted only after its Metaverse
+    /// Object is and stays Proposed once written, so a Proposed one is a real value on the object; whether the value
+    /// is the one in use is decided by matching its Synchronisation Rule against the value's contributor.
+    /// </summary>
+    public Task<List<GeneratedValueOwnership>> GetGeneratedValueOwnershipsAsync(Guid metaverseObjectId);
+
     #endregion
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);

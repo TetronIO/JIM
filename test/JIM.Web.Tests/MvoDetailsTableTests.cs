@@ -209,30 +209,6 @@ public class MvoDetailsTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void DetailsTable_GeneratedValueAssignment_RendersTheGeneratedValueChipBesideThatValue()
-    {
-        // Unique Value Generation (#242): the host hands the assignments in, so the table needs no application
-        // layer of its own to mark a generated value.
-        var mvo = BuildObject(TextValue(1, "Account Name", "jsmith"), TextValue(2, "Job Title", "Engineer"));
-        var assignments = new Dictionary<string, GeneratedValueAssignmentHeader>
-        {
-            ["Account Name"] = new() { AttributeName = "Account Name", Value = "jsmith", SyncRuleId = 5, SyncRuleName = "HR Import" }
-        };
-
-        var cut = Render<MvoDetailsTable>(p => p
-            .Add(c => c.MetaverseObject, mvo)
-            .Add(c => c.ObjectTypeName, "User")
-            .Add(c => c.GeneratedValueAssignments, assignments));
-
-        var chips = cut.FindComponents<GeneratedValueProvenanceChip>();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(chips, Has.Count.EqualTo(1));
-            Assert.That(chips[0].Instance.Assignment.AttributeName, Is.EqualTo("Account Name"));
-        }
-    }
-
-    [Test]
     public void DetailsTable_SingleTextValue_RendersOnOneClippedLineWithItsFullTextAsTheTitle()
     {
         const string longValue = "Principal Software Engineer, Identity and Access Management Platform";

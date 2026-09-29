@@ -24,6 +24,12 @@ public class AttributeSourceCandidate
 
     public bool IsExpression { get; set; }
 
+    /// <summary>
+    /// True when the mapping's Source Type is Generated Value. Its candidate value is the value it generated for
+    /// this Metaverse Object, if any; a Generated Value is never recomputed, so there is nothing to evaluate.
+    /// </summary>
+    public bool IsGeneratedValue { get; set; }
+
     public string? Expression { get; set; }
 
     public AttributeSourceState State { get; set; }

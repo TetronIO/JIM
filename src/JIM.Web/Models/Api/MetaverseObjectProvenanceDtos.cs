@@ -48,7 +48,7 @@ public class MetaverseAttributeOriginSummaryDto
 
 /// <summary>
 /// API representation of a Metaverse Object attribute value's origin: a Connected System through a
-/// Synchronisation Rule, JIM itself, a person, or not recorded.
+/// Synchronisation Rule (read, or produced by a Generated Value Attribute Flow), a person, or not recorded.
 /// </summary>
 public class ValueOriginDto
 {

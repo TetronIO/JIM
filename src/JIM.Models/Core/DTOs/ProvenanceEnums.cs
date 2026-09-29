@@ -14,8 +14,12 @@ public enum ValueOriginKind
     /// <summary>A Connected System contributed the value through an import Synchronisation Rule.</summary>
     SynchronisationRule = 1,
 
-    /// <summary>JIM generated the value (Unique Value Generation, #242). Not produced until #242 lands.</summary>
-    GeneratedByJim = 2,
+    /// <summary>
+    /// A Connected System's Synchronisation Rule contributed the value through an Attribute Flow whose Source Type
+    /// is Generated Value (Unique Value Generation, #242). The origin still names the Connected System and the
+    /// Synchronisation Rule; the kind says the Attribute Flow generated the value rather than reading it.
+    /// </summary>
+    GeneratedValue = 2,
 
     /// <summary>A person set the value directly (internal Metaverse Object management, #614). Not produced until #614 lands.</summary>
     SetByPerson = 3

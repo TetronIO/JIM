@@ -36,15 +36,17 @@ function Get-JIMMetaverseObjectProvenance {
     .OUTPUTS
         With just -Id: a PSCustomObject with MetaverseObjectId and Attributes (each with
         AttributeId, AttributeName and Origins, an array of {Kind, ConnectedSystemId,
-        ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue}).
+        ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue, Corrected}).
+        Kind is NotRecorded, SynchronisationRule, GeneratedValue or SetByPerson.
 
         With -AttributeName or -AttributeId: a PSCustomObject with MetaverseObjectId,
         MetaverseObjectTypeId, AttributeId, AttributeName, AttributeType, AttributePlurality,
         CurrentValues (each with DisplayValue, ReferenceMetaverseObjectId, ReferenceTypeName,
         Origin), CurrentValueTotalCount, ContributingConnectedSystemObject, LastSet (the Activity
         that set the current value), Sources (each mapping's Rank, SyncRuleId, SyncRuleName,
-        ConnectedSystemId, ConnectedSystemName, IsExpression, Expression, State, CandidateValues,
-        Note), History (newest first) and HistoryTruncated.
+        ConnectedSystemId, ConnectedSystemName, IsExpression, IsGeneratedValue, Expression, State,
+        CandidateValues, Note), History (newest first; IsGeneratedValue marks a generated value) and
+        HistoryTruncated.
 
     .EXAMPLE
         Get-JIMMetaverseObjectProvenance -Id "12345678-1234-1234-1234-123456789abc"

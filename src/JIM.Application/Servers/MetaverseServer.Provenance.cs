@@ -34,7 +34,34 @@ public partial class MetaverseServer
     /// </summary>
     public async Task<MetaverseObjectProvenance?> GetMetaverseObjectProvenanceAsync(Guid metaverseObjectId)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectProvenanceAsync(metaverseObjectId);
+        var provenance = await Application.Repository.Metaverse.GetMetaverseObjectProvenanceAsync(metaverseObjectId);
+        if (provenance == null)
+            return null;
+
+        var generatedValues = await GetGeneratedValuesByAttributeAsync(metaverseObjectId);
+        if (generatedValues.Count == 0)
+            return provenance;
+
+        foreach (var attribute in provenance.Attributes)
+        {
+            var ownership = generatedValues.GetValueOrDefault(attribute.AttributeId);
+            attribute.Origins = attribute.Origins.Select(o => ProvenanceLogic.ApplyGeneratedValue(o, ownership)).ToList();
+        }
+
+        return provenance;
+    }
+
+    /// <summary>
+    /// The Generated Values a Metaverse Object holds, keyed by attribute. A Generated Value only ever targets a
+    /// single-valued attribute, so there is at most one per attribute; should that ever not hold, the first wins
+    /// rather than failing a read-only display.
+    /// </summary>
+    private async Task<Dictionary<int, GeneratedValueOwnership>> GetGeneratedValuesByAttributeAsync(Guid metaverseObjectId)
+    {
+        var ownerships = await Application.Repository.Metaverse.GetGeneratedValueOwnershipsAsync(metaverseObjectId);
+        return (ownerships ?? new List<GeneratedValueOwnership>())
+            .GroupBy(o => o.AttributeId)
+            .ToDictionary(g => g.Key, g => g.First());
     }
 
     /// <summary>
@@ -61,6 +88,10 @@ public partial class MetaverseServer
         var (currentValues, currentValueTotalCount) = await Application.Repository.Metaverse.GetMetaverseAttributeCurrentValuesAsync(
             metaverseObjectId, attributeId, currentValueCap);
 
+        var generatedValue = (await GetGeneratedValuesByAttributeAsync(metaverseObjectId)).GetValueOrDefault(attributeId);
+        foreach (var value in currentValues)
+            value.Origin = ProvenanceLogic.ApplyGeneratedValue(value.Origin, generatedValue);
+
         var result = new MetaverseAttributeProvenance
         {
             MetaverseObjectId = metaverseObjectId,
@@ -75,8 +106,10 @@ public partial class MetaverseServer
 
         // Contributing Connected System Object: derived from the first value whose origin names a Connected
         // System (a multi-valued attribute with several origins shows only the first here; the inspector's
-        // per-value origin covers the rest).
-        var contributingOrigin = currentValues.Select(v => v.Origin).FirstOrDefault(o => o.ConnectedSystemId.HasValue);
+        // per-value origin covers the rest). A Generated Value names its Connected System, but that system's
+        // object did not supply it, so it has no contributing Connected System Object.
+        var contributingOrigin = currentValues.Select(v => v.Origin)
+            .FirstOrDefault(o => o.ConnectedSystemId.HasValue && o.Kind != ValueOriginKind.GeneratedValue);
         if (contributingOrigin != null)
         {
             result.ContributingConnectedSystemObject = await Application.Repository.Metaverse.GetContributingConnectedSystemObjectAsync(
@@ -100,13 +133,15 @@ public partial class MetaverseServer
         {
             rank++;
             result.Sources.Add(await BuildAttributeSourceCandidateAsync(
-                mapping, rank, attribute.Type, currentContributorSyncRuleIds, joinedCsoCache, metaverseObjectId, candidateValueCap));
+                mapping, rank, attribute.Type, currentContributorSyncRuleIds, joinedCsoCache, metaverseObjectId, candidateValueCap, generatedValue));
         }
 
         // History: raw Add/Remove rows, newest change first, paired into display entries by the pure
         // ProvenanceLogic helper so the pairing rules are unit-testable without a database.
         var rawHistory = await Application.Repository.Metaverse.GetAttributeHistoryRawEntriesAsync(metaverseObjectId, attributeId, historyRawCap);
         var (history, truncatedByPairing) = ProvenanceLogic.PairAttributeHistory(rawHistory, attribute.AttributePlurality, historyCap);
+        foreach (var entry in history)
+            entry.IsGeneratedValue = ProvenanceLogic.IsGeneratedHistoryValue(entry, generatedValue);
         result.History = history;
         result.HistoryTruncated = truncatedByPairing || rawHistory.Count >= historyRawCap;
 
@@ -126,7 +161,8 @@ public partial class MetaverseServer
         HashSet<int> currentContributorSyncRuleIds,
         Dictionary<(int ConnectedSystemId, int ConnectedSystemObjectTypeId), ConnectedSystemObject?> joinedCsoCache,
         Guid metaverseObjectId,
-        int candidateValueCap)
+        int candidateValueCap,
+        GeneratedValueOwnership? generatedValue)
     {
         var sourceType = mapping.GetSourceType();
         var expressionSource = mapping.Sources
@@ -142,6 +178,7 @@ public partial class MetaverseServer
             ConnectedSystemId = mapping.SyncRule?.ConnectedSystemId ?? 0,
             ConnectedSystemName = mapping.SyncRule?.ConnectedSystem?.Name ?? string.Empty,
             IsExpression = sourceType == SyncRuleMappingSourcesType.ExpressionMapping,
+            IsGeneratedValue = sourceType == SyncRuleMappingSourcesType.GeneratedMapping,
             Expression = sourceType == SyncRuleMappingSourcesType.ExpressionMapping ? expressionSource?.Expression : null
         };
 
@@ -182,6 +219,13 @@ public partial class MetaverseServer
         if (sourceType == SyncRuleMappingSourcesType.AttributeMapping)
         {
             candidate.CandidateValues = EvaluateAttributeSourceCandidateValues(mapping, cso!, targetAttributeType, candidateValueCap);
+        }
+        else if (sourceType == SyncRuleMappingSourcesType.GeneratedMapping)
+        {
+            // A Generated Value is generated once and never recomputed, so the value this flow supplies is the one
+            // it generated for this Metaverse Object, if it generated one.
+            if (generatedValue != null && generatedValue.SyncRuleMappingId == mapping.Id)
+                candidate.CandidateValues = new List<string> { generatedValue.Value };
         }
         else if (sourceType == SyncRuleMappingSourcesType.ExpressionMapping)
         {

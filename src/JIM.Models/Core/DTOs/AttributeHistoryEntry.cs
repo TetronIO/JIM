@@ -20,5 +20,11 @@ public class AttributeHistoryEntry
 
     public string? SyncRuleName { get; set; }
 
+    /// <summary>
+    /// True when the value was produced by a Generated Value Attribute Flow rather than read from the Connected
+    /// System (see <see cref="ProvenanceLogic.IsGeneratedHistoryValue"/>).
+    /// </summary>
+    public bool IsGeneratedValue { get; set; }
+
     public ProvenanceChange Change { get; set; } = new();
 }

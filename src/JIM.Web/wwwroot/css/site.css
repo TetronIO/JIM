@@ -1101,6 +1101,20 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     flex-shrink: 2;
 }
 
+/* A Generated Value's ending (System · Rule · Generated Value): gives way after the rule, before the system. */
+.jim-source-dot-type {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.jim-source-dot-label:has(.jim-source-dot-type):not(:has(.jim-source-dot-rule)) .jim-source-dot-name {
+    flex-shrink: 0;
+    max-width: 70%;
+}
+
 /* ─── System and rule chip (SystemRuleChip.razor, #399) ─── */
 
 /* One pill naming a route: [CS] system [SR] rule. The SR glyph separates the two halves, so no dot or divider is
@@ -1435,6 +1449,13 @@ a.jim-system-rule-chip-part:focus-visible {
 .jim-inspector-source-rule {
     color: var(--mud-palette-text-secondary);
     font-size: 0.875rem;
+}
+
+.jim-inspector-source-type {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    white-space: nowrap;
 }
 
 .jim-inspector-source-system:hover,

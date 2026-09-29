@@ -108,12 +108,6 @@
                                     {
                                         <div class="jim-inspect-value" title="@ValueTitle(group)">
                                             @RenderValue(attributeValue)
-                                            @* Unique Value Generation (#242, Phase 3, Work Package D2): a generated
-                                               value only ever targets a single-valued attribute. *@
-                                            @if (GeneratedValueAssignments.TryGetValue(group.AttributeName, out var assignment))
-                                            {
-                                                <GeneratedValueProvenanceChip Assignment="assignment" Class="ml-2" />
-                                            }
                                         </div>
                                     }
                                     else
@@ -254,15 +248,6 @@
     /// <summary>The object's attribute origins (#399), loaded by the host when this view is shown. Null while loading.</summary>
     [Parameter]
     public MetaverseObjectProvenance? Provenance { get; set; }
-
-    /// <summary>
-    /// Generated-value assignments for this Metaverse Object (Unique Value Generation, #242, Phase 3, Work
-    /// Package D2), keyed by attribute name. Loaded by the host with the provenance, like everything else this
-    /// component shows, so it stays a presentational renderer of its parameters.
-    /// </summary>
-    [Parameter]
-    public IReadOnlyDictionary<string, GeneratedValueAssignmentHeader> GeneratedValueAssignments { get; set; } =
-        new Dictionary<string, GeneratedValueAssignmentHeader>();
 
     /// <summary>Whether the host is loading <see cref="Provenance"/>.</summary>
     [Parameter]

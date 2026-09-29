@@ -28,7 +28,7 @@ public record ValueOrigin
     /// <summary>True when the contributor positively asserted "no value" (an asserted-null row).</summary>
     public bool AssertsNoValue { get; init; }
 
-    /// <summary>True when JIM corrected a generated value after a collision (#242). Always false until #242 lands.</summary>
+    /// <summary>True when a Generated Value was revised after a collision (#242 Collision Remediation).</summary>
     public bool Corrected { get; init; }
 
     /// <summary>The person who set the value (#614). Null until #614 lands.</summary>

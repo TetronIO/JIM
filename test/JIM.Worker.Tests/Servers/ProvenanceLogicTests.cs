@@ -137,6 +137,98 @@ public class ProvenanceLogicTests
 
     #endregion
 
+    #region ApplyGeneratedValue / IsGeneratedHistoryValue
+
+    private static ValueOrigin RuleOrigin(int syncRuleId) => new()
+    {
+        Kind = ValueOriginKind.SynchronisationRule,
+        ConnectedSystemId = 9,
+        ConnectedSystemName = "HR",
+        SyncRuleId = syncRuleId,
+        SyncRuleName = "HR Import Users"
+    };
+
+    private static GeneratedValueOwnership Ownership(int syncRuleId = 5, string value = "E1001", string? previousValue = null, bool corrected = false) => new()
+    {
+        AttributeId = 42,
+        SyncRuleId = syncRuleId,
+        SyncRuleMappingId = 7,
+        Value = value,
+        PreviousValue = previousValue,
+        Corrected = corrected
+    };
+
+    [Test]
+    public void ApplyGeneratedValue_ValueFromTheGeneratingRule_IsAGeneratedValueThatKeepsItsSystemAndRule()
+    {
+        var origin = ProvenanceLogic.ApplyGeneratedValue(RuleOrigin(5), Ownership(syncRuleId: 5));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.GeneratedValue));
+            Assert.That(origin.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(origin.SyncRuleName, Is.EqualTo("HR Import Users"));
+            Assert.That(origin.Corrected, Is.False);
+        }
+    }
+
+    [Test]
+    public void ApplyGeneratedValue_ValueFromAnotherRule_StaysASynchronisationRuleValue()
+    {
+        var origin = ProvenanceLogic.ApplyGeneratedValue(RuleOrigin(6), Ownership(syncRuleId: 5));
+
+        Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+    }
+
+    [Test]
+    public void ApplyGeneratedValue_NothingGenerated_ReturnsTheOriginUnchanged()
+    {
+        var original = RuleOrigin(5);
+
+        Assert.That(ProvenanceLogic.ApplyGeneratedValue(original, null), Is.SameAs(original));
+    }
+
+    [Test]
+    public void ApplyGeneratedValue_RuleDeleted_StaysASynchronisationRuleValue()
+    {
+        // A deleted rule's generated mapping cascades its assignments away, so an ownership naming no rule cannot
+        // match; guard the null anyway rather than matching null to null.
+        var origin = ProvenanceLogic.ApplyGeneratedValue(RuleOrigin(5) with { SyncRuleId = null, SyncRuleDeleted = true }, Ownership());
+
+        Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+    }
+
+    [Test]
+    public void ApplyGeneratedValue_ValueRevisedAfterACollision_IsMarkedCorrected()
+    {
+        var origin = ProvenanceLogic.ApplyGeneratedValue(RuleOrigin(5), Ownership(corrected: true));
+
+        Assert.That(origin.Corrected, Is.True);
+    }
+
+    [TestCase(5, "E1001", true, TestName = "IsGeneratedHistoryValue_CurrentGeneratedValueFromTheGeneratingRule_IsTrue")]
+    [TestCase(5, "E1000", true, TestName = "IsGeneratedHistoryValue_ValueItReplacedAfterACollision_IsTrue")]
+    [TestCase(5, "E0042", false, TestName = "IsGeneratedHistoryValue_OtherValueFromTheSameRule_IsFalse")]
+    [TestCase(6, "E1001", false, TestName = "IsGeneratedHistoryValue_SameValueFromAnotherRule_IsFalse")]
+    public void IsGeneratedHistoryValue_MatchesOnTheGeneratingRuleAndAGeneratedValue(int syncRuleId, string value, bool expected)
+    {
+        // A rule's flow can be switched to Generated Value after it has already contributed plain values, so the
+        // rule alone is not enough: the entry must also carry a value the generation actually produced.
+        var entry = new AttributeHistoryEntry { Kind = AttributeHistoryChangeKind.Added, Value = value, SyncRuleId = syncRuleId };
+
+        Assert.That(ProvenanceLogic.IsGeneratedHistoryValue(entry, Ownership(previousValue: "E1000")), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void IsGeneratedHistoryValue_NothingGenerated_IsFalse()
+    {
+        var entry = new AttributeHistoryEntry { Kind = AttributeHistoryChangeKind.Added, Value = "E1001", SyncRuleId = 5 };
+
+        Assert.That(ProvenanceLogic.IsGeneratedHistoryValue(entry, null), Is.False);
+    }
+
+    #endregion
+
     #region DetermineFixedState / NoteForFixedState
 
     [Test]
@@ -147,7 +239,6 @@ public class ProvenanceLogicTests
         Assert.That(state, Is.EqualTo(AttributeSourceState.NotJoined));
     }
 
-    [TestCase(SyncRuleMappingSourcesType.GeneratedMapping)]
     [TestCase(SyncRuleMappingSourcesType.AdvancedMapping)]
     [TestCase(SyncRuleMappingSourcesType.NotSet)]
     public void DetermineFixedState_JoinedButNotEvaluableSourceType_ReturnsNotEvaluated(SyncRuleMappingSourcesType sourceType)
@@ -159,17 +250,12 @@ public class ProvenanceLogicTests
 
     [TestCase(SyncRuleMappingSourcesType.AttributeMapping)]
     [TestCase(SyncRuleMappingSourcesType.ExpressionMapping)]
+    [TestCase(SyncRuleMappingSourcesType.GeneratedMapping)]
     public void DetermineFixedState_JoinedAndEvaluableSourceType_ReturnsNull(SyncRuleMappingSourcesType sourceType)
     {
         var state = ProvenanceLogic.DetermineFixedState(joined: true, sourceType);
 
         Assert.That(state, Is.Null);
-    }
-
-    [Test]
-    public void NoteForFixedState_GeneratedMapping_NamesJim()
-    {
-        Assert.That(ProvenanceLogic.NoteForFixedState(SyncRuleMappingSourcesType.GeneratedMapping), Is.EqualTo("Generated by JIM"));
     }
 
     [Test]

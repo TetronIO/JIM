@@ -90,16 +90,20 @@ public class MvoContributionBarTests : JimComponentTestContext
     }
 
     [Test]
-    public void ContributionBar_GeneratedByJim_TakesThePrimaryColour()
+    public void ContributionBar_GeneratedValue_TakesThePrimaryColourAndItsOwnLegendEntry()
     {
-        var generated = new ValueOrigin { Kind = ValueOriginKind.GeneratedByJim, ConnectedSystemId = 1, ConnectedSystemName = "HR", SyncRuleId = 10, SyncRuleName = "HR Import" };
+        var generated = new ValueOrigin { Kind = ValueOriginKind.GeneratedValue, ConnectedSystemId = 1, ConnectedSystemName = "HR", SyncRuleId = 10, SyncRuleName = "HR Import" };
         var provenance = new MetaverseObjectProvenance { Attributes = [Attribute(1, generated), Attribute(2, AdOrigin)] };
 
         var cut = Render<MvoContributionBar>(p => p
             .Add(c => c.Provenance, provenance)
             .Add(c => c.ObjectTypeName, "User"));
 
-        Assert.That(cut.Markup, Does.Contain("var(--mud-palette-primary)"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("var(--mud-palette-primary)"));
+            Assert.That(cut.FindAll(".jim-contribution-legend-label").Select(l => l.TextContent), Does.Contain("HR · Generated Value"));
+        }
     }
 
     [Test]
