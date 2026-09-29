@@ -299,6 +299,8 @@ sudo /opt/jim/setup.sh --renew-certificate   # a certificate the installer creat
 sudo /opt/jim/setup.sh --certificate         # change its names, or move to your organisation's certificate
 ```
 
+On Docker, it also upgrades JIM, to the latest release or, run inside a newer release's bundle, to that release; see [Upgrading with the installer](upgrading.md#with-the-installer).
+
 For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them. Running the installer again on an existing installation asks before replacing its configuration, and keeps the bundled database's password, which the database was created with.
 
 ---

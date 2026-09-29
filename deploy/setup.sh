@@ -19,6 +19,10 @@
 # The installation keeps a copy of this script, for looking after it later:
 #   sudo /opt/jim/setup.sh --renew-certificate
 #
+# Upgrade a Docker installation to the latest release, or, run inside an extracted release bundle, to that release:
+#   curl -fsSL https://junctional.io/get | sudo bash -s -- --upgrade
+#   cd jim-release-X.Y.Z && sudo ./setup.sh --upgrade
+#
 # Options:
 #   --runtime docker|podman  The container runtime to install JIM on. Only needed where both are installed:
 #                         the script asks rather than guess.
@@ -27,8 +31,11 @@
 #                         for the same names, and restart JIM's web service.
 #   --certificate         Create or install JIM's certificate again, for example to change its names or to
 #                         move to your organisation's certificate, and restart JIM's web service.
+#   --upgrade             Docker only: upgrade the installation to the latest release, or to the release bundle
+#                         this script is in, keeping its settings, and restart JIM.
 #   --help                Show this help.
-#   The certificate options act on the installation the script sits in, or JIM_INSTALL_DIR.
+#   The certificate and upgrade options act on the installation the script sits in, or JIM_INSTALL_DIR (by
+#   default /opt/jim when run as root).
 #
 # JIM serves HTTPS. The script either creates a certificate authority (CA) and a server certificate for this
 # server, or installs your organisation's certificate and key, in the tls folder of the installation.
@@ -69,6 +76,8 @@
 #     JIM_SETUP_PODMAN_ACCOUNT  - The account that runs JIM rootless, with --rootless (default: jim)
 #     JIM_SETUP_OPEN_FIREWALL  - "true" or "false": open the HTTPS port in firewalld, when it is running (default:
 #                             prompt). Podman only.
+#     JIM_SETUP_BACKUP_CONFIRMED - "true", with --upgrade: the database and encryption keys are backed up, so the
+#                             upgrade need not ask (default: prompt, and a "no" cancels the upgrade)
 
 set -euo pipefail
 
@@ -77,6 +86,10 @@ GITHUB_REPO="TetronIO/JIM"
 GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 RELEASE_DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/latest/download"
 COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.production.yml)
+# The files an installation runs from as the release ships them, which an upgrade replaces, and the record of their
+# checksums, by which an upgrade tells whether they were edited.
+SHIPPED_COMPOSE_FILES=(docker-compose.yml docker-compose.production.yml)
+COMPOSE_CHECKSUMS="compose-files.sha256"
 DOCS_BASE="https://docs.junctional.io"
 
 # The user JIM runs as inside its containers. Compose mounts the TLS key with its host owner and mode, and
@@ -484,9 +497,10 @@ download_files() {
 
 # --- Install from a release bundle ---
 read_bundle_version() {
+    local verb="${1:-Installing}"
     [ -f "${BUNDLE_DIR}/VERSION" ] || fatal "No VERSION file in ${BUNDLE_DIR}; this does not look like a complete JIM release bundle."
     JIM_RELEASE_VERSION=$(tr -d '[:space:]' < "${BUNDLE_DIR}/VERSION")
-    success "Installing JIM v${JIM_RELEASE_VERSION} from the release bundle in ${BUNDLE_DIR} (no internet connection needed)"
+    success "${verb} JIM v${JIM_RELEASE_VERSION} from the release bundle in ${BUNDLE_DIR} (no internet connection needed)"
 }
 
 copy_bundle_files() {
@@ -528,26 +542,37 @@ load_bundle_images() {
     success "Loaded the images"
 }
 
-# Docker only, bundled database only. The compose file pins PostgreSQL by its registry digest, which Docker's classic
-# image store drops when it loads an image archive, so on that store the pinned reference never resolves offline.
-# The bundle records the ID of the PostgreSQL image it ships; when the pin does not resolve, this checks the image
-# loaded under the pinned name against that ID, and has Compose run the image by its ID. An ID is the digest of the
-# image's content, so, like the pin, it names only the image the bundle shipped, however the name is later retagged.
-use_verified_database_image() {
-    local install_dir="$1"
-    local pinned
-    pinned=$(cd "$install_dir" && docker compose "${COMPOSE_FILES[@]}" --profile with-db config --images jim.database) \
-        || fatal "Failed to read the PostgreSQL image from ${install_dir}/docker-compose.yml"
+# The PostgreSQL image a compose file pins, the default of its JIM_DB_IMAGE.
+pinned_database_image() {
+    local compose_file="$1"
+    # The second sed reads all its input, where head would stop early and fail the pipeline under pipefail.
+    sed -n 's/^[[:space:]]*image:[[:space:]]*\${JIM_DB_IMAGE:-\([^}]*\)}[[:space:]]*$/\1/p' "$compose_file" | sed -n 1p
+}
 
-    # Docker's containerd image store keeps the digest, and a host that once pulled the image has it.
+# Docker only, bundled database only. Sets DATABASE_IMAGE_ID to what JIM_DB_IMAGE must be for the compose file's
+# pinned PostgreSQL image to run: empty when Docker finds the pinned image, or the image's ID when it cannot.
+# Docker's classic image store drops the registry digest when it loads an image archive, so on that store the pin
+# never resolves for the bundle's image. The bundle records the ID of the PostgreSQL image it ships; this checks
+# the image loaded under the pinned name against it, so that Compose runs the image by its ID. An ID is the digest
+# of the image's content, so, like the pin, it names only the image the bundle shipped, however the name is later
+# retagged.
+DATABASE_IMAGE_ID=""
+check_database_image() {
+    local compose_file="$1"
+    local pinned
+    pinned=$(pinned_database_image "$compose_file")
+    [ -n "$pinned" ] || fatal "Could not find the PostgreSQL image in ${compose_file}"
+
+    DATABASE_IMAGE_ID=""
+    # Docker's containerd image store keeps the digest, and a host that pulled the image has it.
     if docker image inspect "$pinned" >/dev/null 2>&1; then
         return
     fi
     local name="${pinned%@*}"
-    # Not pinned by digest: nothing to check here, and verify_bundle_images reports it if it is missing.
-    if [ "$name" = "$pinned" ]; then
-        return
-    fi
+    [ "$name" != "$pinned" ] \
+        || fatal "The PostgreSQL image ${pinned} is not available, and this installation cannot download it."
+    [ -n "$BUNDLE_DIR" ] \
+        || fatal "Docker cannot find the PostgreSQL image ${pinned} after downloading it."
 
     local ids_file="${BUNDLE_DIR}/docker-images/postgres-18.image-ids"
     [ -f "$ids_file" ] \
@@ -558,7 +583,7 @@ use_verified_database_image() {
     grep -qxF "$id" "$ids_file" \
         || fatal "The image named ${name} on this host (${id}) is not the PostgreSQL image this bundle ships. Check the bundle is intact (sha256sum -c checksums.sha256), and extract it again if not."
 
-    set_setting "JIM_DB_IMAGE" "$id"
+    DATABASE_IMAGE_ID="$id"
     success "Checked the PostgreSQL image against the bundle; JIM runs it by its ID, ${id}"
 }
 
@@ -1940,7 +1965,7 @@ show_summary() {
 
 show_help() {
     echo "Usage: setup.sh [--runtime docker|podman] [--rootless]"
-    echo "       setup.sh --renew-certificate | --certificate | --help"
+    echo "       setup.sh --renew-certificate | --certificate | --upgrade | --help"
     echo
     echo "Installs JIM with Docker or Podman, asking for anything not set in the environment. Run from an"
     echo "extracted release bundle, it installs from the bundle and needs no internet connection."
@@ -1952,10 +1977,223 @@ show_help() {
     echo "                       script created, for the same names, and restart JIM's web service."
     echo "  --certificate        Create or install JIM's certificate again, for example to change its"
     echo "                       names or to use your organisation's certificate, and restart JIM's web service."
+    echo "  --upgrade            Docker only: upgrade the installation to the latest release, or to the release"
+    echo "                       bundle this script is in, keeping its settings, and restart JIM."
     echo "  --help               Show this help."
     echo
-    echo "The certificate options act on the installation this script sits in, or on JIM_INSTALL_DIR."
+    echo "The certificate and upgrade options act on the installation this script sits in, or on JIM_INSTALL_DIR."
     echo "Documentation: ${DOCS_BASE}/administration/deployment/"
+}
+
+# --- Upgrade (Docker) ---
+# Records the checksums of the compose files as the release ships them.
+record_compose_checksums() {
+    local install_dir="$1"
+    (cd "$install_dir" && sha256sum "${SHIPPED_COMPOSE_FILES[@]}" > "$COMPOSE_CHECKSUMS") \
+        || fatal "Failed to record the compose files' checksums in ${install_dir}/${COMPOSE_CHECKSUMS}"
+    chmod 644 "${install_dir}/${COMPOSE_CHECKSUMS}"
+}
+
+# Stops the upgrade if a compose file was edited since it was installed: the upgrade replaces them, and an edit
+# would be lost without anyone noticing. Edits belong in a compose file of the administrator's own.
+check_compose_edits() {
+    local install_dir="$1"
+    if [ ! -f "${install_dir}/${COMPOSE_CHECKSUMS}" ]; then
+        warn "This installation has no record of its compose files as installed, so the upgrade cannot tell whether they were edited. It keeps the current ones as ${SHIPPED_COMPOSE_FILES[*]/%/.previous}; move any edits of yours into a compose file of your own."
+        return
+    fi
+    # sha256sum fails when a file differs, which is the case being looked for, not an error.
+    local edited
+    edited=$( (cd "$install_dir" && sha256sum -c "$COMPOSE_CHECKSUMS" 2>/dev/null || true) | sed -n 's/: FAILED.*$//p' | tr '\n' ' ')
+    [ -z "$edited" ] \
+        || fatal "These compose files were edited after they were installed: ${edited}The upgrade replaces them with the new release's, which would lose the edits. Move the edits into a compose file of your own next to them (for example docker-compose.local.yml), start JIM once with it added (-f docker-compose.local.yml) so the upgrade uses it too, put the edited files back as they were, and run the upgrade again. See ${DOCS_BASE}/administration/upgrading/"
+}
+
+# The compose files the deployment was last started with, as -f arguments in UPGRADE_COMPOSE_FILES, so that the
+# upgraded JIM starts the same way, with any compose file of the administrator's own. Compose records them on
+# each container it creates, a stopped one included; without a container, the files the installer starts JIM with.
+UPGRADE_COMPOSE_FILES=()
+read_deployment_compose_files() {
+    local install_dir="$1"
+    local recorded
+    recorded=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' jim.web 2>/dev/null || true)
+    UPGRADE_COMPOSE_FILES=()
+    if [ -z "$recorded" ]; then
+        UPGRADE_COMPOSE_FILES=("${COMPOSE_FILES[@]}")
+        return
+    fi
+    local file
+    local -a files
+    IFS=',' read -r -a files <<< "$recorded"
+    for file in "${files[@]}"; do
+        [ -f "$file" ] || fatal "JIM was started with ${file}, which no longer exists. Start JIM once without it, or put it back, then run the upgrade again."
+        UPGRADE_COMPOSE_FILES+=(-f "$file")
+    done
+}
+
+# Asks the administrator to confirm the backup the upgrade documentation asks for: an upgrade can change the
+# database, and going back needs the database and the encryption keys from before it.
+confirm_backup() {
+    [ "${JIM_SETUP_BACKUP_CONFIRMED:-}" = "true" ] && return
+    echo
+    warn "Before upgrading: disable JIM's Schedules, let running Activities finish, and back up JIM's database and its encryption keys together. Going back to this version needs both. See ${DOCS_BASE}/administration/upgrading/"
+    if ! prompt_yn "Have you backed up the database and the encryption keys?" "n"; then
+        info "Upgrade cancelled; nothing has changed."
+        exit 0
+    fi
+}
+
+# Lists the settings the new release's template has that .env does not mention; their defaults apply.
+report_new_settings() {
+    local template="$1"
+    local env_file="$2"
+    local key
+    local -a new_keys=()
+    for key in $(sed -n 's/^#\{0,1\} \{0,1\}\([A-Z][A-Z0-9_]*\)=.*/\1/p' "$template" | sort -u); do
+        grep -Eq "^#? ?${key}=" "$env_file" || new_keys+=("$key")
+    done
+    if [ ${#new_keys[@]} -gt 0 ]; then
+        info "This release adds settings your .env does not mention, which keep their defaults: ${new_keys[*]}. See .env.example beside it, and ${DOCS_BASE}/administration/configuration/"
+    fi
+}
+
+UPGRADE_STAGE=""
+UPGRADE_INSTALL_DIR=""
+UPGRADE_SWAPPED=""
+UPGRADE_STARTED=""
+# On leaving before JIM is restarted, puts the previous compose files and .env back, so that a failed upgrade leaves
+# the installation as it was.
+finish_upgrade() {
+    if [ "$UPGRADE_SWAPPED" = "true" ] && [ "$UPGRADE_STARTED" != "true" ]; then
+        local name
+        for name in "${SHIPPED_COMPOSE_FILES[@]}" .env; do
+            if [ -f "${UPGRADE_INSTALL_DIR}/${name}.previous" ]; then
+                cp -p "${UPGRADE_INSTALL_DIR}/${name}.previous" "${UPGRADE_INSTALL_DIR}/${name}"
+            fi
+        done
+        warn "Put the previous compose files and .env back; JIM is as it was before the upgrade."
+    fi
+    if [ -n "$UPGRADE_STAGE" ]; then
+        rm -rf "$UPGRADE_STAGE"
+    fi
+}
+
+upgrade_installation() {
+    local install_dir
+    install_dir=$(resolve_install_dir)
+    is_installation "$install_dir" \
+        || fatal "No JIM installation at ${install_dir}. Set JIM_INSTALL_DIR to the folder JIM is installed in."
+    load_installation "$install_dir"
+    [ "$RUNTIME" = "docker" ] \
+        || fatal "--upgrade upgrades JIM on Docker. To upgrade JIM on Podman, see ${DOCS_BASE}/administration/upgrading/"
+    check_prerequisites
+
+    local current target
+    current=$(env_value JIM_VERSION "$CONFIG_FILE")
+    if [ -n "$BUNDLE_DIR" ]; then
+        read_bundle_version "Upgrading to"
+    else
+        detect_latest_version
+    fi
+    target="$JIM_RELEASE_VERSION"
+    if [ -z "$current" ]; then
+        warn "${CONFIG_FILE} does not set JIM_VERSION, so the upgrade cannot check that v${target} is newer than the version JIM runs."
+    else
+        if [ "$current" = "$target" ]; then
+            success "JIM at ${install_dir} already runs v${target}; there is nothing to upgrade."
+            return
+        fi
+        if version_at_least "$current" "$target"; then
+            fatal "JIM at ${install_dir} runs v${current}, which is newer than v${target}. To go back to an earlier version, restore the backup taken before upgrading: ${DOCS_BASE}/administration/upgrading/#rolling-back"
+        fi
+    fi
+    info "Upgrading JIM at ${install_dir}${current:+ from v${current}} to v${target}"
+
+    check_compose_edits "$install_dir"
+    confirm_backup
+    if [ "$(env_value JIM_DB_HOSTNAME "$CONFIG_FILE")" = "jim.database" ]; then
+        USE_BUNDLED_DB="true"
+    else
+        USE_BUNDLED_DB="false"
+    fi
+    read_deployment_compose_files "$install_dir"
+
+    UPGRADE_INSTALL_DIR="$install_dir"
+    UPGRADE_STAGE=$(mktemp -d)
+    trap finish_upgrade EXIT
+
+    # The new release's files, gathered before anything in the installation changes.
+    if [ -n "$BUNDLE_DIR" ]; then
+        cp "${BUNDLE_DIR}/compose/docker-compose.yml" "${BUNDLE_DIR}/compose/docker-compose.production.yml" \
+            "${BUNDLE_DIR}/compose/.env.example" "$UPGRADE_STAGE/"
+    else
+        local name
+        for name in "${SHIPPED_COMPOSE_FILES[@]}"; do
+            curl -fsSL -o "${UPGRADE_STAGE}/${name}" "${RELEASE_DOWNLOAD_BASE}/${name}" || fatal "Failed to download ${name}"
+        done
+        # Published as default.env.example: GitHub renames an asset whose name starts with a dot.
+        curl -fsSL -o "${UPGRADE_STAGE}/.env.example" "${RELEASE_DOWNLOAD_BASE}/default.env.example" \
+            || fatal "Failed to download default.env.example"
+    fi
+
+    # The previous files stay beside the new ones, for going back.
+    local name
+    for name in "${SHIPPED_COMPOSE_FILES[@]}" .env; do
+        cp -p "${install_dir}/${name}" "${install_dir}/${name}.previous"
+    done
+    UPGRADE_SWAPPED="true"
+    cp "${UPGRADE_STAGE}/docker-compose.yml" "${UPGRADE_STAGE}/docker-compose.production.yml" "$install_dir/"
+    cp "${UPGRADE_STAGE}/.env.example" "${install_dir}/.env.example"
+    success "Installed the v${target} compose files; the previous ones are beside them, ending .previous"
+
+    update_env "JIM_VERSION" "$target" "$CONFIG_FILE"
+    # A PostgreSQL image run by its ID is the previous release's: the new compose file's pin replaces it.
+    if grep -q '^JIM_DB_IMAGE=' "$CONFIG_FILE"; then
+        update_env "JIM_DB_IMAGE" "" "$CONFIG_FILE"
+    fi
+
+    local -a profile=()
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        profile=(--profile with-db)
+    fi
+    if [ -n "$BUNDLE_DIR" ]; then
+        load_bundle_images
+    else
+        info "Downloading JIM's v${target} images (this takes a few minutes)..."
+        (cd "$install_dir" && docker compose "${UPGRADE_COMPOSE_FILES[@]}" ${profile[@]+"${profile[@]}"} pull -q) \
+            || fatal "Failed to download JIM's v${target} images"
+        success "Downloaded the images"
+    fi
+    if [ "$USE_BUNDLED_DB" = "true" ]; then
+        check_database_image "${install_dir}/docker-compose.yml"
+        if [ -n "$DATABASE_IMAGE_ID" ]; then
+            update_env "JIM_DB_IMAGE" "$DATABASE_IMAGE_ID" "$CONFIG_FILE"
+        fi
+    fi
+    local image
+    for image in $(cd "$install_dir" && docker compose "${UPGRADE_COMPOSE_FILES[@]}" ${profile[@]+"${profile[@]}"} config --images); do
+        docker image inspect "$image" >/dev/null 2>&1 \
+            || fatal "The image ${image} is not available, so JIM cannot start on v${target}."
+    done
+    report_new_settings "${install_dir}/.env.example" "$CONFIG_FILE"
+
+    # From here the installation is the new release's: a failure leaves it to be started again, not undone.
+    UPGRADE_STARTED="true"
+    record_compose_checksums "$install_dir"
+    # A copy of the new release's installer, for looking after JIM from now on. Run from the installation's own
+    # copy, this script is the previous release's, so fetch the new one rather than keep it.
+    [ -n "$BUNDLE_DIR" ] || SCRIPT_PATH=""
+    save_installer_copy "$install_dir"
+
+    info "Restarting JIM on v${target}; any database upgrade the release brings is applied as it starts..."
+    (cd "$install_dir" && docker compose "${UPGRADE_COMPOSE_FILES[@]}" ${profile[@]+"${profile[@]}"} up -d --pull never) \
+        || fatal "Failed to start JIM on v${target}. See the messages above; once the cause is fixed, start it with: cd ${install_dir} && docker compose ${UPGRADE_COMPOSE_FILES[*]} ${profile[*]} up -d --pull never"
+    wait_for_jim "$install_dir"
+    if [ "$JIM_READY" = "true" ]; then
+        success "JIM is upgraded to v${target}. Re-enable the Schedules you disabled for the upgrade."
+    else
+        exit 1
+    fi
 }
 
 # --- Main ---
@@ -1992,6 +2230,10 @@ main() {
                 action="certificate"
                 shift
                 ;;
+            --upgrade)
+                action="upgrade"
+                shift
+                ;;
             --help|-h)
                 show_help
                 exit 0
@@ -2009,6 +2251,11 @@ main() {
             ;;
         certificate)
             change_certificate
+            exit 0
+            ;;
+        upgrade)
+            show_banner
+            upgrade_installation
             exit 0
             ;;
     esac
@@ -2060,6 +2307,7 @@ main() {
         else
             download_files "$install_dir"
         fi
+        record_compose_checksums "$install_dir"
         CONFIG_FILE="${install_dir}/.env"
     fi
     save_installer_copy "$install_dir"
@@ -2075,7 +2323,10 @@ main() {
             verify_podman_images "$install_dir"
         else
             if [ "$USE_BUNDLED_DB" = "true" ]; then
-                use_verified_database_image "$install_dir"
+                check_database_image "${install_dir}/docker-compose.yml"
+                if [ -n "$DATABASE_IMAGE_ID" ]; then
+                    set_setting "JIM_DB_IMAGE" "$DATABASE_IMAGE_ID"
+                fi
             fi
             verify_bundle_images "$install_dir"
         fi
