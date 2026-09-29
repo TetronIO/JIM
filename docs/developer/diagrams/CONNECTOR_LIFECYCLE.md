@@ -82,14 +82,15 @@ flowchart TD
     ProcessPage --> NextPage[Pass pagination tokens<br/>for next page]
     NextPage --> PageLoop
 
-    PageLoop -->|No| PersistWM{New watermark<br/>captured?}
-    PersistWM -->|Yes| UpdateCS[Update ConnectedSystem<br/>PersistedConnectorData]
-    PersistWM -->|No| Close
-    UpdateCS --> Close[CloseImportConnection<br/>in finally block - always called]
+    PageLoop -->|No| Close[CloseImportConnection<br/>in finally block - always called]
     Close --> CloseData{Close returned<br/>connector data?}
-    CloseData -->|Yes| PersistClose[Persist it, overriding the page watermark<br/>e.g. a domain controller pin<br/>the connection invalidated, #1169]
-    CloseData -->|No| Done([Import complete])
-    PersistClose --> Done
+    CloseData -->|Yes| PersistClose[Persist it now and drop the page watermark<br/>e.g. a domain controller pin<br/>the connection invalidated, #1169]
+    CloseData -->|No| Stage[Stage the run: deletions, references,<br/>CSOs, reconciliation, results]
+    PersistClose --> Stage
+    Stage --> PersistWM{Page watermark<br/>still held?}
+    PersistWM -->|Yes| UpdateCS[Update ConnectedSystem<br/>PersistedConnectorData<br/>only once staging succeeded, #1868]
+    PersistWM -->|No| Done([Import complete])
+    UpdateCS --> Done
 
     %% --- File-based connector ---
     CheckType -->|IConnectorImportUsingFiles| FileImport[connector.ImportAsync<br/>Returns all objects at once<br/>plus IConnectorProgress<br/>No open/close lifecycle]
@@ -189,13 +190,13 @@ flowchart TD
 
 - **Service injection before open**<br /> Certificate and credential providers are injected before `OpenImportConnection`/`OpenExportConnection` is called. This allows connectors to decrypt passwords and load certificates during connection setup.
 
-- **Watermark consistency**<br /> During paginated delta imports, the *original* persisted connector data is passed to every page. The new watermark from the first page is only saved after all pages complete, ensuring the connector sees a consistent view across pages.
+- **Watermark consistency**<br /> During paginated delta imports, the *original* persisted connector data is passed to every page, ensuring the connector sees a consistent view across pages. The new watermark from the first page is only saved once the run has staged everything the pages returned (#1868); a run that fails or is cancelled first keeps the watermark it started with, so the next run re-reads those changes instead of skipping them.
 
 - **Parallel connector isolation**<br /> Each parallel export batch gets its own connector instance created via factory. This avoids shared connection state between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections.
 
 - **Close in finally, on every channel**<br /> The export connection is always closed, even if an exception occurs during export. The import connection is too, so an import that fails part-way still releases its connection and any temporary trust directory prepared for it, and the password channel likewise. This prevents connection leaks in long-running worker processes.
 
-- **Connector state returned at close wins**<br /> `CloseImportConnection` may return persisted connector data, persisted after the page watermark so it overrides it; the LDAP Connector uses this when using the connection invalidated a previously persisted domain controller pin (#1169). Null, the usual case, means nothing to override.
+- **Connector state returned at close wins**<br /> `CloseImportConnection` may return persisted connector data, persisted when the connection closes (even if the import failed) in place of the page watermark, which is then not persisted at all; the LDAP Connector uses this when using the connection invalidated a previously persisted domain controller pin (#1169). Null, the usual case, means nothing to override.
 
 - **Managed scope is the connector's knowledge (#1250)**<br /> Container selection means the scope JIM manages, not merely what it reads. Before an export JIM states the Connected System's scope-deciding containers (selections and exclusions) to a connector implementing `IConnectorManagedScope`, and the connector refuses per object to write outside them, so the rest of the run proceeds. A Connected System with no container selections states nothing and permits everything. The scope is currently stated only on the connector instance the run was resolved with: the per-batch instances a parallel export creates through the factory do not receive it.
 

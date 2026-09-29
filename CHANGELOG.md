@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An import that fails after reading its changes no longer moves the Connected System's change watermark on, so the next Delta Import reads those changes again instead of silently skipping them. (#1868)
 - 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image by its pinned digest: the setup script checks the loaded image against the ID the bundle records and runs it by that ID. (#1854)
 - 🐛 Drift Correction now reverts an attribute edited in a Connected System whose import Attribute Flow reads a different attribute (a `displayName` edit where Display Name comes from `givenName` and `sn`), instead of leaving the two out of step. (#1864)
 - 🐛 A Delta Sync that removes objects no longer skips others: when more than one page of changes included deleted objects, about half were left unprocessed until the next Full Sync (for example, a leaver's account deleted from a target directory stayed in JIM).
