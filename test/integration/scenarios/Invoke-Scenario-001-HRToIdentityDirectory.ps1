@@ -105,6 +105,7 @@ if (-not $DirectoryConfig) {
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 # Helper function to run the standard delta sync sequence with detailed output
 # This sequence is used after CSV changes to sync them through to both target systems:
@@ -271,8 +272,8 @@ function Get-PendingExportAttributeNames {
     return $names
 }
 
-# Replaces attribute values on a directory user via ldapmodify, branching on directory type
-# (mirrors the Scenario 002 external-modification patterns).
+# Replaces attribute values on a directory user via ldapmodify (Invoke-DirectoryLdif runs it in the
+# directory's container, or in the LDAP toolbox over LDAPS for Active Directory).
 function Set-DirectoryUserAttributes {
     param([string]$UserDn, [hashtable]$Values, [string]$Label)
 
@@ -286,17 +287,9 @@ function Set-DirectoryUserAttributes {
     }
     $ldif = $ldifLines -join "`n"
 
-    if ($isRfcDirectory) {
-        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
-    }
-    else {
-        $result = docker exec $DirectoryConfig.ContainerName bash -c "cat > /tmp/scenario-001-ieo-modify.ldif << 'LDIFEOF'
-$ldif
-LDIFEOF
-ldapmodify -x -H '$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)' -D '$($DirectoryConfig.BindDN)' -w '$($DirectoryConfig.BindPassword)' -f /tmp/scenario-001-ieo-modify.ldif" 2>&1
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Label failed to modify directory user ${UserDn}: $result"
+    $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation modify
+    if (-not $result.Success) {
+        throw "$Label failed to modify directory user ${UserDn}: $($result.Output)"
     }
 }
 
@@ -367,26 +360,18 @@ try {
         if ($isRfcDirectory) {
             # For OpenLDAP, delete by DN using ldapdelete
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = & docker exec $($DirectoryConfig.ContainerName) ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
-                $deletedCount++
-            } elseif ($output -match "No such object") {
-                Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
-            } else {
-                Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
-            }
+            $deleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $userDN
         } else {
-            # For Samba AD, use samba-tool
-            $output = & docker exec $($DirectoryConfig.ContainerName) bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-            if ($output -match "Deleted user") {
-                Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
-                $deletedCount++
-            } elseif ($output -match "Unable to find user") {
-                Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
-            } else {
-                Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
-            }
+            # For Samba AD, samba-tool; for Active Directory, a lookup by sAMAccountName and an LDAPS delete
+            $deleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user
+        }
+        if ($deleteResult.Outcome -eq 'Deleted') {
+            Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
+            $deletedCount++
+        } elseif ($deleteResult.Outcome -eq 'NotFound') {
+            Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  ⚠ Could not delete ${user}: $($deleteResult.Output)" -ForegroundColor Yellow
         }
     }
     Write-Host "  ✓ Directory cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
@@ -883,8 +868,8 @@ try {
             }
         }
         else {
-            # For Samba AD, verify the DN changed (CN= component reflects new displayName)
-            $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn displayName 2>&1"
+            # For Samba AD and Active Directory, verify the DN changed (CN= component reflects new displayName)
+            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverSamAccountName)" -Attributes @('dn', 'displayName') -AsText
 
             if ($adUserInfo -match "CN=$([regex]::Escape($newDisplayName))") {
                 Write-Host "  ✓ User renamed to 'CN=$newDisplayName' in $directoryName" -ForegroundColor Green
@@ -966,8 +951,8 @@ try {
             }
         }
         else {
-            # For Samba AD, verify user moved to OU=Finance in the DN
-            $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn department 2>&1"
+            # For Samba AD and Active Directory, verify user moved to OU=Finance in the DN
+            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverSamAccountName)" -Attributes @('dn', 'department') -AsText
 
             if ($adUserInfo -match "OU=Finance") {
                 Write-Host "  ✓ User moved to OU=Finance in $directoryName" -ForegroundColor Green
@@ -1034,9 +1019,9 @@ try {
         # userAccountControl 514 = 512 (normal) + 2 (disabled)
         Write-Host "Validating account disabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$disableSamAccountName)' userAccountControl 2>&1"
+        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$disableSamAccountName)" -Attributes @('userAccountControl') -AsText
 
-        # Check if userAccountControl is 514 (disabled) - ldbsearch returns decimal value
+        # Check if userAccountControl is 514 (disabled) - the search returns the decimal value
         if ($adUserInfo -match "userAccountControl: 514") {
             Write-Host "  ✓ Account disabled (userAccountControl=514) in AD" -ForegroundColor Green
             $testResults.Steps += @{ Name = "Disable"; Success = $true }
@@ -1107,7 +1092,7 @@ try {
         # Validate account is enabled in AD
         Write-Host "Validating account enabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$enableSamAccountName)' userAccountControl 2>&1"
+        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$enableSamAccountName)" -Attributes @('userAccountControl') -AsText
 
         # Check if userAccountControl is 512 (enabled)
         if ($adUserInfo -match "userAccountControl: 512") {

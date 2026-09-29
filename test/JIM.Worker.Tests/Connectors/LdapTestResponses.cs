@@ -131,6 +131,22 @@ internal static class LdapTestResponses
     }
 
     /// <summary>
+    /// Creates an entry whose attributes may each carry several values, for an entry that holds both single- and
+    /// multi-valued attributes (an objectClass list beside a ranged member attribute, say).
+    /// </summary>
+    internal static SearchResultEntry EntryWithValues(string distinguishedName, params (string Name, string[] Values)[] attributes)
+    {
+        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
+        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", NonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
+
+        foreach (var (name, values) in attributes)
+            add.Invoke(attributeCollection, [name, new DirectoryAttribute(name, values.Cast<object>().ToArray())]);
+
+        return (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
+            args: [distinguishedName, attributeCollection], culture: null)!;
+    }
+
+    /// <summary>
     /// Creates a successful SearchResponse holding one entry with a single multi-valued attribute, as the
     /// rootDSE's namingContexts attribute is (RFC 4512).
     /// </summary>

@@ -264,12 +264,15 @@ internal class LdapConnectorPartitions
             SearchScope.Subtree,
             "name",
             stableIdAttribute);
-        var response = (SearchResponse)_executor.SendRequest(request);
+        // Page by page where the directory pages: a domain with more organisational units and containers than
+        // Active Directory's MaxPageSize is refused as an unpaged search (#1853).
+        var searchResults = LdapPagedSearch.ReadAll(_executor, request, LdapConnectorRootDse.DirectoryTypeSupportsPaging(_directoryType),
+            LdapConnectorConstants.METADATA_SEARCH_PAGE_SIZE, _logger, $"containers of {partition.Name}");
         ldapStopwatch.Stop();
 
         var processingStopwatch = System.Diagnostics.Stopwatch.StartNew();
         // Convert SearchResultEntry objects to simple DTOs for the hierarchy builder
-        var entries = response.Entries.Cast<SearchResultEntry>()
+        var entries = searchResults
             .Select(e => new ContainerEntry(
                 e.DistinguishedName,
                 LdapConnectorUtilities.GetEntryAttributeStringValue(e, "name"),

@@ -79,7 +79,7 @@ jobs:
       shell: pwsh
       run: |
         $config = New-PesterConfiguration
-        $config.Run.Path = @("./src/JIM.PowerShell/Tests", "./scripts/Tests", "./test/integration/utils", "./test/ci", "./.github/scripts/Tests")
+        $config.Run.Path = @("./src/JIM.PowerShell/Tests", "./scripts/Tests", "./test/integration/utils", "./test/integration/ad-lab", "./test/ci", "./.github/scripts/Tests")
         $config.Run.Exit = $true
         $config.Output.Verbosity = "Detailed"
         $config.TestResult.Enabled = $true
@@ -602,8 +602,9 @@ jobs:
     # so the compose files and the pod files cannot drift apart unnoticed (Compare-RuntimeParity.ps1). This
     # is the only check that boots the production deployment of either runtime.
     #
-    # Informational for now: it becomes a required check once it has passed ten consecutive runs (D6 of
-    # engineering/plans/doing/PODMAN_SUPPORT.md), which is a change to the main ruleset.
+    # A required check on main since 2026-09-29, after 40 green runs and none failed (D6 of
+    # engineering/plans/doing/PODMAN_SUPPORT.md). It pulls Keycloak from quay.io and PostgreSQL from Docker
+    # Hub on every run, so an outage at either blocks merges while it lasts.
     #
     # Always on a GitHub-hosted runner, pushes to main included: a fresh VM with systemd, Docker and Podman,
     # where the check can create an account, change a sysctl and take port 443. The self-hosted runners are

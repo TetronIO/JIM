@@ -40,6 +40,14 @@ Before starting, verify:
 
 5. **Review pinned Docker dependencies**: Check for open Dependabot base-image digest PRs and open `apt-pin-check` PRs, and flag them so the user can merge them before tagging. No manual verification of apt versions is needed: the production stages run `apt-get upgrade` before the pinned installs (a stale pin fails the build), and the `scan-images` CI job builds and scans every production image on each push to `main`.
 
+6. **Check the Active Directory lab gate.** `release.yml` refuses to run for a commit whose `jim-ad-lab` commit status is not `success`, and there is no override, so find out now rather than at the tag push:
+   ```
+   pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
+   ```
+   The status is posted on the exact SHA that `.github/workflows/ad-lab.yml` tested (the nightly run of `main`, or a dispatched run), so this is an early warning about the tip of `main` and nothing more: **the release commit, the merge commit of the release PR, does not exist yet and has no status of its own.** It needs its own dispatched `ad-lab.yml` run before it is tagged (Step 8), which takes hours at the Medium template; that is the expected cost of the gate, not a fault in it.
+   - **Exit 0:** carry on. Step 8 still applies to the release commit.
+   - **Exit 1 (`failure`, `error`, `pending` or not reported):** stop and tell the user what the script printed (the state, the run link, the remedy). A red night is a real result against a real Windows Server domain controller; the way forward is a fix and a dispatched re-run, never a way round the gate. If the tip of `main` simply has no status yet, dispatch one now (`gh workflow run ad-lab.yml --ref main`) so the answer is ready sooner.
+
 ## Documentation Review and Update
 
 Before validating the changelog, ensure all documentation reflects the current state of the codebase.
@@ -319,6 +327,17 @@ git pull origin main
 ## Step 8: Tag the Merge Commit and Push the Tag
 
 The release workflow runs on tag push. It will build and publish artefacts from whatever commit the tag points at, so the tag must point at a commit that is on `main`.
+
+**Gate: the Active Directory lab must have passed on this exact commit, before you tag it.** The release commit is new, so no nightly has tested it and it has no `jim-ad-lab` status. Dispatch the lab on it and wait (the full suite at Medium takes up to four hours; this is the expected cost of the gate), then run the gate script on the commit that will be tagged:
+
+```bash
+git rev-parse HEAD                       # the merge commit; this is the SHA the tag will point at
+gh workflow run ad-lab.yml --ref main    # runs on the head of main, which must still be that commit
+gh run list --workflow ad-lab.yml --limit 1   # then: gh run watch <run-id>
+pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"
+```
+
+The dispatch tests whatever `main` points at when it starts, so nothing else may merge between the release PR and the tag; if `main` has moved, stop and ask the user (tagging a later commit would ship changes the changelog does not describe). Do NOT tag until the script exits 0. If it exits 1, tell the user the state and the run link it prints; the remedy is a fix and another dispatched run, and there is no override. Pushing the tag anyway achieves nothing: the `jim-ad-lab-gate` job at the head of `release.yml` runs the same script and stops the release before any image is built.
 
 JIM enforces signed tags (`tag.forceSignAnnotated=true`), so use `git tag -a -m`, not a lightweight tag:
 

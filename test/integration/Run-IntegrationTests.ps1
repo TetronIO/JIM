@@ -9,7 +9,8 @@
     Single entry point for running integration tests. This script:
     1. Resets the JIM environment (stops containers, removes volumes)
     2. Rebuilds and starts the JIM stack and the selected directory (Samba AD, OpenLDAP or
-       389 Directory Server)
+       389 Directory Server; for -DirectoryType ActiveDirectory the directory is the Hyper-V
+       lab's domain controllers, reverted to a checkpoint rather than started)
     3. Waits for all services to be ready
     4. Creates an infrastructure API key
     5. Configures JIM with connected systems and sync rules (via scenario setup)
@@ -91,12 +92,31 @@
 
 .PARAMETER DirectoryType
     The directory the scenario runs against. Default: "SambaAD".
-    Options: SambaAD, OpenLDAP, DirectoryServer389, All.
+    Options: SambaAD, OpenLDAP, DirectoryServer389, ActiveDirectory, All.
     OpenLDAP and DirectoryServer389 share the same lab shape (two suffixes, dc=yellowstone,dc=local
-    and dc=glitterband,dc=local, on one container, populated live on every run). Scenarios 014, 019
-    and 22 are OpenLDAP only and are coerced to OpenLDAP when asked for on another directory;
-    Scenario 017 is Samba AD only. "All" runs the suite against SambaAD, then OpenLDAP, then
+    and dc=glitterband,dc=local, on one container, populated live on every run). Which of the four
+    directory types a scenario supports is one table (utils/Get-ScenarioDirectoryTypes.ps1): a type the
+    scenario does not support is refused when it was asked for, and a scenario with exactly one
+    supported type is moved to it when no directory type was asked for. Scenarios 014, 019 and 022 are
+    OpenLDAP only; Scenario 017 runs on the Active Directory family (Samba AD and ActiveDirectory)
+    only. Scenarios 024 and 025 run on the ActiveDirectory lab only: they are moved
+    to it when no directory type was asked for, refused on any other type that was (-DirectoryType All
+    included, since it never includes ActiveDirectory), and skipped by a -Scenario All sweep of any
+    other directory. "All" runs the suite against SambaAD, then OpenLDAP, then
     DirectoryServer389, with a full environment teardown between them.
+    ActiveDirectory is the real thing: Windows Server domain controllers running as Hyper-V virtual
+    machines (test/integration/ad-lab/README.md). No Samba container runs; every domain controller the
+    scenario uses is reverted to a Hyper-V checkpoint over the lab control plane (SSH to the host), the
+    LDAP client tools run in the jim-ldap-toolbox container, and the domain controllers' LDAPS
+    certificates are read off the wire and trusted in JIM. It needs the lab host, so it is NOT part of
+    "All" or -PreRelease (which never include it); ask for it by name. Configure it with the
+    JIM_AD_LAB_* environment variables: JIM_AD_LAB_CONTROL_HOST (required), _CONTROL_USER,
+    _CONTROL_KEY, _CONTROL_PORT, JIM_AD_LAB_SCRIPT_ROOT, JIM_AD_LAB_<PRIMARY|SOURCE|TARGET>_ADDRESS
+    (required for the instances the scenario uses), _HOST and _VM (defaults follow the topology), and the
+    two passwords, JIM_AD_LAB_ADMIN_PASSWORD and JIM_AD_LAB_JIM_PASSWORD. A missing one stops the run
+    before anything starts and names the variable. Scenarios 002 and 008 use all three domain
+    controllers, every other scenario only the Primary. The long-tail templates are refused, as on
+    Samba AD.
 
 .PARAMETER Parallel
     Runs the directory passes of a -DirectoryType All run (including -PreRelease) side by side instead
@@ -200,6 +220,13 @@
     389 Directory Server falls back to -Template (add -TemplateDirectoryServer389 to change it).
 
 .EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario Scenario-008-CrossDomainEntitlementSync -DirectoryType ActiveDirectory -Template Small
+
+    Runs Scenario 008 against the Active Directory lab (three Hyper-V domain controllers). The runner
+    reverts each to its checkpoint (the populated one when it is current, else baseline and then
+    populates and checkpoints it), so the JIM_AD_LAB_* environment variables must be set.
+
+.EXAMPLE
     ./Run-IntegrationTests.ps1 -PreRelease
 
     Runs the full pre-release regression: every implemented scenario against every
@@ -250,7 +277,7 @@ param(
     [switch]$IgnoreSnapshots,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("SambaAD", "OpenLDAP", "DirectoryServer389", "All")]
+    [ValidateSet("SambaAD", "OpenLDAP", "DirectoryServer389", "ActiveDirectory", "All")]
     [string]$DirectoryType = "SambaAD",
 
     [Parameter(Mandatory=$false)]
@@ -362,6 +389,11 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
 . "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 . "$scriptRoot/utils/Resolve-IntegrationScenarioName.ps1"
+# The Active Directory lab (-DirectoryType ActiveDirectory): control-plane calls over SSH, the LDAP
+# toolbox helpers, and the runner's checkpoint and compose decisions.
+. "$scriptRoot/utils/LDAP-Helpers.ps1"
+. "$scriptRoot/utils/Invoke-LabControl.ps1"
+. "$scriptRoot/utils/ActiveDirectoryLab-Helpers.ps1"
 . "$scriptRoot/utils/Get-ScenarioDirectoryTypes.ps1"
 . "$scriptRoot/utils/Invoke-IntegrationLanes.ps1"
 
@@ -413,7 +445,7 @@ $script:LongTailTemplates = @("Scale100k5kGroups", "Scale200k10kGroups", "Scale5
 function Test-LongTailTemplateCompatibility {
     param([string]$Template, [string]$DirectoryType, [string]$TemplateSambaAD, [string]$TemplateOpenLDAP, [string]$TemplateDirectoryServer389)
     $offendingValues = @()
-    if ($Template -in $script:LongTailTemplates -and $DirectoryType -in @("SambaAD", "DirectoryServer389", "All")) {
+    if ($Template -in $script:LongTailTemplates -and $DirectoryType -in @("SambaAD", "DirectoryServer389", "ActiveDirectory", "All")) {
         $offendingValues += "-Template $Template -DirectoryType $DirectoryType"
     }
     if ($TemplateSambaAD -in $script:LongTailTemplates) {
@@ -647,6 +679,8 @@ function Show-ScenarioMenu {
                 19 { "Auxiliary classes (merge, import, export class convergence, discovery)" }
                 20 { "Password Synchronisation (held while a system is off, delivered when it is switched on, newest password only)" }
                 22 { "OpenLDAP password policy (discovered as published; generated Initial Passwords satisfy an enforcing ppolicy overlay)" }
+                24 { "Active Directory password policy (domain policy and Fine-Grained Password Policy discovered; generated Initial Passwords satisfy it; lab only)" }
+                25 { "Active Directory delta import integrity (Recycle Bin on and off; a checkpoint revert fails a Delta Import fast; lab only)" }
                 default { "Integration test scenario" }
             }
         }
@@ -951,6 +985,12 @@ function Show-TemplateMenu {
 
 # Interactive directory type selection function
 function Show-DirectoryTypeMenu {
+    param(
+        # The scenario the menu is offering directory types for; only the types the table allows for it are listed.
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
     $directoryTypes = @(
         @{
             Name = "SambaAD"
@@ -965,14 +1005,24 @@ function Show-DirectoryTypeMenu {
         @{
             Name = "DirectoryServer389"
             Description = "389 Directory Server with multi-suffix partitions"
-            Details = "LDAP on port 3389, RFC 4512 schema; every OpenLDAP scenario except 14, 19 and 22 (OpenLDAP only) and 17 (Samba AD only)"
+            Details = "LDAP on port 3389, RFC 4512 schema"
+        }
+        @{
+            Name = "ActiveDirectory"
+            Description = "Real Windows Server domain controllers (needs the lab host)"
+            Details = "Hyper-V lab reverted to a checkpoint over SSH, LDAPS on port 636, configured by the JIM_AD_LAB_* environment variables; see test/integration/ad-lab/README.md"
         }
         @{
             Name = "All"
-            Description = "Every directory type (full regression)"
-            Details = "Runs all scenarios against SambaAD first, then OpenLDAP, then DirectoryServer389"
+            Description = "Every container directory type (full regression)"
+            Details = "Runs all scenarios against SambaAD first, then OpenLDAP, then DirectoryServer389; never includes ActiveDirectory, which needs the lab host"
         }
     )
+
+    # Offer only what the scenario can run on (Get-ScenarioDirectoryTypes.ps1): a type the table refuses is not
+    # worth listing, and "All" is left out for a scenario with no container leg, because All never includes the lab.
+    $offered = @(Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber $ScenarioNumber)
+    $directoryTypes = @($directoryTypes | Where-Object { $_.Name -in $offered })
 
     $selectedIndex = 0
     $exitMenu = $false
@@ -1354,7 +1404,9 @@ $templateIrrelevantScenarioNumbers = @(
     19,  # Auxiliary Classes - fixed six-user dataset per suffix, no template scaling
     20,  # Password Synchronisation - asserts against three accounts; a larger template only lengthens the export
     21,  # Run Profile Safeguards - limits are asserted relative to the population; a larger template only lengthens the runs
-    22   # OpenLDAP Password Policy - asserts against one Micro export
+    22,  # OpenLDAP Password Policy - asserts against one Micro export
+    24,  # Active Directory Password Policy - asserts against one Micro export (Active Directory lab only)
+    25   # Active Directory Delta Import Integrity - creates and deletes its own users (Active Directory lab only)
 )
 
 function Test-TemplateRelevant {
@@ -1423,15 +1475,15 @@ if (-not $Scenario) {
     }
 
     # Show directory type menu only if not explicitly provided. A scenario that supports exactly
-    # one directory type (see Get-ScenarioDirectoryTypes.ps1) doesn't offer a choice; go straight
-    # to it.
+    # one directory type (see Get-ScenarioDirectoryTypes.ps1: 14, 19 and 22 on OpenLDAP, 24 and 25 on
+    # the Active Directory lab) doesn't offer a choice; go straight to it.
     if (-not $DirectoryTypeWasExplicitlySet) {
         $menuSupportedTypes = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $scenarioNumber)
         if ($menuSupportedTypes.Count -eq 1) {
             $DirectoryType = $menuSupportedTypes[0]
         }
         else {
-            $DirectoryType = Show-DirectoryTypeMenu
+            $DirectoryType = Show-DirectoryTypeMenu -ScenarioNumber $scenarioNumber
         }
         # Re-resolve directory config with the selected type (skip for "All" — handled below)
         if ($DirectoryType -ne "All") {
@@ -1462,46 +1514,59 @@ if (-not $Scenario) {
 }
 
 # ---------------------------------------------------------------------------
-# OpenLDAP-only directory coercion (Scenarios 014, 019 and 022)
+# Directory type gating, from the scenario table (Get-ScenarioDirectoryTypes.ps1)
 # ---------------------------------------------------------------------------
-# Scenarios 014 and 019 depend on two LDAP suffixes hosted on a single OpenLDAP container
-# (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no equivalent
-# multi-suffix mechanism. Scenario 022 depends on the ppolicy overlay that same script
-# loads, which is OpenLDAP's password policy mechanism. See Get-ScenarioDirectoryTypes.ps1 for the
-# full reasoning. This runs after scenario/directory resolution (whether the values came from
-# parameters or the interactive menu) and before the build, so the constraint is enforced whichever
-# way they were chosen. If -DirectoryType was explicitly passed, respect the explicit intent and
-# reject; otherwise coerce to OpenLDAP. -DirectoryType All is handled by its own block below.
-$openLdapOnlySupport = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $scenarioNumber)
-if ($openLdapOnlySupport.Count -eq 1 -and $openLdapOnlySupport[0] -eq "OpenLDAP" -and $DirectoryType -in @("SambaAD", "DirectoryServer389")) {
-    if ($DirectoryTypeWasExplicitlySet) {
-        throw "Scenarios 014 (Attribute Priority), 19 (Auxiliary Classes) and 22 (OpenLDAP Password Policy) depend on the single OpenLDAP container's two suffixes and ppolicy overlay and are OpenLDAP only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType OpenLDAP."
+# One rule for every scenario, read from Get-ScenarioSupportedDirectoryTypes: 14, 19 and 22 are OpenLDAP
+# only, 17 is the Active Directory family only (Samba AD and the lab), 23 excludes 389 Directory Server,
+# and 24 and 25 run on the Active Directory lab only. See that file for the per-scenario reasoning. This
+# runs after scenario/directory resolution (whether the values came from parameters or the interactive
+# menu) and before the build, so the constraint is enforced whichever way they were chosen.
+#   - A type the scenario does not support is refused, naming the scenario, what it supports and the
+#     rejected type, when it was asked for (-DirectoryType on the command line), and also when it came
+#     from the menu for a scenario with several supported types (there is no single obvious type to
+#     move to).
+#   - A type nobody asked for (the SambaAD default, or a choice made before the scenario was known) is
+#     moved to the scenario's only supported type, with a notice, when it has exactly one.
+# -DirectoryType All is not a directory type: its own handler below intersects the container
+# directory types with the table.
+$scenarioSupportedTypes = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $scenarioNumber)
+if ($DirectoryType -ne "All" -and $DirectoryType -notin $scenarioSupportedTypes) {
+    if ($scenarioSupportedTypes.Count -eq 1 -and -not $DirectoryTypeWasExplicitlySet) {
+        Write-Host "${YELLOW}This scenario supports $($scenarioSupportedTypes[0]) only; using -DirectoryType $($scenarioSupportedTypes[0]).${NC}"
+        $DirectoryType = $scenarioSupportedTypes[0]
+        $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
     }
-    Write-Host "${YELLOW}This scenario is OpenLDAP only; using -DirectoryType OpenLDAP.${NC}"
-    $DirectoryType = "OpenLDAP"
-    $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType "OpenLDAP"
+    else {
+        throw "$Scenario supports $($scenarioSupportedTypes -join ', ') only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType $($scenarioSupportedTypes -join ' or ')."
+    }
 }
 
 # ---------------------------------------------------------------------------
-# Default-to-OpenLDAP directory coercion (Scenario 023), and reject 389 Directory Server
+# Default-to-OpenLDAP directory coercion (Scenario 023)
 # ---------------------------------------------------------------------------
-# Scenario 023 (Unique Value Generation) supports OpenLDAP and Samba AD; unlike the OpenLDAP-only
-# coercion above, an explicit -DirectoryType SambaAD is honoured, not refused - its Collision test
-# step needs a real directory-wide unique-value constraint, which only Samba AD's substrate
-# exercises in this harness. 389 Directory Server is refused outright, matching
-# Setup-Scenario-023.ps1's own refusal, but fails here in seconds rather than after the stack is
+# Scenario 023 (Unique Value Generation) supports OpenLDAP, Samba AD and the Active Directory lab; unlike
+# the single-type scenarios above, an explicit -DirectoryType SambaAD is honoured, not refused - its
+# Collision test step needs a real directory-wide unique-value constraint, which only Samba AD's substrate
+# exercises in this harness. 389 Directory Server is refused by the gating above, matching
+# Setup-Scenario-023.ps1's own refusal, but fails there in seconds rather than after the stack is
 # built. When no -DirectoryType was given at all, OpenLDAP is the faster default: the scenario's
 # whole point is an empty target directory, and OpenLDAP stands up faster than Samba AD.
 if ($scenarioNumber -eq 23) {
-    if ($DirectoryType -eq "DirectoryServer389") {
-        throw "Scenario 023 (Unique Value Generation) supports OpenLDAP and Samba AD only. Its Collision test step needs a directory-wide unique-value constraint a CSV target cannot produce, and OpenLDAP already covers the RFC-directory shape, so 389 Directory Server adds nothing this scenario needs. Use -DirectoryType OpenLDAP or -DirectoryType SambaAD."
-    }
     if (-not $DirectoryTypeWasExplicitlySet) {
         Write-Host "${YELLOW}This scenario defaults to OpenLDAP; using -DirectoryType OpenLDAP. Pass -DirectoryType SambaAD explicitly to also exercise its Samba-AD-only Collision test step.${NC}"
         $DirectoryType = "OpenLDAP"
         $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType "OpenLDAP"
     }
 }
+
+# ---------------------------------------------------------------------------
+# Compose files for every JIM stack call (build, up, down)
+# ---------------------------------------------------------------------------
+# One list, used at every call site, so that compose always sees the same project. An Active Directory run
+# adds the lab overlay, which gives jim.web, jim.worker and jim.scheduler extra_hosts entries for the
+# domain controllers' FQDNs (their names are in no DNS the containers can see, and their LDAPS certificates
+# name the FQDN). Decided here, after the directory type has been chosen by parameter, menu or coercion.
+$script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType -BaseArguments (Get-JimComposeArgs)
 
 # ---------------------------------------------------------------------------
 # Handle "-DirectoryType All": run the suite for each directory type
@@ -1532,9 +1597,10 @@ if ($Parallel) {
 
 if ($DirectoryType -eq "All") {
     $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
-    $directoryTypesToRun = @("SambaAD", "OpenLDAP", "DirectoryServer389")
+    $directoryTypesToRun = @(Get-ContainerDirectoryType)
 
-    # Restrict $directoryTypesToRun to what this single scenario supports (see
+    # Intersect $directoryTypesToRun (the container directory types: All never includes
+    # ActiveDirectory, which needs the lab host) with what this single scenario supports (see
     # Get-ScenarioDirectoryTypes.ps1 for the per-scenario reasoning), keeping the canonical
     # SambaAD, OpenLDAP, DirectoryServer389 order. $scenarioNumber is $null for "-Scenario All", in
     # which case every directory type stays here; the -Scenario All sweep in each per-directory-type
@@ -1542,6 +1608,12 @@ if ($DirectoryType -eq "All") {
     if ($scenarioNumber) {
         $supportedTypes = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $scenarioNumber)
         $restrictedTypes = @($directoryTypesToRun | Where-Object { $_ -in $supportedTypes })
+
+        # Nothing left (Scenarios 024 and 025) means the scenario runs on the Active Directory lab only.
+        # Refuse here rather than fan out into legs that cannot run it.
+        if ($restrictedTypes.Count -eq 0) {
+            throw "$Scenario runs on the Active Directory lab only, which -DirectoryType All never includes (it runs the container directory types only: $($directoryTypesToRun -join ', ')). Rejected -DirectoryType All. Use -DirectoryType $($supportedTypes -join ' or ')."
+        }
 
         # Directory-agnostic scenarios (011, 015, 016) don't use a directory at all; running it
         # once for every directory type would produce three identical results.
@@ -1727,8 +1799,84 @@ if ($DirectoryType -eq "All") {
 # Handle "-Scenario All": run every implemented scenario sequentially
 # ---------------------------------------------------------------------------
 
+# ============================================================================
+# Active Directory lab (-DirectoryType ActiveDirectory)
+# ============================================================================
+# The lab is Hyper-V virtual machines, so the reset is a checkpoint revert over the control plane rather than
+# a container recreation. The decisions (which machines, which checkpoint, whether to populate) are the
+# tested functions in utils/ActiveDirectoryLab-Helpers.ps1; these are the runner's thin, impure wrappers.
+
+function Get-ActiveDirectoryLabRunContext {
+    # The configs of the lab machines a scenario uses, and their state from the control plane. Throws, naming
+    # the variable, when a JIM_AD_LAB_* variable the scenario needs is missing, and, naming the machine, when
+    # its baseline checkpoint is.
+    param([AllowNull()][Nullable[int]]$ScenarioNumber)
+
+    $configs = @{}
+    foreach ($instance in (Get-ActiveDirectoryLabInstance -ScenarioNumber $ScenarioNumber)) {
+        $configs[$instance] = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $instance
+    }
+    return @{ Configs = $configs; States = (Get-ActiveDirectoryLabState -DirectoryConfig $configs) }
+}
+
+function Invoke-ActiveDirectoryLabReset {
+    # Reverts every lab machine in the context to the checkpoint chosen for it and returns the plan (which
+    # says which of them still need populating). The LDAPS bind and clock check are Invoke-ActiveDirectoryLabReady.
+    param(
+        [hashtable]$Context,
+        [AllowNull()][Nullable[int]]$ScenarioNumber,
+        [string]$Template
+    )
+
+    $populateHash = Get-ActiveDirectoryLabPopulateHash -ScriptRoot $scriptRoot
+    $plan = Get-ActiveDirectoryLabRestorePlan -State $Context.States -ScenarioNumber $ScenarioNumber -Template $Template -Hash $populateHash
+    Invoke-ActiveDirectoryLabRestore -Plan $plan
+    return $plan
+}
+
+function Invoke-ActiveDirectoryLabToolbox {
+    # Starts or stops the LDAP toolbox container (compose profile ad-lab). Stop leaves the stopped container
+    # in place on purpose: the end-of-run image prune keeps the image of any existing container, so the next
+    # run does not rebuild it.
+    param([ValidateSet("Up", "Stop")][string]$Action)
+
+    if ($Action -eq "Up") {
+        # The certificates folder is bind-mounted into the toolbox; create it first, or Docker creates it as root.
+        New-Item -ItemType Directory -Path (Join-Path $scriptRoot "ad-lab-certs") -Force | Out-Null
+        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab up -d ldap-toolbox 2>&1
+    }
+    else {
+        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab stop ldap-toolbox 2>&1
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not $($Action.ToLower()) the LDAP toolbox (jim-ldap-toolbox): $($toolboxResult | Out-String)"
+    }
+}
+
+function Invoke-ActiveDirectoryLabReady {
+    # Waits for every lab machine in the configs to accept an LDAPS bind as svc-jim with its clock within 5
+    # seconds of this machine's. The first poll of each also fetches its LDAPS certificate for the toolbox,
+    # before anything needs to verify it. A revert plus boot can outlast the runner's 180 second default, so
+    # the wait is never shorter than 300.
+    param(
+        [hashtable]$Configs,
+        [int]$TimeoutSeconds
+    )
+
+    foreach ($instance in @("Primary", "Source", "Target")) {
+        if (-not $Configs.ContainsKey($instance)) { continue }
+        & "$scriptRoot/Wait-ActiveDirectoryReady.ps1" -DirectoryConfig $Configs[$instance] -TimeoutSeconds ([Math]::Max($TimeoutSeconds, 300))
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Active Directory ($($Configs[$instance].VmName)) did not become ready in time"
+            return $false
+        }
+    }
+    return $true
+}
+
 # Lightweight reset: stop JIM containers, remove JIM DB volume, clean Samba AD
 # OUs, generate a new API key, and restart JIM — without rebuilding images.
+# For an Active Directory run the directory step is skipped: each child scenario reverts the lab itself.
 function Reset-JIMForNextScenario {
     param(
         [string]$RepoRoot,
@@ -1764,6 +1912,12 @@ function Reset-JIMForNextScenario {
     Write-Host "${GRAY}  Removing JIM database volume...${NC}"
     docker volume rm $script:Lane.DbVolume 2>&1 | Out-Null
 
+    # 3. Active Directory lab: nothing to do here. No container runs, and every scenario in a sweep is a child
+    # process whose own Step 1 reverts the domain controllers it uses, Step 3 starts the toolbox and Step 4 waits
+    # for readiness, so a revert here would only be a second, wasted one.
+    # The Samba AD data cleaning below is unchanged and deliberately not re-indented (diff hygiene); it is
+    # skipped for an Active Directory run.
+    if ($DirectoryType -ne "ActiveDirectory") {
     # 3. Clean Samba AD test data (delete OUs with --force-subtree-delete; much faster than container restart)
     # A -Parallel lane for another directory type must never reach into the Samba AD lane's containers.
     if (-not $script:Lane.Active -or $script:Lane.Name -eq "SambaAD") {
@@ -1793,7 +1947,8 @@ function Reset-JIMForNextScenario {
             docker exec samba-ad-target samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
     }
-    } # end: Samba AD clean-up
+    } # end: Samba AD clean-up (a lane other than Samba AD has no Samba containers to clean)
+    } # end: not an Active Directory run (Samba AD data cleaning)
 
     # 3b. No OpenLDAP cleanup is needed here, and none belongs here. The same holds for 389 Directory
     # Server: Step 1 force-removes dirsrv-primary and its jim-integration-dirsrv-primary-data volume,
@@ -1907,15 +2062,18 @@ if ($Scenario -eq "All") {
         $implementedScenarios += ($file.BaseName -replace '^Invoke-', '')
     }
 
-    # Skip scenarios that don't support this directory type (14, 19 and 22 are OpenLDAP only; 17 is
-    # Samba AD only; 23 supports OpenLDAP and Samba AD only) rather than recording a guaranteed
-    # failure. Scenario 020 runs on every directory: OpenLDAP's RFC 3062 Password Modify path works
-    # over plain LDAP against the test container (no TLS required there), verified end to end
-    # (#1697); its parked-change retry test also runs on OpenLDAP now that the lab's ppolicy overlay
-    # genuinely refuses an under-length password there. 389 Directory Server is the same family as
-    # OpenLDAP for this purpose. See Get-ScenarioDirectoryTypes.ps1 for the full per-scenario
-    # reasoning, including why 23 is skipped here too (it used to slip through and fail on this
-    # 389 Directory Server pass).
+    # Skip scenarios whose supported directory types (Get-ScenarioSupportedDirectoryTypes) do not include
+    # this sweep's directory type (14, 19 and 22 are OpenLDAP only; 17 is Samba AD and the Active
+    # Directory lab only; 23 supports OpenLDAP, Samba AD and the lab only; 24 and 25 run on the lab only)
+    # rather than recording a guaranteed failure. Scenario 020 runs on every directory: OpenLDAP's
+    # RFC 3062 Password Modify path works over plain LDAP against the test container (no TLS required
+    # there), verified end to end (#1697); its parked-change retry test also runs on OpenLDAP now that
+    # the lab's ppolicy overlay genuinely refuses an under-length password there. 389 Directory Server
+    # is the same family as OpenLDAP for this purpose. See Get-ScenarioDirectoryTypes.ps1 for the full
+    # per-scenario reasoning, including why 23 is skipped here too (it used to slip through and fail
+    # on the 389 Directory Server pass). One rule for every directory type: the Active Directory lab
+    # is a column of that table, so an ActiveDirectory sweep is judged by its own column, and
+    # -DirectoryType All (which runs the three container types) never runs 24 and 25.
     $unsupportedOnThisDirectory = @($implementedScenarios | Where-Object {
         $DirectoryType -notin (Get-ScenarioSupportedDirectoryTypes -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_))
     })
@@ -1956,6 +2114,28 @@ if ($Scenario -eq "All") {
         Write-Host "  ${CYAN}$s${NC}  ${GRAY}[$templateNote]${NC}"
     }
     Write-Host ""
+
+    # Active Directory lab: record the domain controllers' operating system builds with the results (the lab is
+    # patched by rebuild, so which build a result came from is part of what it means). Best effort here: a
+    # lab that cannot be asked fails the first scenario's Step 0 with the real cause, and that is the failure
+    # that matters.
+    $adLabGuestBuilds = $null
+    if ($DirectoryType -eq "ActiveDirectory") {
+        try {
+            $adSweepInstances = @($implementedScenarios | ForEach-Object { Get-ActiveDirectoryLabInstance -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_) } | Sort-Object -Unique)
+            $adSweepConfigs = @{}
+            foreach ($adSweepInstance in $adSweepInstances) {
+                $adSweepConfigs[$adSweepInstance] = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $adSweepInstance
+            }
+            $adLabGuestBuilds = Get-ActiveDirectoryLabGuestBuild -State (Get-ActiveDirectoryLabState -DirectoryConfig $adSweepConfigs)
+            Write-ActiveDirectoryLabLine "${GRAY}Domain controller builds: ${CYAN}$(Format-ActiveDirectoryLabGuestBuild -GuestBuilds $adLabGuestBuilds)${NC}"
+            Write-ActiveDirectoryLabLine ""
+        }
+        catch {
+            Write-ActiveDirectoryLabLine "${YELLOW}Could not read the domain controller builds for the report: $($_.Exception.Message)${NC}"
+            Write-ActiveDirectoryLabLine ""
+        }
+    }
 
     # Build common parameters — Template is overridden per-scenario inside Invoke-SingleScenario
     $commonParams = @{ DirectoryType = $DirectoryType }
@@ -2111,6 +2291,9 @@ if ($Scenario -eq "All") {
 
     Write-Host ""
     Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
+    if ($adLabGuestBuilds) {
+        Write-ActiveDirectoryLabLine "${CYAN}Domain controller builds: ${NC}$(Format-ActiveDirectoryLabGuestBuild -GuestBuilds $adLabGuestBuilds)"
+    }
     $totalCount = @($results).Count
     if ($skipCount -gt 0) {
         Write-Host "${CYAN}Passed: ${NC}$passCount / $totalCount    ${CYAN}Failed: ${NC}$failCount / $totalCount    ${CYAN}Skipped (fail-fast): ${NC}$skipCount / $totalCount"
@@ -2149,6 +2332,10 @@ if ($Scenario -eq "All") {
             }
         })
         Timings        = $regressionTimings
+    }
+    if ($adLabGuestBuilds) {
+        # The domain controllers' guest operating system builds, by machine name (Active Directory runs only).
+        $regressionResults.DomainControllerBuilds = $adLabGuestBuilds
     }
 
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
@@ -2234,6 +2421,19 @@ $templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
 # (two suffixes on one container, plain LDAP, no Samba AD containers); everything below that
 # branches on "Samba AD or not" keys on this rather than on the directory type's name.
 $isRfcDirectoryRun = Test-IsRfcDirectory $script:DirectoryConfig
+
+# A real Active Directory run (the Hyper-V lab) is in the Active Directory family for scenario decisions, but
+# runs no Samba container, so everything below that starts, waits for or cleans a Samba container keys on
+# $usesSambaContainers, not on "not an RFC directory".
+$isActiveDirectoryRun = ($DirectoryType -eq "ActiveDirectory")
+$usesSambaContainers = (-not $isRfcDirectoryRun) -and (-not $isActiveDirectoryRun)
+
+# Set by the Active Directory branches of Steps 0, 1 and 4: the lab machines' configs and state, the revert plan,
+# the populate hash the checkpoints are named by, and the guest builds recorded with the results.
+$script:AdLabContext = $null
+$script:AdLabPlan = $null
+$script:AdLabGuestBuilds = $null
+$script:UsingAdLabCheckpoints = $false
 
 # Auto-set higher export concurrency for OpenLDAP (can handle 50+ concurrent writes)
 # unless the user explicitly specified a value. Samba AD keeps the JIM default of 4.
@@ -2354,7 +2554,7 @@ Write-Section "Step 0: Checking Samba AD Images"
 # OpenLDAP and 389 Directory Server scenarios never use Samba AD containers, so skip the image
 # build entirely. Building Samba AD images takes 30-600+ seconds and can time out under disk
 # pressure, causing false failures for those runs.
-if ($isRfcDirectoryRun) {
+if ($isRfcDirectoryRun -or $isActiveDirectoryRun) {
     Write-Step "Skipping Samba AD image check (DirectoryType=$DirectoryType)"
 }
 else {
@@ -2486,6 +2686,28 @@ if ($scenarioNumber -in 2, 8 -and -not $isRfcDirectoryRun) {
 
 $timings["0. Check Samba Image"] = (Get-Date) - $step0Start
 
+# Step 0 (Active Directory): check the lab instead. Validates the JIM_AD_LAB_* variables (Get-DirectoryConfig
+# throws naming the missing one), asks the control plane about every domain controller the scenario uses,
+# requires each to have its baseline checkpoint, and records the guest operating system builds for the results.
+if ($isActiveDirectoryRun) {
+    $step0AdStart = Get-Date
+    Write-Section "Step 0: Checking the Active Directory Lab"
+    try {
+        $script:AdLabContext = Get-ActiveDirectoryLabRunContext -ScenarioNumber $scenarioNumber
+    }
+    catch {
+        Write-Failure "The Active Directory lab is not ready for a run: $($_.Exception.Message)"
+        exit 1
+    }
+    foreach ($adState in $script:AdLabContext.States) {
+        $adBuildText = if ($adState.GuestBuild) { $adState.GuestBuild } else { "unknown (guest not reachable)" }
+        Write-Success "$($adState.VmName) ($($adState.Instance)): $($adState.State), checkpoints: $($adState.CheckpointNames -join ', '), guest build $adBuildText"
+    }
+    $script:AdLabGuestBuilds = Get-ActiveDirectoryLabGuestBuild -State $script:AdLabContext.States
+    Write-Step "Domain controller builds recorded with the results: $(Format-ActiveDirectoryLabGuestBuild -GuestBuilds $script:AdLabGuestBuilds)"
+    $timings["0a. Check AD Lab"] = (Get-Date) - $step0AdStart
+}
+
 # Step 1: Reset (unless skipped)
 $step1Start = Get-Date
 if (-not $SkipReset) {
@@ -2508,6 +2730,11 @@ if (-not $SkipReset) {
     # schema, and a content hash of the generated script decides whether it needs to. A stale Scenario 016
     # database is therefore not reachable. Everything else here stays ephemeral.
     docker compose @script:IntegrationComposeArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
+    if ($isActiveDirectoryRun) {
+        # The ad-lab profile (the LDAP toolbox) is named only for an Active Directory run: taking it down for
+        # every run would also release its image to the end-of-run prune, and rebuild it next time.
+        docker compose @script:IntegrationComposeArgs --profile ad-lab down -v --remove-orphans 2>&1 | Out-Null
+    }
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
@@ -2545,6 +2772,25 @@ if (-not $SkipReset) {
     }
 
     Write-Success "Containers stopped and all volumes removed"
+
+    # Active Directory: there are no directory containers to recreate, so the directory is reset by reverting
+    # every domain controller the scenario uses to its checkpoint: baseline (a clean, delegated OU=Corp), or
+    # for Scenario 8's Source and Target the populated checkpoint when it is current. This only reverts and
+    # starts them; the readiness check (Step 4) needs the LDAP toolbox, which Step 3 starts.
+    if ($isActiveDirectoryRun) {
+        Write-Step "Reverting the Active Directory lab's domain controllers to their checkpoints..."
+        try {
+            $script:AdLabPlan = Invoke-ActiveDirectoryLabReset -Context $script:AdLabContext -ScenarioNumber $scenarioNumber -Template $Template
+        }
+        catch {
+            Write-Failure "Could not revert the Active Directory lab: $($_.Exception.Message)"
+            exit 1
+        }
+        foreach ($adPlanEntry in $script:AdLabPlan) {
+            Write-Success "$($adPlanEntry.VmName) reverted to '$($adPlanEntry.Checkpoint)'$(if ($adPlanEntry.NeedsPopulation) { ' (to be populated and checkpointed)' })"
+        }
+        $script:UsingAdLabCheckpoints = [bool]@($script:AdLabPlan | Where-Object { $_.Checkpoint -ne 'baseline' }).Count
+    }
 }
 else {
     Write-Section "Step 1: Reset Skipped"
@@ -2736,7 +2982,7 @@ $env:DIRSRV_IMAGE_PRIMARY = $null
 # S023 (Unique Value Generation) is included: its substrate is Setup-Scenario-001.ps1
 # -GenerateAccountName, so the "OUs only, no test users" snapshot is exactly what it wants too - a
 # schema-ready, empty target directory, faster than live population.
-if (-not $IgnoreSnapshots -and -not $isRfcDirectoryRun -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18, 23) {
+if (-not $IgnoreSnapshots -and $usesSambaContainers -and $scenarioNumber -in 1, 10, 11, 12, 13, 17, 18, 23) {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario-001"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -2943,6 +3189,20 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     }
     Write-Success "389 Directory Server Primary started"
 }
+elseif ($isActiveDirectoryRun) {
+    # No Samba containers: the domain controllers are the Hyper-V machines Step 1 reverted. What runs here is the
+    # LDAP toolbox, the container every LDAP client tool (ldapsearch, ldapwhoami, ldapadd, openssl s_client)
+    # runs in, since a domain controller has no container to docker exec into.
+    Write-Step "Starting the LDAP toolbox for the Active Directory lab..."
+    try {
+        Invoke-ActiveDirectoryLabToolbox -Action Up
+    }
+    catch {
+        Write-Failure $_.Exception.Message
+        exit 1
+    }
+    Write-Success "LDAP toolbox started (jim-ldap-toolbox)"
+}
 else {
     Write-Step "Starting Samba AD (Primary)..."
     $sambaResult = docker compose @script:IntegrationComposeArgs up -d 2>&1
@@ -2986,7 +3246,7 @@ if ($scenarioNumber -eq 15) {
 
 # Start Scenario 002 containers if running Scenario 002 with Samba AD
 # For OpenLDAP and 389 Directory Server, S002 uses the two suffixes of the single container (already started above)
-if ($scenarioNumber -eq 2 -and -not $isRfcDirectoryRun) {
+if ($scenarioNumber -eq 2 -and $usesSambaContainers) {
     Write-Step "Starting Samba AD (Source and Target for Scenario 002)..."
     $scenario2Result = docker compose @script:IntegrationComposeArgs --profile scenario-002 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -2999,7 +3259,7 @@ if ($scenarioNumber -eq 2 -and -not $isRfcDirectoryRun) {
 
 # Start Scenario 008 containers if running Scenario 008 with Samba AD
 # For OpenLDAP and 389 Directory Server, S008 uses the same single container (already started above)
-if ($scenarioNumber -eq 8 -and -not $isRfcDirectoryRun) {
+if ($scenarioNumber -eq 8 -and $usesSambaContainers) {
     # Check for pre-populated snapshot images
     if (-not $IgnoreSnapshots) {
         $s8Hash = Get-PopulateScriptHash -ScenarioName "Scenario-008"
@@ -3140,6 +3400,18 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
         exit 1
     }
 }
+elseif ($isActiveDirectoryRun) {
+    # Wait for every domain controller the scenario uses: an LDAPS bind as svc-jim must succeed and the root DSE
+    # clock must be within 5 seconds of this machine's. Wait-ActiveDirectoryReady.ps1 also fetches each
+    # controller's LDAPS certificate on its first poll, so the toolbox trusts it before its first bind (the
+    # upload to JIM is Step 4a).
+    Write-Step "Waiting for the Active Directory domain controllers to be ready..."
+    if (-not (Invoke-ActiveDirectoryLabReady -Configs $script:AdLabContext.Configs -TimeoutSeconds $TimeoutSeconds)) {
+        Write-ActiveDirectoryLabLine "${YELLOW}  Check the machines: Get-LabDomainController.ps1 (over the lab control plane), and docker logs jim-ldap-toolbox${NC}"
+        exit 1
+    }
+    Write-Success "Active Directory domain controllers are ready"
+}
 else {
     # Wait for Samba AD Primary
     Write-Step "Waiting for Samba AD Primary to be ready..."
@@ -3160,7 +3432,7 @@ else {
 
 # Wait for Scenario 002 or Scenario 008 Samba AD containers if applicable
 # For OpenLDAP and 389 Directory Server, the single container's wait is handled above
-if ($scenarioNumber -in 2, 8 -and -not $isRfcDirectoryRun) {
+if ($scenarioNumber -in 2, 8 -and $usesSambaContainers) {
     Write-Step "Waiting for Samba AD Source to be ready..."
     $sourceReady = $false
     $elapsed = 0
@@ -3269,6 +3541,18 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # One container hosts both suffixes, so one CA covers Primary, Source and Target alike.
     Add-DirsrvCertificateToJimStore -ContainerName "dirsrv-primary" -JIMUrl $script:Lane.JimUrl -ApiKey $apiKey
 }
+elseif ($isActiveDirectoryRun) {
+    Write-Section "Step 4a: Trusting the Active Directory Domain Controller Certificates"
+
+    # Each domain controller's self-signed LDAPS certificate is read off the wire (openssl s_client in the
+    # toolbox), its Subject Alternative Names checked for the FQDN JIM will connect by, and uploaded to JIM's
+    # certificate store, for every controller the scenario uses. The controllers were reverted and are ready
+    # (Step 4), so each answers on 636.
+    foreach ($adInstance in @("Primary", "Source", "Target")) {
+        if (-not $script:AdLabContext.Configs.ContainsKey($adInstance)) { continue }
+        Add-ActiveDirectoryCertificateToJimStore -DirectoryConfig $script:AdLabContext.Configs[$adInstance] -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    }
+}
 
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 001, we need a clean Corp OU - delete if exists and recreate
@@ -3338,6 +3622,45 @@ if ($scenarioNumber -in 1, 10, 11, 12, 13, 14, 17, 18, 19, 23 -and -not $script:
     Write-Step "Delegating JIM's access over the Corp OU..."
     Grant-JimAdDelegation -ContainerName "samba-ad-primary" -ContainerDn "OU=Corp,DC=panoply,DC=local"
     Write-Success "Delegated JIM's access over OU: Corp"
+}
+
+# Step 4b (Active Directory): nothing to prepare. The baseline checkpoint the domain controllers were reverted to
+# already holds a clean OU=Corp (with Users and Groups below it), delegated to JIM, so there is no Corp OU to
+# delete and recreate and no delegation to re-grant.
+
+# Step 4c (Active Directory): populate Scenario 8's Source and Target forests when Step 1 reverted them to
+# baseline (no populated checkpoint for this template and populate script hash), then checkpoint the populated
+# state as populated-<template>-<hash> so the next run reverts straight to it. The population is delivered as
+# the domain administrator over LDAPS through the toolbox (Populate-SambaAD-Scenario-008.ps1 -DirectoryConfig);
+# it runs here rather than in the scenario so that the checkpoint is taken between population and setup. With
+# -SkipReset nothing was reverted, so nothing is decided here and the scenario populates for itself (idempotently).
+$adPopulateEntries = @()
+if ($isActiveDirectoryRun -and $script:AdLabPlan) {
+    $adPopulateEntries = @($script:AdLabPlan | Where-Object { $_.NeedsPopulation })
+}
+if ($adPopulateEntries.Count -gt 0) {
+    Write-Section "Step 4c: Populating the Active Directory Lab for Scenario 8"
+
+    $adPopulateHash = Get-ActiveDirectoryLabPopulateHash -ScriptRoot $scriptRoot
+    $adPopulatedCheckpoint = Get-ActiveDirectoryLabCheckpointName -Template $Template -Hash $adPopulateHash
+    try {
+        foreach ($adEntry in $adPopulateEntries) {
+            Write-Step "Populating $($adEntry.VmName) ($($adEntry.Instance)) with the $Template template..."
+            & "$scriptRoot/Populate-SambaAD-Scenario-008.ps1" -Template $Template -Instance $adEntry.Instance -DirectoryConfig $script:AdLabContext.Configs[$adEntry.Instance]
+            if ($LASTEXITCODE -ne 0) {
+                throw "Populate-SambaAD-Scenario-008.ps1 exited with code $LASTEXITCODE for $($adEntry.VmName)"
+            }
+        }
+        foreach ($adEntry in $adPopulateEntries) {
+            Invoke-ActiveDirectoryLabCheckpoint -VmName $adEntry.VmName -Checkpoint $adPopulatedCheckpoint
+            Write-Success "$($adEntry.VmName): checkpoint '$adPopulatedCheckpoint' taken"
+        }
+    }
+    catch {
+        Write-Failure "Active Directory population failed: $($_.Exception.Message)"
+        exit 1
+    }
+    $script:UsingAdLabCheckpoints = $true
 }
 
 # Step 4c: Populate OpenLDAP or 389 Directory Server with test data
@@ -3653,7 +3976,7 @@ $scenarioParams = @{
 # turn comes, which would wrongly pass SkipPopulate to the scenario and leave its directory empty, so the
 # Employee ID join finds nothing (14, 19) or the policy fixture is missing (22). Mirrors the
 # exclusions already on the snapshot-detection and general-population guards above.
-if (($script:UsingSnapshots -or $script:UsingRfcDirectorySnapshots) -and $scenarioNumber -notin 14, 19, 22) {
+if (($script:UsingSnapshots -or $script:UsingRfcDirectorySnapshots -or $script:UsingAdLabCheckpoints) -and $scenarioNumber -notin 14, 19, 22) {
     $scenarioParams.SkipPopulate = $true
 }
 
@@ -3921,6 +4244,10 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
         TestDurationMs = $testDurationMs
         Operations = @()
     }
+    if ($script:AdLabGuestBuilds) {
+        # The domain controllers' guest operating system builds, by machine name (Active Directory runs only).
+        $wallClockMetrics.DomainControllerBuilds = $script:AdLabGuestBuilds
+    }
 
     # Create performance results directory (per hostname)
     $hostname = [System.Net.Dns]::GetHostName()
@@ -4018,6 +4345,10 @@ $metrics = @{
     Step = $Step
     TestDurationMs = $timings["5. Run Tests"].TotalMilliseconds
     Operations = @()
+}
+if ($script:AdLabGuestBuilds) {
+    # The domain controllers' guest operating system builds, by machine name (Active Directory runs only).
+    $metrics.DomainControllerBuilds = $script:AdLabGuestBuilds
 }
 
 # Use parallel processing for log parsing (PowerShell 7+)
@@ -4343,6 +4674,11 @@ $duration = $endTime - $startTime
 
 Write-Banner "Test Run Complete"
 
+if ($script:AdLabGuestBuilds) {
+    Write-ActiveDirectoryLabLine ""
+    Write-ActiveDirectoryLabLine "${GRAY}Domain controller builds:${NC} ${CYAN}$(Format-ActiveDirectoryLabGuestBuild -GuestBuilds $script:AdLabGuestBuilds)${NC}"
+}
+
 # Performance Summary
 Write-Section "Performance Summary"
 Write-Host "${CYAN}Stage Timings:${NC}"
@@ -4425,6 +4761,17 @@ Write-Host ""
 } finally {
     if ($transcriptActive) {
         Stop-Transcript | Out-Null
+    }
+
+    # Active Directory: stop the LDAP toolbox. The domain controllers are left as they are; the next run
+    # reverts them. (The stopped container is kept so the end-of-run image prune does not remove its image.)
+    if ($isActiveDirectoryRun) {
+        try {
+            Invoke-ActiveDirectoryLabToolbox -Action Stop
+        }
+        catch {
+            Write-Warning "Could not stop the LDAP toolbox: $($_.Exception.Message)"
+        }
     }
 }
 exit $scenarioExitCode

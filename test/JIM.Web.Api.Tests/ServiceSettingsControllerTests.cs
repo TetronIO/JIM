@@ -29,6 +29,7 @@ public class ServiceSettingsControllerTests
     private Mock<IServiceSettingsRepository> _mockServiceSettingsRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
+    private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private Mock<ILogger<ServiceSettingsController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private ServiceSettingsController _controller = null!;
@@ -85,25 +86,18 @@ public class ServiceSettingsControllerTests
     }
 
     /// <summary>
-    /// Re-authenticates the controller as a signed-in (JWT) user and wires the SSO claim lookup so
-    /// GetCurrentUserAsync resolves that user to a Metaverse Object.
+    /// Re-authenticates the controller as a signed-in (JWT) user, shaped as the bearer pipeline leaves it: the token's
+    /// identity plus JIM's own identity carrying the resolved Metaverse Object id, which GetCurrentUserAsync reads.
     /// </summary>
     private MetaverseObject AuthenticateAsInteractiveUser()
     {
-        var metaverseRepo = new Mock<IMetaverseRepository>();
-        _mockRepository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
-        var ssoAttribute = new MetaverseAttribute { Id = 1, Name = "SsoId" };
-        _mockServiceSettingsRepo.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync(new ServiceSettings
-        {
-            SSOUniqueIdentifierClaimType = "sub",
-            SSOUniqueIdentifierMetaverseAttribute = ssoAttribute
-        });
-        var userType = new MetaverseObjectType { Id = 1, Name = "User" };
-        metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(It.IsAny<string>(), false, It.IsAny<bool>())).ReturnsAsync(userType);
-        var user = new MetaverseObject { Id = Guid.NewGuid(), Type = userType, CachedDisplayName = "Admin User" };
-        metaverseRepo.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(userType, ssoAttribute, It.IsAny<string>())).ReturnsAsync(user);
-        var identity = new ClaimsIdentity(new List<Claim> { new("sub", user.Id.ToString()), new(ClaimTypes.Name, "Admin User") }, "TestAuth");
-        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } };
+        _mockMetaverseRepo = new Mock<IMetaverseRepository>();
+        _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        var user = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 1, Name = "User" }, CachedDisplayName = "Admin User" };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectAsync(user.Id)).ReturnsAsync(user);
+        var tokenIdentity = new ClaimsIdentity(new List<Claim> { new("sub", "idp-subject"), new(ClaimTypes.Name, "Admin User") }, "TestAuth");
+        var jimIdentity = new ClaimsIdentity(new List<Claim> { new(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()) });
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new[] { tokenIdentity, jimIdentity }) } };
         return user;
     }
 
@@ -431,6 +425,46 @@ public class ServiceSettingsControllerTests
         Assert.That(result, Is.InstanceOf<OkObjectResult>(), () => System.Text.Json.JsonSerializer.Serialize((result as ObjectResult)?.Value));
         Assert.That(recorded?.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
         Assert.That(recorded?.InitiatedById, Is.EqualTo(user.Id));
+    }
+
+    [Test]
+    public async Task UpdateAsync_InteractiveUser_ResolvesTheUserFromTheMetaverseObjectIdClaimAloneAsync()
+    {
+        // The bearer pipeline has already resolved the caller and attached their Metaverse Object id; the controller
+        // must attribute the change to that id, not resolve the caller a second time through the SSO attribute lookup
+        // (which could disagree with the identity authorisation was granted to).
+        _mockServiceSettingsRepo.Setup(r => r.GetSettingAsync("Test.Setting")).ReturnsAsync(new ServiceSetting
+        {
+            Key = "Test.Setting",
+            DisplayName = "Test",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false
+        });
+        _mockServiceSettingsRepo.Setup(r => r.UpdateSettingAsync(It.IsAny<ServiceSetting>())).Returns(Task.CompletedTask);
+        var user = AuthenticateAsInteractiveUser();
+
+        // Wire the SSO attribute lookup fully, resolving to a different Metaverse Object, so a second resolution
+        // would both be reachable and visibly misattribute the change.
+        var ssoAttribute = new MetaverseAttribute { Id = 1, Name = "SsoId" };
+        _mockServiceSettingsRepo.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync(new ServiceSettings
+        {
+            SSOUniqueIdentifierClaimType = "sub",
+            SSOUniqueIdentifierMetaverseAttribute = ssoAttribute
+        });
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(It.IsAny<string>(), false, It.IsAny<bool>())).ReturnsAsync(user.Type);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(It.IsAny<MetaverseObjectType>(), It.IsAny<MetaverseAttribute>(), It.IsAny<string>()))
+            .ReturnsAsync(new MetaverseObject { Id = Guid.NewGuid(), Type = user.Type, CachedDisplayName = "Someone Else" });
+        Activity? recorded = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Callback<Activity>(a => recorded = a).Returns(Task.CompletedTask);
+
+        await _controller.UpdateAsync("Test.Setting", new ServiceSettingUpdateRequestDto { Value = "false" });
+
+        Assert.That(recorded?.InitiatedById, Is.EqualTo(user.Id));
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectByTypeAndAttributeAsync(
+            It.IsAny<MetaverseObjectType>(), It.IsAny<MetaverseAttribute>(), It.IsAny<string>()), Times.Never);
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectTypeAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never);
     }
 
     #endregion
