@@ -37,8 +37,15 @@ public static class DerivedFlowValidator
         var proposed = new HashSet<SyncRuleMapping>(proposedMappings, ReferenceEqualityComparer.Instance);
         var errors = new List<string>();
 
+        // A cycle blocks a save only through a proposed mapping that is enabled. A cycle can already exist (saved with
+        // the flag off, when nothing is validated, or by two concurrent saves), and disabling one of its mappings is how
+        // an administrator breaks it, so that save must go through. Re-enabling the mapping is validated like any other
+        // save, and the graph includes disabled mappings (decision 2), so it cannot slip a cycle back in. Deliberately
+        // keyed on the mapping, not its rule: a rule's own Enabled switch has save paths of its own, and exempting a
+        // disabled rule here would let one of those bring a cycle live unvalidated.
         errors.AddRange(graph.Cycles
-            .Where(cycle => proposed.Any(cycle.Involves))
+            .Where(cycle => cycle.Members.Concat(cycle.AdditionalMembers).Any(member =>
+                proposed.Contains(member.Mapping) && member.Mapping.Enabled))
             .Select(cycle => DescribeCycle(cycle, proposed)));
 
         errors.AddRange(graph.UnknownInputs

@@ -34,6 +34,35 @@ public class DerivedFlowValidatorTests
     // ---- cycles (Scenario 3) ----
 
     [Test]
+    public void Validate_DisablingAMemberOfAnExistingCycle_IsAllowed()
+    {
+        // A cycle can already exist (saved while the flag was off, when nothing is validated, or by two concurrent
+        // saves). Disabling one of its members is how an administrator breaks it, so that save must not be refused.
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 1);
+        var ad = ImportRule(2, "AD Import", connectedSystemId: 2);
+        var displayName = Expression(hr, 101, _model.DisplayName, "mv[\"Mail Nickname\"]", enabled: false);
+        Expression(ad, 102, _model.MailNickname, "mv[\"Display Name\"]");
+
+        var result = Validate([displayName], hr, ad);
+
+        Assert.That(result.Errors, Is.Empty);
+    }
+
+    [Test]
+    public void Validate_EnablingAMemberOfACycleWithADisabledMapping_IsRefused()
+    {
+        // Decision 2: validation includes disabled mappings, so re-enabling the member can never slip a cycle past it.
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 1);
+        var ad = ImportRule(2, "AD Import", connectedSystemId: 2);
+        var displayName = Expression(hr, 101, _model.DisplayName, "mv[\"Mail Nickname\"]");
+        Expression(ad, 102, _model.MailNickname, "mv[\"Display Name\"]", enabled: false);
+
+        var result = Validate([displayName], hr, ad);
+
+        Assert.That(result.Errors, Has.Count.EqualTo(1));
+    }
+
+    [Test]
     public void Validate_TwoRuleCycle_SavingEitherRule_NamesBothAttributesAndBothRules()
     {
         var hr = ImportRule(1, "HR Import", connectedSystemId: 1);
