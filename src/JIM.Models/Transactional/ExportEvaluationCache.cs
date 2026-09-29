@@ -41,6 +41,15 @@ public class ExportEvaluationCache
     public ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> CsoAttributeValues { get; set; }
 
     /// <summary>
+    /// Per-page: which of the page's target Connected System Objects have a Pending Export persisted by an earlier
+    /// run or page. No-net-change detection reads it to decide whether an object whose evaluation needs nothing
+    /// might still carry a queued change that evaluation has just made stale, so only those objects cost a database
+    /// lookup. Null means it has not been loaded for this page, in which case the lookup is always made (correct,
+    /// only slower). Rebuilt each page via RefreshForPageAsync.
+    /// </summary>
+    public HashSet<Guid>? CsoIdsWithPersistedPendingExports { get; set; }
+
+    /// <summary>
     /// Page-scoped export-matching candidates: populated by a per-page batch prefetch (one query per
     /// Object Matching Rule per page) so export evaluation can look up an unjoined Connected System
     /// Object without a per-object database round trip. Null means no prefetch has been performed for
