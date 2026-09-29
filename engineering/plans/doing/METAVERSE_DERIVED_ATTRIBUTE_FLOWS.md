@@ -1,9 +1,9 @@
 # Metaverse-Derived Attribute Flows
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 delivered; Phase 1 in progress)
 - **Issue:** [#1750](https://github.com/TetronIO/JIM/issues/1750)
-- **PRD:** [`../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../prd/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
-- **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (release 2 depends on this plan; see [`doing/UNIQUE_VALUE_GENERATION.md`](doing/UNIQUE_VALUE_GENERATION.md) decision 7 and Phases 5 and 6), [#1864](https://github.com/TetronIO/JIM/issues/1864) drift contributor fix (the bottom layer of this stack), [#1861](https://github.com/TetronIO/JIM/issues/1861) Reference inputs (deferred), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler, [#1781](https://github.com/TetronIO/JIM/issues/1781) feature flags, [#614](https://github.com/TetronIO/JIM/issues/614) internally managed Metaverse Objects
+- **PRD:** [`../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
+- **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (release 2 depends on this plan; see [`UNIQUE_VALUE_GENERATION.md`](UNIQUE_VALUE_GENERATION.md) decision 7 and Phases 5 and 6), [#1864](https://github.com/TetronIO/JIM/issues/1864) drift contributor fix (the bottom layer of this stack), [#1861](https://github.com/TetronIO/JIM/issues/1861) Reference inputs (deferred), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler, [#1781](https://github.com/TetronIO/JIM/issues/1781) feature flags, [#614](https://github.com/TetronIO/JIM/issues/614) internally managed Metaverse Objects
 - **Last Updated:** 2026-09-29 (drafted from the PRD against the current code; product-owner decisions of 2026-09-28 and 2026-09-29 applied)
 
 ## Overview
@@ -129,9 +129,11 @@ Delta / full selection
 
 ## Implementation Phases
 
-A stacked PR chain. Each layer is TDD (tests red first), `dotnet build JIM.sln` and `dotnet test JIM.sln` clean. Tests run with the flag on (`InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()`). The PRD moves to `engineering/prd/doing/` and this plan to `engineering/plans/doing/` in Phase 1's first commit.
+A stacked PR chain. Each layer is TDD (tests red first), `dotnet build JIM.sln` and `dotnet test JIM.sln` clean. Tests run with the flag on (`InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()`). The PRD and this plan moved to `doing/` when Phase 1 started.
 
-### Phase 0 (bottom layer): drift contributor fix, [#1864](https://github.com/TetronIO/JIM/issues/1864)
+### Phase 0 (bottom layer): drift contributor fix, [#1864](https://github.com/TetronIO/JIM/issues/1864) ✅
+
+Delivered by [#1872](https://github.com/TetronIO/JIM/pull/1872) (2026-09-29), as planned below; not behind the flag.
 
 1. Failing test: AD import Display Name = `cs["givenName"] + " " + cs["sn"]`, export Display Name → `displayName`; an out-of-band `displayName` edit is corrected.
 2. `DriftDetectionService`: a system is a legitimate source for a diverged Connected System attribute only if its winning import flow for the Metaverse attribute reads that attribute (direct source, or a `cs["..."]` input via `ExpressionInputResolver`).

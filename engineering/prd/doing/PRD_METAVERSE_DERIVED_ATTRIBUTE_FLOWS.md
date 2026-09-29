@@ -1,11 +1,11 @@
 # Metaverse-Derived Attribute Flows
 
-- **Status:** Planned
+- **Status:** Doing
 - **Created:** 2026-09-19
 - **Author:** JayVDZ (PRD drafted via Claude Code)
 - **Issue:** [#1750](https://github.com/TetronIO/JIM/issues/1750)
 - **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (depends on this PRD), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler (the flag-and-reprocess precedent), [#1864](https://github.com/TetronIO/JIM/issues/1864) drift contributor fix, [#1861](https://github.com/TetronIO/JIM/issues/1861) Reference inputs (deferred)
-- **Plan:** [`../plans/METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../plans/METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
+- **Plan:** [`../../plans/doing/METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../plans/doing/METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
 - **Updated:** 2026-09-29. Product-owner review of the plan revised which synchronisation evaluates a derived flow (FR 5, FR 9, Scenarios 2, 5 and 6, user stories 3 and 5): a derived flow runs only in its hosting system's synchronisation, and a change to its input elsewhere marks the hosting Connected System Object for re-evaluation. The original wording ran a rule's flows inside another system's synchronisation, a departure from sync sequencing that was not called out as one; see Behavioural Implications. Open questions resolved.
 
 ## Problem Statement
