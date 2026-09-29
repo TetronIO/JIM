@@ -30,6 +30,9 @@ setup_colours
 $Arrange
 $Function
 "@
+        # This file is checked out with CRLF line endings (.gitattributes), which bash would read as part of
+        # each command.
+        $script = $script -replace "`r", ''
         $output = & bash -c $script 'setup-test' $script:SetupPath 2>&1
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
     }
