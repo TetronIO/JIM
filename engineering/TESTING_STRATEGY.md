@@ -257,7 +257,7 @@ Beside the five tiers, which test JIM's code, one check tests how JIM is deploye
 
 **Purpose**: Prove that what a customer installs works, on every runtime JIM supports. The integration tests run the development stack, which is not what ships.
 
-**What it does**: builds the images and a release bundle from the commit (`Build-ReleaseBundle.ps1 -SkipImageBuild -SkipArchive`), then installs JIM from that bundle with its own `setup.sh`, offline, three times: on Docker, on rootful Podman and on rootless Podman (`Invoke-DeploymentBoot.ps1`). Each leg:
+**What it does**: builds the images and a release bundle from the commit (`Build-ReleaseBundle.ps1 -SkipImageBuild -SkipArchive`), then installs JIM from that bundle with its own `setup.sh`, offline, three times: on Docker, on rootful Podman and on rootless Podman (`Invoke-DeploymentBoot.ps1`). The bundle is built on Docker's containerd image store, the only one that saves the registry manifest PostgreSQL's digest pin needs; the Docker leg then installs on the classic image store, the harder case for an air-gapped install and the default wherever Docker predates the containerd store. Each leg:
 - waits for JIM to answer ready over HTTPS, trusting only the certificate authority the installer created;
 - waits for every container's own health check to pass;
 - writes a marker to the database and the File Connector volume, stops and starts JIM (Compose down and up; the Quadlet units stopped and started), and checks that JIM came back in new containers with both markers;

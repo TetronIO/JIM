@@ -64,8 +64,8 @@ $IntendedDifferences = @(
     }
     @{
         Service = 'web', 'worker', 'scheduler'; Property = 'environment variable'; On = 'Docker'
-        Values = @('DOCKER_REGISTRY', 'JIM_VERSION', 'JIM_WEB_PORT')
-        Reason = 'Settings of the Compose files themselves (the images and the published port), which env_file also passes into the containers, where nothing reads them. The pod files name the images, and jim.kube publishes the port.'
+        Values = @('DOCKER_REGISTRY', 'JIM_VERSION', 'JIM_WEB_PORT', 'JIM_DB_IMAGE')
+        Reason = 'Settings of the Compose files themselves (the images and the published port), which env_file also passes into the containers, where nothing reads them. The pod files name the images, and jim.kube publishes the port. JIM_DB_IMAGE is set only for an air-gapped install on Docker''s classic image store (#1854).'
     }
     @{
         Service = 'database'; Property = 'environment variable'; On = 'Podman'; Values = @('JIM_DB_LOG_MIN_DURATION')
