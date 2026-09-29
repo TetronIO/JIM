@@ -135,6 +135,10 @@ public partial class ConnectedSystemServer
         var recallScope = ContributorRecallScope.ForStrandedContribution(connectedSystem.Id);
         var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(Application.SyncRepo);
 
+        // Derived-input marks (#1750 Phase 4): the swept rules stay, so the recall's own graph is the marking graph.
+        // Nothing is excluded, the swept system included: no derived flow has run on the post-sweep values.
+        var derivedInputMarks = new DerivedInputMarkBatch(priorityContext.DerivedFlowGraph, "Stranded value sweep");
+
         // Fetched once: the rules from GetAllSyncRulesAsync carry their Connected System Object Type
         // navigation already, so this is the defensive fallback, not the ordinary path.
         var objectTypesById = (await Application.Repository.ConnectedSystems.GetObjectTypesAsync(connectedSystem.Id))
@@ -170,6 +174,7 @@ public partial class ConnectedSystemServer
                 expressionEvaluator,
                 exportEvaluationCache,
                 activity,
+                derivedInputMarks,
                 reElectedDetailMessage: $"Values stranded by an earlier Connector Space clear of Connected System '{connectedSystem.Name}' were recalled; a surviving contributor was re-elected.",
                 clearedDetailMessage: $"Values stranded by an earlier Connector Space clear of Connected System '{connectedSystem.Name}' were recalled; no remaining contributor supplied the attribute value(s), which were cleared.",
                 trackActivityProgress: false,
@@ -186,6 +191,8 @@ public partial class ConnectedSystemServer
             result.ValuesPreserved += ruleResult.ValuesPreserved;
             result.PendingExportsStaged += ruleResult.PendingExportsStaged;
         }
+
+        derivedInputMarks.LogSummary();
 
         // #1605 Functional Requirement 7: evaluate the Deletion Rule for every recorded object that still
         // lacks a re-join. Runs after the value recall above (which may itself have touched some of these

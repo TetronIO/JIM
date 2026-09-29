@@ -276,6 +276,7 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
             new JIM.Application.Expressions.DynamicExpressoEvaluator(),
             exportEvaluationCache,
             activity,
+            new DerivedInputMarkBatch(priorityContext.DerivedFlowGraph, "test"),
             reElectedDetailMessage: "re-elected",
             clearedDetailMessage: "cleared",
             trackActivityProgress: false,

@@ -64,6 +64,12 @@ public partial class ConnectedSystemServer
             var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);
             var recallScope = ContributorRecallScope.ForDeletedSyncRule(task.SyncRuleId);
 
+            // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the deletion completes: the
+            // deleted rule's own derived mappings go with it, so they must not count as hosting flows, whatever its
+            // Enabled state (it is disabled at queue time, but the marking must not depend on that).
+            var derivedInputMarks = await CreateDerivedInputMarkBatchAsync(
+                allSyncRules.Where(rule => rule.Id != task.SyncRuleId), "Synchronisation Rule deletion recall");
+
             var affectedMvoIds = await Application.SyncRepo.GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(task.SyncRuleId);
             activity.ObjectsToProcess = affectedMvoIds.Count;
             activity.ObjectsProcessed = 0;
@@ -77,9 +83,11 @@ public partial class ConnectedSystemServer
                 expressionEvaluator,
                 exportEvaluationCache,
                 activity,
+                derivedInputMarks,
                 reElectedDetailMessage: $"Synchronisation Rule '{syncRule.Name}' is being deleted; a surviving contributor was re-elected for the recalled attribute value(s).",
                 clearedDetailMessage: $"Synchronisation Rule '{syncRule.Name}' is being deleted; the recalled attribute value(s) had no remaining contributor and were cleared.",
                 trackActivityProgress: true);
+            derivedInputMarks.LogSummary();
         }
 
         // FINAL step: delete the rule via the existing delete path (configuration snapshot, priority
@@ -134,6 +142,9 @@ public partial class ConnectedSystemServer
     /// <param name="expressionEvaluator">The evaluator for expression-based mappings in the re-election re-flow.</param>
     /// <param name="exportEvaluationCache">The pre-built export evaluation cache driving Pending Export staging.</param>
     /// <param name="activity">The Activity the per-object results are recorded on.</param>
+    /// <param name="derivedInputMarks">Collects the Metaverse-Derived Attribute Flow marks (#1750 Phase 4) for every
+    /// object whose attribute values change, flushed once per batch after the batch is persisted; inert when the
+    /// feature is off.</param>
     /// <param name="reElectedDetailMessage">The outcome wording for values a surviving contributor took over.</param>
     /// <param name="clearedDetailMessage">The outcome wording for values cleared with no remaining contributor.</param>
     /// <param name="trackActivityProgress">Whether to advance the Activity's ObjectsProcessed counter per batch
@@ -158,6 +169,7 @@ public partial class ConnectedSystemServer
         JIM.Models.Interfaces.IExpressionEvaluator expressionEvaluator,
         ExportEvaluationCache exportEvaluationCache,
         Activity activity,
+        DerivedInputMarkBatch derivedInputMarks,
         string reElectedDetailMessage,
         string clearedDetailMessage,
         bool trackActivityProgress,
@@ -238,6 +250,10 @@ public partial class ConnectedSystemServer
                 var removedAttributes = removals.ToHashSet();
                 var clearedAttributeCount = ContributorReElectionService.GetClearedAttributeIds(mvo, additions, removals).Count;
 
+                // Every attribute whose values changed (recalled values and re-elected survivors) may be a derived
+                // flow's input; a hosting system's next synchronisation must re-derive (#1750 Phase 4, FR 9).
+                derivedInputMarks.Collect(mvo, changedAttributes);
+
                 syncEngine.ApplyPendingAttributeChanges(mvo);
                 changedMvos.Add(mvo);
                 removedValueIds.AddRange(removals.Where(av => av.Id != Guid.Empty).Select(av => av.Id));
@@ -294,6 +310,10 @@ public partial class ConnectedSystemServer
                 await Application.SyncRepo.CreatePendingExportsAsync(stagedPendingExports);
                 result.PendingExportsStaged += stagedPendingExports.Count;
             }
+
+            // The batch's Metaverse changes are persisted; mark their hosting systems in one bulk update. Marking
+            // after the write means a hosting system's run that clears a mark has seen the values that caused it.
+            await derivedInputMarks.FlushAsync(Application.SyncRepo);
 
             await Application.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
 
