@@ -250,7 +250,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // the Connected System after schema import, saving any changes.
             AutoTuneExportConcurrency(settingValues, rootDse, logger);
 
-            var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
+            var ldapConnectorSchema = new LdapConnectorSchema(new LdapOperationExecutor(_connection), logger, rootDse, includeAuxiliaryClasses);
             return await ldapConnectorSchema.GetSchemaAsync();
         }
         finally
@@ -480,7 +480,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             if (!rootDse.IsActiveDirectoryFamily)
                 throw new NotSupportedException(DirectoryServerDiscoveryUnsupportedMessage(rootDse.DirectoryType));
 
-            var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(_connection, logger);
+            var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
             return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
         }
         finally

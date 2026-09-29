@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) Tetron Limited. All rights reserved.
+  Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+  Unattended Windows Server 2025 install for a lab domain controller (Generation 2, UEFI).
+
+  This is a TEMPLATE. Each token of the form double-underscore, NAME, double-underscore is replaced by
+  ConvertTo-LabUnattendXml (LabDomainController.psm1) before the file is burned onto the small ISO that
+  New-LabDomainController.ps1 attaches beside the Windows media; the render fails if a token is left
+  over or a value has no token. Windows Setup reads autounattend.xml from the root of any attached
+  removable media.
+
+  Nothing is installed by this file and nothing is enabled for remote access: the host drives
+  everything after the install through PowerShell Direct (Invoke-Command -VMName), which needs no
+  network and no listener in the guest.
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend"
+          xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <!-- The Windows Server media carries one UI language (en-US), and Setup fails on a UI language it
+           does not hold, so the UI language is a parameter. Formats, system locale and keyboard are en-GB. -->
+      <SetupUILanguage>
+        <UILanguage>__UI_LANGUAGE__</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>__LOCALE__</InputLocale>
+      <SystemLocale>__LOCALE__</SystemLocale>
+      <UILanguage>__UI_LANGUAGE__</UILanguage>
+      <UserLocale>__LOCALE__</UserLocale>
+    </component>
+
+    <component name="Microsoft-Windows-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <!-- GPT layout for UEFI: EFI system partition, Microsoft reserved, then Windows filling the disk. -->
+      <DiskConfiguration>
+        <WillShowUI>OnError</WillShowUI>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Type>EFI</Type>
+              <Size>300</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Type>MSR</Type>
+              <Size>16</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>3</Order>
+              <Type>Primary</Type>
+              <Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Label>System</Label>
+              <Format>FAT32</Format>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>2</PartitionID>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>3</Order>
+              <PartitionID>3</PartitionID>
+              <Label>Windows</Label>
+              <Letter>C</Letter>
+              <Format>NTFS</Format>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+
+      <!-- The image is chosen by name: the host script reads the names off the media's install.wim and
+           passes the Datacenter (Desktop Experience) one, so a reordered image list cannot pick the wrong edition. -->
+      <ImageInstall>
+        <OSImage>
+          <InstallFrom>
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/NAME</Key>
+              <Value>__IMAGE_NAME__</Value>
+            </MetaData>
+          </InstallFrom>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+          <WillShowUI>OnError</WillShowUI>
+        </OSImage>
+      </ImageInstall>
+
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <!-- Automatic Virtual Machine Activation key for Windows Server 2025 Datacenter, from Microsoft's
+             published AVMA key table:
+             https://learn.microsoft.com/windows-server/get-started/automatic-vm-activation
+             It is a generic key that only activates against an activated Datacenter Hyper-V host; it is not
+             a licence and is safe to keep in source control. -->
+        <ProductKey>
+          <Key>__PRODUCT_KEY__</Key>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
+      </UserData>
+    </component>
+  </settings>
+
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <ComputerName>__COMPUTER_NAME__</ComputerName>
+      <!-- The same AVMA key as above (see the citation there), applied to the installed system. -->
+      <ProductKey>__PRODUCT_KEY__</ProductKey>
+      <TimeZone>__TIME_ZONE__</TimeZone>
+    </component>
+    <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <InputLocale>__LOCALE__</InputLocale>
+      <SystemLocale>__LOCALE__</SystemLocale>
+      <UILanguage>__UI_LANGUAGE__</UILanguage>
+      <UserLocale>__LOCALE__</UserLocale>
+    </component>
+  </settings>
+
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+      </OOBE>
+      <TimeZone>__TIME_ZONE__</TimeZone>
+      <!-- The password is base64 of UTF-16LE(password + "AdministratorPassword"), which is how Setup
+           reads a value marked PlainText false. It is an encoding, not encryption: the ISO carrying this
+           file is deleted as soon as the install has finished. -->
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value>__ADMIN_PASSWORD_ENCODED__</Value>
+          <PlainText>false</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <LogonCount>1</LogonCount>
+        <Username>Administrator</Username>
+        <Password>
+          <Value>__AUTOLOGON_PASSWORD_ENCODED__</Value>
+          <PlainText>false</PlainText>
+        </Password>
+      </AutoLogon>
+      <!-- First logon installs nothing. It stops Server Manager opening at every sign-in, and leaves a marker
+           the host can look for. Everything else is done by the host through PowerShell Direct. -->
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>Do not open Server Manager at logon</Description>
+          <CommandLine>reg.exe add HKLM\SOFTWARE\Microsoft\ServerManager /v DoNotOpenServerManagerAtLogon /t REG_DWORD /d 1 /f</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Description>Mark the unattended install as finished</Description>
+          <CommandLine>cmd.exe /c md C:\jim-ad-lab &amp; echo installed&gt; C:\jim-ad-lab\install-complete.txt</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+    <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <InputLocale>__LOCALE__</InputLocale>
+      <SystemLocale>__LOCALE__</SystemLocale>
+      <UILanguage>__UI_LANGUAGE__</UILanguage>
+      <UserLocale>__LOCALE__</UserLocale>
+    </component>
+  </settings>
+</unattend>

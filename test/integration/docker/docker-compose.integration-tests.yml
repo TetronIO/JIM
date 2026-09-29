@@ -441,6 +441,38 @@ services:
           cpus: ${DIRSRV_PRIMARY_CPUS_RESERVED:-0.5}
           memory: ${DIRSRV_PRIMARY_MEMORY_RESERVED:-512M}
 
+  # LDAP toolbox for the Active Directory lab (Hyper-V virtual machines, no container of their own).
+  # Every LDAP client tool the harness runs against a domain controller runs here, over LDAPS, and
+  # openssl reads the domain controller's certificate off the wire (Invoke-LdapTool and
+  # Save-ActiveDirectoryCertificate). Only an Active Directory run activates the ad-lab profile, and
+  # that run always sets the JIM_AD_LAB_*_ADDRESS variables, so the 0.0.0.0 fallbacks below never take
+  # effect; they exist only so `docker compose config` parses without them.
+  ldap-toolbox:
+    image: jim-ldap-toolbox:local
+    build:
+      context: ./ldap-toolbox
+      dockerfile: Dockerfile
+    container_name: jim-ldap-toolbox
+    # sleep is PID 1; without an init it ignores SIGTERM and docker stop waits out its timeout.
+    init: true
+    environment:
+      # Verify every LDAPS certificate against the lab bundle the harness writes to /certs.
+      - LDAPTLS_CACERT=/certs/ad-lab-ca.pem
+      - LDAPTLS_REQCERT=demand
+    extra_hosts:
+      # The domain controllers are on the Hyper-V network, not this Docker one, and their names are in
+      # no DNS the container can see. Their certificates name the FQDN, so it is mapped to the address.
+      - "${JIM_AD_LAB_PRIMARY_HOST:-dc1.panoply.local}:${JIM_AD_LAB_PRIMARY_ADDRESS:-0.0.0.0}"
+      - "${JIM_AD_LAB_SOURCE_HOST:-dc1.resurgam.local}:${JIM_AD_LAB_SOURCE_ADDRESS:-0.0.0.0}"
+      - "${JIM_AD_LAB_TARGET_HOST:-dc1.gentian.local}:${JIM_AD_LAB_TARGET_ADDRESS:-0.0.0.0}"
+    volumes:
+      # Written by the harness (Save-ActiveDirectoryCertificate); gitignored, read-only here.
+      - ../ad-lab-certs:/certs:ro
+    networks:
+      - jim-network
+    profiles:
+      - ad-lab
+
   # Phase 2 - MySQL, staged for the JIM SQL Connector's priority 2 providers. Not used by Scenario 016,
   # which covers the priority 1 providers (Microsoft SQL Server and Oracle Database).
   mysql-test:
