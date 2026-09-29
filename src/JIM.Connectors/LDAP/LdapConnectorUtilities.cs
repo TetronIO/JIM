@@ -890,9 +890,11 @@ internal static class LdapConnectorUtilities
 
             throw new CannotPerformDeltaImportException(
                 $"Delta import aborted: the domain controller's invocationId has changed since the watermark was recorded " +
-                $"(previous: {previousInvocationId.Value}, current: {currentInvocationId.Value}). This can happen when a domain " +
-                "name configured as Host resolves to a different domain controller (DNS round-robin), or the domain controller " +
-                "was restored from backup. Run a Full Import to re-establish the delta baseline.");
+                $"(previous: {previousInvocationId.Value}, current: {currentInvocationId.Value}). The usual cause is that the " +
+                "directory was restored from a backup or snapshot: the domain controller is then issued a new invocationId and its " +
+                "update sequence numbers restart from the restored point, so a Delta Import reading from the recorded watermark " +
+                "would silently miss changes. It can also happen when a domain name configured as Host resolves to a different " +
+                "domain controller (DNS round-robin). Run a Full Import to re-establish the delta baseline.");
         }
 
         // The invocationId pair is incomplete (a baseline persisted before this guard was added, or the
