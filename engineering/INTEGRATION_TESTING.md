@@ -475,6 +475,7 @@ All templates generate realistic enterprise data following normal distribution p
 | Runner option | Directory | Template(s) | Time (cached) | Notes |
 |---------------|-----------|-------------|---------------|-------|
 | `-PreRelease` | Samba AD + OpenLDAP + 389 Directory Server | Medium + Large + Large | **~5h 10m** (Samba AD ~1h 32m, OpenLDAP ~1h 43m, 389 Directory Server ~1h 52m) | measured 2026-09-23 with snapshots already built; first run +~15 min |
+| `-PreRelease -Parallel` | Samba AD + OpenLDAP + 389 Directory Server, side by side | Medium + Large + Large | **~1h 41m** (Samba AD 1h 29m, OpenLDAP 1h 40m, 389 Directory Server 1h 31m) | measured 2026-09-29, all 51 scenario runs passing; the run ends with its slowest lane, plus ~1-5 min to build the images once |
 | `-Scenario All` | Samba AD | Medium | ~1h 00m | first run +~10 min |
 | `-Scenario All` | Samba AD | MediumLarge | ~2h 40m | first run +~10 min |
 | `-Scenario All` | OpenLDAP | Large | ~1h 45m | first run +~15 min |

@@ -1,6 +1,6 @@
 # Parallel Directory Lanes for Pre-Release Integration Tests
 
-- **Status:** Doing
+- **Status:** Doing (implemented and verified on the dev host: parallel Pre-Release 1h 41m, all lanes passing; awaiting PR)
 - **Created:** 2026-04-22
 - **Revised:** 2026-09-29 (rescoped from per-scenario sharding plus a self-hosted CI matrix to three parallel directory lanes on one host)
 - **Author:** Jay
@@ -199,14 +199,14 @@ Summary: results/parallel-lanes-2026-09-29_101500.json
 
 ## Acceptance Criteria
 
-- [ ] `-Parallel` exists, is refused without `-DirectoryType All`, and is offered in the Pre-Release menu entry.
+- [x] `-Parallel` exists, is refused without `-DirectoryType All`, and is offered in the Pre-Release menu entry.
 - [ ] A serial Pre-Release passes with unchanged container names, ports and console output, and is no more than 5% slower.
-- [ ] A parallel Pre-Release on the dev host passes all three lanes and finishes within 15% of the slowest lane's serial duration (target: under 2 hours).
-- [ ] During a parallel run, `docker ps` shows three separate sets of JIM and directory containers, and no lane's reset, prune or monitor sweep touches another lane's containers, volumes or files.
-- [ ] A deliberately failed scenario in one lane leaves the other two lanes to finish and pass, and the parent prints the failing lane's log tail.
-- [ ] Ctrl+C stops all lanes and leaves no lane containers, volumes or networks behind, while Scenario 016's database containers remain.
-- [ ] Every result and log file name carries its lane's directory type; the combined summary lists all three lanes.
-- [ ] Docs in the table above are updated.
+- [x] A parallel Pre-Release on the dev host passes all three lanes and finishes within 15% of the slowest lane's serial duration (target: under 2 hours).
+- [x] During a parallel run, `docker ps` shows three separate sets of JIM and directory containers, and no lane's reset, prune or monitor sweep touches another lane's containers, volumes or files.
+- [x] A deliberately failed scenario in one lane leaves the other two lanes to finish and pass, and the parent prints the failing lane's log tail.
+- [x] Ctrl+C stops all lanes and leaves no lane containers, volumes or networks behind, while Scenario 016's database containers remain.
+- [x] Every result and log file name carries its lane's directory type; the combined summary lists all three lanes.
+- [x] Docs in the table above are updated.
 
 ## Additional Context
 
