@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A queued Pending Export change is no longer exported after its reason has gone: its export Attribute Flow was removed or disabled, its Synchronisation Rule was disabled or deleted, or the object left scope with the Disconnect action. The next export withdraws it instead.
 - 🐛 A Delta Sync that removes objects no longer skips others: when more than one page of changes included deleted objects, about half were left unprocessed until the next Full Sync (for example, a leaver's account deleted from a target directory stayed in JIM).
 - 🐛 Running the setup script again over an installation with the bundled PostgreSQL no longer locks JIM out of its database: it keeps the database's password instead of generating a new one. (#1808)
 - 🐛 New Docker installations no longer trust the development identity provider's token issuer, `http://localhost:8181/realms/jim`, which the settings template set. On an existing one, delete the `JIM_SSO_VALID_ISSUERS` line from `.env` unless you added it yourself. (#1808)

@@ -566,6 +566,12 @@ public partial class SyncRepository : ISyncRepository
         IReadOnlyList<Guid> changeIdsToRemove)
         => _repo.ConnectedSystems.AppendAttributeChangesToPendingExportAsync(pendingExportId, changesToAdd, changeIdsToRemove);
 
+    public Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
+        => _repo.ConnectedSystems.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(connectedSystemId, classMembershipAttributeIds);
+
+    public Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds)
+        => _repo.ConnectedSystems.WithdrawPendingExportAttributeChangesAsync(attributeChangeIds);
+
     #endregion
 
     #region Export Evaluation Support

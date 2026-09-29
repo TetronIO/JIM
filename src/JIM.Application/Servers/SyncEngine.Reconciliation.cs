@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
@@ -779,4 +780,55 @@ public partial class SyncEngine
 
         return pairs;
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<PendingExportAttributeValueChange> SelectQueuedChangesWithoutAuthority(
+        PendingExport pendingExport,
+        bool connectedSystemObjectIsJoined,
+        IReadOnlyDictionary<int, SyncRule> syncRulesById,
+        IReadOnlySet<int> classMembershipAttributeIds)
+    {
+        if (pendingExport.ChangeType != PendingExportChangeType.Update || pendingExport.Status == PendingExportStatus.Executing)
+            return [];
+
+        var queued = pendingExport.AttributeValueChanges
+            .Where(c => c.SyncRuleId.HasValue &&
+                        c.Status is PendingExportAttributeChangeStatus.Pending or PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+            .ToList();
+        if (queued.Count == 0)
+            return [];
+
+        var withdrawn = new List<PendingExportAttributeValueChange>();
+        var rulesLosingAttributeChanges = new HashSet<int>();
+
+        foreach (var change in queued.Where(c => !classMembershipAttributeIds.Contains(c.AttributeId)))
+        {
+            var ruleId = change.SyncRuleId!.Value;
+            if (!connectedSystemObjectIsJoined ||
+                !syncRulesById.TryGetValue(ruleId, out var rule) ||
+                !rule.Enabled ||
+                !rule.AttributeFlowRules.Any(m => m.Enabled && MappingTargetAttributeId(m) == change.AttributeId))
+            {
+                withdrawn.Add(change);
+                rulesLosingAttributeChanges.Add(ruleId);
+            }
+        }
+
+        foreach (var change in queued.Where(c => classMembershipAttributeIds.Contains(c.AttributeId)))
+        {
+            var ruleId = change.SyncRuleId!.Value;
+            if (!connectedSystemObjectIsJoined ||
+                !syncRulesById.TryGetValue(ruleId, out var rule) ||
+                !rule.Enabled ||
+                rulesLosingAttributeChanges.Contains(ruleId))
+            {
+                withdrawn.Add(change);
+            }
+        }
+
+        return withdrawn;
+    }
+
+    private static int? MappingTargetAttributeId(SyncRuleMapping mapping) =>
+        mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id;
 }

@@ -375,4 +375,24 @@ public interface ISyncEngine
     IReadOnlyList<DeferredDeleteReconciliation> ReconcileDeferredExportsAgainstPersistedDeletes(
         IReadOnlyCollection<PendingExport> deferredPendingExports,
         IReadOnlyDictionary<Guid, PendingExport> persistedPendingExportsByCsoId);
+
+    /// <summary>
+    /// Selects the queued changes on an Update Pending Export that no longer have a reason to be sent: a change attributed to an export Synchronisation Rule is withdrawn when that rule no longer exists or is
+    /// disabled, when it has no enabled Attribute Flow for the change's attribute, or when the account is no longer
+    /// joined (it left the rule's scope with the Disconnect action). Class membership changes have no Attribute Flow of
+    /// their own and are withdrawn with their rule, the join, or any of that rule's attribute changes on the export
+    /// (the classes were planned for those attributes; the next evaluation replans them). Only changes awaiting a send
+    /// (Pending or ExportedNotConfirmed) are considered; changes with no rule attribution, Create and Delete exports,
+    /// and exports a connector is executing are never selected. Pure; mutates nothing.
+    /// </summary>
+    /// <param name="pendingExport">The Pending Export to examine, with its attribute changes loaded.</param>
+    /// <param name="connectedSystemObjectIsJoined">Whether the account is still joined to a Metaverse Object.</param>
+    /// <param name="syncRulesById">The Connected System's Synchronisation Rules (enabled and disabled), with their
+    /// Attribute Flows loaded. A rule id missing from it means the rule was deleted.</param>
+    /// <param name="classMembershipAttributeIds">The Connected System's class membership attribute ids.</param>
+    IReadOnlyList<PendingExportAttributeValueChange> SelectQueuedChangesWithoutAuthority(
+        PendingExport pendingExport,
+        bool connectedSystemObjectIsJoined,
+        IReadOnlyDictionary<int, SyncRule> syncRulesById,
+        IReadOnlySet<int> classMembershipAttributeIds);
 }

@@ -4789,6 +4789,57 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
+    {
+        var classAttributeIds = classMembershipAttributeIds.ToList();
+        var database = Repository.Database;
+
+        return await database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+            .Include(pe => pe.ConnectedSystemObject)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ChangeType == PendingExportChangeType.Update
+                      && pe.Status != PendingExportStatus.Executing)
+            .Where(pe => pe.AttributeValueChanges.Any(c =>
+                (c.Status == PendingExportAttributeChangeStatus.Pending || c.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+                && c.SyncRuleId != null
+                && ((pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.MetaverseObjectId == null)
+                    || !database.SyncRules.Any(r => r.Id == c.SyncRuleId && r.Enabled)
+                    || (!classAttributeIds.Contains(c.AttributeId)
+                        && !database.SyncRuleMappings.Any(m => m.SyncRuleId == c.SyncRuleId && m.Enabled && m.TargetConnectedSystemAttributeId == c.AttributeId)))))
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds)
+    {
+        if (attributeChangeIds.Count == 0)
+            return (0, 0);
+
+        var ids = attributeChangeIds.ToArray();
+        var pendingExportIds = await Repository.Database.PendingExportAttributeValueChanges
+            .Where(c => ids.Contains(c.Id) && c.PendingExportId != null)
+            .Select(c => c.PendingExportId!.Value)
+            .Distinct()
+            .ToArrayAsync();
+
+        var changesWithdrawn = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""Id"" = ANY({0})", ids);
+
+        var pendingExportsDeleted = pendingExportIds.Length == 0 ? 0 : await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" pe
+              WHERE pe.""Id"" = ANY({0})
+                AND pe.""ChangeType"" = {1}
+                AND pe.""Status"" <> {2}
+                AND NOT EXISTS (SELECT 1 FROM ""PendingExportAttributeValueChanges"" c WHERE c.""PendingExportId"" = pe.""Id"")",
+            pendingExportIds, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing);
+
+        return (changesWithdrawn, pendingExportsDeleted);
+    }
+
 
     /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.

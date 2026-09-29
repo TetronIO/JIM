@@ -65,4 +65,28 @@ internal static class ExportOutcomeMessage
         return $"Max {plural} is {limit:N0}, but {pending:N0} {plural} were pending, so none were attempted and all {pending:N0} remain pending. " +
                string.Format(remedy, "them");
     }
+
+    /// <summary>
+    /// The sentence appended to the Activity's warning when queued changes were withdrawn before the run because nothing
+    /// authorised them any more (see <c>ExportExecutionServer.WithdrawQueuedChangesWithoutAuthorityAsync</c>). A warning
+    /// rather than a silent tidy-up: a queued change an administrator may have been expecting did not go out.
+    /// </summary>
+    /// <param name="changes">How many queued attribute changes were withdrawn.</param>
+    /// <param name="pendingExports">How many Pending Exports were removed because the withdrawal left them empty.</param>
+    internal static string ForWithdrawn(int changes, int pendingExports)
+    {
+        var (subject, pronoun) = changes == 1
+            ? ("1 queued change was", "it")
+            : ($"{changes:N0} queued changes were", "them");
+
+        var removal = pendingExports switch
+        {
+            0 => ".",
+            1 => "; 1 Pending Export left empty was removed.",
+            _ => $"; {pendingExports:N0} Pending Exports left empty were removed."
+        };
+
+        return $"{subject} withdrawn instead of exported, because no enabled Synchronisation Rule or Attribute Flow authorised {pronoun} " +
+               $"any more, or the object was no longer joined{removal}";
+    }
 }

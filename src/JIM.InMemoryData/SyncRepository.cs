@@ -2447,6 +2447,58 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
+    {
+        bool IsJoined(PendingExport pe)
+        {
+            var cso = pe.ConnectedSystemObjectId.HasValue && _csos.TryGetValue(pe.ConnectedSystemObjectId.Value, out var stored)
+                ? stored
+                : pe.ConnectedSystemObject;
+            return cso == null || cso.MetaverseObjectId != null;
+        }
+
+        bool PossiblyWithoutAuthority(PendingExport pe, PendingExportAttributeValueChange c) =>
+            !IsJoined(pe)
+            || !_syncRules.TryGetValue(c.SyncRuleId!.Value, out var rule)
+            || !rule.Enabled
+            || (!classMembershipAttributeIds.Contains(c.AttributeId)
+                && !rule.AttributeFlowRules.Any(m => m.Enabled && (m.TargetConnectedSystemAttributeId ?? m.TargetConnectedSystemAttribute?.Id) == c.AttributeId));
+
+        var result = _pendingExports.Values
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ChangeType == PendingExportChangeType.Update
+                      && pe.Status != PendingExportStatus.Executing
+                      && pe.AttributeValueChanges.Any(c =>
+                          c.Status is PendingExportAttributeChangeStatus.Pending or PendingExportAttributeChangeStatus.ExportedNotConfirmed
+                          && c.SyncRuleId.HasValue
+                          && PossiblyWithoutAuthority(pe, c)))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds)
+    {
+        var ids = attributeChangeIds.ToHashSet();
+        var changesWithdrawn = 0;
+        var emptied = new List<PendingExport>();
+
+        foreach (var pe in _pendingExports.Values)
+        {
+            var removed = pe.AttributeValueChanges.RemoveAll(c => ids.Contains(c.Id));
+            if (removed == 0)
+                continue;
+
+            changesWithdrawn += removed;
+            if (pe.AttributeValueChanges.Count == 0 && pe.ChangeType == PendingExportChangeType.Update && pe.Status != PendingExportStatus.Executing)
+                emptied.Add(pe);
+        }
+
+        foreach (var pe in emptied)
+            RemovePe(pe);
+
+        return Task.FromResult((changesWithdrawn, emptied.Count));
+    }
+
     #endregion
 
     #region Export Evaluation Support
