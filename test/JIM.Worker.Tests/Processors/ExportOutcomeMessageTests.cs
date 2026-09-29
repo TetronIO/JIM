@@ -98,4 +98,32 @@ public class ExportOutcomeMessageTests
             "Max updates is 10,000, but 12,500 updates were pending, so none were attempted and all 12,500 remain pending. " +
             "Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
+
+    [Test]
+    public void ForWithdrawn_SeveralChangesAndExports_NamesBothCountsAndTheReasons()
+    {
+        var message = ExportOutcomeMessage.ForWithdrawn(changes: 1_250, pendingExports: 3);
+
+        Assert.That(message, Is.EqualTo(
+            "1,250 queued changes were withdrawn instead of exported, because no enabled Synchronisation Rule or Attribute Flow " +
+            "authorised them any more, or the object was no longer joined; 3 Pending Exports left empty were removed."));
+    }
+
+    [Test]
+    public void ForWithdrawn_OneChangeNoExportRemoved_UsesTheSingularAndOmitsTheRemovalClause()
+    {
+        var message = ExportOutcomeMessage.ForWithdrawn(changes: 1, pendingExports: 0);
+
+        Assert.That(message, Is.EqualTo(
+            "1 queued change was withdrawn instead of exported, because no enabled Synchronisation Rule or Attribute Flow " +
+            "authorised it any more, or the object was no longer joined."));
+    }
+
+    [Test]
+    public void ForWithdrawn_OneExportRemoved_UsesTheSingular()
+    {
+        var message = ExportOutcomeMessage.ForWithdrawn(changes: 2, pendingExports: 1);
+
+        Assert.That(message, Does.EndWith("; 1 Pending Export left empty was removed."));
+    }
 }

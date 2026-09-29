@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using JIM.Application.Diagnostics;
+using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Application.Staging;
 using JIM.Data;
@@ -10,6 +11,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -47,6 +49,7 @@ public class ExportExecutionServer
 
     private JimApplication Application { get; }
     private ISyncRepository SyncRepo { get; }
+    private readonly ISyncEngine _syncEngine = new SyncEngine();
 
     internal ExportExecutionServer(JimApplication application, ISyncRepository syncRepo)
     {
@@ -104,6 +107,15 @@ public class ExportExecutionServer
             RunMode = runMode,
             StartedAt = DateTime.UtcNow
         };
+
+        // A queued change must not outlive the reason it was queued. Configuration can change between the
+        // synchronisation that queued a change and this export (an Attribute Flow removed or disabled, a Synchronisation
+        // Rule disabled or deleted), and an account can leave scope with the Disconnect action after a change was queued
+        // for it; none of those revisit what is already queued, so it is checked here, once, before anything is counted
+        // or sent. A preview must not change the queue.
+        if (runMode != SyncRunMode.PreviewOnly)
+            (result.QueuedChangesWithdrawnCount, result.PendingExportsWithdrawnCount) =
+                await WithdrawQueuedChangesWithoutAuthorityAsync(connectedSystem.Id, connectedSystem.Name);
 
         // Get the count of executable exports without loading them all into memory.
         // Exports are loaded in batches to avoid EF change tracker overhead
@@ -226,6 +238,81 @@ public class ExportExecutionServer
         });
 
         return result;
+    }
+
+    /// <summary>
+    /// Withdraws queued changes on a Connected System's Update Pending Exports that nothing authorises any more (see
+    /// <see cref="ISyncEngine.SelectQueuedChangesWithoutAuthority"/>), deleting any Pending Export that leaves empty.
+    /// Runs before every export, and after every configuration change that can take authority away from a queued
+    /// change (an export Synchronisation Rule or Attribute Flow disabled, removed or deleted), so the Pending Exports
+    /// page reflects the change at once. One candidate query; objects with nothing stale cost nothing further.
+    /// </summary>
+    /// <remarks>
+    /// Safe to run while an export of the same Connected System is in progress: exports a connector is executing are
+    /// never touched, and an export's writes to Pending Export rows are updates, which a concurrent withdrawal turns
+    /// into no-ops. The narrow window between an export loading a batch and marking it executing can still send a
+    /// change withdrawn meanwhile, which is exactly what happened before this check existed.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose queue to check.</param>
+    /// <param name="connectedSystemName">Its name, for the log; the id is logged when it is not to hand.</param>
+    /// <returns>How many queued changes were withdrawn and how many emptied Pending Exports were deleted.</returns>
+    public async Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawQueuedChangesWithoutAuthorityAsync(
+        int connectedSystemId, string? connectedSystemName = null)
+    {
+        var syncRules = await SyncRepo.GetSyncRulesAsync(connectedSystemId, includeDisabled: true);
+        var classMembershipAttributeIds = ClassMembershipAttributeIds(syncRules);
+
+        var candidates = await SyncRepo.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(connectedSystemId, classMembershipAttributeIds);
+        if (candidates.Count == 0)
+            return (0, 0);
+
+        var syncRulesById = syncRules.ToDictionary(r => r.Id);
+        var withdrawnChangeIds = new List<Guid>();
+        foreach (var pendingExport in candidates)
+        {
+            var isJoined = pendingExport.ConnectedSystemObject == null || pendingExport.ConnectedSystemObject.MetaverseObjectId != null;
+            var withdrawn = _syncEngine.SelectQueuedChangesWithoutAuthority(pendingExport, isJoined, syncRulesById, classMembershipAttributeIds);
+            if (withdrawn.Count == 0)
+                continue;
+
+            withdrawnChangeIds.AddRange(withdrawn.Select(c => c.Id));
+            Log.Information("WithdrawQueuedChangesWithoutAuthorityAsync: Withdrew {Count} queued change(s) from Pending Export {PendingExportId} " +
+                "(Connected System Object {CsoId}): {Reason}",
+                withdrawn.Count, pendingExport.Id, pendingExport.ConnectedSystemObjectId,
+                isJoined ? "no enabled Synchronisation Rule or Attribute Flow authorises them any more" : "the account is no longer joined");
+        }
+
+        if (withdrawnChangeIds.Count == 0)
+            return (0, 0);
+
+        var (changesWithdrawn, pendingExportsDeleted) = await SyncRepo.WithdrawPendingExportAttributeChangesAsync(withdrawnChangeIds);
+
+        // Synchronisation Integrity: summary statistics for the batch operation.
+        Log.Information("WithdrawQueuedChangesWithoutAuthorityAsync: {SystemName}: withdrew {ChangeCount} queued change(s) no longer authorised " +
+            "by an enabled Synchronisation Rule, Attribute Flow or join, deleting {PendingExportCount} Pending Export(s) left empty",
+            connectedSystemName ?? $"Connected System {connectedSystemId}", changesWithdrawn, pendingExportsDeleted);
+
+        return (changesWithdrawn, pendingExportsDeleted);
+    }
+
+    /// <summary>
+    /// The class membership attribute of each Object Type the Connected System's Synchronisation Rules cover. Class
+    /// membership is JIM-computed, so it has no Attribute Flow of its own.
+    /// </summary>
+    private static HashSet<int> ClassMembershipAttributeIds(IEnumerable<SyncRule> syncRules)
+    {
+        var ids = new HashSet<int>();
+        foreach (var objectType in syncRules.Select(r => r.ConnectedSystemObjectType).OfType<ConnectedSystemObjectType>().DistinctBy(t => t.Id))
+        {
+            var attributeName = objectType.ClassMembershipAttributeName();
+            if (string.IsNullOrEmpty(attributeName))
+                continue;
+
+            var attribute = objectType.Attributes?.FirstOrDefault(a => a.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
+            if (attribute != null)
+                ids.Add(attribute.Id);
+        }
+        return ids;
     }
 
     /// <summary>

@@ -66,7 +66,7 @@ public class ConfigurationChangeCaptureGranularTests
         _csRepo.Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRuleMapping>());
 
         _protection = new FakeProtection();
-        _jim = new JimApplication(_repo.Object) { CredentialProtection = _protection };
+        _jim = new JimApplication(_repo.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository()) { CredentialProtection = _protection };
 
         SetupTrackingSetting(enabled: true);
         SetupHashKeySetting();

@@ -43,7 +43,7 @@ public class InitialPasswordReleaseOnSaveTests
 
         _mockRepository = new Mock<IRepository>();
         _mockCsRepo = new Mock<IConnectedSystemRepository>();
-        _mockSyncRepo = new Mock<ISyncRepository>();
+        _mockSyncRepo = TestUtilities.StubQueuedChangeWithdrawal(new Mock<ISyncRepository>());
         var mockMvRepo = new Mock<IMetaverseRepository>();
         var mockActivityRepo = new Mock<IActivityRepository>();
 

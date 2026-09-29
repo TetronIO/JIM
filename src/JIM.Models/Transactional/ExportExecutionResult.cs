@@ -97,6 +97,18 @@ public class ExportExecutionResult
     /// </remarks>
     public int ClassMembershipRefusedCount { get; set; }
 
+    /// <summary>
+    /// Queued attribute changes withdrawn before the export ran because nothing authorised them any more: their export
+    /// Synchronisation Rule was deleted or disabled, its Attribute Flow for the attribute was removed or disabled, or the
+    /// account was no longer joined (it left the rule's scope with the Disconnect action).
+    /// </summary>
+    public int QueuedChangesWithdrawnCount { get; set; }
+
+    /// <summary>
+    /// Update Pending Exports deleted before the export ran because withdrawing their stale changes left them empty.
+    /// </summary>
+    public int PendingExportsWithdrawnCount { get; set; }
+
     #region Optimistic Export Apply (issue #1079)
 
     /// <summary>

@@ -4349,27 +4349,17 @@ public abstract class SyncTaskProcessorBase
         if (persistedPesByCsoId.Count == 0)
             return;
 
-        var reconciledCount = 0;
+        var pairs = _syncEngine.ReconcileDeferredExportsAgainstPersistedDeletes(_pendingExportsToCreate, persistedPesByCsoId);
 
-        foreach (var (csoId, persistedPe) in persistedPesByCsoId)
+        foreach (var pair in pairs)
         {
-            if (persistedPe.ChangeType != PendingExportChangeType.Delete ||
-                persistedPe.Status != PendingExportStatus.Pending)
-                continue;
+            var csoId = pair.PersistedDelete.ConnectedSystemObjectId!.Value;
 
-            // Find the matching deferred CREATE or UPDATE
-            var deferredPe = _pendingExportsToCreate.FirstOrDefault(pe =>
-                pe.ConnectedSystemObjectId == csoId &&
-                pe.Status == PendingExportStatus.Pending);
-
-            if (deferredPe == null)
-                continue;
-
-            if (deferredPe.ChangeType == PendingExportChangeType.Create)
+            if (pair.Outcome == DeferredDeleteReconciliationOutcome.CancelBoth)
             {
                 // CREATE + DELETE → cancel both. Remove deferred CREATE and queue persisted DELETE for deletion.
-                _pendingExportsToCreate.Remove(deferredPe);
-                _pendingExportsToDelete.Add(persistedPe);
+                _pendingExportsToCreate.Remove(pair.Deferred);
+                _pendingExportsToDelete.Add(pair.PersistedDelete);
 
                 // Also remove the provisioning CSO — it was never exported, so no need to create it
                 var provisioningCso = _provisioningCsosToCreate.FirstOrDefault(c => c.Id == csoId);
@@ -4377,19 +4367,19 @@ public abstract class SyncTaskProcessorBase
                     _provisioningCsosToCreate.Remove(provisioningCso);
 
                 Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Cancelled CREATE PE {CreateId} and DELETE PE {DeleteId} for CSO {CsoId} — no net change, object was never exported",
-                    deferredPe.Id, persistedPe.Id, csoId);
-                reconciledCount++;
+                    pair.Deferred.Id, pair.PersistedDelete.Id, csoId);
             }
-            else if (deferredPe.ChangeType == PendingExportChangeType.Update)
+            else
             {
                 // UPDATE + DELETE → remove UPDATE only, DELETE still needed
-                _pendingExportsToCreate.Remove(deferredPe);
+                _pendingExportsToCreate.Remove(pair.Deferred);
 
                 Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Removed redundant UPDATE PE {UpdateId} for CSO {CsoId} — DELETE PE {DeleteId} will proceed",
-                    deferredPe.Id, csoId, persistedPe.Id);
-                reconciledCount++;
+                    pair.Deferred.Id, csoId, pair.PersistedDelete.Id);
             }
         }
+
+        var reconciledCount = pairs.Count;
 
         if (reconciledCount > 0)
         {
