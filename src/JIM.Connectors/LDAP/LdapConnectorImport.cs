@@ -46,10 +46,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     internal string? PinValidationWarning { get; private set; }
 
     /// <summary>
-    /// Where the follow-up reads of an attribute the directory answered in ranges go
-    /// (<see cref="LdapRangedAttribute"/>). The import's own connection; settable so a test can answer them.
+    /// Where the reads the import makes through the <see cref="ILdapOperationExecutor"/> seam go: the root DSE read,
+    /// every read a change source makes, and the follow-up reads of an attribute the directory answered in ranges
+    /// (<see cref="LdapRangedAttribute"/>). The import's own connection; settable so a test can script a directory
+    /// and drive the whole Delta Import, in the order the import runs it, without a server.
     /// </summary>
-    internal ILdapOperationExecutor RangeExecutor { get; set; }
+    internal ILdapOperationExecutor Executor { get; set; }
 
     /// <summary>
     /// Set when this session's change source may have missed something: JIM could not confirm that the account it
@@ -114,7 +116,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = runProfile;
         _connection = connection;
-        RangeExecutor = new LdapOperationExecutor(connection);
+        Executor = new LdapOperationExecutor(connection);
         _connectionFactory = connectionFactory;
         _importConcurrency = Math.Clamp(importConcurrency, 1, LdapConnectorConstants.MAX_IMPORT_CONCURRENCY);
         _paginationTokens = paginationTokens;
@@ -704,7 +706,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         request.Attributes.AddRange(LdapConnectorUtilities.RootDseDiscoveryAttributes);
 
 
-        var response = (SearchResponse)_connection.SendRequest(request);
+        var response = (SearchResponse)Executor.SendRequest(request);
 
         if (response == null)
             throw new LdapCommunicationException("LDAP response was null when querying directory information.");
@@ -889,7 +891,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     /// hold no state, so one is made wherever it is needed rather than kept.
     /// </summary>
     private ILdapDeltaSource DeltaSourceFor(LdapConnectorRootDse rootDse) =>
-        LdapDeltaSources.Create(rootDse.DeltaSourceKind, new LdapOperationExecutor(_connection), _logger);
+        LdapDeltaSources.Create(rootDse.DeltaSourceKind, Executor, _logger);
 
     #region ILdapDeltaImportHost members
     // The way a change source reaches the parts of the import that are not about any one directory type.
@@ -1006,7 +1008,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                 if (LdapRangedAttribute.TryParse(attributeDescription, out var rangedAttributeName, out _, out _))
                 {
                     attributeName = rangedAttributeName;
-                    attribute = LdapRangedAttribute.ReadAll(RangeExecutor, searchResult, attributeDescription, _searchTimeout, _logger);
+                    attribute = LdapRangedAttribute.ReadAll(Executor, searchResult, attributeDescription, _searchTimeout, _logger);
                 }
 
                 // get the schema attribute for this search result attribute, so we can work out what type it is
