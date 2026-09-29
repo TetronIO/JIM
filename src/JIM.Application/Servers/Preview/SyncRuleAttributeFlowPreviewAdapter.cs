@@ -648,7 +648,24 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     private async Task<List<PreviewValidationFinding>> DescribeDerivedFlowsAsync(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
     {
         var findings = new List<PreviewValidationFinding>();
-        var standIn = await MaterialiseAsync(rule, proposal);
+
+        // Flag first, so a preview with the feature off reads and materialises nothing more than it did before it.
+        if (!await _application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
+            return findings;
+
+        SyncRule standIn;
+        try
+        {
+            standIn = await MaterialiseAsync(rule, proposal);
+        }
+        catch (InvalidOperationException)
+        {
+            // A proposal naming an attribute the rule's object types do not have cannot be materialised. Validation
+            // has never failed on that: the value evaluation reports it, as it did before derived flows existed, so
+            // there is simply nothing to assess here.
+            return findings;
+        }
+
         var assessment = await _application.ConnectedSystems.AssessDerivedFlowProposalAsync(standIn);
         if (assessment == null)
             return findings;

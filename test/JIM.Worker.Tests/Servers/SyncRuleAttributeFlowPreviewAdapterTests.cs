@@ -613,6 +613,21 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
 
         Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty,
             "the flag off leaves the preview exactly as it was: no graph, no derived flow findings");
+        _connectedSystemRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never,
+            "and reads nothing to find out");
+    }
+
+    [Test]
+    public async Task ValidateAsync_ProposalNamesATargetAttributeTheTypeDoesNotHave_AssessesNothingRatherThanFailingAsync()
+    {
+        // Such a proposal cannot be materialised; the value evaluation reports it, as it always has, so validation must
+        // not start failing on it now.
+        var proposal = new SyncRuleAttributeFlowProposal([new SyncRuleMappingProposal(
+            999, null, [new SyncRuleMappingSourceProposal(1, null, null, "mv[\"Email\"]")])]);
+
+        var findings = await NewAdapter().ValidateAsync(Context(proposal));
+
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
     }
 
     #region helpers
