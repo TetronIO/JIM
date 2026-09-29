@@ -423,10 +423,24 @@ public class SyncImportTaskProcessor
 
                     // Now that all pages are processed, update the persisted connector data
                     // with the new watermark captured from the first page.
+                    //
+                    // Not when the run was cancelled: the watermark stands for every change the connector reads
+                    // across ALL its pages, a cancelled run stops before it has read them, and it then skips staging
+                    // (the cancellation check after this block), so recording the watermark would tell the next
+                    // Delta Import that changes JIM never received are already imported, and it would silently skip
+                    // them. The watermark the run started with stays, so the next run re-reads what this one dropped.
                     if (newPersistedData != null && newPersistedData != originalPersistedData)
                     {
-                        Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
-                        await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
+                        if (_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            Log.Information("PerformImportAsync: Cancellation requested. Not recording the connector's new watermark for Connected System {ConnectedSystemId}: this run read {PagesRead} page(s) and {ObjectsRead} object(s) and staged none of them, so the next run must read from the watermark this run started with.",
+                                _connectedSystem.Id, pageNumber, totalObjectsImported);
+                        }
+                        else
+                        {
+                            Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
+                            await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
+                        }
                     }
 
                     // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
