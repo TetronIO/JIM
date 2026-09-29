@@ -1,6 +1,6 @@
 # Metaverse-Derived Attribute Flows
 
-- **Status:** Doing (Phase 0 delivered; Phase 1 in progress)
+- **Status:** Doing (Phases 0 and 1 delivered)
 - **Issue:** [#1750](https://github.com/TetronIO/JIM/issues/1750)
 - **PRD:** [`../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
 - **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (release 2 depends on this plan; see [`UNIQUE_VALUE_GENERATION.md`](UNIQUE_VALUE_GENERATION.md) decision 7 and Phases 5 and 6), [#1864](https://github.com/TetronIO/JIM/issues/1864) drift contributor fix (the bottom layer of this stack), [#1861](https://github.com/TetronIO/JIM/issues/1861) Reference inputs (deferred), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler, [#1781](https://github.com/TetronIO/JIM/issues/1781) feature flags, [#614](https://github.com/TetronIO/JIM/issues/614) internally managed Metaverse Objects
@@ -139,7 +139,16 @@ Delivered by [#1872](https://github.com/TetronIO/JIM/pull/1872) (2026-09-29), as
 2. `DriftDetectionService`: a system is a legitimate source for a diverged Connected System attribute only if its winning import flow for the Metaverse attribute reads that attribute (direct source, or a `cs["..."]` input via `ExpressionInputResolver`).
 3. Tests for direct attribute (same attribute: not drift; different attribute: drift), expression reading it or not, multi-contributor priority interaction, mixed `cs`/`mv` expression. Changelog 🐛 entry; drift docs. Standalone and user-facing, so it is not behind the flag.
 
-### Phase 1: Graph, save-time validation and the flag
+### Phase 1: Graph, save-time validation and the flag ✅
+
+**Delivered (2026-09-29), with these specifics the plan left open.**
+- The flag is `Features.MetaverseDerivedAttributeFlows`, removal tracked by [#1878](https://github.com/TetronIO/JIM/issues/1878).
+- Only problems involving a proposed mapping are reported, so a save is never refused for someone else's configuration. When no proposed import mapping reads `mv`, nothing runs and nothing is read, whatever the flag.
+- A cycle blocks a save only through a proposed mapping that is **enabled**. A cycle can already exist (saved with the flag off, or by concurrent saves), and disabling one of its mappings is how an administrator breaks it; re-enabling is validated as normal, and the graph still includes disabled mappings (decision 2). The exemption is keyed on the mapping, never its rule.
+- "Newly reads `mv`" (the flag-off gate) is judged against a no-tracking read of the persisted rules, because the settings-update path holds a tracked, already-mutated mapping.
+- Warnings travel on a transient `SyncRuleMapping.SaveWarnings` (the `SequenceSkippedAhead` precedent): REST `warnings` on the mapping POST and PATCH responses, PowerShell `Write-Warning` in `New-`/`Set-JIMSyncRuleMapping`. The portal renders them in Phase 6; it already surfaces the errors and, new here, a `FeatureDisabledException` as a snackbar instead of an unhandled error.
+- The non-repeatable functions JIM's evaluator actually offers are `Now()`, `Today()`, `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`; there is no `NewGuid()` function (decision 15's wording).
+
 
 1. `FeatureFlagCatalogue.MetaverseDerivedAttributeFlows` (In development); file the removal issue and set `TrackingIssueNumber`.
 2. `DerivedFlowGraph`, `DerivedFlowValidator` (cycles, unknown names, Reference rejection, non-repeatable warning), `DerivedFlowValidationException : ArgumentException`.
