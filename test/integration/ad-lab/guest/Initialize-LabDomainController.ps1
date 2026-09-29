@@ -52,8 +52,9 @@
     Default gateway (Prepare).
 
 .PARAMETER DnsForwarder
-    The DNS server this domain controller forwards to (Prepare sets it as the resolver before promotion;
-    Configure sets it as the forwarder after).
+    Optional. The DNS server this domain controller forwards to (Prepare sets it as the resolver before promotion;
+    Configure sets it as the forwarder after). The lab network has no uplink, so normally there is none: with no
+    value, Prepare points the resolver at this machine's own address and Configure adds no forwarder.
 
 .PARAMETER NtpServer
     The NTP source w32time follows (Configure sets it; Verify checks it).
@@ -75,6 +76,11 @@
 
 .PARAMETER LabRoot
     Where the lab files live in the guest. Default C:\jim-ad-lab.
+
+.EXAMPLE
+    .\Initialize-LabDomainController.ps1 -Phase Prepare -ComputerName dc1 -IPAddress 10.99.0.11 -PrefixLength 24 -Gateway 10.99.0.1
+
+    No forwarder: the lab network has no uplink, so the resolver is the machine itself.
 
 .EXAMPLE
     .\Initialize-LabDomainController.ps1 -Phase Prepare -ComputerName dc1 -IPAddress 10.20.30.41 -PrefixLength 24 -Gateway 10.20.30.1 -DnsForwarder 10.20.30.2
@@ -142,6 +148,14 @@ function Assert-Setting {
     }
 }
 
+function Resolve-DnsForwarder {
+    # The address to use as the DNS forwarder, or $null when there is none: an empty value means none, and nothing
+    # else does. The lab network has no uplink, so normally there is none.
+    param([string]$Forwarder)
+    if ([string]::IsNullOrWhiteSpace($Forwarder)) { return $null }
+    return $Forwarder.Trim()
+}
+
 function Get-DomainRole {
     # 0 standalone workstation ... 3 member server, 4 backup domain controller, 5 primary domain controller.
     return [int](Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
@@ -175,7 +189,7 @@ function Wait-ActiveDirectory {
 # ---------------------------------------------------------------------------------------------
 
 function Invoke-PreparePhase {
-    Assert-Setting -Name 'ComputerName', 'IPAddress', 'PrefixLength', 'Gateway', 'DnsForwarder'
+    Assert-Setting -Name 'ComputerName', 'IPAddress', 'PrefixLength', 'Gateway'
 
     # Rename. The unattend file already names the machine, so this normally does nothing; it makes a re-run
     # after a manual change converge.
@@ -200,7 +214,11 @@ function Invoke-PreparePhase {
         Set-Changed "Set the static address $IPAddress/$PrefixLength via $Gateway"
     }
     if (-not (Test-IsDomainController)) {
-        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $DnsForwarder
+        # With no forwarder (the lab has no uplink) the resolver is this machine itself, which is what it becomes on
+        # promotion anyway.
+        $forwarder = Resolve-DnsForwarder -Forwarder $DnsForwarder
+        $resolver = if ($forwarder) { $forwarder } else { $IPAddress }
+        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $resolver
     }
 
     # Roles.
@@ -405,7 +423,7 @@ function Enable-RecycleBinFeature {
 }
 
 function Invoke-ConfigurePhase {
-    Assert-Setting -Name 'ComputerName', 'Domain', 'NetBiosName', 'DnsForwarder', 'NtpServer', 'ServiceAccountPassword'
+    Assert-Setting -Name 'ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword'
     if ([string]::IsNullOrEmpty($VmName)) { $script:VmName = $ComputerName }
 
     Wait-ActiveDirectory
@@ -413,7 +431,9 @@ function Invoke-ConfigurePhase {
     $base = $info.BaseDn
     $aclPath = Join-Path $LabRoot 'jim-ad-delegation.acl'
 
-    Set-DnsForwarderTo -Address $DnsForwarder
+    # No forwarder unless one was given: the lab network has no uplink to forward to.
+    $forwarder = Resolve-DnsForwarder -Forwarder $DnsForwarder
+    if ($forwarder) { Set-DnsForwarderTo -Address $forwarder }
     Set-TimeSource -Server $NtpServer
     Set-WindowsUpdatePolicy
 

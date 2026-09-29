@@ -827,7 +827,8 @@ function Get-LabGuestPhaseArgument {
 
     .DESCRIPTION
         Each phase gets only what it uses, so a secret is never sent to a phase that does not need it. The
-        result is an ordered dictionary for splatting; the Recycle Bin is a switch, present only when on.
+        result is an ordered dictionary for splatting; the Recycle Bin is a switch, present only when on, and the
+        DNS forwarder (Prepare and Configure) is present only when it has a value.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
@@ -841,10 +842,18 @@ function Get-LabGuestPhaseArgument {
     )
 
     $required = @{
-        Prepare   = @('ComputerName', 'IPAddress', 'PrefixLength', 'Gateway', 'DnsForwarder')
+        Prepare   = @('ComputerName', 'IPAddress', 'PrefixLength', 'Gateway')
         Promote   = @('Domain', 'NetBiosName', 'SafeModePassword')
-        Configure = @('ComputerName', 'Domain', 'NetBiosName', 'DnsForwarder', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
+        Configure = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
         Verify    = @('ComputerName', 'Domain', 'NetBiosName', 'NtpServer', 'ServiceAccountPassword', 'VmName', 'LabRoot')
+    }
+    # The DNS forwarder is optional: the lab network has no uplink, so there is normally nothing to forward to. It
+    # is passed only when it has a value, so the guest never receives an empty argument.
+    $optionalScalar = @{
+        Prepare   = @('DnsForwarder')
+        Promote   = @()
+        Configure = @('DnsForwarder')
+        Verify    = @()
     }
     $optionalArray = @{
         Prepare   = @()
@@ -865,6 +874,11 @@ function Get-LabGuestPhaseArgument {
             throw "Phase $Phase needs the setting '$name'."
         }
         $arguments[$name] = $Settings[$name]
+    }
+    foreach ($name in $optionalScalar[$Phase]) {
+        if ($Settings.Contains($name) -and (-not [string]::IsNullOrWhiteSpace([string]$Settings[$name]))) {
+            $arguments[$name] = $Settings[$name]
+        }
     }
     foreach ($name in $optionalArray[$Phase]) {
         if ($Settings.Contains($name) -and ($null -ne $Settings[$name]) -and (@($Settings[$name]).Count -gt 0)) {

@@ -37,7 +37,8 @@
     Folder that receives the VM's files: <VhdDirectory>\<Name>\.
 
 .PARAMETER SwitchName
-    The external virtual switch on the CI VLAN.
+    The virtual switch the domain controller attaches to. In the lab that is the Internal switch called Lab: it has an
+    adapter on the host (which serves NTP to the domain controllers) and no uplink, so nothing routes out.
 
 .PARAMETER IPAddress
     Static IPv4 address for the domain controller.
@@ -46,13 +47,16 @@
     Prefix length of the subnet.
 
 .PARAMETER Gateway
-    Default gateway.
+    Default gateway. On the lab's Internal switch there is no router; use the host's own address on that switch,
+    which leads nowhere by design.
 
 .PARAMETER DnsForwarder
-    DNS server the domain controller forwards to.
+    Optional. DNS server the domain controller forwards to. The lab network has no uplink, so leave it out: the
+    domain controller then resolves through itself and is given no forwarder.
 
 .PARAMETER NtpServer
-    NTP source for w32time; use the same one the host and the runner use.
+    NTP source for w32time. In the lab that is the host's address on the Lab switch, the only NTP-synchronised machine
+    the domain controllers can reach.
 
 .PARAMETER AdministratorPassword
     Administrator (and Directory Services Restore Mode) password, as a SecureString. Falls back to the
@@ -105,21 +109,21 @@
     $admin = Read-Host 'Administrator password' -AsSecureString
     $jim = Read-Host 'svc-jim password' -AsSecureString
     .\New-LabDomainController.ps1 -Name dc-primary -Domain PANOPLY.LOCAL -IsoPath D:\iso\ws2025.iso -VhdDirectory D:\vm `
-        -SwitchName CI-VLAN -IPAddress 10.20.30.41 -PrefixLength 24 -Gateway 10.20.30.1 -DnsForwarder 10.20.30.2 `
-        -NtpServer 10.20.30.2 -AdministratorPassword $admin -ServiceAccountPassword $jim -EnableRecycleBin `
+        -SwitchName Lab -IPAddress 10.99.0.11 -PrefixLength 24 -Gateway 10.99.0.1 `
+        -NtpServer 10.99.0.1 -AdministratorPassword $admin -ServiceAccountPassword $jim -EnableRecycleBin `
         -ExtraCertificateNames samba-ad-primary
 
 .EXAMPLE
     .\New-LabDomainController.ps1 -Name dc-source -Domain RESURGAM.LOCAL -IsoPath D:\iso\ws2025.iso -VhdDirectory D:\vm `
-        -SwitchName CI-VLAN -IPAddress 10.20.30.42 -PrefixLength 24 -Gateway 10.20.30.1 -DnsForwarder 10.20.30.2 `
-        -NtpServer 10.20.30.2
+        -SwitchName Lab -IPAddress 10.99.0.12 -PrefixLength 24 -Gateway 10.99.0.1 `
+        -NtpServer 10.99.0.1
 
     With the passwords in JIM_AD_LAB_ADMIN_PASSWORD and JIM_AD_LAB_JIM_PASSWORD.
 
 .EXAMPLE
     .\New-LabDomainController.ps1 -Name dc-target -Domain GENTIAN.LOCAL -IsoPath D:\iso\ws2025.iso -VhdDirectory D:\vm `
-        -SwitchName CI-VLAN -IPAddress 10.20.30.43 -PrefixLength 24 -Gateway 10.20.30.1 -DnsForwarder 10.20.30.2 `
-        -NtpServer 10.20.30.2 -CumulativeUpdatePath D:\updates\windows-server-2025-latest.msu
+        -SwitchName Lab -IPAddress 10.99.0.13 -PrefixLength 24 -Gateway 10.99.0.1 `
+        -NtpServer 10.99.0.1 -CumulativeUpdatePath D:\updates\windows-server-2025-latest.msu
 #>
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Operator-facing progress output, coloured in the repository style.')]
@@ -153,7 +157,6 @@ param(
     [Parameter(Mandatory)]
     [System.Net.IPAddress]$Gateway,
 
-    [Parameter(Mandatory)]
     [System.Net.IPAddress]$DnsForwarder,
 
     [Parameter(Mandatory)]
@@ -380,7 +383,6 @@ try {
         IPAddress              = $IPAddress.ToString()
         PrefixLength           = $PrefixLength
         Gateway                = $Gateway.ToString()
-        DnsForwarder           = $DnsForwarder.ToString()
         NtpServer              = $NtpServer
         SafeModePassword       = $adminSecret
         ServiceAccountPassword = $jimSecret
@@ -388,6 +390,10 @@ try {
         ExtraCertificateNames  = @($ExtraCertificateNames)
         VmName                 = $Name
         LabRoot                = $guestRoot
+    }
+    # The lab network has no uplink, so normally there is no forwarder and the setting is left out altogether.
+    if ($null -ne $DnsForwarder) {
+        $settings['DnsForwarder'] = $DnsForwarder.ToString()
     }
 
     foreach ($phase in @('Prepare', 'Promote')) {

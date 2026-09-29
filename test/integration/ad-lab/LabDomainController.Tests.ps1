@@ -1910,3 +1910,84 @@ Describe 'Invoke-LabRebuildPhase' {
         }
     }
 }
+
+Describe 'Get-LabGuestPhaseArgument without a DNS forwarder' {
+    BeforeAll {
+        # The lab network has no uplink, so there is nothing to forward to and the setting is optional.
+        function Get-ForwarderTestSetting {
+            return @{
+                ComputerName           = 'dc1'
+                Domain                 = 'PANOPLY.LOCAL'
+                NetBiosName            = 'PANOPLY'
+                IPAddress              = '10.99.0.11'
+                PrefixLength           = 24
+                Gateway                = '10.99.0.1'
+                NtpServer              = '10.99.0.1'
+                ServiceAccountPassword = (Get-TestSecret 'Svc-Secret-1')
+                VmName                 = 'dc-primary'
+                LabRoot                = 'C:\jim-ad-lab'
+            }
+        }
+    }
+
+    It 'gives Prepare and Configure no DnsForwarder when the setting is absent' {
+        $settings = Get-ForwarderTestSetting
+        foreach ($phase in 'Prepare', 'Configure') {
+            { Get-LabGuestPhaseArgument -Phase $phase -Settings $settings } | Should -Not -Throw
+            (Get-LabGuestPhaseArgument -Phase $phase -Settings $settings).Contains('DnsForwarder') | Should -BeFalse
+        }
+    }
+
+    It 'omits DnsForwarder when the value is null, empty or blank, so it never reaches the guest as an empty argument' {
+        foreach ($empty in $null, '', '   ') {
+            $settings = Get-ForwarderTestSetting
+            $settings.DnsForwarder = $empty
+            foreach ($phase in 'Prepare', 'Configure') {
+                (Get-LabGuestPhaseArgument -Phase $phase -Settings $settings).Contains('DnsForwarder') | Should -BeFalse
+            }
+        }
+    }
+
+    It 'still passes a forwarder to Prepare and Configure when there is one, and to no other phase' {
+        $settings = Get-ForwarderTestSetting
+        $settings.DnsForwarder = '10.20.30.2'
+        (Get-LabGuestPhaseArgument -Phase Prepare -Settings $settings).DnsForwarder | Should -Be '10.20.30.2'
+        (Get-LabGuestPhaseArgument -Phase Configure -Settings $settings).DnsForwarder | Should -Be '10.20.30.2'
+        (Get-LabGuestPhaseArgument -Phase Verify -Settings $settings).Contains('DnsForwarder') | Should -BeFalse
+        $settings.SafeModePassword = (Get-TestSecret 'Dsrm-Secret-1')
+        (Get-LabGuestPhaseArgument -Phase Promote -Settings $settings).Contains('DnsForwarder') | Should -BeFalse
+    }
+
+    It 'still requires the rest of what each phase needs' {
+        $partial = Get-ForwarderTestSetting
+        $partial.Remove('Gateway')
+        { Get-LabGuestPhaseArgument -Phase Prepare -Settings $partial } | Should -Throw '*Gateway*'
+        $partial = Get-ForwarderTestSetting
+        $partial.Remove('NtpServer')
+        { Get-LabGuestPhaseArgument -Phase Configure -Settings $partial } | Should -Throw '*NtpServer*'
+    }
+}
+
+Describe 'ConvertFrom-LabRebuildSetting with a settings.json that has no dnsForwarder' {
+    It 'accepts the parsed file and builds every candidate without a DnsForwarder parameter' {
+        $json = @'
+{
+  "isoPath": "D:\\media\\WindowsServer2025.iso",
+  "vhdDirectory": "D:\\Hyper-V\\Virtual Hard Disks",
+  "switchName": "Lab",
+  "ntpServer": "10.99.0.1",
+  "domainControllers": {
+    "dc-primary": { "domain": "PANOPLY.LOCAL", "ipAddress": "10.99.0.11", "prefixLength": 24, "gateway": "10.99.0.1" },
+    "dc-source":  { "domain": "RESURGAM.LOCAL", "ipAddress": "10.99.0.12", "prefixLength": 24, "gateway": "10.99.0.1" },
+    "dc-target":  { "domain": "GENTIAN.LOCAL", "ipAddress": "10.99.0.13", "prefixLength": 24, "gateway": "10.99.0.1" }
+  }
+}
+'@
+        $plan = ConvertFrom-LabRebuildSetting -Settings ($json | ConvertFrom-Json) -GenerationName 'g1'
+        @($plan.Roles).Count | Should -Be 3
+        foreach ($role in $plan.Roles) {
+            $role.BuildParameters.ContainsKey('DnsForwarder') | Should -BeFalse
+            $role.BuildParameters.NtpServer | Should -Be '10.99.0.1'
+        }
+    }
+}
