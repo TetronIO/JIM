@@ -53,7 +53,7 @@
                 </MudItem>
                 <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync"
-                               DropShadow="false" FullWidth="true" Style="height: 50px;"
+                               DropShadow="false" FullWidth="true" Style="height: 39px; margin-top: 6px;"
                                Disabled="@(_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)">
                         Execute</MudButton>
                     </MudItem>
@@ -227,7 +227,8 @@ rather than appearing and disappearing with the processing state *@
                                                      Class="ml-0">@GetTaskStatusDisplay(context.Item)</MudChip>
                                         </CellTemplate>
                                     </TemplateColumn>
-                                    <TemplateColumn T="WorkerTaskHeader" Title="Progress" Sortable="false" HeaderStyle="min-width: 200px;">
+                                    <TemplateColumn T="WorkerTaskHeader" Title="Progress" Sortable="false" HeaderStyle="min-width: 200px;"
+                                                    CellClass="jim-queue-progress-cell">
                                         <HeaderTemplate>
                                             <MudText Typo="Typo.button">Progress</MudText>
                                         </HeaderTemplate>

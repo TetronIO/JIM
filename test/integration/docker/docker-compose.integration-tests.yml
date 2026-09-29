@@ -29,7 +29,7 @@
 name: jim-integration
 
 services:
-  # Phase 1 - Scenario 1 & 3: HR to Directory, GALSYNC
+  # Phase 1 - Scenario 001 & 3: HR to Directory, GALSYNC
   # Primary Samba AD instance for most scenarios
   samba-ad-primary:
     image: ${SAMBA_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-samba-ad:primary}
@@ -84,7 +84,7 @@ services:
           cpus: ${SAMBA_PRIMARY_CPUS_RESERVED:-0.5}
           memory: ${SAMBA_PRIMARY_MEMORY_RESERVED:-512M}
 
-  # Phase 1 - Scenario 2: Directory to Directory Sync (Source)
+  # Phase 1 - Scenario 002: Directory to Directory Sync (Source)
   samba-ad-source:
     image: ${SAMBA_IMAGE_SOURCE:-ghcr.io/tetronio/jim-samba-ad:source}
     build:
@@ -119,8 +119,8 @@ services:
         aliases:
           - dc1-source.resurgam.local
     profiles:
-      - scenario2
-      - scenario8
+      - scenario-002
+      - scenario-008
     healthcheck:
       test: ["CMD-SHELL", "/usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1"]
       interval: 10s
@@ -137,7 +137,7 @@ services:
           cpus: ${SAMBA_SOURCE_CPUS_RESERVED:-0.5}
           memory: ${SAMBA_SOURCE_MEMORY_RESERVED:-512M}
 
-  # Phase 1 - Scenario 2: Directory to Directory Sync (Target)
+  # Phase 1 - Scenario 002: Directory to Directory Sync (Target)
   samba-ad-target:
     image: ${SAMBA_IMAGE_TARGET:-ghcr.io/tetronio/jim-samba-ad:target}
     build:
@@ -172,8 +172,8 @@ services:
         aliases:
           - dc1-target.gentian.local
     profiles:
-      - scenario2
-      - scenario8
+      - scenario-002
+      - scenario-008
     healthcheck:
       test: ["CMD-SHELL", "/usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1"]
       interval: 10s
@@ -190,7 +190,7 @@ services:
           cpus: ${SAMBA_TARGET_CPUS_RESERVED:-0.5}
           memory: ${SAMBA_TARGET_MEMORY_RESERVED:-512M}
 
-  # Phase 2 - Scenario 16: JIM SQL Connector matrix (Microsoft SQL Server provider)
+  # Phase 2 - Scenario 016: JIM SQL Connector matrix (Microsoft SQL Server provider)
   sqlserver-hris-a:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver-hris-a
@@ -218,7 +218,7 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
-    # Sized for the Scenario 16 scale run (500,000 rows). SQL Server refuses to start with less than
+    # Sized for the Scenario 016 scale run (500,000 rows). SQL Server refuses to start with less than
     # 2GB and pages hard against a 500,000-row keyset scan at that floor.
     deploy:
       resources:
@@ -229,7 +229,7 @@ services:
           cpus: ${SQLSERVER_CPUS_RESERVED:-1.0}
           memory: ${SQLSERVER_MEMORY_RESERVED:-2G}
 
-  # Phase 2 - Scenario 16: JIM SQL Connector matrix (Oracle Database provider)
+  # Phase 2 - Scenario 016: JIM SQL Connector matrix (Oracle Database provider)
   #
   # Oracle Database Free 23ai, not the retired Express 21c image. Free 23ai pulls anonymously from
   # Oracle's own registry (no docker login, no licence click-through), so no third-party Docker Hub
@@ -283,7 +283,7 @@ services:
     shm_size: 2gb
 
   # Phase 2 - PostgreSQL, staged for the JIM SQL Connector's priority 2 providers. Not used by
-  # Scenario 16, which covers the priority 1 providers (Microsoft SQL Server and Oracle Database).
+  # Scenario 016, which covers the priority 1 providers (Microsoft SQL Server and Oracle Database).
   postgres-test:
     image: postgres:16
     container_name: postgres-target
@@ -441,7 +441,7 @@ services:
           cpus: ${DIRSRV_PRIMARY_CPUS_RESERVED:-0.5}
           memory: ${DIRSRV_PRIMARY_MEMORY_RESERVED:-512M}
 
-  # Phase 2 - MySQL, staged for the JIM SQL Connector's priority 2 providers. Not used by Scenario 16,
+  # Phase 2 - MySQL, staged for the JIM SQL Connector's priority 2 providers. Not used by Scenario 016,
   # which covers the priority 1 providers (Microsoft SQL Server and Oracle Database).
   mysql-test:
     image: mysql:8
@@ -472,14 +472,14 @@ volumes:
     name: jim-integration-samba-primary-private
   samba-primary-etc:
     name: jim-integration-samba-primary-etc
-  # Samba AD source volumes (scenario2)
+  # Samba AD source volumes (scenario-002)
   samba-source-data:
     name: jim-integration-samba-source-var
   samba-source-private:
     name: jim-integration-samba-source-private
   samba-source-etc:
     name: jim-integration-samba-source-etc
-  # Samba AD target volumes (scenario2)
+  # Samba AD target volumes (scenario-002)
   samba-target-data:
     name: jim-integration-samba-target-var
   samba-target-private:

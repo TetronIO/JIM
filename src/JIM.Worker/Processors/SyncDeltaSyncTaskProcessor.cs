@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -113,26 +114,24 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             allSyncRules = await _syncRepo.GetAllSyncRulesAsync(withChangeTracking: true);
         }
 
-        // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
+        // Metaverse-Derived Attribute Flows (#1750): build the run's dependency graph from the same all-systems rule
+        // set, reading the feature flag once for the run (null when off: the engine is exactly as before). A cycle
+        // among the enabled derived flows throws DerivedFlowCycleException here, before any object is processed,
+        // failing the run hard with the cycle named on the Activity (plan decision 11).
+        DerivedFlowGraph? derivedFlowGraph;
+        using (Diagnostics.Sync.StartSpan("BuildDerivedFlowGraph"))
+        {
+            derivedFlowGraph = await _syncServer.CreateDerivedFlowGraphAsync(allSyncRules);
+        }
+
+        // Build drift detection cache (import mapping cache + export rules with EnforceState=true), and the attribute
+        // priority context carrying the derived flow graph.
         // This enables efficient drift detection during CSO processing
-        BuildDriftDetectionCache(allSyncRules, activeSyncRules);
+        BuildDriftDetectionCache(allSyncRules, activeSyncRules, derivedFlowGraph);
 
         // Use object types already loaded on the Connected System (with matching rules and attributes)
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
-
-        // Load the Pending Exports that confirmation evaluation can actually act on, once upfront, and
-        // index by CSO ID for O(1) lookup (see SyncFullSyncTaskProcessor for the full rationale). Grouped
-        // by the scalar ConnectedSystemObjectId rather than the ConnectedSystemObject navigation, which
-        // this query no longer loads.
-        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
-        {
-            var pendingExportsForConfirmation = await _syncRepo.GetPendingExportsForConfirmationEvaluationAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = pendingExportsForConfirmation
-                .GroupBy(pe => pe.ConnectedSystemObjectId!.Value)
-                .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformDeltaSyncAsync: Loaded {Count} Pending Exports into confirmation lookup dictionary", pendingExportsForConfirmation.Count);
-        }
 
         // Pre-load export evaluation cache
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
@@ -167,6 +166,14 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         var throughput = new ThroughputTracker();
 
+        // Keyset cursor, as in full sync, and here it is a correctness requirement rather than a speed-up: each page
+        // boundary deletes that page's obsolete CSOs (FlushObsoleteCsoOperationsAsync), so the modified set shrinks
+        // while we page through it. An OFFSET into it skips the rows that move up into the gap: with a whole page of
+        // obsolete CSOs, every other page (Scenario 008 LeaverCohort: 1,000 of 2,000 obsolete target accounts never
+        // processed, and the watermark then moved past them). The cursor must advance to the last row of each page
+        // exactly as the repository returned it.
+        var csoPageCursor = Guid.Empty;
+
         for (var page = 1; page <= totalCsoPages; page++)
         {
 
@@ -180,14 +187,22 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     lastSyncTimestamp,
                     page,
                     pageSize,
-                    totalCsosToProcess);
+                    totalCsosToProcess,
+                    csoPageCursor);
             }
+
+            if (csoPagedResult.Results.Count > 0)
+                csoPageCursor = csoPagedResult.Results[^1].Id;
 
             // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
             // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve
             // onto the same canonical instance as this navigation, rather than two distinct loads of the
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
+
+            // Metaverse-Derived Attribute Flows (#1750): the row version of every marked object as this load read it,
+            // before this run writes anything; it guards the mark's clear at page flush (see the method for why).
+            CaptureDerivedInputRowVersions(csoPagedResult.Results);
 
             // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
             // run has no generated mappings.
@@ -211,7 +226,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                         break;
                     }
 
-                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
                 }
 
                 // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
@@ -252,11 +267,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // cannot be decoupled from batch persistence boundaries.
                 await PersistPendingMetaverseObjectsAsync();
 
-                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
-                // assignments, then delete whatever lifecycle reconciliation decided no longer belongs. See
-                // SyncFullSyncTaskProcessor for the full rationale; both are no-ops with no generated mappings.
-                await CommitGeneratedValueAssignmentsAsync();
+                // Unique Value Generation (#242, Phase 2 work package G): delete whatever lifecycle
+                // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
+                // THEN commit this page's generated/adopted assignments. See SyncFullSyncTaskProcessor for the
+                // full rationale for the order; both are no-ops with no generated mappings.
                 await FlushGeneratedValueAssignmentDeletionsAsync();
+                await CommitGeneratedValueAssignmentsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
@@ -359,6 +375,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 Worker.CalculateActivitySummaryStats(_activity);
         }
 
+        LogDerivedInputMarkSummary();
         syncSpan.SetSuccess();
     }
 }

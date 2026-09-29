@@ -14,7 +14,7 @@ namespace JIM.Web.Api.Tests;
 /// <summary>
 /// Tests for SyncRuleScopingCriteriaDto round-trip mapping.
 /// Guards against value-carrier fields silently dropping on the API boundary
-/// — a regression would make Scenario 11's evaluation matrix meaningless.
+/// — a regression would make Scenario 011's evaluation matrix meaningless.
 /// </summary>
 [TestFixture]
 public class SyncRuleScopingCriteriaDtoTests
@@ -125,7 +125,7 @@ public class SyncRuleScopingCriteriaDtoTests
     public void CreateScopingCriterionRequest_DefaultsCaseSensitiveTrue()
     {
         // The CaseSensitive flag defaults to true when omitted from the request,
-        // matching the entity default. Scenario 11 relies on this so cells that
+        // matching the entity default. Scenario 011 relies on this so cells that
         // don't specify the flag get case-sensitive evaluation.
         var request = new CreateScopingCriterionRequest
         {

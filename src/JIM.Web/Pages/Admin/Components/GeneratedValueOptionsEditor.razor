@@ -182,10 +182,22 @@
     @* ─── When JIM generates this value (read-only) ─── *@
     <MudPaper Outlined="true" Class="pa-3 mt-5">
         <MudText Typo="Typo.subtitle2" Class="mb-2">When JIM generates this value</MudText>
-        <MudText Typo="Typo.body2">
-            1. The Metaverse Object has no @(TargetName ?? "this attribute") from a higher-priority source, and no
-            connected system already holds one for it (an existing value is adopted, never replaced).
-        </MudText>
+        @if (Direction == SyncRuleDirection.Import)
+        {
+            <MudText Typo="Typo.body2">
+                1. The Metaverse Object has no @(TargetName ?? "this attribute") from a higher-priority source. If it
+                already holds a value for the attribute (left behind when a higher-priority source stops supplying
+                one), that existing value is adopted rather than a new one generated.
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2">
+                1. JIM generates @(TargetName ?? "the value") the first time it exports it to a Connected System
+                Object and keeps that value from then on. A value the Connected System already holds is replaced;
+                to set it only on accounts JIM creates, turn on Initial Export Only.
+            </MudText>
+        }
         @if (BaseExpressionInputs.Count == 0)
         {
             <MudText Typo="Typo.body2" Class="mt-2">2. No inputs to wait for: the base expression is empty.</MudText>

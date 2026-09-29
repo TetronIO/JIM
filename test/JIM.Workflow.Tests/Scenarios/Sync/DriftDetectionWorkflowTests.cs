@@ -1787,7 +1787,7 @@ public class DriftDetectionWorkflowTests
     public async Task DeltaSync_WithExportRuleAndDrift_CreatesCorrectiveExportAsync()
     {
         // Arrange: Set up Source (import/contributor) -> Target (export-only) scenario
-        // This mirrors the real-world Scenario 8 setup
+        // This mirrors the real-world Scenario 008 setup
 
         // Source system (contributor)
         await _harness.CreateConnectedSystemAsync("Source");

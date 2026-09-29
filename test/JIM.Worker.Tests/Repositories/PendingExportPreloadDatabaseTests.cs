@@ -306,4 +306,75 @@ public class PendingExportPreloadDatabaseTests
         Assert.That(result.Values.Sum(pe => pe.AttributeValueChanges.Count), Is.EqualTo(6),
             "Three of the four Pending Exports carry two value changes each.");
     }
+
+    /// <summary>
+    /// A Failed Pending Export must be included in the whole-system preload alongside every other
+    /// status, with its attribute changes and their Attribute navigations intact. Import
+    /// reconciliation's Failed auto-clear (<c>SyncEngine.ReconcileCsoAgainstPendingExport</c>) needs
+    /// exactly this to detect that an administrator has fixed the target by hand. The query carries
+    /// no status filter today; this test guards against one being added by a future change.
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportsLightweightByConnectedSystemIdAsync_FailedStatusPendingExport_IsIncludedWithAttributeAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var targetSystem = new ConnectedSystem { Name = "Glitterband", ConnectorDefinition = connectorDefinition };
+        var targetType = new ConnectedSystemObjectType { Name = "jimPerson", ConnectedSystem = targetSystem, Selected = true };
+        var mailAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "mail", ConnectedSystemObjectType = targetType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        targetType.Attributes.Add(mailAttr);
+        seed.AddRange(connectorDefinition, targetSystem, targetType);
+        await seed.SaveChangesAsync();
+
+        var cso = new ConnectedSystemObject
+        {
+            Type = targetType,
+            ConnectedSystem = targetSystem,
+            Status = ConnectedSystemObjectStatus.Normal,
+            ExternalIdAttributeId = mailAttr.Id
+        };
+        seed.Add(cso);
+
+        var failedExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObject = cso,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Failed,
+            ErrorCount = 5,
+            CreatedAt = DateTime.UtcNow
+        };
+        failedExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = mailAttr.Id,
+            StringValue = "rejected@example.com",
+            ChangeType = PendingExportAttributeChangeType.Update,
+            Status = PendingExportAttributeChangeStatus.Failed
+        });
+        seed.Add(failedExport);
+        await seed.SaveChangesAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var result = await repository.Sync.GetPendingExportsLightweightByConnectedSystemIdAsync(targetSystem.Id);
+
+        Assert.That(result, Does.ContainKey(cso.Id), "A Failed Pending Export must still be returned by the whole-system preload.");
+        var loaded = result[cso.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(loaded.Status, Is.EqualTo(PendingExportStatus.Failed));
+            Assert.That(loaded.AttributeValueChanges, Has.Count.EqualTo(1));
+            Assert.That(loaded.AttributeValueChanges[0].Attribute, Is.Not.Null,
+                "Attribute navigations must be stitched onto a Failed Pending Export's value changes too.");
+            Assert.That(loaded.AttributeValueChanges[0].Attribute!.Name, Is.EqualTo("mail"));
+        }
+    }
 }

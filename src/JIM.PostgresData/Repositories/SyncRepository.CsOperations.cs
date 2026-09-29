@@ -238,6 +238,7 @@ public partial class SyncRepository
             // The only legitimate stamp is StampImportStateAsync, run after values commit (D7/D8).
             await writer.WriteNullAsync();
             await writer.WriteNullAsync();
+            await writer.WriteAsync(cso.DerivedInputChangePending, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();
@@ -702,7 +703,7 @@ public partial class SyncRepository
         // cascade fix-up issue an UPDATE against the already-deleted row when its source MVO is
         // deleted in the same page flush; that matches zero rows and throws
         // DbUpdateConcurrencyException, poisoning every later SaveChangesAsync on the context
-        // (Scenario4-DeletionRules Test 3 failure, issue #993).
+        // (Scenario-004-DeletionRules Test 3 failure, issue #993).
         var pendingExportIds = await _context.PendingExports
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIds.Contains(pe.ConnectedSystemObjectId.Value))
             .Select(pe => pe.Id)

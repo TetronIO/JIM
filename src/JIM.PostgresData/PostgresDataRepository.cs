@@ -3,8 +3,10 @@
 
 using JIM.Data.Repositories;
 using JIM.Data;
+using JIM.Models.Operations;
 using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 using System.Diagnostics;
 namespace JIM.PostgresData;
@@ -86,6 +88,43 @@ public class PostgresDataRepository : IRepository
         Tasking = new TaskingRepository(this);
         TrustedCertificates = new TrustedCertificateRepository(this);
         Sync = new SyncRepository(this);
+    }
+
+    public async Task<DatabaseConnectionResult> TryConnectAsync(CancellationToken cancellationToken)
+    {
+        // A connection of its own rather than the context's: EF Core wraps a failed open in its own exception, which
+        // hides the Npgsql error this method needs to classify.
+        var connectionString = Database.Database.GetConnectionString();
+        try
+        {
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync(cancellationToken);
+            return DatabaseConnectionResult.Connected;
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InvalidCatalogName)
+        {
+            // The server accepted the credentials but has no JIM database yet. JIM.Worker's migration creates it, and
+            // the other services wait for that migration, so the server being up is all this check is for.
+            return DatabaseConnectionResult.Connected;
+        }
+        catch (NpgsqlException ex) when (ex.IsTransient)
+        {
+            // Refused, unresolvable, timed out, or "the database system is starting up": all worth retrying. Anything
+            // else (rejected credentials, a refused TLS handshake) is not caught, so the service stops with it.
+            var server = new NpgsqlConnectionStringBuilder(connectionString);
+            return DatabaseConnectionResult.Failed($"{server.Host}:{server.Port}: {InnermostMessage(ex)}");
+        }
+    }
+
+    /// <summary>
+    /// The deepest exception's message: Npgsql wraps a socket failure in a generic "Failed to connect to", and the
+    /// socket's own reason (refused, unresolvable, timed out) is what points the administrator at the fix.
+    /// </summary>
+    private static string InnermostMessage(Exception ex)
+    {
+        while (ex.InnerException != null)
+            ex = ex.InnerException;
+        return ex.Message;
     }
 
     public async Task InitialiseDatabaseAsync()

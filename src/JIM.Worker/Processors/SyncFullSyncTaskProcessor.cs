@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -97,9 +98,20 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             allSyncRules = await _syncRepo.GetAllSyncRulesAsync(withChangeTracking: true);
         }
 
-        // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
+        // Metaverse-Derived Attribute Flows (#1750): build the run's dependency graph from the same all-systems rule
+        // set, reading the feature flag once for the run (null when off: the engine is exactly as before). A cycle
+        // among the enabled derived flows throws DerivedFlowCycleException here, before any object is processed,
+        // failing the run hard with the cycle named on the Activity (plan decision 11).
+        DerivedFlowGraph? derivedFlowGraph;
+        using (Diagnostics.Sync.StartSpan("BuildDerivedFlowGraph"))
+        {
+            derivedFlowGraph = await _syncServer.CreateDerivedFlowGraphAsync(allSyncRules);
+        }
+
+        // Build drift detection cache (import mapping cache + export rules with EnforceState=true), and the attribute
+        // priority context carrying the derived flow graph.
         // This enables efficient drift detection during CSO processing
-        BuildDriftDetectionCache(allSyncRules, activeSyncRules);
+        BuildDriftDetectionCache(allSyncRules, activeSyncRules, derivedFlowGraph);
 
         // Build reference object type cache for selective attribute loading optimisation.
         // Object types with reference attribute rules need full attribute loading even when unchanged.
@@ -108,22 +120,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // Use object types already loaded on the Connected System (with matching rules and attributes)
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
-
-        // Load the Pending Exports that confirmation evaluation can actually act on, once upfront, and
-        // index by CSO ID for O(1) lookup. SyncEngine.EvaluatePendingExportConfirmation skips Pending and
-        // Exported statuses unconditionally (the vast majority at scale), so GetPendingExportsForConfirmationEvaluationAsync
-        // filters those out in SQL and never loads the Connected System Object graph GetPendingExportsAsync
-        // loads for every row (35 seconds at 100,000 Connected System Objects). Grouped by the scalar
-        // ConnectedSystemObjectId rather than the ConnectedSystemObject navigation, which this query no
-        // longer loads.
-        using (Diagnostics.Sync.StartSpan("LoadPendingExports"))
-        {
-            var pendingExportsForConfirmation = await _syncRepo.GetPendingExportsForConfirmationEvaluationAsync(_connectedSystem.Id);
-            _pendingExportsByCsoId = pendingExportsForConfirmation
-                .GroupBy(pe => pe.ConnectedSystemObjectId!.Value)
-                .ToDictionary(g => g.Key, g => g.ToList());
-            Log.Verbose("PerformFullSyncAsync: Loaded {Count} Pending Exports into confirmation lookup dictionary", pendingExportsForConfirmation.Count);
-        }
 
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
         // This eliminates O(N×M) database queries during export evaluation
@@ -218,6 +214,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // same row.
             _mvoIdentityMap.Seed(csoPagedResult.Results);
 
+            // Metaverse-Derived Attribute Flows (#1750): the row version of every marked object as this load read it,
+            // before this run writes anything; it guards the mark's clear at page flush (see the method for why).
+            CaptureDerivedInputRowVersions(csoPagedResult.Results);
+
             // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
             // run has no generated mappings.
             await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
@@ -246,7 +246,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                         break;
                     }
 
-                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
                 }
 
                 // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
@@ -320,12 +320,15 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // Progress updates at finer granularity would require a separate DbContext instance.
                 await PersistPendingMetaverseObjectsAsync();
 
-                // Unique Value Generation (#242, Phase 2 work package G): commit this page's generated/adopted
-                // assignments now the objects have real ids, then delete whatever the page's lifecycle
-                // reconciliation decided no longer belongs. Both are no-ops for a run with no generated
-                // mappings, or a page with nothing to commit/delete.
-                await CommitGeneratedValueAssignmentsAsync();
+                // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle
+                // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
+                // THEN commit this page's generated/adopted assignments now the objects have real ids - deletion
+                // must run first because a stale assignment being removed can share its (object, attribute) key
+                // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's
+                // doc comment. Both are no-ops for a run with no generated mappings, or a page with nothing to
+                // commit/delete.
                 await FlushGeneratedValueAssignmentDeletionsAsync();
+                await CommitGeneratedValueAssignmentsAsync();
 
                 // create MVO change objects for change tracking (after MVOs persisted so IDs available)
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
@@ -445,6 +448,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 Worker.CalculateActivitySummaryStats(_activity);
         }
 
+        LogDerivedInputMarkSummary();
         syncSpan.SetSuccess();
     }
 }

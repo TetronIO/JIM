@@ -1,0 +1,60 @@
+# JIM on Podman: settings
+#
+# The same settings, with the same names, as the Docker path's .env; the Configuration guide describes each one:
+# https://docs.junctional.io/administration/configuration/
+#
+# Secrets do not belong here: the database password, the identity provider's client secret and the infrastructure
+# API key are Podman secrets (see jim-secrets.yaml). setup.sh fills this file in from its questions. By hand, fill
+# in every empty value (JIM will not start without them), and uncomment any optional setting you need.
+#
+# Every value is text, so quote numbers and true/false. Quote a value containing ": " or " #", or starting with a
+# character YAML treats specially, such as *, &, !, {, [ or a quotation mark.
+#
+# Leave out the settings jim.yaml sets itself (JIM_LOG_PATH, JIM_LOG_REQUESTS and the ASPNETCORE_ settings): Podman
+# would let a value here replace the pod file's.
+#
+# Restart JIM after a change:
+#   rootful (the default):  systemctl restart jim.service
+#   rootless:               systemctl --user -M jim@ restart jim.service
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jim-config
+data:
+  # Locale for dates and times in the JIM services (the bundled PostgreSQL always uses C.UTF-8).
+  LANG: en_GB.UTF-8
+
+  # --- Database ---
+  # jim-database for the bundled PostgreSQL, otherwise your server's name. Port 5432 is assumed; append another,
+  # e.g. db.example.org:5433.
+  JIM_DB_HOSTNAME: jim-database
+  JIM_DB_NAME: jim
+  JIM_DB_USERNAME: jim
+  JIM_DB_LOG_SENSITIVE_INFO: "false"
+  # Slow query log threshold in milliseconds; -1 disables it.
+  JIM_DB_LOG_MIN_DURATION: "1000"
+
+  # --- Logging ---
+  # Verbose, Debug, Information, Warning, Error or Fatal.
+  JIM_LOG_LEVEL: Information
+
+  # --- Identity provider (OIDC) ---
+  # e.g. https://login.microsoftonline.com/your-tenant-id/v2.0
+  JIM_SSO_AUTHORITY: ""
+  JIM_SSO_CLIENT_ID: ""
+  # e.g. api://your-client-id/access_as_user
+  JIM_SSO_API_SCOPE: ""
+  JIM_SSO_CLAIM_TYPE: sub
+  JIM_SSO_MV_ATTRIBUTE: Subject Identifier
+  # The first administrator's value of the JIM_SSO_CLAIM_TYPE claim.
+  JIM_SSO_INITIAL_ADMIN: ""
+  # JIM_SSO_PUBLIC_AUTHORITY: https://idp.example.com/realms/jim
+  # JIM_SSO_PUBLIC_CLIENT_ID: jim-powershell
+  # JIM_SSO_VALID_ISSUERS: https://idp.example.com/realms/jim
+
+  # --- Reverse proxy or load balancer (only if one sits in front of JIM) ---
+  # JIM_TRUSTED_PROXIES: 10.0.0.5
+
+  # --- Appearance ---
+  # JIM_THEME: navy-o6

@@ -52,7 +52,7 @@ internal class FileConnectorExport
         if (string.IsNullOrEmpty(exportFilePath))
             throw new InvalidSettingValuesException("File Path setting is required for export operations.");
 
-        var delimiter = GetSettingValue("Delimiter") ?? ",";
+        var delimiter = GetSettingValue("Delimiter") is { Length: > 0 } configuredDelimiter ? configuredDelimiter : FileConnector.DefaultDelimiter;
         var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") ?? "|";
 
         // Ensure the export directory exists

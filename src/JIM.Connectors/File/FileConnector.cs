@@ -56,6 +56,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private const string SettingDelimiter = "Delimiter";
     private const string SettingStopOnFirstError = "Stop On First Error";
     private const string SettingMultiValueDelimiter = "Multi-Value Delimiter";
+    internal const string DefaultDelimiter = ",";
     private const string ObjectTypeRequiredGroup = "Object Type";
     // Mode values
     private const string ModeImportOnly = "Import Only";
@@ -84,10 +85,10 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = SettingObjectType, Required = false, RequiredGroup = ObjectTypeRequiredGroup, RequiredGroupCardinality = ConnectorSettingRequiredGroupCardinality.ExactlyOne, Description = "A fixed object type for when the file only contains one type of object, e.g. user.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
 
             // Import-specific settings
-            new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
+            new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
 
             // Format settings
-            new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue = ",", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
+            new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue = DefaultDelimiter, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingCulture, Required = false, Description = "Optionally specify a culture (i.e. en-gb) for the file contents. Use if you experience problems with the default (invariant culture).", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
             new() { Name = SettingMultiValueDelimiter, Required = false, Description = "Character used to separate multiple values within a single field. Defaults to pipe (|).", DefaultStringValue = "|", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String }
         };
@@ -605,13 +606,14 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (culture != null && !string.IsNullOrEmpty(culture.StringValue))
             cultureInfo = new CultureInfo(culture.StringValue);
 
-        var delimiter = settingValues.SingleOrDefault(q => q.Setting.Name == SettingDelimiter);
-        if (delimiter == null || string.IsNullOrEmpty(delimiter.StringValue))
-            throw new InvalidSettingValuesException($"Missing setting value for {SettingDelimiter}.");
+        // An unset Delimiter means the declared default, as it does on export, rather than an error.
+        var delimiter = settingValues.SingleOrDefault(q => q.Setting.Name == SettingDelimiter)?.StringValue;
+        if (string.IsNullOrEmpty(delimiter))
+            delimiter = DefaultDelimiter;
 
         var config = new CsvConfiguration(cultureInfo)
         {
-            Delimiter = delimiter.StringValue,
+            Delimiter = delimiter,
             // Throw an exception when a row has fewer fields than the header row
             MissingFieldFound = null
         };

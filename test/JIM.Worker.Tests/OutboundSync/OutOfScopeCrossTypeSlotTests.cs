@@ -121,7 +121,7 @@ public class OutOfScopeCrossTypeSlotTests
     [Test]
     public async Task EvaluateOutOfScopeExports_SlotHeldByAnotherRulesObjectType_SkipsSilentlyAsync()
     {
-        // The Scenario 16 shape: NaturalKeyAccount (Research) and GuidKeyedPerson (Finance) rules share
+        // The Scenario 016 shape: NaturalKeyAccount (Research) and GuidKeyedPerson (Finance) rules share
         // one Connected System with disjoint scopes. A Finance MVO is out of scope for the
         // NaturalKeyAccount rule while correctly holding a GuidKeyedPerson object in the slot.
         var naturalKeyType = ObjectType(25, "NaturalKeyAccount");

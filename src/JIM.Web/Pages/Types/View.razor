@@ -108,8 +108,8 @@
                     @if (_changeHistoryRows.Count < _changeHistoryTotal)
                     {
                         <div class="d-flex justify-center mt-3">
-                            <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Secondary"
                                        Disabled="@_changeHistoryLoading"
                                        OnClick="LoadMoreChangeHistoryAsync">
                                 @if (_changeHistoryLoading)
@@ -200,7 +200,7 @@
 
         @* ─── Connections ─── *@
         @* Every Connected System Object joined to this Metaverse Object, its role in synchronisation, its  *@
-        @* derived State and a per-row Preview Sync, plus the outbound-only preview of it as it stands      *@
+        @* derived State and a per-row Preview Sync, plus Preview Exports: the export-only preview of it as it stands  *@
         @* (#1519, D-S6). Which systems hold data about someone is not something every signed-in user may *@
         @* see about every other person, so the tab carries its own Administrator gate, as Password does.  *@
         <AuthorizeView Roles="Administrator" Context="connectionsAuth">
@@ -226,15 +226,18 @@
                         <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-preview-outbound">
                             <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary" Class="mt-1" />
                             <MudStack Spacing="1" Class="flex-grow-1">
-                                <MudText Typo="Typo.h6">Preview Outbound Synchronisation</MudText>
+                                <MudText Typo="Typo.h6">Preview Exports</MudText>
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    Puts this Metaverse Object's current state to every enabled export Synchronisation Rule:
-                                    accounts that would be provisioned where none exists, updated where one does, or
-                                    deprovisioned where the Metaverse Object has left a rule's scope. No object is
-                                    synchronised first; use a connection's Preview Sync above for that.
+                                    What JIM would export for this Metaverse Object as it stands: where it would be
+                                    provisioned, updated or deprovisioned under each enabled export Synchronisation Rule.
+                                    Nothing is imported first.
+                                    @if (_connections.Count > 0)
+                                    {
+                                        <text>To preview synchronising one of its connections, use that row's Preview Sync.</text>
+                                    }
                                 </MudText>
                             </MudStack>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                            <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
                                        Disabled="@_outboundPreviewLoading"
                                        OnClick="PreviewOutboundAsync"
                                        data-testid="jim-mvo-preview-outbound">

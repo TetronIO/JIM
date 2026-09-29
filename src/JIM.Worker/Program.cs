@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Hosting;
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Connectors;
@@ -96,4 +97,5 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
-await host.RunAsync();
+// The exit code tells the container runtime, or systemd, whether the Worker stopped because a service failed.
+return await HostRunner.RunAsync(host);

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.Models.Operations;
 namespace JIM.Data;
 
 public interface IRepository : IDisposable
@@ -28,6 +29,15 @@ public interface IRepository : IDisposable
     /// <see cref="JIM.Data.Repositories.ISyncRepository"/> and the worker hot-path rules for when it may be used.
     /// </summary>
     public ISyncRepository Sync { get; }
+
+    /// <summary>
+    /// Makes one attempt to reach the database server with the configured connection settings. A server that is
+    /// down, starting up or not yet resolvable is a failed result, to be retried; a failure retrying cannot fix
+    /// (rejected credentials, a refused TLS handshake) is thrown. A server that accepts the credentials but has no
+    /// JIM database yet counts as connected: JIM.Worker's migration creates the database, and the other services
+    /// wait for that migration anyway.
+    /// </summary>
+    public Task<DatabaseConnectionResult> TryConnectAsync(CancellationToken cancellationToken);
 
     public Task InitialiseDatabaseAsync();
     public Task InitialisationCompleteAsync();

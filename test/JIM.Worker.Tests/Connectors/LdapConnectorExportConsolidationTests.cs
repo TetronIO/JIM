@@ -525,7 +525,7 @@ public class LdapConnectorExportConsolidationTests
     [Test]
     public async Task ExecuteAsync_CreateWithLargeMultiValuedAttribute_AllValuesConsolidatedAsync()
     {
-        // 50 members (matching Scenario 8 group size)
+        // 50 members (matching Scenario 008 group size)
         var pendingExport = CreateGroupCreatePendingExport("CN=Project-Catalyst,OU=Entitlements,DC=test,DC=local", memberCount: 50);
 
         AddRequest? capturedAddRequest = null;

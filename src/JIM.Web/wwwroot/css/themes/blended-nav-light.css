@@ -20,11 +20,11 @@ html[lang] {
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette === */
-    --mud-palette-secondary: #2a6dd9;
-    --mud-palette-secondary-rgb: 42,109,217;
-    --mud-palette-secondary-darken: #1e5abf;
-    --mud-palette-secondary-lighten: #4a88e8;
-    --mud-palette-secondary-text: #ffffffff;
+    --mud-palette-secondary: #56606e;
+    --mud-palette-secondary-rgb: 86,96,110;
+    --mud-palette-secondary-darken: #474f5b;
+    --mud-palette-secondary-lighten: #6a7584;
+    --mud-palette-secondary-text: #ffffff;
 
     /* === Tertiary Palette === */
     --mud-palette-tertiary: #0d7d5f;

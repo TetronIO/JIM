@@ -788,6 +788,151 @@ public class SyncEngineReconciliationTests
         Assert.That(result.PendingExportDeleted, Is.True, "Boolean attribute should be confirmed — this was a bug in the old AttributeValuesMatch");
     }
 
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_FailedStatus_AllChangesConfirmed_MarksForDeletion()
+    {
+        // The synchronisation-side confirmation check used to reopen a Failed export outright on every
+        // sync run; now only import reconciliation clears one, and only when every attribute change it
+        // asserts is now visible on the CSO (an administrator fixed the target by hand).
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "expected");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
+        attrChange.Status = PendingExportAttributeChangeStatus.Failed;
+        attrChange.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
+
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Failed,
+            ErrorCount = SyncEngine.DefaultMaxRetries,
+            AttributeValueChanges = [attrChange]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.PendingExportDeleted, Is.True);
+            Assert.That(result.PendingExportToDelete, Is.SameAs(pe));
+            Assert.That(result.ConfirmedChanges, Is.EquivalentTo(new[] { attrChange }));
+        }
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_FailedStatus_PartiallyConfirmed_LeftCompletelyUntouched()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "expected");
+        var confirmable = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
+        confirmable.Status = PendingExportAttributeChangeStatus.Failed;
+        confirmable.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
+        var stillWrong = CreateAttrChange(2, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "still-wrong");
+        stillWrong.Status = PendingExportAttributeChangeStatus.Failed;
+        stillWrong.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
+
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Failed,
+            ErrorCount = SyncEngine.DefaultMaxRetries,
+            AttributeValueChanges = [confirmable, stillWrong]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasChanges, Is.False, "A partially confirmed Failed export must not be touched at all.");
+            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Failed));
+            Assert.That(pe.ErrorCount, Is.EqualTo(SyncEngine.DefaultMaxRetries), "No attempt/error accounting on a Failed export outside full confirmation.");
+            Assert.That(pe.AttributeValueChanges, Has.Count.EqualTo(2), "No changes are removed from a partially confirmed Failed export.");
+            Assert.That(confirmable.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
+            Assert.That(stillWrong.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
+        }
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_FailedStatus_NoneConfirmed_LeftCompletelyUntouched()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "wrong");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
+        attrChange.Status = PendingExportAttributeChangeStatus.Failed;
+        attrChange.ExportAttemptCount = SyncEngine.DefaultMaxRetries;
+
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Failed,
+            ErrorCount = SyncEngine.DefaultMaxRetries,
+            AttributeValueChanges = [attrChange]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasChanges, Is.False);
+            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Failed));
+            Assert.That(pe.ErrorCount, Is.EqualTo(SyncEngine.DefaultMaxRetries));
+            Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.Failed));
+        }
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_ParkedStatus_NeverTouchedEvenWithNotConfirmedChange()
+    {
+        // A Parked export's attribute changes may still carry ExportedNotConfirmed status left over
+        // from before it was parked (Unique Value Generation release 4). That status alone used to be
+        // enough to fall through the general status check below and get reconciled anyway, retrying
+        // the very value the target had already rejected.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "wrong");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+        attrChange.ExportAttemptCount = 2;
+
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Parked,
+            ErrorCount = 2,
+            AttributeValueChanges = [attrChange]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasChanges, Is.False);
+            Assert.That(pe.Status, Is.EqualTo(PendingExportStatus.Parked));
+            Assert.That(pe.ErrorCount, Is.EqualTo(2));
+            Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
+            Assert.That(attrChange.ExportAttemptCount, Is.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_ExecutingStatus_NeverTouched()
+    {
+        // Executing is mid-flight under a connector's control; reconciliation must not race it.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "expected");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Executing,
+            AttributeValueChanges = [attrChange]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.HasChanges, Is.False);
+    }
+
     #endregion
 
     #region ReconcileCsoAgainstPendingExport: per data type, via full orchestration (issue #988 pin)

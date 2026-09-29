@@ -11,17 +11,17 @@
     reducing startup from minutes to seconds.
 
     Snapshot images are tagged per-scenario and per-size:
-      - jim-openldap:general-{size}    (Scenarios 5, 9 — both suffixes populated)
-      - jim-openldap:s8-{size}         (Scenario 8 — Source populated, Target OUs only)
+      - jim-openldap:general-{size}    (Scenarios 005, 009 — both suffixes populated)
+      - jim-openldap:s8-{size}         (Scenario 008 — Source populated, Target OUs only)
 
-    Scenario 1 does not use OpenLDAP snapshots — the target directory starts empty.
+    Scenario 001 does not use OpenLDAP snapshots — the target directory starts empty.
 
     Each image is labelled with its snapshot hash (the populate scripts) and the base image hash
     it was baked from; the test runner compares both to detect stale snapshots that need
     rebuilding. docker/openldap/Get-OpenLDAPBuildHash.ps1 defines both hashes and the check.
 
 .PARAMETER Scenario
-    Which scenario to build snapshots for (General, Scenario8, All)
+    Which scenario to build snapshots for (General, Scenario-008, All)
 
 .PARAMETER Template
     Data size template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
@@ -39,12 +39,12 @@
     ./Build-OpenLDAPSnapshots.ps1 -Scenario All -Template Medium
 
 .EXAMPLE
-    ./Build-OpenLDAPSnapshots.ps1 -Scenario Scenario8 -Template MediumLarge -Force
+    ./Build-OpenLDAPSnapshots.ps1 -Scenario Scenario-008 -Template MediumLarge -Force
 #>
 
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet("General", "Scenario8", "All")]
+    [ValidateSet("General", "Scenario-008", "All")]
     [string]$Scenario = "All",
 
     [Parameter(Mandatory = $true)]
@@ -239,7 +239,7 @@ if ($needsBaseRebuild) {
     $Force = $true
 }
 
-$scenariosToProcess = if ($Scenario -eq "All") { @("General", "Scenario8") } else { @($Scenario) }
+$scenariosToProcess = if ($Scenario -eq "All") { @("General", "Scenario-008") } else { @($Scenario) }
 
 # OpenLDAP environment variables (matching test/integration/docker/docker-compose.integration-tests.yml)
 $openLDAPEnv = @{
@@ -289,7 +289,7 @@ foreach ($scen in $scenariosToProcess) {
             Write-Host ""
         }
 
-        "Scenario8" {
+        "Scenario-008" {
             $tag = Get-OpenLDAPSnapshotImageTag -Role "s8" -Template $Template -Registry $Registry
 
             if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedSnapshotHash $contentHash -ExpectedBaseHash $expectedBuildHash)) {
@@ -304,10 +304,10 @@ foreach ($scen in $scenariosToProcess) {
                 -ContentHash $contentHash `
                 -EnvVars $openLDAPEnv `
                 -PopulateAction {
-                    & "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Source -Container "openldap-snapshot-s8"
-                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario8.ps1 (Source) failed" }
-                    & "$scriptRoot/Populate-OpenLDAP-Scenario8.ps1" -Template $Template -Instance Target -Container "openldap-snapshot-s8"
-                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario8.ps1 (Target) failed" }
+                    & "$scriptRoot/Populate-OpenLDAP-Scenario-008.ps1" -Template $Template -Instance Source -Container "openldap-snapshot-s8"
+                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario-008.ps1 (Source) failed" }
+                    & "$scriptRoot/Populate-OpenLDAP-Scenario-008.ps1" -Template $Template -Instance Target -Container "openldap-snapshot-s8"
+                    if ($LASTEXITCODE -ne 0) { throw "Populate-OpenLDAP-Scenario-008.ps1 (Target) failed" }
                 }
 
             Write-Host ""
@@ -326,7 +326,7 @@ foreach ($scen in $scenariosToProcess) {
             $tag = Get-OpenLDAPSnapshotImageTag -Role "general" -Template $Template -Registry $Registry
             Write-Host "  $tag" -ForegroundColor Gray
         }
-        "Scenario8" {
+        "Scenario-008" {
             Write-Host "  $(Get-OpenLDAPSnapshotImageTag -Role 's8' -Template $Template -Registry $Registry)" -ForegroundColor Gray
         }
     }

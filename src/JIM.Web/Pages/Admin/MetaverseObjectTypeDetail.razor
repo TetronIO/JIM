@@ -171,7 +171,7 @@
                     </MudButton>
                     @* Preview (#1114): the one change in JIM that can make existing Metaverse Objects eligible for *@
                     @* deletion the moment it is saved, so it is the one that most needs answering beforehand.      *@
-                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Outlined" Color="Color.Primary"
+                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Filled" Color="Color.Secondary"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDeletionRulesAsync"
                         Disabled="@(!CanSave() || _startingPreview)">
                         Preview Changes
@@ -443,7 +443,7 @@
                             @if (contributorCount > 1)
                             {
                                 <MudTooltip Text="Multiple contributors. Click to manage the Attribute Priority order." Arrow="true" Placement="Placement.Top">
-                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Secondary"
                                                EndIcon="@Icons.Material.Filled.OpenInNew"
                                                OnClick="@(() => OpenAttributePriorityDialog(attribute))">
                                         @contributorCount contributors

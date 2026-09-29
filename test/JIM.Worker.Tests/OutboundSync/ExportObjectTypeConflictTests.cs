@@ -53,7 +53,7 @@ public class ExportObjectTypeConflictTests
     [Test]
     public void DetectObjectTypeConflict_ExistingObjectIsADifferentType_ReportsTheConflict()
     {
-        // The shape that broke Scenario 16: the Connected System imports Person objects and joins them to
+        // The shape that broke Scenario 016: the Connected System imports Person objects and joins them to
         // Metaverse Objects, so the AppUser export Rule finds a Person occupying the only slot it could use.
         var personType = ObjectType(8, "Person");
         var appUserType = ObjectType(5, "AppUser");

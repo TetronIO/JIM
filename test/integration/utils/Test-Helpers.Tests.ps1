@@ -208,7 +208,7 @@ Describe 'Add-DirectoryCertificateToJimStore' {
     <#
         The dispatcher a scenario calls to re-trust its directory after a factory reset. It must pick
         the right per-directory function from DirectoryType and hand it the config's ContainerName,
-        so a scenario never runs the Samba function against dirsrv-primary again (the Scenario 10
+        so a scenario never runs the Samba function against dirsrv-primary again (the Scenario 010
         failure on the 389 lab). Both leaf functions are mocked: they docker cp and upload.
     #>
     BeforeAll {
@@ -262,7 +262,7 @@ Describe 'in-container LDAP URIs' {
         exec inside a directory container must be pointed at LdapSearchScheme://localhost:LdapSearchPort.
         Building that URI from Port (JIM's Connected System port) or leaving the port off entirely
         (the tool then defaults to 389) only works where the two ports coincide, and on 389 Directory
-        Server they do not. Scenario 1's Set-DirectoryUserAttributes hung on exactly this.
+        Server they do not. Scenario 001's Set-DirectoryUserAttributes hung on exactly this.
     #>
     BeforeAll {
         $integrationRoot = Split-Path -Parent $PSScriptRoot
@@ -305,5 +305,25 @@ Describe 'in-container LDAP URIs' {
             }
         }
         $offenders | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Test-TemplateSpansSyncPages' {
+    # A run whose users all fit in one synchronisation page never crosses a page boundary, so the code the
+    # worker runs between pages (tracker clear, cross-page reference fix-up, re-attaching bulk-created rows)
+    # goes unexercised; Scenario 023 passed at Micro and failed at Pre-Release's Medium for exactly that reason.
+    It 'returns <Expected> for <Template> at the default page size of 500' -ForEach @(
+        @{ Template = 'Nano';   Expected = $false }
+        @{ Template = 'Micro';  Expected = $false }
+        @{ Template = 'Small';  Expected = $false }
+        @{ Template = 'Medium'; Expected = $true }
+        @{ Template = 'Large';  Expected = $true }
+    ) {
+        Test-TemplateSpansSyncPages -Template $Template | Should -Be $Expected
+    }
+
+    It 'honours a non-default page size' {
+        Test-TemplateSpansSyncPages -Template 'Small' -SyncPageSize 50 | Should -BeTrue
+        Test-TemplateSpansSyncPages -Template 'Medium' -SyncPageSize 1000 | Should -BeFalse
     }
 }

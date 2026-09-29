@@ -4,6 +4,7 @@
 using System.Text;
 using JIM.Models.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -137,7 +138,7 @@ public partial class SyncRepository
         // OriginalValue stays 0. This used to be a latent hazard: if a just-created MVO were then
         // updated via EF SaveChangesAsync in the same page flush, the update issued "... WHERE xmin = 0",
         // matched no rows, and threw an unhandled DbUpdateConcurrencyException that aborted the run (the
-        // pre-release Full Regression Scenario14-AttributePriority failure). That hazard is now closed:
+        // pre-release Full Regression Scenario-014-AttributePriority failure). That hazard is now closed:
         // the MVO update path is raw SQL too (see UpdateMetaverseObjectsBulkAsync), keyed by Id with no
         // xmin predicate, and it detaches the graph afterwards so no later EF SaveChangesAsync re-runs the
         // xmin-guarded update. The bogus tracked xmin is therefore harmless: nothing on the sync write path
@@ -149,7 +150,7 @@ public partial class SyncRepository
             {
                 entry.State = EntityState.Unchanged;
                 // Set shadow FK for the Type relationship
-                entry.Property("TypeId").CurrentValue = mvo.Type.Id;
+                SetShadowForeignKeyAsPersisted(entry.Property("TypeId"), mvo.Type.Id);
             }
 
             foreach (var av in mvo.AttributeValues)
@@ -159,10 +160,27 @@ public partial class SyncRepository
                 {
                     avEntry.State = EntityState.Unchanged;
                     // Set shadow FK for the MetaverseObject relationship
-                    avEntry.Property("MetaverseObjectId").CurrentValue = mvo.Id;
+                    SetShadowForeignKeyAsPersisted(avEntry.Property("MetaverseObjectId"), mvo.Id);
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Sets a shadow foreign key on an entry just attached as Unchanged to the value the bulk write already
+    /// persisted, without leaving the property (and so the entity) Modified. Setting only
+    /// <c>CurrentValue</c> is not enough: when the principal is not tracked by this context (every sync page
+    /// after the first, because the page boundary clears the tracker), relationship fix-up has not filled the
+    /// shadow value in, so the attach snapshot holds an empty original value and the assignment registers as a
+    /// change. For a Metaverse Object that means the next EF <c>SaveChangesAsync</c> on the context issues an
+    /// xmin-guarded UPDATE with the unknown COPY-assigned xmin (tracked as 0), which matches no rows and throws
+    /// DbUpdateConcurrencyException (Pre-Release Scenario-023-UniqueValueGeneration, page 2 of 2).
+    /// </summary>
+    private static void SetShadowForeignKeyAsPersisted(PropertyEntry property, object value)
+    {
+        property.CurrentValue = value;
+        property.OriginalValue = value;
+        property.IsModified = false;
     }
 
     /// <summary>
@@ -404,7 +422,7 @@ public partial class SyncRepository
     /// the raw COPY path, which attaches them to the tracker without their real store-generated xmin. The next EF
     /// update of such an object therefore issued <c>... WHERE xmin = 0</c>, matched no rows, and threw an unhandled
     /// <see cref="DbUpdateConcurrencyException"/> that aborted the whole run (the pre-release Full Regression
-    /// Scenario14-AttributePriority failure). Keying updates by <c>Id</c> and dropping the xmin predicate removes that
+    /// Scenario-014-AttributePriority failure). Keying updates by <c>Id</c> and dropping the xmin predicate removes that
     /// failure class and converges the update path with the create path, per the design note formerly on
     /// <see cref="CreateMetaverseObjectsBulkAsync"/>. Optimistic concurrency via xmin remains in force for the EF write
     /// paths where a concurrent writer genuinely exists (UI / API edits).

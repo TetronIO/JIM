@@ -256,7 +256,7 @@ public class ExportEvaluationMergeTests
     [Test]
     public void SelectSurvivingDriftChanges_IncomingUpdateOnMultiValuedAttribute_SupersedesStagedRemoveOfTheOldValue()
     {
-        // The Scenario 14 export failure. Drift staged Remove title="Consultant (Secondary)" (the value the
+        // The Scenario 014 export failure. Drift staged Remove title="Consultant (Secondary)" (the value the
         // directory actually held), then export evaluation staged Update title="Consultant (Primary)", because
         // the change type follows the Metaverse attribute's plurality (Job Title is single-valued) while the
         // merge key follows the Connected System attribute's (LDAP `title` is multi-valued). The two keys

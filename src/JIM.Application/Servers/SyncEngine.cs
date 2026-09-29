@@ -57,7 +57,15 @@ public partial class SyncEngine : ISyncEngine
 
         // A disabled mapping is skipped without an error: disabling is a deliberate choice (an administrator's,
         // or the schema refresh decision's), so nothing flows and nothing is reported against the object (#1485).
-        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.Where(m => m.Enabled))
+        //
+        // A derived mapping (Metaverse-Derived Attribute Flows, #1750: an import expression reading mv["..."]) is
+        // skipped whenever the run has a derived flow graph: it is evaluated by the derived pass
+        // (EvaluateDerivedLevel), level by level, against the object's effective Metaverse values, never here with a
+        // partial view (plan decision 5). Every inbound path routes through this method, so the skip also covers the
+        // deferred reference-only pass and contributor re-election re-flows. Without a graph (the feature is off) the
+        // mapping flows here exactly as before, reading nothing from mv.
+        var derivedFlowGraph = priorityContext?.DerivedFlowGraph;
+        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.Where(m => m.Enabled && derivedFlowGraph?.IsDerived(m) != true))
         {
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
@@ -68,88 +76,6 @@ public partial class SyncEngine : ISyncEngine
         }
 
         return errors;
-    }
-
-    /// <inheritdoc />
-    public PendingExportConfirmationResult EvaluatePendingExportConfirmation(
-        ConnectedSystemObject cso,
-        Dictionary<Guid, List<PendingExport>>? pendingExportsByCsoId)
-    {
-        if (pendingExportsByCsoId == null ||
-            !pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExportsForThisCso) ||
-            pendingExportsForThisCso.Count == 0)
-        {
-            return PendingExportConfirmationResult.None();
-        }
-
-        var toDelete = new List<PendingExport>();
-        var toUpdate = new List<PendingExport>();
-
-        foreach (var pendingExport in pendingExportsForThisCso.ToList())
-        {
-            // Skip Pending Exports that have not been exported yet
-            if (pendingExport.Status == PendingExportStatus.Pending)
-            {
-                Log.Verbose("EvaluatePendingExportConfirmation: Skipping Pending Export {PeId} - not yet exported (Status=Pending).", pendingExport.Id);
-                continue;
-            }
-
-            // Skip Pending Exports awaiting confirmation via confirming import
-            if (pendingExport.Status == PendingExportStatus.Exported)
-            {
-                Log.Verbose("EvaluatePendingExportConfirmation: Skipping Pending Export {PeId} - awaiting confirmation via import (Status=Exported).", pendingExport.Id);
-                continue;
-            }
-
-            var successfulChanges = new List<PendingExportAttributeValueChange>();
-            var failedChanges = new List<PendingExportAttributeValueChange>();
-
-            foreach (var attributeChange in pendingExport.AttributeValueChanges)
-            {
-                // Use the comprehensive type-aware comparison
-                if (IsAttributeChangeConfirmed(cso, attributeChange))
-                    successfulChanges.Add(attributeChange);
-                else
-                    failedChanges.Add(attributeChange);
-            }
-
-            if (failedChanges.Count == 0)
-            {
-                Log.Information("EvaluatePendingExportConfirmation: All changes confirmed for Pending Export {PeId}. Marking for deletion.", pendingExport.Id);
-                toDelete.Add(pendingExport);
-                pendingExportsForThisCso.Remove(pendingExport);
-            }
-            else if (successfulChanges.Count > 0)
-            {
-                Log.Information("EvaluatePendingExportConfirmation: Partial success for Pending Export {PeId}. " +
-                    "{SuccessCount} succeeded, {FailCount} failed. Marking for update.",
-                    pendingExport.Id, successfulChanges.Count, failedChanges.Count);
-
-                foreach (var successfulChange in successfulChanges)
-                    pendingExport.AttributeValueChanges.Remove(successfulChange);
-
-                if (pendingExport.ChangeType == PendingExportChangeType.Create)
-                {
-                    Log.Information("EvaluatePendingExportConfirmation: Changing Pending Export {PeId} from Create to Update.", pendingExport.Id);
-                    pendingExport.ChangeType = PendingExportChangeType.Update;
-                }
-
-                pendingExport.ErrorCount++;
-                pendingExport.Status = PendingExportStatus.ExportNotConfirmed;
-                toUpdate.Add(pendingExport);
-            }
-            else
-            {
-                Log.Warning("EvaluatePendingExportConfirmation: Complete failure for Pending Export {PeId}. " +
-                    "All {FailCount} attribute changes failed. Marking for update.", pendingExport.Id, failedChanges.Count);
-
-                pendingExport.ErrorCount++;
-                pendingExport.Status = PendingExportStatus.ExportNotConfirmed;
-                toUpdate.Add(pendingExport);
-            }
-        }
-
-        return PendingExportConfirmationResult.Create(toDelete, toUpdate);
     }
 
     /// <inheritdoc />

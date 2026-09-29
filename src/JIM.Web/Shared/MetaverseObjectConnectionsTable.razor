@@ -17,8 +17,10 @@
 }
 else if (IsLoaded && Connections.Count == 0)
 {
-    <TableEmptyState Icon="@Icons.Material.Filled.Hub"
-                     PrimaryText="This Metaverse Object has no Connected System Objects joined to it." />
+    <MudPaper Outlined="true" Elevation="0" Class="jim-empty-state-panel">
+        <TableEmptyState Icon="@Icons.Material.Filled.Hub"
+                         PrimaryText="This Metaverse Object has no Connected System Objects joined to it." />
+    </MudPaper>
 }
 else if (IsLoaded)
 {
@@ -90,7 +92,7 @@ else if (IsLoaded)
                 }
             </MudTd>
             <MudTd>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Visibility"
                            Disabled="@PreviewLoading"
                            OnClick="@(() => OnPreview.InvokeAsync(context))"
@@ -134,7 +136,7 @@ else if (IsLoaded)
     [Parameter]
     public EventCallback<MetaverseObjectConnection> OnPreview { get; set; }
 
-    private bool _dense;
+    private bool _dense = true;
     private bool _preferencesLoaded;
 
     /// <summary>
@@ -148,7 +150,7 @@ else if (IsLoaded)
 
         try
         {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            _dense = await PreferenceService.GetTableDenseAsync() != false;
             _preferencesLoaded = true;
             StateHasChanged();
         }

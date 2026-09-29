@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -51,8 +52,8 @@ public interface ISyncRepository
     Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
 
     /// <summary>
-    /// Gets the count of CSOs modified since the specified date.
-    /// Used by delta sync to calculate page count.
+    /// Gets the count of CSOs created or modified since the specified date, or marked
+    /// <c>DerivedInputChangePending</c> (#1750). Used by delta sync to calculate page count.
     /// </summary>
     Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince);
 
@@ -70,12 +71,18 @@ public interface ISyncRepository
     Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
-    /// Loads a page of CSOs modified since the specified date, with full attribute values.
-    /// Used by delta sync to process only recently changed objects.
+    /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
+    /// (#1750: a Metaverse attribute a derived flow on this system reads changed elsewhere), with full attribute
+    /// values. Used by delta sync to process only recently changed objects.
     /// </summary>
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
     /// for paging metadata.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null);
+    /// <param name="afterId">Keyset cursor, as for <see cref="GetConnectedSystemObjectsAsync"/>: returns the page
+    /// of modified CSOs whose ID sorts after this value instead of using OFFSET. Delta sync must pass it, because
+    /// each page boundary deletes that page's obsolete CSOs; the modified set shrinks under an OFFSET, which then
+    /// skips the rows that moved up into the gap (every other page, when a whole page is deleted). Null behaves
+    /// as the offset-based page requested via <paramref name="page"/>.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null);
 
     /// <summary>
     /// Gets a single CSO by ID with full attribute values.
@@ -325,6 +332,30 @@ public interface ISyncRepository
     Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
+    /// Sets <c>DerivedInputChangePending</c> (#1750, "Position 2") on the Connected System Objects joined to each
+    /// mark's Metaverse Object in the mark's Connected System: those systems' import Synchronisation Rules host a
+    /// Metaverse-Derived Attribute Flow reading a Metaverse attribute that changed, so their next synchronisation,
+    /// delta included, must re-evaluate the object. Every matched row is written, already-marked ones included, so its
+    /// <c>xmin</c> moves: a hosting-system run that loaded the object before this mark then cannot clear it (see
+    /// <see cref="ClearConnectedSystemObjectDerivedInputChangePendingAsync"/>). One bulk statement for the whole batch,
+    /// called at page flush; duplicate marks are harmless and an unjoined system has nothing to mark. Tracked instances
+    /// of the marked rows are brought into line so a later save cannot write the stale value back. No-op when
+    /// <paramref name="marks"/> is empty.
+    /// </summary>
+    /// <returns>The number of objects newly marked (rows already marked are re-marked but not counted).</returns>
+    Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks);
+
+    /// <summary>
+    /// Clears <c>DerivedInputChangePending</c> (#1750) on Connected System Objects whose synchronisation processing
+    /// completed without error, each only while the row's <c>xmin</c> still equals the version the synchronisation
+    /// read when it loaded the object. A row re-marked (or otherwise rewritten) since then keeps its mark and is
+    /// re-evaluated by the next run: fail-safe, never a lost input change. One bulk statement, called at page flush;
+    /// tracked instances of the cleared rows are brought into line. No-op when <paramref name="clears"/> is empty.
+    /// </summary>
+    /// <returns>The number of objects whose mark was cleared.</returns>
+    Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears);
+
+    /// <summary>
     /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).
     /// </summary>
     Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
@@ -568,18 +599,6 @@ public interface ISyncRepository
     /// Used at sync start to build the O(1) Pending Export lookup by CSO ID.
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
-
-    /// <summary>
-    /// Gets the Pending Exports for a Connected System that are candidates for confirmation evaluation
-    /// at the start of a sync run: Status is neither Pending (not yet exported, nothing to confirm) nor
-    /// Exported (awaiting a confirming import), which <see cref="JIM.Application.Servers.SyncEngine.EvaluatePendingExportConfirmation"/>
-    /// skips unconditionally, and ConnectedSystemObjectId is populated (a null FK cannot be indexed by
-    /// CSO ID for the O(1) lookup this method feeds). Loads only AttributeValueChanges (with their
-    /// Attribute), which is all the confirmation evaluation reads; unlike <see cref="GetPendingExportsAsync"/>,
-    /// the Connected System Object graph is deliberately NOT included, since the sync processors hand
-    /// the confirmation evaluation the Connected System Object being evaluated separately.
-    /// </summary>
-    Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId);
 
     /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
@@ -948,6 +967,13 @@ public interface ISyncRepository
     /// Only AttributeValueChanges (with Attribute) are loaded; entities are untracked.
     /// </summary>
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Which of the given Connected System Objects have a Pending Export persisted, as ids only: one indexed
+    /// query per page, so export evaluation's no-net-change path can tell which objects might carry a queued
+    /// change it has just made stale without a database round trip for every object that needs nothing.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Gets CSO IDs that have Pending Exports for a Connected System.
@@ -1445,6 +1471,21 @@ public interface ISyncRepository
     /// Uses raw SQL in production for efficiency.
     /// </summary>
     Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in
+    /// one set-based statement. Called once at Worker startup, alongside <c>RecoverStaleWorkerTasksAsync</c>:
+    /// at startup nothing can genuinely be exporting, the same single-worker assumption that recovery already
+    /// makes. Without this, an Executing row is picked up by neither <see cref="GetExecutableExportsAsync"/>
+    /// (Pending, Exported, ExportNotConfirmed only) nor import reconciliation (which now deliberately excludes
+    /// Executing, since it is meant to be under a connector's control), so it would otherwise be stranded forever.
+    /// A Pending Export moves to Exported when any of its attribute changes already carries
+    /// ExportedPendingConfirmation or ExportedNotConfirmed (something was already sent, so the next confirming
+    /// import reconciles it rather than the export being re-sent), or to Pending when nothing has been sent yet
+    /// (the next export run retries it). ErrorCount is left untouched either way.
+    /// </summary>
+    /// <returns>The number of Pending Exports recovered.</returns>
+    Task<int> RecoverStrandedExecutingPendingExportsAsync();
 
     /// <summary>
     /// Reloads Pending Exports by their IDs with full object graph.

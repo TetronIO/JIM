@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -11,6 +12,7 @@ using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
@@ -64,5 +66,24 @@ public class GlobalExceptionHandlerFeatureDisabledTests
         Assert.That(error!.Code, Is.EqualTo(ApiErrorCodes.BadRequest));
         Assert.That(error.Message, Does.Contain(definition.DisplayName),
             "the error must name the disabled feature, not just say 'bad request'");
+    }
+
+    [Test]
+    public async Task InvokeAsync_FeatureDisabledException_LogsAWarningNotAnErrorAsync()
+    {
+        var logger = new Mock<ILogger<GlobalExceptionHandler>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        var handler = new GlobalExceptionHandler(
+            _ => throw new FeatureDisabledException(FeatureFlagCatalogue.UniqueValueGeneration),
+            logger.Object);
+
+        await handler.InvokeAsync(BuildHttpContext(isDevelopment: false));
+
+        // A refusal the caller can correct is expected behaviour, not a fault in JIM: logging it as an unhandled
+        // Error would page an operator (and fail the integration error watcher) for a request working as designed.
+        logger.Verify(l => l.Log(LogLevel.Error, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
+        logger.Verify(l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 }

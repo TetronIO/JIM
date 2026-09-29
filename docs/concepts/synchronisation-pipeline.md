@@ -142,6 +142,23 @@ This cycle can be automated using the **Scheduler** service, which supports cron
 
 Before running the real cycle for one object, [Sync Preview](../configuration/sync-preview.md) answers what steps 2 to 4 would do with it: whether it would join or project, what would flow, and what would export, without staging or changing anything.
 
+## Initialising JIM
+
+Initialise JIM once in a new deployment, and again after any significant change to Synchronisation Rules, [Object Matching Rules](../configuration/synchronisation-rules.md#object-matching-rules) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
+
+**The order:**
+
+1. **Full Import every Connected System.** Joins, scoping and Attribute Flows are only correct when every connector space holds current data.
+2. **Full Synchronisation every Connected System, sources before targets.** Sources project and join first, so the Metaverse is complete before targets are evaluated. A target that also supplies values (for example a higher-priority import Attribute Flow that keeps an existing account's name) contributes them during its own synchronisation, which cancels any Pending Export that would have overwritten them.
+3. **Review the Pending Exports.** Use [Sync Preview](../configuration/sync-preview.md) to check a sample. This is the last point before anything leaves JIM.
+4. **Export.**
+
+**Why not delta runs.** A delta run only sees objects that changed since the last run. On initialisation everything is new to JIM, so every object has to be processed.
+
+**Existing accounts in a target.** An Object Matching Rule joins accounts JIM did not create to the Metaverse Objects your sources project. That join can only form after the target has been imported, which is why Full Import comes first. Joining does not decide which value wins: to keep an existing account's value (an existing `sAMAccountName`, for example), add an import Attribute Flow from that target at a higher priority than the flow that would otherwise supply it. See [Generated values](../configuration/synchronisation-rules.md#generated-values) for how this works with generated Account Names. Keep the Export Run Profile's [safeguards](../configuration/run-profiles.md#safeguards) in place for the first export, so a rule or matching mistake cannot turn it into a mass write.
+
+**After initialisation,** return to normal delta cycles (see [Schedules](../configuration/schedules.md#common-workflows)).
+
 ## Run Profiles
 
 Each phase is executed through a **Run Profile** -- a configured operation on a Connected System. Common Run Profiles include:

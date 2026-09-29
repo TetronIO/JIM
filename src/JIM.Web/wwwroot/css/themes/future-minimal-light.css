@@ -24,12 +24,12 @@ html[lang] {
     --mud-palette-primary-lighten: #e85a4a;
     --mud-palette-primary-text: #ffffffff;
 
-    /* === Secondary Palette (charcoal — the dark hardware body) === */
-    --mud-palette-secondary: #2a2d2b;
-    --mud-palette-secondary-rgb: 42,45,43;
-    --mud-palette-secondary-darken: #1a1c1b;
-    --mud-palette-secondary-lighten: #3e4240;
-    --mud-palette-secondary-text: #ffffffff;
+    /* === Secondary Palette (neutral grey, for filled secondary actions) === */
+    --mud-palette-secondary: #505552;
+    --mud-palette-secondary-rgb: 80,85,82;
+    --mud-palette-secondary-darken: #424644;
+    --mud-palette-secondary-lighten: #626764;
+    --mud-palette-secondary-text: #ffffff;
 
     /* === Tertiary Palette (muted teal — subtle technological cool) === */
     --mud-palette-tertiary: #4a7c72;

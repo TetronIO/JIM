@@ -26,7 +26,7 @@ The middle two tiers both run under `dotnet test`; they differ in the database p
 
 **UI tests** live in `test/JIM.Web.Tests/`: plain NUnit tests for display logic (notably the causality Lineage and Timeline views) and Blazor component tests rendered with [bUnit](https://bunit.dev) (a test-only dependency; nothing ships in the containers). Component tests are kept deliberately narrow, covering components under `src/JIM.Web/Shared/` that carry logic or lifecycle behaviour rather than pure markup or pages; the scope rules are in `test/CLAUDE.md`.
 
-**Supporting projects** (no tests of their own): `test/JIM.TestSupport/` holds shared test helpers, and `test/JIM.TestScimServiceProvider/` is a SCIM 2.0 service provider built on `src/JIM.Scim`. The SCIM 2.0 Client Connector's unit tests in `JIM.Worker.Tests` drive its `MockScimProvider` in process, and the same provider runs as a container over HTTPS for Integration Scenario 15.
+**Supporting projects** (no tests of their own): `test/JIM.TestSupport/` holds shared test helpers, and `test/JIM.TestScimServiceProvider/` is a SCIM 2.0 service provider built on `src/JIM.Scim`. The SCIM 2.0 Client Connector's unit tests in `JIM.Worker.Tests` drive its `MockScimProvider` in process, and the same provider runs as a container over HTTPS for Integration Scenario 015.
 
 **Characteristics**:
 - Fast execution (milliseconds per test)
@@ -235,7 +235,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 **Example**: HR to Directory synchronisation scenario
 
 ```powershell
-./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Template Large
+./Run-IntegrationTests.ps1 -Scenario Scenario-001-HRToIdentityDirectory -Template Large
 ```
 
 **What Integration Tests Are Good At**:
@@ -248,6 +248,26 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 - ❌ Quick feedback (too slow for TDD)
 - ❌ Isolation (failures could be infrastructure, not code)
 - ❌ Fine-grained debugging (too many moving parts)
+
+## Deployment Boot Tests
+
+Beside the five tiers, which test JIM's code, one check tests how JIM is deployed.
+
+**Location**: `test/ci/deployment/`, run by the `deployment-boot` job in `.github/workflows/ci.yml` on every pull request and push to `main`.
+
+**Purpose**: Prove that what a customer installs works, on every runtime JIM supports. The integration tests run the development stack, which is not what ships.
+
+**What it does**: builds the images and a release bundle from the commit (`Build-ReleaseBundle.ps1 -SkipImageBuild -SkipArchive`), then installs JIM from that bundle with its own `setup.sh`, offline, three times: on Docker, on rootful Podman and on rootless Podman (`Invoke-DeploymentBoot.ps1`). The bundle is built on Docker's containerd image store, the only one that saves the registry manifest PostgreSQL's digest pin needs; the Docker leg then installs on the classic image store, the harder case for an air-gapped install and the default wherever Docker predates the containerd store. Each leg:
+- waits for JIM to answer ready over HTTPS, trusting only the certificate authority the installer created;
+- waits for every container's own health check to pass;
+- writes a marker to the database and the File Connector volume, stops and starts JIM (Compose down and up; the Quadlet units stopped and started), and checks that JIM came back in new containers with both markers;
+- saves the containers' inspect output.
+
+`Compare-RuntimeParity.ps1` then compares what the two runtimes actually run, per service: environment variable names, mounts, read-only root, capabilities kept, no-new-privileges and user. A difference fails the check unless its `$IntendedDifferences` list explains it, with a reason. Its comparison logic has Pester tests in `test/ci/deployment/Tests/`, which `build-and-test` runs.
+
+**Running it locally**: each leg needs a host where it may create an account, change a sysctl and take port 443, so it is meant for CI's throwaway runners. For a leg on a test host, build a bundle, start `Start-TestIdentityProvider.ps1`, and run `Invoke-DeploymentBoot.ps1` with `-KeepRunning` to look around afterwards.
+
+**Status**: informational until it has passed ten consecutive runs, then a required check (plan D6 in `engineering/plans/doing/PODMAN_SUPPORT.md`).
 
 ## The Watermark Bug: A Case Study
 
@@ -280,7 +300,7 @@ dotnet test test/JIM.Worker.Tests/ --filter "Category=RequiresLdaps"
 | Workflow Tests | Critical workflows (sync, provisioning, deletion) | On every commit |
 | Database-Backed Component Tests | Provider-specific / raw-SQL repository behaviour | On every PR (CI `database-tests` job); locally via `jim-test-db` |
 | LDAPS Certificate Validation Tests | Certificate chain, name and expiry validation against real directories | On every PR (CI `ldaps-tests` job) |
-| Integration Tests | Key scenarios (Scenarios 1-5) | On PR, nightly, before release |
+| Integration Tests | Key scenarios (Scenarios 001-005) | On PR, nightly, before release |
 
 ## Best Practices
 
@@ -416,7 +436,7 @@ var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
 - Export rule filter `r.MetaverseObjectTypeId == targetMvo.Type?.Id` always evaluated to `false`
 - Drift detection found NO applicable export rules
 - NO corrective Pending Exports were created
-- **Scenario 8 integration test failed**
+- **Scenario 008 integration test failed**
 
 **Result in Unit/Workflow Tests**:
 - All tests **PASSED** ✅

@@ -167,7 +167,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         // configured too, since the freeze and the flag are the two things that could each suppress a hand-over and
         // this is the combination neither of the tests above covers.
         //
-        // Written to check a suspicion that turned out to be unfounded (#1376, closed): a Scenario 14 step appeared
+        // Written to check a suspicion that turned out to be unfounded (#1376, closed): a Scenario 014 step appeared
         // to show the flag blocking re-election, and the real cause was the scenario's own Enforce State export
         // having made both sources' values identical. It is kept because the semantics are worth pinning: nothing
         // else asserts that a departed contributor's null assertion stays silent.

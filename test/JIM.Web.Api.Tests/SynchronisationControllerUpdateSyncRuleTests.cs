@@ -29,7 +29,7 @@ namespace JIM.Web.Api.Tests;
 /// <summary>
 /// Tests for the UpdateSyncRuleAsync endpoint. Covers the scoping-related
 /// action fields (InboundOutOfScopeAction, OutboundDeprovisionAction) that
-/// integration test Scenario 10 needs to configure programmatically, and the
+/// integration test Scenario 010 needs to configure programmatically, and the
 /// partial-update semantics of the optional Description field.
 /// </summary>
 [TestFixture]

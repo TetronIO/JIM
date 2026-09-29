@@ -69,7 +69,7 @@ public class CrossRunReferenceResolutionTests
     /// NOTE: The EF Core in-memory database auto-resolves FKs from navigation properties, so
     /// this test CANNOT catch the specific FK persistence bug itself — the in-memory DB will
     /// always populate ReferenceValueId automatically when ReferenceValue is set. The integration
-    /// test (Scenario 8 against real PostgreSQL) is the authoritative regression test for that.
+    /// test (Scenario 008 against real PostgreSQL) is the authoritative regression test for that.
     /// This test verifies the two-run import flow works end-to-end and the assertions are correct.
     /// See test/CLAUDE.md "EF Core In-Memory Database Limitation" for full details.
     /// </summary>

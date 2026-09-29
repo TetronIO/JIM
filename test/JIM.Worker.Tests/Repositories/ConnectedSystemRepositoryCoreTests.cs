@@ -570,7 +570,7 @@ public class ConnectedSystemRepositoryCoreTests
     {
         // Arrange: same shape as the GetConnectedSystemAsync test — one partition, one root Corp, three
         // nested descendants. This endpoint powers the partitions-list API that scenario scripts use to
-        // select containers for import, so missing descendants here caused Scenario 8's silent failure
+        // select containers for import, so missing descendants here caused Scenario 008's silent failure
         // even after GetConnectedSystemAsync was fixed (issue #586).
         var cs = CreateConnectedSystem(id: 1);
         _connectedSystemsData.Add(cs);

@@ -266,7 +266,7 @@ try {
         # Step 3: Populate test data
         Write-TestSection "Step 3: Populate Test Data"
 
-        # S1 target directory starts empty — no Populate-SambaAD.ps1 call.
+        # S001 target directory starts empty — no Populate-SambaAD.ps1 call.
         # HR-driven provisioning is tested against a clean directory.
 
         Write-Host "Generating test CSV files..." -ForegroundColor Gray
@@ -297,11 +297,11 @@ try {
     # Use localhost URL since PowerShell scripts run on the host, not in containers
     $jimUrl = "http://localhost:5200"
 
-    Write-Host "Running Scenario 1: HR to Enterprise Directory" -ForegroundColor Cyan
+    Write-Host "Running Scenario 001: HR to Enterprise Directory" -ForegroundColor Cyan
     Write-Host ""
 
     try {
-        & "$scriptRoot/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1" `
+        & "$scriptRoot/scenarios/Invoke-Scenario-001-HRToIdentityDirectory.ps1" `
             -Template $Template `
             -Step All `
             -JIMUrl $jimUrl `
@@ -309,38 +309,38 @@ try {
 
         if ($LASTEXITCODE -eq 0) {
             $results.Scenarios += @{
-                Name = "Scenario 1: HR to Enterprise Directory"
+                Name = "Scenario 001: HR to Enterprise Directory"
                 Success = $true
             }
             Write-Host ""
-            Write-Host "  Scenario 1 passed" -ForegroundColor Green
+            Write-Host "  Scenario 001 passed" -ForegroundColor Green
         }
         else {
             $results.Scenarios += @{
-                Name = "Scenario 1: HR to Enterprise Directory"
+                Name = "Scenario 001: HR to Enterprise Directory"
                 Success = $false
                 Error = "Test failed with exit code $LASTEXITCODE"
             }
             Write-Host ""
-            Write-Host "  Scenario 1 failed" -ForegroundColor Red
+            Write-Host "  Scenario 001 failed" -ForegroundColor Red
         }
     }
     catch {
         $results.Scenarios += @{
-            Name = "Scenario 1: HR to Enterprise Directory"
+            Name = "Scenario 001: HR to Enterprise Directory"
             Success = $false
             Error = $_.Exception.Message
         }
         Write-Host ""
-        Write-Host "  Scenario 1 failed: $_" -ForegroundColor Red
+        Write-Host "  Scenario 001 failed: $_" -ForegroundColor Red
     }
 
     Write-Host ""
-    Write-Host "Running Scenario 4: MVO Deletion Rules" -ForegroundColor Cyan
+    Write-Host "Running Scenario 004: MVO Deletion Rules" -ForegroundColor Cyan
     Write-Host ""
 
     try {
-        & "$scriptRoot/scenarios/Invoke-Scenario4-DeletionRules.ps1" `
+        & "$scriptRoot/scenarios/Invoke-Scenario-004-DeletionRules.ps1" `
             -Template $Template `
             -Step All `
             -JIMUrl $jimUrl `
@@ -348,36 +348,36 @@ try {
 
         if ($LASTEXITCODE -eq 0) {
             $results.Scenarios += @{
-                Name = "Scenario 4: MVO Deletion Rules"
+                Name = "Scenario 004: MVO Deletion Rules"
                 Success = $true
             }
             Write-Host ""
-            Write-Host "  Scenario 4 passed" -ForegroundColor Green
+            Write-Host "  Scenario 004 passed" -ForegroundColor Green
         }
         else {
             $results.Scenarios += @{
-                Name = "Scenario 4: MVO Deletion Rules"
+                Name = "Scenario 004: MVO Deletion Rules"
                 Success = $false
                 Error = "Test failed with exit code $LASTEXITCODE"
             }
             Write-Host ""
-            Write-Host "  Scenario 4 failed" -ForegroundColor Red
+            Write-Host "  Scenario 004 failed" -ForegroundColor Red
         }
     }
     catch {
         $results.Scenarios += @{
-            Name = "Scenario 4: MVO Deletion Rules"
+            Name = "Scenario 004: MVO Deletion Rules"
             Success = $false
             Error = $_.Exception.Message
         }
         Write-Host ""
-        Write-Host "  Scenario 4 failed: $_" -ForegroundColor Red
+        Write-Host "  Scenario 004 failed: $_" -ForegroundColor Red
     }
 
     Write-Host ""
-    Write-Host "Scenarios 2 and 3 not yet implemented:" -ForegroundColor Gray
-    Write-Host "  - Scenario 2: Directory to Directory Sync (placeholder)" -ForegroundColor Gray
-    Write-Host "  - Scenario 3: GALSYNC (placeholder)" -ForegroundColor Gray
+    Write-Host "Scenarios 002 and 003 not yet implemented:" -ForegroundColor Gray
+    Write-Host "  - Scenario 002: Directory to Directory Sync (placeholder)" -ForegroundColor Gray
+    Write-Host "  - Scenario 003: GALSYNC (placeholder)" -ForegroundColor Gray
     Write-Host ""
 
     # Determine overall success

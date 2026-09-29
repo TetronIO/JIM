@@ -70,8 +70,8 @@ public partial class SyncRepository : ISyncRepository
         => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount);
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
@@ -279,14 +279,6 @@ public partial class SyncRepository : ISyncRepository
         => _repo.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
 
     /// <summary>
-    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
-    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
-    /// ConnectedSystemObjectId is populated.
-    /// </summary>
-    public Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetPendingExportsForConfirmationEvaluationAsync(connectedSystemId);
-
-    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values.
     /// The predicate is evaluated in SQL (backed by a partial index on
@@ -316,6 +308,21 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
+
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        var ids = connectedSystemObjectIds.ToArray();
+        var found = await _context.PendingExports
+            .AsNoTracking()
+            .Where(pe => pe.ConnectedSystemObjectId != null && ids.Contains(pe.ConnectedSystemObjectId.Value))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .Distinct()
+            .ToListAsync();
+        return found.ToHashSet();
+    }
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
         => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize);
@@ -630,6 +637,9 @@ public partial class SyncRepository : ISyncRepository
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => _repo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(pendingExports);
+
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+        => _repo.ConnectedSystems.RecoverStrandedExecutingPendingExportsAsync();
 
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
         => _repo.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds);

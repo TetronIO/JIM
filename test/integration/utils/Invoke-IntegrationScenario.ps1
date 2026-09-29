@@ -9,7 +9,7 @@
     The runner used to read $LASTEXITCODE straight after calling the scenario with the call
     operator. PowerShell does not set $LASTEXITCODE for a .ps1 that returns rather than
     exits, so the value that survived was whatever the last native command inside the
-    scenario had left behind. Scenario 16 against Oracle printed "Result: PASS" and the run
+    scenario had left behind. Scenario 016 against Oracle printed "Result: PASS" and the run
     exited 1, because it reaches Oracle through docker exec ... sqlplus and SQL*Plus had
     exited 1. The same scenario against SQL Server exited 0, which made it look like an
     Oracle quirk rather than the general defect it is (#1382).
@@ -28,7 +28,7 @@
 
     A scenario that returns normally without a result object is left with case 3's answer,
     which is the one case that can still inherit a stray code. That is why every scenario
-    which returns rather than exits must return a result object; Scenario 6 and Scenario 11
+    which returns rather than exits must return a result object; Scenario 006 and Scenario 011
     were changed alongside this function so that none currently relies on it.
 #>
 
@@ -53,7 +53,7 @@ function Invoke-IntegrationScenario {
     # Write-Host, NOT back out of this function: the caller assigns this function's output to
     # a variable, so anything emitted here would be captured into that variable rather than
     # shown, and the return value would become an array whose .ExitCode throws under strict
-    # mode the moment a scenario writes anything to the pipeline (Scenario 8 does; the all-
+    # mode the moment a scenario writes anything to the pipeline (Scenario 008 does; the all-
     # Write-Host scenarios never tripped it). Out-String preserves the console formatting the
     # object would have had; per-object formatting can repeat table headers across a sequence,
     # which scenario output (overwhelmingly strings) does not encounter in practice.
@@ -82,7 +82,7 @@ function Invoke-IntegrationScenario {
     Tells a scenario's result object apart from its ordinary output.
 
 .DESCRIPTION
-    Scenarios return either a hashtable (Scenario 16) or a PSCustomObject, so both shapes
+    Scenarios return either a hashtable (Scenario 016) or a PSCustomObject, so both shapes
     are recognised. The Success property is what makes an object a verdict rather than a
     piece of output that happens to be a dictionary.
 #>

@@ -498,7 +498,7 @@ public class SystemResetDatabaseTests
     /// navigation instance onto the tracked singleton then attaches a second instance of an already-tracked
     /// attribute, and the whole reset fails with "The instance of entity type 'MetaverseAttribute' cannot be
     /// tracked because another instance with the same key value for {'Id'} is already being tracked" (surfaced to
-    /// API callers as a 409; found by Scenario10-SyncRuleScoping's factory resets). The existing reset tests never
+    /// API callers as a 409; found by Scenario-010-SyncRuleScoping's factory resets). The existing reset tests never
     /// set the SSO attribute, which is why they could not see it.
     /// </summary>
     [Test]

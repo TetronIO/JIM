@@ -38,8 +38,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
         => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
-        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
+        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
@@ -171,9 +171,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
         => _inner.GetPendingExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
-        => _inner.GetPendingExportsForConfirmationEvaluationAsync(connectedSystemId);
-
     public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
         => _inner.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId);
 
@@ -227,6 +224,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => _inner.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+
+    /// <inheritdoc />
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsWithPendingExportsAsync(connectedSystemObjectIds);
 
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _inner.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
@@ -394,6 +395,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
         => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectScopeReviewPendingAsync));
+
+    public Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks)
+        => throw new PreviewWriteAttemptedException(nameof(MarkConnectedSystemObjectsDerivedInputChangePendingAsync));
+
+    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
+        => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectDerivedInputChangePendingAsync));
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectsWithNewAttributeValuesAsync));
@@ -567,6 +574,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(MarkPendingExportsAsExecutingAsync));
+
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+        => throw new PreviewWriteAttemptedException(nameof(RecoverStrandedExecutingPendingExportsAsync));
 
     public Task SetPendingExportQueueingItemsAsync(IReadOnlyCollection<(Guid PendingExportId, Guid QueuedByRunProfileExecutionItemId)> stamps)
         => throw new PreviewWriteAttemptedException(nameof(SetPendingExportQueueingItemsAsync));

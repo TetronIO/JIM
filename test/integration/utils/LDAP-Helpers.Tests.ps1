@@ -11,7 +11,7 @@
     RFC 2849 folds long LDIF values (e.g. Distinguished Names) at 78 columns: a
     continuation line begins with a single space. Guards Expand-LDIFFoldedLine, which
     reassembles those continuation lines, and its use by Get-LDAPUser, whose failure to
-    unfold a folded dn: line truncated a DN and broke Scenario 1 IEO Phase 3 on Samba AD
+    unfold a folded dn: line truncated a DN and broke Scenario 001 IEO Phase 3 on Samba AD
     (issue exposed by PR #1100's new test; see #1102 follow-up SPEC-1102B).
 #>
 
@@ -104,7 +104,7 @@ Describe 'Get-LDAPBindOutcome' {
         Active Directory reports every bind refusal as result code 49 (invalidCredentials) and puts the
         actual reason in a hexadecimal sub-code in the diagnostic message. Reading only the result code
         therefore cannot tell "the password is wrong" from "the password is right and must be changed",
-        which is precisely the distinction Scenario 17 exists to assert.
+        which is precisely the distinction Scenario 017 exists to assert.
 
         Every string below was captured verbatim from a live Samba AD domain controller
         (ghcr.io/tetronio/jim-samba-ad:primary), not composed by hand: Samba emits the Windows-compatible
@@ -180,7 +180,7 @@ Describe 'Get-LDAPPasswordModifyOutcome' {
     <#
         ldappasswd reports an RFC 3062 refusal as "Result: <text> (<code>)" followed by an
         "Additional info:" line carrying the server's own message. The number is what is classified on,
-        because the text differs between servers. Scenario 22's negative control depends on telling a
+        because the text differs between servers. Scenario 022's negative control depends on telling a
         constraint violation (the password policy refused the value) from an access or bind failure
         (the fixture is wrong), both of which are a non-zero exit code.
 

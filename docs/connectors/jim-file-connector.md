@@ -36,7 +36,7 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 
 ## File access
 
-JIM ships with a formal Docker volume (`jim-connector-files-volume`) mounted inside both the JIM Web and JIM Worker containers at `/connector-files`. The File Connector reads from and writes to paths under this directory. **You will configure all File Connector File Path settings as `/connector-files/<some-path>`.**
+JIM ships with a named volume (`jim-connector-files-volume`) mounted inside both the JIM Web and JIM Worker containers at `/connector-files`, on Docker and on Podman. The File Connector reads from and writes to paths under this directory. **You will configure all File Connector File Path settings as `/connector-files/<some-path>`.**
 
 There are two patterns for getting files into and out of `/connector-files`. Most deployments use both at the same time, depending on the integration.
 
@@ -51,6 +51,13 @@ docker exec -i -u app jim.worker sh -c 'cat > /connector-files/Users.csv' < ./Us
 ```
 
 The `-u app` flag is important: it runs the shell inside the container as the JIM runtime user (UID 1654), so the file lands with the correct ownership. This matters when JIM will later rewrite the same file, for example in **Export Only** or **Bidirectional** mode, or whenever schema discovery is triggered on an existing file.
+
+On Podman, the worker container is `jim-worker`, and its default user is already `app` (for a rootless installation, see [Rootless commands](../administration/podman.md#rootless-commands)):
+
+```bash
+sudo podman exec -i jim-worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
+sudo podman cp jim-worker:/connector-files/Exports.csv - | tar -xf -   # pull an export out
+```
 
 !!! warning "Don't use `docker cp` to push files JIM will rewrite"
     `docker cp ./file jim.worker:/path` is tempting but preserves your host UID/GID. The resulting file is not writable by the JIM runtime user (UID 1654), so any subsequent JIM export against that file will fail with an "Access to the path … is denied" error. Use the `docker exec … cat >` form above instead.
@@ -94,6 +101,43 @@ Then configure the File Connector with `File Path = /connector-files/hr-input/em
     - Adjust your network share's mount options (`uid=1654,gid=1654` for CIFS, or apply NFS UID-mapping) so files appear to be owned by UID 1654 inside the container.
 
     Permission errors during sync show up as RPEIs on the failing import or export Activity, with a clear "Access to the path … is denied" message.
+
+#### On Podman
+
+On Podman, add the host folder to the pod file, `/opt/jim/jim.yaml`: a `hostPath` volume, mounted in the `worker` container (and the `web` container, for the file browser):
+
+```yaml
+      volumeMounts:
+        - { name: hr-extracts, mountPath: /connector-files/hr-input }
+  # ...
+  volumes:
+    - name: hr-extracts
+      hostPath: { path: /mnt/hr-extracts, type: Directory }
+```
+
+Then restart JIM: `sudo systemctl restart jim.service`, or for a rootless installation, `sudo systemctl --user -M jim@ restart jim.service`. An upgrade replaces `jim.yaml`, so carry the addition into each new release's copy.
+
+Two things can differ from Docker:
+
+- **Ownership, when rootless**<br /> A rootful JIM, the default, needs the folder owned by UID 1654, as on Docker. A rootless JIM runs as the `jim` account, and its container user, UID 1654, is a *subordinate* ID of that account on the host rather than UID 1654. Hand the folder to the container user from within the account's own user namespace, which picks the right host ID:
+
+    ```bash
+    chown jim: /mnt/hr-extracts
+    jim-podman unshare chown 1654:1654 /mnt/hr-extracts
+    ```
+
+    On the host, the folder then belongs to the account's first subordinate ID plus 1653 (for example `101653` when `/etc/subuid` gives `jim` the range from `100000`). For a network share, mount it with that ID as the owner (`uid=101653,gid=101653` for CIFS).
+
+- **SELinux**<br /> On a host with SELinux enforcing, as RHEL is by default, a container may read and write only files labelled for containers. Label the folder, persistently:
+
+    ```bash
+    semanage fcontext -a -t container_file_t '/mnt/hr-extracts(/.*)?'
+    restorecon -R /mnt/hr-extracts
+    ```
+
+    For an NFS or CIFS mount, set the label as a mount option instead: `context="system_u:object_r:container_file_t:s0"`.
+
+Where a network share cannot be mounted on the host with a suitable owner or label, a rootful installation can mount it as a Podman volume instead, which Podman mounts itself: `sudo podman volume create --driver local --opt type=cifs --opt device=//fileserver/hr-extracts --opt o=username=jim-svc,uid=1654,gid=1654 hr-extracts`, then use `persistentVolumeClaim: { claimName: hr-extracts }` in place of `hostPath`. Mounting a share needs root, so this does not work rootless.
 
 ### Mounting both at once
 

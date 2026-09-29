@@ -94,7 +94,7 @@ function Get-DirsrvSnapshotHash {
     [OutputType([string])]
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet('General', 'Scenario8')]
+        [ValidateSet('General', 'Scenario-008')]
         [string]$Scenario,
 
         # The test/integration directory. Defaults to two levels above this file's
@@ -105,7 +105,7 @@ function Get-DirsrvSnapshotHash {
 
     $populateScript = switch ($Scenario) {
         'General'   { 'Populate-OpenLDAP.ps1' }
-        'Scenario8' { 'Populate-OpenLDAP-Scenario8.ps1' }
+        'Scenario-008' { 'Populate-OpenLDAP-Scenario-008.ps1' }
     }
     $relativePaths = @(
         'utils/Test-Helpers.ps1',
@@ -141,7 +141,7 @@ function Get-DirsrvSnapshotImageTag {
     [OutputType([string])]
     param(
         # general: both suffixes populated (the directory-agnostic scenarios).
-        # s8: Scenario 8's shape (Source populated, Target OUs only).
+        # s8: Scenario 008's shape (Source populated, Target OUs only).
         [Parameter(Mandatory = $true)]
         [ValidateSet('general', 's8')]
         [string]$Role,

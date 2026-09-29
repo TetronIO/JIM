@@ -10,6 +10,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -172,6 +173,7 @@ public class SyncRepository : ISyncRepository
 
     public void SeedConnectedSystemObject(ConnectedSystemObject cso)
     {
+        BumpRowVersion(cso);
         _csos[cso.Id] = cso;
         if (!_csosByConnectedSystem.TryGetValue(cso.ConnectedSystemId, out var csSet))
         {
@@ -262,9 +264,20 @@ public class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
         var count = GetCsosForSystem(connectedSystemId)
-            .Count(c => c.LastUpdated.HasValue && c.LastUpdated.Value >= modifiedSince);
+            .Count(c => IsModifiedSince(c, modifiedSince));
         return Task.FromResult(count);
     }
+
+    /// <summary>
+    /// Delta sync's "modified since" test. Matches the production query's shape: a CSO counts when it was created
+    /// OR last updated after the watermark. A newly imported CSO has no LastUpdated until something changes it, so
+    /// testing LastUpdated alone hid every joiner from delta sync in tests (the production query never did).
+    /// Inclusive, as this provider has always been, so tests that set a watermark equal to a timestamp still see it.
+    /// </summary>
+    private static bool IsModifiedSince(ConnectedSystemObject cso, DateTime modifiedSince) =>
+        cso.Created >= modifiedSince || (cso.LastUpdated.HasValue && cso.LastUpdated.Value >= modifiedSince) ||
+        // A Metaverse-Derived Attribute Flow mark (#1750) selects the object as the production query does.
+        cso.DerivedInputChangePending;
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
@@ -292,10 +305,26 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
     {
-        var filtered = GetCsosForSystem(connectedSystemId)
-            .Where(c => c.LastUpdated.HasValue && c.LastUpdated.Value >= modifiedSince)
+        var modified = GetCsosForSystem(connectedSystemId)
+            .Where(c => IsModifiedSince(c, modifiedSince));
+
+        if (afterId.HasValue)
+        {
+            // Keyset path, as for GetConnectedSystemObjectsAsync: order by Id and return the first page after the
+            // cursor, so rows deleted by an earlier page cannot shift later rows past the caller.
+            var afterIdValue = afterId.Value;
+            var remaining = modified
+                .OrderBy(c => c.Id)
+                .Where(c => c.Id.CompareTo(afterIdValue) > 0)
+                .ToList();
+            var keysetResult = BuildPagedResult(remaining, 1, pageSize);
+            keysetResult.CurrentPage = page;
+            return Task.FromResult(keysetResult);
+        }
+
+        var filtered = modified
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
@@ -567,6 +596,7 @@ public class SyncRepository : ISyncRepository
         DateJoined = cso.DateJoined,
         ScopeReviewPending = cso.ScopeReviewPending,
         LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt,
+        DerivedInputChangePending = cso.DerivedInputChangePending,
         Changes = cso.Changes
     };
 
@@ -849,6 +879,7 @@ public class SyncRepository : ISyncRepository
                 cso.Id = Guid.NewGuid();
 
             FixupCsoNavigationProperties(cso);
+            BumpRowVersion(cso);
             _csos[cso.Id] = cso;
             AddToCsIndex(cso);
         }
@@ -897,11 +928,13 @@ public class SyncRepository : ISyncRepository
                 stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
                 stored.AttributeValues = cso.AttributeValues;
                 FixupCsoNavigationProperties(stored);
+                BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
             }
             else
             {
                 FixupCsoNavigationProperties(cso);
+                BumpRowVersion(cso);
                 _csos[cso.Id] = cso;
                 UpdateMvoIndex(cso);
             }
@@ -959,6 +992,7 @@ public class SyncRepository : ISyncRepository
                 stored.MetaverseObject = cso.MetaverseObject;
                 stored.JoinType = cso.JoinType;
                 stored.Status = cso.Status;
+                BumpRowVersion(stored);
                 UpdateMvoIndex(stored);
             }
         }
@@ -968,9 +1002,68 @@ public class SyncRepository : ISyncRepository
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
     {
         foreach (var stored in ids.Select(id => _csos.TryGetValue(id, out var cso) ? cso : null).Where(cso => cso != null))
+        {
             stored!.ScopeReviewPending = false;
+            BumpRowVersion(stored);
+        }
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Number of times <see cref="MarkConnectedSystemObjectsDerivedInputChangePendingAsync"/> has been called, and the
+    /// marks each call carried. Lets tests prove marking is one bulk call per page flush and never one per object.
+    /// </summary>
+    public List<IReadOnlyCollection<DerivedInputChangeMark>> DerivedInputMarkCalls { get; } = [];
+
+    public Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks)
+    {
+        if (marks.Count == 0)
+            return Task.FromResult(0);
+
+        DerivedInputMarkCalls.Add(marks.ToList());
+        // Scans _csos rather than the _csosByMvo index, for the reason GetConnectedSystemObjectCountByMvoAsync gives:
+        // the index can lag a join made earlier in the same page.
+        var markSet = marks.ToHashSet();
+        // Every matched row is written, already-marked ones included, so its row version moves, as the production
+        // statement's does: that is what stops a run that loaded the object earlier from clearing this mark.
+        var toMark = _csos.Values
+            .Where(cso => (cso.MetaverseObjectId ?? cso.MetaverseObject?.Id) is { } mvoId &&
+                          markSet.Contains(new DerivedInputChangeMark(mvoId, cso.ConnectedSystemId)))
+            .ToList();
+        var newlyMarked = toMark.Count(cso => !cso.DerivedInputChangePending);
+        foreach (var cso in toMark)
+        {
+            cso.DerivedInputChangePending = true;
+            BumpRowVersion(cso);
+        }
+
+        return Task.FromResult(newlyMarked);
+    }
+
+    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeClear> clears)
+    {
+        // Mirrors the production xmin guard: a row whose version moved since the run loaded it keeps its mark.
+        var cleared = 0;
+        foreach (var (stored, _) in clears
+                     .Select(clear => (Cso: _csos.TryGetValue(clear.ConnectedSystemObjectId, out var cso) ? cso : null, clear.SeenRowVersion))
+                     .Where(x => x.Cso is { DerivedInputChangePending: true } && x.Cso.xmin == x.SeenRowVersion))
+        {
+            stored!.DerivedInputChangePending = false;
+            BumpRowVersion(stored);
+            cleared++;
+        }
+
+        return Task.FromResult(cleared);
+    }
+
+    private uint _lastRowVersion;
+
+    /// <summary>
+    /// Models PostgreSQL's <c>xmin</c> on the stored Connected System Object: every write through this repository
+    /// gives the row a new version, so the derived-input mark's version-guarded clear (#1750) behaves as it does
+    /// against the database.
+    /// </summary>
+    private void BumpRowVersion(ConnectedSystemObject cso) => cso.xmin = ++_lastRowVersion;
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
@@ -997,6 +1090,7 @@ public class SyncRepository : ISyncRepository
                 {
                     stored.ImportStateHash = null;
                     stored.ImportStateFingerprint = null;
+                    BumpRowVersion(stored);
                 }
             }
         }
@@ -1423,6 +1517,7 @@ public class SyncRepository : ISyncRepository
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
         cso.DateJoined = dateJoined;
         cso.Status = ConnectedSystemObjectStatus.Normal;
+        BumpRowVersion(cso);
         return Task.FromResult(true);
     }
 
@@ -1695,21 +1790,6 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
-    /// evaluation at the start of a sync run: Status is neither Pending nor Exported, and
-    /// ConnectedSystemObjectId is populated.
-    /// </summary>
-    public virtual Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId)
-    {
-        var result = GetPendingExportsForSystem(connectedSystemId)
-            .Where(pe => pe.ConnectedSystemObjectId.HasValue
-                      && pe.Status != PendingExportStatus.Pending
-                      && pe.Status != PendingExportStatus.Exported)
-            .ToList();
-        return Task.FromResult(result);
-    }
-
-    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values (#1102).
     /// </summary>
@@ -1856,6 +1936,14 @@ public class SyncRepository : ISyncRepository
                     : null))
             .Where(pair => pair.pe != null)
             .ToDictionary(pair => pair.csoId, pair => pair.pe!);
+        return Task.FromResult(result);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var result = connectedSystemObjectIds
+            .Where(csoId => _pendingExportsByCsoId.TryGetValue(csoId, out var peId) && _pendingExports.ContainsKey(peId))
+            .ToHashSet();
         return Task.FromResult(result);
     }
 
@@ -2487,6 +2575,7 @@ public class SyncRepository : ISyncRepository
             cso.MetaverseObject = null;
             cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
             cso.DateJoined = null;
+            BumpRowVersion(cso);
             UpdateMvoIndex(cso);
         }
         return Task.CompletedTask;
@@ -2773,6 +2862,21 @@ public class SyncRepository : ISyncRepository
             _pendingExports[pe.Id] = pe;
         }
         return Task.CompletedTask;
+    }
+
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+    {
+        var recovered = 0;
+        foreach (var pe in _pendingExports.Values.Where(pe => pe.Status == PendingExportStatus.Executing))
+        {
+            var somethingAlreadySent = pe.AttributeValueChanges.Any(ac =>
+                ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+
+            pe.Status = somethingAlreadySent ? PendingExportStatus.Exported : PendingExportStatus.Pending;
+            recovered++;
+        }
+        return Task.FromResult(recovered);
     }
 
     // Virtual for test-support subclasses: the parallel export batch path re-loads Pending

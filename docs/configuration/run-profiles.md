@@ -30,7 +30,7 @@ A Run Profile that targets no partition reads from every partition currently sel
 
 ### When a targeted partition is deselected
 
-Selecting a partition on the Connected System's Partitions & Containers tab is how you tell JIM which parts of a directory it manages, and that decision binds every Run Profile. If you deselect a partition that a Run Profile targets, that Run Profile becomes **inoperable**: JIM refuses to run it, naming the Run Profile and the partition, rather than reading scope you have withdrawn. The Run Profiles tab marks it **Not selected** beside the partition name, the REST API returns `targetsDeselectedPartition` on the Run Profile, and `Get-JIMRunProfile` surfaces the same property, so you can find every affected Run Profile before a scheduled run reaches one:
+Selecting a partition on the Connected System's Scope tab is how you tell JIM which parts of a directory it manages, and that decision binds every Run Profile. If you deselect a partition that a Run Profile targets, that Run Profile becomes **inoperable**: JIM refuses to run it, naming the Run Profile and the partition, rather than reading scope you have withdrawn. The Run Profiles tab marks it **Not selected** beside the partition name, the REST API returns `targetsDeselectedPartition` on the Run Profile, and `Get-JIMRunProfile` surfaces the same property, so you can find every affected Run Profile before a scheduled run reaches one:
 
 ```powershell
 Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object targetsDeselectedPartition
@@ -89,8 +89,8 @@ Triggering a Run Profile returns an activity ID. The actual work runs on the wor
 **Setting up Run Profiles for a new Connected System:**
 
 1. Create the Connected System and import its schema
-2. Create the Run Profiles you need. Typically: a delta import, a delta sync, and an export. Add full variants too if you want the option of a periodic ground-truth refresh.
-3. Either add them as steps to a [schedule](schedules.md) for automated execution, or run them on demand for one-off operations
+2. Create the Run Profiles you need: a Full Import, a Full Synchronisation and an Export at minimum, since the first run has to look at everything rather than only what changes. Add delta variants for ongoing operation, and keep the full variants for periodic ground-truth refreshes.
+3. Use the full variants to bring the Connected System in, in the order [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) sets out, before switching to delta; then either add the delta Run Profiles as steps to a [schedule](schedules.md) for automated execution, or run them on demand for one-off operations
 
 **Running a one-off import:**
 

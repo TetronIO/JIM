@@ -347,7 +347,7 @@ The tag-push triggers the release workflow which:
 2. Builds and pushes Docker images to `ghcr.io/tetronio/jim-{web,worker,scheduler}:<version>`
 3. Publishes the PowerShell module to PSGallery
 4. Creates an air-gapped deployment bundle
-5. Attaches standalone deployment files to the release (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`)
+5. Attaches standalone deployment files to the release (`docker-compose.yml`, `docker-compose.production.yml`, and `.env.example` published as `default.env.example`)
 6. Creates a GitHub Release with all assets
 
 ## Step 9: Post-Release Verification

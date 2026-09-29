@@ -9,7 +9,7 @@
     Creates users and groups in both OpenLDAP suffixes (dc=yellowstone,dc=local
     and dc=glitterband,dc=local) for multi-partition testing (Issue #72, Phase 1b).
 
-    Each suffix gets distinct users so Scenario 9 can assert that partition-scoped
+    Each suffix gets distinct users so Scenario 009 can assert that partition-scoped
     import only returns objects from the targeted partition.
 
     Users are split: odd indices go to Yellowstone, even indices go to Glitterband.

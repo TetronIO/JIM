@@ -399,7 +399,7 @@ public class DriftDetectionTests
     /// <summary>
     /// The Enforce State half of #492's delta convergence: a corrective export whose drifted attribute is a
     /// merged auxiliary class's contribution must add the class in the same export, exactly as ordinary export
-    /// staging does. Enforce State is on by default, so this drift path is the one that staged Scenario 19's
+    /// staging does. Enforce State is on by default, so this drift path is the one that staged Scenario 019's
     /// join-time exports live, and without the class add the directory refused every one of them with an
     /// objectClassViolation.
     /// </summary>
@@ -841,6 +841,160 @@ public class DriftDetectionTests
     /// import rule (at <paramref name="targetPriority"/>) and a second import rule on <paramref name="winningSystemId"/>
     /// (at <paramref name="winningPriority"/>), so the drift contributor check can be exercised as priority-aware.
     /// </summary>
+    #region Contributor must read the diverged attribute (#1864)
+
+    // A system with the winning import flow for a Metaverse attribute is a legitimate source for a divergence on the
+    // Connected System attribute that attribute is exported to only if that import flow READS the diverged attribute:
+    // only then does the out-of-band edit flow in. When it reads a different attribute (or only Metaverse attributes),
+    // the edit reaches the Connected System Object and nowhere else, so skipping it as "legitimate" leaves the two
+    // sides disagreeing permanently. Such a divergence is drift, and must be corrected.
+
+    private ConnectedSystemObjectTypeAttribute JobTitleCsoAttr =>
+        TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.JobTitle.ToString());
+
+    private SyncRule CreateImportRuleWithSource(SyncRuleMappingSource source)
+    {
+        var importRule = CreateImportRule();
+        var mapping = importRule.AttributeFlowRules.Single();
+        mapping.Sources.Clear();
+        mapping.Sources.Add(source);
+        return importRule;
+    }
+
+    private (MetaverseObject Mvo, ConnectedSystemObject Cso) CreateDivergedDisplayName()
+    {
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe",
+            ContributedBySystemId = TargetSystem.Id
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Edited Out Of Band"
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+        return (mvo, cso);
+    }
+
+    private DriftDetectionResult EvaluateDivergedDisplayName(SyncRule exportRule)
+    {
+        var (mvo, cso) = CreateDivergedDisplayName();
+        return Jim.DriftDetection.EvaluateDrift(
+            cso, mvo, new List<SyncRule> { exportRule },
+            DriftDetectionService.BuildImportMappingCache(SyncRulesData));
+    }
+
+    [Test]
+    public void EvaluateDrift_ContributorImportsADifferentAttribute_DivergenceIsDrift()
+    {
+        // Display Name is imported from JobTitle, but exported to DisplayName: an edit to DisplayName never flows in.
+        CreateImportRuleWithSource(new SyncRuleMappingSource
+        {
+            Id = 20001,
+            ConnectedSystemAttribute = JobTitleCsoAttr,
+            ConnectedSystemAttributeId = JobTitleCsoAttr.Id
+        });
+
+        var result = EvaluateDivergedDisplayName(CreateExportRule());
+
+        Assert.That(result.HasDrift, Is.True,
+            "the system's import flow does not read DisplayName, so an out-of-band DisplayName edit is drift");
+    }
+
+    [Test]
+    public void EvaluateDrift_ContributorExpressionDoesNotReadTheDivergedAttribute_DivergenceIsDrift()
+    {
+        CreateImportRuleWithSource(new SyncRuleMappingSource
+        {
+            Id = 20002,
+            Expression = "cs[\"JobTitle\"] + \" (imported)\""
+        });
+
+        var result = EvaluateDivergedDisplayName(CreateExportRule());
+
+        Assert.That(result.HasDrift, Is.True,
+            "the import expression reads JobTitle only, so an out-of-band DisplayName edit is drift");
+    }
+
+    [Test]
+    public void EvaluateDrift_ContributorExpressionReadsOnlyTheMetaverse_DivergenceIsDrift()
+    {
+        // A Metaverse-Derived Attribute Flow (#1750) hosted on the target's own rule reads nothing from the system.
+        CreateImportRuleWithSource(new SyncRuleMappingSource
+        {
+            Id = 20003,
+            Expression = "mv[\"Email\"]"
+        });
+
+        var result = EvaluateDivergedDisplayName(CreateExportRule());
+
+        Assert.That(result.HasDrift, Is.True,
+            "an import flow reading only Metaverse attributes cannot carry the system's edit inwards");
+    }
+
+    [Test]
+    public void EvaluateDrift_ContributorExpressionReadsTheDivergedAttribute_DivergenceIsNotDrift()
+    {
+        CreateImportRuleWithSource(new SyncRuleMappingSource
+        {
+            Id = 20004,
+            Expression = "cs[\"displayname\"] + \"\""
+        });
+
+        var result = EvaluateDivergedDisplayName(CreateExportRule());
+
+        Assert.That(result.HasDrift, Is.False,
+            "the import expression reads DisplayName (names match case-insensitively), so the edit flows in and is legitimate");
+    }
+
+    [Test]
+    public void EvaluateDrift_ExportExpressionSource_ContributorDoesNotReadTheDivergedAttribute_DivergenceIsDrift()
+    {
+        CreateImportRuleWithSource(new SyncRuleMappingSource
+        {
+            Id = 20005,
+            ConnectedSystemAttribute = JobTitleCsoAttr,
+            ConnectedSystemAttributeId = JobTitleCsoAttr.Id
+        });
+        var exportRule = CreateExportRule();
+        var exportSource = exportRule.AttributeFlowRules.Single().Sources.Single();
+        exportSource.MetaverseAttribute = null;
+        exportSource.MetaverseAttributeId = null;
+        exportSource.Expression = $"mv[\"{Constants.BuiltInAttributes.DisplayName}\"]";
+
+        var result = EvaluateDivergedDisplayName(exportRule);
+
+        Assert.That(result.HasDrift, Is.True,
+            "the export expression reads Display Name, whose import flow reads JobTitle, not DisplayName");
+    }
+
+    [Test]
+    public void EvaluateDrift_ExportExpressionSource_ContributorReadsTheDivergedAttribute_DivergenceIsNotDrift()
+    {
+        CreateImportRule(); // DisplayName -> Display Name
+        var exportRule = CreateExportRule();
+        var exportSource = exportRule.AttributeFlowRules.Single().Sources.Single();
+        exportSource.MetaverseAttribute = null;
+        exportSource.MetaverseAttributeId = null;
+        exportSource.Expression = $"mv[\"{Constants.BuiltInAttributes.DisplayName}\"]";
+
+        var result = EvaluateDivergedDisplayName(exportRule);
+
+        Assert.That(result.HasDrift, Is.False);
+    }
+
+    #endregion
+
     private AttributePriorityContext BuildTwoContributorContext(SyncRule targetRule, int targetPriority, int winningSystemId, int winningPriority)
     {
         var targetMapping = targetRule.AttributeFlowRules.Single();
@@ -1064,7 +1218,7 @@ public class DriftDetectionTests
     #region Cross-System Drift Detection Tests
 
     /// <summary>
-    /// Reproduces the Scenario 8 bug: when a Source system imports group members to
+    /// Reproduces the Scenario 008 bug: when a Source system imports group members to
     /// the MVO (member → Static Members) and a Target system exports them (Static Members → member),
     /// drift detection on the Target CSO should NOT treat the Target as a non-contributor
     /// and should NOT create spurious corrective exports.

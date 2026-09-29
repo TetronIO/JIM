@@ -206,7 +206,7 @@ public class PartialExportUnresolvedReferencesTests
     [Test]
     public async Task Create_ManagerHasNoObjectInTarget_InsertsRowWithoutTheReferenceAndKeepsItPendingAsync()
     {
-        // The Scenario 16 shape: the manager is disabled, so out of scope for the rule and never
+        // The Scenario 016 shape: the manager is disabled, so out of scope for the rule and never
         // provisioned into this system. The employee's row must still be created.
         var manager = SeedMvo("Disabled Manager");
         var cso = NewProvisionedCso();

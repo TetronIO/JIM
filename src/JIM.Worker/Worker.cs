@@ -115,38 +115,55 @@ public class Worker : BackgroundService
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
         using var mainLoopJim = _jimFactory.Create();
-        await mainLoopJim.InitialiseDatabaseAsync();
 
-        // Warm the CSO lookup cache for all Connected Systems before accepting tasks.
-        // This is a blocking operation — tasks queue until warming is complete.
-        await WarmCsoCacheForAllConnectedSystemsAsync(mainLoopJim);
+        // Wait for the database server before the first database call, rather than failing and relying on the
+        // supervisor to have started PostgreSQL first (a pod starts all its containers at once). The health-check
+        // heartbeat is kept fresh meanwhile, so the container is not judged unhealthy for waiting.
+        await mainLoopJim.WaitForDatabaseAsync(JimApplication.DefaultDatabaseWaitBudget,
+            _ => HealthcheckFile.TouchAsync(), stoppingToken);
 
-        // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
-        // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
-        foreach (var taskToCancel in await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync())
-            await mainLoopJim.Tasking.CancelWorkerTaskAsync(taskToCancel);
+        // Migrations and cache warming can outlast the health check's threshold on a large installation, and Podman
+        // restarts a container whose liveness check fails, which would kill a migration part-way, over and over. The
+        // heartbeat is kept fresh until the main loop takes over.
+        await HealthcheckFile.KeepFreshWhileAsync(async () =>
+        {
+            await mainLoopJim.InitialiseDatabaseAsync();
 
-        // Recover any tasks stuck in Processing status from a previous crash.
-        // At startup, ALL Processing tasks are orphaned (the worker just started, nothing is genuinely processing),
-        // so we use TimeSpan.Zero to recover them all immediately without waiting for the stale timeout.
-        var recoveredCount = await mainLoopJim.Tasking.RecoverStaleWorkerTasksAsync(TimeSpan.Zero);
-        if (recoveredCount > 0)
-            Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
+            // Warm the CSO lookup cache for all Connected Systems before accepting tasks.
+            // This is a blocking operation — tasks queue until warming is complete.
+            await WarmCsoCacheForAllConnectedSystemsAsync(mainLoopJim);
 
-        // Healthcheck heartbeat file path — Docker healthcheck monitors this file's age
-        // to determine if the worker's main loop is still executing.
-        const string healthcheckFile = "/tmp/healthcheck";
+            // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
+            // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
+            foreach (var taskToCancel in await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync())
+                await mainLoopJim.Tasking.CancelWorkerTaskAsync(taskToCancel);
 
-        // The same liveness, written to the database for administrators: the Operations page reads it to show
-        // whether the Worker is up, what it is running and since when, and which version. Written wherever the
-        // file is touched; the writer throttles itself and never lets a failed write into this loop.
+            // Recover any tasks stuck in Processing status from a previous crash.
+            // At startup, ALL Processing tasks are orphaned (the worker just started, nothing is genuinely processing),
+            // so we use TimeSpan.Zero to recover them all immediately without waiting for the stale timeout.
+            var recoveredCount = await mainLoopJim.Tasking.RecoverStaleWorkerTasksAsync(TimeSpan.Zero);
+            if (recoveredCount > 0)
+                Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
+
+            // Recover any Pending Exports left stranded in Status Executing by a worker crash or restart
+            // mid-export. At startup nothing can genuinely be exporting, so every Executing row is a leftover;
+            // without this it is picked up by neither the export queue nor import reconciliation (which now
+            // deliberately excludes Executing) and would be stranded forever.
+            var recoveredExportCount = await mainLoopJim.ExportExecution.RecoverStrandedExecutingPendingExportsAsync();
+            if (recoveredExportCount > 0)
+                Log.Warning("ExecuteAsync: Recovered {Count} stranded Executing Pending Export(s) from previous crash", recoveredExportCount);
+        });
+
+        // The same liveness as the health-check heartbeat file, written to the database for administrators: the
+        // Operations page reads it to show whether the Worker is up, what it is running and since when, and which
+        // version. Written wherever the file is touched; the writer throttles itself and never lets a failed write
+        // into this loop.
         var heartbeat = ServiceHeartbeatWriter.ForThisProcess(JimService.WorkerSync);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Touch the healthcheck file each iteration so Docker knows the main loop is alive
-            try { await File.WriteAllTextAsync(healthcheckFile, DateTime.UtcNow.ToString("O"), stoppingToken); }
-            catch { /* Non-critical — don't let healthcheck IO fail the main loop */ }
+            // Touch the health-check heartbeat file each iteration, so the container runtime knows the loop is alive
+            await HealthcheckFile.TouchAsync();
 
             var (currentWork, currentWorkStartedAt) = WorkerCurrentWork.Describe(SnapshotCurrentTasks());
             await heartbeat.WriteAsync(mainLoopJim, currentWork, currentWorkStartedAt, null, stoppingToken);
@@ -990,7 +1007,7 @@ public class Worker : BackgroundService
         // from its identity map rather than refreshing it from a later query, so a Synchronisation Rule or
         // Metaverse Object Type loaded for one batch was being reused, as it then stood, by every batch after it:
         // an export rule switched to Disconnect after the first batch still had its directory objects deleted
-        // (found by Scenario 4, Test 9). A fresh instance reads the configuration as it stands now, and releases
+        // (found by Scenario 004, Test 9). A fresh instance reads the configuration as it stands now, and releases
         // everything the batch tracked when it is done.
         using var jim = _jimFactory.Create();
 
@@ -1720,7 +1737,7 @@ public class Worker : BackgroundService
     /// it will attempt a direct database update as a last resort to ensure the activity is not left in InProgress state.
     /// Activities must never be left in InProgress state as this blocks the integration test scripts and monitoring systems.
     /// </summary>
-    private async Task SafeFailActivityAsync(JimApplication jim, Activity activity, Exception originalException, string context)
+    internal async Task SafeFailActivityAsync(JimApplication jim, Activity activity, Exception originalException, string context)
     {
         Log.Error(originalException, "SafeFailActivityAsync: {Context} for activity {ActivityId}", context, activity.Id);
 
@@ -1730,11 +1747,14 @@ public class Worker : BackgroundService
         // DbUpdateException (the SaveChanges path) or as a provider DbException such as Npgsql's
         // PostgresException (the raw bulk-SQL path used on the sync hot path): the raw statement
         // bypasses the change tracker, but the tracked join/attribute changes it was flushing are
-        // still pending, so the next SaveChanges re-issues them and throws again. Record the failure
+        // still pending, so the next SaveChanges re-issues them and throws again. It applies equally
+        // to a SyncPersistenceException, the sync processors' wrapper for a page that failed part-way
+        // through persisting, whatever its inner cause (an integrity guard throws before any database
+        // call, and the page's entities are still pending all the same). Record the failure
         // via a fresh context straight away instead of fighting the poisoned one. If the fresh context
         // fails too (for example the database is down), fall through to the in-context attempts as a
         // long shot before declaring the activity stuck.
-        if (originalException is DbUpdateException or System.Data.Common.DbException &&
+        if (ShouldFailOnFreshContextFirst(originalException) &&
             await TryFailActivityOnFreshContextAsync(activity, originalException, context))
             return;
 
@@ -1785,6 +1805,14 @@ public class Worker : BackgroundService
     }
 
     /// <summary>
+    /// Whether a failure leaves the run's own DbContext unfit to record it, so the Activity must be failed through a
+    /// fresh context first rather than after two doomed attempts on the poisoned one (see
+    /// <see cref="SafeFailActivityAsync"/>).
+    /// </summary>
+    internal static bool ShouldFailOnFreshContextFirst(Exception exception) =>
+        exception is DbUpdateException or System.Data.Common.DbException or SyncPersistenceException;
+
+    /// <summary>
     /// Attempts to mark an Activity as failed using a freshly created JimApplication (and therefore a fresh
     /// DbContext), for when the original context's change tracker is poisoned by a failed SaveChanges.
     /// Returns true when the Activity is confirmed in a terminal state (updated now, or already terminal).
@@ -1805,11 +1833,13 @@ public class Worker : BackgroundService
             {
                 Log.Information("TryFailActivityOnFreshContextAsync: Activity {ActivityId} is already in terminal state {Status}",
                     activity.Id, freshActivity.Status);
+                AdoptTerminalState(activity, freshActivity);
                 return true;
             }
 
             freshActivity.Status = ActivityStatus.FailedWithError;
             freshActivity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
+            freshActivity.ErrorDetail = ActivityErrorDetail.TryDescribe(originalException);
 
             // Only persist stack traces for unexpected errors (bugs), not for operational errors
             if (originalException is not OperationalException)
@@ -1818,6 +1848,7 @@ public class Worker : BackgroundService
             freshActivity.ExecutionTime = DateTime.UtcNow - freshActivity.Executed;
             freshActivity.TotalActivityTime = DateTime.UtcNow - freshActivity.Created;
             await freshJim.Activities.UpdateActivityAsync(freshActivity);
+            AdoptTerminalState(activity, freshActivity);
 
             Log.Warning("TryFailActivityOnFreshContextAsync: Marked activity {ActivityId} as failed via a fresh context", activity.Id);
             return true;
@@ -1827,6 +1858,23 @@ public class Worker : BackgroundService
             Log.Error(freshEx, "TryFailActivityOnFreshContextAsync: Fresh-context update failed for activity {ActivityId}", activity.Id);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Brings the caller's copy of an Activity into line with the terminal state a fresh context has just persisted
+    /// or found (#1874). The Worker goes on to complete the task with the caller's copy, and
+    /// <c>TaskingServer.CompleteWorkerTaskAsync</c> completes any Activity that copy still says is in progress, with a
+    /// full-row update; left alone, that turned a failed run into a Complete one and erased its error. The other two
+    /// ways <see cref="SafeFailActivityAsync"/> records a failure already write through the caller's copy.
+    /// </summary>
+    private static void AdoptTerminalState(Activity activity, Activity persisted)
+    {
+        activity.Status = persisted.Status;
+        activity.ErrorMessage = persisted.ErrorMessage;
+        activity.ErrorDetail = persisted.ErrorDetail;
+        activity.ErrorStackTrace = persisted.ErrorStackTrace;
+        activity.ExecutionTime = persisted.ExecutionTime;
+        activity.TotalActivityTime = persisted.TotalActivityTime;
     }
 
     /// <summary>

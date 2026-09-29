@@ -7,8 +7,9 @@
 
 .DESCRIPTION
     Creates a self-contained release package containing:
-    - Pre-built Docker images (exported as .tar files)
+    - Pre-built container images (exported as .tar files, which Docker and Podman both load)
     - Docker Compose configuration files
+    - Podman pod files and Quadlet units
     - PowerShell module
     - Installation documentation
     - SHA256 checksums for integrity verification
@@ -24,6 +25,13 @@
 .PARAMETER SkipImageExport
     Skip exporting Docker images (useful for testing the bundle structure).
 
+.PARAMETER SkipImageBuild
+    Export JIM's images as they already are in Docker, tagged ghcr.io/tetronio/<image>:<Version>, rather
+    than building them. CI builds them first, with its build cache; the script stops if one is missing.
+
+.PARAMETER SkipArchive
+    Leave the bundle as a folder, without also writing it into a .tar.gz archive.
+
 .PARAMETER IncludePostgres
     Include the PostgreSQL image in the bundle. Defaults to true.
 
@@ -31,6 +39,11 @@
     ./Build-ReleaseBundle.ps1 -Version "0.2.0"
 
     Builds a release bundle for version 0.2.0.
+
+.EXAMPLE
+    ./Build-ReleaseBundle.ps1 -Version "0.2.0" -SkipImageBuild -SkipArchive
+
+    Bundles images already built and tagged ghcr.io/tetronio/jim-*:0.2.0, as a folder only.
 
 .EXAMPLE
     ./Build-ReleaseBundle.ps1 -SkipImageExport
@@ -51,6 +64,10 @@ param(
 
     [switch]$SkipImageExport,
 
+    [switch]$SkipImageBuild,
+
+    [switch]$SkipArchive,
+
     [bool]$IncludePostgres = $true
 )
 
@@ -61,13 +78,8 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 # Read PostgreSQL image reference from docker-compose.yml (single source of truth).
 # The digest-pinned image in docker-compose.yml is maintained by Dependabot.
-$composeContent = Get-Content (Join-Path $RepoRoot "docker-compose.yml") -Raw
-if ($composeContent -match 'image:\s+(postgres:[^\s]+)') {
-    $PostgresImage = $Matches[1]
-    Write-Host "PostgreSQL image from docker-compose.yml: $PostgresImage" -ForegroundColor Gray
-} else {
-    throw "Could not find PostgreSQL image reference in docker-compose.yml"
-}
+$PostgresImage = & (Join-Path $PSScriptRoot 'Get-PostgresImageReference.ps1')
+Write-Host "PostgreSQL image from docker-compose.yml: $PostgresImage" -ForegroundColor Gray
 Push-Location $RepoRoot
 
 try {
@@ -97,6 +109,7 @@ try {
     $directories = @(
         "$bundlePath/docker-images"
         "$bundlePath/compose"
+        "$bundlePath/podman"
         "$bundlePath/powershell"
         "$bundlePath/docs"
     )
@@ -119,11 +132,19 @@ try {
             $imageName = $image.Name
             $imageTag = "ghcr.io/tetronio/${imageName}:$Version"
 
-            Write-Host "  Building $imageName..." -ForegroundColor Gray
-            docker build -t $imageTag -f $image.Dockerfile $image.Context --build-arg VERSION=$Version
+            if ($SkipImageBuild) {
+                docker image inspect $imageTag *> $null
+                if ($LASTEXITCODE -ne 0) {
+                    throw "The image $imageTag is not in Docker. Build it first, or leave out -SkipImageBuild."
+                }
+            }
+            else {
+                Write-Host "  Building $imageName..." -ForegroundColor Gray
+                docker build -t $imageTag -f $image.Dockerfile $image.Context --build-arg VERSION=$Version
 
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to build $imageName"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to build $imageName"
+                }
             }
 
             Write-Host "  Exporting $imageName..." -ForegroundColor Gray
@@ -146,9 +167,36 @@ try {
                 throw "Failed to pull PostgreSQL image"
             }
 
+            # Save it under its name and tag, never the digest reference itself. Saved by digest reference, the
+            # archive carries no image name, so docker load produces an anonymous image, and the compose file's
+            # digest-pinned reference then finds nothing: the bundled database never starts on an air-gapped host.
+            # Loaded by name, the image still has its digest, which is what the compose file's reference checks.
+            $postgresTagged = $PostgresImage -replace '@sha256:[0-9a-f]+$', ''
+            docker tag $PostgresImage $postgresTagged
             $postgresTar = Join-Path $bundlePath "docker-images/postgres-18.tar"
-            docker save -o $postgresTar $PostgresImage
-            Write-Host "  Exported: $postgresTar" -ForegroundColor Green
+            docker save -o $postgresTar $postgresTagged
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to export the PostgreSQL image"
+            }
+
+            # The compose and pod files pin PostgreSQL by its registry digest, which resolves on an air-gapped
+            # host only if the archive carries the registry's own manifest. Docker's containerd image store saves
+            # it; the classic store writes a manifest of its own, whose digest the pinned reference never matches,
+            # so the bundled database would try to download its image and fail. Refuse to build that bundle.
+            $postgresDigest = ($PostgresImage -split '@')[1]
+            $archiveIndex = tar -xOf $postgresTar index.json 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not ($archiveIndex -match [regex]::Escape($postgresDigest))) {
+                throw "The PostgreSQL archive does not carry the registry manifest $postgresDigest, so the pinned image would not resolve on an air-gapped host. Build the bundle with Docker's containerd image store (https://docs.docker.com/engine/storage/containerd/)."
+            }
+
+            # Docker's classic image store, on the installing host, drops that registry digest when it loads the
+            # archive, so the pinned reference still would not resolve there. Record the image's ID (its config
+            # digest, which that store keeps as the image's ID): the installer checks the loaded image against it
+            # before running the image by its ID instead.
+            $postgresIds = & (Join-Path $PSScriptRoot 'Get-ImageArchiveIds.ps1') -ArchivePath $postgresTar
+            $postgresIdsPath = Join-Path $bundlePath "docker-images/postgres-18.image-ids"
+            (($postgresIds -join "`n") + "`n") | Set-Content -NoNewline $postgresIdsPath
+            Write-Host "  Exported: $postgresTar (image ID $($postgresIds -join ', '))" -ForegroundColor Green
         }
     }
     else {
@@ -174,6 +222,18 @@ try {
             Write-Host "  Copied: $file" -ForegroundColor Gray
         }
     }
+
+    # The Podman files, with this release's image references filled in.
+    Write-Host "`nRendering the Podman files..." -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'Build-PodmanFiles.ps1') -Version $Version -OutputPath "$bundlePath/podman"
+
+    # The installer, which installs from this bundle when run inside it, and the version it installs.
+    Copy-Item (Join-Path $RepoRoot "deploy/setup.sh") -Destination "$bundlePath/setup.sh"
+    if (-not $IsWindows) {
+        chmod 755 "$bundlePath/setup.sh"
+    }
+    "$Version`n" | Set-Content -NoNewline "$bundlePath/VERSION"
+    Write-Host "  Copied: deploy/setup.sh, and wrote VERSION" -ForegroundColor Gray
 
     # Copy PowerShell module
     Write-Host "`nCopying PowerShell module..." -ForegroundColor Cyan
@@ -215,86 +275,217 @@ try {
 
 Version: $Version
 
-## Prerequisites
+This bundle installs JIM without an internet connection. Its installer, setup.sh,
+uses the images and files in this bundle and downloads nothing.
 
-- Docker Engine 24.0 or later
-- Docker Compose v2.20 or later
-- At least 4GB RAM available for containers
-- 10GB disk space
+## Before You Start
 
-## Installation Steps
+You need:
 
-### 1. Transfer the Release Bundle
+- A Linux server with 4 GB of RAM or more and 20 GB of free disk space, and
+  either Docker Engine 24.0 or later with Docker Compose v2.24 or later, or
+  Podman 4.4 or later with systemd (RHEL 9 and 10 include both)
+- OpenSSL, which every mainstream Linux distribution installs by default
+- The DNS name users will reach JIM at
+- A client registration for JIM at your identity provider: its authority URL,
+  client ID and secret, API scope, and the claim value of the first
+  administrator. The SSO Setup Guide at https://docs.junctional.io describes
+  each provider; read it from a connected machine.
+- A PostgreSQL 18 server, unless you use the one in this bundle
+- Your organisation's certificate and key for JIM's name, unless the installer
+  creates them
 
-Transfer `jim-release-$Version.tar.gz` to your target system using your
-organisation's approved secure file transfer method.
+## Install
 
-### 2. Extract the Bundle
+1. Transfer jim-release-$Version.tar.gz to the server by your organisation's
+   approved method, then extract it and check it arrived intact; every line
+   should end in OK:
+
+    ``````bash
+    tar -xzf jim-release-$Version.tar.gz
+    cd jim-release-$Version
+    sha256sum -c checksums.sha256
+    ``````
+
+2. Run the installer as root:
+
+    ``````bash
+    sudo ./setup.sh
+    ``````
+
+   It uses Docker or Podman, whichever the server has. Where both are
+   installed it asks which; name one with --runtime docker or --runtime podman.
+   On Podman, JIM runs as root, as on Docker, and systemd starts it at boot;
+   add --rootless to run it instead under an account named jim, which the
+   installer creates.
+
+   It installs JIM in /opt/jim and asks about:
+
+   - the database: the bundled PostgreSQL, or your own server
+   - your identity provider
+   - the HTTPS port: 443 unless you choose another
+   - the certificate: one it creates, with a certificate authority (CA) of its
+     own, or your organisation's certificate and key
+   - any reverse proxy or load balancer in front of JIM
+   - on Podman, whether to open the port in firewalld, if it is running
+
+   It then loads JIM's images, starts JIM, and waits until JIM is ready.
+
+3. Do what the installer lists under Next steps:
+
+   - At your identity provider, register JIM's two redirect URIs,
+     https://jim.example.com/signin-oidc and
+     https://jim.example.com/signout-callback-oidc, with your JIM name (and
+     :port if you chose one other than 443).
+   - If the installer created the certificate, add /opt/jim/tls/ca.crt to the
+     trusted root certificate authorities of every machine whose browser or
+     tools use JIM, for example by Group Policy. Until then, browsers warn about
+     JIM's certificate.
+
+Then open https://jim.example.com and sign in.
+
+## Looking After JIM
+
+The installation keeps a copy of the installer:
 
 ``````bash
-tar -xzf jim-release-$Version.tar.gz
-cd jim-release-$Version
+# Renew a certificate the installer created, before it expires (it lasts a year)
+sudo /opt/jim/setup.sh --renew-certificate
+
+# Change the certificate's names, or move to your organisation's certificate
+sudo /opt/jim/setup.sh --certificate
 ``````
 
-### 3. Verify Integrity (Recommended)
+On Docker, run Docker Compose commands in /opt/jim, naming both compose files,
+and with --profile with-db if you use the bundled PostgreSQL:
 
 ``````bash
-sha256sum -c checksums.sha256
+cd /opt/jim
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db ps
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db logs jim.web
 ``````
 
-All files should report "OK".
-
-### 4. Load Docker Images
+On Podman, systemd runs JIM as jim.service (and the bundled PostgreSQL as
+jim-database.service):
 
 ``````bash
-docker load -i docker-images/jim-web.tar
-docker load -i docker-images/jim-worker.tar
-docker load -i docker-images/jim-scheduler.tar
-docker load -i docker-images/postgres-18.tar
+sudo systemctl status jim.service
+sudo systemctl restart jim.service
+sudo podman ps
+sudo podman logs jim-web
 ``````
 
-### 5. Configure Environment
+Installed with --rootless, JIM belongs to the jim account: its own systemd
+manager runs JIM, and its own Podman holds JIM's containers.
 
 ``````bash
-cd compose
-cp .env.example .env
+sudo systemctl --user -M jim@ status jim.service
+# Podman as the jim account, from the root folder, which the account can read
+jim-podman() { (cd / && sudo -u jim XDG_RUNTIME_DIR=/run/user/`$(id -u jim) podman "`$@"); }
+jim-podman ps
+jim-podman logs jim-web
 ``````
 
-Edit `.env` with your configuration:
-- Database credentials
-- SSO/OIDC settings (if applicable)
-- Logging preferences
+## Installing Without the Installer
 
-### 6. Start JIM
+If your organisation's policy requires every step by hand, follow the steps
+for your runtime.
 
-With the bundled PostgreSQL container:
+### With Docker
 
 ``````bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
+# As root, in the extracted bundle
+for f in docker-images/*.tar; do docker load -i "`$f"; done
+mkdir -p /opt/jim/tls && chmod 700 /opt/jim/tls
+cp compose/docker-compose.yml compose/docker-compose.production.yml /opt/jim/
+cp compose/.env.example /opt/jim/.env && chmod 600 /opt/jim/.env
 ``````
 
-With an external PostgreSQL server (set JIM_DB_HOSTNAME in .env), leave out --profile with-db.
+Edit /opt/jim/.env: set DOCKER_REGISTRY=ghcr.io/tetronio/ and
+JIM_VERSION=$Version, and the identity provider settings its comments
+describe. For the bundled PostgreSQL, set JIM_DB_HOSTNAME=jim.database (the
+template's localhost is for development) and choose a strong JIM_DB_PASSWORD;
+for your own server, give its name and JIM's credentials there.
 
-Pass the same -f files and --profile to every later docker compose command (ps, logs, stop).
+For the bundled PostgreSQL on Docker's classic image store (docker info shows
+Storage Driver: overlay2), Docker drops the registry digest the compose file
+pins PostgreSQL by when it loads the image. Run the loaded image by its ID
+instead, after checking it is the one this bundle records:
 
-### 7. Verify Installation
-
-Access JIM at http://localhost:5200 (set JIM_WEB_PORT in .env to use another port).
-
-Run the health check; it returns 200 once JIM is ready:
 ``````bash
-curl -f http://localhost:5200/api/v1/health/ready
+image=`$(docker load -i docker-images/postgres-18.tar | sed -n 's/^Loaded image: //p')
+id=`$(docker image inspect -f '{{.Id}}' "`$image")
+grep -qxF "`$id" docker-images/postgres-18.image-ids && echo "JIM_DB_IMAGE=`$id" >> /opt/jim/.env
 ``````
+
+Nothing is added if the IDs differ; then extract the bundle again and check it
+with sha256sum -c checksums.sha256.
+
+Put JIM's certificate and key in place. For your organisation's certificate:
+
+``````bash
+cp /path/to/jim.crt /opt/jim/tls/tls.crt   # the certificate, followed by any intermediate CA certificates
+cp /path/to/jim.key /opt/jim/tls/tls.key   # its unencrypted private key
+chown 1654:1654 /opt/jim/tls/tls.key && chmod 400 /opt/jim/tls/tls.key
+``````
+
+For a certificate of JIM's own instead, run only the installer's certificate
+step: sudo JIM_INSTALL_DIR=/opt/jim ./setup.sh --certificate
+
+Then start JIM. Leave out --profile with-db if you use your own PostgreSQL
+server, and --pull never stops Docker from trying the internet:
+
+``````bash
+cd /opt/jim
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d --pull never
+``````
+
+JIM is ready when docker compose ... ps shows jim.web as healthy.
+
+### With Podman
+
+These steps install JIM rootful, as the installer does by default. Running
+on Podman, on the documentation site, also gives the rootless steps. As root,
+in the extracted bundle:
+
+``````bash
+for f in docker-images/*.tar; do podman load -i "`$f"; done
+mkdir -p /opt/jim/tls /etc/containers/systemd && chmod 700 /opt/jim/tls
+cp podman/jim.yaml podman/jim-database.yaml podman/jim-config.yaml /opt/jim/
+cp podman/quadlet/jim.network podman/quadlet/jim.kube podman/quadlet/jim-database.kube /etc/containers/systemd/
+``````
+
+Leave out jim-database.kube if you use your own PostgreSQL server. Edit
+/opt/jim/jim-config.yaml: fill in the identity provider settings, and for your
+own PostgreSQL server set JIM_DB_HOSTNAME to its name. To use a port other than
+443, change PublishPort= in /etc/containers/systemd/jim.kube.
+
+Store the database password and client secret in Podman, from a copy of
+podman/jim-secrets.yaml with both filled in, then delete the copy:
+
+``````bash
+podman kube play jim-secrets.yaml && shred -u jim-secrets.yaml
+``````
+
+Put JIM's certificate and key in /opt/jim/tls as tls.crt and tls.key, as for
+Docker above (Podman needs no chown), and store them in Podman as well:
+
+``````bash
+printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: jim-tls\ndata:\n  tls.crt: %s\n  tls.key: %s\n' \
+  "`$(base64 -w0 /opt/jim/tls/tls.crt)" "`$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
+``````
+
+Then start JIM, and allow its port through firewalld if it is running:
+
+``````bash
+systemctl daemon-reload
+systemctl start jim-database.service jim.service
+firewall-cmd --permanent --add-service=https && firewall-cmd --reload
+``````
+
+JIM is ready when podman healthcheck run jim-web succeeds.
 
 ## Installing the PowerShell Module
-
-### Option A: Import Directly
-
-``````powershell
-Import-Module ./powershell/JIM/JIM.psd1
-``````
-
-### Option B: Install to Module Path
 
 ``````powershell
 `$modulePath = `$env:PSModulePath.Split([IO.Path]::PathSeparator)[0]
@@ -302,52 +493,23 @@ Copy-Item -Recurse ./powershell/JIM "`$modulePath/JIM"
 Import-Module JIM
 ``````
 
-### Verify Module
+The machine running the module must trust JIM's certificate, or the
+certificate authority the installer created.
 
 ``````powershell
-Get-Module JIM
-Get-Command -Module JIM
-``````
-
-## Connecting to JIM
-
-``````powershell
-# Connect using API key
-Connect-JIM -Server "http://localhost:5200" -ApiKey "your-api-key"
-
-# Test connection
+Connect-JIM -Url "https://jim.example.com" -ApiKey "your-api-key"
 Test-JIMConnection
-
-# List connected systems
-Get-JIMConnectedSystem
-``````
-
-## Troubleshooting
-
-### Container Logs
-``````bash
-docker compose logs jim.web
-docker compose logs jim.worker
-docker compose logs jim.scheduler
-``````
-
-### Database Connection
-``````bash
-docker compose exec jim.db psql -U jim -d jim -c "SELECT 1"
-``````
-
-### Restart Services
-``````bash
-docker compose restart
 ``````
 
 ## Support
 
-For issues and questions:
-- GitHub: https://github.com/TetronIO/JIM/issues
-- Documentation: https://github.com/TetronIO/JIM/wiki
+- Documentation: https://docs.junctional.io
+- Issues: https://github.com/TetronIO/JIM/issues
 "@
-    $installGuide | Set-Content "$bundlePath/docs/INSTALL.md"
+    # LF line endings: the guide is read, and its commands pasted, on Linux hosts. This script is checked out
+    # with CRLF (.gitattributes), so the here-string carries CRLF until converted, and a heredoc copied from
+    # it would write carriage returns into the configuration files it creates.
+    ($installGuide -replace "`r`n", "`n") + "`n" | Set-Content -NoNewline "$bundlePath/docs/INSTALL.md"
     Write-Host "  Created: INSTALL.md" -ForegroundColor Gray
 
     # Create README
@@ -355,28 +517,29 @@ For issues and questions:
 JIM (Junctional Identity Manager) - Release $Version
 =====================================================
 
-This bundle contains everything needed for an air-gapped deployment of JIM.
+This bundle installs JIM without an internet connection.
 
 Contents:
 ---------
-- docker-images/  : Pre-built Docker images (tar format)
+- setup.sh        : The installer; it installs from this bundle
+- VERSION         : The JIM version this bundle installs
+- docker-images/  : Pre-built container images (tar format), for Docker or Podman
 - compose/        : Docker Compose configuration files
+- podman/         : Podman pod files, settings and secrets templates, and Quadlet units
 - powershell/     : JIM PowerShell module
-- docs/           : Documentation and changelog
+- docs/           : Installation guide, readme and changelog
 - checksums.sha256: SHA256 checksums for integrity verification
 
 Quick Start:
 ------------
-1. Verify checksums: sha256sum -c checksums.sha256
-2. Load images:      docker load -i docker-images/*.tar
-3. Configure:        cp compose/.env.example compose/.env && edit compose/.env
-4. Start:            cd compose && docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+1. Verify:  sha256sum -c checksums.sha256
+2. Install: sudo ./setup.sh
 
-For detailed instructions, see docs/INSTALL.md
+For details, including installing by hand, see docs/INSTALL.md.
 
 License: See https://junctional.io/license
 "@
-    $readme | Set-Content "$bundlePath/README.txt"
+    ($readme -replace "`r`n", "`n") + "`n" | Set-Content -NoNewline "$bundlePath/README.txt"
     Write-Host "  Created: README.txt" -ForegroundColor Gray
 
     # Generate checksums
@@ -398,25 +561,26 @@ License: See https://junctional.io/license
 
     Pop-Location
 
-    # Create tarball
-    Write-Host "`nCreating release archive..." -ForegroundColor Cyan
-    $tarballPath = Join-Path $OutputPath "$bundleName.tar.gz"
-
-    Push-Location $OutputPath
-    tar -czf "$bundleName.tar.gz" $bundleName
-    Pop-Location
-
-    if ($LASTEXITCODE -eq 0) {
-        $tarballSize = (Get-Item $tarballPath).Length / 1MB
-        Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB)" -ForegroundColor Green
-    }
-    else {
-        Write-Warning "Failed to create tarball"
-    }
-
     Write-Host "`nRelease bundle complete!" -ForegroundColor Green
     Write-Host "Bundle location: $bundlePath" -ForegroundColor Cyan
-    Write-Host "Archive: $tarballPath" -ForegroundColor Cyan
+
+    if (-not $SkipArchive) {
+        Write-Host "`nCreating release archive..." -ForegroundColor Cyan
+        $tarballPath = Join-Path $OutputPath "$bundleName.tar.gz"
+
+        Push-Location $OutputPath
+        tar -czf "$bundleName.tar.gz" $bundleName
+        Pop-Location
+
+        if ($LASTEXITCODE -eq 0) {
+            $tarballSize = (Get-Item $tarballPath).Length / 1MB
+            Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB)" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "Failed to create tarball"
+        }
+        Write-Host "Archive: $tarballPath" -ForegroundColor Cyan
+    }
 }
 finally {
     Pop-Location

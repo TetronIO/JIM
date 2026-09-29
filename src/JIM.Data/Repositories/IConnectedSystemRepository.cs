@@ -195,17 +195,6 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Retrieves the Pending Exports for a Connected System that are candidates for confirmation
-    /// evaluation at the start of a sync run: Status is neither Pending nor Exported (both skipped
-    /// unconditionally by <see cref="JIM.Application.Servers.SyncEngine.EvaluatePendingExportConfirmation"/>),
-    /// and ConnectedSystemObjectId is populated. Loads only AttributeValueChanges (with their Attribute);
-    /// unlike <see cref="GetPendingExportsAsync"/>, the Connected System Object graph is deliberately NOT
-    /// included, since the caller is handed the Connected System Object being evaluated separately.
-    /// </summary>
-    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
-    public Task<List<PendingExport>> GetPendingExportsForConfirmationEvaluationAsync(int connectedSystemId);
-
-    /// <summary>
     /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
     /// reference resolution: Pending status with unresolved reference attribute values.
     /// The predicate is evaluated in SQL (backed by a partial index on
@@ -353,6 +342,16 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to mark as executing.</param>
     public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Recovers Pending Exports stranded in Status Executing by a worker crash or restart mid-export, in
+    /// one set-based statement: moved to Exported when any attribute change already carries
+    /// ExportedPendingConfirmation or ExportedNotConfirmed (something was already sent), otherwise to Pending
+    /// (nothing sent yet). ErrorCount is left untouched. Called once at Worker startup; see
+    /// <see cref="ISyncRepository.RecoverStrandedExecutingPendingExportsAsync"/> for the full rationale.
+    /// </summary>
+    /// <returns>The number of Pending Exports recovered.</returns>
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync();
 
     /// <summary>
     /// Creates a new Pending Export object.
@@ -977,6 +976,16 @@ public interface IConnectedSystemRepository
         IReadOnlyCollection<int> syncRuleIds, IReadOnlyCollection<int> connectedSystemAttributeIds);
 
     /// <summary>
+    /// Gets every import Synchronisation Rule flowing to a Metaverse Object Type, across all Connected Systems,
+    /// disabled rules included, with each rule's Attribute Flow mappings, their sources (expressions included),
+    /// generation settings and target Metaverse attributes (#1750). The save-time Metaverse-Derived Attribute Flow
+    /// validation builds its dependency graph from this, so it must report what the database holds: implementations
+    /// read untracked, never returning an instance the caller may be mid-way through mutating.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type the rules flow to.</param>
+    Task<List<SyncRule>> GetImportSyncRulesForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
     /// database, keyed by mapping id (#1199). Deliberately a scalar projection rather than an entity load: a
     /// whole-rule save mutates the tracked rule graph in memory before persisting it, and this is the "before"
@@ -1100,12 +1109,14 @@ public interface IConnectedSystemRepository
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
+    /// <param name="afterId">Keyset cursor; see <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>.</param>
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId,
         DateTime modifiedSince,
         int page,
         int pageSize,
-        int? knownTotalCount = null);
+        int? knownTotalCount = null,
+        Guid? afterId = null);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.

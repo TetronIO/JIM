@@ -52,6 +52,9 @@ public class ConnectorDefinitionSettingRemovalTests
         _mockActivityRepository.Setup(r => r.GetMaxConfigurationChangeVersionAsync(It.IsAny<JIM.Models.Activities.ActivityTargetType>(), It.IsAny<int>()))
             .ReturnsAsync(0);
 
+        // The sync goes on to reconcile the Connected Systems built on each definition; there are none here.
+        _mockConnectedSystemRepository.Setup(r => r.GetConnectedSystemsAsync()).ReturnsAsync(new List<ConnectedSystem>());
+
         _application = new JimApplication(_mockRepository.Object);
     }
 

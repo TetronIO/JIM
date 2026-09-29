@@ -130,6 +130,19 @@
     margin-left: auto;
 }
 
+/* The view switcher is the shared SegmentedToggle (.jim-seg in site.css); the panel gives it its own palette and
+   the larger size it sits at in the summary band. Qualified with .seg (the Class the panel passes) so it outranks
+   site.css's body.jim-dark-mode .jim-seg, which would otherwise repaint the chosen option in dark mode. */
+.causality-panel .jim-seg.seg {
+    --jim-seg-track: var(--cz-inner);
+    --jim-seg-track-edge: transparent;
+    --jim-seg-on: var(--cz-surface);
+    --jim-seg-on-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+    --jim-seg-text: var(--cz-text-dim);
+    --jim-seg-text-on: var(--cz-text);
+}
+
+.causality-panel .seg button:focus-visible,
 .causality-panel .tl-expander:focus-visible,
 .causality-panel .filter-chips button:focus-visible,
 .causality-panel .evt-card:focus-visible,
@@ -1377,7 +1390,6 @@
     background: color-mix(in srgb, var(--tone) 12%, transparent);
     color: var(--tone-text, var(--tone));
     font-size: 0.8125rem;
-    font-weight: var(--jim-chip-font-weight);
     white-space: nowrap;
 }
 

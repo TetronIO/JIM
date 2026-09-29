@@ -28,7 +28,7 @@ internal static class CsoBulkColumns
         "ExternalIdAttributeId", "SecondaryExternalIdAttributeId",
         "Status", "MetaverseObjectId", "JoinType", "DateJoined",
         "PartitionId", "ScopeReviewPending", "LastScopeEvaluatedAt",
-        "ImportStateHash", "ImportStateFingerprint"
+        "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending"
     ];
 
     /// <summary>
@@ -44,6 +44,10 @@ internal static class CsoBulkColumns
     /// across a long import flush, some of whose attribute values may not have committed yet) would
     /// let a stale in-memory hash overwrite a fresher stamp, or stamp a hash before the values it
     /// describes exist - the exact lie the stamp-ordering invariant exists to prevent.
+    /// DerivedInputChangePending (#1750) is excluded for the ScopeReviewPending reason: it is set by another
+    /// Connected System's synchronisation (a bulk mark on the hosting system's joined objects) and cleared by the
+    /// hosting system's own, each through a dedicated statement, so an entity held across a long flush must never
+    /// write back a stale value over a mark set concurrently.
     /// BulkInsertColumnCompletenessTests keeps this list in lockstep with
     /// <see cref="ConnectedSystemObjects"/> so a migration that adds a mutable column is a conscious
     /// decision here, not a silent omission.
@@ -61,7 +65,7 @@ internal static class CsoBulkColumns
     internal static readonly string[] ConnectedSystemObjectsUpdateExclusions =
     [
         "Id", "ConnectedSystemId", "Created", "TypeId", "ScopeReviewPending", "LastScopeEvaluatedAt",
-        "ImportStateHash", "ImportStateFingerprint"
+        "ImportStateHash", "ImportStateFingerprint", "DerivedInputChangePending"
     ];
 
     /// <summary>

@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-25, JIM v0.15.0
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target Connected Systems.
 
@@ -124,30 +124,13 @@ flowchart LR
     RetryCreate -.->|Next export run| GetExecutable
 ```
 
-## Pending Export Confirmation During Sync
+## Confirmation Happens on Import Only
 
-During Full/Delta Sync, Pending Exports are also checked for confirmation (separate from the confirming import path above). This uses `ISyncEngine.EvaluatePendingExportConfirmation` for the pure comparison logic, invoked from `SyncTaskProcessorBase`:
+Pending Exports are confirmed only by the confirming import path shown in "3. Confirming Import" above (`ISyncEngine.ReconcileCsoAgainstPendingExport`, driven by `SyncImportTaskProcessor.ReconcilePendingExportsAsync`). Synchronisation does not re-check them: every change to a CSO's values arrives through an import, so the import has always seen it first.
 
-```mermaid
-flowchart TD
-    Start([ProcessPendingExport<br/>for each CSO]) --> LookupPE[Lookup Pending Exports<br/>for this CSO from<br/>pre-loaded dictionary]
-    LookupPE --> HasPE{PE exists<br/>for CSO?}
-    HasPE -->|No| Done([Skip])
-
-    HasPE -->|Yes| CheckStatus{PE<br/>status?}
-    CheckStatus -->|Pending| SkipPending[Skip - not yet exported<br/>Nothing to confirm]
-    CheckStatus -->|Exported| SkipExported[Skip - awaiting<br/>confirmation via import<br/>reconciliation service]
-    CheckStatus -->|ExportNotConfirmed| CompareAttrs[For each attribute change:<br/>Compare expected value<br/>against CSO current value]
-
-    CompareAttrs --> MatchResult{All attributes<br/>confirmed?}
-    MatchResult -->|All confirmed| QueueDelete[Queue PE for<br/>batch deletion]
-    MatchResult -->|Some confirmed| QueuePartialUpdate[Remove confirmed attributes<br/>If Create, change to Update<br/>Increment error count<br/>Queue for batch update]
-    MatchResult -->|None confirmed| QueueFullUpdate[Increment error count<br/>Queue for batch update]
-
-    QueueDelete --> Done
-    QueuePartialUpdate --> Done
-    QueueFullUpdate --> Done
-```
+- **Failed** Pending Exports need manual intervention, and reconciliation leaves them alone (no status, attribute, ErrorCount or attempt change) unless every change they assert is now visible on the CSO, for example because an administrator fixed the target by hand. They are then deleted, like a fully confirmed Exported one.
+- **Parked** and **Executing** Pending Exports are never touched by reconciliation.
+- **Executing** Pending Exports left behind by a worker crash or restart are recovered when the worker starts: to Exported if any change was already sent, so the next confirming import reconciles it, otherwise to Pending, so the next export retries it.
 
 ## Attribute-Level Status Tracking
 
@@ -222,7 +205,7 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **The cross-page reference pass leaves Pending Exports in place (#1741)**<br /> A Full Synchronisation re-evaluates objects whose references span pages once every page is done. That pass used to batch-delete the targets' Pending Exports first, which (since #1687) made a group whose Create was never sent read as already sent, so only its members were staged as an Update for a group that did not exist. It now lets per-object staging find each existing PE and decide: an unsent Create is rebuilt with the resolved references, an exported one has the changes appended, a pending Update is merged.
 
-- **No-net-change detection**<br /> Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load.
+- **No-net-change detection**<br /> Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load. An attribute found already current also **withdraws** any change still queued for it (or, for a multi-valued attribute, for that value) on the CSO's existing PE, in the run's in-memory batch or persisted by an earlier run: the Metaverse and the target already agree, so the queued change is stale (a value changed and changed back before an export, or a clear queued before another source supplied the value the target holds). It is the #1199 supersede rule applied when the answer is "no change" (`SyncEngine.WithdrawChangesAlreadyCurrent`); a PE left empty is deleted, a change already sent and awaiting confirmation is kept, and a PE a connector is executing is never touched. The page's `ExportEvaluationCache.CsoIdsWithPersistedPendingExports` limits the persisted lookup to objects that have one.
 
 - **Drift correction**<br /> When `EnforceState` is enabled on an export Synchronisation Rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
 

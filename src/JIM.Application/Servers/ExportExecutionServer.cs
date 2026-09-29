@@ -481,13 +481,6 @@ public class ExportExecutionServer
     {
         try
         {
-            // Open connection for the primary connector (prepared for export by the caller)
-            using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
-            {
-                connector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
-            }
-            Log.Debug("ExecuteUsingCallsWithBatchingAsync: Opened export connection for {SystemName}", connectedSystem.Name);
-
             // Tracks whether the export phase below completed without throwing. Read from the
             // finally block to decide whether a failure while persisting CloseExportConnection's
             // return value may safely propagate on its own, or must be logged and swallowed so it
@@ -497,6 +490,17 @@ public class ExportExecutionServer
 
             try
             {
+                // Open connection for the primary connector (prepared for export by the caller). Opened
+                // inside the try, so a connection that fails to open is still closed by the finally block
+                // below and what the connector returns at close is still persisted (#1875): failing to
+                // connect is exactly when it has state to hand back, such as a pinned domain controller
+                // the failure invalidated (issue #230).
+                using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
+                {
+                    connector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
+                }
+                Log.Debug("ExecuteUsingCallsWithBatchingAsync: Opened export connection for {SystemName}", connectedSystem.Name);
+
                 // Load and process exports in batches to avoid loading all 100K+ entities at once.
                 // Batch collection is a single forward sweep using keyset pagination on
                 // (CreatedAt, Id). Executed exports drop out of the query mid-run (Update
@@ -1301,8 +1305,9 @@ public class ExportExecutionServer
                     return;
                 }
 
-                // Create and prepare a connector for this batch
+                // Create a connector for this batch; one of its own is prepared and opened inside the try below
                 IConnectorExportUsingCalls batchConnector;
+                IConnector? ownedConnector = null;
                 if (batchIndex == 0)
                 {
                     // First batch uses the already-opened primary connector
@@ -1317,8 +1322,7 @@ public class ExportExecutionServer
                         return;
                     }
                     batchConnector = callsConnector;
-                    PrepareConnectorForExport(newConnector, connectedSystem);
-                    batchConnector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
+                    ownedConnector = newConnector;
                 }
 
                 // Tracks whether this batch completed without throwing, mirroring the primary
@@ -1330,6 +1334,15 @@ public class ExportExecutionServer
 
                 try
                 {
+                    // A batch connector of its own is prepared and opened inside the try, so one that fails
+                    // to open is still closed and disposed by the finally block below, and what it returns
+                    // at close (a pin the failure invalidated, issue #230) is still persisted (#1875).
+                    if (ownedConnector != null)
+                    {
+                        PrepareConnectorForExport(ownedConnector, connectedSystem);
+                        batchConnector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
+                    }
+
                     // Mark batch as executing (raw SQL - context-independent)
                     await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
@@ -3037,4 +3050,14 @@ public class ExportExecutionServer
         Log.Information("RetryFailedExportsAsync: Reset {Count} failed exports for system {SystemId}",
             failedExports.Count, connectedSystemId);
     }
+
+    /// <summary>
+    /// Recovers Pending Exports left stranded in Status Executing by a worker crash or restart mid-export.
+    /// Called once at Worker startup, alongside the existing stale worker task recovery: at startup nothing
+    /// can genuinely be exporting, so every Executing row is a leftover from before the crash/restart. See
+    /// <see cref="ISyncRepository.RecoverStrandedExecutingPendingExportsAsync"/> for the full rationale.
+    /// </summary>
+    /// <returns>The number of Pending Exports recovered.</returns>
+    public Task<int> RecoverStrandedExecutingPendingExportsAsync()
+        => SyncRepo.RecoverStrandedExecutingPendingExportsAsync();
 }

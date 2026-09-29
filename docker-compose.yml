@@ -14,6 +14,8 @@ services:
       # 8080 is the .NET base image's own default, and being above 1024 it binds as the non-root
       # 'app' user with no capabilities on any container runtime. Set here rather than in .env so
       # a stray ASPNETCORE_URLS in .env cannot move the port out from under the healthcheck.
+      # docker-compose.production.yml adds HTTPS on 8443 and keeps 8080 for the healthcheck,
+      # bound to the container's loopback interface.
       - ASPNETCORE_URLS=http://+:8080
     volumes:
       - jim-logs-volume:/var/log/jim
@@ -69,10 +71,6 @@ services:
       - /tmp
     cap_drop:
       - ALL
-    cap_add:
-      # Required for CIFS/SMB file share mounting (file-based connectors)
-      - DAC_READ_SEARCH
-      - SYS_ADMIN
     security_opt:
       - no-new-privileges:true
     build:
@@ -144,7 +142,11 @@ services:
 
   jim.database:
     container_name: jim.database
-    image: postgres:18.6@sha256:86c951e05bf56c93d95d397747fb8820ac76cc3bedb78f43abd83eedbe3666ae
+    # Fully qualified: Podman refuses a short name like "postgres" unless the host defines an alias for it.
+    # JIM_DB_IMAGE is for air-gapped installations only. Docker's classic image store drops the registry digest when
+    # it loads the release bundle's image, so the pinned reference never resolves; the installer then checks the
+    # loaded image's ID against the one the bundle recorded and sets JIM_DB_IMAGE to that ID. Leave it unset otherwise.
+    image: ${JIM_DB_IMAGE:-docker.io/library/postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722}
     profiles:
       - with-db
     # PostgreSQL tuning - customise for your environment using https://pgtune.leopard.in.ua/
@@ -168,7 +170,8 @@ services:
     volumes:
       - jim-db-volume:/var/lib/postgresql
       - jim-logs-volume:/var/log/jim
-    env_file: .env
+    # No env_file: PostgreSQL reads none of JIM's settings, and its superuser can read the server's environment,
+    # so .env's secrets stay out of this container. Compose still reads .env for the ${...} values in this service.
     environment:
       # .env sets LANG=en_GB.UTF-8 for the JIM services, but the postgres image does not ship that
       # locale, so initdb would fail on first start with "invalid locale settings". C.UTF-8 is built

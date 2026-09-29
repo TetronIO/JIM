@@ -190,7 +190,7 @@ internal class LdapConnectorExport
 
         var message = $"Cannot write to '{targetDn}': it is outside the containers selected for this Connected System, " +
                       "so JIM would not be able to import the object back and would treat it as deleted on the next Full Import. " +
-                      "Select the container on the Partitions & Containers tab, or change the Attribute Flow that produced this " +
+                      "Select the container on the Scope tab, or change the Attribute Flow that produced this " +
                       "Distinguished Name.";
 
         _logger.Warning("LdapConnectorExport: Refused an export to '{Dn}' because it is outside the selected containers", LogSanitiser.Sanitise(targetDn));

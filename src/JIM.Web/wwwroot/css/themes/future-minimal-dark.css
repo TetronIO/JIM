@@ -24,12 +24,12 @@ html[lang] {
     /* Dark, not white: white on this coral measures 3.50:1, below the 4.5:1 AA floor. */
     --mud-palette-primary-text: #000000dd;
 
-    /* === Secondary Palette (warm grey — the light theme's bg tone) === */
-    --mud-palette-secondary: #8a8d8b;
-    --mud-palette-secondary-rgb: 138,141,139;
-    --mud-palette-secondary-darken: #6e716f;
-    --mud-palette-secondary-lighten: #a4a7a5;
-    --mud-palette-secondary-text: #000000dd;
+    /* === Secondary Palette (neutral grey, for filled secondary actions) === */
+    --mud-palette-secondary: #434644;
+    --mud-palette-secondary-rgb: 67,70,68;
+    --mud-palette-secondary-darken: #383b39;
+    --mud-palette-secondary-lighten: #505351;
+    --mud-palette-secondary-text: #dadddb;
 
     /* === Tertiary Palette (muted teal — brighter for dark bg) === */
     --mud-palette-tertiary: #5e9488;
@@ -76,6 +76,11 @@ html[lang] {
     --mud-palette-action-default-hover: rgba(232, 90, 74, 0.20);
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.34);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.08);
+
+    /* === JIM Custom: Hover and pressed states (see the tonal step in site.css) === */
+    /* A dark surface lifts toward white on hover and steps back down when pressed. */
+    --jim-state-hover-mix: white 22%;
+    --jim-state-press-mix: black 16%;
 
     /* === Lines & Dividers === */
     --mud-palette-lines-default: #2e302f;
@@ -155,15 +160,6 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
     border-color: var(--mud-palette-primary);
 }
 */
-
-/* Default filled button — slightly lighter charcoal for contrast on dark backgrounds */
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
-    background-color: #282a29;
-}
-
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
-    background-color: #363836;
-}
 
 /* Improve Dark button visibility on dark charcoal backgrounds */
 html[lang] .mud-button-filled.mud-button-filled-dark:not(:disabled) {

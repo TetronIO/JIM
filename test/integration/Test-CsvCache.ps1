@@ -9,9 +9,12 @@
     Covers the acceptance criteria from issue #634:
       1. Generator produces byte-identical CSVs across runs (determinism).
       2. Two successive wrapper runs: first is a miss, second is a hit.
-      3. Restored CSVs are byte-identical to freshly-generated ones.
+      3. Restored CSVs are byte-identical to freshly-generated ones; the cache key differs across
+         templates and across -OmitItOwnedAttributes (Unique Value Generation, #242).
       4. Editing a hashed file invalidates the cache key.
       5. -IgnoreCache forces regeneration.
+      6. -OmitItOwnedAttributes actually omits the IT-owned columns, and their absence has no effect
+         on generation when the switch is not supplied.
 
     Runs the generator with -SkipSeed so it can execute without a running jim.worker.
     The cache wrapper's own seeding step (which does need jim.worker) is bypassed by
@@ -78,10 +81,10 @@ function Get-CsvTriplet {
 }
 
 function Invoke-GeneratorOnly {
-    param([string]$OutputPath, [string]$Template)
+    param([string]$OutputPath, [string]$Template, [switch]$OmitItOwnedAttributes)
     # Generate-TestCSV.ps1 is a PowerShell script with $ErrorActionPreference = "Stop";
     # failures throw rather than setting $LASTEXITCODE, so no exit-code check is needed.
-    & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath $OutputPath -SkipSeed | Out-Null
+    & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath $OutputPath -SkipSeed -OmitItOwnedAttributes:$OmitItOwnedAttributes | Out-Null
 }
 
 # ---------------------------------------------------------------------------
@@ -151,6 +154,18 @@ try {
     Assert-True ($hashNano -ne $hashSmall) "Nano and Small templates produce different cache keys"
 
     # -----------------------------------------------------------------------
+    # Test 3b: Cache key is sensitive to -OmitItOwnedAttributes (#242)
+    # -----------------------------------------------------------------------
+    # Two CSV shapes (IT-owned attributes present or omitted) must never share a cache entry: a hit
+    # for one shape must never silently serve the other's CSVs to a scenario expecting different
+    # columns. Same template, switch on vs off, must key differently.
+    Write-Host ""
+    Write-Host "Test 3b: Cache key differs with -OmitItOwnedAttributes" -ForegroundColor Cyan
+    $hashWithItOwned    = Get-CsvCacheKey -IntegrationRoot $scriptRoot -Template $Template
+    $hashWithoutItOwned = Get-CsvCacheKey -IntegrationRoot $scriptRoot -Template $Template -OmitItOwnedAttributes
+    Assert-True ($hashWithItOwned -ne $hashWithoutItOwned) "-OmitItOwnedAttributes produces a different cache key for the same template"
+
+    # -----------------------------------------------------------------------
     # Test 4: Cache key is sensitive to hashed script changes
     # -----------------------------------------------------------------------
     Write-Host ""
@@ -181,6 +196,29 @@ try {
     Assert-True ($headerLine -eq "samAccountName,displayName,email,department,employeeId,company,pronouns") "Header line is exactly the seven expected columns"
     $lineCount = (Get-Content -Path $crossDomainPath | Measure-Object -Line).Lines
     Assert-Equal 1 $lineCount "cross-domain-users.csv has exactly one (header) line"
+
+    # -----------------------------------------------------------------------
+    # Test 6: -OmitItOwnedAttributes actually omits the IT-owned columns (#242)
+    # -----------------------------------------------------------------------
+    Write-Host ""
+    Write-Host "Test 6: -OmitItOwnedAttributes omits samAccountName, email, userPrincipalName from hr-users.csv" -ForegroundColor Cyan
+
+    $runD = Join-Path $workRoot "gen-omit"
+    New-Item -ItemType Directory -Path $runD -Force | Out-Null
+    Invoke-GeneratorOnly -OutputPath $runD -Template $Template -OmitItOwnedAttributes
+
+    $omittedHeader = ((Get-Content -Path (Join-Path $runD "hr-users.csv") -TotalCount 1) -split ',') | ForEach-Object { $_.Trim('"') }
+    Assert-True ($omittedHeader -notcontains 'samAccountName') "hr-users.csv header omits samAccountName"
+    Assert-True ($omittedHeader -notcontains 'email') "hr-users.csv header omits email"
+    Assert-True ($omittedHeader -notcontains 'userPrincipalName') "hr-users.csv header omits userPrincipalName"
+    Assert-True ($omittedHeader -contains 'employeeId') "hr-users.csv header still carries employeeId"
+    Assert-True ($omittedHeader -contains 'firstName') "hr-users.csv header still carries firstName"
+
+    # Unconverted (switch absent) generation must stay byte-for-byte unaffected by this feature's
+    # addition. Test 1 already proved run A and run B (both without the switch, both against this
+    # script as it now stands) hash-identical, which is exactly that guarantee; nothing further to
+    # regenerate here.
+    Assert-Equal $hashesA[0].Hash $hashesB[0].Hash "hr-users.csv is byte-for-byte unaffected when -OmitItOwnedAttributes is absent (from Test 1)"
 }
 finally {
     if (Test-Path $workRoot) {

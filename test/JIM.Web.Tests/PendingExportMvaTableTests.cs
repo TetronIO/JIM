@@ -1,0 +1,246 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Bunit;
+using JIM.Application;
+using JIM.Application.Interfaces;
+using JIM.Data;
+using JIM.Data.Repositories;
+using JIM.Models.Core;
+using JIM.Models.Staging;
+using JIM.Models.Transactional;
+using JIM.Models.Utility;
+using JIM.Web.Models;
+using JIM.Web.Shared;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using MudBlazor;
+using NUnit.Framework;
+
+namespace JIM.Web.Tests;
+
+/// <summary>
+/// Covers the table listing every queued change to one multi-valued attribute of a Pending Export, nested in the
+/// Attribute Changes table's value cell once the attribute carries more changes than stack inline. It is a
+/// <see cref="VirtualisedDataGrid{TItem}"/> over the application layer's range read, so what is worth pinning is
+/// that a window is handed to the range read exactly as it arrived, in one call and with the grid's decision about
+/// counting intact (anything else shows the wrong changes, or none, with no error anywhere), and that the grid is
+/// set up to live inside a table cell: embedded, with a height ceiling of its own.
+/// </summary>
+[TestFixture]
+public class PendingExportMvaTableTests : JimComponentTestContext
+{
+    private const string AttributeName = "member";
+
+    private static readonly Guid PendingExportId = Guid.NewGuid();
+
+    private Mock<IConnectedSystemRepository> _connectedSystems = null!;
+
+    protected override void ConfigureAdditionalServices()
+    {
+        var repository = new Mock<IRepository>();
+        _connectedSystems = new Mock<IConnectedSystemRepository>();
+        repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystems.Object);
+
+        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
+    }
+
+    /// <summary>
+    /// Serves the given changes as the repository's range read does: the window at the requested offset and count,
+    /// and the total only when it was asked for (null, never zero, when it was not).
+    /// </summary>
+    private void SetupChanges(IReadOnlyList<PendingExportAttributeValueChange> changes)
+    {
+        _connectedSystems
+            .Setup(r => r.GetPendingExportAttributeChangesRangeAsync(PendingExportId, AttributeName,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
+                new RangeResultSet<PendingExportAttributeValueChange>
+                {
+                    Results = changes.Skip(offset).Take(count).ToList(),
+                    TotalResults = includeTotalCount ? changes.Count : null
+                });
+    }
+
+    private static List<PendingExportAttributeValueChange> BuildChanges(int count) =>
+        Enumerable.Range(0, count)
+            .Select(i => new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                Attribute = new ConnectedSystemObjectTypeAttribute { Name = AttributeName, Type = AttributeDataType.Text },
+                ChangeType = PendingExportAttributeChangeType.Add,
+                Status = PendingExportAttributeChangeStatus.Pending,
+                StringValue = $"change-{i:D4}"
+            })
+            .ToList();
+
+    private IRenderedComponent<PendingExportMvaTable> RenderTable()
+    {
+        var cut = Render<PendingExportMvaTable>(p => p
+            .Add(c => c.AttributeName, AttributeName)
+            .Add(c => c.PendingExportId, PendingExportId));
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.HasComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>(), Is.True));
+        return cut;
+    }
+
+    private static VirtualisedDataGrid<PendingExportAttributeValueChange> Grid(IRenderedComponent<PendingExportMvaTable> cut) =>
+        cut.FindComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>().Instance;
+
+    [Test]
+    public void PendingExportMvaTable_IsEmbeddedWithItsOwnHeightCeiling()
+    {
+        SetupChanges(BuildChanges(3));
+
+        var grid = Grid(RenderTable());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(grid.Embedded, Is.True,
+                "one table sits on the page per large attribute, so none may claim the address bar or the density toggle");
+            Assert.That(grid.MaxHeight, Is.Not.Null.And.Not.Empty,
+                "its container is a table cell, not the page, so it has to state its own height ceiling");
+        }
+    }
+
+    [Test]
+    public void PendingExportMvaTable_RendersAVirtualisedGridWithNoPager()
+    {
+        SetupChanges(BuildChanges(3));
+
+        var provider = RenderTable();
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("change-0000")));
+        Assert.That(provider.HasComponent<MudTablePager>(), Is.False,
+            "a virtualised list has no page size to choose and no page controls");
+    }
+
+    [Test]
+    public void PendingExportMvaTable_KeepsTheChangeTypeStatusAndValueColumns()
+    {
+        SetupChanges(BuildChanges(2));
+
+        var provider = RenderTable();
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(provider.Markup, Does.Contain("Change Type"));
+                Assert.That(provider.Markup, Does.Contain("Status"));
+                Assert.That(provider.Markup, Does.Contain("Value"));
+                Assert.That(provider.Markup, Does.Contain("Attribute Flow"));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Values queued for one multi-valued attribute can each carry their own staging Synchronisation Rule (#399),
+    /// so the Attribute Flow column is per row: a change with a rule names it, and one without renders empty.
+    /// </summary>
+    [Test]
+    public void PendingExportMvaTable_AttributeFlow_NamesTheStagingSynchronisationRulePerRow()
+    {
+        var changes = BuildChanges(2);
+        changes[0].SyncRuleId = 9;
+        changes[0].SyncRuleName = "HR to AD - Users";
+
+        SetupChanges(changes);
+
+        var provider = RenderTable();
+
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                var chip = provider.FindComponents<ObjectChip>().SingleOrDefault(c => c.Instance.Kind == ObjectChipKind.SynchronisationRule);
+                Assert.That(chip, Is.Not.Null);
+                var chipInstance = chip!.Instance;
+                Assert.That(chipInstance.Name, Is.EqualTo("HR to AD - Users"));
+                Assert.That(chipInstance.Href, Is.EqualTo("/admin/sync-rules/9"));
+                Assert.That(provider.HasComponent<EmptyValue>(), Is.True, "the row with no staging rule renders the empty value");
+            }
+        });
+    }
+
+    /// <summary>
+    /// The grid addresses windows by absolute offset and count, and so does the range read behind them, so the
+    /// request goes over unchanged and in a single read; the page stitching this replaced took two whenever the
+    /// window did not start on a page boundary.
+    /// </summary>
+    [Test]
+    public async Task PendingExportMvaTable_Window_ReadsTheOffsetAndCountItWasAskedForInOneReadAsync()
+    {
+        var changes = BuildChanges(250);
+        SetupChanges(changes);
+        var provider = RenderTable();
+        _connectedSystems.Invocations.Clear();
+
+        var window = await Grid(provider).LoadWindow(
+            new VirtualisedWindowRequest(98, 6, null, "order", false, IncludeTotalCount: true),
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(window.Items.Select(c => c.StringValue),
+                Is.EqualTo(changes.Skip(98).Take(6).Select(c => c.StringValue)));
+            Assert.That(window.TotalItems, Is.EqualTo(250));
+        }
+
+        _connectedSystems.Verify(r => r.GetPendingExportAttributeChangesRangeAsync(
+            PendingExportId, AttributeName, 98, 6, null, true), Times.Once);
+    }
+
+    /// <summary>
+    /// Counting is the expensive half of a window read, so a request that does not ask for it must not trigger
+    /// one, and the absent total must stay null: a zero in its place reads as "nothing matched".
+    /// </summary>
+    [Test]
+    public async Task PendingExportMvaTable_WindowNotAskingForTheCount_DoesNotCountAndReturnsANullTotalAsync()
+    {
+        SetupChanges(BuildChanges(20));
+        var provider = RenderTable();
+        _connectedSystems.Invocations.Clear();
+
+        var window = await Grid(provider).LoadWindow(
+            new VirtualisedWindowRequest(0, 5, null, "order", false, IncludeTotalCount: false), CancellationToken.None);
+
+        Assert.That(window.TotalItems, Is.Null, "null means not counted, and must not be read as no matches");
+
+        _connectedSystems.Verify(r => r.GetPendingExportAttributeChangesRangeAsync(
+            PendingExportId, AttributeName, 0, 5, null, false), Times.Once);
+    }
+
+    [Test]
+    public void PendingExportMvaTable_WithNoChanges_SaysSoRatherThanShowingAnEmptyTable()
+    {
+        SetupChanges([]);
+
+        var provider = RenderTable();
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.FindComponent<TableEmptyState>().Instance.PrimaryText,
+                Is.EqualTo("No changes are queued for this attribute")));
+    }
+
+    [Test]
+    public void PendingExportMvaTable_WithChanges_ShowsNoEmptyState()
+    {
+        SetupChanges(BuildChanges(4));
+
+        var provider = RenderTable();
+
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("change-0003")));
+        Assert.That(provider.HasComponent<TableEmptyState>(), Is.False);
+    }
+
+    private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
+    {
+        public JimApplication Create() => new(repository);
+    }
+}

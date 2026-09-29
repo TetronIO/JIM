@@ -685,8 +685,9 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalGeneratedValues { get; set; }
 
     /// <summary>
-    /// Number of existing values adopted rather than generated, because a participating target already
-    /// held one for the object and attribute (Unique Value Generation, #242).
+    /// Number of existing values adopted rather than generated, because the object already held one for the
+    /// attribute (left behind by a withdrawn higher-priority Attribute Flow, for import mode; Unique Value
+    /// Generation, #242).
     /// </summary>
     public int TotalGeneratedValuesAdopted { get; set; }
 

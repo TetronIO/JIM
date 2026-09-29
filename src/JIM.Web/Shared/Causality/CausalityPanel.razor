@@ -3,7 +3,6 @@
 @using JIM.Models.Sync
 @using JIM.Models.Transactional
 @using JIM.Web.Causality
-@using JIM.Web.Models
 @inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -59,9 +58,8 @@
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {
-                    <SegmentedControl TValue="CausalityView" AriaLabel="Causality view" Value="_view"
-                                      Options="@(AvailableViews.Select(v => new SegmentedOption<CausalityView>(v, GetViewLabel(v))).ToList())"
-                                      ValueChanged="SelectViewAsync" />
+                    <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
+                                     AriaLabel="Causality view" Class="seg" />
                 }
             </Actions>
         </CausalitySummaryBand>
@@ -125,6 +123,9 @@
     private static readonly IReadOnlyList<CausalityView> SpeculativeViews = [CausalityView.Timeline, CausalityView.Table];
 
     private IReadOnlyList<CausalityView> AvailableViews => _model?.IsSpeculative == true ? SpeculativeViews : RecordedViews;
+
+    private IReadOnlyList<SegmentedToggleOption<CausalityView>> ViewOptions =>
+        AvailableViews.Select(view => new SegmentedToggleOption<CausalityView>(view, GetViewLabel(view))).ToList();
 
     /// <summary>
     /// The Run Profile Execution Item whose causality is visualised. Required for the recorded path;

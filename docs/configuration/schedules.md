@@ -165,7 +165,7 @@ When changing a schedule from automation you can record a reason alongside the c
 **Setting up an automated nightly sync:**
 
 1. Create a schedule with a cron trigger, a specific-times pattern, and the schedule enabled
-2. Add ordered steps for each operation: imports first, then syncs, then exports (typically sequential)
+2. Add ordered steps for each operation: imports first, then syncs, then exports (typically sequential). If this is a new deployment, or a Synchronisation Rule, Object Matching Rule or Attribute Priority change has just gone in, run the schedule's Connected Systems through [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) first, since a delta cycle alone only catches what changes from here.
 3. Verify by triggering a manual run before the first scheduled fire
 4. Monitor the resulting execution to confirm each step completes as expected
 

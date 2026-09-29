@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text.Json;
+using JIM.Application.Exceptions;
 using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,13 @@ public class GlobalExceptionHandler(RequestDelegate next, ILogger<GlobalExceptio
         if (isTransient)
         {
             _logger.LogWarning(exception, "Transient database error on {Method} {Path}: {Message}",
+                LogSanitiser.Sanitise(context.Request.Method), LogSanitiser.Sanitise(context.Request.Path), LogSanitiser.Sanitise(exception.Message));
+        }
+        else if (exception is FeatureDisabledException)
+        {
+            // A deliberate refusal the caller can correct (enable the feature, or stop using it), not a fault in
+            // JIM, so it is not logged as an unhandled Error.
+            _logger.LogWarning("Request refused on {Method} {Path}: {Message}",
                 LogSanitiser.Sanitise(context.Request.Method), LogSanitiser.Sanitise(context.Request.Path), LogSanitiser.Sanitise(exception.Message));
         }
         else

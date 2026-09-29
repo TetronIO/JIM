@@ -23,7 +23,7 @@ Together, these cause superlinear memory growth; doubling the object count more 
 - Memory consumption during sync must be bounded, proportional to page size, not total dataset size
 - No regression in sync correctness (Attribute Flow, reference resolution, export evaluation, change tracking)
 - No regression in sync performance for deployments under 50K objects
-- Existing integration tests (Scenarios 1-8, all templates up to Large) must continue to pass
+- Existing integration tests (Scenarios 001-008, all templates up to Large) must continue to pass
 
 ## Non-Goals
 
@@ -95,7 +95,7 @@ Together, these cause superlinear memory growth; doubling the object count more 
 ### Scenario 5: No Regression on Small Deployments
 
 **Given**: A JIM deployment with 100 users (Small template)
-**When**: Running the full integration test suite (Scenarios 1-8)
+**When**: Running the full integration test suite (Scenarios 001-008)
 **Then**: All tests pass with identical outcomes, no performance regression
 
 ## Constraints
@@ -139,9 +139,9 @@ Together, these cause superlinear memory growth; doubling the object count more 
 - [ ] Memory usage measured at page 1 and final page shows bounded growth (< 20% increase)
 - [ ] All existing unit tests pass without modification
 - [ ] All existing workflow tests pass without modification
-- [ ] Integration tests Scenario 1-8 pass on Small template with identical outcomes
-- [ ] Integration test Scenario 8 passes on Large template (10K objects)
-- [ ] Integration test Scenario 8 passes on Scale100K template (100K objects)
+- [ ] Integration tests Scenario 001-008 pass on Small template with identical outcomes
+- [ ] Integration test Scenario 008 passes on Large template (10K objects)
+- [ ] Integration test Scenario 008 passes on Scale100K template (100K objects)
 - [ ] Export evaluation produces identical results for a reference deployment (diff sync outcomes before/after)
 - [ ] Cross-page reference resolution works correctly for groups with members spanning multiple pages
 - [ ] No new NuGet packages introduced

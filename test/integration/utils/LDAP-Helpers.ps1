@@ -836,7 +836,7 @@ function Get-LDAPPasswordModifyOutcome {
 
     .DESCRIPTION
         Turns ldappasswd's exit code and diagnostic text into one word describing what the directory
-        decided. The distinction that matters for Scenario 22 is between 'ConstraintViolation' (the
+        decided. The distinction that matters for Scenario 022 is between 'ConstraintViolation' (the
         password policy did its job and refused the value) and everything else: a refusal for want of
         access, or a bind failure, is a test-fixture problem that would otherwise pass as "enforced".
 
@@ -888,7 +888,7 @@ function Set-LDAPUserPasswordWithPasswordModify {
         an outcome JIM's password channel would see too.
 
         Two things this proves that a Modify of userPassword would not: that the directory takes the
-        extended operation at all over the scheme in use (the Scenario 22 "step 0 spike"), and that a
+        extended operation at all over the scheme in use (the Scenario 022 "step 0 spike"), and that a
         password policy overlay sees the cleartext value it needs for a quality check. The rootdn is
         exempt from OpenLDAP's password policy, so bind as an ordinary account to observe enforcement.
 

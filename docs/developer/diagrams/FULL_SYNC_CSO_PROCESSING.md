@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-25, JIM v0.15.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -19,7 +19,7 @@ Since v0.7.1, sync decisions are split across three layers:
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284<br/>Pre-load Pending Exports into dictionary<br/>Configuration changed since last fully applied?<br/>Disable the unchanged-object skip for this run]
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284<br/>Configuration changed since last fully applied?<br/>Disable the unchanged-object skip for this run]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
     PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance<br/>Seed page identity map #1612 with<br/>the page's joined MVOs]
@@ -28,7 +28,7 @@ flowchart TD
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
     CheckCancel -->|Yes| FlushBeforeCancel[Complete current page flush<br/>before stopping]
     FlushBeforeCancel --> Return([Return - activity<br/>finalised by caller])
-    CheckCancel -->|No| Pass1[Pass 1: for every CSO in page<br/>ProcessObsoleteAndExportConfirmationAsync<br/>- Confirm Pending Exports<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
+    CheckCancel -->|No| Pass1[Pass 1: for every CSO in page<br/>ProcessObsoleteConnectedSystemObjectTeardownAsync<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
     Pass1 --> Pass2[Pass 2: for every non-obsolete CSO<br/>ProcessActiveConnectedSystemObjectAsync<br/>See Per-CSO Processing below<br/>Skips if IsUnchangedSinceLastSync<br/>unless flagged ScopeReviewPending]
     Pass2 --> IncrProgress[Increment ObjectsProcessed]
     IncrProgress --> CsoLoop
@@ -60,12 +60,11 @@ flowchart TD
 
 ## Per-CSO Processing
 
-This is the decision tree for a single CSO, spanning Pass 1 (`ProcessObsoleteAndExportConfirmationAsync`, whose obsolete path is `ConnectedSystemObjectObsoletionService`) and Pass 2 (`ProcessActiveConnectedSystemObjectAsync`).
+This is the decision tree for a single CSO, spanning Pass 1 (`ProcessObsoleteConnectedSystemObjectTeardownAsync`, whose obsolete path is `ConnectedSystemObjectObsoletionService`) and Pass 2 (`ProcessActiveConnectedSystemObjectAsync`).
 
 ```mermaid
 flowchart TD
-    Entry([Process one CSO]) --> ConfirmPE[Confirm Pending Exports<br/>ISyncEngine.EvaluatePendingExportConfirmation<br/>checks if exported values match CSO attributes]
-    ConfirmPE --> CheckObsolete{CSO status<br/>= Obsolete?}
+    Entry([Process one CSO]) --> CheckObsolete{CSO status<br/>= Obsolete?}
 
     %% --- Obsolete CSO path ---
     CheckObsolete -->|Yes| CheckJoined{CSO joined<br/>to MVO?}
@@ -198,7 +197,7 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Data integrity validation (v0.9.0, #465)**<br /> Metaverse attribute operations are validated for data integrity before being applied. This prevents silent corruption from malformed attribute values reaching the metaverse.
 
-- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 (`ProcessObsoleteAndExportConfirmationAsync`) handles pending-export confirmation and obsolete CSO teardown for every CSO, populating `_pendingDisconnectedMvoIds` before any Pass 2 work begins. Pass 2 (`ProcessActiveConnectedSystemObjectAsync`) runs join/projection/Attribute Flow only for non-obsolete CSOs. This ordering guarantees that Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1 and skip them, avoiding race conditions where a CSO tries to join an MVO that is being torn down in the same page.
+- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 (`ProcessObsoleteConnectedSystemObjectTeardownAsync`) handles obsolete CSO teardown for every CSO, populating `_pendingDisconnectedMvoIds` before any Pass 2 work begins. Pass 2 (`ProcessActiveConnectedSystemObjectAsync`) runs join/projection/Attribute Flow only for non-obsolete CSOs. This ordering guarantees that Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1 and skip them, avoiding race conditions where a CSO tries to join an MVO that is being torn down in the same page. Pending Export confirmation is not part of synchronisation; it happens on import (see `PENDING_EXPORT_LIFECYCLE.md`).
 
 - **Cross-page RPEI merge (v0.10.0)**<br /> The unique index `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` means each RPEI can have at most one MvoChange parent. Cross-page reference resolution therefore merges new reference-attribute changes *under the existing MvoChange parent* rather than creating a second standalone RPEI for the same MVO. This resolves the previous ~2x RPEI duplication and the confusing split-outcome rows that appeared in activity detail when groups spanned multiple pages.
 

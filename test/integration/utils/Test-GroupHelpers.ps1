@@ -3,7 +3,7 @@
 
 <#
 .SYNOPSIS
-    Group helper functions for Scenario 8 integration testing
+    Group helper functions for Scenario 008 integration testing
 
 .DESCRIPTION
     Provides functions to generate test groups with realistic enterprise distribution
@@ -870,7 +870,7 @@ function New-TestGroup {
 function New-Scenario8GroupSet {
     <#
     .SYNOPSIS
-        Generate a complete set of groups for Scenario 8 based on template scale
+        Generate a complete set of groups for Scenario 008 based on template scale
 
     .PARAMETER Template
         Data scale template (Nano, Micro, Small, etc.)

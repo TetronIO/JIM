@@ -52,3 +52,6 @@ CHANGELOG.md merge=union
 *.ttf binary
 *.otf binary
 *.db binary
+
+# Podman deployment files are read by Podman and systemd on Linux hosts
+deploy/podman/** text eol=lf

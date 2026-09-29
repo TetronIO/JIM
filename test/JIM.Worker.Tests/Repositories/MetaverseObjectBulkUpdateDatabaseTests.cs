@@ -17,7 +17,7 @@ namespace JIM.Worker.Tests.Repositories;
 /// Real-PostgreSQL verification of the synchronisation Metaverse Object update path
 /// (<c>SyncRepository.UpdateMetaverseObjectsAsync</c>).
 ///
-/// Reproduces the pre-release Full Regression failure (Scenario14-AttributePriority, activity
+/// Reproduces the pre-release Full Regression failure (Scenario-014-AttributePriority, activity
 /// 019f4501-...): a Metaverse Object bulk-created via the raw COPY path is attached to the change
 /// tracker without its real <c>xmin</c> (the concurrency token defaults to 0), so the next EF
 /// <c>SaveChangesAsync</c> update of that object in the same flush issues <c>... WHERE xmin = 0</c>,
@@ -274,7 +274,7 @@ public class MetaverseObjectBulkUpdateDatabaseTests
     /// (<c>QueueMvoForUpdate</c>) is meant to prevent this shape from ever reaching here at all; this test
     /// proves the method survives a regression of that guard rather than aborting the whole Activity.
     /// <para>
-    /// Pre-fix, this reproduces the real integration failure from Scenario 5's SamePageJoinConflict step:
+    /// Pre-fix, this reproduces the real integration failure from Scenario 005's SamePageJoinConflict step:
     /// PostgreSQL applies a duplicate-keyed <c>UPDATE ... FROM (VALUES ...)</c> row nondeterministically
     /// (here, observably losing the deletion markers when the attribute-flow instance's row wins), and if
     /// the two instances happened to contribute the identical new attribute value Id twice, the raw SQL

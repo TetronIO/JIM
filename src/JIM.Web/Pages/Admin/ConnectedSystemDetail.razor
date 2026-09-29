@@ -16,7 +16,33 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System:</span> <span class="mud-primary-text">@_connectedSystem?.Name</span></MudText>
+@* The title row carries the page's data views (the Connected System's data, as distinct from the configuration tabs
+   below) as page actions on its right. A row of their own left a gap under the audit chips; the tab bar has no room
+   to take them without scrolling further. They wrap under the title on a narrow screen. *@
+<div class="d-flex justify-space-between align-center flex-wrap gap-3">
+    <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System:</span> <span class="mud-primary-text">@_connectedSystem?.Name</span></MudText>
+    @if (_connectedSystem != null)
+    {
+        <MudStack Row Spacing="3">
+            <MudButton Variant="Variant.Filled"
+                       StartIcon="@Icons.Material.Filled.Storage"
+                       DropShadow="false"
+                       Size="Size.Small"
+                       Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space")">
+                Connector Space
+                <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       StartIcon="@Icons.Material.Filled.Outbox"
+                       DropShadow="false"
+                       Size="Size.Small"
+                       Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports")">
+                Pending Exports
+                <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
+            </MudButton>
+        </MudStack>
+    }
+</div>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_connectedSystem != null)
@@ -24,31 +50,6 @@
         <AuditInfo Entity="@_connectedSystem" />
     }
 </div>
-
-@* ─── Data views (the Connected System's data, as distinct from the configuration tabs below) ─── *@
-@if (_connectedSystem != null)
-{
-    @* mt-2 combines with the breadcrumbs' own 16px padding for the 24px section gap; mb-6 because the
-       following block's mt-2 alone collapses to 8px, same reasoning as the drift notice below. *@
-    <MudStack Row Spacing="3" Class="mt-2 mb-6">
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Storage"
-                   DropShadow="false"
-                   Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space")">
-            Connector Space
-            <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
-        </MudButton>
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Outbox"
-                   DropShadow="false"
-                   Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports")">
-            Pending Exports
-            <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
-        </MudButton>
-    </MudStack>
-}
 
 @* ─── Run Profile Safeguards withheld-changes notice (#1618) ───
    Derived from the most recent completed Export Activity, so a backlog of deliberately unprocessed
@@ -278,7 +279,10 @@ else if (_drift is { TrackingDisabled: true })
 
         @if (_connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
-            <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
+            @* "Scope" rather than "Partitions & Containers": the tab is where an administrator chooses what JIM manages
+               in this system, and the name holds whether the Connector offers partitions alone or partitions with
+               containers, where "hierarchy" or "containers" would each be wrong for one of them. *@
+            <MudTabPanel Text="Scope" Disabled="@AreSettingDependentTabsDisabled()">
                 <ConnectedSystemPartitionsTab ConnectedSystem="_connectedSystem"
                                               PartitionsAndHierarchiesText="@_partitionsAndHierarchiesText"
                                               PartitionAndHierarchyText="@_partitionAndHierarchyText"

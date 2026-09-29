@@ -25,9 +25,9 @@ The standard base image provisions a new Active Directory domain on every startu
 
 | Image | Domain | Use Case |
 |-------|--------|----------|
-| `ghcr.io/tetronio/jim-samba-ad:primary` | `TESTDOMAIN.LOCAL` | Scenario 1 & 3 |
-| `ghcr.io/tetronio/jim-samba-ad:source` | `RESURGAM.LOCAL` | Scenario 2 |
-| `ghcr.io/tetronio/jim-samba-ad:target` | `GENTIAN.LOCAL` | Scenario 2 |
+| `ghcr.io/tetronio/jim-samba-ad:primary` | `TESTDOMAIN.LOCAL` | Scenario 001 & 3 |
+| `ghcr.io/tetronio/jim-samba-ad:source` | `RESURGAM.LOCAL` | Scenario 002 |
+| `ghcr.io/tetronio/jim-samba-ad:target` | `GENTIAN.LOCAL` | Scenario 002 |
 
 ## What's Pre-configured
 

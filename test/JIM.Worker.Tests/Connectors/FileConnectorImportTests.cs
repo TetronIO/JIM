@@ -443,6 +443,35 @@ public class FileConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_WithNoDelimiterSet_UsesTheDeclaredCommaDefaultAsync()
+    {
+        // Export already falls back to the declared default when Delimiter is unset; import threw instead, so the
+        // one setting behaved differently depending on which way the data was going.
+        var filePath = Path.Combine(_testFilesPath, "valid_users.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User", delimiter: null);
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
+
+        Assert.That(result.ImportObjects, Is.Not.Empty);
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_WithNoDelimiterSet_UsesTheDeclaredCommaDefaultAsync()
+    {
+        var filePath = Path.Combine(_testFilesPath, "valid_users.csv");
+        var settingValues = CreateSettingValues(filePath, "User", delimiter: null);
+
+        var schema = await _connector.GetSchemaAsync(settingValues, _logger);
+
+        Assert.That(schema.ObjectTypes[0].Attributes, Has.Count.EqualTo(5));
+    }
+
+    [Test]
     public async Task ImportAsync_WithMultiValuedAttributes_ParsesPipeDelimitedValuesAsync()
     {
         // Arrange
@@ -794,7 +823,7 @@ public class FileConnectorImportTests
 
     #region Helper Methods
 
-    private List<ConnectedSystemSettingValue> CreateSettingValues(string filePath, string objectType, string delimiter = ",", bool stopOnFirstError = false, string multiValueDelimiter = "|")
+    private List<ConnectedSystemSettingValue> CreateSettingValues(string filePath, string objectType, string? delimiter = ",", bool stopOnFirstError = false, string multiValueDelimiter = "|")
     {
         return new List<ConnectedSystemSettingValue>
         {
@@ -881,7 +910,7 @@ public class FileConnectorImportTests
         };
     }
 
-    private ConnectedSystem CreateConnectedSystem(string filePath, string objectTypeName, string delimiter = ",", bool stopOnFirstError = false, string multiValueDelimiter = "|")
+    private ConnectedSystem CreateConnectedSystem(string filePath, string objectTypeName, string? delimiter = ",", bool stopOnFirstError = false, string multiValueDelimiter = "|")
     {
         var objectType = new ConnectedSystemObjectType
         {

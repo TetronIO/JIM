@@ -27,6 +27,9 @@ public partial class SyncEngine
     /// <summary>
     /// Processes a Synchronisation Rule mapping to flow attribute values from CSO to MVO.
     /// </summary>
+    /// <param name="metaverseAttributes">The Metaverse Object's effective values, supplied only by the derived pass
+    /// of Metaverse-Derived Attribute Flows (#1750) so an expression's <c>mv["..."]</c> inputs resolve; null for the
+    /// ordinary inbound pass, whose expressions read the Connected System Object alone.</param>
     internal static void ProcessMapping(
         ConnectedSystemObject cso,
         SyncRuleMapping syncRuleMapping,
@@ -38,7 +41,8 @@ public partial class SyncEngine
         int? contributingSystemId = null,
         List<AttributeFlowError>? errors = null,
         int mvoObjectTypeId = 0,
-        AttributePriorityContext? priorityContext = null)
+        AttributePriorityContext? priorityContext = null,
+        IDictionary<string, object?>? metaverseAttributes = null)
     {
         if (cso.MetaverseObject == null)
         {
@@ -120,7 +124,7 @@ public partial class SyncEngine
         // ordinary attribute and expression mappings only.
         if (syncRuleMapping.Generation != null)
         {
-            ProcessGeneratedMapping(cso, mvo, syncRuleMapping, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, errors);
+            ProcessGeneratedMapping(cso, mvo, syncRuleMapping, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, errors, metaverseAttributes);
             return;
         }
 
@@ -225,7 +229,7 @@ public partial class SyncEngine
             }
             else if (!string.IsNullOrWhiteSpace(source.Expression))
             {
-                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext, errors);
+                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext, errors, metaverseAttributes);
             }
             else if (source.MetaverseAttribute != null)
                 throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. " +
@@ -504,8 +508,9 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Evaluates an expression source against the Connected System Object: Missing Input Behaviour (#1361), then
-    /// the expression itself, exactly as inbound Attribute Flow always has. Shared by
+    /// Evaluates an expression source against the Connected System Object, and, for a Metaverse-Derived Attribute
+    /// Flow (#1750), the Metaverse Object's effective values: Missing Input Behaviour (#1361), then the expression
+    /// itself. Shared by
     /// <see cref="ProcessExpressionMapping"/> and <see cref="ProcessGeneratedMapping"/>'s base expression (Unique
     /// Value Generation, #242, plan decision 6), so the guarded evaluation and exception mapping exist in one
     /// place rather than two. FailMapping and FailObject are identical for every caller (record the error, or
@@ -513,13 +518,17 @@ public partial class SyncEngine
     /// <see cref="ExpressionSourceEvaluation.NoValue"/> for each caller to interpret (an ordinary mapping abstains
     /// or clears by priority; a generated mapping withholds generation without touching any existing value, FR 10).
     /// </summary>
+    /// <param name="metaverseAttributes">The Metaverse Object's effective values
+    /// (<see cref="BuildEffectiveAttributeDictionary"/>), supplied only by the derived pass; null for the ordinary
+    /// inbound pass.</param>
     private static ExpressionSourceEvaluation EvaluateExpressionSource(
         ConnectedSystemObject cso,
         SyncRuleMapping syncRuleMapping,
         SyncRuleMappingSource source,
         ConnectedSystemObjectType csoType,
         IExpressionEvaluator? expressionEvaluator,
-        List<AttributeFlowError>? errors)
+        List<AttributeFlowError>? errors,
+        IDictionary<string, object?>? metaverseAttributes = null)
     {
         if (expressionEvaluator == null)
         {
@@ -533,7 +542,7 @@ public partial class SyncEngine
             cso.Id, source.Expression, string.Join(", ", csAttributeDictionary.Keys));
 
         var context = new ExpressionContext(
-            metaverseAttributes: null,
+            metaverseAttributes: metaverseAttributes,
             connectedSystemAttributes: csAttributeDictionary);
 
         // Missing Input Behaviour (#1361): an Expression whose input is absent does not fail, it evaluates cleanly
@@ -542,13 +551,17 @@ public partial class SyncEngine
         // Expression built on IIF or IsNullOrEmpty handles the absence itself, and one building an identifier
         // must not run at all.
         //
-        // Only Connected System inputs are considered here. Inbound Attribute Flow evaluates against the Connected
-        // System Object alone (metaverseAttributes above is deliberately null), so an mv[...] accessor in an
-        // inbound Expression is unsupported rather than an object missing a value, and treating it as missing
-        // would fail every object on a mapping that is misconfigured in a different way entirely.
+        // Which sides count depends on whether the expression has a Metaverse view. A Metaverse-Derived Attribute
+        // Flow (#1750), evaluated by the derived pass, reads both the Connected System Object and the Metaverse
+        // Object's effective values as of this pass, so an absent input on either side is an absent input, reported
+        // in accessor form (cs["x"], mv["x"]); an asserted-null marker is excluded from that view, so it reads as
+        // absent exactly as it does to an export expression. Everywhere else (the ordinary inbound pass, and every
+        // inbound pass when the feature is off) there is no Metaverse view: mv[...] reads nothing, as it always
+        // has, and counting it as missing would fail every object on a mapping over something no object can
+        // supply. There only Connected System inputs are considered.
         if (source.MissingInputBehaviour != MissingInputBehaviour.EvaluateAnyway)
         {
-            var missingInputs = ExpressionInputResolver.FindMissingInputs(source.Expression, ExpressionInputSource.ConnectedSystem, csAttributeDictionary);
+            var missingInputs = FindMissingInputs(source.Expression, csAttributeDictionary, metaverseAttributes);
             if (missingInputs.Count > 0)
             {
                 switch (source.MissingInputBehaviour)
@@ -619,6 +632,25 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The inputs an expression reads that have no value (Missing Input Behaviour, #1361), in accessor form: always
+    /// the Connected System side, and the Metaverse side too when a Metaverse view is supplied (the derived pass,
+    /// #1750). See the comment at the call site in <see cref="EvaluateExpressionSource"/>.
+    /// </summary>
+    private static IReadOnlyList<string> FindMissingInputs(
+        string? expression,
+        IDictionary<string, object?> connectedSystemAttributes,
+        IDictionary<string, object?>? metaverseAttributes)
+    {
+        var missing = ExpressionInputResolver.FindMissingInputs(expression, ExpressionInputSource.ConnectedSystem, connectedSystemAttributes);
+        if (metaverseAttributes == null)
+            return missing;
+
+        return missing
+            .Concat(ExpressionInputResolver.FindMissingInputs(expression, ExpressionInputSource.Metaverse, metaverseAttributes))
+            .ToList();
+    }
+
+    /// <summary>
     /// Processes an expression-based Synchronisation Rule mapping source.
     /// </summary>
     private static void ProcessExpressionMapping(
@@ -632,9 +664,10 @@ public partial class SyncEngine
         int? contributingSyncRuleId,
         int mvoObjectTypeId,
         AttributePriorityContext? priorityContext,
-        List<AttributeFlowError>? errors)
+        List<AttributeFlowError>? errors,
+        IDictionary<string, object?>? metaverseAttributes)
     {
-        var evaluation = EvaluateExpressionSource(cso, syncRuleMapping, source, csoType, expressionEvaluator, errors);
+        var evaluation = EvaluateExpressionSource(cso, syncRuleMapping, source, csoType, expressionEvaluator, errors, metaverseAttributes);
 
         if (evaluation.Stopped)
             return;
@@ -727,7 +760,8 @@ public partial class SyncEngine
         IExpressionEvaluator? expressionEvaluator,
         int? contributingSystemId,
         int? contributingSyncRuleId,
-        List<AttributeFlowError>? errors)
+        List<AttributeFlowError>? errors,
+        IDictionary<string, object?>? metaverseAttributes)
     {
         var attributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
 
@@ -756,7 +790,7 @@ public partial class SyncEngine
             return;
         }
 
-        var evaluation = EvaluateExpressionSource(cso, syncRuleMapping, source, csoType, expressionEvaluator, errors);
+        var evaluation = EvaluateExpressionSource(cso, syncRuleMapping, source, csoType, expressionEvaluator, errors, metaverseAttributes);
 
         // Stopped: no evaluator, or FailMapping already recorded its AttributeFlowError. Either way nothing is
         // recorded for this attribute this pass; unlike an ordinary mapping there is no value for a generated

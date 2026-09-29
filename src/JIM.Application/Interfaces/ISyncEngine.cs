@@ -68,6 +68,54 @@ public interface ISyncEngine
         AttributePriorityContext? priorityContext = null);
 
     /// <summary>
+    /// The derived pass of Metaverse-Derived Attribute Flows (#1750) for one level: evaluates every derived mapping
+    /// the run's graph (<see cref="AttributePriorityContext.DerivedFlowGraph"/>) places at <paramref name="level"/>
+    /// on <paramref name="syncRules"/>, in the graph's canonical order, against the joined Metaverse Object's
+    /// effective values as they stand when the level starts (persisted values, minus pending removals, plus pending
+    /// additions, so values contributed earlier in this pass are visible). Each mapping goes through the ordinary
+    /// inbound path: the Attribute Priority gate, "Null is a value", Missing Input Behaviour on both
+    /// <c>cs</c> and <c>mv</c> inputs, provenance, and a pending generation request for a generated mapping.
+    /// Pure: no I/O. Call once per level per object, after the ordinary inbound pass, levels ascending from 1 to
+    /// <see cref="DerivedFlowGraph.MaxLevel"/>; a caller may resolve pending generation requests between levels so
+    /// the next level reads the generated values.
+    /// </summary>
+    /// <param name="cso">The Connected System Object being synchronised (must have MetaverseObject set).</param>
+    /// <param name="level">The level to evaluate (1 or more; level 0 holds no derived mappings).</param>
+    /// <param name="syncRules">The import Synchronisation Rules in scope for <paramref name="cso"/>; only derived
+    /// mappings hosted on these rules are evaluated, since a derived flow runs only in its hosting system's own
+    /// synchronisation.</param>
+    /// <param name="objectTypes">CSO object types for attribute lookup.</param>
+    /// <param name="expressionEvaluator">Expression evaluator for the derived expressions.</param>
+    /// <param name="priorityContext">The run's attribute priority context, carrying the derived flow graph.</param>
+    /// <returns>The errors raised, empty if none; each names its hosting rule in <see cref="AttributeFlowError.SyncRuleName"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="priorityContext"/> carries no derived flow graph.</exception>
+    /// <exception cref="SyncExpressionEvaluationException">A derived expression threw; fails the object as for an
+    /// ordinary flow, with <see cref="SyncExpressionEvaluationException.SyncRuleName"/> naming the hosting rule.</exception>
+    /// <exception cref="SyncExpressionMissingInputException">A derived mapping's Missing Input Behaviour is to fail the
+    /// object; <see cref="SyncExpressionMissingInputException.SyncRuleName"/> names the hosting rule.</exception>
+    List<AttributeFlowError> EvaluateDerivedLevel(
+        ConnectedSystemObject cso,
+        int level,
+        IReadOnlyList<SyncRule> syncRules,
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes,
+        IExpressionEvaluator? expressionEvaluator,
+        AttributePriorityContext priorityContext);
+
+    /// <summary>
+    /// Runs <see cref="EvaluateDerivedLevel"/> for every level of the joined Metaverse Object's type, 1 to
+    /// <see cref="DerivedFlowGraph.MaxLevel"/>, with nothing in between: for callers that do not interleave
+    /// generation resolution between levels. A no-op when the context carries no derived flow graph (the feature is
+    /// off), so it reproduces the engine as it was before Metaverse-Derived Attribute Flows.
+    /// </summary>
+    /// <returns>The errors raised across every level, empty if none.</returns>
+    List<AttributeFlowError> EvaluateDerivedLevels(
+        ConnectedSystemObject cso,
+        IReadOnlyList<SyncRule> syncRules,
+        IReadOnlyList<ConnectedSystemObjectType> objectTypes,
+        IExpressionEvaluator? expressionEvaluator,
+        AttributePriorityContext priorityContext);
+
+    /// <summary>
     /// Recalls Metaverse Object attribute values whose contributing Attribute Flow mapping has been DELETED
     /// (#1533): the value's provenance names this Connected System and a Synchronisation Rule, but the priority
     /// contributor cache holds neither a live import mapping from that rule targeting the attribute nor a dormant
@@ -104,17 +152,6 @@ public interface ISyncEngine
     /// <see cref="Models.Core.AttributeDataType.LongNumber"/> target. For a Number target, an out-of-range
     /// value throws <see cref="InvalidOperationException"/> rather than silently truncating.</param>
     void ApplyGeneratedValue(MetaverseObject mvo, PendingGeneratedValue pending, string? textValue, long? numericValue);
-
-    /// <summary>
-    /// Evaluates whether Pending Exports have been confirmed by a CSO's current attribute state.
-    /// Confirmed exports are marked for deletion; partially confirmed exports are updated.
-    /// </summary>
-    /// <param name="cso">The CSO whose current attributes to check against Pending Exports.</param>
-    /// <param name="pendingExportsByCsoId">Pre-loaded Pending Exports keyed by CSO ID.</param>
-    /// <returns>A result indicating which Pending Exports to delete or update.</returns>
-    PendingExportConfirmationResult EvaluatePendingExportConfirmation(
-        ConnectedSystemObject cso,
-        Dictionary<Guid, List<PendingExport>>? pendingExportsByCsoId);
 
     /// <summary>
     /// Evaluates the MVO deletion rule after a CSO is disconnected.
@@ -294,6 +331,19 @@ public interface ISyncEngine
     PendingExportMergeResult MergeAttributeChangesIntoPendingExport(
         PendingExport stagedPendingExport,
         List<PendingExportAttributeValueChange> newChanges);
+
+    /// <summary>
+    /// Withdraws the changes staged on a Pending Export that an export evaluation has just found unnecessary,
+    /// because the target already holds what the evaluation's skipped (no-net-change) changes would set: the same
+    /// supersede rule as <see cref="MergeAttributeChangesIntoPendingExport"/>, applied when the answer for an
+    /// attribute is "no change". A change already sent and awaiting confirmation is kept. Pure in-memory mutation.
+    /// </summary>
+    /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
+    /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
+    /// <returns>How many staged changes were withdrawn.</returns>
+    int WithdrawChangesAlreadyCurrent(
+        PendingExport stagedPendingExport,
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges);
 
     /// <summary>
     /// Creates the Pending Export attribute value changes an export Synchronisation Rule's Attribute Flow

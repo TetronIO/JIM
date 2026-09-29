@@ -110,9 +110,15 @@ window.jimVirtualList = {
                 element.style.maxHeight = ceiling + 'px';
             }
         };
+        // Once per animation frame, not debounced: a debounce held the ceiling at its old value for as long as a
+        // window was being dragged and then snapped it into place after the drag stopped, so the grid visibly lagged
+        // the window it sits in. apply() is a few rect reads and at most three writes, well inside a frame.
         entry.handler = function () {
-            if (entry.timer) window.clearTimeout(entry.timer);
-            entry.timer = window.setTimeout(entry.apply, 100);
+            if (entry.timer) return;
+            entry.timer = window.requestAnimationFrame(function () {
+                entry.timer = null;
+                entry.apply();
+            });
         };
 
         entry.apply();
@@ -132,7 +138,7 @@ window.jimVirtualList = {
         var entry = window.jimVirtualList._fitted[selector];
         if (!entry) return;
 
-        if (entry.timer) window.clearTimeout(entry.timer);
+        if (entry.timer) window.cancelAnimationFrame(entry.timer);
         window.removeEventListener('resize', entry.handler);
         if (entry.observer) entry.observer.disconnect();
         delete window.jimVirtualList._fitted[selector];

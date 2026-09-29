@@ -38,11 +38,19 @@
 .PARAMETER NoCache
     Generate as normal but do not read from or write to the cache.
 
+.PARAMETER OmitItOwnedAttributes
+    Forwarded to Generate-TestCSV.ps1: omits hr-users.csv's IT-owned columns (samAccountName, email,
+    userPrincipalName), for a scenario that generates those values (Unique Value Generation, #242).
+    Folded into the cache key so the two CSV shapes never share, or collide in, a cache entry.
+
 .EXAMPLE
     ./Get-OrGenerate-TestCSV.ps1 -Template Scale100k50Groups
 
 .EXAMPLE
     ./Get-OrGenerate-TestCSV.ps1 -Template Small -IgnoreCache
+
+.EXAMPLE
+    ./Get-OrGenerate-TestCSV.ps1 -Template Micro -OmitItOwnedAttributes
 #>
 
 param(
@@ -60,7 +68,10 @@ param(
     [switch]$IgnoreCache,
 
     [Parameter(Mandatory=$false)]
-    [switch]$NoCache
+    [switch]$NoCache,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$OmitItOwnedAttributes
 )
 
 Set-StrictMode -Version Latest
@@ -83,7 +94,7 @@ if (-not $CachePath) {
     $CachePath = Join-Path $resolvedOutputPath ".cache"
 }
 
-$hash16 = Get-CsvCacheKey -IntegrationRoot $scriptRoot -Template $Template
+$hash16 = Get-CsvCacheKey -IntegrationRoot $scriptRoot -Template $Template -OmitItOwnedAttributes:$OmitItOwnedAttributes
 $archivePath = Get-CsvCacheArchivePath -CacheRoot $CachePath -Template $Template -Hash16 $hash16
 
 Write-TestSection "CSV cache lookup ($Template)"
@@ -119,7 +130,7 @@ else {
     }
 
     $generateStart = Get-Date
-    & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath $resolvedOutputPath -SkipSeed
+    & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath $resolvedOutputPath -SkipSeed -OmitItOwnedAttributes:$OmitItOwnedAttributes
     # Generate-TestCSV.ps1 uses $ErrorActionPreference = "Stop"; a failure throws rather than
     # setting $LASTEXITCODE, so we don't check it here.
     $elapsedSeconds = [math]::Round(((Get-Date) - $generateStart).TotalSeconds, 2)

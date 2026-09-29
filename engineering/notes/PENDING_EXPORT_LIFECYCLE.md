@@ -49,7 +49,7 @@ For each `AttributeFlowRule` in the export rule:
 - **Direct mappings**: use the source MVO attribute value
 - **Create operations**: include ALL mapped MVO attribute values (not just changed ones)
 - **Update operations**: only include the changed attribute values
-- **No-net-change detection**: if cache is available, skip changes where the CSO already has the target value
+- **No-net-change detection**: if cache is available, skip changes where the CSO already has the target value, and withdraw any change still queued for the same attribute (or value) on the CSO's existing Pending Export, in the in-memory batch or persisted (`SyncEngine.WithdrawChangesAlreadyCurrent`, `ExportEvaluationServer.WithdrawQueuedChangesAlreadyCurrentAsync`): the queued change is stale once the Metaverse and the target agree. Changes awaiting confirmation and executing Pending Exports are left alone; an emptied Pending Export is deleted
 - **Reference attributes**: store target MVO reference ID in `UnresolvedReferenceValue`; PE marked for deferred resolution
 - **Removals**: multi-valued → `ChangeType = Remove`; single-valued → null-clearing change
 
@@ -211,7 +211,7 @@ staging path, which finds the group's existing Pending Export (Scenario B above)
 unsent Create is rebuilt as a Create carrying the resolved references, an exported-but-unconfirmed Create has
 the changes appended, a pending Update is merged. The pass must never delete those rows first: a Pending
 Provisioning CSO with no Pending Export reads as "Create already sent" (see the section above), so a
-pre-deleted unsent Create came back as an Update for an object that did not exist yet (Scenario 8, fixed after
+pre-deleted unsent Create came back as an Update for an object that did not exist yet (Scenario 008, fixed after
 #1687 exposed it). `CrossPageReferenceProvisioningTests` pins the contract.
 
 ## Status Transitions

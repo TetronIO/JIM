@@ -190,7 +190,7 @@ Write-Host "  ${GREEN}•${NC} JIM API:      ${BLUE}http://localhost:5200/api${N
 Write-Host ""
 Write-Host "${GRAY}Next Steps:${NC}"
 Write-Host "  1. Create API key:  ${BLUE}pwsh test/integration/Setup-InfrastructureApiKey.ps1${NC}"
-Write-Host "  2. Run tests:       ${BLUE}pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)${NC}"
+Write-Host "  2. Run tests:       ${BLUE}pwsh test/integration/scenarios/Invoke-Scenario-001-HRToIdentityDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)${NC}"
 Write-Host ""
 Write-Host "${GRAY}Troubleshooting:${NC}"
 Write-Host "  • View logs:        ${BLUE}docker compose logs -f${NC}"

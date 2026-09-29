@@ -220,6 +220,34 @@ public class JimApplication : IDisposable
     }
 
     /// <summary>
+    /// How long a service waits at start-up for the database server before giving up: long enough for a bundled
+    /// PostgreSQL to initialise a new data directory, or for a routine restart of an external server.
+    /// </summary>
+    public static readonly TimeSpan DefaultDatabaseWaitBudget = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Holds the caller until the database server accepts a connection, retrying with an increasing delay and
+    /// logging each attempt. Every service calls this before its first database work, so none of them relies on
+    /// PostgreSQL having been started first. Throws <see cref="Models.Exceptions.DatabaseUnavailableException"/>
+    /// when <paramref name="budget"/> is spent, and lets a failure that waiting cannot fix (such as rejected
+    /// credentials) through at once. See <see cref="DatabaseStartupWait"/>.
+    /// </summary>
+    /// <param name="budget">How long to keep trying; <see cref="DefaultDatabaseWaitBudget"/> unless a host has reason to differ.</param>
+    /// <param name="whileWaiting">Called before each pause between attempts, so a host can keep its container
+    /// health heartbeat fresh while it waits; null for none.</param>
+    /// <param name="cancellationToken">Stops the wait when the service is shutting down.</param>
+    public Task WaitForDatabaseAsync(TimeSpan budget, Func<CancellationToken, Task>? whileWaiting, CancellationToken cancellationToken) =>
+        new DatabaseStartupWait(Repository).WaitAsync(budget, whileWaiting, cancellationToken);
+
+    /// <summary>
+    /// Whether the database server accepts a connection right now, checked once, without waiting or logging. For a
+    /// secondary loop in a process whose main loop runs <see cref="WaitForDatabaseAsync"/> and reports the wait:
+    /// checking this first keeps the data layer from logging an error for every call made while the server is down.
+    /// </summary>
+    public async Task<bool> IsDatabaseReachableAsync(CancellationToken cancellationToken) =>
+        (await Repository.TryConnectAsync(cancellationToken)).IsConnected;
+
+    /// <summary>
     /// Ensures that JIM is fully deployed and seeded, i.e. database migrations have been performed
     /// and data needed to run the service has been created.
     /// Only the primary JIM application instance should run this task on startup. Secondary app instances

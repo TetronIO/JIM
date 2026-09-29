@@ -1091,7 +1091,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             // Warning, not Error: this is settings validation, and an administrator naming a host that
             // cannot be reached is an ordinary, expected outcome which JIM handles and reports back on the
             // settings form. At Error, every mistyped hostname became an application error in the service
-            // log; it also aborted twelve unrelated Run Profiles in the Scenario 16 matrix, because the
+            // log; it also aborted twelve unrelated Run Profiles in the Scenario 016 matrix, because the
             // integration harness treats any Error line as a scenario failure and the matrix deliberately
             // provokes this path to prove validation rejects bad settings. The exception is still logged,
             // so nothing is lost for diagnosis.

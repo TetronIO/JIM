@@ -40,6 +40,61 @@ public partial class SyncEngine
             return;
         }
 
+        // Parked and Executing Pending Exports must never be touched by reconciliation. Parked is held
+        // for an administrator's Unique Value Generation decision (the target rejected a generated value
+        // and another Connected System already holds it) and Executing is currently under a connector's
+        // control; in both cases the export's own attribute changes may still carry
+        // ExportedPendingConfirmation/ExportedNotConfirmed status left over from before the export
+        // entered that state. Without this guard those statuses fall through the general check below
+        // and get reconciled anyway: a Parked export would be retried with the very value the target
+        // already rejected, and an Executing export would be raced against the in-flight write.
+        // A Pending Export can only be genuinely stuck in Executing if the worker died mid-export; that
+        // is recovered separately at Worker startup (Worker.ExecuteAsync ->
+        // ExportExecutionServer.RecoverStrandedExecutingPendingExportsAsync ->
+        // ISyncRepository.RecoverStrandedExecutingPendingExportsAsync), not by reconciliation.
+        if (pendingExport.Status is PendingExportStatus.Parked or PendingExportStatus.Executing)
+        {
+            Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status}; excluded from reconciliation.",
+                pendingExport.Id, pendingExport.Status);
+            return;
+        }
+
+        // A Failed Pending Export has already exhausted its retries and requires manual intervention,
+        // so it is deliberately excluded from the retry-and-confirm pipeline below: re-entering that
+        // pipeline would restart error accounting on an export an administrator must act on, and could
+        // resurrect it into the export queue on a false partial match. The one thing reconciliation
+        // still does for it: if every attribute change it asserts is now visible on the CSO (the
+        // administrator fixed the target by hand, or reissued the value out of band), the Pending
+        // Export is cleared, exactly as a fully confirmed Exported one would be. Anything less than
+        // full confirmation leaves it completely untouched: no status change, no attribute mutation,
+        // no ErrorCount or attempt accounting.
+        if (pendingExport.Status == PendingExportStatus.Failed)
+        {
+            // The same per-attribute value index the general path below builds (#988), so a large Failed
+            // group export is checked in linear time rather than rebuilding a lookup per change.
+            var failedIndexByAttrId = BuildAttributeValueIndexByAttributeId(connectedSystemObject);
+            if (pendingExport.AttributeValueChanges.Count > 0 &&
+                pendingExport.AttributeValueChanges.All(ac => IsAttributeChangeConfirmedFast(failedIndexByAttrId, ac)))
+            {
+                Log.Information("ReconcileCsoAgainstPendingExport: All {Count} attribute change(s) on Failed Pending Export {PeId} " +
+                    "are now confirmed on CSO {CsoId} (administrator intervention); clearing it.",
+                    pendingExport.AttributeValueChanges.Count, pendingExport.Id, connectedSystemObject.Id);
+                result.ConfirmedChanges.AddRange(pendingExport.AttributeValueChanges);
+                // Mirrors the general confirmation path below, which always empties AttributeValueChanges
+                // of everything it just confirmed; here that is all of them, since the export is deleted.
+                pendingExport.AttributeValueChanges.Clear();
+                result.PendingExportDeleted = true;
+                result.PendingExportToDelete = pendingExport;
+            }
+            else
+            {
+                Log.Debug("ReconcileCsoAgainstPendingExport: Failed Pending Export {PeId} is not fully confirmed on CSO {CsoId}; " +
+                    "leaving untouched pending manual intervention.", pendingExport.Id, connectedSystemObject.Id);
+            }
+
+            return;
+        }
+
         // Only process exports that have been executed and are awaiting confirmation. An export
         // written in part (issue #1398: the row went, a reference is still owed) sits Pending while
         // it waits, but its written changes still need confirming, so a Pending export with changes
@@ -71,12 +126,7 @@ public partial class SyncEngine
         // from attrValuesByAttrId above. This turns the per-change membership test that ValueExistsOnCso
         // used to do with List.Any() (O(n) per change - O(n²) for a large multi-valued attribute with
         // many pending changes, e.g. a 200,000-member group) into an O(1) average-case set lookup.
-        var attrIndexByAttrId = new Dictionary<int, AttributeValueIndex>(attrValuesByAttrId.Count);
-        foreach (var (attributeId, values) in attrValuesByAttrId)
-        {
-            var attrType = values.Count > 0 ? values[0].Attribute?.Type ?? AttributeDataType.NotSet : AttributeDataType.NotSet;
-            attrIndexByAttrId[attributeId] = BuildAttributeValueIndex(attrType, values);
-        }
+        var attrIndexByAttrId = BuildAttributeValueIndexByAttributeId(attrValuesByAttrId);
 
         // Process each attribute change that is awaiting confirmation
         var changesAwaitingConfirmation = pendingExport.AttributeValueChanges
@@ -484,6 +534,31 @@ public partial class SyncEngine
             _ => false
         };
     }
+
+    /// <summary>
+    /// Builds the per-attribute value index <see cref="IsAttributeChangeConfirmedFast"/> reads, from a
+    /// Connected System Object's attribute values grouped by attribute id.
+    /// </summary>
+    private static Dictionary<int, AttributeValueIndex> BuildAttributeValueIndexByAttributeId(
+        Dictionary<int, List<ConnectedSystemObjectAttributeValue>> attrValuesByAttrId)
+    {
+        var attrIndexByAttrId = new Dictionary<int, AttributeValueIndex>(attrValuesByAttrId.Count);
+        foreach (var (attributeId, values) in attrValuesByAttrId)
+        {
+            var attrType = values.Count > 0 ? values[0].Attribute?.Type ?? AttributeDataType.NotSet : AttributeDataType.NotSet;
+            attrIndexByAttrId[attributeId] = BuildAttributeValueIndex(attrType, values);
+        }
+
+        return attrIndexByAttrId;
+    }
+
+    /// <summary>
+    /// Builds the per-attribute value index for a Connected System Object's attribute values.
+    /// </summary>
+    private static Dictionary<int, AttributeValueIndex> BuildAttributeValueIndexByAttributeId(ConnectedSystemObject connectedSystemObject)
+        => BuildAttributeValueIndexByAttributeId(connectedSystemObject.AttributeValues
+            .GroupBy(av => av.AttributeId)
+            .ToDictionary(g => g.Key, g => g.ToList()));
 
     /// <summary>
     /// Set-based equivalent of <see cref="IsAttributeChangeConfirmed(Dictionary{int, List{ConnectedSystemObjectAttributeValue}}, PendingExportAttributeValueChange)"/>

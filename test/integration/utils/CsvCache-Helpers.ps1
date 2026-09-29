@@ -22,14 +22,19 @@ function Get-CsvCacheKey {
         Compute the 16-hex-char content hash used to key the CSV cache archive.
     .DESCRIPTION
         Hashes (in order): whole Generate-TestCSV.ps1, whole utils/Test-Helpers.ps1, the template
-        name, and the PowerShell major version. Any of these changing invalidates the cache.
-        Hashing whole files (rather than extracting specific functions) matches Get-PopulateScriptHash
-        in Build-SambaSnapshots.ps1; it over-invalidates on unrelated helper edits, which is a price
-        worth paying for simplicity and safety.
+        name, the PowerShell major version, and whether -OmitItOwnedAttributes was requested. Any of
+        these changing invalidates the cache. Hashing whole files (rather than extracting specific
+        functions) matches Get-PopulateScriptHash in Build-SambaSnapshots.ps1; it over-invalidates on
+        unrelated helper edits, which is a price worth paying for simplicity and safety.
     #>
     param(
         [Parameter(Mandatory=$true)][string]$IntegrationRoot,
-        [Parameter(Mandatory=$true)][string]$Template
+        [Parameter(Mandatory=$true)][string]$Template,
+
+        # Unique Value Generation (#242): the HR CSV's IT-owned-attribute shape is a second axis
+        # alongside the template, so the two shapes' cached archives must never collide (a cache hit
+        # for one must never silently serve the other's CSVs).
+        [Parameter(Mandatory=$false)][switch]$OmitItOwnedAttributes
     )
 
     $filesToHash = @(
@@ -46,6 +51,7 @@ function Get-CsvCacheKey {
     }
     $combinedContent += "template=$Template"
     $combinedContent += "psmajor=$($PSVersionTable.PSVersion.Major)"
+    $combinedContent += "omitItOwned=$($OmitItOwnedAttributes.IsPresent)"
 
     $hashBytes = [System.Security.Cryptography.SHA256]::HashData(
         [System.Text.Encoding]::UTF8.GetBytes($combinedContent)

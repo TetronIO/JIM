@@ -1,0 +1,52 @@
+@typeparam TValue
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A segmented control for choosing one of a few settings or views: a recessed track with the chosen option raised
+   as a card. Use it where the choice is a state (which view, which scope) rather than an action, which is what a
+   button group reads as. Styled by .jim-seg in site.css through custom properties, so a host with its own palette
+   (the Causality view) sets those rather than restyling the control. The chosen option carries the "on" class. *@
+<div class="jim-seg @(Dense ? "jim-seg-dense" : null) @Class" role="group" aria-label="@AriaLabel" data-testid="@TestId">
+    @foreach (var option in Options)
+    {
+        var isOn = EqualityComparer<TValue>.Default.Equals(option.Value, Value);
+        <button type="button" class="@(isOn ? "on" : null)" aria-pressed="@(isOn ? "true" : "false")"
+                data-testid="@option.TestId" @onclick="() => SelectAsync(option.Value)">@option.Label</button>
+    }
+</div>
+
+@code {
+    /// <summary>The options, in display order.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SegmentedToggleOption<TValue>> Options { get; set; } = [];
+
+    /// <summary>The chosen option's value. Two-way bindable.</summary>
+    [Parameter]
+    public TValue? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<TValue> ValueChanged { get; set; }
+
+    /// <summary>Names the group for assistive technology, e.g. "Scope" or "Causality view".</summary>
+    [Parameter, EditorRequired]
+    public string AriaLabel { get; set; } = string.Empty;
+
+    /// <summary>The compact size, for rows in a list or table.</summary>
+    [Parameter]
+    public bool Dense { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public string? TestId { get; set; }
+
+    private async Task SelectAsync(TValue value)
+    {
+        if (EqualityComparer<TValue>.Default.Equals(value, Value))
+            return;
+
+        await ValueChanged.InvokeAsync(value);
+    }
+}

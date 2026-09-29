@@ -1,0 +1,116 @@
+@page "/sign-in-failed"
+@model JIM.Web.Pages.SignInFailedModel
+@{
+    Layout = "_ErrorPageLayout";
+    ViewData["Title"] = "Sign-in could not complete";
+}
+
+@section Illustration {
+    <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A sign-in loop between JIM and the identity provider, halted by a stop sign, with a cookie crumbling away">
+        <defs>
+            <marker id="jim-err-loop-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto">
+                <path d="M0 0 L10 5 L0 10 Z" fill="var(--jim-error-shape-secondary)"/>
+            </marker>
+        </defs>
+
+        <circle class="jim-err-float-shape jim-err-shape-1" cx="55" cy="45" r="7" fill="var(--jim-error-shape-tertiary)" opacity="0.6"/>
+        <circle class="jim-err-float-shape jim-err-shape-2" cx="345" cy="75" r="11" fill="var(--jim-error-shape-secondary)" opacity="0.5"/>
+        <circle class="jim-err-float-shape jim-err-shape-3" cx="75" cy="235" r="6" fill="var(--jim-error-shape-primary)" opacity="0.4"/>
+        <circle class="jim-err-float-shape jim-err-shape-4" cx="335" cy="255" r="9" fill="var(--jim-error-shape-tertiary)" opacity="0.5"/>
+
+        <rect class="jim-err-float-shape jim-err-shape-5" x="22" y="140" width="14" height="14" rx="3" fill="var(--jim-error-shape-secondary)" opacity="0.4" transform="rotate(45 29 147)"/>
+        <rect class="jim-err-float-shape jim-err-shape-6" x="365" y="170" width="12" height="12" rx="2" fill="var(--jim-error-shape-primary)" opacity="0.5" transform="rotate(30 371 176)"/>
+
+        <polygon class="jim-err-float-shape jim-err-shape-7" points="65,280 75,265 85,280" fill="var(--jim-error-shape-tertiary)" opacity="0.4"/>
+        <polygon class="jim-err-float-shape jim-err-shape-8" points="340,35 350,20 360,35" fill="var(--jim-error-shape-secondary)" opacity="0.5"/>
+
+        @* The loop: out to the identity provider over the top, back to JIM underneath. *@
+        <path class="jim-err-loop-flow" d="M140 118 C 170 58, 230 58, 260 118"
+              stroke="var(--jim-error-shape-secondary)" stroke-width="4" fill="none" stroke-linecap="round" marker-end="url(#jim-err-loop-arrow)"/>
+        <path class="jim-err-loop-flow" d="M260 182 C 230 242, 170 242, 140 182"
+              stroke="var(--jim-error-shape-secondary)" stroke-width="4" fill="none" stroke-linecap="round" marker-end="url(#jim-err-loop-arrow)"/>
+
+        <g>
+            <rect x="58" y="122" width="88" height="56" rx="14" fill="var(--mud-palette-primary, #764ce8)"/>
+            <text x="102" y="158" text-anchor="middle" font-family="'Space Grotesk', 'IBM Plex Sans', sans-serif" font-size="22" font-weight="600" fill="#ffffff">JIM</text>
+        </g>
+        <g>
+            <rect x="254" y="122" width="88" height="56" rx="14" fill="var(--jim-error-shape-tertiary)"/>
+            <text x="298" y="158" text-anchor="middle" font-family="'Space Grotesk', 'IBM Plex Sans', sans-serif" font-size="22" font-weight="600" fill="var(--jim-error-badge-text-dark)">IdP</text>
+        </g>
+
+        @* JIM's stop sign, sitting on the return leg of the loop. The background-coloured outline cuts the arc. *@
+        <g class="jim-err-stop">
+            <polygon points="222.2,213.8 209.2,200.8 190.8,200.8 177.8,213.8 177.8,232.2 190.8,245.2 209.2,245.2 222.2,232.2"
+                     fill="var(--jim-error-stop-color)" stroke="var(--mud-palette-background, #ffffff)" stroke-width="6" paint-order="stroke"/>
+            <polygon points="219.1,215.1 207.9,203.9 192.1,203.9 180.9,215.1 180.9,230.9 192.1,242.1 207.9,242.1 219.1,230.9"
+                     fill="none" stroke="#ffffff" stroke-width="2"/>
+            <rect x="188" y="219.5" width="24" height="7" rx="2" fill="#ffffff"/>
+        </g>
+
+        @* The cookie the browser would not keep. *@
+        <g class="jim-err-cookie">
+            <circle cx="200" cy="44" r="14" fill="var(--jim-error-cookie-color)"/>
+            <circle cx="211" cy="34" r="6" fill="var(--mud-palette-background, #ffffff)"/>
+            <circle cx="194" cy="39" r="2.2" fill="var(--jim-error-cookie-chip)"/>
+            <circle cx="203" cy="47" r="2.2" fill="var(--jim-error-cookie-chip)"/>
+            <circle cx="193" cy="50" r="1.8" fill="var(--jim-error-cookie-chip)"/>
+            <circle cx="207" cy="42" r="1.6" fill="var(--jim-error-cookie-chip)"/>
+        </g>
+
+        <g fill="var(--jim-error-cookie-color)">
+            <circle class="jim-err-crumb" cx="200" cy="122" r="3" style="--jim-crumb-dx: -24px; --jim-crumb-dy: 10px"/>
+            <circle class="jim-err-crumb" cx="200" cy="122" r="2.5" style="--jim-crumb-dx: 22px; --jim-crumb-dy: 14px"/>
+            <circle class="jim-err-crumb" cx="200" cy="122" r="2" style="--jim-crumb-dx: -10px; --jim-crumb-dy: 26px"/>
+            <circle class="jim-err-crumb" cx="200" cy="122" r="2" style="--jim-crumb-dx: 12px; --jim-crumb-dy: -12px"/>
+            <circle class="jim-err-crumb" cx="200" cy="122" r="1.8" fill="var(--jim-error-cookie-chip)" style="--jim-crumb-dx: 4px; --jim-crumb-dy: 22px"/>
+        </g>
+
+        <g class="jim-err-sparkle jim-err-sparkle-1">
+            <path d="M120 72 L123 78 L130 78 L125 83 L127 90 L120 86 L113 90 L115 83 L110 78 L117 78 Z" fill="var(--jim-error-sparkle-color)"/>
+        </g>
+        <g class="jim-err-sparkle jim-err-sparkle-2">
+            <path d="M292 80 L294 84 L299 84 L295 87 L297 92 L292 89 L287 92 L289 87 L285 84 L290 84 Z" fill="var(--jim-error-sparkle-color)" opacity="0.7"/>
+        </g>
+        <g class="jim-err-sparkle jim-err-sparkle-3">
+            <path d="M300 222 L302 226 L307 226 L303 229 L305 234 L300 231 L295 234 L297 229 L293 226 L298 226 Z" fill="var(--jim-error-sparkle-color)" opacity="0.8"/>
+        </g>
+    </svg>
+}
+
+<h1 class="jim-error-title">Sign-in could not complete</h1>
+<p class="jim-error-subtitle">JIM stopped the sign-in rather than keep sending you back to your identity provider.</p>
+
+@if (Model.IsPlainHttp)
+{
+    <p class="jim-error-detail">
+        You are connected to JIM over plain HTTP. Your browser discards the cookies sign-in depends on unless the
+        connection is secure, so <strong>browser access from other machines requires HTTPS</strong>.
+    </p>
+    <p class="jim-error-detail">
+        If your address bar already shows <code>https://</code>, TLS ends at a reverse proxy that JIM has not been
+        told to trust. Set <code>JIM_TRUSTED_PROXIES</code> so JIM can see the original connection was secure.
+    </p>
+}
+else
+{
+    <p class="jim-error-detail">
+        Your browser came back from the identity provider without the cookies JIM set when sign-in began, even
+        after JIM restarted it. Check that your browser accepts cookies from this site, and that any reverse
+        proxy in front of JIM passes cookies through unchanged.
+    </p>
+}
+
+<p class="jim-error-detail">If you do not look after this JIM deployment, pass these details to whoever does.</p>
+
+<ul class="jim-error-links">
+    <li><a href="@Model.TlsAndReverseProxyDocsUrl" target="_blank" rel="noopener noreferrer">Serving JIM over HTTPS</a></li>
+    <li><a href="@Model.SignInLoopsDocsUrl" target="_blank" rel="noopener noreferrer">Troubleshooting sign-in loops</a></li>
+</ul>
+
+<div class="jim-error-actions">
+    <a href="/" class="jim-error-button jim-error-button-filled">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        Try Again
+    </a>
+</div>

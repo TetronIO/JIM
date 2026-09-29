@@ -22,7 +22,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 /// MVO -> joined CSO and can never succeed for a deleted Metaverse Object, so staging-time resolution
 /// is the only correct option. Without reference recall, a target system without referential integrity
 /// keeps the deleted object as a group member forever: the referencing groups' CSOs never change, so
-/// the unchanged-skip means no sync ever re-evaluates them (found red by Scenario 8's LeaverCohort step).
+/// the unchanged-skip means no sync ever re-evaluates them (found red by Scenario 008's LeaverCohort step).
 /// </summary>
 [TestFixture]
 public class ReferenceRecallExportTests

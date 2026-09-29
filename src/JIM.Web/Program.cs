@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using JIM.Application;
+using JIM.Application.Hosting;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
@@ -356,15 +357,11 @@ try
 
                 // Failures a fresh attempt recovers completely (a replayed callback whose single-use code is
                 // already spent, a lost correlation cookie) restart the sign-in instead of surfacing an
-                // exception page; the audit record above still captures every occurrence. Everything else
-                // still throws, keeping genuine provider and configuration errors loud and diagnosable.
-                if (OidcSignInRecovery.ShouldRestartSignIn(ctx.Failure))
-                {
-                    ctx.Response.Redirect(OidcSignInRecovery.GetSafeReturnPath(ctx.Properties?.RedirectUri));
-                    ctx.HandleResponse();
-                }
-
-                return Task.CompletedTask;
+                // exception page; the audit record above still captures every occurrence. The restart is
+                // bounded, and refused outright where the browser can never keep the sign-in cookies (plain
+                // HTTP from another machine), so it cannot become a silent loop. Everything else still throws,
+                // keeping genuine provider and configuration errors loud and diagnosable.
+                return OidcSignInRecovery.HandleRemoteFailureAsync(ctx);
             };
 
             // Security audit events (issue #500): a token was returned but failed local validation (bad signature,
@@ -731,7 +728,9 @@ try
     if (!trustedProxies.IsEmpty)
         app.UseForwardedHeaders();
 
-    app.UseHttpsRedirection();
+    // Health probes are exempt, so that a probe over the loopback HTTP listener sees JIM's real state rather than
+    // a redirect that counts as healthy.
+    app.UseHttpsRedirectionExceptHealthProbes();
     app.UseStaticFiles();
     app.UseRouting();
 
@@ -830,8 +829,10 @@ try
     app.Logger.LogInformation("Warmup complete — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}",  5, 30);
 
     app.Logger.LogInformation("The JIM Web has started");
-    app.Run();
-    return 0;
+
+    // Non-zero when a background service failed and stopped the host, so the container runtime, or systemd, sees
+    // the failure rather than a clean stop.
+    return await HostRunner.RunAsync(app);
 }
 catch (Exception ex)
 {
@@ -935,6 +936,12 @@ static async Task CompleteJimApplicationBootstrapAsync(WebApplication app)
     var ssoSecret = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret)!;
     var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType)!;
     var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute)!;
+
+    // Wait for the database server first: until it answers, each readiness check below would throw and end the host.
+    // Nothing can cancel this yet (the host's shutdown handling starts with app.Run), so there is no token to pass.
+    using (var waitScope = app.Services.CreateScope())
+        await waitScope.ServiceProvider.GetRequiredService<JimApplication>()
+            .WaitForDatabaseAsync(JimApplication.DefaultDatabaseWaitBudget, null, CancellationToken.None);
 
     while (true)
     {

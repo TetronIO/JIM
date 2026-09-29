@@ -269,6 +269,12 @@ public class SyncImportTaskProcessor
         // per Container for the run, not per page.
         var entriesDiscardedByExclusion = new Dictionary<int, long>();
 
+        // The watermark a call-based Connector returned with its first page, held back until the run has staged
+        // everything it read (#1868). It stands for every change the pages covered, so recording it any earlier
+        // lets a run that fails or is cancelled before staging tell the next Delta Import that changes JIM never
+        // staged are already imported, and that run would silently skip them. Null means there is nothing to record.
+        string? watermarkToRecord = null;
+
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
         // connecting out before it began.
@@ -293,12 +299,6 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
-                await _phases.EnterAsync(RunPhaseKeys.ImportConnect);
-                using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
-                {
-                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, _connectedSystem.PersistedConnectorData, Log.Logger);
-                }
-
                 // Tracks whether the import phase below completed without throwing. Read from the
                 // finally block to decide whether a failure while persisting CloseImportConnection's
                 // return value may safely propagate on its own, or must be logged and swallowed so it
@@ -306,12 +306,24 @@ public class SyncImportTaskProcessor
                 // finally block (see the finally block below for the full rationale).
                 var importPhaseSucceeded = false;
 
-                // Every page is read under this step, however many the Connected System returns, so
-                // it stays the step running for as long as objects are arriving.
-                await _phases.EnterAsync(RunPhaseKeys.ImportFetch);
+                await _phases.EnterAsync(RunPhaseKeys.ImportConnect);
 
                 try
                 {
+                    // Opened inside the try, so a connection that fails to open is still closed by the
+                    // finally block below (#1875). Failing to connect is exactly when a connector has state
+                    // to hand back at close, such as a pinned domain controller the failure invalidated
+                    // (issue #230); opened outside, that state was never persisted and every later run
+                    // failed against the same unreachable server.
+                    using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
+                    {
+                        callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, _connectedSystem.PersistedConnectorData, Log.Logger);
+                    }
+
+                    // Every page is read under this step, however many the Connected System returns, so
+                    // it stays the step running for as long as objects are arriving.
+                    await _phases.EnterAsync(RunPhaseKeys.ImportFetch);
+
                     var initialPage = true;
                     var paginationTokens = new List<ConnectedSystemPaginationToken>();
                     var pageNumber = 0;
@@ -330,7 +342,7 @@ public class SyncImportTaskProcessor
                     // This is critical for delta imports where subsequent pages must use the SAME
                     // watermark (USN) as the first page to query for changes.
                     // The connector will return a NEW watermark on the first page that we'll save
-                    // AFTER all pages are processed.
+                    // only once the run has staged everything it read (#1868).
                     var originalPersistedData = _connectedSystem.PersistedConnectorData;
                     string? newPersistedData = null;
                     string? connectorWarningMessage = null;
@@ -389,8 +401,8 @@ public class SyncImportTaskProcessor
 
                         // Capture the new persisted connector data from the first page only.
                         // Subsequent pages return null (indicating "no change"), so we only capture once.
-                        // We'll save this AFTER all pages are processed to avoid affecting watermark
-                        // queries on subsequent pages.
+                        // We'll save this only once the run has staged everything it read (#1868), which
+                        // also keeps it from affecting watermark queries on subsequent pages.
                         if (result.PersistedConnectorData != null && newPersistedData == null)
                         {
                             Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
@@ -421,13 +433,10 @@ public class SyncImportTaskProcessor
                         }
                     }
 
-                    // Now that all pages are processed, update the persisted connector data
-                    // with the new watermark captured from the first page.
+                    // Every page has been read, but nothing has been staged yet, so the new watermark is only
+                    // remembered here; it is recorded at the end of the run, once staging has succeeded (#1868).
                     if (newPersistedData != null && newPersistedData != originalPersistedData)
-                    {
-                        Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
-                        await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
-                    }
+                        watermarkToRecord = newPersistedData;
 
                     // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
                     // Connector warnings (e.g., DeltaImportFallbackToFullImport) are operational notes about
@@ -456,11 +465,15 @@ public class SyncImportTaskProcessor
 
                     // Persist connector state the connector chose to override at close, e.g. because
                     // opening/using the connection invalidated a previously persisted pin (issue #230).
-                    // This runs AFTER the newPersistedData persistence above, so a Close-returned value
-                    // always wins over whatever the import pages themselves reported. Null (the
+                    // It is persisted here, even when opening the connection (#1875) or reading the pages
+                    // failed, and it always wins over whatever the pages themselves reported. The page
+                    // watermark is only recorded at the end of the run (#1868), after this, so it is
+                    // dropped rather than left to overwrite the value the connector chose. Null (the
                     // overwhelmingly common case) means "nothing to override" and must not persist.
                     if (closeReturn != null)
                     {
+                        watermarkToRecord = null;
+
                         try
                         {
                             await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, closeReturn);
@@ -966,6 +979,17 @@ public class SyncImportTaskProcessor
         if (_activity.RunProfileExecutionItems.Count > 0)
             Worker.CalculateActivitySummaryStats(_activity);
 
+        // Everything this run read is now staged and its results recorded, so the watermark the Connector returned
+        // can finally be recorded (#1868). Every earlier way out of the run (an exception, or cancellation) leaves the
+        // watermark the run started with, so the next Delta Import re-reads what this one did not stage; re-reading
+        // an already staged change is harmless, skipping an unstaged one is not.
+        if (watermarkToRecord != null)
+        {
+            Log.Debug("PerformImportAsync: Recording the Connector's new watermark for Connected System {ConnectedSystemId} now that the run has staged everything it read. Old value: '{OldWatermark}', new value: '{NewWatermark}'",
+                _connectedSystem.Id, LogSanitiser.Sanitise(_connectedSystem.PersistedConnectorData), LogSanitiser.Sanitise(watermarkToRecord));
+            await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, watermarkToRecord);
+        }
+
         // The run is done: leave the Activity describing the whole of it, not its last internal phase. Every
         // phase above set the counters to its own work (the flush just now to the handful of items it had
         // left, usually none) and the phase label as the message, so a finished import read "0 / 0" and
@@ -1140,7 +1164,7 @@ public class SyncImportTaskProcessor
                 case AttributeDataType.Boolean:
                 default:
                     // Name what could not be handled. A bare ArgumentOutOfRangeException here cost a
-                    // day of Scenario 16 triage: deletion detection is the phase that decides whether
+                    // day of Scenario 016 triage: deletion detection is the phase that decides whether
                     // an object still exists, so a failure must say which Object Type and which type
                     // of anchor it could not answer for (#1283).
                     throw new ArgumentOutOfRangeException(
