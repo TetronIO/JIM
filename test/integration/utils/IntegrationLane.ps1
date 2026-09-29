@@ -264,8 +264,9 @@ function Get-IntegrationTempPath {
 
     .PARAMETER Name
         The file or directory name a serial run has always used, such as "scenario-012-hr-users.csv".
-        A -Parallel lane gets the same name with its suffix before the extension, so two lanes running
-        the same scenario never share a scratch file.
+        A -Parallel lane gets the same name inside its own temp sub-directory, so two lanes running the
+        same scenario never share a scratch file. The name itself is kept, because some scenarios seed
+        the file into the connector-files volume under its own name, which their Connected Systems expect.
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -273,11 +274,14 @@ function Get-IntegrationTempPath {
     )
 
     $lane = Get-IntegrationLane
-    $laneName = $Name
-    if ($lane.Active) {
-        $laneTag = "-$($lane.Name.ToLowerInvariant())"
-        $extension = [System.IO.Path]::GetExtension($Name)
-        $laneName = if ($extension) { [System.IO.Path]::GetFileNameWithoutExtension($Name) + $laneTag + $extension } else { $Name + $laneTag }
+    $tempRoot = [System.IO.Path]::GetTempPath()
+    if (-not $lane.Active) {
+        return Join-Path $tempRoot $Name
     }
-    return Join-Path ([System.IO.Path]::GetTempPath()) $laneName
+
+    $laneTempDir = Join-Path $tempRoot "jim-integration-lane-$($lane.Name.ToLowerInvariant())"
+    if (-not (Test-Path $laneTempDir)) {
+        New-Item -ItemType Directory -Path $laneTempDir -Force | Out-Null
+    }
+    return Join-Path $laneTempDir $Name
 }

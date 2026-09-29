@@ -139,9 +139,13 @@ Describe 'Get-IntegrationTempPath' {
         Split-Path -Leaf (Get-IntegrationTempPath -Name 'scenario-012-hr-users.csv') | Should -Be 'scenario-012-hr-users.csv'
     }
 
-    It 'gives each lane its own scratch file' {
+    It 'gives each lane its own scratch directory and keeps the file name' {
         $env:JIM_INTEGRATION_LANE = 'OpenLDAP'
-        Split-Path -Leaf (Get-IntegrationTempPath -Name 'scenario-012-hr-users.csv') | Should -Be 'scenario-012-hr-users-openldap.csv'
-        Split-Path -Leaf (Get-IntegrationTempPath -Name 'scenario-018') | Should -Be 'scenario-018-openldap'
+        $openLdapPath = Get-IntegrationTempPath -Name 'scenario-012-hr-users.csv'
+        Split-Path -Leaf $openLdapPath | Should -Be 'scenario-012-hr-users.csv'
+        $env:JIM_INTEGRATION_LANE = 'DirectoryServer389'
+        $dirsrvPath = Get-IntegrationTempPath -Name 'scenario-012-hr-users.csv'
+        $dirsrvPath | Should -Not -Be $openLdapPath
+        Split-Path -Parent $dirsrvPath | Should -Not -Be (Split-Path -Parent $openLdapPath)
     }
 }

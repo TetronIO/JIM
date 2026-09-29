@@ -268,7 +268,7 @@ function Update-IntegrationLaneFromLog {
             $Lane.CurrentScenario = $Matches[3]
             Write-IntegrationLaneStatus -Lane $Lane -Message "$($Matches[3]) started ($($Matches[1])/$($Matches[2]))"
         }
-        elseif ($line -match '^\s*Result:\s+(PASSED|FAILED[^D]*?)\s+Duration:\s+(\d+):(\d+):(\d+)') {
+        elseif ($line -match '^\s*Result:\s+(PASSED|FAILED.*?)\s+Duration:\s+(\d+):(\d+):(\d+)') {
             $duration = [TimeSpan]::new([int]$Matches[2], [int]$Matches[3], [int]$Matches[4])
             $scenarioName = if ($Lane.CurrentScenario) { $Lane.CurrentScenario } else { 'Scenario' }
             if ($Matches[1] -eq 'PASSED') {
