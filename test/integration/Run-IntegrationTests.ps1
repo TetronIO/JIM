@@ -1823,27 +1823,27 @@ function Reset-JIMForNextScenario {
     $newApiKey = "jim_ak_$randomString"
 
     if ($script:Lane.Active) {
-    # A lane never writes the shared .env (three lanes would race on it). Compose prefers the process
-    # environment over .env when interpolating JIM_INFRASTRUCTURE_API_KEY, so the lane's own key reaches
-    # its own JIM from here, and the scenario receives it as -ApiKey.
-    $env:JIM_INFRASTRUCTURE_API_KEY = $newApiKey
+        # A lane never writes the shared .env (three lanes would race on it). Compose prefers the process
+        # environment over .env when interpolating JIM_INFRASTRUCTURE_API_KEY, so the lane's own key reaches
+        # its own JIM from here, and the scenario receives it as -ApiKey.
+        $env:JIM_INFRASTRUCTURE_API_KEY = $newApiKey
     }
     else {
-    $envFilePath = Join-Path $RepoRoot ".env"
-    $envContent = Get-Content $envFilePath -Raw
-    if ($null -eq $envContent) { $envContent = "" }
-    if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
-        # Strip any leading comment marker (# ) so a commented-out line becomes active
-        $envContent = $envContent -replace "(?m)^#\s*JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
-        $envContent = $envContent -replace "(?m)^JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
-    } else {
-        $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
-        $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$newApiKey`n"
+        $envFilePath = Join-Path $RepoRoot ".env"
+        $envContent = Get-Content $envFilePath -Raw
+        if ($null -eq $envContent) { $envContent = "" }
+        if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
+            # Strip any leading comment marker (# ) so a commented-out line becomes active
+            $envContent = $envContent -replace "(?m)^#\s*JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
+            $envContent = $envContent -replace "(?m)^JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
+        } else {
+            $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
+            $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$newApiKey`n"
     }
-    $envContent | Set-Content $envFilePath -NoNewline
+        $envContent | Set-Content $envFilePath -NoNewline
 
-    $keyFilePath = Join-Path $ScriptRoot ".api-key"
-    $newApiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
+        $keyFilePath = Join-Path $ScriptRoot ".api-key"
+        $newApiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
     }
 
     # 5. Pre-create the worker log bind-mount directory so Docker doesn't create it as root
