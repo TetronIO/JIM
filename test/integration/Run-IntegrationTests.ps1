@@ -375,6 +375,10 @@ $script:IntegrationComposeArgs = @(Get-IntegrationComposeArgs)
 # Result and log file names carry the lane's directory type, so two lanes finishing the same scenario
 # at the same template in the same second cannot overwrite each other's files. Serial names are unchanged.
 $script:ResultNameTag = if ($script:Lane.Active) { "-$($script:Lane.Name)" } else { "" }
+# A serial run's performance baseline must be a serial run too: a lane's files (named with the tag above)
+# were measured on a contended host, so the baseline lookups skip them. A lane compares like with like, as
+# its own lookup pattern already includes its tag.
+$script:LaneResultNamePattern = "-(" + ((Get-IntegrationLaneNames) -join '|') + ")(-durable)?-\d{4}-\d{2}-\d{2}_\d{6}\.json$"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -2311,7 +2315,10 @@ if (Test-Path $envFilePath) {
         }
     }
 }
-$metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY
+# A -Parallel lane never streams to JIM-Bench: its timings are taken while two other stacks compete for
+# the same host, and the submission carries nothing that would let JIM-Bench tell them apart from a
+# nominal run. Parallel runs are a correctness gate; performance data comes from serial runs.
+$metricsStreamingEnabled = $env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY -and -not $script:Lane.Active
 # Pre-declare metrics tracking vars so the resolved-config banner and the
 # post-scenario submission block can reference them under Set-StrictMode
 # even on code paths where streaming is disabled or never started.
@@ -2321,6 +2328,8 @@ $metricsHostFingerprint = $null
 if ($metricsStreamingEnabled) {
     Write-Host "  Metrics Streaming:       ${GREEN}Enabled${NC}"
     Write-Host "                           ${GRAY}$($env:JIM_BENCH_API_URL)${NC}"
+} elseif ($script:Lane.Active) {
+    Write-Host "  Metrics Streaming:       ${GRAY}Disabled (a -Parallel lane's timings are not nominal)${NC}"
 } else {
     Write-Host "  Metrics Streaming:       ${GRAY}Disabled (set JIM_BENCH_API_URL and JIM_BENCH_API_KEY to enable)${NC}"
 }
@@ -3930,6 +3939,7 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-*.json" |
         Where-Object { $_.Name -ne "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json" } |
         Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
+        Where-Object { $script:ResultNameTag -ne "" -or $_.Name -notmatch $script:LaneResultNamePattern } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -4210,6 +4220,7 @@ else {
     $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-*.json" |
         Where-Object { $_.Name -ne "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json" } |
         Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
+        Where-Object { $script:ResultNameTag -ne "" -or $_.Name -notmatch $script:LaneResultNamePattern } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 

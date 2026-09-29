@@ -329,6 +329,9 @@ function Invoke-IntegrationLanes {
     }
     Write-Host ""
     Test-ParallelHostCapacity -LaneCount $DirectoryTypes.Count
+    if ($env:JIM_BENCH_API_URL -and $env:JIM_BENCH_API_KEY) {
+        Write-Host "JIM-Bench streaming is off for this run: lanes share the host, so their timings are not nominal. Run serially for performance data." -ForegroundColor Gray
+    }
 
     $lanes = @()
     $originalLogLevel = $null

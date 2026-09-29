@@ -107,6 +107,7 @@ The original version of this PRD proposed sharding by scenario (N stacks, one sc
 30. On Ctrl+C the parent stops every lane process (found by the `JIM_INTEGRATION_LANE` value they inherited, since the `pwsh` shim does not forward signals), removes every lane's containers, volumes and network, and writes `results/parallel-lanes-<timestamp>-interrupted.json` recording each lane's state and log path.
 31. When every lane passes, the parent removes all three lane stacks, so the run leaves nothing behind. A failed lane is left running for diagnosis and the parent prints the command that removes it; the next run (serial or parallel) and `jim-reset` remove it too.
 32. The run exits non-zero if any lane failed.
+33. Lanes never stream to or submit results to JIM-Bench, because their timings are taken on a contended host and the submission carries nothing that would let JIM-Bench tell them apart from nominal runs. A serial run's local performance baseline lookup skips lane result files. Parallel runs are a correctness gate; performance data comes from serial runs.
 
 ### Non-Functional Requirements
 
