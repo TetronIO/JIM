@@ -14,6 +14,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -444,6 +445,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// ExecuteUpdateAsync that touches no tracked state; the in-memory test provider does not support
     /// ExecuteUpdateAsync (same pattern as the failed-authentication counter in ActivitiesRepository), so it
     /// falls back to a narrow tracked load of the root entity only.
+    /// <para>
+    /// The fallback saves through a short-lived context over the same in-memory store, not the shared one, so
+    /// that, like the relational path, it writes this one column and nothing else. An import records its
+    /// watermark at the very end of the run (#1868), when the shared context in a workflow test still tracks the
+    /// run's Activity and its Run Profile Execution Item graph; a save on it would flush that graph too.
+    /// </para>
     /// </summary>
     public async Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData)
     {
@@ -455,11 +462,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return;
         }
 
-        var connectedSystem = await Repository.Database.ConnectedSystems
+        if (Repository.Database.GetService<IDbContextOptions>() is not DbContextOptions<JimDbContext> options)
+            throw new InvalidOperationException("UpdateConnectedSystemPersistedConnectorDataAsync: the non-relational fallback needs the context's own options to open a context over the same store.");
+
+        await using var isolatedContext = new JimDbContext(options);
+        var connectedSystem = await isolatedContext.ConnectedSystems
             .AsTracking()
             .SingleAsync(cs => cs.Id == connectedSystemId);
         connectedSystem.PersistedConnectorData = persistedConnectorData;
-        await Repository.Database.SaveChangesAsync();
+        await isolatedContext.SaveChangesAsync();
     }
 
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
@@ -524,11 +535,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Explicitly mark setting values as modified since UpdateDetachedSafe only marks the
         // parent entity without traversing the object graph. Without this, setting value changes
         // are silently discarded on save.
+        // A value with no Id is new: a setting the Connector gained after this Connected System was created, added on
+        // startup (ConnectedSystemServer.ReconcileSettingValues). It is inserted rather than marked Modified, which
+        // would issue an UPDATE of row 0. Only the value itself is marked Added, not the graph behind it, so its
+        // setting (and the Connector Definition beyond) is never re-inserted; the setting is attached as it stands if
+        // the caller loaded it in another context.
         if (connectedSystem.SettingValues != null)
         {
             foreach (var settingValue in connectedSystem.SettingValues)
             {
-                Repository.UpdateDetachedSafe(settingValue);
+                if (settingValue.Id == 0)
+                {
+                    if (Repository.Database.Entry(settingValue.Setting).State == EntityState.Detached)
+                        Repository.Database.Entry(settingValue.Setting).State = EntityState.Unchanged;
+                    Repository.Database.Entry(settingValue).State = EntityState.Added;
+                }
+                else
+                {
+                    Repository.UpdateDetachedSafe(settingValue);
+                }
             }
         }
 
@@ -1572,7 +1597,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         DateTime modifiedSince,
         int page,
         int pageSize,
-        int? knownTotalCount = null)
+        int? knownTotalCount = null,
+        Guid? afterId = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1611,8 +1637,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                   (cso.Created > modifiedSince ||
                                    (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
 
+        // Keyset cursor (see ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync): delta sync deletes each
+        // page's obsolete CSOs at the page boundary, so an OFFSET into the shrinking modified set skips rows. The
+        // cursor must be the last row of the previous page exactly as returned; Guid.CompareTo translates to the
+        // native uuid comparison, matching the ORDER BY above.
         var offset = (page - 1) * pageSize;
-        var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
+        var afterIdValue = afterId ?? Guid.Empty;
+        var pagedCsoQuery = afterId.HasValue
+            ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
+            : csoQuery.Skip(offset).Take(pageSize);
 
         var results = await pagedCsoQuery.ToListAsync();
         await PopulateReferenceValuesAsync(results);
@@ -6964,6 +6997,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 m.SyncRule.MetaverseObjectTypeId == metaverseObjectTypeId)
             .OrderBy(m => m.Priority)
             .ThenBy(m => m.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets every import Synchronisation Rule flowing to a Metaverse Object Type, disabled rules included, with the
+    /// mappings, sources, generation settings and target attributes the Metaverse-Derived Attribute Flow graph reads
+    /// (#1750). AsNoTracking is load-bearing, not an optimisation: the save path calling this may be holding a tracked,
+    /// already-mutated mapping (the settings update loads it tracked), and the validation must compare against what
+    /// the database holds, not what the graph has been changed to.
+    /// </summary>
+    public async Task<List<SyncRule>> GetImportSyncRulesForMetaverseObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        return await Repository.Database.SyncRules
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Sources)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.TargetMetaverseAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Generation)
+            .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .OrderBy(sr => sr.Id)
             .ToListAsync();
     }
 

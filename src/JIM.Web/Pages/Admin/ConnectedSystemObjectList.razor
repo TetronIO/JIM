@@ -12,6 +12,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -108,60 +109,101 @@
                          SingularName="Connected System Object"
                          PluralName="Connected System Objects"
                          SearchPlaceholder="Search external ID, secondary ID, or display name">
+        @* Which identifier an administrator reads differs by Connector (an LDAP directory's DN, a SCIM service's
+           external ID), so the two identifier columns can be hidden, remembered per Connected System in this
+           browser. Checkboxes rather than menu items, so the menu stays open while both are set. Search still
+           matches both columns whether or not they are shown. *@
+        <ToolBarExtras>
+            @* The menu's own button, not an ActivatorContent one: MudMenu wraps a custom activator in a focusable
+               role="button" div, which would give keyboard users two tab stops for one control. *@
+            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Filled" Color="Color.Default"
+                     Size="Size.Small" DropShadow="false" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                <ChildContent>
+                    <div class="jim-column-menu">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary jim-column-menu-heading">Show columns</MudText>
+                        <MudCheckBox T="bool" Value="_showExternalId" Dense="true" Label="@_externalIdColumnHeader"
+                                     ValueChanged="@(v => SetColumnVisibleAsync(ConnectorSpaceColumn.ExternalId, v))" />
+                        @if (_hasSecondaryExternalId)
+                        {
+                            <MudCheckBox T="bool" Value="_showSecondaryExternalId" Dense="true" Label="@_secondaryExternalIdColumnHeader"
+                                         ValueChanged="@(v => SetColumnVisibleAsync(ConnectorSpaceColumn.SecondaryExternalId, v))" />
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary jim-column-menu-hint">
+                            Remembered for @_connectedSystemHeader?.Name in this browser.
+                        </MudText>
+                    </div>
+                </ChildContent>
+            </MudMenu>
+        </ToolBarExtras>
         <Columns>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate></HeaderTemplate>
                 <CellTemplate>
                     @* The row navigates on click and so does this button, so without stopping the click here a
                        reader who clicks View gets two identical navigations. The button is what offers middle-click
                        and open-in-new-tab, which a row-click handler cannot. *@
                     <span @onclick:stopPropagation="true">
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    Size="Size.Small"
-                                   Color="Color.Primary"
+                                   Color="Color.Secondary"
                                    Href="@(Utilities.GetConnectedSystemObjectHref(context.Item))">
                             View
                         </MudButton>
                     </span>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false" CellClass="jim-text-code mud-text-secondary">
+            @* Rows are one line, so this column and the Secondary External ID beside it share the width the other
+               columns leave, 40/60 (see .jim-fill-column in site.css): both show in full in a wide window, and in a
+               narrow one both clip with the whole value on the title. The floor keeps a GUID's first eight
+               characters, which tell rows apart. The header may wrap, so it stays readable within the column. *@
+            <TemplateColumn Sortable="false" Hidden="@(!_showExternalId)" HeaderClass="jim-fill-column" CellClass="jim-text-code mud-text-secondary jim-fill-column"
+                            HeaderStyle="@ExternalIdColumnStyle" CellStyle="@ExternalIdColumnStyle">
                 <HeaderTemplate>
                     @* The header names the Connected System's own anchor attribute once the first window reveals
                        it, e.g. "External Id (objectGUID)". *@
                     <VirtualisedSortHeader Title="@_externalIdColumnHeader" Name="externalid" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
-                    {
-                        <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" />
-                    }
-                    else
-                    {
-                        @context.Item.ExternalIdValue
-                    }
+                    @{ var externalId = !string.IsNullOrEmpty(context.Item.PendingExternalId) ? context.Item.PendingExternalId : context.Item.ExternalIdValue; }
+                    <div class="jim-one-line" title="@externalId">
+                        @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
+                        {
+                            <PendingValue Value="@context.Item.PendingExternalId" Status="@context.Item.PendingExportStatus" />
+                        }
+                        else
+                        {
+                            @context.Item.ExternalIdValue
+                        }
+                    </div>
                 </CellTemplate>
             </TemplateColumn>
             @* Hidden rather than omitted: MudDataGrid orders its columns by the order they register with it, not by
                their position in this markup, and whether the rows carry a secondary external ID is only known once
                the first window has loaded. Wrapping this column in an @if therefore registers it after every column
                below and renders it last, whatever the markup says. *@
-            <TemplateColumn Sortable="false" Hidden="@(!_hasSecondaryExternalId)" CellClass="jim-text-code mud-text-secondary">
+            @* The larger share of the fill width (see the External ID column above): every other column keeps to one
+               line and sizes to its content. Wrapping the DN instead made each row as tall as its longest identifier
+               (88px against the 36px of a dense row). *@
+            <TemplateColumn Sortable="false" Hidden="@(!SecondaryExternalIdColumnShown)" HeaderClass="jim-fill-column" CellClass="jim-text-code mud-text-secondary jim-fill-column"
+                            HeaderStyle="@SecondaryExternalIdColumnStyle" CellStyle="@SecondaryExternalIdColumnStyle">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="@_secondaryExternalIdColumnHeader" Name="secondaryexternalid" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @if (!string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue))
-                    {
-                        @context.Item.SecondaryExternalIdValue
-                    }
-                    else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
-                    {
-                        <PendingValue Value="@context.Item.PendingSecondaryExternalId" Status="@context.Item.PendingExportStatus" />
-                    }
+                    @{ var secondaryExternalId = !string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue) ? context.Item.SecondaryExternalIdValue : context.Item.PendingSecondaryExternalId; }
+                    <div class="jim-one-line" title="@secondaryExternalId">
+                        @if (!string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue))
+                        {
+                            @context.Item.SecondaryExternalIdValue
+                        }
+                        else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
+                        {
+                            <PendingValue Value="@context.Item.PendingSecondaryExternalId" Status="@context.Item.PendingExportStatus" />
+                        }
+                    </div>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Display Name" Name="displayname" />
                 </HeaderTemplate>
@@ -180,7 +222,7 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Type" Name="type" />
                 </HeaderTemplate>
@@ -188,7 +230,7 @@
                     <MudChip T="string" Text="@context.Item.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.TypeName)" Class="ma-0" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Created" Name="created" />
                 </HeaderTemplate>
@@ -198,7 +240,7 @@
                     </MudTooltip>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Date Joined" Name="datejoined" />
                 </HeaderTemplate>
@@ -216,7 +258,7 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Status" Name="status" />
                 </HeaderTemplate>
@@ -228,7 +270,7 @@
                Status plus any queued Pending Export, so "Export failed" reads off the row rather than being
                inferred from a status and a chip. Not sortable: it is resolved after the window is read, so
                sorting by it would only order the window, not the Connector Space. *@
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <MudText Typo="Typo.subtitle2">State</MudText>
                 </HeaderTemplate>
@@ -236,7 +278,7 @@
                     <ConnectionStateChip State="context.Item.State" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Sortable="false">
+            <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Join Type" Name="jointype" />
                 </HeaderTemplate>
@@ -367,6 +409,22 @@ else
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
 
+    // The administrator's column choices for this Connected System (see the Columns menu), loaded once the circuit
+    // can reach the browser's storage; both shown until then, which is also the default with no choice stored.
+    private bool _showExternalId = true;
+    private bool _showSecondaryExternalId = true;
+    private int? _columnPreferencesLoadedFor;
+
+    private bool SecondaryExternalIdColumnShown => _hasSecondaryExternalId && _showSecondaryExternalId;
+
+    // The two identifier columns split the spare width 40/60 when both are shown (see .jim-fill-column in site.css);
+    // either one alone takes all of it.
+    private string ExternalIdColumnStyle => SecondaryExternalIdColumnShown
+        ? "--jim-fill-share: 40%; min-width: 7.5rem;"
+        : "--jim-fill-share: 100%; min-width: 7.5rem;";
+
+    private string SecondaryExternalIdColumnStyle => _showExternalId ? "--jim-fill-share: 60%;" : "--jim-fill-share: 100%;";
+
     // Filter state
     private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new List<ConnectedSystemObjectStatus>();
     private IReadOnlyCollection<int> _selectedObjectTypeIds = new List<int>();
@@ -409,6 +467,30 @@ else
         {
             _selectedStatuses = new List<ConnectedSystemObjectStatus> { deepLinkStatus };
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Browser storage is only reachable once the page is interactive. Keyed on Id rather than firstRender so a
+        // navigation that reuses this component for another Connected System reads that system's choices.
+        if (_columnPreferencesLoadedFor == Id)
+            return;
+
+        _columnPreferencesLoadedFor = Id;
+        _showExternalId = await PreferenceService.GetConnectorSpaceColumnVisibleAsync(Id, ConnectorSpaceColumn.ExternalId);
+        _showSecondaryExternalId = await PreferenceService.GetConnectorSpaceColumnVisibleAsync(Id, ConnectorSpaceColumn.SecondaryExternalId);
+        if (!_showExternalId || !_showSecondaryExternalId)
+            StateHasChanged();
+    }
+
+    private async Task SetColumnVisibleAsync(ConnectorSpaceColumn column, bool visible)
+    {
+        if (column == ConnectorSpaceColumn.ExternalId)
+            _showExternalId = visible;
+        else
+            _showSecondaryExternalId = visible;
+
+        await PreferenceService.SetConnectorSpaceColumnVisibleAsync(Id, column, visible);
     }
 
     private async Task<VirtualisedWindow<ConnectedSystemObjectHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)

@@ -1,0 +1,427 @@
+@using JIM.Models.Staging
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Every auxiliary class the schema defines, offered for merging into one structural Object Type. Opens on the
+   short list (what is suggested), with the whole schema one click away; each row opens to show the attributes
+   merging it would bring, because a count alone cannot inform the choice. Nothing is saved until Apply, so several
+   classes can be changed and confirmed once. Discovery, which only adds suggestions, is here too. *@
+
+<MudDialog data-testid="jim-aux-dialog">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Extension" Class="me-3" /> Auxiliary classes for @ObjectType.Name
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Offers.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">
+                @ConnectedSystem.Name defines no auxiliary classes, so there is nothing to merge into @ObjectType.Name.
+            </MudAlert>
+        }
+        else
+        {
+        <div>
+            <MudText Class="mud-text-secondary">
+                Only the classes you enable here shape the schema; suggestions never apply themselves. A merged
+                class's attributes join the Object Type at the next schema refresh.
+            </MudText>
+
+            <MudGrid Class="mt-2">
+                <MudItem xs="12" md="7">
+                    <SearchField @bind-Value="_search" Label="Search auxiliary classes" Margin="Margin.None" IconSize="Size.Small" />
+                </MudItem>
+                <MudItem xs="12" md="5" Class="d-flex align-center justify-md-end">
+                    <MudChipSet T="OfferFilter"
+                                SelectionMode="SelectionMode.SingleSelection"
+                                SelectedValue="_filter"
+                                SelectedValueChanged="@((OfferFilter value) => _filter = value)">
+                        <MudChip Value="OfferFilter.Suggested" Color="Color.Primary" data-testid="jim-aux-filter-suggested"
+                                 Variant="@(_filter == OfferFilter.Suggested ? Variant.Filled : Variant.Outlined)">
+                            Suggested (@SuggestedCount)
+                        </MudChip>
+                        <MudChip Value="OfferFilter.InUse" Color="Color.Primary" data-testid="jim-aux-filter-in-use"
+                                 Variant="@(_filter == OfferFilter.InUse ? Variant.Filled : Variant.Outlined)">
+                            In use (@InUseCount)
+                        </MudChip>
+                        <MudChip Value="OfferFilter.All" Color="Color.Default" data-testid="jim-aux-filter-all"
+                                 Variant="@(_filter == OfferFilter.All ? Variant.Filled : Variant.Outlined)">
+                            All (@Offers.Count)
+                        </MudChip>
+                    </MudChipSet>
+                </MudItem>
+            </MudGrid>
+
+            @{
+                var visible = VisibleOffers().ToList();
+            }
+            @if (visible.Count == 0)
+            {
+                <MudText Class="mud-text-secondary mt-4" data-testid="jim-aux-none">
+                    @(string.IsNullOrWhiteSpace(_search)
+                        ? "Nothing is suggested. Run discovery below, or show every class in the schema."
+                        : "No auxiliary class matches that name.")
+                </MudText>
+            }
+            else
+            {
+                <div class="jim-aux-list mt-3">
+                    @foreach (var offer in visible)
+                    {
+                        var isExpanded = _expanded.Contains(offer.ObjectType.Id);
+                        var isMerged = _merged.Contains(offer.ObjectType.Id);
+                        <div class="jim-aux-row" data-testid="jim-aux-row" data-class="@offer.ObjectType.Name" @key="offer.ObjectType.Id">
+                            <div class="d-flex align-center flex-wrap gap-2">
+                                <MudSwitch T="bool"
+                                           Value="isMerged"
+                                           ValueChanged="@(merged => SetMerged(offer, merged))"
+                                           Color="Color.Primary"
+                                           Disabled="_saving" />
+                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined">@offer.ObjectType.Name</MudChip>
+                                @if (offer.PermittedByTheConnectedSystem)
+                                {
+                                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                                        <TooltipContent>
+                                            <TooltipText Text="@($"{ConnectedSystem.Name} publishes a DIT Content Rule saying this class may attach to {ObjectType.Name} entries. It is a statement of what is permitted, not of what is in use.")" />
+                                        </TooltipContent>
+                                        <ChildContent>
+                                            <MudChip T="string" Variant="Variant.Outlined">suggested: DIT Content Rule</MudChip>
+                                        </ChildContent>
+                                    </MudTooltip>
+                                }
+                                @if (offer.EntriesObservedOn is > 0)
+                                {
+                                    var entriesObservedOn = offer.EntriesObservedOn.Value;
+                                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                                        <TooltipContent>
+                                            <TooltipText Text="@ObservationTooltip(entriesObservedOn)" />
+                                        </TooltipContent>
+                                        <ChildContent>
+                                            <MudChip T="string" Variant="Variant.Outlined">@($"suggested: in use on {entriesObservedOn:N0} entries")</MudChip>
+                                        </ChildContent>
+                                    </MudTooltip>
+                                }
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" Class="ms-auto"
+                                           EndIcon="@(isExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                           OnClick="@(() => ToggleExpanded(offer))"
+                                           data-testid="jim-aux-attrs-toggle">
+                                    @AttributeCountLabel(offer)
+                                </MudButton>
+                            </div>
+                            @if (isExpanded)
+                            {
+                                <div class="jim-aux-attrs" data-testid="jim-aux-attrs">
+                                    @if (offer.ContributedAttributeCount == 0)
+                                    {
+                                        <span class="mud-text-secondary">This class defines no attributes of its own.</span>
+                                    }
+                                    @* Not named "attribute": Razor reads "@attribute" as its directive. *@
+                                    @foreach (var contributed in offer.ContributedAttributes)
+                                    {
+                                        var isCredential = CredentialAttributes.IsCredentialAttribute(contributed.Name);
+                                        <span class="jim-aux-attr" data-attribute="@contributed.Name">
+                                            <code>@contributed.Name</code>
+                                            @if (contributed.Required)
+                                            {
+                                                <span class="mud-text-secondary">required</span>
+                                            }
+                                            @if (isCredential)
+                                            {
+                                                <span class="mud-text-secondary">credential, never selectable</span>
+                                            }
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @* ─── Discovery ─── *@
+            <MudDivider Class="my-4" />
+            <div class="d-flex align-center flex-wrap gap-2">
+                @* The classes above come from the schema; discovery is a different read, of the entries, and says
+                   which of those classes are in use. Said explicitly, because a list of classes beside "discovery
+                   has never been run" reads as a contradiction. *@
+                @if (LatestDiscoveryRun == null)
+                {
+                    <MudText Class="mud-text-secondary" data-testid="jim-aux-discovery-status">
+                        These classes come from the schema. JIM has not yet read @ConnectedSystem.Name's entries to find
+                        which of them are in use.
+                    </MudText>
+                }
+                else
+                {
+                    <MudChip T="string" Color="@StatusColour(LatestDiscoveryRun.Status)" Variant="Variant.Outlined">
+                        @StatusText(LatestDiscoveryRun.Status)
+                    </MudChip>
+                    <MudText Class="mud-text-secondary">@DescribeRun(LatestDiscoveryRun)</MudText>
+                }
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Class="ms-auto"
+                           Disabled="DiscoveryInProgress"
+                           EndIcon="@(_discoveryOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                           OnClick="@(() => _discoveryOpen = !_discoveryOpen)"
+                           data-testid="jim-aux-discovery-toggle">
+                    @(LatestDiscoveryRun == null ? "Discover classes in use" : "Discover again")
+                </MudButton>
+            </div>
+
+            @if (_discoveryOpen)
+            {
+                <div class="mt-2" data-testid="jim-aux-discovery">
+                    <MudText Class="mb-2">
+                        Discovery reads @ConnectedSystem.Name's entries to find which auxiliary classes they actually carry.
+                        It only adds suggestions to the list above; every auxiliary class in the schema is listed for
+                        enabling either way.
+                    </MudText>
+                    <MudRadioGroup T="AuxiliaryClassDiscoveryScope" @bind-Value="_scope">
+                        <MudRadio T="AuxiliaryClassDiscoveryScope" Value="AuxiliaryClassDiscoveryScope.QuickSample" Color="Color.Primary">
+                            Quick sample
+                        </MudRadio>
+                        <MudText Typo="Typo.caption" Class="d-block ml-8 mb-2 mud-text-secondary">
+                            Reads the first entries of each Object Type. Fast. A directory returns entries in its own order,
+                            so a rarely used class can be missed; the results are ranked suggestions, never limits.
+                        </MudText>
+                        <MudRadio T="AuxiliaryClassDiscoveryScope" Value="AuxiliaryClassDiscoveryScope.FullScan" Color="Color.Primary">
+                            Full scan
+                        </MudRadio>
+                        <MudText Typo="Typo.caption" Class="d-block ml-8 mud-text-secondary">
+                            Reads every entry in scope, asking for its class membership and nothing else. Complete, and the
+                            only scope whose answer of "this class is not in use" means anything. It can take a long time on
+                            a large directory, and runs as an Activity you can watch and cancel.
+                        </MudText>
+                    </MudRadioGroup>
+
+                    @if (_scope == AuxiliaryClassDiscoveryScope.QuickSample)
+                    {
+                        <MudNumericField T="int"
+                                         @bind-Value="_sampleSizePerObjectType"
+                                         Label="Entries to read per Object Type"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="1000000"
+                                         Immediate="true"
+                                         Class="mt-3"
+                                         Style="max-width: 20rem;" />
+                    }
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" Class="mt-3"
+                               Disabled="@(_startingDiscovery || !CanStartDiscovery())"
+                               OnClick="HandleRunDiscoveryAsync"
+                               data-testid="jim-aux-discovery-run">
+                        Discover classes in use
+                    </MudButton>
+                </div>
+            }
+        </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel" Class="ma-4" DropShadow="false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ma-4" DropShadow="false"
+                   Disabled="@(_saving || !HasChanges)"
+                   OnClick="ApplyAsync"
+                   data-testid="jim-aux-apply">
+            @(_saving ? "Applying" : "Apply")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public ConnectedSystemObjectType ObjectType { get; set; } = null!;
+
+    /// <summary>
+    /// The offers as the host built them (merged first, then suggested, then by name), so the dialog lists the
+    /// same classes in the same order as the REST API and PowerShell.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public List<AuxiliaryClassOffer> Offers { get; set; } = [];
+
+    /// <summary>
+    /// The Connected System's last discovery run, or null when none has been run. A snapshot taken when the
+    /// dialog opened; starting a run closes the dialog so the host reloads and shows the run's progress.
+    /// </summary>
+    [Parameter]
+    public AuxiliaryClassDiscoveryRun? LatestDiscoveryRun { get; set; }
+
+    private enum OfferFilter { Suggested, InUse, All }
+
+    private const int DefaultSampleSizePerObjectType = 5000;
+
+    private OfferFilter _filter = OfferFilter.All;
+    private string? _search;
+    private readonly HashSet<int> _merged = [];
+    private readonly HashSet<int> _expanded = [];
+    private HashSet<int> _mergedAsOpened = [];
+    private bool _saving;
+    private bool _discoveryOpen;
+    private bool _startingDiscovery;
+    private AuxiliaryClassDiscoveryScope _scope = AuxiliaryClassDiscoveryScope.QuickSample;
+    private int _sampleSizePerObjectType = DefaultSampleSizePerObjectType;
+
+    private int SuggestedCount => Offers.Count(offer => offer.IsSuggested);
+    private int InUseCount => Offers.Count(offer => offer.EntriesObservedOn > 0);
+    private bool HasChanges => !_merged.SetEquals(_mergedAsOpened);
+    private bool DiscoveryInProgress => LatestDiscoveryRun?.Status == AuxiliaryClassDiscoveryStatus.InProgress;
+
+    protected override void OnInitialized()
+    {
+        _mergedAsOpened = Offers.Where(offer => offer.Merged).Select(offer => offer.ObjectType.Id).ToHashSet();
+        _merged.UnionWith(_mergedAsOpened);
+
+        // Open on the short list where there is one. A schema nothing suggests anything for would open on an
+        // empty list, which reads as "there are none", so it opens on everything instead.
+        _filter = SuggestedCount > 0 ? OfferFilter.Suggested : OfferFilter.All;
+    }
+
+    private IEnumerable<AuxiliaryClassOffer> VisibleOffers()
+    {
+        var offers = _filter switch
+        {
+            OfferFilter.Suggested => Offers.Where(offer => offer.IsSuggested || _merged.Contains(offer.ObjectType.Id)),
+            OfferFilter.InUse => Offers.Where(offer => offer.EntriesObservedOn > 0 || _merged.Contains(offer.ObjectType.Id)),
+            _ => Offers
+        };
+
+        if (!string.IsNullOrWhiteSpace(_search))
+            offers = offers.Where(offer => offer.ObjectType.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+        return offers;
+    }
+
+    private static string AttributeCountLabel(AuxiliaryClassOffer offer) =>
+        $"+{offer.ContributedAttributeCount} attribute{(offer.ContributedAttributeCount == 1 ? "" : "s")}";
+
+    private void SetMerged(AuxiliaryClassOffer offer, bool merged)
+    {
+        if (merged)
+            _merged.Add(offer.ObjectType.Id);
+        else
+            _merged.Remove(offer.ObjectType.Id);
+    }
+
+    private void ToggleExpanded(AuxiliaryClassOffer offer)
+    {
+        if (!_expanded.Remove(offer.ObjectType.Id))
+            _expanded.Add(offer.ObjectType.Id);
+    }
+
+    private bool CanStartDiscovery() =>
+        _scope != AuxiliaryClassDiscoveryScope.QuickSample || _sampleSizePerObjectType > 0;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task ApplyAsync()
+    {
+        _saving = true;
+        try
+        {
+            // The whole set, through the same validated path the REST API and PowerShell use.
+            using var jim = JimFactory.Create();
+            var result = await jim.ConnectedSystems.SetObjectTypeExtensionsAsync(ObjectType.Id, _merged);
+
+            if (!result.Success)
+            {
+                Snackbar.Add(result.ErrorMessage ?? $"The auxiliary classes of '{ObjectType.Name}' could not be changed.", Severity.Error);
+                return;
+            }
+
+            var added = _merged.Except(_mergedAsOpened).Count();
+            var removed = _mergedAsOpened.Except(_merged).Count();
+            Snackbar.Add(
+                added > 0
+                    ? $"'{ObjectType.Name}' now carries {_merged.Count} auxiliary class{(_merged.Count == 1 ? "" : "es")}. Refresh the schema to bring in the attributes."
+                    : $"{removed} auxiliary class{(removed == 1 ? " is" : "es are")} no longer merged into '{ObjectType.Name}'.",
+                Severity.Success);
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task HandleRunDiscoveryAsync()
+    {
+        _startingDiscovery = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var result = await jim.ConnectedSystems.StartAuxiliaryClassDiscoveryAsync(
+                ConnectedSystem.Id,
+                _scope,
+                _scope == AuxiliaryClassDiscoveryScope.QuickSample ? _sampleSizePerObjectType : null,
+                user);
+
+            if (!result.Success)
+            {
+                Snackbar.Add(result.ErrorMessage ?? "Discovery could not be started.", Severity.Error);
+                return;
+            }
+
+            Snackbar.Add("Discovery queued. Its progress and results are on its Activity.", Severity.Success);
+
+            // Closed rather than left open: the run's progress is the host's to show, and the suggestions here
+            // are a snapshot from before it started.
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _startingDiscovery = false;
+        }
+    }
+
+    private static string ObservationTooltip(int entriesObservedOn)
+    {
+        return $"The last discovery run saw this class on {entriesObservedOn:N0} of the entries it read. " +
+               "A quick sample counts within the sample, not within the whole population.";
+    }
+
+    private static Color StatusColour(AuxiliaryClassDiscoveryStatus status) => status switch
+    {
+        AuxiliaryClassDiscoveryStatus.InProgress => Color.Info,
+        AuxiliaryClassDiscoveryStatus.Complete => Color.Success,
+        AuxiliaryClassDiscoveryStatus.Cancelled => Color.Warning,
+        AuxiliaryClassDiscoveryStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string StatusText(AuxiliaryClassDiscoveryStatus status) => status switch
+    {
+        AuxiliaryClassDiscoveryStatus.InProgress => "Running",
+        AuxiliaryClassDiscoveryStatus.Complete => "Last completed",
+        AuxiliaryClassDiscoveryStatus.Cancelled => "Cancelled, partial",
+        AuxiliaryClassDiscoveryStatus.Failed => "Failed",
+        _ => "Not run"
+    };
+
+    private static string DescribeRun(AuxiliaryClassDiscoveryRun run)
+    {
+        var scope = run.Scope == AuxiliaryClassDiscoveryScope.QuickSample
+            ? $"Quick sample ({run.SampleSizePerObjectType:N0} per Object Type)"
+            : "Full scan";
+
+        var when = run.Completed.HasValue
+            ? run.Completed.Value.ToLocalTime().ToFriendlyDate()
+            : $"started {run.Started.ToLocalTime().ToRelativeTime()}";
+
+        return $"{scope}, {when}, {run.EntriesRead:N0} entries read";
+    }
+}

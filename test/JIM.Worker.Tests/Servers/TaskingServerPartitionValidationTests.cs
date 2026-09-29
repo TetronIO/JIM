@@ -94,7 +94,7 @@ public class TaskingServerPartitionValidationTests
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Resurgam AD"));
             Assert.That(result.ErrorMessage, Does.Contain("hierarchy"));
-            Assert.That(result.ErrorMessage, Does.Contain("Partitions & Containers"));
+            Assert.That(result.ErrorMessage, Does.Contain("Scope tab"));
         }
     }
 

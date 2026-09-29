@@ -22,7 +22,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Built-in scheduler that supports parallel operations
 - Validated at 500,000-user scale (with tens of thousands of groups of up to 495,000 members)
 - Transform data using expressions with extensive built-in functions for common identity operations
-- Built-in LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors, plus a custom connector framework
+- Built-in LDAP, File, SCIM 2.0 and SQL (MS SQL Server, Oracle Database) connectors (more coming)
 - [Passwords](https://docs.junctional.io/concepts/passwords/): initial passwords for newly provisioned objects, on-demand password setting, and Password Synchronisation to every configured Connected System, queued, encrypted at rest and retried
 - Preview before you commit: a [Configuration Change Preview](https://docs.junctional.io/configuration/configuration-changes/) shows which objects a proposed edit would affect, and [Sync Preview](https://docs.junctional.io/configuration/sync-preview/) shows what synchronising one object would do, changing nothing
 - [Run Profile Safeguards](https://docs.junctional.io/configuration/run-profiles/#safeguards): cap how many creates, updates, deletes and detected deletions a single run may attempt, so one bad filter cannot become a mass change
@@ -109,10 +109,10 @@ For detailed architecture diagrams (Component level), see the [Architecture](htt
 The fastest way to get JIM running:
 
 ```bash
-curl -fsSL https://junctional.io/get | bash
+curl -fsSL https://junctional.io/get | sudo bash
 ```
 
-This downloads everything you need, walks you through configuration, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://docs.junctional.io/getting-started/) guide.
+This downloads everything you need, walks you through configuration, including JIM's HTTPS certificate, and starts JIM. For manual setup, air-gapped deployment, and production hardening, see the [Getting Started](https://docs.junctional.io/getting-started/) guide.
 
 ### Develop
 

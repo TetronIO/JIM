@@ -167,5 +167,31 @@ public class LdapConnectorDirectoryServerDiscoveryTests
         Assert.That(directoryServers[0].Site, Is.Null);
     }
 
+    #region Unsupported directory message
+
+    /// <summary>
+    /// The refusal names the directory the way the rest of the portal does (the Details tab's detected facts, the
+    /// password preflight), not by the enum's identifier: an administrator read "DirectoryServer389" in the
+    /// Discover Domain Controllers dialog and asked what it meant.
+    /// </summary>
+    // The enum is internal, and NUnit needs a public test method, so the cases name it as text.
+    [TestCase("DirectoryServer389", "389 Directory Server")]
+    [TestCase("OpenLDAP", "OpenLDAP")]
+    [TestCase("Generic", "an LDAP directory")]
+    public void DirectoryServerDiscoveryUnsupportedMessage_NamesTheDirectoryAsThePortalDoes(string directoryTypeName, string expectedName)
+    {
+        var directoryType = Enum.Parse<LdapDirectoryType>(directoryTypeName);
+
+        var message = LdapConnector.DirectoryServerDiscoveryUnsupportedMessage(directoryType);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain($"detected as {expectedName}."));
+            Assert.That(message, Does.Not.Contain("DirectoryServer389"));
+        }
+    }
+
+    #endregion
+
     #endregion
 }

@@ -7,19 +7,22 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Inline, searchable, virtualised table of a single Metaverse Object attribute's values. Used directly
-   in the details table's value cell for multi-valued attributes whose value count exceeds the inline cap,
-   so all values are browsable in place without a dialog. The scrolling, the search box, the count and the
-   density all belong to the shared grid; this component only says how a value renders and how a window of
-   values is read. *@
+@* Searchable, virtualised table of a single Metaverse Object attribute's values, nested in the value cell of the
+   details table for a multi-valued attribute too large to stack inline (see AttributeValuesCell), so all values
+   are browsable in place without a dialog. It is Embedded, because one sits on the page per large attribute:
+   none may claim the address bar or repeat the portal-wide density toggle. The scrolling, the search box and the
+   count belong to the shared grid; this component only says how a value renders and how a window of values is
+   read. *@
 
-<div class="jim-mva-dialog-table">
+<div class="jim-mva-table">
 @if (_isReferenceAttribute)
 {
     <VirtualisedDataGrid T="MetaverseObjectAttributeValue"
                          ContainerId="@($"mvo-mva-{_slug}-references")"
-                         UrlParameterPrefix="@($"{_slug}-")"
                          StateKey="@AttributeName"
+                         Embedded="true"
+                         MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -66,8 +69,10 @@ else
 {
     <VirtualisedDataGrid T="MetaverseObjectAttributeValue"
                          ContainerId="@($"mvo-mva-{_slug}-values")"
-                         UrlParameterPrefix="@($"{_slug}-")"
                          StateKey="@AttributeName"
+                         Embedded="true"
+                         MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -122,6 +127,13 @@ else
     public string AttributeName { get; set; } = string.Empty;
 
     /// <summary>
+    /// How many values the attribute holds, so the table can hold its height while its first window loads (see
+    /// VirtualisedDataGrid.ExpectedItemCount).
+    /// </summary>
+    [Parameter]
+    public int? ValueCount { get; set; }
+
+    /// <summary>
     /// The owning Metaverse Object's ID.
     /// </summary>
     [Parameter]
@@ -134,13 +146,6 @@ else
     public bool IsReferenceAttribute { get; set; }
 
     /// <summary>
-    /// Whether the host page's tables are showing compact rows. Retained for the host's binding: the grid reads
-    /// the same saved density preference the host's toggle writes, so it no longer needs threading through.
-    /// </summary>
-    [Parameter]
-    public bool Dense { get; set; }
-
-    /// <summary>
     /// The sort key standing for "the order the application layer returned them in". The range read takes no sort
     /// parameter (it orders by value id, which is the total order its offset and count are addressed against), so
     /// no column offers a sort; naming the default something no header claims keeps the grid from showing a sort
@@ -151,9 +156,8 @@ else
     private bool _isReferenceAttribute;
 
     /// <summary>
-    /// The attribute name reduced to a URL- and element-id-safe token. Several of these tables render on one
-    /// page, one per capped multi-valued attribute, so the grid's element id and URL parameters have to carry
-    /// which attribute they belong to.
+    /// The attribute name reduced to an element-id-safe token. Several of these tables render on one page, one per
+    /// large multi-valued attribute, so the grid's element id has to carry which attribute it belongs to.
     /// </summary>
     private string _slug = string.Empty;
 

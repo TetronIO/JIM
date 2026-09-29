@@ -127,6 +127,46 @@ public class KeysetCsoPagingDatabaseTests
         Assert.That(seenIds, Is.EquivalentTo(expectedIds));
     }
 
+    /// <summary>
+    /// Delta sync deletes each page's obsolete CSOs at the page boundary. Walking the modified-since query with the
+    /// keyset cursor, exactly as the delta sync loop does, must still reach every modified CSO once when each page's
+    /// rows are deleted before the next page loads (OFFSET paging skipped every other page here; Scenario 008
+    /// LeaverCohort left 1,000 of 2,000 obsolete accounts unprocessed).
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsModifiedSinceAsync_KeysetCursorWhilePagesAreDeleted_ReachesEveryCsoAsync()
+    {
+        var modifiedSince = DateTime.UtcNow.AddHours(-1);
+        var (systemId, expectedIds) = await SeedCsosAsync(9);
+
+        var seenIds = new List<Guid>();
+        var afterId = Guid.Empty;
+        for (var page = 1; page <= 3; page++)
+        {
+            List<Guid> pageIds;
+            await using (var ctx = NewContext())
+            {
+                var repository = new PostgresDataRepository(ctx);
+                var result = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
+                    systemId, modifiedSince, page, pageSize: 3, knownTotalCount: 9, afterId: afterId);
+                pageIds = result.Results.Select(cso => cso.Id).ToList();
+            }
+
+            seenIds.AddRange(pageIds);
+            if (pageIds.Count > 0)
+                afterId = pageIds[^1];
+
+            // The page boundary's obsolete-CSO flush: this page's rows are gone before the next page loads.
+            await using var deleteContext = NewContext();
+            await deleteContext.ConnectedSystemObjectAttributeValues
+                .Where(av => pageIds.Contains(av.ConnectedSystemObject.Id)).ExecuteDeleteAsync();
+            await deleteContext.ConnectedSystemObjects.Where(cso => pageIds.Contains(cso.Id)).ExecuteDeleteAsync();
+        }
+
+        Assert.That(seenIds, Is.Unique, "Keyset pages must not overlap");
+        Assert.That(seenIds, Is.EquivalentTo(expectedIds), "Every modified CSO must be reached although earlier pages were deleted");
+    }
+
     [Test]
     public async Task GetConnectedSystemObjectsAsync_KeysetWithWatermark_LoadsChangedCsoAttributesAcrossPagesAsync()
     {

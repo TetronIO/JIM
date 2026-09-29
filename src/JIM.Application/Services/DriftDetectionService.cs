@@ -178,6 +178,22 @@ public class DriftDetectionService
                         isContributor = false;
                     }
 
+                    // #1864: a contributor is a legitimate source for THIS divergence only if its import flow reads the
+                    // diverged Connected System attribute; only then does the out-of-band edit flow into the Metaverse.
+                    // An import flow reading a different attribute (Display Name built from givenName and sn, exported
+                    // to displayName), or only Metaverse attributes (a Metaverse-Derived Attribute Flow, #1750), leaves
+                    // the edit stranded on the Connected System Object, so skipping it would leave the two sides
+                    // disagreeing permanently. That is drift, and is corrected.
+                    if (isContributor && !AnyContributingImportFlowReads(
+                            cso.ConnectedSystemId,
+                            mvoAttributeId,
+                            source.Expression,
+                            mapping.TargetConnectedSystemAttribute,
+                            importMappingsByAttribute))
+                    {
+                        isContributor = false;
+                    }
+
                     Log.Debug("EvaluateDrift: Contributor check for CSO {CsoId}, attribute {AttrName}: " +
                         "mvoAttributeId={MvoAttrId}, csoConnectedSystemId={CsoSystemId}, isContributor={IsContributor}, " +
                         "hasExpression={HasExpression}, cacheKeys=[{CacheKeys}]",
@@ -277,6 +293,68 @@ public class DriftDetectionService
 
         var key = (connectedSystemId, mvoAttributeId);
         return importMappingsByAttribute.ContainsKey(key);
+    }
+
+    /// <summary>
+    /// Whether any of the Connected System's import flows that make it a contributor for the export source reads
+    /// <paramref name="divergedAttribute"/>, so that an out-of-band edit to that attribute flows into the Metaverse
+    /// (#1864). The contributing flows are those targeting <paramref name="mvoAttributeId"/> for a direct export source,
+    /// or any Metaverse attribute an export expression reads. A flow reads the attribute through a direct Connected
+    /// System attribute source (matched by id), or a <c>cs["..."]</c> input of an expression source (matched by name,
+    /// case-insensitively, as the expression evaluator resolves it).
+    /// </summary>
+    /// <remarks>
+    /// Keyed on the system, not the object type, as the contributor check above is: a system with import rules for
+    /// the same Metaverse attribute on two object types matches on either. JIM's standard topology is one object type
+    /// per system per Metaverse Object Type, so this is deferred with the same rationale as
+    /// <see cref="AttributeWonByConnectedSystem"/>.
+    /// </remarks>
+    private static bool AnyContributingImportFlowReads(
+        int connectedSystemId,
+        int mvoAttributeId,
+        string? exportExpression,
+        ConnectedSystemObjectTypeAttribute divergedAttribute,
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute)
+    {
+        if (importMappingsByAttribute == null)
+            return false;
+
+        IEnumerable<SyncRuleMapping> contributingMappings;
+        if (mvoAttributeId > 0)
+        {
+            contributingMappings = importMappingsByAttribute.TryGetValue((connectedSystemId, mvoAttributeId), out var mappings)
+                ? mappings
+                : [];
+        }
+        else
+        {
+            var expressionMvInputs = ExpressionInputResolver.ResolveCached(exportExpression)
+                .Where(i => i.Source == ExpressionInputSource.Metaverse)
+                .Select(i => i.AttributeName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            contributingMappings = importMappingsByAttribute
+                .Where(kvp => kvp.Key.ConnectedSystemId == connectedSystemId)
+                .SelectMany(kvp => kvp.Value)
+                .Where(m => m.TargetMetaverseAttribute != null && expressionMvInputs.Contains(m.TargetMetaverseAttribute.Name));
+        }
+
+        return contributingMappings.Any(m => m.Sources.Any(s => SourceReads(s, divergedAttribute)));
+    }
+
+    /// <summary>
+    /// Whether an import mapping source reads the given Connected System attribute: directly, or as a <c>cs["..."]</c>
+    /// input of its expression.
+    /// </summary>
+    private static bool SourceReads(SyncRuleMappingSource source, ConnectedSystemObjectTypeAttribute attribute)
+    {
+        var directAttributeId = source.ConnectedSystemAttributeId ?? source.ConnectedSystemAttribute?.Id;
+        if (directAttributeId == attribute.Id)
+            return true;
+
+        return ExpressionInputResolver.ResolveCached(source.Expression).Any(i =>
+            i.Source == ExpressionInputSource.ConnectedSystem
+            && string.Equals(i.AttributeName, attribute.Name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

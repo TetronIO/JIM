@@ -61,7 +61,7 @@ jobs:
         dotnet-version: 10.0.x
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@3ea06614dafe36dec890db3446326e0d40ce53d4  # v3.38.1
+      uses: github/codeql-action/init@1190a975f95ce23525efb6a3fc21ea29567c1b52  # v3.38.2
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
@@ -85,7 +85,7 @@ jobs:
     # for every language identically. The filter reads the same paths-ignore block, so the config
     # file remains the single place a path is excluded.
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@3ea06614dafe36dec890db3446326e0d40ce53d4  # v3.38.1
+      uses: github/codeql-action/analyze@1190a975f95ce23525efb6a3fc21ea29567c1b52  # v3.38.2
       with:
         category: "/language:${{ matrix.language }}"
         upload: failure-only
@@ -96,7 +96,7 @@ jobs:
       run: ./scripts/Filter-Sarif.ps1 -SarifDirectory sarif-results -ConfigFile ./.github/codeql/codeql-config.yml
 
     - name: Upload filtered SARIF
-      uses: github/codeql-action/upload-sarif@3ea06614dafe36dec890db3446326e0d40ce53d4  # v3.38.1
+      uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52  # v3.38.2
       with:
         sarif_file: sarif-results
         category: "/language:${{ matrix.language }}"

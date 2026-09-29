@@ -136,7 +136,7 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
         panel.Find($"[data-testid='{ToggleMarker}']").Click();
 
         Assert.That(panel.Find($"[data-testid='{LinkMarker}']").GetAttribute("href"),
-            Is.EqualTo("/admin/connected-systems/7/?t=schema"));
+            Is.EqualTo("/admin/connected-systems/7/?t=passwords"));
     }
 
     [Test]

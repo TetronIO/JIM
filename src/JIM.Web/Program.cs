@@ -728,7 +728,9 @@ try
     if (!trustedProxies.IsEmpty)
         app.UseForwardedHeaders();
 
-    app.UseHttpsRedirection();
+    // Health probes are exempt, so that a probe over the loopback HTTP listener sees JIM's real state rather than
+    // a redirect that counts as healthy.
+    app.UseHttpsRedirectionExceptHealthProbes();
     app.UseStaticFiles();
     app.UseRouting();
 

@@ -55,7 +55,7 @@
                     <VirtualisedSortHeader Title="Change Type" Name="changetype" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.Item.ChangeType)" Style="font-size: 1rem;">
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.Item.ChangeType)">
                         @context.Item.ChangeType
                     </MudChip>
                 </CellTemplate>
@@ -65,7 +65,7 @@
                     <VirtualisedSortHeader Title="Status" Name="status" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Item.Status)" Style="font-size: 1rem;">
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Item.Status)">
                         @context.Item.Status.ToString().SplitOnCapitalLetters()
                     </MudChip>
                 </CellTemplate>

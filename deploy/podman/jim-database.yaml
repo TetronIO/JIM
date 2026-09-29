@@ -1,0 +1,124 @@
+# JIM on Podman: the bundled PostgreSQL database pod (optional)
+#
+# Run by the jim-database.kube Quadlet unit. Leave both out when JIM uses your own PostgreSQL server.
+#
+# JIM reaches this pod on the jim network at the host name jim-database, which jim-config.yaml sets as
+# JIM_DB_HOSTNAME. PostgreSQL is not published on the host.
+#
+# The tuning matches docker-compose.yml, and suits a large host: 64 GB of memory and 16 cores. For another size,
+# change the settings below (https://pgtune.leopard.in.ua/ suggests values). Unlike Docker, Podman cannot enlarge
+# a pod's /dev/shm, so dynamic_shared_memory_type=mmap keeps PostgreSQL's parallel query memory in its data folder
+# instead; shared_buffers never used /dev/shm.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jim-database
+  labels:
+    app: jim
+spec:
+  restartPolicy: Always
+  containers:
+    - name: postgres
+      image: __POSTGRES_IMAGE__
+      # The logs volume's root belongs to root, so this wrapper creates a folder PostgreSQL may write its logs to
+      # before handing over to the image's own entrypoint.
+      command:
+        - /bin/bash
+        - -c
+        - >-
+          mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database &&
+          exec docker-entrypoint.sh "$@" -c "log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000}"
+        - --
+      args:
+        - postgres
+        - -c
+        - max_connections=200
+        - -c
+        - shared_buffers=8GB
+        - -c
+        - effective_cache_size=24GB
+        - -c
+        - maintenance_work_mem=2GB
+        - -c
+        - checkpoint_completion_target=0.9
+        - -c
+        - wal_buffers=16MB
+        - -c
+        - default_statistics_target=100
+        - -c
+        - random_page_cost=1.1
+        - -c
+        - effective_io_concurrency=1000
+        - -c
+        - work_mem=102300kB
+        - -c
+        - min_wal_size=1GB
+        - -c
+        - max_wal_size=4GB
+        - -c
+        - max_worker_processes=16
+        - -c
+        - max_parallel_workers_per_gather=4
+        - -c
+        - max_parallel_workers=16
+        - -c
+        - max_parallel_maintenance_workers=4
+        - -c
+        - statement_timeout=300000
+        - -c
+        - dynamic_shared_memory_type=mmap
+        - -c
+        - logging_collector=on
+        - -c
+        - log_destination=jsonlog
+        - -c
+        - log_directory=/var/log/jim/database
+        - -c
+        - log_filename=jim.database.%Y%m%d.log
+        - -c
+        - log_rotation_age=1440
+        - -c
+        - log_rotation_size=0
+        - -c
+        - log_file_mode=0644
+      env:
+        # The image ships only the C and C.UTF-8 locales. LANG is read only when the database is first created.
+        - name: LANG
+          value: C.UTF-8
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef: { name: jim-config, key: JIM_DB_NAME }
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef: { name: jim-config, key: JIM_DB_USERNAME }
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: JIM_DB_PASSWORD }
+        - name: JIM_DB_LOG_MIN_DURATION
+          valueFrom:
+            configMapKeyRef: { name: jim-config, key: JIM_DB_LOG_MIN_DURATION, optional: true }
+      # Podman 5 restarts a container whose liveness check fails. PostgreSQL counts as started once it accepts
+      # connections, however long the first start or a crash recovery takes, and as alive while it answers at all,
+      # even to refuse a connection while it starts up. Only five minutes without an answer restarts it.
+      startupProbe:
+        exec:
+          command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 8640
+      livenessProbe:
+        exec:
+          command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -t 10; test $? -le 1"]
+        initialDelaySeconds: 30
+        periodSeconds: 30
+        timeoutSeconds: 15
+        failureThreshold: 10
+      volumeMounts:
+        - { name: jim-db, mountPath: /var/lib/postgresql }
+        - { name: jim-logs, mountPath: /var/log/jim }
+  volumes:
+    - name: jim-db
+      persistentVolumeClaim: { claimName: jim-db-volume }
+    - name: jim-logs
+      persistentVolumeClaim: { claimName: jim-logs-volume }

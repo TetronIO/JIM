@@ -23,11 +23,11 @@ html[lang] {
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette (navy — from the dark theme's background) === */
-    --mud-palette-secondary: #1e3a5f;
-    --mud-palette-secondary-rgb: 30, 58, 95;
-    --mud-palette-secondary-darken: #142a48;
-    --mud-palette-secondary-lighten: #2a4e7a;
-    --mud-palette-secondary-text: #ffffffff;
+    --mud-palette-secondary: #52637a;
+    --mud-palette-secondary-rgb: 82,99,122;
+    --mud-palette-secondary-darken: #445469;
+    --mud-palette-secondary-lighten: #66778e;
+    --mud-palette-secondary-text: #ffffff;
 
     /* === Tertiary Palette (slate blue-grey) === */
     /* One step darker than the olive this was (#85782b), because that shade sits at the luminance where
@@ -75,9 +75,16 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: rgba(18, 27, 41, 0.58);
-    --mud-palette-action-default-hover: rgba(0, 118, 211, 0.12);
+    /* The theme's navy, the table row hover's hue a step stronger, not the cyan-blue this was (left over from navy-o5, whose
+       primary it is). Menus, selects, list items and icon buttons hover in it, and a foreign hue there was the
+       same jar the table rows were moved off. */
+    --mud-palette-action-default-hover: rgba(30, 58, 95, 0.11);
     --mud-palette-action-disabled: rgba(18, 27, 41, 0.34);
     --mud-palette-action-disabled-background: rgba(18, 27, 41, 0.08);
+
+    /* === JIM Custom: Hover and pressed states (see the tonal step in site.css) === */
+    --jim-neutral-press: rgba(30, 58, 95, 0.18);
+    --jim-control-border-hover: rgba(30, 58, 95, 0.50);
 
     /* === Lines & Dividers === */
     --mud-palette-lines-default: rgba(30, 58, 95, 0.28);
@@ -193,30 +200,6 @@ html[lang] .mud-primary-text:not(a) {
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #0076d3 !important;
-}
-
-/* Default filled button — lighter neutral grey for light backgrounds */
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
-    background-color: #ededee;
-}
-
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
-    background-color: #e2e3e5;
-}
-
-/* Default outlined button hover — neutral grey instead of blue tint */
-html[lang] .mud-button-outlined.mud-button-outlined-default:not(:disabled):hover {
-    background-color: rgba(0, 0, 0, 0.06);
-}
-
-/* Secondary button hover — use secondary colour tint instead of default blue */
-html[lang] .mud-button-outlined.mud-button-outlined-secondary:not(:disabled):hover,
-html[lang] .mud-button-text.mud-button-text-secondary:not(:disabled):hover {
-    background-color: color-mix(in srgb, var(--mud-palette-secondary) 10%, transparent) !important;
-}
-
-html[lang] .mud-button-filled.mud-button-filled-secondary:not(:disabled):hover {
-    background-color: var(--mud-palette-secondary-darken) !important;
 }
 
 /* Boost alert background contrast — MudBlazor defaults are too faint on light backgrounds.

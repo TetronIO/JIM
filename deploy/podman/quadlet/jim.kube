@@ -1,0 +1,27 @@
+# JIM on Podman: the systemd unit that runs JIM
+#
+# A Quadlet unit. From it, systemd generates jim.service, which starts JIM at boot and stops it at shutdown.
+# Installed in /etc/containers/systemd/ (rootful, the default), or in ~/.config/containers/systemd/ of the account
+# that runs JIM (rootless). After editing it, reload systemd and restart JIM:
+#   rootful:   systemctl daemon-reload && systemctl restart jim.service
+#   rootless:  systemctl --user -M jim@ daemon-reload && systemctl --user -M jim@ restart jim.service
+
+[Unit]
+Description=JIM (Junctional Identity Manager)
+# Start after the bundled database when there is one. JIM waits for its database in any case.
+After=jim-database.service
+
+[Kube]
+Yaml=/opt/jim/jim.yaml
+ConfigMap=/opt/jim/jim-config.yaml
+Network=jim.network
+# The HTTPS port users reach JIM on, then the port JIM listens on inside its pod (always 8443). Running rootless, a
+# host port below 1024 needs the net.ipv4.ip_unprivileged_port_start setting lowered to it; setup.sh does that.
+PublishPort=443:8443
+
+[Service]
+# The first start after an install or upgrade may download JIM's images.
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

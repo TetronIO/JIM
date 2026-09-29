@@ -55,6 +55,29 @@ Describe 'Get-JIMConnectedSystemAuxiliaryClass' {
             }
         }
 
+        It 'Carries the attributes each class would contribute through unchanged' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    @(
+                        [PSCustomObject]@{
+                            objectTypeId = 2; name = 'posixAccount'; merged = $false; isSuggested = $true
+                            contributedAttributeCount = 2
+                            contributedAttributes = @(
+                                [PSCustomObject]@{ name = 'uidNumber'; type = 'Number'; attributePlurality = 'SingleValued'; required = $true; isCredential = $false },
+                                [PSCustomObject]@{ name = 'userPassword'; type = 'Text'; attributePlurality = 'SingleValued'; required = $false; isCredential = $true }
+                            )
+                        }
+                    )
+                }
+
+                $result = @(Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5)
+
+                $result[0].contributedAttributes.Count | Should -Be 2
+                $result[0].contributedAttributes[1].isCredential | Should -BeTrue
+            }
+        }
+
         It 'Returns only the merged classes when asked for them' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

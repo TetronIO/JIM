@@ -9,7 +9,7 @@ using Serilog;
 namespace JIM.Connectors.LDAP;
 
 /// <summary>
-/// Counts the objects each Container in a partition holds, for the Partitions and Containers tab (#1276).
+/// Counts the objects each Container in a partition holds, for the Scope tab (#1276).
 /// </summary>
 /// <remarks>
 /// LDAP has no COUNT operation, so counting means retrieving the matching entries. It does not mean running an

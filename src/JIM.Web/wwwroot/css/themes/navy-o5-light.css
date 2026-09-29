@@ -23,11 +23,11 @@ html[lang] {
     --mud-palette-primary-text: #ffffffff;
 
     /* === Secondary Palette (navy — from the dark theme's background) === */
-    --mud-palette-secondary: #1e3a5f;
-    --mud-palette-secondary-rgb: 30,58,95;
-    --mud-palette-secondary-darken: #142a48;
-    --mud-palette-secondary-lighten: #2a4e7a;
-    --mud-palette-secondary-text: #ffffffff;
+    --mud-palette-secondary: #52637a;
+    --mud-palette-secondary-rgb: 82,99,122;
+    --mud-palette-secondary-darken: #445469;
+    --mud-palette-secondary-lighten: #66778e;
+    --mud-palette-secondary-text: #ffffff;
 
     /* === Tertiary Palette (muted teal) === */
     --mud-palette-tertiary: #3a8070;
@@ -164,20 +164,6 @@ html[lang] .mud-primary-text:not(a) {
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #0076d3 !important;
-}
-
-/* Default filled button — lighter neutral grey for light backgrounds */
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
-    background-color: #ededee;
-}
-
-html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
-    background-color: #e2e3e5;
-}
-
-/* Default outlined button hover — neutral grey instead of blue tint */
-html[lang] .mud-button-outlined.mud-button-outlined-default:not(:disabled):hover {
-    background-color: rgba(0, 0, 0, 0.06);
 }
 
 /* Boost alert background contrast — MudBlazor defaults are too faint on light backgrounds.

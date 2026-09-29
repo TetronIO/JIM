@@ -27,7 +27,7 @@
     @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
        inside the grid, so it is reached as a descendant of something this component names rather than by a global
        selector that another table on the page could match. *@
-    <div id="@ContainerId" class="jim-virtualised-list" style="@ContainerStyle">
+    <div id="@ContainerId" class="@ContainerClass" style="@ContainerStyle">
     @* OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
        SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
        Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
@@ -46,13 +46,13 @@
            whole portal, and a control for it once per attribute is the same switch drawn a dozen times. It
            keeps its search box, which is per table by nature and is how a member is found among half a
            million, and its count, which is the one thing each embedded table must say for itself. *@
-        @if (!Embedded)
+        @if (ShowDensityToggle)
         {
             <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
         }
         @if (ToolBarExtras != null)
         {
-            @if (!Embedded)
+            @if (ShowDensityToggle)
             {
                 <MudText Class="mx-2 mud-text-disabled">|</MudText>
             }
@@ -95,6 +95,22 @@
     </MudDataGrid>
     </div>
     </CascadingValue>
+}
+else if (ReservesHeight)
+{
+    @* Stands in for the grid until the density preference has been read, at the size the grid will open at, so
+       the content below a grid that sits among other content does not jump twice: once when the grid appears and
+       again when its first rows arrive. Same id, so the height ceiling fits the stand-in exactly as it will fit the
+       grid, and the grid's own outline and margin, so the swap is not visible. *@
+    <div id="@ContainerId" class="jim-virtualised-list jim-virtualised-list-reserving" style="@ContainerStyle">
+        <div class="@($"mud-table mud-table-outlined jim-virtualised-list-placeholder {GridClass}")">
+            @if (ShowToolBar)
+            {
+                <div class="jim-virtualised-list-placeholder-toolbar"></div>
+            }
+            <div class="mud-table-container"></div>
+        </div>
+    </div>
 }
 
 @code {
@@ -180,6 +196,17 @@
     public bool Embedded { get; set; }
 
     /// <summary>
+    /// Pins the grid to dense rows and drops the density toggle, for a list that is a working surface rather than
+    /// something to read: the attribute selection table on a Connected System's schema, where a directory object
+    /// type runs to several hundred rows and the task is scanning and ticking them, not reading each one.
+    /// </summary>
+    [Parameter]
+    public bool AlwaysDense { get; set; }
+
+    // Whether the toolbar offers the density toggle; see Embedded and AlwaysDense.
+    private bool ShowDensityToggle => !Embedded && !AlwaysDense;
+
+    /// <summary>
     /// Whether this grid offers a search box. Set false where the list is small by construction and searching it
     /// says nothing a glance does not: the queued steps of one Schedule Execution, a handful of Roles. A box that
     /// narrows four rows is a control asking to be used for no benefit, and repeated per group it is clutter.
@@ -194,7 +221,7 @@
     /// already say. The count earns its place beside the control that changes it, so it goes when that control
     /// does. Public so a test can assert the decision rather than infer it from rendered markup.
     /// </summary>
-    public bool ShowToolBar => !Embedded || ShowSearch || ToolBarExtras != null;
+    public bool ShowToolBar => ShowDensityToggle || ShowSearch || ToolBarExtras != null;
 
     /// <summary>
     /// Whether this grid keeps its search, sort and scroll position in the address bar. A grid in a dialog sets
@@ -203,6 +230,16 @@
     /// </summary>
     [Parameter]
     public bool TrackUrlState { get; set; } = true;
+
+    /// <summary>
+    /// How many rows the grid is expected to open with, when the host already knows (a multi-valued attribute's
+    /// value count). The grid then holds that height, up to its ceiling, from its first paint until its first
+    /// window arrives, so content below it does not jump as it loads. Leave it unset for a grid at the foot of its
+    /// page, where growing moves nothing but the footer. A search restored from the URL can match fewer rows, and
+    /// the grid then settles to its content once they arrive.
+    /// </summary>
+    [Parameter]
+    public int? ExpectedItemCount { get; set; }
 
     /// <summary>
     /// Classes for the grid itself. The default is the standing gap between a grid and whatever page chrome sits
@@ -246,7 +283,7 @@
     // ─── Internals ───
 
     private MudDataGrid<T>? _dataGrid;
-    private bool _dense;
+    private bool _dense = true;
     private bool _preferencesLoaded;
     private string? _appliedStateKey;
 
@@ -257,11 +294,43 @@
 
     // A stated ceiling is applied as a plain style on the container, so it holds from the first paint and needs no
     // measurement; the CSS fallback ceiling is scoped to the same element, so this overrides it.
-    private string? ContainerStyle => string.IsNullOrWhiteSpace(MaxHeight) ? null : $"--jim-virtualised-list-max-height: {MaxHeight};";
+    private string? ContainerStyle
+    {
+        get
+        {
+            var ceiling = string.IsNullOrWhiteSpace(MaxHeight) ? null : $"--jim-virtualised-list-max-height: {MaxHeight};";
+            if (!ReservingHeight)
+                return ceiling;
+
+            // The header row plus the expected rows; site.css caps it at the grid's ceiling.
+            var reserved = HeaderRowHeight + ExpectedItemCount!.Value * RowHeight;
+            return $"{ceiling}--jim-virtualised-list-reserved-height: {reserved.ToString(System.Globalization.CultureInfo.InvariantCulture)}px;";
+        }
+    }
+
+    private string ContainerClass => ReservingHeight ? "jim-virtualised-list jim-virtualised-list-reserving" : "jim-virtualised-list";
+
+    // Whether the host said how many rows to expect; see ExpectedItemCount.
+    private bool ReservesHeight => ExpectedItemCount > 0;
+
+    // Whether the grid is still holding its expected height. site.css only applies it while the table has no rows
+    // (and no empty state) to show, so the height is let go the moment the first rows are actually in the DOM: this
+    // component is not told when that is, and the window call returning is too early, since the virtualiser renders
+    // the rows a beat after it. The class itself is dropped at the reader's first search, sort or refresh, so a
+    // reload that empties the table between windows does not bring the held height back.
+    private bool ReservingHeight => ReservesHeight && !_reservationReleased;
+
+    private bool _reservationReleased;
+
+    private void ReleaseReservedHeight() => _reservationReleased = true;
+
+    // The header row's rendered height at each density, measured; only the reservation uses it.
+    private float HeaderRowHeight => _dense ? 38f : 57f;
 
     // The row height the grid is laid out at, and the divisor that turns a scroll offset into a row index. The two
-    // must agree, so both read this rather than repeating the numbers.
-    private float RowHeight => _dense ? 36f : 50f;
+    // must agree, so both read this rather than repeating the numbers. site.css pins the rows (.jim-virtualised-list
+    // .mud-table-row) to these same heights; change both together.
+    private float RowHeight => _dense ? 36f : 52f;
 
     // The row to restore to, read from the URL on load, then kept current as the reader scrolls. _scrollRestored
     // stops the restore repeating on every later render, and turns the grid from reading the position to writing it.
@@ -325,7 +394,7 @@
         // (and picks the matching virtualisation row height) on first appearance rather than flashing.
         if (firstRender)
         {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            _dense = AlwaysDense || await PreferenceService.GetTableDenseAsync() != false;
             _preferencesLoaded = true;
             StateHasChanged();
             return;
@@ -407,6 +476,7 @@
     /// <inheritdoc />
     public async Task ToggleSortAsync(string name)
     {
+        ReleaseReservedHeight();
         // No TotalItems reset here, deliberately: sorting reorders the match set without changing which objects
         // are in it, so the total the scroll area is sized from still holds.
         if (SortBy == name)
@@ -434,6 +504,7 @@
     /// </summary>
     public async Task RefreshAsync(bool invalidateTotals = false)
     {
+        ReleaseReservedHeight();
         if (invalidateTotals)
         {
             TotalItems = null;
@@ -469,6 +540,7 @@
 
     private async Task OnSearchAsync(string text)
     {
+        ReleaseReservedHeight();
         SearchText = text;
         // The search changes which objects match, so the total must be re-counted; the unfiltered baseline is
         // deliberately kept, because it is the very thing the new filtered count is compared against.

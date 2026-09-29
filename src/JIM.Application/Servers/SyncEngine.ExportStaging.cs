@@ -1118,6 +1118,17 @@ public partial class SyncEngine
     /// The dictionary keys are attribute names, and values are the attribute values.
     /// </summary>
     internal static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+        => BuildAttributeDictionary(mvo, mvo.AttributeValues);
+
+    /// <summary>
+    /// The single implementation of a Metaverse expression dictionary, over whichever set of the object's values the
+    /// caller supplies: its persisted values for export evaluation (<see cref="BuildAttributeDictionary(MetaverseObject)"/>),
+    /// or its effective values as of this pass for a Metaverse-Derived Attribute Flow
+    /// (<see cref="BuildEffectiveAttributeDictionary"/>, #1750). Sharing it is what guarantees an export expression
+    /// and a derived flow reading the same attribute see the same value: keys case-insensitive, values typed by the
+    /// attribute's data type, asserted-null markers absent, and the last value winning for a multi-valued attribute.
+    /// </summary>
+    private static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo, IEnumerable<MetaverseObjectAttributeValue> values)
     {
         var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
@@ -1129,7 +1140,7 @@ public partial class SyncEngine
 
         // Exclude asserted-null markers (#91): they carry no value, so the expression context must treat the
         // attribute as absent (mv["x"] resolves to null) rather than seeing a phantom value.
-        foreach (var attributeValue in mvo.AttributeValues.Where(av => !av.NullValue))
+        foreach (var attributeValue in values.Where(av => !av.NullValue))
         {
             if (attributeValue.Attribute == null)
             {

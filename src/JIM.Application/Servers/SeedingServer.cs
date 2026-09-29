@@ -1794,6 +1794,12 @@ internal class SeedingServer
         {
             Log.Debug($"SyncConnectorDefinitionAsync: No changes detected for '{connector.Name}'");
         }
+
+        // The definition now matches the Connector; bring the Connected Systems built on it into line too, so a
+        // setting or default added in this release reaches them rather than only systems created from now on. Runs
+        // whether or not the definition changed on this pass: a system can be out of line with a definition that was
+        // brought up to date on an earlier start.
+        await Application.ConnectedSystems.ReconcileConnectedSystemSettingValuesAsync(existingDefinition, GetOrCreateSeedingActivityAsync);
     }
 
     #region private methods

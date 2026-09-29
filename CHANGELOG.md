@@ -9,15 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ JIM can now be deployed with Podman, rootful or rootless, with no Docker or other extra software, including air-gapped: the setup script installs it on RHEL and other Podman hosts, and systemd starts it at boot. Ansible can deploy it too. (#1808)
+- ✨ Air-gapped installs use the same setup script: run it inside the extracted release bundle and it loads the images and installs without an internet connection. (#1808)
+- ✨ `setup.sh --upgrade` upgrades a Docker installation, online or from a release bundle: it keeps your settings and compose files of your own, refuses to overwrite edited ones, and puts everything back if it fails before JIM restarts. (#1854)
+- ✨ Adding an auxiliary class to a Connected System Object Type now lists the attributes each class would contribute, in a dialog that opens on the suggested classes and applies several at once; REST and `Get-JIMConnectedSystemAuxiliaryClass` return them too.
 - ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
 - ✨ A Schedule run that carried on past a failed step now ends **Complete With Error**, naming the failed steps, instead of a plain Complete, so the portal, PowerShell and monitoring scripts can tell it apart from a clean run. (#1787)
+- ✨ The Connector Space list's new **Columns** menu shows or hides the External ID and Secondary External ID columns, remembered per Connected System in your browser, so an LDAP directory's list can show just the distinguished names.
 
 ### Changed
 
+- 🔄 Multi-valued attributes on Connected System Object and Pending Export pages now list their values in the row, as on a Metaverse Object, instead of behind **+n more**; over 10 get a scrolling table in the row. The Metaverse Object Table view gains search and sorting.
+- 🔄 The portal is more compact: 14px body text, navigation and inputs (from 16px), 13px tables, smaller headings, denser form fields with help text clear of the next field, smaller buttons and chips, and lists that open with dense rows unless you chose otherwise.
+- 🔄 The Connected System's **Partitions & Containers** tab is now called **Scope**: it is where you choose what JIM manages in a system, whatever shape that takes. Links to the old tab name open the Details tab.
+- 🔄 The Password Channel check and the discovered Password Policy now sit on the Connected System's **Passwords** tab, beneath the Password Synchronisation settings, rather than on the Schema tab.
+- 🔄 A Connected System's Schema tab now opens on a one-line status with a Refresh Schema button instead of a warning band, and each Object Type shows Attribute Selection before its settings.
+- 🔄 The Auxiliary Classes panel on a Connected System Object Type now shows what the type is made of (its class plus the merged auxiliary classes) instead of listing every auxiliary class in the schema, so Attribute Selection is no longer pushed off the screen.
+- 🔄 The Directory Capabilities card on a Connected System's Details tab is now a compact strip of detected facts beneath the form, with its explanation in an info button.
 - 🔄 A Schedule step's failure setting now also covers a step that cannot be queued when the Schedule starts, and in parallel steps only a step that actually failed decides whether the Schedule stops. (#1768)
 - 🔄 Deselecting an Object Type now takes it out of management: the next Full Import obsoletes its objects, as for a partition, and it is refused while an enabled Synchronisation Rule manages the type. (#1474)
-- 🔄 The production compose file now publishes the web UI and API on host port 5200 (set `JIM_WEB_PORT` to change it), and `jim.web` listens on port 8080 inside its container.
+- 🔄 JIM now serves HTTPS out of the box, with your organisation's certificate or one the setup script creates, so sign-in works from any machine without a reverse proxy. Before upgrading, put the certificate in the `tls` folder beside the compose files. (#1808)
+- 🔄 The production compose file now publishes the web UI and API over HTTPS on the standard port, 443, so JIM's address needs no port (set `JIM_WEB_PORT` to change it).
+- 🔄 The setup script installs in `/opt/jim` when run as root, waits until JIM is ready, and keeps a copy of itself there to renew (`--renew-certificate`) or change (`--certificate`) JIM's certificate. (#1808)
+- 🔄 The Worker now reports healthy while it upgrades the database or warms its caches at start-up, so a long upgrade no longer looks like a hung Worker. (#1808)
 - 🔄 JIM's services now wait for the database at start-up, logging each attempt, instead of exiting and restarting until it is available; an external database that is briefly unreachable no longer takes the web portal down. (#1808)
 - 🔄 A Delta Import stopped because an Active Directory or Samba AD domain controller's invocationId changed now says the directory was probably restored from a backup or snapshot, why continuing would miss changes, and that a Full Import fixes it. (#1853)
 
@@ -25,6 +40,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 A group with more members than Active Directory returns in one read (MaxValRange, 1,500 by default) now imports with every member, instead of failing as a configuration error naming `member;range=0-1499`. (#1853)
 - 🐛 Schema, container and domain controller discovery on Active Directory now read page by page, so a forest with more attributes, organisational units or domain controllers than MaxPageSize (1,000 by default) no longer fails with "size limit exceeded". (#1853)
+- 🐛 A Run Profile execution that fails while saving its changes to the database is now recorded as failed, with its error, instead of Complete. (#1874)
+- 🐛 When a pinned domain controller stops answering, JIM now clears the pin as documented, so the next run re-discovers a domain controller instead of failing against the same unreachable one every time. (#1875)
+- 🐛 An import that fails after reading its changes no longer moves the Connected System's change watermark on, so the next Delta Import reads those changes again instead of silently skipping them. (#1868)
+- 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image by its pinned digest: the setup script checks the loaded image against the ID the bundle records and runs it by that ID. (#1854)
+- 🐛 Drift Correction now reverts an attribute edited in a Connected System whose import Attribute Flow reads a different attribute (a `displayName` edit where Display Name comes from `givenName` and `sn`), instead of leaving the two out of step. (#1864)
+- 🐛 A Delta Sync that removes objects no longer skips others: when more than one page of changes included deleted objects, about half were left unprocessed until the next Full Sync (for example, a leaver's account deleted from a target directory stayed in JIM).
+- 🐛 Running the setup script again over an installation with the bundled PostgreSQL no longer locks JIM out of its database: it keeps the database's password instead of generating a new one. (#1808)
+- 🐛 New Docker installations no longer trust the development identity provider's token issuer, `http://localhost:8181/realms/jim`, which the settings template set. On an existing one, delete the `JIM_SSO_VALID_ISSUERS` line from `.env` unless you added it yourself. (#1808)
+- 🐛 Installing with the setup script's bundled PostgreSQL works: it pointed JIM at `localhost` instead of the bundled database, so JIM never started.
+- 🐛 The release bundle's PostgreSQL image now loads under its name, so an air-gapped install with the bundled database finds it.
+- 🐛 The setup script no longer stops at `Failed to download .env.example`, and the manual download commands in the Deployment Guide and Quick Start work again: releases publish the environment template as `default.env.example`.
+- 🐛 A Synchronisation Rule attribute flow created with every inbound value processing option turned off is now saved that way; previously it was saved with "treat whitespace as no value" switched back on.
+- 🐛 The LDAP Connector's Delete Behaviour setting now shows Delete, the value export uses when it is unset, instead of an empty dropdown.
+- 🐛 Connected Systems now receive settings their Connector gains in a later release, and unset settings take a newly declared default, when JIM starts; previously these reached only Connected Systems created afterwards, so a new setting never appeared on existing ones.
+- 🐛 The File Connector's import no longer fails when Delimiter is blank; it uses the default comma, as export already did.
+- 🐛 Discover Domain Controllers, refused on a directory that is not Active Directory or Samba AD, now names the detected directory as the portal does elsewhere ("389 Directory Server") rather than by its internal identifier.
+- 🐛 An auxiliary class's contributed attribute count (portal, REST and PowerShell) no longer includes attributes the Object Type already carries, such as the directory's common entry attributes, which overstated every class by the same few.
 - 🐛 Opening JIM over plain HTTP from another machine no longer loops endlessly between JIM and the identity provider; sign-in stops on a page explaining that browser access from other machines requires HTTPS. A one-off lost sign-in cookie is still recovered automatically.
 - 🐛 `Get-JIMScheduleExecution -Status` and the REST API's Schedule Execution list now return only executions with the requested status, instead of every execution.
 - 🐛 A Schedule with a step that cannot be queued, for example because its Connected System is being deleted, no longer runs its earlier steps and then reports Complete; it runs nothing, fails naming the step, and each step shows why it did not run. (#1768)
@@ -49,7 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 The setup script makes `.env`, which holds the database password and the identity provider's client secret, readable by its owner only. (#1808)
 - 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
+- 🔒 On Docker, the bundled database container no longer receives JIM's settings and secrets, such as the identity provider's client secret, which PostgreSQL never used. (#1862)
 
 ### Performance
 
