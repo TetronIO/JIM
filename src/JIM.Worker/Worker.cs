@@ -1737,7 +1737,7 @@ public class Worker : BackgroundService
     /// it will attempt a direct database update as a last resort to ensure the activity is not left in InProgress state.
     /// Activities must never be left in InProgress state as this blocks the integration test scripts and monitoring systems.
     /// </summary>
-    private async Task SafeFailActivityAsync(JimApplication jim, Activity activity, Exception originalException, string context)
+    internal async Task SafeFailActivityAsync(JimApplication jim, Activity activity, Exception originalException, string context)
     {
         Log.Error(originalException, "SafeFailActivityAsync: {Context} for activity {ActivityId}", context, activity.Id);
 
@@ -1833,11 +1833,13 @@ public class Worker : BackgroundService
             {
                 Log.Information("TryFailActivityOnFreshContextAsync: Activity {ActivityId} is already in terminal state {Status}",
                     activity.Id, freshActivity.Status);
+                AdoptTerminalState(activity, freshActivity);
                 return true;
             }
 
             freshActivity.Status = ActivityStatus.FailedWithError;
             freshActivity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
+            freshActivity.ErrorDetail = ActivityErrorDetail.TryDescribe(originalException);
 
             // Only persist stack traces for unexpected errors (bugs), not for operational errors
             if (originalException is not OperationalException)
@@ -1846,6 +1848,7 @@ public class Worker : BackgroundService
             freshActivity.ExecutionTime = DateTime.UtcNow - freshActivity.Executed;
             freshActivity.TotalActivityTime = DateTime.UtcNow - freshActivity.Created;
             await freshJim.Activities.UpdateActivityAsync(freshActivity);
+            AdoptTerminalState(activity, freshActivity);
 
             Log.Warning("TryFailActivityOnFreshContextAsync: Marked activity {ActivityId} as failed via a fresh context", activity.Id);
             return true;
@@ -1855,6 +1858,23 @@ public class Worker : BackgroundService
             Log.Error(freshEx, "TryFailActivityOnFreshContextAsync: Fresh-context update failed for activity {ActivityId}", activity.Id);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Brings the caller's copy of an Activity into line with the terminal state a fresh context has just persisted
+    /// or found (#1874). The Worker goes on to complete the task with the caller's copy, and
+    /// <c>TaskingServer.CompleteWorkerTaskAsync</c> completes any Activity that copy still says is in progress, with a
+    /// full-row update; left alone, that turned a failed run into a Complete one and erased its error. The other two
+    /// ways <see cref="SafeFailActivityAsync"/> records a failure already write through the caller's copy.
+    /// </summary>
+    private static void AdoptTerminalState(Activity activity, Activity persisted)
+    {
+        activity.Status = persisted.Status;
+        activity.ErrorMessage = persisted.ErrorMessage;
+        activity.ErrorDetail = persisted.ErrorDetail;
+        activity.ErrorStackTrace = persisted.ErrorStackTrace;
+        activity.ExecutionTime = persisted.ExecutionTime;
+        activity.TotalActivityTime = persisted.TotalActivityTime;
     }
 
     /// <summary>

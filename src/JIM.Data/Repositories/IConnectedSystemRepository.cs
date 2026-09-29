@@ -962,6 +962,16 @@ public interface IConnectedSystemRepository
     Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Gets every import Synchronisation Rule flowing to a Metaverse Object Type, across all Connected Systems,
+    /// disabled rules included, with each rule's Attribute Flow mappings, their sources (expressions included),
+    /// generation settings and target Metaverse attributes (#1750). The save-time Metaverse-Derived Attribute Flow
+    /// validation builds its dependency graph from this, so it must report what the database holds: implementations
+    /// read untracked, never returning an instance the caller may be mid-way through mutating.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type the rules flow to.</param>
+    Task<List<SyncRule>> GetImportSyncRulesForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
     /// database, keyed by mapping id (#1199). Deliberately a scalar projection rather than an entity load: a
     /// whole-rule save mutates the tracked rule graph in memory before persisting it, and this is the "before"

@@ -78,6 +78,7 @@ To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URL
 | `JIM_DB_PASSWORD`          | Database password. **Use a strong, unique value in production.**                                                    | *(none)*    | *(generate a strong password)* |
 | `JIM_DB_LOG_SENSITIVE_INFO` | When `true`, includes parameter values in database query logs. **Do not enable in production.**                    | `false`     | `false`                    |
 | `JIM_DB_LOG_MIN_DURATION`  | Slow query log threshold in milliseconds. Queries exceeding this duration are logged. Set to `-1` to disable, `0` to log all queries. | `1000`  | `500`                      |
+| `JIM_DB_IMAGE`             | Docker only: the bundled PostgreSQL's image. Leave it unset: the installer sets it to the image's ID for an air-gapped install on Docker's classic image store, which cannot find the pinned image by its digest (see [By Hand](deployment.md#by-hand)). | *(the image `docker-compose.yml` pins by digest)* | `sha256:662db3da…` |
 
 ### Connecting to a non-default port
 

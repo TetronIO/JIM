@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
@@ -162,6 +163,16 @@ public class SyncRuleMapping : IAuditable
     /// a reason is what distinguishes the two. Cleared when the mapping is re-enabled.
     /// </summary>
     public string? DisabledReason { get; set; }
+
+    /// <summary>
+    /// Non-blocking warnings the save that returned this instance raised about it, such as a Metaverse-Derived
+    /// Attribute Flow calling a function that returns a different value on every evaluation (#1750). Transient:
+    /// never persisted, and empty on every ordinary read. The server that performed the save fills it on the same
+    /// instance the caller holds (as <see cref="SyncRuleMappingGeneration.SequenceSkippedAhead"/> is), so a REST
+    /// response, a PowerShell cmdlet or the portal can report the warnings without a second round trip.
+    /// </summary>
+    [NotMapped]
+    public List<string> SaveWarnings { get; } = [];
 
     /// <summary>
     /// Whether this export mapping contributes to an Update export to the Connected System. The export

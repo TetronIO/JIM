@@ -835,6 +835,14 @@ else if (_syncRule != null)
             Snackbar.Add(ex.Message, Severity.Error);
             return;
         }
+        catch (JIM.Application.Exceptions.FeatureDisabledException ex)
+        {
+            // a save that needs a feature that is switched off (an import expression newly reading mv["..."] while
+            // Metaverse-Derived Attribute Flows is off, #1750) is refused by the Application layer with a message
+            // naming the feature; surface it the same way rather than as an unhandled error.
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
         // the staged removals the choices describe have been applied; a failed save keeps them for the retry.
         if (wasSuccessful)
             _mappingRemovalChoices.Clear();
