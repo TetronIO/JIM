@@ -62,7 +62,7 @@ public class ConfigurationChangeCaptureTests
         _csRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
 
         _protection = new FakeProtection();
-        _jim = new JimApplication(_repo.Object) { CredentialProtection = _protection };
+        _jim = new JimApplication(_repo.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository()) { CredentialProtection = _protection };
     }
 
     [TearDown]
@@ -188,7 +188,7 @@ public class ConfigurationChangeCaptureTests
         // so it returns the ciphertext, which is not valid base64. Previously this surfaced as a cryptic FormatException
         // that the best-effort capture path swallowed, silently dropping the snapshot; it must now be a clear,
         // diagnosable InvalidOperationException naming the missing protection service.
-        using var jimWithoutProtection = new JimApplication(_repo.Object);
+        using var jimWithoutProtection = new JimApplication(_repo.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository());
         _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ConfigurationChangeHashKey))
             .ReturnsAsync(new ServiceSetting
             {

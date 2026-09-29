@@ -133,7 +133,7 @@ public class ObjectMatchingRuleClearPersistenceDatabaseTests
         // then saved through the application layer, whose simple-mode validation clears the inert rules.
         await using (var saveCtx = NewContext())
         {
-            using var application = new JimApplication(new PostgresDataRepository(saveCtx));
+            using var application = NewJimApplication(saveCtx);
             var syncRule = await application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
             Assert.That(syncRule, Is.Not.Null);
             var apiKey = await application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
@@ -154,5 +154,13 @@ public class ObjectMatchingRuleClearPersistenceDatabaseTests
                 "no source row may survive either; a lingering attribute reference is what blocks the " +
                 "Connected System's deletion");
         }
+    }
+
+    // The sync repository is passed explicitly, as every host passes it: saving a Synchronisation Rule checks the export
+    // queue for changes the save left without authority, and that check reads through the sync repository.
+    private static JimApplication NewJimApplication(JimDbContext context)
+    {
+        var repository = new PostgresDataRepository(context);
+        return new JimApplication(repository, syncRepository: repository.Sync);
     }
 }

@@ -26,6 +26,11 @@ pwsh test/integration/Run-IntegrationTests.ps1 -Scenario 005 -DirectoryType Open
 
 # Customer-representative directory write performance (OpenLDAP; see warning below)
 pwsh test/integration/Run-IntegrationTests.ps1 -Scenario Scenario-008-CrossDomainEntitlementSync -Template Large -DirectoryType OpenLDAP -DurableDirectoryWrites
+
+# The pre-release gate with its three directory passes side by side, one isolated stack ("lane") each.
+# Samba AD's JIM is on localhost:5200, OpenLDAP's on 5300, 389 Directory Server's on 5400. Each lane's full
+# output goes to results/logs/lane-<DirectoryType>-<timestamp>.log; see engineering/INTEGRATION_TESTING.md.
+pwsh test/integration/Run-IntegrationTests.ps1 -PreRelease -Parallel
 ```
 
 > **⚠ Directory writes are ARTIFICIALLY FAST by default.** OpenLDAP test containers relax MDB durability (`nosync`, no per-transaction fsync), roughly a 9x write-rate difference (~308 vs ~34 adds/sec measured). This keeps large-template test cycles short, but it is **not what customers experience**: real directories fsync their writes and bound export throughput. Never derive customer-facing performance figures or hardware sizing from a default (fast) run; use `-DurableDirectoryWrites` for representative measurements. The mode is printed in the run configuration and fast/durable performance baselines are kept separate. Samba AD runs are always durable.

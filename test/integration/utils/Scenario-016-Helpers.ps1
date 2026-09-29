@@ -1709,7 +1709,8 @@ function Test-S16ScaleImport {
     # Peak memory is sampled for the whole import on the three containers that do the work: JIM's worker
     # (the product under test), JIM's own database (where the 500,000 Connected System Objects land) and
     # the source database server being read.
-    $sampler = Start-S16MemorySampler -Containers @('jim.worker', 'jim.database', $Config.ContainerName)
+    $lane = Get-IntegrationLane
+    $sampler = Start-S16MemorySampler -Containers @($lane.WorkerContainer, $lane.DatabaseContainer, $Config.ContainerName)
     $started = Get-Date
     try {
         $run = Invoke-S16FullImport -Context $Context
@@ -1744,8 +1745,8 @@ function Test-S16ScaleImport {
         ActivityId               = $run.activityId
         ActivityExecutionTime    = $activityExecutionTime
         PageSize                 = $Context.PageSize
-        WorkerPeakMemory         = Format-S16Bytes -Bytes $peaks['jim.worker']
-        DatabasePeakMemory       = Format-S16Bytes -Bytes $peaks['jim.database']
+        WorkerPeakMemory         = Format-S16Bytes -Bytes $peaks[$lane.WorkerContainer]
+        DatabasePeakMemory       = Format-S16Bytes -Bytes $peaks[$lane.DatabaseContainer]
         SourceContainer          = $Config.ContainerName
         SourcePeakMemory         = Format-S16Bytes -Bytes $peaks[$Config.ContainerName]
     }

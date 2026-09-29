@@ -107,7 +107,7 @@ param(
     [string]$Template = "Micro",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -361,7 +361,7 @@ Add-TestResult -Name "The overlay stamped pwdChangedTime on the probe user after
 Write-TestSection "Step 0b: Configuring JIM"
 
 Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
-& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$PSScriptRoot/../../test-data"
+& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$(Get-IntegrationTestDataPath)"
 Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
 $config = & "$PSScriptRoot/../Setup-Scenario-022.ps1" `

@@ -153,7 +153,7 @@ public class SyncRuleMappingDeleteDatabaseTests
 
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var initiator = await ctx.MetaverseObjects.SingleAsync(x => x.Id == ids.InitiatorId);
 
             // Loading the rule tracks every one of its mapping sources. The API does this only to return a 404
@@ -192,7 +192,7 @@ public class SyncRuleMappingDeleteDatabaseTests
 
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var initiator = await ctx.MetaverseObjects.SingleAsync(x => x.Id == ids.InitiatorId);
             var mapping = await jim.ConnectedSystems.GetSyncRuleMappingAsync(ids.MappingId);
             Assert.That(mapping, Is.Not.Null);
@@ -202,5 +202,13 @@ public class SyncRuleMappingDeleteDatabaseTests
 
         await using var verify = NewContext();
         Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.Id == ids.MappingId), Is.False);
+    }
+
+    // The sync repository is passed explicitly, as every host passes it: saving or deleting a Synchronisation Rule or
+    // Attribute Flow checks the export queue for changes the change left without authority, which reads through it.
+    private static JimApplication NewJimApplication(JimDbContext context)
+    {
+        var repository = new PostgresDataRepository(context);
+        return new JimApplication(repository, syncRepository: repository.Sync);
     }
 }

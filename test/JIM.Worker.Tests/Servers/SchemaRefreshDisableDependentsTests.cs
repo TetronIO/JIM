@@ -27,6 +27,7 @@ public class SchemaRefreshDisableDependentsTests
     private Mock<IRepository> _repository = null!;
     private Mock<IActivityRepository> _activityRepository = null!;
     private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
+    private Mock<ISyncRepository> _syncRepository = null!;
     private JimApplication _jim = null!;
     private string _csvPath = null!;
     private SyncRule _computerRule = null!;
@@ -42,6 +43,7 @@ public class SchemaRefreshDisableDependentsTests
         _repository = new Mock<IRepository>();
         _activityRepository = new Mock<IActivityRepository>();
         _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
+        _syncRepository = TestUtilities.StubQueuedChangeWithdrawal(new Mock<ISyncRepository>());
         _repository.Setup(r => r.Activity).Returns(_activityRepository.Object);
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
 
@@ -67,7 +69,7 @@ public class SchemaRefreshDisableDependentsTests
         _userRule.AttributeFlowRules.Add(_faxMapping);
         _connectedSystemRepository.Setup(r => r.GetSyncRulesAsync(1, true)).ReturnsAsync([_computerRule, _userRule]);
 
-        _jim = new JimApplication(_repository.Object);
+        _jim = new JimApplication(_repository.Object, syncRepository: _syncRepository.Object);
 
         _csvPath = Path.Join(Path.GetTempPath(), $"jim-schema-disable-{Guid.NewGuid():N}.csv");
         File.WriteAllText(_csvPath, "id,displayName\n1,Test User\n");
@@ -164,6 +166,41 @@ public class SchemaRefreshDisableDependentsTests
         var refreshActivity = _createdActivities.Single(a => a.TargetOperationType == ActivityTargetOperationType.ImportSchema);
         var ruleActivity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.SynchronisationRule);
         Assert.That(ruleActivity.ParentActivityId, Is.EqualTo(refreshActivity.Id));
+    }
+
+    [Test]
+    public async Task ApplyConnectedSystemSchemaRefreshAsync_WithADisablePlan_ChecksTheExportQueueForChangesLeftWithoutAuthorityAsync()
+    {
+        // A change queued by an Attribute Flow or Synchronisation Rule the refresh has just disabled has nothing left to
+        // send it; the queue is checked straight away rather than at the next export, so the Pending Exports page agrees.
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var previewResult = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+        var plan = new SchemaRefreshDependents();
+        plan.InvalidatedMappings.Add(new SchemaRefreshDependentMapping
+        {
+            MappingId = 102,
+            SyncRuleId = 11,
+            SyncRuleName = "HR Users Inbound",
+            Description = "faxNumber → Fax Number",
+            Reason = "Attribute 'faxNumber' is no longer reported by the Connected System (schema refresh of 21 Aug 2026)."
+        });
+
+        await _jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, plan, NewInitiator());
+
+        _syncRepository.Verify(r => r.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(
+            connectedSystem.Id, It.IsAny<IReadOnlyCollection<int>>()), Times.Once);
+    }
+
+    [Test]
+    public async Task ApplyConnectedSystemSchemaRefreshAsync_WithAnEmptyDisablePlan_LeavesTheExportQueueAloneAsync()
+    {
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var previewResult = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+
+        await _jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, new SchemaRefreshDependents(), NewInitiator());
+
+        _syncRepository.Verify(r => r.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(
+            It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>()), Times.Never, "nothing was disabled, so nothing lost its authority");
     }
 
     private static MetaverseObject NewInitiator() => new()
