@@ -649,6 +649,21 @@ public class SyncPreviewServer
                         ConnectedSystemId = connectedSystemId
                     });
                 }
+                catch (SyncExpressionMissingInputException missingInputEx)
+                {
+                    // Missing Input Behaviour "Fail the object": the real run records an ExpressionMissingInput error
+                    // for the object and applies nothing, so the preview reports it as blocking, in the same words,
+                    // rather than letting the exception escape the preview.
+                    result.Errors.Add(new SyncPreviewMessage
+                    {
+                        Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                        Detail = missingInputEx.DescribeForAdministrator(),
+                        SyncRuleId = rule.Id,
+                        SyncRuleName = rule.Name,
+                        ConnectedSystemId = connectedSystemId,
+                        AttributeName = missingInputEx.TargetAttributeName
+                    });
+                }
             }
         }
         finally
@@ -731,6 +746,25 @@ public class SyncPreviewServer
             };
             result.OutcomeTree.Add(root);
 
+            // Unique Value Generation (#242): a GeneratedValueAssigned/GeneratedValueAdopted child per
+            // resolved attribute, mirroring exactly where the worker records them: a child of the root
+            // (alongside, not nested inside, the Attribute Flow child), never gated to a tracking level,
+            // since a generated value is as much an audit signal in a preview as it is in a real run. Added
+            // BEFORE the Attribute Flow child, because that is the order the worker records them in (its root
+            // builder in SyncTaskProcessorBase adds the generated children first), and the fidelity pairing
+            // compares sibling order.
+            foreach (var (outcomeType, attributeName, value) in generatedValueOutcomes)
+            {
+                root.Children.Add(new SyncOutcomeNode
+                {
+                    OutcomeType = outcomeType,
+                    TargetEntityId = root.TargetEntityId,
+                    TargetEntityDescription = root.TargetEntityDescription,
+                    DetailMessage = $"{attributeName}: {value}",
+                    Ordinal = root.Children.Count
+                });
+            }
+
             SyncOutcomeNode? attributeFlowChild = null;
             if (rootType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
@@ -743,22 +777,6 @@ public class SyncPreviewServer
                     Ordinal = root.Children.Count
                 };
                 root.Children.Add(attributeFlowChild);
-            }
-
-            // Unique Value Generation (#242): a GeneratedValueAssigned/GeneratedValueAdopted child per
-            // resolved attribute, mirroring exactly where the worker records them: a child of the root
-            // (alongside, not nested inside, the Attribute Flow child), never gated to a tracking level,
-            // since a generated value is as much an audit signal in a preview as it is in a real run.
-            foreach (var (outcomeType, attributeName, value) in generatedValueOutcomes)
-            {
-                root.Children.Add(new SyncOutcomeNode
-                {
-                    OutcomeType = outcomeType,
-                    TargetEntityId = root.TargetEntityId,
-                    TargetEntityDescription = root.TargetEntityDescription,
-                    DetailMessage = $"{attributeName}: {value}",
-                    Ordinal = root.Children.Count
-                });
             }
 
             // The outbound outcomes nest under the Attribute Flow child where there is one, because what

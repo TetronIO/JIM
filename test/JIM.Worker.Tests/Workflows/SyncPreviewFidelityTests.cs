@@ -5,6 +5,7 @@ using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
@@ -667,6 +668,123 @@ public class SyncPreviewFidelityTests : WorkflowTestBase
             }
         });
         return importRule;
+    }
+
+    #endregion
+
+    #region Fidelity fixes found while pairing Metaverse-Derived Attribute Flows (#1750)
+
+    /// <summary>
+    /// Unique Value Generation (#242): the real run records a generated value's node on the root BEFORE the Attribute
+    /// Flow child, so the preview's tree must list them in the same order.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_GeneratedAttributeOnProjection_TreeMatchesTheRealSyncOutcomeTreeAsync()
+    {
+        DbContext.ServiceSettingItems.AddRange(await JIM.TestSupport.InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync());
+        await DbContext.SaveChangesAsync();
+
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        mvType.Attributes.First(a => a.Name == "DisplayName").Name = Constants.BuiltInAttributes.DisplayName;
+        var accountName = new MetaverseAttribute
+        {
+            Name = "Account Name",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = [mvType],
+            PredefinedSearchAttributes = []
+        };
+        DbContext.MetaverseAttributes.Add(accountName);
+        mvType.Attributes.Add(accountName);
+        await DbContext.SaveChangesAsync();
+
+        var importRule = await CreateImportSyncRuleWithDisplayNameFlowAsync(sourceSystem, sourceType, mvType);
+        importRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = importRule,
+            SyncRuleId = importRule.Id,
+            TargetMetaverseAttribute = accountName,
+            TargetMetaverseAttributeId = accountName.Id,
+            Generation = new SyncRuleMappingGeneration
+            {
+                TokenKind = GeneratedValueTokenKind.OnlyIfTaken,
+                SuffixStyle = GeneratedValueSuffixStyle.Number,
+                SuffixStart = 1,
+                AttemptLimit = 100,
+                NeverReuse = true
+            },
+            Sources = { new SyncRuleMappingSource { Order = 0, Expression = "Lower(cs[\"EmployeeId\"])" } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+        var activity = await RunFullSyncAsync(sourceSystem);
+
+        var previewTree = DescribeTree(preview.OutcomeTree);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(previewTree, Does.Contain(nameof(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned)),
+                "precondition: the preview generated a value");
+            Assert.That(previewTree, Is.EqualTo(DescribeTree(MapRealOutcomeTree(activity))),
+                "the generated value's node precedes the Attribute Flow child, as the real run records it");
+        }
+    }
+
+    /// <summary>
+    /// Missing Input Behaviour "Fail the object" on an ordinary import Expression: the real run records an
+    /// ExpressionMissingInput error for the object and applies nothing. The preview used to let the exception escape;
+    /// it must report the same failure as a blocking error, in the worker's words, and return.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_ImportExpressionMissingInputFailsTheObject_ReportsTheWorkersErrorAsBlockingAsync()
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var importRule = await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+        var mvEmployeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
+        importRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = importRule,
+            TargetMetaverseAttribute = mvEmployeeId,
+            TargetMetaverseAttributeId = mvEmployeeId.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                Expression = "cs[\"EmployeeId\"]",
+                MissingInputBehaviour = MissingInputBehaviour.FailObject
+            }}
+        });
+        await DbContext.SaveChangesAsync();
+
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", employeeId: null);
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+        var activity = await RunFullSyncAsync(sourceSystem);
+
+        var realError = activity.RunProfileExecutionItems.Single(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput);
+        var previewError = preview.Errors.SingleOrDefault(e => e.Code == SyncPreviewMessageCode.ExpressionEvaluationError);
+        Assert.That(previewError, Is.Not.Null, "the preview reports the failure rather than throwing");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(preview.HasBlockingErrors, Is.True);
+            Assert.That(previewError!.Detail, Is.EqualTo(realError.ErrorMessage), "in the words the real run records");
+            Assert.That(previewError.SyncRuleName, Is.EqualTo("HR Import"));
+            Assert.That(previewError.AttributeName, Is.EqualTo("EmployeeId"));
+        }
+    }
+
+    private async Task<Activity> RunFullSyncAsync(ConnectedSystem connectedSystem)
+    {
+        var profile = await CreateRunProfileAsync(connectedSystem.Id, $"{connectedSystem.Name} Full Sync {Guid.NewGuid():N}", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(connectedSystem.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+        return activity;
     }
 
     #endregion
