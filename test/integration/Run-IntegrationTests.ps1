@@ -2836,7 +2836,9 @@ if ($DirectoryType -eq "OpenLDAP") {
     Write-Step "Starting OpenLDAP (Primary)..."
     # A lane names the service: samba-ad-primary carries no profile, so an unqualified `up -d` would also
     # try to create it, a container the Samba AD lane already owns under that fixed name.
-    $openldapServices = if ($script:Lane.Active) { @("openldap-primary") } else { @() }
+    # @(...) around the whole if is load-bearing: a one-element array returned from an if is unwrapped to
+    # a bare string, and splatting a string passes it one character at a time ("no such service: o").
+    $openldapServices = @(if ($script:Lane.Active) { "openldap-primary" })
     $openldapResult = docker compose @script:IntegrationComposeArgs --profile openldap up -d @openldapServices 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start OpenLDAP"
@@ -2948,7 +2950,7 @@ else {
 # current connector code is exactly the masked-bug class the no-SkipBuild rule exists to prevent.
 if ($scenarioNumber -eq 15) {
     Write-Step "Building and starting the SCIM test service provider..."
-    $scimServices = if ($script:Lane.Active) { @("scim-provider") } else { @() }
+    $scimServices = @(if ($script:Lane.Active) { "scim-provider" })
     $scimProviderResult = docker compose @script:IntegrationComposeArgs --profile scim up -d --build @scimServices 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to start the SCIM test service provider"

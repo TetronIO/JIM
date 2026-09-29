@@ -61,8 +61,8 @@ The original version of this PRD proposed sharding by scenario (N stacks, one sc
 
 5. A lane is one directory pass (Samba AD, OpenLDAP or 389 Directory Server) with its own stack. No two lanes may share a container, volume, network, host port, or any file written during the run.
 6. Each lane runs in its own `pwsh` process, not a runspace. Several settings the harness relies on (`SAMBA_IMAGE_*`, `OPENLDAP_*`, `DIRSRV_*`, `JIM_DB_*`, `VERSION_SUFFIX`, `JIM_RUNPROFILE_ABORT_SENTINEL`) are process environment variables, which runspaces would share.
-7. Each lane has its own Docker Compose project name for both the JIM stack and the integration compose file. A serial run keeps today's project names (`jim` and `jim-integration`), so serial behaviour and container names are unchanged.
-8. Containers are reached by lane-scoped names wherever scripts use a fixed name today (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, the directory containers via `Get-DirectoryConfig`, and the fixed `docker rm -f` list). Scripts resolve the name for the current lane rather than hardcoding it.
+7. Each lane has its own Docker Compose project names for the JIM stack and the integration Compose file. The Samba AD lane and a serial run keep today's names (`jim` and `jim-integration`); the OpenLDAP and 389 Directory Server lanes use `jim-openldap`/`jim-integration-openldap` and `jim-dirsrv`/`jim-integration-dirsrv`, applied with two lane override files so the base Compose files are unchanged.
+8. Containers are reached by lane-scoped names wherever scripts use a fixed name today (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`, and the fixed `docker rm -f` list). Scripts resolve the name for the current lane rather than hardcoding it. The directory containers (`samba-ad-*`, `openldap-primary`, `dirsrv-primary`) keep their names: each belongs to one directory type and so to one lane. A lane starts its directory containers by service name, because `samba-ad-primary` carries no Compose profile and an unqualified `up -d` from another lane would try to create it a second time.
 9. Each lane publishes JIM on its own host port, and every script that calls `http://localhost:5200` today uses the lane's URL instead. The scripts run on the host (the PowerShell module talks HTTP to JIM), so a host port is required; reaching JIM over the Docker network is not an option.
 
    | Lane | JIM (web and API) | Postgres | Keycloak |
@@ -74,9 +74,9 @@ The original version of this PRD proposed sharding by scenario (N stacks, one sc
    The Samba AD lane keeps today's ports, so a serial run and the first lane look identical. 5201 and 5210 are already taken by the devcontainer (JIM.Web over HTTPS, and `dotnet watch` browser refresh), hence the jump to 5300 and 5400. Postgres gets a port per lane so each lane's database can still be inspected with local tools.
 10. Each lane runs its own Keycloak, as part of its own JIM stack. No scenario uses SSO (they all authenticate with the infrastructure API key), but JIM.Web fetches the OIDC discovery document at startup and will not start without it, and `jim.web` waits for Keycloak to report healthy. A per-lane Keycloak keeps today's stack definition unchanged and adds no coupling between lanes. It costs up to 2.5 GB of memory per lane, which the host can afford.
 11. Only the Samba AD lane's web front end can be signed in to from a browser. The other lanes do not publish Keycloak, so their front ends are API-only during a parallel run. This is deliberate: pointing two JIM stacks at one browser-facing Keycloak address is exactly what produces `invalid_grant: Code not valid` sign-in failures. To debug another lane's front end, re-run that directory type on its own.
-12. Each lane has its own named volumes (JIM database, logs, keys, connector files, and the `jim-integration-*` set) and its own Docker network.
-13. Each lane has its own settings file in place of the shared `.env` rewrite, and its own infrastructure API key. No lane edits the repository's `.env` during a parallel run.
-14. Each lane writes its test data (HR CSVs and scenario-specific files currently written to fixed names under `test/test-data/` and fixed `/tmp` paths) to a lane-scoped location. The shared CSV cache stays shared and read-mostly, with cache writes made atomic (unique temp file, then rename) so two lanes cannot corrupt one entry.
+12. Each lane has its own named volumes and network. The suffixed lanes rename every volume the integration Compose file declares, not only their own directory's: `docker compose down -v` removes explicitly named volumes whichever project created them (verified), so a lane resetting against the base names would delete another lane's directory data.
+13. No lane edits the repository's `.env`, and no lane writes `.api-key`. Each lane's infrastructure API key is set in its own process environment, which Compose prefers over `.env` when interpolating `JIM_INFRASTRUCTURE_API_KEY`, and is passed to its scenarios as `-ApiKey`. The parent applies `-LogLevel` to `.env` once before the lanes start and restores it at the end.
+14. Each lane writes its generated test data to its own directory (`test/test-data/lanes/<DirectoryType>/`), so the CSV cache for that lane lives there too and no two processes ever write the same cache entry. Scenario scratch files with fixed names under the temp directory get the lane's name as a suffix.
 
 #### Scoped reset and clean-up
 
@@ -84,17 +84,17 @@ The original version of this PRD proposed sharding by scenario (N stacks, one sc
 16. The stale-monitor sweep (`Clear-StaleIntegrationMonitors`) reaps only the current lane's monitors and sidecars.
 17. Host-wide clean-up (the Step 7 image and build-cache prune) never runs inside a lane. In a parallel run it runs once, in the parent, after every lane has finished.
 18. The error watcher and the post-scenario error scan read only the current lane's JIM containers, and each lane's error sentinel file is its own.
-19. Docker stats and Docker events capture are filtered to the current lane's containers.
+19. Docker stats capture records the current lane's containers only. Docker events capture stays host-wide: its purpose is to catch out-of-band writers, which by definition are not part of the lane's own projects. Its file name carries the lane's directory type like every other result file.
 
 #### Prepare once, then fan out
 
-20. Before any lane starts, the parent runs a prepare phase that builds the JIM images once and makes sure every snapshot image and CSV cache entry the three lanes need exists. Lanes then start without building anything, so no two processes build or tag the same image at once.
+20. Before any lane starts, the parent runs a prepare phase that reaps stale monitors, applies `-LogLevel`, and builds the JIM images once; lanes then run with `-SkipBuild`. Directory base and snapshot images are still built on demand by the lane that uses them, which is safe because each directory's images belong to exactly one lane.
 21. If the prepare phase fails, no lane starts and the run exits non-zero.
 
 #### Directory-agnostic scenarios and shared databases
 
-22. Directory-agnostic scenarios (011, 015, 016) run in exactly one lane, as today. In a parallel run they go to the lane expected to finish first (Samba AD at the current templates), to keep the lanes balanced.
-23. Scenario 016's database containers (`sqlserver-hris-a`, `oracle-hris-b`) stay shared, outside every lane, and preserved across runs. Today they join the fixed `jim-network`; in a parallel run the lane that runs Scenario 016 connects them to its own network (`docker network connect`) before the scenario starts and disconnects them afterwards. No other lane starts, stops, reseeds or connects to them.
+22. Directory-agnostic scenarios (011, 015, 016) run in exactly one lane, as today: the first, which is the Samba AD lane.
+23. Scenario 016's database containers (`sqlserver-hris-a`, `oracle-hris-b`) stay shared, outside every lane, and preserved across runs. They join the unsuffixed `jim-network`, which is the Samba AD lane's network, and that is the lane that runs Scenario 016, so they need no special handling. No other lane starts, stops, reseeds or connects to them.
 24. Each lane's JIM Postgres keeps today's sizing rule: the runner picks the profile from that lane's template and passes it through `JIM_DB_*` process environment variables, so separate lane processes (requirement 6) size their own databases with no extra work. At Large the dev profile (256 MB shared buffers) peaked at 0.53 GB, so it needs no change for three lanes.
 25. `-FullMatrix` is allowed with `-Parallel`. It moves only the JIM database of the lane that runs Scenario 016 to the Scale500k profile (4 GB shared buffers), because that setting is also a per-process environment variable. The other lanes are unaffected.
 
@@ -104,8 +104,9 @@ The original version of this PRD proposed sharding by scenario (N stacks, one sc
 27. When a lane fails, the parent prints the failure and the last 50 lines of that lane's log. The other lanes run to completion, because their results remain valid and are the point of the run.
 28. Every result and log file a lane writes carries the lane's directory type in its name, so two lanes finishing in the same second cannot overwrite each other.
 29. After all lanes finish, the parent writes a combined summary (JSON plus console table) of each lane's outcome, duration and per-scenario results. Each lane still writes its own `full-regression-*.json` in today's shape, so existing tooling keeps working.
-30. On Ctrl+C the parent stops all lanes, and each lane cleans up only its own containers and volumes. If clean-up cannot finish, the parent prints the exact commands needed to finish it by hand.
-31. The run exits non-zero if any lane failed.
+30. On Ctrl+C the parent stops every lane process (found by the `JIM_INTEGRATION_LANE` value they inherited, since the `pwsh` shim does not forward signals), removes every lane's containers, volumes and network, and writes `results/parallel-lanes-<timestamp>-interrupted.json` recording each lane's state and log path.
+31. When every lane passes, the parent removes all three lane stacks, so the run leaves nothing behind. A failed lane is left running for diagnosis and the parent prints the command that removes it; the next run (serial or parallel) and `jim-reset` remove it too.
+32. The run exits non-zero if any lane failed.
 
 ### Non-Functional Requirements
 
@@ -136,7 +137,7 @@ Prepare phase complete (3m 12s)
 [389DS]     finished: 17 passed, 0 failed (1h 41m)
 
 Pre-Release: 2 of 3 lanes passed, 1h 44m total
-Summary: results/pre-release-2026-09-29_101500.json
+Summary: results/parallel-lanes-2026-09-29_101500.json
 ```
 
 ### Scenario 2: Serial Pre-Release is unchanged
@@ -161,7 +162,7 @@ Summary: results/pre-release-2026-09-29_101500.json
 
 **Given** a parallel run with all three lanes mid-scenario
 **When** the developer presses Ctrl+C
-**Then** all three lanes stop, each removes its own containers, volumes and network, the parent writes the summary for what finished, and Scenario 016's database containers are left in place.
+**Then** all three lanes stop, the parent removes each lane's containers, volumes and network, writes an interrupted-run record listing each lane's state and log, and leaves Scenario 016's database containers in place.
 
 ## Constraints
 
@@ -178,7 +179,7 @@ Summary: results/pre-release-2026-09-29_101500.json
 | Area | Impact |
 |------|--------|
 | Runner | `Run-IntegrationTests.ps1`: `-Parallel` switch and menu prompt, prepare phase, lane launch as child processes, prefixed status output, combined summary, lane-scoped reset, parent-only image prune |
-| Helpers | `utils/Test-Helpers.ps1`: lane-aware container lookup, JIM URL, error watcher, stats/events capture, stale-monitor sweep, connector-volume clearing, CSV cache atomic writes |
+| Helpers | New `utils/IntegrationLane.ps1` (lane names, ports, Compose arguments, data and temp paths) and `utils/Invoke-IntegrationLanes.ps1` (the parent); `utils/Test-Helpers.ps1`: lane-aware container lookup, error watcher, stats capture, connector-volume clearing |
 | Scenarios | Swap fixed container names, `http://localhost:5200` defaults and fixed test-data paths for lane-scoped ones; no logic changes |
 | Compose | Root `docker-compose.yml` / override and `test/integration/docker/docker-compose.integration-tests.yml`: project-name-scoped container names, volumes and network, and per-lane host ports for JIM, Postgres and Keycloak (requirement 9), with serial defaults unchanged |
 | Snapshot builders | `Build-SambaSnapshots.ps1`, `Build-OpenLDAPSnapshots.ps1`, `Build-DirsrvSnapshots.ps1`: called from the prepare phase only in a parallel run |

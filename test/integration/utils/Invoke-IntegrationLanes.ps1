@@ -88,8 +88,10 @@ function Remove-IntegrationLaneStack {
             $lane = Get-IntegrationLane
             $jimArgs = @(Get-JimComposeArgs)
             $integrationArgs = @(Get-IntegrationComposeArgs)
-            docker compose @jimArgs --profile with-db down -v --remove-orphans 2>&1 | Out-Null
+            # The integration systems first: they sit on the JIM stack's network (declared external in the
+            # integration Compose file), which the JIM stack's own `down` can only remove once they are gone.
             docker compose @integrationArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
+            docker compose @jimArgs --profile with-db down -v --remove-orphans 2>&1 | Out-Null
             foreach ($container in $lane.DirectoryContainers) {
                 # Only a container this lane's integration project created; a fixed name alone could
                 # belong to a serial run's stack.
@@ -101,6 +103,11 @@ function Remove-IntegrationLaneStack {
             $laneVolumes = @(docker volume ls --format '{{.Name}}' | Where-Object { Test-VolumeBelongsToIntegrationLane -VolumeName $_ })
             foreach ($volume in $laneVolumes + @($lane.DbVolume, $lane.ConnectorFilesVolume)) {
                 docker volume rm $volume 2>&1 | Out-Null
+            }
+            # A suffixed lane's network is its own. The unsuffixed jim-network is left alone: Scenario 016's
+            # shared database containers stay attached to it between runs.
+            if ($lane.Suffix) {
+                docker network rm $lane.Network 2>&1 | Out-Null
             }
         }
     }
@@ -401,6 +408,10 @@ function Invoke-IntegrationLanes {
                     $lane.Finished = $true
                     $lane.End = Get-Date
                     $lane.ExitCode = $lane.Process.ExitCode
+                    # A single-scenario lane prints no per-scenario result lines; its exit code is the result.
+                    if ($Scenario -ne 'All' -and ($lane.Passed + $lane.Failed) -eq 0) {
+                        if ($lane.ExitCode -eq 0) { $lane.Passed = 1 } else { $lane.Failed = 1 }
+                    }
                     $laneDuration = Format-IntegrationLaneDuration ($lane.End - $lane.Start)
                     if ($lane.ExitCode -eq 0) {
                         Write-IntegrationLaneStatus -Lane $lane -Message "finished: $($lane.Passed) passed, $($lane.Failed) failed ($laneDuration)" -Colour Green
