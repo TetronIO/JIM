@@ -6990,6 +6990,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Gets every import Synchronisation Rule flowing to a Metaverse Object Type, disabled rules included, with the
+    /// mappings, sources, generation settings and target attributes the Metaverse-Derived Attribute Flow graph reads
+    /// (#1750). AsNoTracking is load-bearing, not an optimisation: the save path calling this may be holding a tracked,
+    /// already-mutated mapping (the settings update loads it tracked), and the validation must compare against what
+    /// the database holds, not what the graph has been changed to.
+    /// </summary>
+    public async Task<List<SyncRule>> GetImportSyncRulesForMetaverseObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        return await Repository.Database.SyncRules
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Sources)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.TargetMetaverseAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Generation)
+            .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .OrderBy(sr => sr.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
     /// database, keyed by mapping id (#1199). AsNoTracking with a scalar projection is load-bearing, not an
     /// optimisation: the caller is mid-save on a tracked, already-mutated rule graph, and this must report what
