@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
@@ -748,5 +749,34 @@ public partial class SyncEngine
             AttributeDataType.Binary => attrChange.ByteValue != null ? $"(binary, {attrChange.ByteValue.Length} bytes)" : "(null)",
             _ => "(unknown type)"
         };
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<DeferredDeleteReconciliation> ReconcileDeferredExportsAgainstPersistedDeletes(
+        IReadOnlyCollection<PendingExport> deferredPendingExports,
+        IReadOnlyDictionary<Guid, PendingExport> persistedPendingExportsByCsoId)
+    {
+        var pairs = new List<DeferredDeleteReconciliation>();
+
+        foreach (var (csoId, persistedPe) in persistedPendingExportsByCsoId)
+        {
+            // Only a Delete that has not been attempted can be cancelled or relied on to supersede an Update.
+            if (persistedPe.ChangeType != PendingExportChangeType.Delete || persistedPe.Status != PendingExportStatus.Pending)
+                continue;
+
+            var deferredPe = deferredPendingExports.FirstOrDefault(pe =>
+                pe.ConnectedSystemObjectId == csoId &&
+                pe.Status == PendingExportStatus.Pending);
+
+            if (deferredPe == null)
+                continue;
+
+            if (deferredPe.ChangeType == PendingExportChangeType.Create)
+                pairs.Add(new DeferredDeleteReconciliation(deferredPe, persistedPe, DeferredDeleteReconciliationOutcome.CancelBoth));
+            else if (deferredPe.ChangeType == PendingExportChangeType.Update)
+                pairs.Add(new DeferredDeleteReconciliation(deferredPe, persistedPe, DeferredDeleteReconciliationOutcome.DropDeferredUpdate));
+        }
+
+        return pairs;
     }
 }

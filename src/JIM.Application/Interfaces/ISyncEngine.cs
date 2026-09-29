@@ -363,4 +363,16 @@ public interface ISyncEngine
     /// </summary>
     /// <param name="exportRule">The export Synchronisation Rule about to provision.</param>
     IReadOnlyList<ObjectMatchingRule> SelectExportMatchingRules(SyncRule exportRule);
+
+    /// <summary>
+    /// Flush-time reconciliation (#218): pairs each deferred Create or Update Pending Export with a Pending
+    /// Delete already persisted for the same Connected System Object. Create + Delete cancel each other; an
+    /// Update is dropped in favour of the Delete. Deferred exports that are not Pending, persisted exports that
+    /// are not Pending Deletes, and objects with no persisted export are left alone. Pure; mutates nothing.
+    /// </summary>
+    /// <param name="deferredPendingExports">The page's deferred (not yet persisted) Pending Exports.</param>
+    /// <param name="persistedPendingExportsByCsoId">Pending Exports already persisted, keyed by Connected System Object id.</param>
+    IReadOnlyList<DeferredDeleteReconciliation> ReconcileDeferredExportsAgainstPersistedDeletes(
+        IReadOnlyCollection<PendingExport> deferredPendingExports,
+        IReadOnlyDictionary<Guid, PendingExport> persistedPendingExportsByCsoId);
 }
