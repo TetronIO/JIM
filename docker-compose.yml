@@ -167,7 +167,8 @@ services:
     volumes:
       - jim-db-volume:/var/lib/postgresql
       - jim-logs-volume:/var/log/jim
-    env_file: .env
+    # No env_file: PostgreSQL reads none of JIM's settings, and its superuser can read the server's environment,
+    # so .env's secrets stay out of this container. Compose still reads .env for the ${...} values in this service.
     environment:
       # .env sets LANG=en_GB.UTF-8 for the JIM services, but the postgres image does not ship that
       # locale, so initdb would fail on first start with "invalid locale settings". C.UTF-8 is built
