@@ -138,6 +138,18 @@ public class ConnectedSystemObject
     public bool ScopeReviewPending { get; set; }
 
     /// <summary>
+    /// Set when a synchronisation of another Connected System (or, from #1750 Phase 4, a write outside
+    /// synchronisation) changed a Metaverse attribute that a Metaverse-Derived Attribute Flow on this object's
+    /// Connected System reads (#1750, "Position 2"). A derived flow runs only in its hosting system's own
+    /// synchronisation, and neither a delta nor a full synchronisation would otherwise revisit an object whose own
+    /// Connected System data did not change, so the derived value would stay stale indefinitely. The flag makes the
+    /// hosting system's next synchronisation (delta included) select and re-evaluate the object; it is cleared once
+    /// that processing completes without error. Deliberately separate from <see cref="ScopeReviewPending"/>, which
+    /// the Temporal Scope Reconciler rewrites for every object it evaluates.
+    /// </summary>
+    public bool DerivedInputChangePending { get; set; }
+
+    /// <summary>
     /// UTC watermark of when the Temporal Scope Reconciler last evaluated this object's relative-date scope.
     /// Bounds each reconciliation sweep to the objects whose temporal boundary could have crossed since they
     /// were last evaluated. Null until first reconciled.

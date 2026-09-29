@@ -10,6 +10,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -273,7 +274,9 @@ public class SyncRepository : ISyncRepository
     /// Inclusive, as this provider has always been, so tests that set a watermark equal to a timestamp still see it.
     /// </summary>
     private static bool IsModifiedSince(ConnectedSystemObject cso, DateTime modifiedSince) =>
-        cso.Created >= modifiedSince || (cso.LastUpdated.HasValue && cso.LastUpdated.Value >= modifiedSince);
+        cso.Created >= modifiedSince || (cso.LastUpdated.HasValue && cso.LastUpdated.Value >= modifiedSince) ||
+        // A Metaverse-Derived Attribute Flow mark (#1750) selects the object as the production query does.
+        cso.DerivedInputChangePending;
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
@@ -592,6 +595,7 @@ public class SyncRepository : ISyncRepository
         DateJoined = cso.DateJoined,
         ScopeReviewPending = cso.ScopeReviewPending,
         LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt,
+        DerivedInputChangePending = cso.DerivedInputChangePending,
         Changes = cso.Changes
     };
 
@@ -995,6 +999,44 @@ public class SyncRepository : ISyncRepository
         foreach (var stored in ids.Select(id => _csos.TryGetValue(id, out var cso) ? cso : null).Where(cso => cso != null))
             stored!.ScopeReviewPending = false;
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Number of times <see cref="MarkConnectedSystemObjectsDerivedInputChangePendingAsync"/> has been called, and the
+    /// marks each call carried. Lets tests prove marking is one bulk call per page flush and never one per object.
+    /// </summary>
+    public List<IReadOnlyCollection<DerivedInputChangeMark>> DerivedInputMarkCalls { get; } = [];
+
+    public Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks)
+    {
+        if (marks.Count == 0)
+            return Task.FromResult(0);
+
+        DerivedInputMarkCalls.Add(marks.ToList());
+        // Scans _csos rather than the _csosByMvo index, for the reason GetConnectedSystemObjectCountByMvoAsync gives:
+        // the index can lag a join made earlier in the same page.
+        var markSet = marks.ToHashSet();
+        var toMark = _csos.Values
+            .Where(cso => !cso.DerivedInputChangePending &&
+                          (cso.MetaverseObjectId ?? cso.MetaverseObject?.Id) is { } mvoId &&
+                          markSet.Contains(new DerivedInputChangeMark(mvoId, cso.ConnectedSystemId)))
+            .ToList();
+        foreach (var cso in toMark)
+            cso.DerivedInputChangePending = true;
+
+        return Task.FromResult(toMark.Count);
+    }
+
+    public Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        var cleared = 0;
+        foreach (var stored in ids.Select(id => _csos.TryGetValue(id, out var cso) ? cso : null).Where(cso => cso is { DerivedInputChangePending: true }))
+        {
+            stored!.DerivedInputChangePending = false;
+            cleared++;
+        }
+
+        return Task.FromResult(cleared);
     }
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(

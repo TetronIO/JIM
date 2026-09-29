@@ -196,6 +196,7 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             PartitionId = s.PartitionId,
             ScopeReviewPending = true,
             LastScopeEvaluatedAt = lastScopeEvaluatedAt,
+            DerivedInputChangePending = true,
             Created = DateTime.UtcNow,
             LastUpdated = lastUpdated
         };
@@ -234,6 +235,7 @@ public class CsoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedCso.PartitionId, Is.EqualTo(s.PartitionId));
             Assert.That(storedCso.ScopeReviewPending, Is.True);
             Assert.That(storedCso.LastScopeEvaluatedAt, Is.EqualTo(lastScopeEvaluatedAt));
+            Assert.That(storedCso.DerivedInputChangePending, Is.True, "#1750: the derived-input mark must round-trip through the bulk create writer");
             Assert.That(storedCso.LastUpdated, Is.EqualTo(lastUpdated));
             Assert.That(storedCso.ImportStateHash, Is.Null, "SPEC-1082 D6: a newly created CSO must never carry a pre-stamped content hash");
             Assert.That(storedCso.ImportStateFingerprint, Is.Null, "SPEC-1082 D6: a newly created CSO must never carry a pre-stamped fingerprint");

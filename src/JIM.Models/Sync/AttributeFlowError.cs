@@ -76,4 +76,11 @@ public class AttributeFlowError
     /// <c>cs["lastName"]</c>). Only populated for <see cref="AttributeFlowErrorKind.ExpressionMissingInput"/>.
     /// </summary>
     public IReadOnlyList<string> MissingInputs { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The Synchronisation Rule hosting the mapping, when the mapping is a Metaverse-Derived Attribute Flow (#1750):
+    /// a derived flow is evaluated after the object's ordinary flows, from whichever of the object's rules hosts it,
+    /// so the error names the rule an administrator has to open. Null for an ordinary mapping.
+    /// </summary>
+    public string? SyncRuleName { get; set; }
 }

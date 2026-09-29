@@ -927,6 +927,16 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_MetaverseObjects_ScopeReviewPending")
             .HasFilter("\"ScopeReviewPending\"");
 
+        // Partial index on the Metaverse-Derived Attribute Flow mark (#1750). Delta synchronisation selects a Connected
+        // System's objects that are new, changed, OR marked (WHERE "ConnectedSystemId" = @cs AND ... OR
+        // "DerivedInputChangePending"); marks are rare and cleared once processed, so keying the partial index on
+        // ConnectedSystemId keeps the marked arm of that OR an O(marked) index scan rather than O(all CSOs). Mirrors
+        // IX_MetaverseObjects_ScopeReviewPending above.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.ConnectedSystemId)
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending")
+            .HasFilter("\"DerivedInputChangePending\"");
+
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
         // which is used in GetConnectedSystemObjectsModifiedSinceAsync

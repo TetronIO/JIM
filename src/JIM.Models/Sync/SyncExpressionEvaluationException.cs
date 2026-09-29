@@ -27,6 +27,13 @@ public class SyncExpressionEvaluationException : Exception
     /// </summary>
     public string? TargetAttributeName { get; }
 
+    /// <summary>
+    /// The Synchronisation Rule hosting the failing mapping, set when the mapping is a Metaverse-Derived Attribute Flow
+    /// (#1750), so the error names the rule to open; null for an ordinary mapping. Administrator-authored: sanitise
+    /// before logging (CWE-117).
+    /// </summary>
+    public string? SyncRuleName { get; set; }
+
     public SyncExpressionEvaluationException(string? expression, string? targetAttributeName, Exception innerException)
         : base(BuildMessage(targetAttributeName, innerException), innerException)
     {

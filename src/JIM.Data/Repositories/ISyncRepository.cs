@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -51,8 +52,8 @@ public interface ISyncRepository
     Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
 
     /// <summary>
-    /// Gets the count of CSOs modified since the specified date.
-    /// Used by delta sync to calculate page count.
+    /// Gets the count of CSOs created or modified since the specified date, or marked
+    /// <c>DerivedInputChangePending</c> (#1750). Used by delta sync to calculate page count.
     /// </summary>
     Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince);
 
@@ -70,8 +71,9 @@ public interface ISyncRepository
     Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
-    /// Loads a page of CSOs modified since the specified date, with full attribute values.
-    /// Used by delta sync to process only recently changed objects.
+    /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
+    /// (#1750: a Metaverse attribute a derived flow on this system reads changed elsewhere), with full attribute
+    /// values. Used by delta sync to process only recently changed objects.
     /// </summary>
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
     /// for paging metadata.</param>
@@ -328,6 +330,26 @@ public interface ISyncRepository
     /// (issue #892). Called at page flush. No-op when <paramref name="ids"/> is empty.
     /// </summary>
     Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
+    /// Sets <c>DerivedInputChangePending</c> (#1750, "Position 2") on the Connected System Objects joined to each
+    /// mark's Metaverse Object in the mark's Connected System: those systems' import Synchronisation Rules host a
+    /// Metaverse-Derived Attribute Flow reading a Metaverse attribute that changed, so their next synchronisation,
+    /// delta included, must re-evaluate the object. One bulk statement for the whole batch, called at page flush;
+    /// duplicate marks are harmless and an unjoined system has nothing to mark. Tracked instances of the marked rows
+    /// are brought into line so a later save cannot write the stale value back. No-op when
+    /// <paramref name="marks"/> is empty.
+    /// </summary>
+    /// <returns>The number of objects newly marked (already-marked objects are not counted).</returns>
+    Task<int> MarkConnectedSystemObjectsDerivedInputChangePendingAsync(IReadOnlyCollection<DerivedInputChangeMark> marks);
+
+    /// <summary>
+    /// Clears <c>DerivedInputChangePending</c> (#1750) on Connected System Objects whose synchronisation processing
+    /// completed without error. One bulk statement, called at page flush; tracked instances are brought into line.
+    /// No-op when <paramref name="ids"/> is empty.
+    /// </summary>
+    /// <returns>The number of objects whose mark was cleared.</returns>
+    Task<int> ClearConnectedSystemObjectDerivedInputChangePendingAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
     /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).

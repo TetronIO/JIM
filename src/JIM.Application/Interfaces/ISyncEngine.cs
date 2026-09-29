@@ -87,8 +87,12 @@ public interface ISyncEngine
     /// <param name="objectTypes">CSO object types for attribute lookup.</param>
     /// <param name="expressionEvaluator">Expression evaluator for the derived expressions.</param>
     /// <param name="priorityContext">The run's attribute priority context, carrying the derived flow graph.</param>
-    /// <returns>The errors raised, empty if none.</returns>
+    /// <returns>The errors raised, empty if none; each names its hosting rule in <see cref="AttributeFlowError.SyncRuleName"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="priorityContext"/> carries no derived flow graph.</exception>
+    /// <exception cref="SyncExpressionEvaluationException">A derived expression threw; fails the object as for an
+    /// ordinary flow, with <see cref="SyncExpressionEvaluationException.SyncRuleName"/> naming the hosting rule.</exception>
+    /// <exception cref="SyncExpressionMissingInputException">A derived mapping's Missing Input Behaviour is to fail the
+    /// object; <see cref="SyncExpressionMissingInputException.SyncRuleName"/> names the hosting rule.</exception>
     List<AttributeFlowError> EvaluateDerivedLevel(
         ConnectedSystemObject cso,
         int level,
