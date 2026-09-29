@@ -34,6 +34,20 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Builds the derived-input mark collector (#1750, plan Phase 4, FR 9) for a server-side writer outside
+    /// synchronisation, from the Synchronisation Rules that will exist once the write completes. A rule being deleted,
+    /// or a system being deprovisioned, is left out of <paramref name="survivingSyncRules"/> by the caller: its derived
+    /// mappings are going away with it, so they must neither mark its own system nor carry transitivity onwards. Null
+    /// graph (the feature off) makes the collector inert.
+    /// </summary>
+    /// <exception cref="DerivedFlowCycleException">The surviving enabled derived flows contain a cycle (decision 11).</exception>
+    private async Task<DerivedInputMarkBatch> CreateDerivedInputMarkBatchAsync(IEnumerable<SyncRule> survivingSyncRules, string writerName)
+    {
+        var derivedFlowGraph = await DerivedFlowGraphFactory.CreateAsync(Application.FeatureFlags, survivingSyncRules, []);
+        return new DerivedInputMarkBatch(derivedFlowGraph, writerName);
+    }
+
+    /// <summary>
     /// The single-mapping save paths' entry point (create, update, settings update): gates and validates
     /// <paramref name="mapping"/> as a proposal replacing the persisted mapping with the same id on its rule, and
     /// stamps any warnings onto <see cref="SyncRuleMapping.SaveWarnings"/>.
