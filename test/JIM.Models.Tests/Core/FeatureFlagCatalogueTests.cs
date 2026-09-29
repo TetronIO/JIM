@@ -72,4 +72,19 @@ public class FeatureFlagCatalogueTests
             Assert.That(FeatureFlagCatalogue.All, Does.Contain(definition));
         }
     }
+
+    [Test]
+    public void MetaverseDerivedAttributeFlows_MatchesTheAgreedDefinition()
+    {
+        var definition = FeatureFlagCatalogue.MetaverseDerivedAttributeFlows;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(definition.Key, Is.EqualTo("Features.MetaverseDerivedAttributeFlows"));
+            Assert.That(definition.DisplayName, Is.EqualTo("Metaverse-Derived Attribute Flows"));
+            Assert.That(definition.Tier, Is.EqualTo(FeatureFlagTier.InDevelopment));
+            Assert.That(definition.TrackingIssueNumber, Is.EqualTo(1878));
+            Assert.That(FeatureFlagCatalogue.All, Does.Contain(definition));
+        }
+    }
 }
