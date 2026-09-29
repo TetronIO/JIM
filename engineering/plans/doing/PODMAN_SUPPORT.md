@@ -1,6 +1,6 @@
 # Podman Support - Implementation Plan
 
-- **Status:** Doing (Phases 1, 2 and 3 complete)
+- **Status:** Doing (Phases 1, 2 and 3 complete; Phase 4's check in place, awaiting D6 and the RHEL acceptance run)
 - **Created:** 2026-09-25
 - **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
 - **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/doing/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
@@ -346,19 +346,36 @@ Delivered as one PR: the files, the installer, the release and the documentation
 
 ### Phase 4: Proof in CI
 
-1. **New `deployment-boot` job** in `.github/workflows/ci.yml`:
-   - Runs on GitHub's Ubuntu 24.04 runners for every event; the self-hosted runners are not assumed to have Podman.
-   - Builds the three images once and loads them into both runtimes.
-   - Uses a test-only Keycloak with the development realm (`test/ci/deployment/`) as the identity provider.
-2. **Docker leg:** boots the production compose files with a generated certificate and waits for readiness over HTTPS.
-3. **Podman legs, rootful and rootless:**
-   - The rootless leg creates a dedicated account with lingering, as `setup.sh` does.
-   - Render the pod files with the CI tag, play the secrets, install the Quadlet units, start `jim.service`, and wait for readiness over HTTPS.
-   - Run `podman healthcheck run` on each container.
-   - Stop and start the unit, then confirm a marker written before the restart is still there.
-4. **Parity:** `test/ci/deployment/Compare-RuntimeParity.ps1` (PowerShell, with Pester tests for its comparison logic) runs the D7 comparison and fails with a named difference.
-5. **Required check:** made required per D6.
-6. **Manual acceptance:** the RHEL virtual machine run from D5, covering `setup.sh` rootless and rootful and the D12 playbook, recorded in the PR that closes #1808.
+1. **`deployment-boot` job** in `.github/workflows/ci.yml` ✅, with one change to the plan: each leg installs JIM from a release bundle built from the commit, with the bundle's own `setup.sh`, offline, rather than rendering the files and playing the secrets by hand. That covers every step planned here, and also the installer and the bundle, which nothing else tested; and it is what a customer runs.
+   - Runs on GitHub's Ubuntu 24.04 runners for every event except the nightly schedule; the self-hosted runners are not assumed to have Podman.
+   - Builds the three images with `scan-images`' build cache (read-only), then bundles them. `Build-ReleaseBundle.ps1` gains `-SkipImageBuild` and `-SkipArchive` for this, with Pester tests.
+   - Switches Docker to the containerd image store, which the bundle's PostgreSQL digest guard needs (#1854), and frees disk for three installations.
+   - The test-only Keycloak (`Start-TestIdentityProvider.ps1`) runs the image `docker-compose.override.yml` names, with the development realm, on the host's network at the host's address, so one identity provider serves all three legs and the check has nothing of its own to keep up to date.
+2. **Docker leg** ✅ and 3. **Podman legs, rootful and rootless** ✅, all driven by `test/ci/deployment/Invoke-DeploymentBoot.ps1`:
+   - The installer creates the rootless leg's account, with lingering, as it does for a customer.
+   - Each leg waits for readiness over HTTPS, trusting only the certificate authority the installer created, then for every container's own health check (`podman healthcheck run` on Podman).
+   - It writes a marker to the database and to the File Connector volume, stops and starts JIM (Compose down and up; `systemctl stop` and `start` of the units), and checks that JIM came back in new containers with both markers.
+   - It saves the containers' inspect output, and on failure their logs, as the job's artifact.
+4. **Parity** ✅ `test/ci/deployment/Compare-RuntimeParity.ps1`, with Pester tests for its comparison logic, compares the D7 properties per service. The intended differences are listed in the script with their reasons:
+   - variables Podman sets in every container;
+   - Compose's own settings, which `env_file` also passes into the containers;
+   - the certificate, mounted as two files on Docker and as a secret folder on Podman;
+   - the database's default capabilities, where Docker's set is larger;
+   - the whole `.env` in Docker's database container (below).
+
+   **Found on its first run:**
+   - `.env.example` set `JIM_SSO_VALID_ISSUERS` to the development Keycloak's issuer, so every Docker installation trusted that issuer too. Fixed in this phase: the value moved into `docker-compose.override.yml`.
+   - Docker Compose's `env_file` gives the database container every JIM setting and secret, which it never needed ([#1862](https://github.com/TetronIO/JIM/issues/1862)). It is listed as intended until that is fixed.
+
+   **Found on GitHub's Ubuntu runner (Podman 4.9), and fixed in this phase:**
+   - **Rootful JIM on Ubuntu 24.04 had no network at all.** Ubuntu gives `crun` and `podman` AppArmor profiles of their own; a container that sets no-new-privileges cannot leave them for `containers-default`, so AppArmor stacks the two (`containers-default//&crun`), and the stack denies every socket (`failed af match`). JIM reached neither PostgreSQL nor its identity provider, while its health checks stayed green: the worker was deliberately waiting. Rootless Podman, Docker and RHEL are unaffected. `setup.sh` now offers, as it does for the firewall, to add a network rule to each profile's local override in `/etc/apparmor.d/local/`; the container keeps its own profile. Removing the two profiles instead was measured and rejected: it breaks rootless Podman for every account on the host.
+   - **`setup.sh` ran the rootless account's Podman with the caller's environment,** and GitHub's sudo keeps `XDG_CONFIG_HOME`, so Podman read the runner's configuration folder and failed. The account's commands now get a clean environment, keeping proxy settings.
+
+   **Found on GitHub's Ubuntu runner, and detected by the installer:** the runner image sets `XDG_CONFIG_HOME` and `XDG_RUNTIME_DIR` for every account in `/etc/environment`, pointing at the runner's own folders. The rootless account's systemd user manager inherits them, so the Quadlet generator looked for JIM's units in the wrong folder and generated none, and Podman used a runtime folder the account does not own. A customer host configured the same way failed the same way, silently. `setup.sh` now reads the account's manager environment before installing anything and stops, naming each setting, where such settings usually live and how to restart the manager, when `XDG_CONFIG_HOME`, `XDG_DATA_HOME` or `XDG_RUNTIME_DIR` is not the account's own (Pester tests in `test/ci/deployment/Tests/SetupScript.Tests.ps1`, which source the installer). It does not override them: they are the host's configuration, and rootful is unaffected. The job removes those lines before the rootless leg.
+5. **Required check:** pending. Informational until it has passed ten consecutive runs (D6); then an administrator adds it to the `main` ruleset.
+6. **Manual acceptance:** pending. The RHEL virtual machine run from D5, covering `setup.sh` rootless and rootful and the D12 playbook, recorded in the PR that closes #1808.
+
+**Verified before the PR:** the Docker leg in the cloud sandbox (Docker 29, containerd image store), both Podman legs on the CentOS Stream 9 test host (Podman 5.8, systemd), and the parity comparison across all three. The Ubuntu runner (Podman 4.9) is proven by the job itself.
 
 ## Success Criteria
 
