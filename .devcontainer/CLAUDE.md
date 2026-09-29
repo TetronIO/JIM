@@ -48,6 +48,7 @@
 **Reset:**
 - `jim-reset` - Full reset (containers, images, volumes). Keeps Scenario 016's database servers (`sqlserver-hris-a`, `oracle-hris-b`, their volumes and images), exactly as the integration runner's own reset does: Oracle's first boot takes tens of minutes and Scenario 016 recreates its schema every run, so a kept one is never stale
 - `jim-reset-all` - `jim-reset`, and also removes Scenario 016's database servers. Only when you genuinely need them rebuilt; the next Scenario 016 run pays the full Oracle download and first-boot cost
+- Both also remove the OpenLDAP and 389 Directory Server lanes a parallel Pre-Release (`Run-IntegrationTests.ps1 -Parallel`) can leave running after a failure: containers in the `jim-openldap`, `jim-integration-openldap`, `jim-dirsrv` and `jim-integration-dirsrv` Compose projects, their `-openldap`/`-dirsrv` volumes and networks. The Samba AD lane uses the normal names, so the normal reset covers it. The next integration run removes leftover lanes too
 
 **Documentation:**
 - `jim-docs` - Preview docs site at http://localhost:8000 (live-reloading)

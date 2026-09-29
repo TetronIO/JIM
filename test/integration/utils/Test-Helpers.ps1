@@ -13,6 +13,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Lane-aware names, ports and Compose arguments (#636). A serial run resolves every one of them to the
+# names the harness has always used.
+. (Join-Path $PSScriptRoot 'IntegrationLane.ps1')
+
 function Assert-Condition {
     <#
     .SYNOPSIS
@@ -1552,15 +1556,16 @@ function Clear-ConnectorFilesVolume {
     #>
     param()
 
-    $workerImage = (docker inspect jim.worker --format '{{.Config.Image}}' 2>$null)
+    $lane = Get-IntegrationLane
+    $workerImage = (docker inspect $lane.WorkerContainer --format '{{.Config.Image}}' 2>$null)
     if (-not $workerImage) {
         # Fall back to the compose-project image name if the container isn't up.
         $workerImage = 'jim-worker'
     }
 
-    Write-Host "  Emptying jim-connector-files-volume contents (via throwaway $workerImage container)..." -ForegroundColor Gray
+    Write-Host "  Emptying $($lane.ConnectorFilesVolume) contents (via throwaway $workerImage container)..." -ForegroundColor Gray
     docker run --rm --user 0 --entrypoint sh `
-        -v jim-connector-files-volume:/vol $workerImage `
+        -v "$($lane.ConnectorFilesVolume):/vol" $workerImage `
         -c 'rm -rf /vol/* /vol/.[!.]* 2>/dev/null; true' 2>&1 | Out-Null
 }
 
@@ -1725,7 +1730,7 @@ function Write-FilesToConnectorVolume {
     $fullScript = $headerScript.ToString() + $mkdirScript.ToString() + $shellScript.ToString()
 
     $mountSpec = "${resolvedSourceDir}:/src:ro"
-    $volumeMount = 'jim-connector-files-volume:/connector-files'
+    $volumeMount = "$((Get-IntegrationLane).ConnectorFilesVolume):/connector-files"
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = 'docker'
@@ -1949,9 +1954,10 @@ function Assert-ConnectorVolumeCsvParity {
     $containerPaths = ($Pairs | ForEach-Object { "'$($_.ContainerPath)'" }) -join ' '
     $statCmd = "for f in $containerPaths; do printf '%s %s\n' `"`$f`" `"`$(stat -c '%s' `"`$f`" 2>/dev/null || echo MISSING)`"; done"
 
-    $statOutput = & docker exec jim.worker sh -c $statCmd 2>&1
+    $workerContainer = (Get-IntegrationLane).WorkerContainer
+    $statOutput = & docker exec $workerContainer sh -c $statCmd 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "Assert-ConnectorVolumeCsvParity: docker exec jim.worker failed: $statOutput"
+        throw "Assert-ConnectorVolumeCsvParity: docker exec $workerContainer failed: $statOutput"
     }
 
     $actualByPath = @{}
@@ -1979,7 +1985,7 @@ function Assert-ConnectorVolumeCsvParity {
     if ($mismatches.Count -eq 0) { return }
 
     # Divergence detected — grab the .last-seed breadcrumb and fail loudly.
-    $lastSeed = & docker exec jim.worker sh -c 'cat /connector-files/.last-seed 2>/dev/null || echo "(.last-seed not present)"' 2>&1
+    $lastSeed = & docker exec $workerContainer sh -c 'cat /connector-files/.last-seed 2>/dev/null || echo "(.last-seed not present)"' 2>&1
     $details = $mismatches -join "`n"
     throw @"
 Connector volume CSV parity check FAILED. One or more files have diverged from the
@@ -2616,7 +2622,7 @@ WHERE "ActivityId" = '$safeActivityId'
   AND "ErrorType" IS NULL;
 "@
 
-    $rpeiNullCount = docker compose exec -T jim.database psql -t -A -U jim -d jim -c $rpeiQuery 2>&1
+    $rpeiNullCount = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $rpeiQuery 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Assert-ExportRpeisHaveCsoLink: psql query failed for '$Name' (ActivityId: $ActivityId). Output: $rpeiNullCount"
     }
@@ -2641,7 +2647,7 @@ WHERE r."ActivityId" = '$safeActivityId'
   AND c."ConnectedSystemObjectId" IS NULL;
 "@
 
-    $changeNullCount = docker compose exec -T jim.database psql -t -A -U jim -d jim -c $changeQuery 2>&1
+    $changeNullCount = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -U jim -d jim -c $changeQuery 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Assert-ExportRpeisHaveCsoLink: psql query failed (change rows) for '$Name' (ActivityId: $ActivityId). Output: $changeNullCount"
     }
@@ -3671,7 +3677,7 @@ FROM "MetaverseObjects"
 WHERE "Id" = '$safeMvoId';
 "@
 
-    $row = docker compose exec -T jim.database psql -t -A -F '|' -U jim -d jim -c $query 2>&1
+    $row = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -F '|' -U jim -d jim -c $query 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Get-MvoDeletionMarkers: psql query failed for MVO $MvoId. Output: $row"
     }
@@ -3770,7 +3776,7 @@ function Start-JimErrorWatcher {
         [string]$AllowPattern = '',
 
         [Parameter(Mandatory=$false)]
-        [string[]]$Containers = @('jim.web', 'jim.worker', 'jim.scheduler')
+        [string[]]$Containers = (Get-JimServiceContainers)
     )
 
     # Ensure sentinel file exists and is empty
@@ -4074,7 +4080,7 @@ function Start-ConnectorVolumeAuditor {
         # inotifywait -m never exits on its own, and --rm only removes the container
         # after exit, so a hard-killed runner otherwise leaks the sidecar forever.
         '--label', 'jim-integration-monitor=volume-audit',
-        '-v', 'jim-connector-files-volume:/watch:ro',
+        '-v', "$((Get-IntegrationLane).ConnectorFilesVolume):/watch:ro",
         '-v', "${LogPath}:/audit.log",
         'alpine:3.20',
         'sh', '-c', $monitorCmd
@@ -4344,7 +4350,7 @@ ORDER BY cs."Name", pe."Id";
 
     $violations = @()
     foreach ($invariant in $invariants) {
-        $rows = docker compose exec -T jim.database psql -t -A -F '|' -U jim -d jim -c $invariant.Query 2>&1
+        $rows = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -t -A -F '|' -U jim -d jim -c $invariant.Query 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "Assert-SyncStateInvariants: psql query failed for invariant '$($invariant.Name)'. Output: $rows"
         }
@@ -4397,7 +4403,7 @@ function Assert-NoWorkerErrors {
         [string]$AllowPattern = '',
 
         [Parameter(Mandatory=$false)]
-        [string[]]$Containers = @('jim.web', 'jim.worker', 'jim.scheduler')
+        [string[]]$Containers = (Get-JimServiceContainers)
     )
 
     $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -4428,7 +4434,7 @@ function Assert-NoWorkerErrors {
         throw "JIM logged $($allErrors.Count) Error/Fatal line(s) during the scenario. See output above."
     }
 
-    Write-Host "✓ PASSED: No Error/Fatal lines in jim.web, jim.worker, or jim.scheduler logs" -ForegroundColor Green
+    Write-Host "✓ PASSED: No Error/Fatal lines in $($Containers -join ', ') logs" -ForegroundColor Green
 }
 
 # Functions are automatically available when dot-sourced
