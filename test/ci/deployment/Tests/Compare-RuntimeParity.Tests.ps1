@@ -187,12 +187,22 @@ Describe 'Compare-RuntimeParity' {
         foreach ($name in 'web', 'worker', 'scheduler') {
             $docker[$name].Env += 'DOCKER_REGISTRY', 'JIM_VERSION', 'JIM_WEB_PORT'
         }
-        $docker.database.Env += 'JIM_SSO_SECRET', 'DOCKER_REGISTRY'
+        # Compose puts the slow query threshold into the database's command itself; Podman's command reads it.
+        $docker.database.Env = @($docker.database.Env | Where-Object { $_ -ne 'JIM_DB_LOG_MIN_DURATION' })
         # The certificate: two files on Docker, one secret folder on Podman.
         $docker.web.Mounts += '/run/jim-tls/tls.crt', '/run/jim-tls/tls.key'
         $podman.web.Mounts += '/run/jim-tls'
 
         Invoke-Comparison -Docker $docker -Podman @{ 'podman-rootful' = $podman } | Should -BeNullOrEmpty
+    }
+
+    It 'fails when the database container is given JIM''s own settings' {
+        # PostgreSQL reads none of them, and its superuser can read the server's environment (#1862).
+        $docker = New-Services
+        $docker.database.Env += 'JIM_SSO_SECRET'
+
+        Invoke-Comparison -Docker $docker -Podman @{ 'podman-rootful' = (New-Services) } |
+            Should -BeLike '*database*JIM_SSO_SECRET*Docker only*'
     }
 
     It 'takes Docker''s default capabilities as what a container keeps when it drops none' {
