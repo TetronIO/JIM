@@ -1085,12 +1085,11 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     max-width: none;
 }
 
-/* The mark between the system and its rule: quieter than either, and never the part that gives way. */
+/* The mark between the system and its rule: the breadcrumb separator's own treatment, never the part that gives way. */
 .jim-source-dot-sep {
     flex: none;
-    color: var(--mud-palette-text-secondary);
-    font-size: 1.1em;
-    line-height: 1;
+    color: var(--mud-palette-text-primary);
+    opacity: .38;
 }
 
 .jim-source-dot-rule {

@@ -47,9 +47,9 @@ public class SourceDotTests : JimComponentTestContext
     }
 
     [Test]
-    public void SourceDot_ShowRule_SeparatesTheSystemFromTheRuleWithAChevron()
+    public void SourceDot_ShowRule_SeparatesTheSystemFromTheRuleWithTheBreadcrumbSlash()
     {
-        // The system and its rule read as one path (System › Rule), so they need a mark between them rather than a
+        // The system and its rule read as one path (System / Rule), marked the way the portal's breadcrumbs mark a path, so they need a mark between them rather than a
         // gap alone, which reads as one long name.
         var cut = Render<SourceDot>(p => p.Add(c => c.Group, Group(Hr)).Add(c => c.ShowRule, true));
 
@@ -57,7 +57,7 @@ public class SourceDotTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(parts, Is.EqualTo(new[] { "jim-source-dot", "jim-source-dot-name", "jim-source-dot-sep", "jim-source-dot-rule" }));
-            Assert.That(cut.Find(".jim-source-dot-sep").TextContent, Is.EqualTo("›"));
+            Assert.That(cut.Find(".jim-source-dot-sep").TextContent, Is.EqualTo("/"));
             Assert.That(cut.Find(".jim-source-dot-sep").GetAttribute("aria-hidden"), Is.EqualTo("true"));
         }
     }
