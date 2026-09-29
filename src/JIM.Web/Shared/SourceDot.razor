@@ -13,6 +13,8 @@
     <span class="jim-source-dot-name">@Group.Label</span>
     @if (ShowRule && RuleText != null)
     {
+        @* The system and its rule are one path (System › Rule); a gap alone reads them as one long name. *@
+        <span class="jim-source-dot-sep" aria-hidden="true">›</span>
         <span class="jim-source-dot-rule">@RuleText</span>
     }
 </span>

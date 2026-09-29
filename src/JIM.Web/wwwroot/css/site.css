@@ -1085,6 +1085,14 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     max-width: none;
 }
 
+/* The mark between the system and its rule: quieter than either, and never the part that gives way. */
+.jim-source-dot-sep {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+    font-size: 1.1em;
+    line-height: 1;
+}
+
 .jim-source-dot-rule {
     color: var(--mud-palette-text-secondary);
     font-size: 0.875rem;
@@ -2858,8 +2866,32 @@ html[lang] .jim-attribute-table td.jim-attr-value {
     background: color-mix(in srgb, var(--mud-palette-text-primary) 3%, transparent);
 }
 
+/* A group header's one line: label (a source's dot and path, or a category's icon and name), a separator, then the
+   count, all centred on one axis so the icon sits level with the text beside it. */
+.jim-inspect-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.jim-inspect-group-icon {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-inspect-group-name {
+    font-weight: 500;
+}
+
+.jim-inspect-group-sep {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+    font-weight: 700;
+}
+
 .jim-inspect-group-count {
-    margin-left: 10px;
+    flex: none;
     font-size: 0.875rem;
     color: var(--mud-palette-text-secondary);
 }

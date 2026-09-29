@@ -67,19 +67,24 @@
                 <GroupHeaderTemplate>
                     <MudTd colspan="@ColumnCount">
                         @{ var key = (string)context.Key!; var count = context.Items.Count(); }
-                        @if (GroupBy == "source" && _sourceGroupsByKey.TryGetValue(key, out var sourceGroup))
-                        {
-                            @* Group by Source: the header names the source exactly as the Source column it replaces
-                               does (the bar's swatch and legend label), with the rule beside it; the inspector,
-                               which any row beneath it opens, carries the links. *@
-                            <SourceDot Group="@sourceGroup" ShowRule="true" />
-                        }
-                        else
-                        {
-                            <MudIcon Icon="@AttributeCategories.GetIcon(key)" Size="Size.Small" Class="me-2" />
-                            <span>@key</span>
-                        }
-                        <span class="jim-inspect-group-count">@count attribute@(count == 1 ? "" : "s")</span>
+                        @* One centred line: the label, a separator, then the count, so the icon sits level with its
+                           name and the count never reads as part of it. *@
+                        <div class="jim-inspect-group-heading">
+                            @if (GroupBy == "source" && _sourceGroupsByKey.TryGetValue(key, out var sourceGroup))
+                            {
+                                @* Group by Source: the header names the source exactly as the Source column it
+                                   replaces does (the bar's swatch and legend label), with the rule beside it; the
+                                   inspector, which any row beneath it opens, carries the links. *@
+                                <SourceDot Group="@sourceGroup" ShowRule="true" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@AttributeCategories.GetIcon(key)" Size="Size.Small" Class="jim-inspect-group-icon" />
+                                <span class="jim-inspect-group-name">@key</span>
+                            }
+                            <span class="jim-inspect-group-sep" aria-hidden="true">·</span>
+                            <span class="jim-inspect-group-count">@count attribute@(count == 1 ? "" : "s")</span>
+                        </div>
                     </MudTd>
                 </GroupHeaderTemplate>
                 <RowTemplate>

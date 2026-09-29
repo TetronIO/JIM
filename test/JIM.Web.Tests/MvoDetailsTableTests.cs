@@ -298,6 +298,31 @@ public class MvoDetailsTableTests : JimComponentTestContext
         }
     }
 
+    [TestCase("source")]
+    [TestCase("category")]
+    public void DetailsTable_GroupHeaderRow_LaysOutItsLabelThenASeparatorThenTheCountOnOneCentredLine(string groupBy)
+    {
+        // One flex line keeps the category icon level with its name, and the separator keeps the count from reading
+        // as part of the name ("Identity 4 attributes").
+        var mvo = BuildObject(TextValue(1, Constants.BuiltInAttributes.DisplayName, "Amelia Sullivan"), TextValue(2, "Job Title", "Engineer"));
+        var provenance = BuildProvenance((1, "Display Name", HrOrigin), (2, "Job Title", HrOrigin));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.GroupBy, groupBy));
+
+        var heading = cut.Find("tr.jim-inspect-group-header .jim-inspect-group-heading");
+        var lastParts = heading.Children.TakeLast(2).Select(c => c.ClassName).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lastParts, Is.EqualTo(new[] { "jim-inspect-group-sep", "jim-inspect-group-count" }));
+            Assert.That(heading.QuerySelector(".jim-inspect-group-sep")!.TextContent, Is.EqualTo("·"));
+            Assert.That(heading.QuerySelector(".jim-inspect-group-count")!.TextContent, Does.EndWith("attribute" + (groupBy == "source" ? "s" : "")));
+        }
+    }
+
     [TestCase("source", 7)]
     [TestCase("source", null)]
     [TestCase("category", 7)]
