@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Synchronisation no longer reopens Failed or Parked Pending Exports, or counts errors against exports awaiting confirmation; this could silently strand an export outside both the export queue and the Failed list.
 - 🐛 A Failed Pending Export now clears automatically once a confirming import shows every change it asserts has taken effect, without waiting for a manual retry.
 - 🐛 A Pending Export interrupted by a worker crash or restart mid-export is recovered when the worker next starts, instead of being stranded in Executing forever.
+- 🐛 A cancelled import no longer records the connector's new watermark when it staged nothing, so the next Delta Import reads from the watermark the cancelled run started with instead of silently skipping the changes it never imported. (#1853)
 
 ### Security
 
