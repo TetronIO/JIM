@@ -76,7 +76,7 @@ param(
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -168,7 +168,7 @@ function Get-TestUser {
 }
 
 function Write-HRCsv {
-    $csvPath = Join-Path ([IO.Path]::GetTempPath()) "scenario-013-hr-users.csv"
+    $csvPath = Get-IntegrationTempPath -Name "scenario-013-hr-users.csv"
     $users | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
     Copy-CsvToConnectorFiles -SourcePath $csvPath -DestinationName "scenario-013-hr-users.csv"
     Remove-Item $csvPath -Force -ErrorAction SilentlyContinue
@@ -179,7 +179,7 @@ function Write-TargetHeaderCsv {
     # exported rows to it. Regenerated fresh so no state leaks between runs. The manager column
     # receives the exported Manager reference (the referenced Metaverse Object's ID, via the
     # mv["Manager"] expression mapping), proving the reconciler-driven reference export flow (#892).
-    $csvPath = Join-Path ([IO.Path]::GetTempPath()) "scenario-013-target.csv"
+    $csvPath = Get-IntegrationTempPath -Name "scenario-013-target.csv"
     Set-Content -Path $csvPath -Value "samAccountName,displayName,email,employeeId,manager" -Encoding UTF8
     Copy-CsvToConnectorFiles -SourcePath $csvPath -DestinationName "scenario-013-target.csv"
     Remove-Item $csvPath -Force -ErrorAction SilentlyContinue
@@ -385,7 +385,7 @@ try {
             $controlMvoId = [guid]$controlMvos[0].id
             $joinerMvoId = [guid]$joinerMvos[0].id
             $seedSql = "INSERT INTO ""MetaverseObjectAttributeValues"" (""Id"", ""AttributeId"", ""MetaverseObjectId"", ""ReferenceValueId"", ""NullValue"") SELECT gen_random_uuid(), ma.""Id"", '$joinerMvoId', '$controlMvoId', false FROM ""MetaverseAttributes"" ma WHERE ma.""Name"" = 'Manager';"
-            $seedResult = docker compose exec -T jim.database psql -U jim -d jim -c $seedSql 2>&1
+            $seedResult = docker exec -i (Get-IntegrationLane).DatabaseContainer psql -U jim -d jim -c $seedSql 2>&1
             if ($LASTEXITCODE -ne 0 -or "$seedResult" -notmatch "INSERT 0 1") {
                 throw "T2 failed to seed the joiner's Manager reference: $seedResult"
             }
@@ -414,7 +414,7 @@ try {
             # populated manager cell proves the expression context fell back to the FK scalar
             # rather than silently evaluating the reference to null.
             $joinerUser = Get-TestUser -EmployeeId $empProvision
-            $targetCsvRaw = docker compose exec -T jim.worker cat /connector-files/test-data/scenario-013-target.csv 2>&1
+            $targetCsvRaw = docker exec (Get-IntegrationLane).WorkerContainer cat /connector-files/test-data/scenario-013-target.csv 2>&1
             if ($LASTEXITCODE -ne 0) { throw "T2 could not read the exported target CSV: $targetCsvRaw" }
             $joinerRows = @(@($targetCsvRaw | ConvertFrom-Csv) | Where-Object { $_.samAccountName -eq $joinerUser.samAccountName })
             if ($joinerRows.Count -ne 1) {

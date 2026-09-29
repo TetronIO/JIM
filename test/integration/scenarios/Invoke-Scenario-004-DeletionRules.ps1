@@ -201,7 +201,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -263,7 +263,7 @@ function Invoke-ProvisionUser {
         [string]$TestName
     )
 
-    $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+    $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
     $upn = "$SamAccountName@panoply.local"
 
     # Add user to CSV
@@ -347,7 +347,7 @@ function Invoke-RemoveUserFromSource {
         [switch]$FullCycle
     )
 
-    $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+    $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
     # Remove user from CSV using proper CSV parsing to avoid partial matches
     $csv = Import-Csv $csvPath
@@ -414,7 +414,7 @@ function Invoke-ProvisionTrainingData {
         [string]$TestName
     )
 
-    $trainingCsvPath = "$PSScriptRoot/../../test-data/training-records.csv"
+    $trainingCsvPath = "$(Get-IntegrationTestDataPath)/training-records.csv"
 
     # Add training record to CSV
     $csv = Import-Csv $trainingCsvPath
@@ -477,7 +477,7 @@ function Invoke-RemoveTrainingData {
         [string]$TestName
     )
 
-    $trainingCsvPath = "$PSScriptRoot/../../test-data/training-records.csv"
+    $trainingCsvPath = "$(Get-IntegrationTestDataPath)/training-records.csv"
 
     # Remove training record from CSV by employeeId
     $csv = Import-Csv $trainingCsvPath
@@ -955,7 +955,7 @@ try {
     # of the baselines so the deletion tests start with a known single-user state.
     # Prior to this the scenario relied on files leaking from Scenario 001's volume.
     Write-Host "Seeding baseline CSVs for Scenario 004..." -ForegroundColor Gray
-    $testDataPath = "$PSScriptRoot/../../test-data"
+    $testDataPath = "$(Get-IntegrationTestDataPath)"
     $scenarioDataPath = "$PSScriptRoot/data"
 
     if (-not (Test-Path $testDataPath)) {
@@ -1243,7 +1243,7 @@ try {
 
         # Remove user from CSV - CSV-only cycle, inlined (rather than via Invoke-RemoveUserFromSource) so
         # this step can capture the Sync Activity id and query its RPEI outcomes below (Assert 5)
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $csv = Import-Csv $csvPath
         $csv = @($csv | Where-Object { $_.samAccountName -ne "test.nosource.preserve" })
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
@@ -1688,7 +1688,7 @@ try {
 
         # Remove user from CSV - CSV-only cycle, inlined (rather than via Invoke-RemoveUserFromSource) so
         # this step can capture the Sync Activity id and query its RPEI outcomes below (Assert 4)
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $csv = Import-Csv $csvPath
         $csv = @($csv | Where-Object { $_.samAccountName -ne "test.pending.preserve" })
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8

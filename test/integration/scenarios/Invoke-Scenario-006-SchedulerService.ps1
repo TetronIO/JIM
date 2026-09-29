@@ -61,7 +61,7 @@ param(
     [string]$Template = "Nano",  # Accepted but ignored - scheduler tests don't use test data templates
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -142,7 +142,7 @@ if ($connectedSystems.Count -eq 0) {
     # Generate test CSV data first (training-records.csv, cross-domain-users.csv, etc.)
     # These must exist BEFORE Setup-Scenario-001 runs, so schema discovery succeeds
     Write-Host "  Generating test CSV data..." -ForegroundColor DarkGray
-    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template "Micro" -OutputPath "$PSScriptRoot/../../test-data"
+    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template "Micro" -OutputPath "$(Get-IntegrationTestDataPath)"
 
     # Run Setup-Scenario-001 to create the required test infrastructure
     $setupScript = "$PSScriptRoot/../Setup-Scenario-001.ps1"
@@ -688,8 +688,8 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             Write-Host "  Making CSV changes to test data flow through parallel steps..." -ForegroundColor Cyan
             Write-Host ""
 
-            $hrCsvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-            $trainingCsvPath = "$PSScriptRoot/../../test-data/training-records.csv"
+            $hrCsvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
+            $trainingCsvPath = "$(Get-IntegrationTestDataPath)/training-records.csv"
 
             # Modify HR CSV - update title for first user
             if (Test-Path $hrCsvPath) {
