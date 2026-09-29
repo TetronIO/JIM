@@ -575,8 +575,10 @@ try {
         Add-TestResult -Name "Get-JIMGeneratedValueSequence reports AssignedCount matching the population size" -Passed ($sequenceState.assignedCount -eq $population.Count) `
             -Detail "Expected $($population.Count), got $($sequenceState.assignedCount)"
 
-        # Raise Sequence Start: new joiners must skip ahead to (at least) the new start.
-        $raisedStart = 5000
+        # Raise Sequence Start: new joiners must skip ahead to (at least) the new start. The new start is set
+        # relative to the live counter, because a start at or below the counter is a no-op by design, and the
+        # counter's position depends on the template (a fixed 5000 is already behind it at Large).
+        $raisedStart = [long]$sequenceState.nextNumber + 1000
         $raiseResult = Set-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId -SequenceStart $raisedStart -PassThru
         Add-TestResult -Name "Raising Sequence Start reports SequenceSkippedAhead" -Passed ($null -ne $raiseResult.generation.sequenceSkippedAhead) `
             -Detail "Generation.SequenceSkippedAhead was absent on the response"
@@ -758,7 +760,7 @@ try {
         $survivorNumberBefore = $survivorBefore.attributes.'Staff Number'
 
         $sequenceBefore = Get-JIMGeneratedValueSequence -SyncRuleId $config.ImportRuleId -MappingId $config.EmployeeNumberMappingId
-        # The flow's configured Start as it stands now (the Sequence step raised it to 5000 and then
+        # The flow's configured Start as it stands now (the Sequence step raised it above the counter and then
         # lowered it to 1; lowering never moves the counter, but it is the value Start again returns to).
         $configuredStart = (@(Get-JIMSyncRuleMapping -SyncRuleId $config.ImportRuleId) | Where-Object { $_.id -eq $config.EmployeeNumberMappingId }).generation.sequenceStart
 
