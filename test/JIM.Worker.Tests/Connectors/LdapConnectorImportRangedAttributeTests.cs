@@ -47,7 +47,7 @@ public class LdapConnectorImportRangedAttributeTests
                 Assert.That(search.Attributes[0], Is.EqualTo("member;range=2-*"));
                 return LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.EntryWithValues(GroupDn, ("member;range=2-*", ["CN=c", "CN=d"])));
             });
-        import.RangeExecutor = executor.Object;
+        import.Executor = executor.Object;
 
         var entries = LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.EntryWithValues(GroupDn,
             ("objectClass", ["top", "group"]),
