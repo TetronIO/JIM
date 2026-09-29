@@ -13,8 +13,8 @@
     <span class="jim-source-dot-name">@Group.Label</span>
     @if (ShowRule && RuleText != null)
     {
-        @* The system and its rule are one path, marked with the breadcrumbs' slash; a gap alone reads them as one name. *@
-        <span class="jim-source-dot-sep" aria-hidden="true">/</span>
+        @* The same dot a group header puts before its count; a gap alone reads the system and its rule as one name. *@
+        <span class="jim-source-dot-sep" aria-hidden="true">·</span>
         <span class="jim-source-dot-rule">@RuleText</span>
     }
 </span>

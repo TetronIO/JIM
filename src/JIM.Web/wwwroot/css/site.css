@@ -1085,11 +1085,11 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     max-width: none;
 }
 
-/* The mark between the system and its rule: the breadcrumb separator's own treatment, never the part that gives way. */
+/* The mark between the system and its rule: the group header's count separator, never the part that gives way. */
 .jim-source-dot-sep {
     flex: none;
-    color: var(--mud-palette-text-primary);
-    opacity: .38;
+    color: var(--mud-palette-text-secondary);
+    font-weight: 700;
 }
 
 .jim-source-dot-rule {

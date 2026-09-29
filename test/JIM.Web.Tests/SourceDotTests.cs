@@ -57,7 +57,7 @@ public class SourceDotTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(parts, Is.EqualTo(new[] { "jim-source-dot", "jim-source-dot-name", "jim-source-dot-sep", "jim-source-dot-rule" }));
-            Assert.That(cut.Find(".jim-source-dot-sep").TextContent, Is.EqualTo("/"));
+            Assert.That(cut.Find(".jim-source-dot-sep").TextContent, Is.EqualTo("·"));
             Assert.That(cut.Find(".jim-source-dot-sep").GetAttribute("aria-hidden"), Is.EqualTo("true"));
         }
     }
