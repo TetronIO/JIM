@@ -1,6 +1,6 @@
 # Metaverse-Derived Attribute Flows
 
-- **Status:** Doing (Phases 0 to 4 delivered)
+- **Status:** Doing (Phases 0 to 5 delivered)
 - **Issue:** [#1750](https://github.com/TetronIO/JIM/issues/1750)
 - **PRD:** [`../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md`](../../prd/doing/PRD_METAVERSE_DERIVED_ATTRIBUTE_FLOWS.md)
 - **Related:** [#242](https://github.com/TetronIO/JIM/issues/242) Unique Value Generation (release 2 depends on this plan; see [`UNIQUE_VALUE_GENERATION.md`](UNIQUE_VALUE_GENERATION.md) decision 7 and Phases 5 and 6), [#1864](https://github.com/TetronIO/JIM/issues/1864) drift contributor fix (the bottom layer of this stack), [#1861](https://github.com/TetronIO/JIM/issues/1861) Reference inputs (deferred), [#1361](https://github.com/TetronIO/JIM/issues/1361) Missing Input Behaviour, [#91](https://github.com/TetronIO/JIM/issues/91) Attribute Priority, [#892](https://github.com/TetronIO/JIM/issues/892) Temporal Scope Reconciler, [#1781](https://github.com/TetronIO/JIM/issues/1781) feature flags, [#614](https://github.com/TetronIO/JIM/issues/614) internally managed Metaverse Objects
@@ -209,7 +209,20 @@ Delivered by [#1872](https://github.com/TetronIO/JIM/pull/1872) (2026-09-29), as
 2. Tests: each writer marks exactly the hosting systems' objects; a direct Account Name edit re-derives Email and UPN on the next hosting-system delta (Scenario 5 without remediation).
 3. Run Scenario 8 before the PR (`src/JIM.Application/CLAUDE.md` section 6).
 
-### Phase 5: Sync Preview and Configuration Change Preview
+### Phase 5: Sync Preview and Configuration Change Preview ✅
+
+**Delivered (2026-09-29), with these specifics the plan left open.**
+- `SyncPreviewServer.BuildCsoPreviewContextAsync` is the only preview-path `AttributePriorityContext` construction site. It builds the graph through `DerivedFlowGraphFactory.CreateAsync` over the unit of work's `FeatureFlags` and the all-systems rule set with the proposal substituted (so a Configuration Change Preview evaluates the derived flows the proposal would leave), and attaches it to the context exactly as the worker does. The out-of-scope cascade's contributor re-election shares that context, so it skips derived mappings as the worker's recall does. The Metaverse Object previews build no priority context and are unchanged.
+- The level loop is `ResolveGenerationsAndDerivedLevelsForPreviewAsync`, called where the single dry-run generation resolve was, inside the working copy's link to the Connected System Object (the engine reads the Metaverse Object through it) and before change capture: level 0 resolves the ordinary pass's generations, then levels 1 to the deepest `MaxLevel` of the in-scope rules' types are each evaluated once with a dry-run resolve after each, as `ResolveGenerationsAndDerivedLevelsAsync` does. Derived results are ordinary pending additions, so they reach the Attribute Flow changes, the outcome tree's counts and the outbound evaluation with no special case.
+- Derived mapping-level errors are reported with the ordinary pass's, naming the hosting Synchronisation Rule as the worker's message does. A thrown derived error (an expression that fails, or Missing Input Behaviour "Fail the object") is a blocking `ExpressionEvaluationError` and no further level is evaluated, since the real run fails the object there.
+- A cycle is reported, never thrown: the new `SyncPreviewMessageCode.DerivedFlowCycle` (appended) carries the factory's message. A per-object preview returns it as its only error with no inbound summary; a full-system preview returns it once and evaluates no object, matching the run that would refuse to start.
+- The preview never marks or clears: nothing on the preview path collects marks, and `ReadOnlySyncRepositoryGuard` throws on both writes; a test previews the object whose change a real run would mark, and a marked object, through a counting repository.
+- Found by the fidelity pairing and fixed here: the preview recorded a generated value's outcome node after the Attribute Flow child, while the worker records it before; the preview now matches (a Unique Value Generation divergence independent of derived flows, with its own test).
+- The Configuration Change Preview adapter asks `ConnectedSystemServer.AssessDerivedFlowProposalAsync` (internal), which runs the whole-rule save's validation without throwing (the same substitution, now shared as `SubstituteWholeRule`) and returns the rule sets before and after. Flag off, or an export rule: null, and nothing is read. Unlike the save path it loads the rules even when no proposed mapping reads `mv["..."]`, because removing an ordinary mapping can starve a derived flow elsewhere. Blocking and non-repeatable Warning findings reuse the validator's messages verbatim.
+- `DerivedFlowDependentDetector` (FR 3) is built: pure, static, handed the rules before and after a change. An attribute is starved when it had an enabled contributor before and every contributor it has left after is a derived flow that is itself missing an input (none being the direct case), worked to a fixed point; a derived flow the change removes or disables is not a dependant. The adapter's Warning names each dependant and whether each input is left with no contributor or only with starved ones.
+- The Information finding names each enabled derived flow on another Connected System's rule that reads, directly or through other derived attributes, a Metaverse attribute whose mappings on this rule the proposal adds, removes or alters (compared per target attribute). Derived flows on this Connected System's own rules are not named: the preview evaluates the edited rule's object type itself.
+- No non-text UI change: the findings and the cycle error render through the existing findings list and error alert, and derived values through the existing Attribute Flow changes.
+- The fixtures of `SyncPreviewServerTests`, `FullSyncPreviewServerTests` and `SyncRuleAttributeFlowPreviewAdapterTests` now run with every flag on, as `test/CLAUDE.md` asks.
 
 1. Graph on `CsoPreviewContext` from substituted rules; level loop in `PreviewCsoCoreAsync`; derived results in the Attribute Flow changes and outcome tree.
 2. Adapter findings: Blocking for a proposal that fails validation, Warnings from the FR 3 detector and non-repeatable functions, Information for dependants on other systems' rules.
@@ -218,7 +231,7 @@ Delivered by [#1872](https://github.com/TetronIO/JIM/pull/1872) (2026-09-29), as
 ### Phase 6: Authoring surfaces, FR 3 dependents and public docs
 
 1. Portal: an "Insert attribute" menu under the Expression field (Metaverse attributes on import with the flag on); a read-only line stating the flow is derived, its level and its `mv` inputs; a `Derived` row chip; FR 3 confirmation on disable and remove; the non-repeatable warning; bUnit tests. A UI artefact for review before building.
-2. `DerivedFlowDependentDetector`; `dependentDerivedFlows` on the responses; PowerShell warnings; API and Pester tests; schema refresh dependents.
+2. `DerivedFlowDependentDetector` (built in Phase 5, with its unit tests; only the surfaces remain); `dependentDerivedFlows` on the responses; PowerShell warnings; API and Pester tests; schema refresh dependents.
 3. Docs: `docs/configuration/synchronisation-rules.md` (deriving Metaverse attributes, ordering, cycles, which synchronisation evaluates them, sequencing sources first, the marking), `docs/concepts/expressions.md`, the Initialising JIM and Schedules guidance, PowerShell and API reference. `CHANGELOG.md` entry withheld until the flag is removed (the #242 precedent).
 
 ### Phase 7: Integration and release
