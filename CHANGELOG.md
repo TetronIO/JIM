@@ -34,9 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 The setup script installs in `/opt/jim` when run as root, waits until JIM is ready, and keeps a copy of itself there to renew (`--renew-certificate`) or change (`--certificate`) JIM's certificate. (#1808)
 - 🔄 The Worker now reports healthy while it upgrades the database or warms its caches at start-up, so a long upgrade no longer looks like a hung Worker. (#1808)
 - 🔄 JIM's services now wait for the database at start-up, logging each attempt, instead of exiting and restarting until it is available; an external database that is briefly unreachable no longer takes the web portal down. (#1808)
+- 🔄 A Delta Import stopped because an Active Directory or Samba AD domain controller's invocationId changed now says the directory was probably restored from a backup or snapshot, why continuing would miss changes, and that a Full Import fixes it. (#1853)
 
 ### Fixed
 
+- 🐛 A group with more members than Active Directory returns in one read (MaxValRange, 1,500 by default) now imports with every member, instead of failing as a configuration error naming `member;range=0-1499`. (#1853)
+- 🐛 Schema, container and domain controller discovery on Active Directory now read page by page, so a forest with more attributes, organisational units or domain controllers than MaxPageSize (1,000 by default) no longer fails with "size limit exceeded". (#1853)
 - 🐛 A signed-in administrator can now update or revert a Service Setting through the REST API (`PUT`/`DELETE api/v1/service-settings/{key}`); the change is attributed to them instead of being refused with a misleading 400. API key callers and the portal were unaffected. (#1802)
 - 🐛 A queued Pending Export change is withdrawn, not exported, once its reason has gone: its export Attribute Flow or Synchronisation Rule was disabled, removed or deleted (withdrawn on save), or the object left scope with the Disconnect action (withdrawn at the next export).
 - 🐛 A queued Pending Export change is withdrawn once the Connected System already holds the value the Metaverse wants (for example, a value changed and changed back before an export), instead of being exported and overwriting the correct value.
@@ -77,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Synchronisation no longer reopens Failed or Parked Pending Exports, or counts errors against exports awaiting confirmation; this could silently strand an export outside both the export queue and the Failed list.
 - 🐛 A Failed Pending Export now clears automatically once a confirming import shows every change it asserts has taken effect, without waiting for a manual retry.
 - 🐛 A Pending Export interrupted by a worker crash or restart mid-export is recovered when the worker next starts, instead of being stranded in Executing forever.
+- 🐛 A cancelled import no longer records the connector's new watermark when it staged nothing, so the next Delta Import reads from the watermark the cancelled run started with instead of silently skipping the changes it never imported. (#1853)
 
 ### Security
 

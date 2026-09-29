@@ -290,6 +290,45 @@ function Get-TemplateScale {
     return $scales[$Template]
 }
 
+function Get-ActiveDirectoryLabSetting {
+    <#
+    .SYNOPSIS
+        Read one of the JIM_AD_LAB_* environment variables the Active Directory lab is configured by.
+
+    .DESCRIPTION
+        Returns the variable's value, or -Default when it is unset or blank. With no -Default the
+        variable is required, and the error names it (and never its value: several of these are
+        passwords). A function rather than an inline read so a test can set and clear the variable.
+
+    .PARAMETER Name
+        The full environment variable name, for example JIM_AD_LAB_PRIMARY_ADDRESS.
+
+    .PARAMETER Default
+        The value to use when the variable is not set. Leave it off to make the variable required.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Default
+    )
+
+    $value = [System.Environment]::GetEnvironmentVariable($Name)
+    if (-not [string]::IsNullOrWhiteSpace($value)) {
+        return $value
+    }
+    if ($PSBoundParameters.ContainsKey('Default')) {
+        return $Default
+    }
+
+    throw "The Active Directory lab needs the environment variable $Name to be set, and it is not. See test/integration/ad-lab/README.md."
+}
+
 function Test-TemplateSpansSyncPages {
     <#
     .SYNOPSIS
@@ -321,8 +360,8 @@ function Get-DirectoryConfig {
     .DESCRIPTION
         Returns a hashtable with all directory-specific values needed by setup scripts,
         scenario scripts, and LDAP helper functions. This abstraction allows the same
-        test scenarios to run against Samba AD, OpenLDAP or 389 Directory Server by varying only
-        the directory-specific details. Every config carries a DirectoryType key naming the family
+        test scenarios to run against Samba AD, OpenLDAP, 389 Directory Server or a real Active
+        Directory domain controller by varying only the directory-specific details. Every config carries a DirectoryType key naming the family
         it describes (the same value as the parameter), so a caller holding only the config can
         branch on it; Test-IsRfcDirectory is the usual question asked of it.
 
@@ -347,17 +386,32 @@ function Get-DirectoryConfig {
         instance today), so callers can always read MultiPartitionJimBindDN/Password without
         branching on directory type.
 
+        ActiveDirectory is the real thing: Windows Server domain controllers running as Hyper-V virtual
+        machines (test/integration/ad-lab/), reached over LDAPS from the harness. It returns the SambaAD
+        instance's config (same tree, same attributes, same Connected System names) with these
+        differences: ContainerName is $null (there is no container, so the LDAP client tools run in the
+        shared jim-ldap-toolbox container; see Invoke-LdapTool), Host is the domain controller's FQDN,
+        Address its IP, VmName the Hyper-V virtual machine, Port and LdapSearchPort are 636 over
+        ldaps (Windows Server enforces LDAP signing, so plain LDAP is refused), the two passwords come
+        from the environment (JIM_AD_LAB_ADMIN_PASSWORD and JIM_AD_LAB_JIM_PASSWORD, the same in all
+        three forests), the compose profile is ad-lab, and CheckpointBaseline names the Hyper-V
+        checkpoint a run reverts to. Each instance's address is required
+        (JIM_AD_LAB_<PRIMARY|SOURCE|TARGET>_ADDRESS); its host name and VM name default to the
+        topology (dc1.panoply.local and dc-primary, and so on) and can be overridden
+        (..._HOST, ..._VM). A missing required variable throws, naming it.
+
     .PARAMETER DirectoryType
-        Which directory type to configure for (SambaAD, OpenLDAP or DirectoryServer389)
+        Which directory type to configure for (SambaAD, OpenLDAP, DirectoryServer389 or ActiveDirectory)
 
     .PARAMETER Instance
         Which instance to use: Primary, Source or Target. Samba AD runs one container per
-        instance; OpenLDAP and 389 Directory Server run one container hosting two suffixes,
+        instance and Active Directory one virtual machine per instance (a forest each);
+        OpenLDAP and 389 Directory Server run one container hosting two suffixes,
         with Source and Target naming the Yellowstone and Glitterband suffixes of it.
     #>
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet("SambaAD", "OpenLDAP", "DirectoryServer389")]
+        [ValidateSet("SambaAD", "OpenLDAP", "DirectoryServer389", "ActiveDirectory")]
         [string]$DirectoryType,
 
         [Parameter(Mandatory=$false)]
@@ -722,6 +776,48 @@ function Get-DirectoryConfig {
                 }
             }
         }
+        "ActiveDirectory" {
+            # Validate the instance first, so an unknown one is reported as that and not as a missing
+            # variable, and read only the variables of the instance asked for.
+            if ($Instance -notin @('Primary', 'Source', 'Target')) {
+                throw "Unknown $DirectoryType instance: $Instance. Valid values: Primary, Source, Target"
+            }
+
+            # The tree, attributes, delegation and Connected System names are the SambaAD instance's
+            # (the two labs run the same scenarios against the same shape of directory), so start from
+            # that config and change only what differs for a real domain controller. A key added to the
+            # SambaAD config therefore reaches this one without a second edit.
+            $config = Get-DirectoryConfig -DirectoryType SambaAD -Instance $Instance
+            $instanceKey = $Instance.ToUpperInvariant()
+            $defaultHost = @{ Primary = 'dc1.panoply.local'; Source = 'dc1.resurgam.local'; Target = 'dc1.gentian.local' }[$Instance]
+            $defaultVm = @{ Primary = 'dc-primary'; Source = 'dc-source'; Target = 'dc-target' }[$Instance]
+
+            $adminPassword = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADMIN_PASSWORD'
+            $jimPassword = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_JIM_PASSWORD'
+            $jimBindDn = "CN=svc-jim,OU=Services,$($config.BaseDN)"
+
+            $config.ContainerName = $null
+            $config.Host = Get-ActiveDirectoryLabSetting -Name "JIM_AD_LAB_${instanceKey}_HOST" -Default $defaultHost
+            $config.Address = Get-ActiveDirectoryLabSetting -Name "JIM_AD_LAB_${instanceKey}_ADDRESS"
+            $config.VmName = Get-ActiveDirectoryLabSetting -Name "JIM_AD_LAB_${instanceKey}_VM" -Default $defaultVm
+            $config.Port = 636
+            $config.UseSSL = $true
+            # Windows Server enforces LDAP signing, so plain LDAP is refused: the harness's own ldap
+            # tools use LDAPS too, unlike the container labs where they use the in-container port.
+            $config.LdapSearchPort = 636
+            $config.LdapSearchScheme = "ldaps"
+            $config.BindDN = "CN=Administrator,CN=Users,$($config.BaseDN)"
+            $config.BindPassword = $adminPassword
+            $config.JimBindDN = $jimBindDn
+            $config.JimBindPassword = $jimPassword
+            $config.MultiPartitionJimBindDN = $jimBindDn
+            $config.MultiPartitionJimBindPassword = $jimPassword
+            $config.ComposeProfiles = @("ad-lab")
+            $config.PopulateScript = "Populate-SambaAD.ps1"
+            $config.CheckpointBaseline = "baseline"
+
+            $instanceConfigs = @{ $Instance = $config }
+        }
     }
 
     if (-not $instanceConfigs.ContainsKey($Instance)) {
@@ -740,7 +836,7 @@ function Test-IsRfcDirectory {
     <#
     .SYNOPSIS
         Whether a directory config describes an RFC 4512 directory (OpenLDAP, 389 Directory Server)
-        rather than an Active Directory-family one (Samba AD).
+        rather than an Active Directory-family one (Samba AD, or a real Active Directory).
 
     .DESCRIPTION
         The question scenarios actually ask when they branch on directory type: RFC directories share
@@ -768,9 +864,105 @@ function Test-IsRfcDirectory {
         "OpenLDAP"           { return $true }
         "DirectoryServer389" { return $true }
         "SambaAD"            { return $false }
+        "ActiveDirectory"    { return $false }
         default {
-            throw "Test-IsRfcDirectory: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP or DirectoryServer389). Build configs with Get-DirectoryConfig."
+            throw "Test-IsRfcDirectory: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP, DirectoryServer389 or ActiveDirectory). Build configs with Get-DirectoryConfig."
         }
+    }
+}
+
+function Add-CertificateBytesToJimStore {
+    <#
+    .SYNOPSIS
+        Upload a certificate file to JIM's certificate store, replacing a stale one of the same name.
+
+    .DESCRIPTION
+        The tail every directory's certificate-trust function shares (Add-SambaCertificateToJimStore,
+        Add-DirsrvCertificateToJimStore, Add-ActiveDirectoryCertificateToJimStore): import the JIM
+        PowerShell module, connect, remove any certificate already stored under the same name (left by
+        a previous run, and possibly for a key the directory no longer holds), then upload the file's
+        bytes and report the result. Bytes are uploaded rather than a path because -Path is read
+        server-side by jim.web, and the host path the file was written to does not exist inside that
+        container. Self-contained per call (mirrors Setup-Scenario-015.ps1's own Connect-JIM /
+        Disconnect-JIM bracket), so it has no dependency on the caller's connection state.
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .PARAMETER CertificateName
+        The name the certificate is stored under. An existing certificate of this name is removed first.
+
+    .PARAMETER CertificatePath
+        The local file whose bytes are uploaded.
+
+    .PARAMETER Notes
+        The note stored with the certificate.
+
+    .PARAMETER CallerName
+        The calling function's name, used in error messages.
+
+    .PARAMETER TrustedDescription
+        What was trusted, for the success message ("Trusted <description> (ID: ..., thumbprint: ...)").
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey,
+
+        [Parameter(Mandatory=$true)]
+        [string]$CertificateName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$CertificatePath,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Notes,
+
+        [Parameter(Mandatory=$true)]
+        [string]$CallerName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TrustedDescription
+    )
+
+    $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
+    if (-not (Test-Path $modulePath)) {
+        throw "${CallerName}: JIM PowerShell module not found at: $modulePath"
+    }
+
+    Remove-Module JIM -Force -ErrorAction SilentlyContinue
+    Import-Module $modulePath -Force -ErrorAction Stop
+    try {
+        Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+
+        $existingCertificates = @(Get-JIMCertificate -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $CertificateName }
+        foreach ($certificate in $existingCertificates) {
+            Remove-JIMCertificate -Id $certificate.id -Force | Out-Null
+            Write-Host "    Removed stale trusted certificate from a previous run" -ForegroundColor Gray
+        }
+
+        $certificateBytes = [System.IO.File]::ReadAllBytes($CertificatePath)
+        $trusted = Add-JIMCertificate `
+            -Name $CertificateName `
+            -CertificateData $certificateBytes `
+            -Notes $Notes `
+            -PassThru
+
+        if (-not $trusted) {
+            throw "${CallerName}: Add-JIMCertificate returned nothing for '$CertificateName'; upload failed."
+        }
+
+        Write-Host "  OK Trusted $TrustedDescription (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
+    }
+    finally {
+        Disconnect-JIM -ErrorAction SilentlyContinue
+        Remove-Module JIM -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -867,46 +1059,19 @@ function Add-SambaCertificateToJimStore {
         throw "Add-SambaCertificateToJimStore: 'docker cp' failed to copy the CA certificate from '$ContainerName'. Has the container finished provisioning?"
     }
 
-    # Import the JIM PowerShell module and connect. Self-contained per call (mirrors
-    # Setup-Scenario-015.ps1's own Connect-JIM / Disconnect-JIM bracket) so this function has no
-    # dependency on caller connection state.
-    $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
-    if (-not (Test-Path $modulePath)) {
-        throw "Add-SambaCertificateToJimStore: JIM PowerShell module not found at: $modulePath"
-    }
-
-    Remove-Module JIM -Force -ErrorAction SilentlyContinue
-    Import-Module $modulePath -Force -ErrorAction Stop
-    try {
-        Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
-
-        $certificateName = "$ContainerName CA"
-        $existingCertificates = @(Get-JIMCertificate -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $certificateName }
-        foreach ($certificate in $existingCertificates) {
-            # Samba AD generates a fresh certificate at every first start (see post-provision.sh's
-            # "if [ ! -f cert.pem ]" guard), so a trusted certificate left over from a previous run's
-            # image build is not merely stale, it is for a key the provider no longer holds.
-            Remove-JIMCertificate -Id $certificate.id -Force | Out-Null
-            Write-Host "    Removed stale trusted certificate from a previous run" -ForegroundColor Gray
-        }
-
-        $certificateBytes = [System.IO.File]::ReadAllBytes($localCaPath)
-        $trusted = Add-JIMCertificate `
-            -Name $certificateName `
-            -CertificateData $certificateBytes `
-            -Notes "Samba AD CA for $ContainerName, trusted automatically by the integration test runner (#1141)." `
-            -PassThru
-
-        if (-not $trusted) {
-            throw "Add-SambaCertificateToJimStore: Add-JIMCertificate returned nothing for '$certificateName'; upload failed."
-        }
-
-        Write-Host "  OK Trusted ${ContainerName}'s CA (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
-    }
-    finally {
-        Disconnect-JIM -ErrorAction SilentlyContinue
-        Remove-Module JIM -Force -ErrorAction SilentlyContinue
-    }
+    # Import the JIM PowerShell module, replace any stale certificate of this name and upload the fresh
+    # bytes (the shared tail, Add-CertificateBytesToJimStore). Samba AD generates a fresh certificate at
+    # every first start (see post-provision.sh's "if [ ! -f cert.pem ]" guard), so a trusted certificate
+    # left over from a previous run's image build is not merely stale, it is for a key the provider no
+    # longer holds.
+    Add-CertificateBytesToJimStore `
+        -JIMUrl $JIMUrl `
+        -ApiKey $ApiKey `
+        -CertificateName "$ContainerName CA" `
+        -CertificatePath $localCaPath `
+        -Notes "Samba AD CA for $ContainerName, trusted automatically by the integration test runner (#1141)." `
+        -CallerName "Add-SambaCertificateToJimStore" `
+        -TrustedDescription "${ContainerName}'s CA"
 }
 
 function Add-DirsrvCertificateToJimStore {
@@ -973,44 +1138,282 @@ function Add-DirsrvCertificateToJimStore {
         throw "Add-DirsrvCertificateToJimStore: 'docker cp' failed to copy the lab CA from '$ContainerName'. Is the container built from the current image (pwsh ./test/integration/docker/dirsrv/Build-DirsrvImage.ps1)?"
     }
 
-    # Import the JIM PowerShell module and connect. Self-contained per call, as
-    # Add-SambaCertificateToJimStore is, so this function has no dependency on caller connection state.
-    $modulePath = Join-Path $PSScriptRoot "../../../src/JIM.PowerShell/JIM.psd1"
-    if (-not (Test-Path $modulePath)) {
-        throw "Add-DirsrvCertificateToJimStore: JIM PowerShell module not found at: $modulePath"
+    # Import the JIM PowerShell module, replace any stale certificate of this name and upload the fresh
+    # bytes (the shared tail, Add-CertificateBytesToJimStore). An image rebuild mints a new lab CA
+    # (create_lab_tls discards the key), so a certificate left from a previous run may be for a CA the
+    # image no longer uses.
+    Add-CertificateBytesToJimStore `
+        -JIMUrl $JIMUrl `
+        -ApiKey $ApiKey `
+        -CertificateName "$ContainerName lab CA" `
+        -CertificatePath $localCaPath `
+        -Notes "389 Directory Server lab CA for $ContainerName, trusted automatically by the integration test runner." `
+        -CallerName "Add-DirsrvCertificateToJimStore" `
+        -TrustedDescription "the 389 Directory Server lab CA"
+}
+
+# The shared container that runs LDAP client tools and openssl for directories that have no container
+# of their own; see test/integration/docker/ldap-toolbox/. LDAP-Helpers.ps1 keeps the same name.
+$script:AdLabToolboxContainerName = 'jim-ldap-toolbox'
+
+function Get-FirstPemCertificate {
+    <#
+    .SYNOPSIS
+        Extract the first PEM certificate block from text, as openssl s_client -showcerts prints it.
+
+    .DESCRIPTION
+        s_client lists the chain with the server's own certificate first, so the first block is the
+        domain controller's certificate. Returns the block with LF line endings and a trailing newline,
+        exactly as it should be written to a .pem file. Throws, showing the text, when there is none
+        (the connection was refused, or nothing is listening on the port).
+
+    .PARAMETER Text
+        The s_client output, as one string or as the array of lines docker exec produces.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string[]]$Text
+    )
+
+    $joined = ($Text -join "`n") -replace "`r`n?", "`n"
+    if ($joined -match '(?s)-----BEGIN CERTIFICATE-----\n.*?-----END CERTIFICATE-----') {
+        return "$($matches[0])`n"
     }
 
-    Remove-Module JIM -Force -ErrorAction SilentlyContinue
-    Import-Module $modulePath -Force -ErrorAction Stop
-    try {
-        Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
+    $shown = if ($joined.Length -gt 600) { $joined.Substring(0, 600) + '...' } else { $joined }
+    throw "No certificate was found in the openssl s_client output. The domain controller may not be listening on LDAPS yet. Output was: $shown"
+}
 
-        $certificateName = "$ContainerName lab CA"
-        $existingCertificates = @(Get-JIMCertificate -ErrorAction SilentlyContinue) | Where-Object { $_.name -eq $certificateName }
-        foreach ($certificate in $existingCertificates) {
-            # An image rebuild mints a new lab CA (create_lab_tls discards the key), so a certificate
-            # left from a previous run may be for a CA the image no longer uses.
-            Remove-JIMCertificate -Id $certificate.id -Force | Out-Null
-            Write-Host "    Removed stale trusted certificate from a previous run" -ForegroundColor Gray
-        }
+function Test-CertificateSanHasName {
+    <#
+    .SYNOPSIS
+        Whether an X.509 Subject Alternative Name listing carries an exact DNS name.
 
-        $certificateBytes = [System.IO.File]::ReadAllBytes($localCaPath)
-        $trusted = Add-JIMCertificate `
-            -Name $certificateName `
-            -CertificateData $certificateBytes `
-            -Notes "389 Directory Server lab CA for $ContainerName, trusted automatically by the integration test runner." `
-            -PassThru
+    .DESCRIPTION
+        Reads the text openssl x509 -noout -ext subjectAltName prints ("DNS:a, DNS:b, ...") and matches
+        the whole name, case-insensitively: 'dc1' is not found in 'DNS:dc1.panoply.local', and a
+        wildcard character in the name is literal.
 
-        if (-not $trusted) {
-            throw "Add-DirsrvCertificateToJimStore: Add-JIMCertificate returned nothing for '$certificateName'; upload failed."
-        }
+    .PARAMETER SubjectAltNameText
+        The listing, as one string or as the array of lines docker exec produces.
 
-        Write-Host "  OK Trusted the 389 Directory Server lab CA (ID: $($trusted.id), thumbprint: $($trusted.thumbprint))" -ForegroundColor Green
+    .PARAMETER DnsName
+        The name that must be present.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string[]]$SubjectAltNameText,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DnsName
+    )
+
+    $joined = $SubjectAltNameText -join "`n"
+    return [bool]($joined -match ('(?im)DNS:\s*' + [regex]::Escape($DnsName) + '\s*(,|$)'))
+}
+
+function Build-ActiveDirectoryLabCaBundle {
+    <#
+    .SYNOPSIS
+        Rebuild ad-lab-ca.pem as the concatenation of every domain controller certificate fetched.
+
+    .DESCRIPTION
+        The LDAP toolbox trusts the lab through one file (LDAPTLS_CACERT=/certs/ad-lab-ca.pem), so a run
+        that uses two or three domain controllers needs all of their certificates in it. The bundle is
+        rebuilt from every *.pem in the folder except itself, in name order, so it never carries a
+        certificate whose file has gone. Written without a byte order mark.
+
+    .PARAMETER CertificateDirectory
+        The folder holding the per-domain-controller .pem files (test/integration/ad-lab-certs).
+
+    .PARAMETER BundleFileName
+        The bundle's file name. Defaults to ad-lab-ca.pem, which the toolbox's compose service names.
+
+    .OUTPUTS
+        The bundle's path.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$CertificateDirectory,
+
+        [Parameter(Mandatory=$false)]
+        [string]$BundleFileName = 'ad-lab-ca.pem'
+    )
+
+    $bundlePath = Join-Path $CertificateDirectory $BundleFileName
+    $certificateFiles = @(Get-ChildItem -Path $CertificateDirectory -Filter '*.pem' -File |
+        Where-Object { $_.Name -ne $BundleFileName } |
+        Sort-Object -Property Name)
+
+    $bundle = [System.Text.StringBuilder]::new()
+    foreach ($file in $certificateFiles) {
+        $text = [System.IO.File]::ReadAllText($file.FullName)
+        [void]$bundle.Append($text)
+        if (-not $text.EndsWith("`n")) { [void]$bundle.Append("`n") }
     }
-    finally {
-        Disconnect-JIM -ErrorAction SilentlyContinue
-        Remove-Module JIM -Force -ErrorAction SilentlyContinue
+
+    [System.IO.File]::WriteAllText($bundlePath, $bundle.ToString(), [System.Text.UTF8Encoding]::new($false))
+    return $bundlePath
+}
+
+function Save-ActiveDirectoryCertificate {
+    <#
+    .SYNOPSIS
+        Fetch a domain controller's LDAPS certificate, check its names, and save it for the toolbox.
+
+    .DESCRIPTION
+        The domain controllers' certificates are self-signed and live in the guest, so the harness
+        reads each one off the wire: openssl s_client, run in the toolbox container, connects to the
+        controller's address on 636 asking for its host name (SNI), and the first certificate it prints
+        is taken. Before anything is written, its Subject Alternative Name list is read in the toolbox
+        and must carry the config's Host, the name the Connected System will connect by; a certificate
+        that does not is refused rather than trusted, because JIM's validation would fail downstream
+        with a misleading "server unavailable".
+
+        The certificate is written to ./test/integration/ad-lab-certs/<VmName>.pem and ad-lab-ca.pem is
+        rebuilt from every certificate in that folder (Build-ActiveDirectoryLabCaBundle), which is the
+        file the toolbox trusts. Nothing here needs JIM, so the runner calls this as soon as the domain
+        controller answers on 636, before anything (the readiness check, an ldapsearch) needs to verify
+        that certificate.
+
+        The certificate is trusted on first use, from whatever answers at the address. That is
+        acceptable for a lab on an isolated Hyper-V network and is why the Subject Alternative Name
+        check exists; it is not a way to trust a domain controller across an untrusted network.
+
+    .PARAMETER DirectoryConfig
+        An ActiveDirectory config from Get-DirectoryConfig (Host, Address, VmName, Port).
+
+    .PARAMETER CertificateDirectory
+        Where to write the certificates. Defaults to test/integration/ad-lab-certs, the folder the
+        toolbox's compose service mounts at /certs.
+
+    .OUTPUTS
+        A hashtable with Path (the domain controller's certificate) and BundlePath (ad-lab-ca.pem).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$false)]
+        [string]$CertificateDirectory = (Join-Path $PSScriptRoot '../ad-lab-certs')
+    )
+
+    if (([string]$DirectoryConfig['DirectoryType']) -ne 'ActiveDirectory') {
+        throw "Save-ActiveDirectoryCertificate: the directory config is for '$($DirectoryConfig['DirectoryType'])', not ActiveDirectory."
     }
+
+    # These reach a shell inside the toolbox (the </dev/null redirect needs one) and a file name, so
+    # each must be a plain name before it is used.
+    $address = [string]$DirectoryConfig['Address']
+    $hostName = [string]$DirectoryConfig['Host']
+    $vmName = [string]$DirectoryConfig['VmName']
+    $port = if ($DirectoryConfig.ContainsKey('Port') -and $DirectoryConfig['Port']) { [int]$DirectoryConfig['Port'] } else { 636 }
+    if ($address -notmatch '^[0-9A-Za-z.:-]+$') {
+        throw "Save-ActiveDirectoryCertificate: the Address '$address' is not a plain IP address or name."
+    }
+    if ($hostName -notmatch '^[A-Za-z0-9.-]+$') {
+        throw "Save-ActiveDirectoryCertificate: the Host '$hostName' is not a plain DNS name."
+    }
+    if ($vmName -notmatch '^[A-Za-z0-9._-]+$') {
+        throw "Save-ActiveDirectoryCertificate: the VmName '$vmName' is not a plain name, and it becomes a file name."
+    }
+
+    $toolbox = $script:AdLabToolboxContainerName
+    Write-Host "  Fetching ${vmName}'s LDAPS certificate (${hostName} at ${address}:${port}) through the toolbox..." -ForegroundColor Gray
+
+    $running = docker ps --filter "name=^/${toolbox}$" --format '{{.Names}}' 2>$null
+    if (-not $running) {
+        throw "Save-ActiveDirectoryCertificate: the LDAP toolbox container '$toolbox' is not running. Start it with the ad-lab compose profile. Cannot fetch ${vmName}'s certificate."
+    }
+
+    $fetchOutput = docker exec $toolbox sh -c "openssl s_client -connect ${address}:${port} -servername ${hostName} -showcerts </dev/null" 2>&1
+    $certificatePem = Get-FirstPemCertificate -Text @($fetchOutput | ForEach-Object { "$_" })
+
+    $sanOutput = $certificatePem | docker exec -i $toolbox openssl x509 -noout -ext subjectAltName 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Save-ActiveDirectoryCertificate: could not read ${vmName}'s Subject Alternative Name list (docker exec openssl x509 failed): $sanOutput"
+    }
+    $sanText = @($sanOutput | ForEach-Object { "$_" }) -join "`n"
+    if (-not (Test-CertificateSanHasName -SubjectAltNameText $sanText -DnsName $hostName)) {
+        throw "Save-ActiveDirectoryCertificate: ${vmName}'s LDAPS certificate does not carry '$hostName' in its Subject Alternative Name list, so the Connected System could not validate it. Was the domain controller built with -ExtraCertificateNames for this name? Subject Alternative Names found: $sanText"
+    }
+
+    New-Item -ItemType Directory -Path $CertificateDirectory -Force | Out-Null
+    $certificatePath = Join-Path $CertificateDirectory "$vmName.pem"
+    [System.IO.File]::WriteAllText($certificatePath, $certificatePem, [System.Text.UTF8Encoding]::new($false))
+    $bundlePath = Build-ActiveDirectoryLabCaBundle -CertificateDirectory $CertificateDirectory
+
+    Write-Host "  OK Saved ${vmName}'s certificate and refreshed the toolbox CA bundle" -ForegroundColor Green
+    return @{ Path = $certificatePath; BundlePath = $bundlePath }
+}
+
+function Add-ActiveDirectoryCertificateToJimStore {
+    <#
+    .SYNOPSIS
+        Trust one Active Directory domain controller's LDAPS certificate in JIM's certificate store.
+
+    .DESCRIPTION
+        The Active Directory counterpart of Add-SambaCertificateToJimStore. JIM validates the
+        directory's certificate against the operating system's trust anchors plus its own store, and a
+        domain controller's self-signed certificate is in neither, so it has to be uploaded before the
+        first scenario connects. Save-ActiveDirectoryCertificate fetches it (through the toolbox, by
+        openssl s_client), checks that its Subject Alternative Names carry the config's Host and writes
+        it beside the toolbox's CA bundle; this then uploads that file's bytes, exactly as the Samba
+        function uploads its CA (Add-CertificateBytesToJimStore), replacing any earlier certificate of
+        the same name. The certificate is stored under "<VmName> CA".
+
+    .PARAMETER DirectoryConfig
+        An ActiveDirectory config from Get-DirectoryConfig.
+
+    .PARAMETER JIMUrl
+        The URL of the JIM instance to upload the certificate to.
+
+    .PARAMETER ApiKey
+        API key for authenticating to JIM.
+
+    .PARAMETER CertificateDirectory
+        Where the certificate is written. Defaults to test/integration/ad-lab-certs.
+
+    .EXAMPLE
+        Add-ActiveDirectoryCertificateToJimStore -DirectoryConfig (Get-DirectoryConfig -DirectoryType ActiveDirectory) -JIMUrl "http://localhost:5200" -ApiKey $apiKey
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$true)]
+        [string]$JIMUrl,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ApiKey,
+
+        [Parameter(Mandatory=$false)]
+        [string]$CertificateDirectory
+    )
+
+    $save = @{ DirectoryConfig = $DirectoryConfig }
+    if ($PSBoundParameters.ContainsKey('CertificateDirectory')) { $save.CertificateDirectory = $CertificateDirectory }
+    $saved = Save-ActiveDirectoryCertificate @save
+
+    $vmName = $DirectoryConfig.VmName
+    Add-CertificateBytesToJimStore `
+        -JIMUrl $JIMUrl `
+        -ApiKey $ApiKey `
+        -CertificateName "$vmName CA" `
+        -CertificatePath $saved.Path `
+        -Notes "Active Directory domain controller certificate for $vmName ($($DirectoryConfig.Host)), trusted automatically by the integration test runner." `
+        -CallerName "Add-ActiveDirectoryCertificateToJimStore" `
+        -TrustedDescription "${vmName}'s LDAPS certificate"
 }
 
 function Add-DirectoryCertificateToJimStore {
@@ -1023,7 +1426,9 @@ function Add-DirectoryCertificateToJimStore {
         (Reset-JIMSystem truncates Trusted Certificates, and the runner only trusts the directory's CA
         once, in Step 4a). A scenario never has to know which directory it is on: this dispatches on
         DirectoryConfig.DirectoryType to Add-SambaCertificateToJimStore or
-        Add-DirsrvCertificateToJimStore, each with the config's ContainerName, and does nothing for
+        Add-DirsrvCertificateToJimStore, each with the config's ContainerName, to
+        Add-ActiveDirectoryCertificateToJimStore with the whole config (a real domain controller has
+        no container; the certificate is fetched from its address), and does nothing for
         OpenLDAP, whose lab connects over plain LDAP and has no certificate to trust. Scenario 010 on
         the 389 lab failed exactly because it called the Samba function against dirsrv-primary.
 
@@ -1032,7 +1437,8 @@ function Add-DirectoryCertificateToJimStore {
 
     .PARAMETER DirectoryConfig
         A directory config from Get-DirectoryConfig. DirectoryType chooses the function to call and
-        ContainerName names the container whose CA is trusted.
+        ContainerName names the container whose CA is trusted (for ActiveDirectory, which has no
+        container, the config's Address, Host and VmName say which domain controller).
 
     .PARAMETER JIMUrl
         The URL of the JIM instance to upload the certificate to.
@@ -1065,12 +1471,15 @@ function Add-DirectoryCertificateToJimStore {
         "DirectoryServer389" {
             Add-DirsrvCertificateToJimStore -ContainerName $DirectoryConfig.ContainerName -JIMUrl $JIMUrl -ApiKey $ApiKey
         }
+        "ActiveDirectory" {
+            Add-ActiveDirectoryCertificateToJimStore -DirectoryConfig $DirectoryConfig -JIMUrl $JIMUrl -ApiKey $ApiKey
+        }
         "OpenLDAP" {
             Write-Host "  The OpenLDAP lab connects over plain LDAP; no certificate to trust." -ForegroundColor Gray
             return
         }
         default {
-            throw "Add-DirectoryCertificateToJimStore: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP or DirectoryServer389). Build configs with Get-DirectoryConfig."
+            throw "Add-DirectoryCertificateToJimStore: the directory config carries an unknown DirectoryType '$directoryType' (expected SambaAD, OpenLDAP, DirectoryServer389 or ActiveDirectory). Build configs with Get-DirectoryConfig."
         }
     }
 }
@@ -1103,20 +1512,56 @@ function Grant-JimAdDelegation {
         The Docker container name of the Samba AD instance, e.g. samba-ad-primary,
         samba-ad-source, samba-ad-target.
 
+    .PARAMETER DirectoryConfig
+        A config from Get-DirectoryConfig, instead of -ContainerName. A config with a container takes
+        the Samba AD path with that container. A config with none (a real Active Directory domain
+        controller, a Hyper-V virtual machine) asks the lab host to apply the same delegation to its
+        VmName: Invoke-LabControl runs ad-lab/host/Grant-LabDelegation.ps1, which applies the access
+        control entries in jim-ad-delegation.acl unchanged, idempotently.
+
     .PARAMETER ContainerDn
         The Distinguished Name of the container (OU) to delegate over. The delegation applies to
         that container and everything below it.
 
     .EXAMPLE
         Grant-JimAdDelegation -ContainerName "samba-ad-primary" -ContainerDn "OU=Corp,DC=panoply,DC=local"
+
+    .EXAMPLE
+        Grant-JimAdDelegation -DirectoryConfig $SourceConfig -ContainerDn "OU=TestUsers,$($SourceConfig.BaseDN)"
     #>
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory=$true, ParameterSetName='Container')]
         [string]$ContainerName,
+
+        [Parameter(Mandatory=$true, ParameterSetName='Config')]
+        [hashtable]$DirectoryConfig,
 
         [Parameter(Mandatory=$true)]
         [string]$ContainerDn
     )
+
+    if ($PSCmdlet.ParameterSetName -eq 'Config') {
+        if ([string]::IsNullOrEmpty([string]$DirectoryConfig['ContainerName'])) {
+            $vmName = [string]$DirectoryConfig['VmName']
+            if ([string]::IsNullOrEmpty($vmName)) {
+                throw "Grant-JimAdDelegation: the directory config has no container and no VmName, so there is nothing to delegate on. Build the config with Get-DirectoryConfig."
+            }
+
+            if (-not (Get-Command -Name Invoke-LabControl -ErrorAction SilentlyContinue)) {
+                . "$PSScriptRoot/Invoke-LabControl.ps1"
+            }
+
+            try {
+                Invoke-LabControl -Script 'Grant-LabDelegation.ps1' -Arguments @('-Name', $vmName, '-ContainerDn', $ContainerDn) | Out-Null
+            }
+            catch {
+                throw "Grant-JimAdDelegation: could not delegate JIM's access over '$ContainerDn' on '$vmName'. JIM's Connected System will fail at export with an access error until this is granted. Grant-LabDelegation.ps1 said: $($_.Exception.Message)"
+            }
+            return
+        }
+
+        $ContainerName = [string]$DirectoryConfig['ContainerName']
+    }
 
     $output = docker exec $ContainerName /usr/local/sbin/jim-delegate.sh "$ContainerDn" 2>&1
     $outputText = ($output -join [Environment]::NewLine).Trim()

@@ -344,6 +344,7 @@ try {
 
     $searchOutput = Invoke-LDAPSearch `
         -ContainerName $DirectoryConfig.ContainerName `
+        -DirectoryConfig $DirectoryConfig `
         -Server "localhost" `
         -Port $DirectoryConfig.LdapSearchPort `
         -Scheme $DirectoryConfig.LdapSearchScheme `

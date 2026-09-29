@@ -49,6 +49,35 @@ public class LdapConnectorImportDomainControllerIdentityTests
     }
 
     [Test]
+    public void VerifyDomainControllerIdentity_InvocationIdMismatchOnTheSameServer_ExplainsTheRestoreItsConsequenceAndTheRemedy()
+    {
+        // The lab reverts a domain controller to a checkpoint before every scenario: same name, new invocationId.
+        var previousRootDse = new LdapConnectorRootDse
+        {
+            DirectoryType = LdapDirectoryType.ActiveDirectory,
+            InvocationId = Guid.NewGuid(),
+            DnsHostName = "dc1.jim.test"
+        };
+        var currentRootDse = new LdapConnectorRootDse
+        {
+            DirectoryType = LdapDirectoryType.ActiveDirectory,
+            InvocationId = Guid.NewGuid(),
+            DnsHostName = "dc1.jim.test"
+        };
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() =>
+            LdapConnectorUtilities.VerifyDomainControllerIdentity(previousRootDse, currentRootDse, Logger));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain("restored from a backup or snapshot"), "the usual cause");
+            Assert.That(ex.Message, Does.Contain("silently miss changes"), "why the run must not carry on");
+            Assert.That(ex.Message, Does.Contain("Run a Full Import to re-establish the delta baseline"), "what to do");
+            Assert.That(ex.Message, Does.Contain("DNS round-robin"), "the other cause, when Host is a domain name");
+        }
+    }
+
+    [Test]
     public void VerifyDomainControllerIdentity_InvocationIdMatches_DoesNotThrow()
     {
         var invocationId = Guid.NewGuid();
