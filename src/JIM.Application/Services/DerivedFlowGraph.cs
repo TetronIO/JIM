@@ -307,9 +307,8 @@ public sealed class DerivedFlowGraph
             if (!typeGraph.ReadersByInput.TryGetValue(node, out var readers))
                 continue;
 
-            foreach (var reader in readers)
+            foreach (var target in readers.Select(reader => reader.TargetAttributeId))
             {
-                var target = reader.TargetAttributeId;
                 levels[target] = Math.Max(levels[target], levels[node] + 1);
                 inDegree[target]--;
                 if (inDegree[target] == 0)
