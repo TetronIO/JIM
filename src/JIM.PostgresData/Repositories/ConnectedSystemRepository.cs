@@ -14,6 +14,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -444,6 +445,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// ExecuteUpdateAsync that touches no tracked state; the in-memory test provider does not support
     /// ExecuteUpdateAsync (same pattern as the failed-authentication counter in ActivitiesRepository), so it
     /// falls back to a narrow tracked load of the root entity only.
+    /// <para>
+    /// The fallback saves through a short-lived context over the same in-memory store, not the shared one, so
+    /// that, like the relational path, it writes this one column and nothing else. An import records its
+    /// watermark at the very end of the run (#1868), when the shared context in a workflow test still tracks the
+    /// run's Activity and its Run Profile Execution Item graph; a save on it would flush that graph too.
+    /// </para>
     /// </summary>
     public async Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData)
     {
@@ -455,11 +462,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return;
         }
 
-        var connectedSystem = await Repository.Database.ConnectedSystems
+        if (Repository.Database.GetService<IDbContextOptions>() is not DbContextOptions<JimDbContext> options)
+            throw new InvalidOperationException("UpdateConnectedSystemPersistedConnectorDataAsync: the non-relational fallback needs the context's own options to open a context over the same store.");
+
+        await using var isolatedContext = new JimDbContext(options);
+        var connectedSystem = await isolatedContext.ConnectedSystems
             .AsTracking()
             .SingleAsync(cs => cs.Id == connectedSystemId);
         connectedSystem.PersistedConnectorData = persistedConnectorData;
-        await Repository.Database.SaveChangesAsync();
+        await isolatedContext.SaveChangesAsync();
     }
 
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
@@ -1439,6 +1450,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     // reference values are loaded; otherwise Pass 2 Attribute Flow would run against an empty attribute
                     // set. The flag is cleared once the object has been re-evaluated.
                     !cso.ScopeReviewPending &&
+                    // Likewise a CSO marked because a Metaverse-Derived Attribute Flow input changed in another
+                    // system's synchronisation (#1750): its own data is unchanged, but its derived flows must be
+                    // re-evaluated, so its attribute values must be loaded. Cleared once it has been processed.
+                    !cso.DerivedInputChangePending &&
                     (cso.LastUpdated == null ? cso.Created <= watermark : cso.LastUpdated.Value <= watermark);
 
                 if (isUnchanged)
@@ -1602,9 +1617,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
         // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         //
-        // We check BOTH Created AND LastUpdated because:
+        // We check Created, LastUpdated AND the derived-input mark because:
         // - Created > watermark: Captures newly created CSOs that haven't been modified yet
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
+        // - DerivedInputChangePending (#1750): an unchanged CSO whose Metaverse-Derived Attribute Flow input was
+        //   changed by another system's synchronisation; without it a delta would never re-derive the value.
+        //   Served by the partial index IX_ConnectedSystemObjects_ConnectedSystemId_DerivedInputChangePending.
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
         // must identity-fix with already-tracked instances from the Connected System/Synchronisation Rule queries.
@@ -1615,7 +1633,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(av => av.Attribute)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
-                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
+                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
+                          cso.DerivedInputChangePending))
             .OrderBy(cso => cso.Id);
 
         // Get count with lightweight query (no includes)
@@ -1624,7 +1643,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             ?? await Repository.Database.ConnectedSystemObjects
                 .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId &&
                                   (cso.Created > modifiedSince ||
-                                   (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+                                   (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
+                                   cso.DerivedInputChangePending));
 
         // Keyset cursor (see ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync): delta sync deletes each
         // page's obsolete CSOs at the page boundary, so an OFFSET into the shrinking modified set skips rows. The
@@ -1902,12 +1922,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="modifiedSince">Only count CSOs where Created or LastUpdated is greater than this timestamp.</param>
     public async Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
     {
-        // Count CSOs that are either newly created OR have been modified since the watermark.
-        // This ensures delta sync counts both new and updated objects.
+        // Count CSOs that are newly created, modified since the watermark, or marked for re-evaluation because a
+        // Metaverse-Derived Attribute Flow input changed elsewhere (#1750). Must match the page query exactly.
         return await Repository.Database.ConnectedSystemObjects.CountAsync(cso =>
             cso.ConnectedSystemId == connectedSystemId &&
             (cso.Created > modifiedSince ||
-             (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+             (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince) ||
+             cso.DerivedInputChangePending));
     }
 
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
@@ -4789,6 +4810,57 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
+    {
+        var classAttributeIds = classMembershipAttributeIds.ToList();
+        var database = Repository.Database;
+
+        return await database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+            .Include(pe => pe.ConnectedSystemObject)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.ChangeType == PendingExportChangeType.Update
+                      && pe.Status != PendingExportStatus.Executing)
+            .Where(pe => pe.AttributeValueChanges.Any(c =>
+                (c.Status == PendingExportAttributeChangeStatus.Pending || c.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+                && c.SyncRuleId != null
+                && ((pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.MetaverseObjectId == null)
+                    || !database.SyncRules.Any(r => r.Id == c.SyncRuleId && r.Enabled)
+                    || (!classAttributeIds.Contains(c.AttributeId)
+                        && !database.SyncRuleMappings.Any(m => m.SyncRuleId == c.SyncRuleId && m.Enabled && m.TargetConnectedSystemAttributeId == c.AttributeId)))))
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds)
+    {
+        if (attributeChangeIds.Count == 0)
+            return (0, 0);
+
+        var ids = attributeChangeIds.ToArray();
+        var pendingExportIds = await Repository.Database.PendingExportAttributeValueChanges
+            .Where(c => ids.Contains(c.Id) && c.PendingExportId != null)
+            .Select(c => c.PendingExportId!.Value)
+            .Distinct()
+            .ToArrayAsync();
+
+        var changesWithdrawn = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges"" WHERE ""Id"" = ANY({0})", ids);
+
+        var pendingExportsDeleted = pendingExportIds.Length == 0 ? 0 : await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" pe
+              WHERE pe.""Id"" = ANY({0})
+                AND pe.""ChangeType"" = {1}
+                AND pe.""Status"" <> {2}
+                AND NOT EXISTS (SELECT 1 FROM ""PendingExportAttributeValueChanges"" c WHERE c.""PendingExportId"" = pe.""Id"")",
+            pendingExportIds, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing);
+
+        return (changesWithdrawn, pendingExportsDeleted);
+    }
+
 
     /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
@@ -6990,6 +7062,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Gets every import Synchronisation Rule flowing to a Metaverse Object Type, disabled rules included, with the
+    /// mappings, sources, generation settings and target attributes the Metaverse-Derived Attribute Flow graph reads
+    /// (#1750). AsNoTracking is load-bearing, not an optimisation: the save path calling this may be holding a tracked,
+    /// already-mutated mapping (the settings update loads it tracked), and the validation must compare against what
+    /// the database holds, not what the graph has been changed to.
+    /// </summary>
+    public async Task<List<SyncRule>> GetImportSyncRulesForMetaverseObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        return await Repository.Database.SyncRules
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Sources)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.TargetMetaverseAttribute)
+            .Include(sr => sr.AttributeFlowRules)
+                .ThenInclude(m => m.Generation)
+            .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .OrderBy(sr => sr.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
     /// database, keyed by mapping id (#1199). AsNoTracking with a scalar projection is load-bearing, not an
     /// optimisation: the caller is mid-save on a tracked, already-mutated rule graph, and this must report what
@@ -7688,6 +7783,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // The only legitimate stamp is StampImportStateAsync, run after values commit.
                 parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(cso.DerivedInputChangePending);
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

@@ -204,6 +204,7 @@ jim-release-X.Y.Z/
 |   +-- jim-worker.tar        # Image for the worker service
 |   +-- jim-scheduler.tar     # Image for the scheduler service
 |   +-- postgres-18.tar       # PostgreSQL image (if included)
+|   +-- postgres-18.image-ids # Its image ID, which the installer checks on Docker's classic image store
 +-- compose/
 |   +-- docker-compose.yml
 |   +-- docker-compose.production.yml
@@ -254,6 +255,16 @@ cp compose/.env.example /opt/jim/.env && chmod 600 /opt/jim/.env
 ```
 
 1. Edit `/opt/jim/.env`: set `DOCKER_REGISTRY=ghcr.io/tetronio/` and `JIM_VERSION` to the version in the bundle's `VERSION` file, and the identity provider settings (see the [Configuration Reference](configuration.md)). For the bundled PostgreSQL, set `JIM_DB_HOSTNAME=jim.database` (the template's `localhost` is for development) and choose a strong `JIM_DB_PASSWORD`; for your own server, give its name and JIM's credentials.
+    For the bundled PostgreSQL on Docker's classic image store (`docker info` shows `Storage Driver: overlay2` rather than `overlayfs` with the containerd snapshotter), Docker drops the registry digest the compose file pins PostgreSQL by when it loads the image, so run the loaded image by its ID instead, after checking that ID is the one the bundle records:
+
+    ```bash
+    # In the extracted bundle
+    image=$(docker load -i docker-images/postgres-18.tar | sed -n 's/^Loaded image: //p')
+    id=$(docker image inspect -f '{{.Id}}' "$image")
+    grep -qxF "$id" docker-images/postgres-18.image-ids && echo "JIM_DB_IMAGE=$id" >> /opt/jim/.env
+    ```
+
+    Nothing is added if the IDs differ; then extract the bundle again and check it with `sha256sum -c checksums.sha256`.
 2. Put JIM's certificate and key in `/opt/jim/tls/` (see [The Certificate](#the-certificate)).
 3. Start JIM, leaving out `--profile with-db` if you use your own PostgreSQL server. `--pull never` makes Docker report a missing image rather than try the internet:
 
@@ -279,7 +290,7 @@ Then carry on at [After Installing](#after-installing).
 
 On Docker, it keeps `.env`, which holds the database password and your identity provider's client secret, readable by root only.
 
-On Podman, it runs JIM as root (rootful) by default, as Docker does. Pass `--rootless` to run JIM under a dedicated account named `jim` instead, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; read [Rootful or Rootless](podman.md#rootful-or-rootless) before choosing. It writes your settings to `jim-config.yaml`, stores the secrets in Podman's secret store, installs the systemd units, and offers to open the port in firewalld; rootless, it also lets unprivileged programs use port 443.
+On Podman, it runs JIM as root (rootful) by default, as Docker does. Pass `--rootless` to run JIM under a dedicated account named `jim` instead, which it creates with lingering enabled, so that systemd starts JIM at boot with nobody logged in; read [Rootful or Rootless](podman.md#rootful-or-rootless) before choosing. It writes your settings to `jim-config.yaml`, stores the secrets in Podman's secret store, installs the systemd units, and offers to open the port in firewalld and, on Ubuntu 24.04, to let JIM's containers use the network under AppArmor; rootless, it also lets unprivileged programs use port 443.
 
 It then starts JIM, waits until JIM is ready, and prints JIM's address and what is left to do; if JIM is not ready within ten minutes, it says so and exits with a failure code. It keeps a copy of itself in the installation, for looking after it later:
 
@@ -287,6 +298,8 @@ It then starts JIM, waits until JIM is ready, and prints JIM's address and what 
 sudo /opt/jim/setup.sh --renew-certificate   # a certificate the installer created, before it expires
 sudo /opt/jim/setup.sh --certificate         # change its names, or move to your organisation's certificate
 ```
+
+On Docker, it also upgrades JIM, to the latest release or, run inside a newer release's bundle, to that release; see [Upgrading with the installer](upgrading.md#with-the-installer).
 
 For automation, every question can be answered in advance with an environment variable; the header of `setup.sh` lists them. Running the installer again on an existing installation asks before replacing its configuration, and keeps the bundled database's password, which the database was created with.
 

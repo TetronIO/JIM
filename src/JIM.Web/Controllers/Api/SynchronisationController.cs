@@ -4270,7 +4270,7 @@ public class SynchronisationController(
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The mapping creation request.</param>
     /// <returns>The created Attribute Flow Mapping.</returns>
-    /// <response code="201">Mapping created successfully.</response>
+    /// <response code="201">Mapping created successfully. The response's <c>warnings</c> lists any non-blocking warnings the save raised.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule or referenced Attributes not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -4451,6 +4451,8 @@ public class SynchronisationController(
                 dto.Generation.SequenceSkippedAhead = mapping.Generation?.SequenceSkippedAhead is { } skip
                     ? new SequenceSkippedAheadDto { From = skip.From, To = skip.To }
                     : null;
+            // Likewise the save's non-blocking warnings (#1750), stamped on the saved instance, not the reloaded one.
+            dto.Warnings = mapping.SaveWarnings.ToList();
             return CreatedAtRoute("GetSyncRuleMapping", new { syncRuleId, mappingId = mapping.Id }, dto);
         }
         catch (ArgumentException ex)
@@ -4481,7 +4483,7 @@ public class SynchronisationController(
     /// <param name="mappingId">The unique identifier of the mapping to update.</param>
     /// <param name="request">The settings to change.</param>
     /// <returns>The updated mapping.</returns>
-    /// <response code="200">Returns the updated mapping.</response>
+    /// <response code="200">Returns the updated mapping; its <c>warnings</c> lists any non-blocking warnings the save raised.</response>
     /// <response code="400">The request named no setting, named one that does not apply to this mapping, or carried an invalid Expression.</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>

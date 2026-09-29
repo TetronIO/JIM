@@ -76,7 +76,7 @@ public class ConfigurationChangePreflightDatabaseTests
         var ruleId = await CreatePersistedExportRuleAsync(ids);
 
         await using var ctx = NewContext();
-        var jim = new JimApplication(new PostgresDataRepository(ctx));
+        var jim = NewJimApplication(ctx);
         var rule = await jim.ConnectedSystems.GetSyncRuleAsync(ruleId);
         Assert.That(rule, Is.Not.Null);
 
@@ -102,7 +102,7 @@ public class ConfigurationChangePreflightDatabaseTests
         var ruleId = await CreatePersistedExportRuleAsync(ids);
 
         await using var ctx = NewContext();
-        var jim = new JimApplication(new PostgresDataRepository(ctx));
+        var jim = NewJimApplication(ctx);
         var rule = await jim.ConnectedSystems.GetSyncRuleAsync(ruleId);
         Assert.That(rule, Is.Not.Null);
 
@@ -193,11 +193,19 @@ public class ConfigurationChangePreflightDatabaseTests
             MetaverseObjectType = mvType
         };
 
-        var jim = new JimApplication(new PostgresDataRepository(ctx));
+        var jim = NewJimApplication(ctx);
         var ok = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator);
         Assert.That(ok, Is.True, "Failed to create the rule the preflight tests need.");
         return rule.Id;
     }
 
     #endregion
+
+    // The sync repository is passed explicitly, as every host passes it: saving a Synchronisation Rule checks the export
+    // queue for changes the save left without authority, and that check reads through the sync repository.
+    private static JimApplication NewJimApplication(JimDbContext context)
+    {
+        var repository = new PostgresDataRepository(context);
+        return new JimApplication(repository, syncRepository: repository.Sync);
+    }
 }

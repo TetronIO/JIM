@@ -119,7 +119,7 @@ public class SyncRuleMappingUpdateApiTests
         }
         _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
 
-        var application = new JimApplication(mockRepository.Object);
+        var application = new JimApplication(mockRepository.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
         _controller = new SynchronisationController(
             new Mock<ILogger<SynchronisationController>>().Object,
             application,

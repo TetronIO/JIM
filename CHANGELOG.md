@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ JIM can now be deployed with Podman, rootful or rootless, with no Docker or other extra software, including air-gapped: the setup script installs it on RHEL and other Podman hosts, and systemd starts it at boot. Ansible can deploy it too. (#1808)
 - ✨ Air-gapped installs use the same setup script: run it inside the extracted release bundle and it loads the images and installs without an internet connection. (#1808)
+- ✨ `setup.sh --upgrade` upgrades a Docker installation, online or from a release bundle: it keeps your settings and compose files of your own, refuses to overwrite edited ones, and puts everything back if it fails before JIM restarts. (#1854)
 - ✨ Adding an auxiliary class to a Connected System Object Type now lists the attributes each class would contribute, in a dialog that opens on the suggested classes and applies several at once; REST and `Get-JIMConnectedSystemAuxiliaryClass` return them too.
 - ✨ Feature flags let JIM roll out a capability gradually: Preview features can be switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, each change fully audited. (#1781)
 - ✨ Set once per Schedule whether it stops or continues when a step fails, with each step able to follow the Schedule or override it (including via the new `Set-JIMScheduleStep` cmdlet); existing Schedules behave exactly as before. (#1787)
@@ -36,8 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A queued Pending Export change is withdrawn, not exported, once its reason has gone: its export Attribute Flow or Synchronisation Rule was disabled, removed or deleted (withdrawn on save), or the object left scope with the Disconnect action (withdrawn at the next export).
+- 🐛 A queued Pending Export change is withdrawn once the Connected System already holds the value the Metaverse wants (for example, a value changed and changed back before an export), instead of being exported and overwriting the correct value.
+- 🐛 A Run Profile execution that fails while saving its changes to the database is now recorded as failed, with its error, instead of Complete. (#1874)
+- 🐛 When a pinned domain controller stops answering, JIM now clears the pin as documented, so the next run re-discovers a domain controller instead of failing against the same unreachable one every time. (#1875)
+- 🐛 An import that fails after reading its changes no longer moves the Connected System's change watermark on, so the next Delta Import reads those changes again instead of silently skipping them. (#1868)
+- 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image by its pinned digest: the setup script checks the loaded image against the ID the bundle records and runs it by that ID. (#1854)
+- 🐛 Drift Correction now reverts an attribute edited in a Connected System whose import Attribute Flow reads a different attribute (a `displayName` edit where Display Name comes from `givenName` and `sn`), instead of leaving the two out of step. (#1864)
 - 🐛 A Delta Sync that removes objects no longer skips others: when more than one page of changes included deleted objects, about half were left unprocessed until the next Full Sync (for example, a leaver's account deleted from a target directory stayed in JIM).
 - 🐛 Running the setup script again over an installation with the bundled PostgreSQL no longer locks JIM out of its database: it keeps the database's password instead of generating a new one. (#1808)
+- 🐛 New Docker installations no longer trust the development identity provider's token issuer, `http://localhost:8181/realms/jim`, which the settings template set. On an existing one, delete the `JIM_SSO_VALID_ISSUERS` line from `.env` unless you added it yourself. (#1808)
 - 🐛 Installing with the setup script's bundled PostgreSQL works: it pointed JIM at `localhost` instead of the bundled database, so JIM never started.
 - 🐛 The release bundle's PostgreSQL image now loads under its name, so an air-gapped install with the bundled database finds it.
 - 🐛 The setup script no longer stops at `Failed to download .env.example`, and the manual download commands in the Deployment Guide and Quick Start work again: releases publish the environment template as `default.env.example`.
@@ -72,6 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔒 The setup script makes `.env`, which holds the database password and the identity provider's client secret, readable by its owner only. (#1808)
 - 🔒 The Worker container no longer holds the `SYS_ADMIN` and `DAC_READ_SEARCH` Linux capabilities, which it never used. (#1808)
+- 🔒 On Docker, the bundled database container no longer receives JIM's settings and secrets, such as the identity provider's client secret, which PostgreSQL never used. (#1862)
 
 ### Performance
 

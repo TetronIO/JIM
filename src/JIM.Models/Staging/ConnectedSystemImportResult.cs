@@ -24,6 +24,9 @@ public class ConnectedSystemImportResult
     /// Write any information to this property that you want to be made available on subsequent synchronisation runs.
     /// i.e. for an LDAP system you might write the last known change number here so that you can perform delta imports in the future.
     /// JIM will pass this data to Connectors on each synchronisation run.
+    /// JIM records it only once the run has staged every object it read. A run that fails or is cancelled before then leaves
+    /// the previous value in place, so the next run is replayed the value the failed one started with and reads its
+    /// changes again: expect to see a change more than once, never to miss one.
     /// </summary>
     public string? PersistedConnectorData { get; set; }
 

@@ -77,7 +77,7 @@ public class SynchronisationControllerSyncRuleDeletionTests
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
-        _application = new JimApplication(_mockRepository.Object);
+        _application = new JimApplication(_mockRepository.Object, syncRepository: new JIM.InMemoryData.SyncRepository());
         _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator, _mockCredentialProtection.Object);
 
         // Create a test API key and authenticate the controller with it.

@@ -245,7 +245,8 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         // Use Eq() for value-based string/object comparisons in expressions.
         target.SetFunction("Eq", (Func<object?, object?, bool>)ValueEquals);
 
-        // Date functions
+        // Date functions. Now and Today (like RandomPassword and RandomPassphrase below) return a different value on
+        // each evaluation; NonRepeatableFunctionDetector lists them, so keep it in step when adding another.
         target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
         target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
         target.SetFunction("FormatDate", (Func<DateTime?, string, string?>)((dt, format) => dt?.ToString(format, CultureInfo.InvariantCulture)));

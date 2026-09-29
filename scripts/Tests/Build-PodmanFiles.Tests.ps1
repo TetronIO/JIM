@@ -60,11 +60,12 @@ Describe 'Build-PodmanFiles' {
     It 'uses the PostgreSQL image docker-compose.yml pins' {
         $output = New-OutputPath
         $compose = Get-Content (Join-Path $script:RepoRoot 'docker-compose.yml') -Raw
-        $expected = [regex]::Match($compose, 'image:\s+(docker\.io/library/postgres:\S+)').Groups[1].Value
+        # The default of JIM_DB_IMAGE, which lets an air-gapped Docker installation run the loaded image by its ID.
+        $expected = [regex]::Match($compose, 'image:\s+\$\{JIM_DB_IMAGE:-(docker\.io/library/postgres:[^}\s]+)\}').Groups[1].Value
 
         & $script:ScriptPath -Version 1.2.3 -OutputPath $output
 
-        $expected | Should -Match '@sha256:[0-9a-f]{64}$'
+        $expected | Should -Match '^docker\.io/library/postgres:[^@]+@sha256:[0-9a-f]{64}$'
         Get-ImageReferences (Join-Path $output 'jim-database.yaml') | Should -Be @($expected)
     }
 

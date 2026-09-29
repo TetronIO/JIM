@@ -309,6 +309,21 @@ public partial class SyncRepository : ISyncRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        var ids = connectedSystemObjectIds.ToArray();
+        var found = await _context.PendingExports
+            .AsNoTracking()
+            .Where(pe => pe.ConnectedSystemObjectId != null && ids.Contains(pe.ConnectedSystemObjectId.Value))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .Distinct()
+            .ToListAsync();
+        return found.ToHashSet();
+    }
+
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
         => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize);
 
@@ -565,6 +580,12 @@ public partial class SyncRepository : ISyncRepository
         IReadOnlyList<PendingExportAttributeValueChange> changesToAdd,
         IReadOnlyList<Guid> changeIdsToRemove)
         => _repo.ConnectedSystems.AppendAttributeChangesToPendingExportAsync(pendingExportId, changesToAdd, changeIdsToRemove);
+
+    public Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
+        => _repo.ConnectedSystems.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(connectedSystemId, classMembershipAttributeIds);
+
+    public Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds)
+        => _repo.ConnectedSystems.WithdrawPendingExportAttributeChangesAsync(attributeChangeIds);
 
     #endregion
 

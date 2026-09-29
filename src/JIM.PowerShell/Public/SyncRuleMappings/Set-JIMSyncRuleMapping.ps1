@@ -109,6 +109,8 @@ function Set-JIMSyncRuleMapping {
         None by default. The updated mapping when -PassThru is supplied. A generated mapping's
         Generation property carries its uniqueness token settings; Generation.SequenceSkippedAhead
         is present only when -SequenceStart raised the target attribute's counter on this save.
+        Warnings lists any non-blocking warnings the save raised (empty when there were none); each is
+        written with Write-Warning whether or not -PassThru is supplied.
 
     .EXAMPLE
         Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject
@@ -272,6 +274,13 @@ function Set-JIMSyncRuleMapping {
                 if ($result.Generation.SequenceSkippedAhead) {
                     $skip = $result.Generation.SequenceSkippedAhead
                     Write-Warning "Mapping $mapId's Sequence counter moved from $($skip.From) to $($skip.To) to honour the requested Sequence Start."
+                }
+
+                # Non-blocking warnings the save raised (for example, an Attribute Flow deriving a Metaverse
+                # attribute that calls a function returning a different value each time, #1750). The save went
+                # ahead; each warning is written as the server phrased it.
+                foreach ($saveWarning in @($result.Warnings | Where-Object { $_ })) {
+                    Write-Warning $saveWarning
                 }
 
                 if ($PassThru) {

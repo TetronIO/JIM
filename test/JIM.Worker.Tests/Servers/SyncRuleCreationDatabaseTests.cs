@@ -144,7 +144,7 @@ public class SyncRuleCreationDatabaseTests
 
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             // Before the fix this throws a PostgreSQL FK violation on ConnectedSystemObjectTypeId (sent as 0).
             var ok = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator);
             Assert.That(ok, Is.True, "CreateOrUpdateSyncRuleAsync returned false; the rule was not created.");
@@ -182,7 +182,7 @@ public class SyncRuleCreationDatabaseTests
 
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var ok = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator);
             Assert.That(ok, Is.True, "CreateOrUpdateSyncRuleAsync returned false; the rule was not created.");
         }
@@ -226,7 +226,7 @@ public class SyncRuleCreationDatabaseTests
 
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var ok = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator);
             Assert.That(ok, Is.True, "CreateOrUpdateSyncRuleAsync returned false; the rule was not created.");
         }
@@ -239,5 +239,13 @@ public class SyncRuleCreationDatabaseTests
             // No duplicate connected-system attribute rows should have been inserted by graph traversal.
             Assert.That(verify.ConnectedSystemAttributes.Count(), Is.EqualTo(1), "Connected System attribute count");
         }
+    }
+
+    // The sync repository is passed explicitly, as every host passes it: saving or deleting a Synchronisation Rule or
+    // Attribute Flow checks the export queue for changes the change left without authority, which reads through it.
+    private static JimApplication NewJimApplication(JimDbContext context)
+    {
+        var repository = new PostgresDataRepository(context);
+        return new JimApplication(repository, syncRepository: repository.Sync);
     }
 }

@@ -125,6 +125,33 @@ public abstract class SyncTaskProcessorBase
     // keep re-flagging an object that is back in agreement.
     protected readonly List<Guid> _pendingScopeReviewClears = [];
 
+    // Metaverse-Derived Attribute Flows (#1750, "Position 2"): for each Metaverse Object whose attributes changed this
+    // page, the OTHER Connected Systems hosting a derived flow that reads a changed attribute. Held against the object
+    // instance rather than its id, because an object projected on this page has no id until the page flush persists
+    // it; resolved and applied there as one bulk mark (MarkConnectedSystemObjectsDerivedInputChangePendingAsync).
+    private readonly List<(MetaverseObject Mvo, int ConnectedSystemId)> _pendingDerivedInputMarks = [];
+
+    // This system's Connected System Objects that carried the derived-input mark and whose Pass 2 processing
+    // completed without error, each with the row version (xmin) its page load read; cleared in bulk at page flush
+    // (the ScopeReviewPending fail-safe pattern), and only while the row version is unchanged.
+    private readonly List<DerivedInputChangeClear> _pendingDerivedInputClears = [];
+
+    // The row version (xmin) of each marked Connected System Object on the current page, as the page load read it.
+    // Captured by CaptureDerivedInputRowVersions straight after the load, before this run writes anything, because
+    // an EF save of a tracked object refreshes its xmin to this run's own write, which would defeat the guard.
+    private readonly Dictionary<Guid, uint> _derivedInputSeenRowVersions = [];
+
+    // Connected System Objects on the current page whose derived pass returned an Attribute Flow error (for example
+    // Missing Input Behaviour "Fail the mapping" on an mv input). Decision 10: a derived-flow error fails the object,
+    // so its mark is kept and the next run re-evaluates it and reports the error again, rather than leaving a stale
+    // derived value that nothing revisits.
+    private readonly HashSet<Guid> _derivedFlowErroredCsoIds = [];
+
+    // Run totals for the end-of-run summary (Synchronisation Integrity: summary statistics for every batch operation).
+    private int _derivedInputMarksSet;
+    private int _derivedInputMarksCleared;
+    private int _derivedInputMarksKept;
+
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
 
@@ -767,7 +794,10 @@ public abstract class SyncTaskProcessorBase
         // Exception: a CSO flagged by the Temporal Scope Reconciler (ScopeReviewPending, #892) has drifted in or
         // out of scope with the clock despite static source data; it must be re-evaluated even though unchanged.
         // (The loader already forces a full attribute load for such CSOs so Attribute Flow has real values.)
-        if (connectedSystemObject.IsUnchangedSinceLastSync && !connectedSystemObject.ScopeReviewPending)
+        // Likewise a CSO marked because another system changed a Metaverse attribute that a derived flow on this
+        // system's rules reads (DerivedInputChangePending, #1750): its own data is unchanged, but its derived flows
+        // must be re-evaluated. (The loader already treats a marked CSO as changed and loads its attribute values.)
+        if (connectedSystemObject.IsUnchangedSinceLastSync && !connectedSystemObject.ScopeReviewPending && !connectedSystemObject.DerivedInputChangePending)
             return;
 
         // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
@@ -816,6 +846,8 @@ public abstract class SyncTaskProcessorBase
                     {
                         _pendingMvoChanges.Add((changeResult.DisconnectedMvo, changeResult.RecalledAttributeAdditions ?? [],
                             changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei, null));
+                        CollectDerivedInputMarks(changeResult.DisconnectedMvo,
+                            (changeResult.RecalledAttributeAdditions ?? []).Concat(changeResult.RecalledAttributeValues));
 
                         // Defensive parity with the new-RPEI branch below: surface genuine scope-exit clears as a
                         // NoContributor outcome when this RPEI already carries an outcome tree to attach to.
@@ -902,6 +934,8 @@ public abstract class SyncTaskProcessorBase
                     {
                         _pendingMvoChanges.Add((changeResult.DisconnectedMvo, changeResult.RecalledAttributeAdditions ?? [],
                             changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, runProfileExecutionItem, null));
+                        CollectDerivedInputMarks(changeResult.DisconnectedMvo,
+                            (changeResult.RecalledAttributeAdditions ?? []).Concat(changeResult.RecalledAttributeValues));
                     }
 
                     // Build sync outcome for RPEIs not already covered by ProcessMetaverseObjectChangesAsync
@@ -1024,6 +1058,17 @@ public abstract class SyncTaskProcessorBase
             // the flag set and the reconciler re-flags it next sweep (fail-safe).
             if (connectedSystemObject.ScopeReviewPending)
                 _pendingScopeReviewClears.Add(connectedSystemObject.Id);
+
+            // Same fail-safe for the derived-input mark (#1750): cleared only once the object's derived flows have been
+            // re-evaluated without error. An object that errors keeps its mark and is selected again next run.
+            // Kept, too, when the object's derived pass reported an Attribute Flow error (decision 10), unlike an
+            // ordinary flow's mapping-level error, which follows the ScopeReviewPending behaviour above.
+            if (connectedSystemObject.DerivedInputChangePending &&
+                !_derivedFlowErroredCsoIds.Contains(connectedSystemObject.Id) &&
+                _derivedInputSeenRowVersions.TryGetValue(connectedSystemObject.Id, out var seenRowVersion))
+            {
+                _pendingDerivedInputClears.Add(new DerivedInputChangeClear(connectedSystemObject.Id, seenRowVersion));
+            }
         }
         catch (SyncJoinException joinEx)
         {
@@ -1074,6 +1119,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
             runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
+                (missingInputEx.SyncRuleName == null ? string.Empty : $" The Attribute Flow is derived by Synchronisation Rule '{missingInputEx.SyncRuleName}'.") +
                 " Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
@@ -1190,8 +1236,15 @@ public abstract class SyncTaskProcessorBase
         var expression = LogSanitiser.Sanitise(expressionEx.Expression) ?? "(none)";
         var reason = expressionEx.InnerException?.Message ?? expressionEx.Message;
         var subject = metaverseObjectId.HasValue ? $" for Metaverse Object {metaverseObjectId.Value}" : string.Empty;
-        return $"Expression evaluation failed{subject} flowing to attribute '{attribute}': {reason}. Expression: {expression}";
+        return $"Expression evaluation failed{subject} flowing to attribute '{attribute}'{DescribeDerivedHost(expressionEx.SyncRuleName)}: {reason}. Expression: {expression}";
     }
+
+    /// <summary>
+    /// Names the Synchronisation Rule hosting a Metaverse-Derived Attribute Flow (#1750) in an error message, so the
+    /// administrator knows which rule to open; empty for an ordinary flow, whose message is unchanged.
+    /// </summary>
+    private static string DescribeDerivedHost(string? syncRuleName) =>
+        syncRuleName == null ? string.Empty : $" (derived by Synchronisation Rule '{syncRuleName}')";
 
     /// <summary>
     /// Check if a CSO has been obsoleted and delete it, applying any joined Metaverse Object changes as necessary.
@@ -1250,7 +1303,13 @@ public abstract class SyncTaskProcessorBase
         foreach (var (cso, executionItem) in result.CsoDeletions)
             _obsoleteCsosToDelete.Add((cso, executionItem));
         if (result.MvoAttributeChange is { } mvoChange)
+        {
             _pendingMvoChanges.Add((mvoChange.Mvo, mvoChange.Additions, mvoChange.Removals, mvoChange.ChangeType, mvoChange.ExecutionItem, null));
+
+            // A recall on obsoletion changes the Metaverse Object like any other flow, so a derived flow on another
+            // system's rule reading a recalled attribute must be re-evaluated there (#1750).
+            CollectDerivedInputMarks(mvoChange.Mvo, mvoChange.Additions.Concat(mvoChange.Removals));
+        }
         // ProcessMvoDeletionRuleAsync (invoked earlier inside the core, via the
         // processMvoDeletionRuleAsync delegate) may already have queued this same MVO instance for its
         // grace-period deletion markers, ahead of the attribute-recall change staged here.
@@ -1736,16 +1795,7 @@ public abstract class SyncTaskProcessorBase
 
             // Create error RPEIs for MVA->SVA violations (#435): a multi-valued source with more than one value
             // targeting a single-valued attribute. The attribute does not flow; the object's other attributes do.
-            foreach (var attributeFlowError in attributeFlowErrors)
-            {
-                var errorRpei = _activity.PrepareRunProfileExecutionItem();
-                errorRpei.ConnectedSystemObject = connectedSystemObject;
-                errorRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
-                var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: false, targetSystemName: null);
-                errorRpei.ErrorType = errorType;
-                errorRpei.ErrorMessage = errorMessage;
-                _activity.RunProfileExecutionItems.Add(errorRpei);
-            }
+            RecordInboundAttributeFlowErrors(connectedSystemObject, attributeFlowErrors);
 
             // Queue this CSO for deferred reference attribute processing
             // This ensures reference attributes are processed after all CSOs in the page have MVOs
@@ -1782,19 +1832,15 @@ public abstract class SyncTaskProcessorBase
                     generatedValueOutcomesForRpei = await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
             }
 
-            // Unique Value Generation (#242, Phase 2 work package G): resolve this object's pending generated
-            // values inline, right here, so change tracking, outcomes, export evaluation and drift detection
-            // below see the result exactly as they see any other Attribute Flow contribution. Must run before
-            // "Count actual attribute changes" (immediately below), since ApplyGeneratedValue stages its result
-            // the same way an ordinary Attribute Flow writer does. Any outcome already resolved above, by a
-            // re-elected survivor's own generated mapping (work package H fix), is merged in rather than lost.
-            if (connectedSystemObject.MetaverseObject.PendingGeneratedValues.Count > 0)
-            {
-                var resolvedHere = await ResolvePendingGeneratedValuesAsync(connectedSystemObject, connectedSystemObject.MetaverseObject);
-                generatedValueOutcomesForRpei = generatedValueOutcomesForRpei == null
-                    ? resolvedHere
-                    : [.. generatedValueOutcomesForRpei, .. resolvedHere];
-            }
+            // Unique Value Generation (#242, Phase 2 work package G) and Metaverse-Derived Attribute Flows (#1750,
+            // FR 10): resolve this object's pending generated values inline, right here, so change tracking, outcomes,
+            // export evaluation and drift detection below see the result exactly as they see any other Attribute
+            // Flow contribution, interleaved level by level with the derived pass. Must run before "Count actual
+            // attribute changes" (immediately below), since both stage their results the same way an ordinary
+            // Attribute Flow writer does. Any outcome already resolved above, by a re-elected survivor's own
+            // generated mapping (work package H fix), is merged in rather than lost.
+            generatedValueOutcomesForRpei = await ResolveGenerationsAndDerivedLevelsAsync(
+                connectedSystemObject, inboundSyncRules, generatedValueOutcomesForRpei);
 
             // Count actual attribute changes that were queued
             var attributesAdded = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.Count;
@@ -1808,6 +1854,11 @@ public abstract class SyncTaskProcessorBase
             var removedAttributes = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count > 0
                 ? connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToHashSet()
                 : null;
+
+            // Metaverse-Derived Attribute Flows (#1750, "Position 2"): every attribute changed this pass (ordinary,
+            // derived, generated and re-elected values alike; a provenance-only takeover stages nothing) marks the
+            // other systems whose rules host a derived flow reading it, applied in bulk at page flush.
+            CollectDerivedInputMarks(connectedSystemObject.MetaverseObject, changedAttributes);
 
             // Capture MVO changes for change tracking (before applying, so we have the pending lists)
             // Change objects will be created in batch at page boundary for performance
@@ -1986,6 +2037,209 @@ public abstract class SyncTaskProcessorBase
         }
 
         return MetaverseObjectChangeResult.NoChanges();
+    }
+
+    /// <summary>
+    /// The per-object level loop (Metaverse-Derived Attribute Flows, #1750, plan Phase 3; FR 10). Level 0 resolves the
+    /// generation requests the ordinary pass recorded, exactly as before the feature. Then, for each level 1 to the
+    /// deepest level of the in-scope rules' Metaverse Object Types, the engine evaluates that level's derived flows
+    /// hosted on <paramref name="inScopeRules"/> (this Connected System's rules only: a derived flow runs in its
+    /// hosting system's own synchronisation), and any generation requests they recorded are resolved in one batch
+    /// before the next level reads them. Each level is evaluated exactly once per object per pass: running a mapping
+    /// twice would stage a duplicate pending addition. With no derived flow graph (the feature is off) only level 0
+    /// runs, which is exactly the single generation resolve this replaced.
+    /// </summary>
+    /// <returns>The generated-value outcomes for the object's RPEI, <paramref name="outcomesSoFar"/> included; null
+    /// when there are none, as before.</returns>
+    private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>?> ResolveGenerationsAndDerivedLevelsAsync(
+        ConnectedSystemObject cso,
+        List<SyncRule> inScopeRules,
+        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? outcomesSoFar)
+    {
+        var mvo = cso.MetaverseObject!;
+        var outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, outcomesSoFar);
+
+        var graph = _attributePriorityContext?.DerivedFlowGraph;
+        if (graph == null || inScopeRules.Count == 0)
+            return outcomes;
+
+        var maxLevel = inScopeRules
+            .Select(rule => rule.MetaverseObjectTypeId)
+            .Distinct()
+            .Select(graph.MaxLevel)
+            .Max();
+
+        for (var level = 1; level <= maxLevel; level++)
+        {
+            List<AttributeFlowError> levelErrors;
+            using (Diagnostics.Sync.StartSpan("EvaluateDerivedLevel").SetTag("level", level))
+            {
+                levelErrors = _syncEngine.EvaluateDerivedLevel(cso, level, inScopeRules, _objectTypes!, _expressionEvaluator, _attributePriorityContext!);
+            }
+
+            // Surfaced exactly as the ordinary pass's mapping-level errors are (decision 10); a thrown derived
+            // expression error propagates to ProcessActiveConnectedSystemObjectAsync and fails the object, as an
+            // ordinary one does. Each names its hosting Synchronisation Rule.
+            RecordInboundAttributeFlowErrors(cso, levelErrors);
+            if (levelErrors.Count > 0)
+                _derivedFlowErroredCsoIds.Add(cso.Id);
+
+            outcomes = await ResolveAndMergePendingGenerationsAsync(cso, mvo, outcomes);
+        }
+
+        return outcomes;
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="mvo"/>'s pending generation requests, if it has any (one <c>ResolveAsync</c> batch),
+    /// and merges their outcomes into <paramref name="outcomesSoFar"/>. Costs nothing when there are none.
+    /// </summary>
+    private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>?> ResolveAndMergePendingGenerationsAsync(
+        ConnectedSystemObject cso,
+        MetaverseObject mvo,
+        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? outcomesSoFar)
+    {
+        if (mvo.PendingGeneratedValues.Count == 0)
+            return outcomesSoFar;
+
+        var resolvedHere = await ResolvePendingGeneratedValuesAsync(cso, mvo);
+        return outcomesSoFar == null ? resolvedHere : [.. outcomesSoFar, .. resolvedHere];
+    }
+
+    /// <summary>
+    /// Records one error execution item per inbound Attribute Flow error: a separate error RPEI, not a failure on the
+    /// object's change RPEI, so the object's other attributes still synchronise and both are individually visible.
+    /// Shared by the ordinary pass and the derived pass so the two can never surface the same fault differently.
+    /// </summary>
+    private void RecordInboundAttributeFlowErrors(ConnectedSystemObject cso, List<AttributeFlowError> errors)
+    {
+        foreach (var attributeFlowError in errors)
+        {
+            var errorRpei = _activity.PrepareRunProfileExecutionItem();
+            errorRpei.ConnectedSystemObject = cso;
+            errorRpei.ConnectedSystemObjectId = cso.Id;
+            var (errorType, errorMessage) = DescribeAttributeFlowError(attributeFlowError, exporting: false, targetSystemName: null);
+            errorRpei.ErrorType = errorType;
+            errorRpei.ErrorMessage = errorMessage;
+            _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+    }
+
+    /// <summary>
+    /// Metaverse-Derived Attribute Flows (#1750, "Position 2"): records, for the page flush, which OTHER Connected
+    /// Systems must re-evaluate <paramref name="mvo"/> because a derived flow on their rules reads one of the attributes
+    /// in <paramref name="changedValues"/>. The system being synchronised is excluded: its own derived pass has already
+    /// run on this pass's values. In memory only; the marks are applied in one bulk update per page. A no-op when the
+    /// feature is off (no graph) or nothing changed.
+    /// </summary>
+    private void CollectDerivedInputMarks(MetaverseObject mvo, IEnumerable<MetaverseObjectAttributeValue> changedValues)
+    {
+        var graph = _attributePriorityContext?.DerivedFlowGraph;
+        if (graph == null)
+            return;
+
+        if (mvo.Type == null)
+        {
+            // Every sync load includes the Metaverse Object's type; without it the graph cannot be consulted, and a
+            // silent skip would leave a derived value stale indefinitely, so say so.
+            Log.Warning("CollectDerivedInputMarks: Metaverse Object {MvoId} has no Metaverse Object Type loaded; cannot determine which " +
+                "Connected Systems' derived Attribute Flows read its changed attributes, so none are marked.", mvo.Id);
+            return;
+        }
+
+        foreach (var connectedSystemId in DerivedInputMarking.GetConnectedSystemsToMark(graph, mvo.Type.Id, changedValues, _connectedSystem.Id))
+            _pendingDerivedInputMarks.Add((mvo, connectedSystemId));
+    }
+
+    /// <summary>
+    /// Page flush for the derived-input mark (#1750): applies the page's collected marks as one bulk update, and clears
+    /// the mark on this system's objects whose processing succeeded as another; neither makes a per-object call. Runs
+    /// after the page's Metaverse Objects are persisted, so a Metaverse Object projected on this page has its id.
+    /// </summary>
+    private async Task FlushDerivedInputMarksAsync()
+    {
+        if (_pendingDerivedInputMarks.Count > 0)
+        {
+            var marks = _pendingDerivedInputMarks
+                .Where(pending => pending.Mvo.Id != Guid.Empty)
+                .Select(pending => new DerivedInputChangeMark(pending.Mvo.Id, pending.ConnectedSystemId))
+                .Distinct()
+                .ToList();
+
+            var unresolved = _pendingDerivedInputMarks.Count(pending => pending.Mvo.Id == Guid.Empty);
+            if (unresolved > 0)
+            {
+                // Cannot happen once the page's Metaverse Objects are persisted; report rather than drop silently.
+                Log.Warning("FlushDerivedInputMarksAsync: {Count} derived-input mark(s) name a Metaverse Object with no id after persistence; they cannot be applied.",
+                    unresolved);
+            }
+
+            if (marks.Count > 0)
+            {
+                var marked = await _syncRepo.MarkConnectedSystemObjectsDerivedInputChangePendingAsync(marks);
+                _derivedInputMarksSet += marked;
+                Log.Debug("FlushDerivedInputMarksAsync: marked {Marked} Connected System Object(s) for derived Attribute Flow re-evaluation " +
+                    "from {Requested} distinct (Metaverse Object, Connected System) mark(s).", marked, marks.Count);
+            }
+
+            _pendingDerivedInputMarks.Clear();
+        }
+
+        if (_pendingDerivedInputClears.Count > 0)
+        {
+            var cleared = await _syncRepo.ClearConnectedSystemObjectDerivedInputChangePendingAsync(_pendingDerivedInputClears);
+            _derivedInputMarksCleared += cleared;
+            _derivedInputMarksKept += _pendingDerivedInputClears.Count - cleared;
+            Log.Debug("FlushDerivedInputMarksAsync: cleared the derived-input mark on {Cleared} of {Requested} re-evaluated Connected System Object(s); " +
+                "the rest were written since their page load (for example re-marked by another run) and stay marked for the next run.",
+                cleared, _pendingDerivedInputClears.Count);
+            _pendingDerivedInputClears.Clear();
+        }
+
+        _derivedInputSeenRowVersions.Clear();
+        _derivedFlowErroredCsoIds.Clear();
+    }
+
+    /// <summary>
+    /// Records the row version (<c>xmin</c>) of each marked Connected System Object on a freshly loaded page, so the
+    /// mark can later be cleared only if nobody re-marked the row after this run read it (#1750). Call straight after
+    /// the page load, before anything on the page is written.
+    /// <para>
+    /// Why this version is early enough: the clear must be guarded by a row version read NO LATER than the Metaverse
+    /// values the derived flows evaluate. Both page loaders (<c>GetConnectedSystemObjectsModifiedSinceAsync</c> for
+    /// delta, <c>GetConnectedSystemObjectsAsync</c> for full) read the Connected System Object rows, xmin included,
+    /// in their first statement (a single query, not split; for full synchronisation the scalar partition query), and
+    /// only afterwards load the joined Metaverse Objects and their attribute values in a separate statement
+    /// (<c>LoadMetaverseObjectsForCsosAsync</c>). Under READ COMMITTED each statement sees everything committed before
+    /// it started, so the Metaverse values are at least as new as the xmin. Another system's run persists its
+    /// Metaverse changes before it marks, so either this load saw the mark's xmin, in which case the later Metaverse
+    /// read sees the change it signals, or the mark lands later and moves the xmin, and the clear leaves it in place.
+    /// A Metaverse Object this run already held from an earlier read would be older than the xmin, but the tracker and
+    /// the page identity map are cleared at every page boundary, and nothing before the first page loads Metaverse
+    /// Objects tracked; a Connected System Object already tracked from before the load keeps its older xmin, which
+    /// can only make the clear skip (fail-safe), never succeed wrongly.
+    /// </para>
+    /// </summary>
+    protected void CaptureDerivedInputRowVersions(IEnumerable<ConnectedSystemObject> loadedPage)
+    {
+        foreach (var cso in loadedPage.Where(cso => cso.DerivedInputChangePending))
+            _derivedInputSeenRowVersions[cso.Id] = cso.xmin;
+    }
+
+    /// <summary>
+    /// End-of-run summary for the derived-input mark (#1750): how many other systems' objects this run marked for
+    /// re-evaluation, and how many of this system's marked objects it re-evaluated and cleared. Only logged when the
+    /// feature is on, so a run with the feature off logs exactly what it did before.
+    /// </summary>
+    protected void LogDerivedInputMarkSummary()
+    {
+        if (_attributePriorityContext?.DerivedFlowGraph == null)
+            return;
+
+        Log.Information("Derived Attribute Flow marks for {ConnectedSystemName}: {Marked} Connected System Object(s) in other systems marked for " +
+            "re-evaluation; {Cleared} of this system's marked object(s) re-evaluated and cleared; {Kept} re-evaluated but kept marked because " +
+            "the row was written after it was loaded.",
+            _connectedSystem.Name, _derivedInputMarksSet, _derivedInputMarksCleared, _derivedInputMarksKept);
     }
 
     /// <summary>
@@ -2907,7 +3161,8 @@ public abstract class SyncTaskProcessorBase
 
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
-        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0)
+        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0 &&
+            _pendingDerivedInputMarks.Count == 0 && _pendingDerivedInputClears.Count == 0)
             return;
 
         // Unique Value Generation (#242, Phase 2 work package G) integrity guard: every pending generation
@@ -3025,6 +3280,12 @@ public abstract class SyncTaskProcessorBase
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Cleared ScopeReviewPending on {Count} CSO(s) in batch", _pendingScopeReviewClears.Count);
             _pendingScopeReviewClears.Clear();
         }
+
+        // Metaverse-Derived Attribute Flows (#1750): mark other hosting systems' objects whose derived inputs changed
+        // this page, and clear the mark on this system's objects re-evaluated without error. Last, like the scope
+        // flag, so a mark is only cleared once its object's outcome is safely stored; after the creates, so an object
+        // projected on this page has the id its marks need.
+        await FlushDerivedInputMarksAsync();
 
         // Re-key deferred MVO→RPEI mappings now that newly projected MVOs have real IDs.
         // This enables EvaluateOutboundExportsAsync to find the originating RPEI for outcome linking.
@@ -4088,27 +4349,17 @@ public abstract class SyncTaskProcessorBase
         if (persistedPesByCsoId.Count == 0)
             return;
 
-        var reconciledCount = 0;
+        var pairs = _syncEngine.ReconcileDeferredExportsAgainstPersistedDeletes(_pendingExportsToCreate, persistedPesByCsoId);
 
-        foreach (var (csoId, persistedPe) in persistedPesByCsoId)
+        foreach (var pair in pairs)
         {
-            if (persistedPe.ChangeType != PendingExportChangeType.Delete ||
-                persistedPe.Status != PendingExportStatus.Pending)
-                continue;
+            var csoId = pair.PersistedDelete.ConnectedSystemObjectId!.Value;
 
-            // Find the matching deferred CREATE or UPDATE
-            var deferredPe = _pendingExportsToCreate.FirstOrDefault(pe =>
-                pe.ConnectedSystemObjectId == csoId &&
-                pe.Status == PendingExportStatus.Pending);
-
-            if (deferredPe == null)
-                continue;
-
-            if (deferredPe.ChangeType == PendingExportChangeType.Create)
+            if (pair.Outcome == DeferredDeleteReconciliationOutcome.CancelBoth)
             {
                 // CREATE + DELETE → cancel both. Remove deferred CREATE and queue persisted DELETE for deletion.
-                _pendingExportsToCreate.Remove(deferredPe);
-                _pendingExportsToDelete.Add(persistedPe);
+                _pendingExportsToCreate.Remove(pair.Deferred);
+                _pendingExportsToDelete.Add(pair.PersistedDelete);
 
                 // Also remove the provisioning CSO — it was never exported, so no need to create it
                 var provisioningCso = _provisioningCsosToCreate.FirstOrDefault(c => c.Id == csoId);
@@ -4116,19 +4367,19 @@ public abstract class SyncTaskProcessorBase
                     _provisioningCsosToCreate.Remove(provisioningCso);
 
                 Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Cancelled CREATE PE {CreateId} and DELETE PE {DeleteId} for CSO {CsoId} — no net change, object was never exported",
-                    deferredPe.Id, persistedPe.Id, csoId);
-                reconciledCount++;
+                    pair.Deferred.Id, pair.PersistedDelete.Id, csoId);
             }
-            else if (deferredPe.ChangeType == PendingExportChangeType.Update)
+            else
             {
                 // UPDATE + DELETE → remove UPDATE only, DELETE still needed
-                _pendingExportsToCreate.Remove(deferredPe);
+                _pendingExportsToCreate.Remove(pair.Deferred);
 
                 Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Removed redundant UPDATE PE {UpdateId} for CSO {CsoId} — DELETE PE {DeleteId} will proceed",
-                    deferredPe.Id, csoId, persistedPe.Id);
-                reconciledCount++;
+                    pair.Deferred.Id, csoId, pair.PersistedDelete.Id);
             }
         }
+
+        var reconciledCount = pairs.Count;
 
         if (reconciledCount > 0)
         {
@@ -5525,7 +5776,7 @@ public abstract class SyncTaskProcessorBase
     {
         var target = exporting && targetSystemName != null
             ? $"'{error.TargetAttributeName}' on '{targetSystemName}'"
-            : $"'{error.TargetAttributeName}'";
+            : $"'{error.TargetAttributeName}'{DescribeDerivedHost(error.SyncRuleName)}";
         var outcome = exporting ? "no Pending Export was generated for this attribute" : "no value was flowed for this attribute";
 
         switch (error.Kind)
@@ -5912,7 +6163,10 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="allSyncRules">All Synchronisation Rules from ALL Connected Systems (needed to build complete import mapping cache).</param>
     /// <param name="currentSystemSyncRules">Synchronisation Rules for the current Connected System being synced.</param>
-    protected void BuildDriftDetectionCache(List<SyncRule> allSyncRules, List<SyncRule> currentSystemSyncRules)
+    /// <param name="derivedFlowGraph">The run's Metaverse-Derived Attribute Flow graph (#1750) from
+    /// <see cref="ISyncServer.CreateDerivedFlowGraphAsync"/>, attached to the priority context; null when the feature is
+    /// off, which leaves the engine exactly as it was.</param>
+    protected void BuildDriftDetectionCache(List<SyncRule> allSyncRules, List<SyncRule> currentSystemSyncRules, DerivedFlowGraph? derivedFlowGraph = null)
     {
         using var span = Diagnostics.Sync.StartSpan("BuildDriftDetectionCache");
 
@@ -5927,7 +6181,7 @@ public abstract class SyncTaskProcessorBase
         // (Metaverse Object Type, Metaverse Attribute), backing the inline incumbent-comparison gate. Null assertions
         // are honoured now the NullValue read-query filter is in place (markers are excluded from export/drift/scoping
         // value sourcing, so an asserted null clears downstream targets and cannot resurrect a lower-priority value).
-        _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
+        _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true, derivedFlowGraph);
 
         // Cache export rules with EnforceState = true for THIS Connected System only
         _driftDetectionExportRules = currentSystemSyncRules

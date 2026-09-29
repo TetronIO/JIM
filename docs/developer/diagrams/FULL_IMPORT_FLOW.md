@@ -35,27 +35,24 @@ flowchart TD
     ParallelImport --> UpdateProgressP[Update activity progress<br/>Imported N objects]
     UpdateProgressP --> CollectExtIdsP[Add external IDs<br/>to collection]
     CollectExtIdsP --> ProcessPageP[ProcessImportObjectsAsync]
-    ProcessPageP --> UpdatePersistedData
+    ProcessPageP --> CloseConn
 
     PagingCheck -->|No, AD or sequential| PageLoop{More pages?<br/>initialPage OR<br/>tokens present}
     PageLoop -->|Yes| Import[connector.ImportAsync<br/>Pass original persisted data<br/>to ensure consistent watermark]
     Import --> UpdateProgress[Update activity progress<br/>Imported N objects page M]
     UpdateProgress --> CollectExtIds[Add external IDs from this page<br/>to externalIdsImported collection]
     CollectExtIds --> CaptureWatermark{First page with<br/>new persisted data?}
-    CaptureWatermark -->|Yes| SaveWatermark[Capture new watermark<br/>Don't save yet - save after all pages]
+    CaptureWatermark -->|Yes| SaveWatermark[Capture new watermark<br/>Don't save yet - save once staged]
     CaptureWatermark -->|No| ProcessPage
     SaveWatermark --> ProcessPage[ProcessImportObjectsAsync<br/>See Per-Object Processing below]
     ProcessPage --> PassTokens[Pass pagination tokens<br/>for next page]
     PassTokens --> ClearTracker[ClearChangeTracker<br/>at page boundary]
     ClearTracker --> PageLoop
 
-    PageLoop -->|No| UpdatePersistedData{New watermark<br/>captured?}
+    PageLoop -->|No| CloseConn[CloseImportConnection<br/>Returned connector data? Persist it<br/>and drop the captured watermark]
 
     %% Cancellation safety: when cancelled, the current page flush completes before exiting (no data loss)
     %% Per-page change tracker clearing: ClearChangeTracker is called at page boundaries to keep memory bounded
-    UpdatePersistedData -->|Yes| PersistWatermark[Update ConnectedSystem<br/>PersistedConnectorData]
-    UpdatePersistedData -->|No| CloseConn
-    PersistWatermark --> CloseConn[CloseImportConnection]
 
     %% --- File-based connector ---
     ConnType -->|IConnectorImportUsingFiles| FileImport[connector.ImportAsync<br/>Returns all objects at once]
@@ -84,7 +81,10 @@ flowchart TD
     Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]
     Reconcile --> ValidateRpeis[Validate RPEIs<br/>Detect orphaned create RPEIs<br/>with no CSO assigned]
     ValidateRpeis --> PersistRpeis[Flush remaining RPEIs<br/>via raw SQL bulk insert<br/>create/update batches flushed<br/>their own RPEIs as they committed]
-    PersistRpeis --> End([Import Complete<br/>Activity counters and message<br/>describe the whole run])
+    PersistRpeis --> RecordWatermark{Watermark captured<br/>and not overridden<br/>at close?}
+    RecordWatermark -->|Yes| PersistWatermark[Update ConnectedSystem<br/>PersistedConnectorData #1868<br/>only now that everything read is staged]
+    RecordWatermark -->|No| End
+    PersistWatermark --> End([Import Complete<br/>Activity counters and message<br/>describe the whole run])
 ```
 
 ## Per-Object Processing
@@ -264,7 +264,7 @@ flowchart TD
 
 - **Same-batch duplicate handling**<br /> When duplicates are found within a single page, BOTH objects are rejected (no "random winner" based on file order). This forces data owners to fix the source data.
 
-- **Watermark consistency**<br /> For paginated delta imports, the original persisted connector data (watermark/USN) is passed to every page. The new watermark from the first page is only saved after all pages complete, ensuring consistent queries.
+- **Watermark consistency**<br /> For paginated delta imports, the original persisted connector data (watermark/USN) is passed to every page, ensuring consistent queries. The new watermark from the first page is only saved at the very end of the run, once everything the pages returned has been staged (#1868): a run that fails or is cancelled before then keeps the watermark it started with, so the next Delta Import re-reads what it did not stage rather than skipping it.
 
 - **RPEI list separation**<br /> RPEIs are maintained separately from the Activity during import to avoid EF Core accidentally persisting CSOs before they're ready (EF would follow the Activity -> RPEI -> CSO navigation chain during `SaveChanges`).
 

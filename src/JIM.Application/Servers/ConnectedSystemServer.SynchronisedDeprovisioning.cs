@@ -87,7 +87,7 @@ public partial class ConnectedSystemServer
         // ineligible and none of its objects counts as a survivor.
         var allSyncRules = await Application.SyncRepo.GetAllSyncRulesAsync();
         var systemSyncRules = allSyncRules.Where(sr => sr.ConnectedSystemId == task.ConnectedSystemId).ToList();
-        var priorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
+        var priorityContext = await BuildRecallPriorityContextAsync(allSyncRules);
         var syncEngine = new SyncEngine();
         var syncServer = new SyncServer(Application);
         var expressionEvaluator = new DynamicExpressoEvaluator();

@@ -1037,3 +1037,82 @@ Describe 'Restart-JIMGeneratedValues' {
         }
     }
 }
+
+Describe 'Synchronisation Rule Mapping cmdlets: Metaverse-Derived Attribute Flows (#1750)' {
+
+    BeforeAll {
+        $script:CycleMessage = "Saving would create a dependency cycle: Mail Nickname (Synchronisation Rule 'AD Import') reads Display Name, which (Synchronisation Rule 'HR Import') reads Mail Nickname."
+        $script:WarningMessage = "The Attribute Flow to Email (Synchronisation Rule 'AD Import') derives its value from Metaverse attributes and calls Now(), which returns a different value each time it is evaluated; the value will change on every synchronisation and can cause repeated exports."
+    }
+
+    Context 'New-JIMSyncRuleMapping' {
+
+        It 'Writes each warning the save raised' {
+            InModuleScope JIM -Parameters @{ WarningMessage = $script:WarningMessage } {
+                param($WarningMessage)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ Id = 7; Warnings = @($WarningMessage) } }
+
+                $warnings = New-JIMSyncRuleMapping -SyncRuleId 2 -TargetMetaverseAttributeId 11 -Expression 'mv["Display Name"] + FormatDate(Now(), "yyyy")' -Confirm:$false 3>&1 |
+                    Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+                $warnings.Count | Should -Be 1
+                $warnings[0].Message | Should -Be $WarningMessage
+            }
+        }
+
+        It 'Writes no warning when the save raised none' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ Id = 7; Warnings = @() } }
+
+                $warnings = New-JIMSyncRuleMapping -SyncRuleId 2 -TargetMetaverseAttributeId 11 -Expression 'cs["mail"]' -Confirm:$false 3>&1 |
+                    Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+                $warnings.Count | Should -Be 0
+            }
+        }
+
+        It 'Passes a refused save''s message through unchanged' {
+            InModuleScope JIM -Parameters @{ CycleMessage = $script:CycleMessage } {
+                param($CycleMessage)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { throw $CycleMessage }
+
+                New-JIMSyncRuleMapping -SyncRuleId 2 -TargetMetaverseAttributeId 14 -Expression 'mv["Display Name"]' -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable err | Out-Null
+
+                # -ErrorVariable also collects the nested records; the cmdlet's own error is the one users see.
+                ($err | ForEach-Object { $_.ToString() }) | Should -Contain "Failed to create Synchronisation Rule Mapping: $CycleMessage"
+            }
+        }
+    }
+
+    Context 'Set-JIMSyncRuleMapping' {
+
+        It 'Writes each warning the save raised' {
+            InModuleScope JIM -Parameters @{ WarningMessage = $script:WarningMessage } {
+                param($WarningMessage)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ Id = 102; Warnings = @($WarningMessage) } }
+
+                $warnings = Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 102 -Expression 'mv["Display Name"] + FormatDate(Now(), "yyyy")' -Confirm:$false 3>&1 |
+                    Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+                $warnings.Count | Should -Be 1
+                $warnings[0].Message | Should -Be $WarningMessage
+            }
+        }
+
+        It 'Passes a refused save''s message through unchanged' {
+            InModuleScope JIM -Parameters @{ CycleMessage = $script:CycleMessage } {
+                param($CycleMessage)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { throw $CycleMessage }
+
+                Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 102 -Expression 'mv["Display Name"]' -Confirm:$false -ErrorAction SilentlyContinue -ErrorVariable err
+
+                ($err | ForEach-Object { $_.ToString() }) | Should -Contain "Failed to update Synchronisation Rule Mapping: $CycleMessage"
+            }
+        }
+    }
+}

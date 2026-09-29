@@ -57,7 +57,15 @@ public partial class SyncEngine : ISyncEngine
 
         // A disabled mapping is skipped without an error: disabling is a deliberate choice (an administrator's,
         // or the schema refresh decision's), so nothing flows and nothing is reported against the object (#1485).
-        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.Where(m => m.Enabled))
+        //
+        // A derived mapping (Metaverse-Derived Attribute Flows, #1750: an import expression reading mv["..."]) is
+        // skipped whenever the run has a derived flow graph: it is evaluated by the derived pass
+        // (EvaluateDerivedLevel), level by level, against the object's effective Metaverse values, never here with a
+        // partial view (plan decision 5). Every inbound path routes through this method, so the skip also covers the
+        // deferred reference-only pass and contributor re-election re-flows. Without a graph (the feature is off) the
+        // mapping flows here exactly as before, reading nothing from mv.
+        var derivedFlowGraph = priorityContext?.DerivedFlowGraph;
+        foreach (var syncRuleMapping in syncRule.AttributeFlowRules.Where(m => m.Enabled && derivedFlowGraph?.IsDerived(m) != true))
         {
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");

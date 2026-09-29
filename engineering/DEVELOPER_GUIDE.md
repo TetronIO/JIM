@@ -702,6 +702,8 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | `Analyze (csharp)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of C# code |
 | `Analyze (javascript-typescript)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of JavaScript/TypeScript code |
 
+**Informational checks:** `deployment-boot` (CI workflow) installs JIM from a release bundle built from the commit, with its own installer, on Docker, rootful Podman and rootless Podman, and compares what the runtimes run (see `engineering/TESTING_STRATEGY.md` > Deployment Boot Tests). It joins the required checks once it has passed ten consecutive runs.
+
 **Why `scan-base-images-summary` exists:** the `scan-images` job uses a dynamic matrix generated from the production Dockerfiles, and matrix leg names are unsuitable as required status checks (a leg appears or disappears with the Dockerfiles, and the original base-image matrix embedded digests that changed with every bump). The summary job aggregates all matrix legs into a single stable check name. The name predates the move from scanning base images to scanning the built JIM images and is kept because the ruleset names it.
 
 **Human review:** the required approving review count is currently set to zero. The machine-enforced quality gates (CodeQL static analysis with review comments via the github-code-quality bot, build and test, base image scanning, changelog lint) provide the consistent baseline across all PRs; an AI-assisted review can be requested on demand by commenting `@claude review this PR` (the `.github/workflows/claude.yml` workflow). As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.

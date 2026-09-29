@@ -25,6 +25,13 @@
 .PARAMETER SkipImageExport
     Skip exporting Docker images (useful for testing the bundle structure).
 
+.PARAMETER SkipImageBuild
+    Export JIM's images as they already are in Docker, tagged ghcr.io/tetronio/<image>:<Version>, rather
+    than building them. CI builds them first, with its build cache; the script stops if one is missing.
+
+.PARAMETER SkipArchive
+    Leave the bundle as a folder, without also writing it into a .tar.gz archive.
+
 .PARAMETER IncludePostgres
     Include the PostgreSQL image in the bundle. Defaults to true.
 
@@ -32,6 +39,11 @@
     ./Build-ReleaseBundle.ps1 -Version "0.2.0"
 
     Builds a release bundle for version 0.2.0.
+
+.EXAMPLE
+    ./Build-ReleaseBundle.ps1 -Version "0.2.0" -SkipImageBuild -SkipArchive
+
+    Bundles images already built and tagged ghcr.io/tetronio/jim-*:0.2.0, as a folder only.
 
 .EXAMPLE
     ./Build-ReleaseBundle.ps1 -SkipImageExport
@@ -52,6 +64,10 @@ param(
 
     [switch]$SkipImageExport,
 
+    [switch]$SkipImageBuild,
+
+    [switch]$SkipArchive,
+
     [bool]$IncludePostgres = $true
 )
 
@@ -62,13 +78,8 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 # Read PostgreSQL image reference from docker-compose.yml (single source of truth).
 # The digest-pinned image in docker-compose.yml is maintained by Dependabot.
-$composeContent = Get-Content (Join-Path $RepoRoot "docker-compose.yml") -Raw
-if ($composeContent -match 'image:\s+((?:docker\.io/library/)?postgres:[^\s]+)') {
-    $PostgresImage = $Matches[1]
-    Write-Host "PostgreSQL image from docker-compose.yml: $PostgresImage" -ForegroundColor Gray
-} else {
-    throw "Could not find PostgreSQL image reference in docker-compose.yml"
-}
+$PostgresImage = & (Join-Path $PSScriptRoot 'Get-PostgresImageReference.ps1')
+Write-Host "PostgreSQL image from docker-compose.yml: $PostgresImage" -ForegroundColor Gray
 Push-Location $RepoRoot
 
 try {
@@ -121,11 +132,19 @@ try {
             $imageName = $image.Name
             $imageTag = "ghcr.io/tetronio/${imageName}:$Version"
 
-            Write-Host "  Building $imageName..." -ForegroundColor Gray
-            docker build -t $imageTag -f $image.Dockerfile $image.Context --build-arg VERSION=$Version
+            if ($SkipImageBuild) {
+                docker image inspect $imageTag *> $null
+                if ($LASTEXITCODE -ne 0) {
+                    throw "The image $imageTag is not in Docker. Build it first, or leave out -SkipImageBuild."
+                }
+            }
+            else {
+                Write-Host "  Building $imageName..." -ForegroundColor Gray
+                docker build -t $imageTag -f $image.Dockerfile $image.Context --build-arg VERSION=$Version
 
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to build $imageName"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to build $imageName"
+                }
             }
 
             Write-Host "  Exporting $imageName..." -ForegroundColor Gray
@@ -169,7 +188,15 @@ try {
             if ($LASTEXITCODE -ne 0 -or -not ($archiveIndex -match [regex]::Escape($postgresDigest))) {
                 throw "The PostgreSQL archive does not carry the registry manifest $postgresDigest, so the pinned image would not resolve on an air-gapped host. Build the bundle with Docker's containerd image store (https://docs.docker.com/engine/storage/containerd/)."
             }
-            Write-Host "  Exported: $postgresTar" -ForegroundColor Green
+
+            # Docker's classic image store, on the installing host, drops that registry digest when it loads the
+            # archive, so the pinned reference still would not resolve there. Record the image's ID (its config
+            # digest, which that store keeps as the image's ID): the installer checks the loaded image against it
+            # before running the image by its ID instead.
+            $postgresIds = & (Join-Path $PSScriptRoot 'Get-ImageArchiveIds.ps1') -ArchivePath $postgresTar
+            $postgresIdsPath = Join-Path $bundlePath "docker-images/postgres-18.image-ids"
+            (($postgresIds -join "`n") + "`n") | Set-Content -NoNewline $postgresIdsPath
+            Write-Host "  Exported: $postgresTar (image ID $($postgresIds -join ', '))" -ForegroundColor Green
         }
     }
     else {
@@ -380,6 +407,20 @@ describe. For the bundled PostgreSQL, set JIM_DB_HOSTNAME=jim.database (the
 template's localhost is for development) and choose a strong JIM_DB_PASSWORD;
 for your own server, give its name and JIM's credentials there.
 
+For the bundled PostgreSQL on Docker's classic image store (docker info shows
+Storage Driver: overlay2), Docker drops the registry digest the compose file
+pins PostgreSQL by when it loads the image. Run the loaded image by its ID
+instead, after checking it is the one this bundle records:
+
+``````bash
+image=`$(docker load -i docker-images/postgres-18.tar | sed -n 's/^Loaded image: //p')
+id=`$(docker image inspect -f '{{.Id}}' "`$image")
+grep -qxF "`$id" docker-images/postgres-18.image-ids && echo "JIM_DB_IMAGE=`$id" >> /opt/jim/.env
+``````
+
+Nothing is added if the IDs differ; then extract the bundle again and check it
+with sha256sum -c checksums.sha256.
+
 Put JIM's certificate and key in place. For your organisation's certificate:
 
 ``````bash
@@ -520,25 +561,26 @@ License: See https://junctional.io/license
 
     Pop-Location
 
-    # Create tarball
-    Write-Host "`nCreating release archive..." -ForegroundColor Cyan
-    $tarballPath = Join-Path $OutputPath "$bundleName.tar.gz"
-
-    Push-Location $OutputPath
-    tar -czf "$bundleName.tar.gz" $bundleName
-    Pop-Location
-
-    if ($LASTEXITCODE -eq 0) {
-        $tarballSize = (Get-Item $tarballPath).Length / 1MB
-        Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB)" -ForegroundColor Green
-    }
-    else {
-        Write-Warning "Failed to create tarball"
-    }
-
     Write-Host "`nRelease bundle complete!" -ForegroundColor Green
     Write-Host "Bundle location: $bundlePath" -ForegroundColor Cyan
-    Write-Host "Archive: $tarballPath" -ForegroundColor Cyan
+
+    if (-not $SkipArchive) {
+        Write-Host "`nCreating release archive..." -ForegroundColor Cyan
+        $tarballPath = Join-Path $OutputPath "$bundleName.tar.gz"
+
+        Push-Location $OutputPath
+        tar -czf "$bundleName.tar.gz" $bundleName
+        Pop-Location
+
+        if ($LASTEXITCODE -eq 0) {
+            $tarballSize = (Get-Item $tarballPath).Length / 1MB
+            Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB)" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "Failed to create tarball"
+        }
+        Write-Host "Archive: $tarballPath" -ForegroundColor Cyan
+    }
 }
 finally {
     Pop-Location

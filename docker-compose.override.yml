@@ -17,6 +17,12 @@ services:
       # so it returns the right endpoint URLs to each caller based on Host.
       - JIM_SSO_AUTHORITY=http://jim.keycloak:8080/realms/jim
       - JIM_SSO_PUBLIC_AUTHORITY=http://localhost:8181/realms/jim
+      # The development Keycloak is configured with KC_HOSTNAME=http://localhost:8181,
+      # so its 'iss' claim is always http://localhost:8181/realms/jim, whichever
+      # address JIM.Web reaches it at; only the back-channel endpoint URLs in the
+      # discovery document vary by access path. Set here rather than in .env.example,
+      # which production installations are made from.
+      - JIM_SSO_VALID_ISSUERS=http://localhost:8181/realms/jim
       # JIM_SSO_CLIENT_ID=jim-web comes from .env and is the confidential client
       # used by the Blazor UI. Keycloak does not allow a single client to be both
       # confidential (with a secret) and public (PKCE/loopback), so the PowerShell

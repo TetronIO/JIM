@@ -375,6 +375,27 @@ public interface IConnectedSystemRepository
         IReadOnlyList<Guid> changeIdsToRemove);
 
     /// <summary>
+    /// Retrieves the Update Pending Exports of a Connected System (not being executed) that carry at least one queued
+    /// change (Pending or ExportedNotConfirmed) attributed to an export Synchronisation Rule which may no longer
+    /// authorise it: the account is no longer joined, the rule is missing or disabled, or (for an attribute that is not
+    /// a class membership attribute) the rule has no enabled Attribute Flow for the change's attribute. A candidate
+    /// filter only; <c>ISyncEngine.SelectQueuedChangesWithoutAuthority</c> makes the decision. Loaded untracked with
+    /// their attribute changes and their Connected System Object (without its attribute values).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose exports are about to run.</param>
+    /// <param name="classMembershipAttributeIds">The Connected System's class membership attribute ids, which have no
+    /// Attribute Flow of their own and so are not candidates on that ground alone.</param>
+    public Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds);
+
+    /// <summary>
+    /// Withdraws queued Pending Export attribute changes by id, then deletes every Update Pending Export (not being
+    /// executed) they belonged to that is left with no attribute changes at all.
+    /// </summary>
+    /// <param name="attributeChangeIds">The attribute changes to withdraw.</param>
+    /// <returns>How many attribute changes were withdrawn and how many emptied Pending Exports were deleted.</returns>
+    public Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawPendingExportAttributeChangesAsync(IReadOnlyCollection<Guid> attributeChangeIds);
+
+    /// <summary>
     /// Retrieves a page of Pending Export headers for a Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
@@ -960,6 +981,16 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the mappings.</param>
     Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Gets every import Synchronisation Rule flowing to a Metaverse Object Type, across all Connected Systems,
+    /// disabled rules included, with each rule's Attribute Flow mappings, their sources (expressions included),
+    /// generation settings and target Metaverse attributes (#1750). The save-time Metaverse-Derived Attribute Flow
+    /// validation builds its dependency graph from this, so it must report what the database holds: implementations
+    /// read untracked, never returning an instance the caller may be mid-way through mutating.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type the rules flow to.</param>
+    Task<List<SyncRule>> GetImportSyncRulesForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
 
     /// <summary>
     /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the

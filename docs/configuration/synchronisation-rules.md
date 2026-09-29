@@ -52,6 +52,8 @@ An export rule:
 
 When **enforce state** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the metaverse-derived value.
 
+A change made in the Connected System is not drift when it can flow back in: that is, when the same Connected System holds the winning import Attribute Flow for the Metaverse attribute and that flow **reads the changed attribute**. For example, an import flow of `mail` into Email and an export of Email to `mail` let an edit to `mail` update Email. If the import flow reads a different attribute (Display Name built from `givenName` and `sn`, but exported to `displayName`), an edit to `displayName` could never reach the Metaverse, so it is treated as drift and corrected.
+
 ## Scoping criteria
 
 Scoping criteria determine which objects the rule applies to. Only objects that match are processed.
@@ -235,7 +237,7 @@ If a Full Import completes without reporting the object back at all, the Create 
 
 Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's Metaverse Object is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)):
 
-- **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported.
+- **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported: a change queued for the object while it was in scope, and not yet exported, is withdrawn by the next export run rather than written to an object JIM no longer manages.
 - **Delete**: JIM queues a delete so the object is removed from the Connected System on the next export run.
 
 The action applies regardless of how the object came to be joined: it makes no difference whether JIM provisioned it or matched (joined) a pre-existing object. If several export rules cover the same object with different actions, Delete wins.
@@ -386,7 +388,7 @@ A mapping's **settings**, meaning how it behaves rather than what it reads and w
 
 Every Attribute Flow mapping can be **disabled** individually, without touching the rest of its Synchronisation Rule. A disabled mapping is skipped by synchronisation in both directions: it contributes nothing inbound (and drops out of the attribute's [Attribute Priority](../concepts/attribute-priority.md) contention), flows nothing on export, at provisioning as much as on updates, and Drift Correction leaves its target attribute alone. Each run whose rules carry disabled mappings notes how many it skipped in the service log.
 
-Disabling one mapping is the smallest safe response to a single source attribute that has been removed or redefined at the Connected System; disabling the whole rule stops every flow it carries. Where JIM disables a mapping, or a whole Synchronisation Rule, on your behalf (the [schema refresh decision](connected-systems.md#refreshing-the-schema)), it records why: the reason is shown on the Attribute Flow tab for a mapping, and beside the Enabled switch for a rule, and saving the item enabled clears it. Re-enabling is always a manual choice.
+Disabling one mapping is the smallest safe response to a single source attribute that has been removed or redefined at the Connected System; disabling the whole rule stops every flow it carries. Either also covers changes already queued: a Pending Export change that a now-disabled (or removed, or deleted) export mapping or rule queued, and that has not been exported yet, is withdrawn from the queue as soon as the change is saved, from the portal, the REST API or PowerShell alike, so the Pending Exports page shows only what will actually be sent. Every export run checks the queue the same way before it starts, and its Activity carries a warning saying how many changes it withdrew. A change already sent and awaiting confirmation by import is left to complete. Where JIM disables a mapping, or a whole Synchronisation Rule, on your behalf (the [schema refresh decision](connected-systems.md#refreshing-the-schema)), it records why: the reason is shown on the Attribute Flow tab for a mapping, and beside the Enabled switch for a rule, and saving the item enabled clears it. Re-enabling is always a manual choice.
 
 What a mapping **targets**, and whether its source is an attribute or an expression, is not editable. Retargeting revalidates against attribute types and plurality, and for an import mapping it reopens the mapping's place in the [Attribute Priority](../concepts/attribute-priority.md) order, so it is a delete and a create rather than an edit. That is deliberate: the priority position is lost either way, and an interface that hid it would lose it silently.
 
