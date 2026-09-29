@@ -32,6 +32,6 @@ public interface IConnectorImportUsingCalls
     /// <summary>
     /// Closes the connection to the Connected System opened by <see cref="OpenImportConnection"/>.
     /// </summary>
-    /// <returns>Return null to leave the persisted connector state unchanged (the normal case); return a value only when the connector needs JIM to persist updated state that no import result carried (for example, connection-open failed in a way that must invalidate persisted state). A non-null return is persisted by the worker AFTER any import-result persistence, so only return non-null when that override is intended.</returns>
+    /// <returns>Return null to leave the persisted connector state unchanged (the normal case); return a value only when the connector needs JIM to persist updated state that no import result carried (for example, connection-open failed in a way that must invalidate persisted state). A non-null return is persisted by the worker as soon as the connection closes, even when the import failed, and replaces any PersistedConnectorData an import result carried: that value is then not persisted at all. Only return non-null when that override is intended.</returns>
     public string? CloseImportConnection();
 }
