@@ -104,6 +104,31 @@ function Get-ContainerDirectoryType {
     return @('SambaAD', 'OpenLDAP', 'DirectoryServer389')
 }
 
+function Get-ScenarioDirectoryTypeMenuEntry {
+    <#
+    .SYNOPSIS
+        The names the interactive directory type menu offers for Scenario $ScenarioNumber: its supported
+        directory types in the canonical order, then "All" when at least one container directory type is
+        among them. "All" expands to the container types only, so a scenario that runs on the Active
+        Directory lab alone (024, 025) is not offered it. Always returns an array.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
+    $supported = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $ScenarioNumber)
+    $containerTypes = @(Get-ContainerDirectoryType)
+    $hasContainerLeg = @($supported | Where-Object { $_ -in $containerTypes }).Count -gt 0
+    if ($hasContainerLeg) {
+        return @($supported + 'All')
+    }
+    return $supported
+}
+
 function Test-ScenarioIsDirectoryAgnostic {
     <#
     .SYNOPSIS

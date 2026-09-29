@@ -949,6 +949,12 @@ function Show-TemplateMenu {
 
 # Interactive directory type selection function
 function Show-DirectoryTypeMenu {
+    param(
+        # The scenario the menu is offering directory types for; only the types the table allows for it are listed.
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
     $directoryTypes = @(
         @{
             Name = "SambaAD"
@@ -963,7 +969,7 @@ function Show-DirectoryTypeMenu {
         @{
             Name = "DirectoryServer389"
             Description = "389 Directory Server with multi-suffix partitions"
-            Details = "LDAP on port 3389, RFC 4512 schema; every OpenLDAP scenario except 14, 19 and 22 (OpenLDAP only), 17 (Samba AD only) and 24 and 25 (Active Directory lab only)"
+            Details = "LDAP on port 3389, RFC 4512 schema"
         }
         @{
             Name = "ActiveDirectory"
@@ -976,6 +982,11 @@ function Show-DirectoryTypeMenu {
             Details = "Runs all scenarios against SambaAD first, then OpenLDAP, then DirectoryServer389; never includes ActiveDirectory, which needs the lab host"
         }
     )
+
+    # Offer only what the scenario can run on (Get-ScenarioDirectoryTypes.ps1): a type the table refuses is not
+    # worth listing, and "All" is left out for a scenario with no container leg, because All never includes the lab.
+    $offered = @(Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber $ScenarioNumber)
+    $directoryTypes = @($directoryTypes | Where-Object { $_.Name -in $offered })
 
     $selectedIndex = 0
     $exitMenu = $false
@@ -1361,7 +1372,7 @@ if (-not $Scenario) {
             $DirectoryType = $menuSupportedTypes[0]
         }
         else {
-            $DirectoryType = Show-DirectoryTypeMenu
+            $DirectoryType = Show-DirectoryTypeMenu -ScenarioNumber $scenarioNumber
         }
         # Re-resolve directory config with the selected type (skip for "All" — handled below)
         if ($DirectoryType -ne "All") {

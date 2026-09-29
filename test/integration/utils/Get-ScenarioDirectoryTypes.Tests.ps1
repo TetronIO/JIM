@@ -168,6 +168,35 @@ Describe 'Test-ScenarioIsDirectoryAgnostic' {
     }
 }
 
+Describe 'Get-ScenarioDirectoryTypeMenuEntry' {
+    It 'offers a scenario with no restriction every directory type and All' {
+        Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber 1 | Should -Be @('SambaAD', 'OpenLDAP', 'DirectoryServer389', 'ActiveDirectory', 'All')
+    }
+
+    It 'offers Scenario 017 only Samba AD, the Active Directory lab and All (its container leg exists)' {
+        Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber 17 | Should -Be @('SambaAD', 'ActiveDirectory', 'All')
+    }
+
+    It 'offers Scenario 014 only OpenLDAP and All' {
+        Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber 14 | Should -Be @('OpenLDAP', 'All')
+    }
+
+    It 'offers Scenarios 024 and 025 only the Active Directory lab, without All, which never includes it' {
+        Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber 24 | Should -Be @('ActiveDirectory')
+        Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber 25 | Should -Be @('ActiveDirectory')
+    }
+
+    It 'offers the "All" scenario ($null) every directory type and All' {
+        Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber $null | Should -Be @('SambaAD', 'OpenLDAP', 'DirectoryServer389', 'ActiveDirectory', 'All')
+    }
+
+    It 'always returns an array, even without All' {
+        $result = @(Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber 24)
+        $result.GetType().IsArray | Should -Be $true
+        $result.Count | Should -Be 1
+    }
+}
+
 Describe 'Run-IntegrationTests.ps1 reads the scenario table for every directory type decision' {
     BeforeAll {
         # The runner cannot run without Docker and the lab, so what is proven here is that every decision
@@ -196,6 +225,14 @@ Describe 'Run-IntegrationTests.ps1 reads the scenario table for every directory 
         $script:sweepIndex = [regex]::Match($script:runnerText, '(?m)^if \(\$Scenario -eq "All"\) \{').Index
         $script:allHandlerText = $script:runnerText.Substring($script:allHandlerIndex, $script:sweepIndex - $script:allHandlerIndex)
         $script:sweepText = $script:runnerText.Substring($script:sweepIndex)
+    }
+
+    It 'offers the interactive menu only the directory types the table allows for the scenario' {
+        $menuIndex = $script:runnerText.IndexOf('function Show-DirectoryTypeMenu')
+        $menuIndex | Should -BeGreaterThan 0
+        $menuText = $script:runnerText.Substring($menuIndex, 4000)
+        $menuText.Contains('Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber $ScenarioNumber') | Should -BeTrue -Because 'the menu filters its entries by the table'
+        $script:runnerText.Contains('Show-DirectoryTypeMenu -ScenarioNumber $scenarioNumber') | Should -BeTrue -Because 'the menu must know which scenario it is offering types for'
     }
 
     It 'finds the -DirectoryType All handler and the -Scenario All sweep, in that order' {
