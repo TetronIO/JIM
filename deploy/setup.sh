@@ -67,6 +67,8 @@
 #     JIM_SETUP_RUNTIME     - "docker" or "podman", as --runtime (default: the one installed; prompt if both)
 #     JIM_SETUP_PODMAN_ROOTLESS - "true" to run JIM rootless on Podman, as --rootless
 #     JIM_SETUP_PODMAN_ACCOUNT  - The account that runs JIM rootless, with --rootless (default: jim)
+#     JIM_SETUP_FIX_APPARMOR   - "true" or "false": on a host whose AppArmor profiles for Podman stop JIM using
+#                             the network (Ubuntu 24.04), add the rule it needs (default: prompt). Podman only.
 #     JIM_SETUP_OPEN_FIREWALL  - "true" or "false": open the HTTPS port in firewalld, when it is running (default:
 #                             prompt). Podman only.
 
@@ -777,6 +779,45 @@ prepare_podman_account() {
     success "Enabled lingering for ${account}: JIM runs with nobody logged in, and starts at boot"
 }
 
+# Stops a rootless installation whose systemd manager would look for JIM in the wrong folders. The manager runs
+# Quadlet and Podman with its own environment, which takes settings made for every account (in /etc/environment,
+# say); a folder setting that points elsewhere leaves Quadlet generating no units from the ones this script
+# installs, or Podman using storage or a runtime folder that is not the account's, and JIM never starts.
+check_account_environment() {
+    [ -n "$PODMAN_ACCOUNT" ] && [ "$PODMAN_SYSTEMD" = "true" ] || return 0
+    local uid home
+    uid=$(id -u "$PODMAN_ACCOUNT")
+    home=$(account_home)
+
+    local environment
+    environment=$(jim_systemctl show-environment) \
+        || fatal "Could not read the environment of the systemd manager of ${PODMAN_ACCOUNT}. See: systemctl status user@${uid}.service"
+
+    local problems=() name expected actual
+    for name in XDG_CONFIG_HOME XDG_DATA_HOME XDG_RUNTIME_DIR; do
+        case "$name" in
+            XDG_CONFIG_HOME) expected="${home}/.config" ;;
+            XDG_DATA_HOME) expected="${home}/.local/share" ;;
+            XDG_RUNTIME_DIR) expected="/run/user/${uid}" ;;
+        esac
+        actual=$(printf '%s\n' "$environment" | sed -n "s/^${name}=//p" | tail -n 1)
+        if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
+            problems+=("${name}=${actual}, where JIM needs ${expected} or nothing")
+        fi
+    done
+    [ "${#problems[@]}" -eq 0 ] && return 0
+
+    error "The systemd manager of ${PODMAN_ACCOUNT}, which runs JIM, has folder settings meant for another account:"
+    local problem
+    for problem in "${problems[@]}"; do
+        error "  ${problem}"
+    done
+    error "They are usually set for every account in /etc/environment, /etc/environment.d/ or"
+    error "/etc/security/pam_env.conf, or for ${PODMAN_ACCOUNT} alone in ${home}/.config/environment.d/. Remove them,"
+    error "or limit them to the accounts they are meant for, then run: systemctl restart user@${uid}.service"
+    fatal "Then run this again. Or run JIM as root, which they do not affect: leave out --rootless."
+}
+
 # Runs a command as the account that runs JIM: that account's Podman sees JIM's images, secrets and containers.
 as_jim_account() {
     if [ -z "$PODMAN_ACCOUNT" ] || [ "$(id -un)" = "$PODMAN_ACCOUNT" ]; then
@@ -785,9 +826,18 @@ as_jim_account() {
     fi
     local uid
     uid=$(id -u "$PODMAN_ACCOUNT")
+    # With a clean environment: the caller's own XDG_CONFIG_HOME, TMPDIR and the like would point Podman at
+    # folders the account cannot read. Proxy settings are kept, for a connected install behind a proxy.
+    local keep=() var
+    for var in LANG http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY; do
+        if [ -n "${!var:-}" ]; then
+            keep+=("${var}=${!var}")
+        fi
+    done
     # From the root folder, which the account can always read, rather than wherever this script was started.
-    (cd / && runuser -u "$PODMAN_ACCOUNT" -- env HOME="$(account_home)" XDG_RUNTIME_DIR="/run/user/${uid}" \
-        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" "$@")
+    (cd / && runuser -u "$PODMAN_ACCOUNT" -- env -i PATH="$PATH" HOME="$(account_home)" USER="$PODMAN_ACCOUNT" \
+        LOGNAME="$PODMAN_ACCOUNT" XDG_RUNTIME_DIR="/run/user/${uid}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" \
+        ${keep[@]+"${keep[@]}"} "$@")
 }
 
 # systemctl for the systemd manager that runs JIM: the system's when rootful, the account's when rootless.
@@ -1024,6 +1074,56 @@ configure_firewall() {
             || fatal "Failed to open port ${port} in firewalld"
         success "Allowed port ${port} in firewalld"
     fi
+}
+
+# Ubuntu 24.04 gives crun and podman AppArmor profiles of their own. A container that sets no-new-privileges, as
+# JIM's do, cannot leave them for its own profile, so AppArmor stacks the two, and the stack allows no network
+# at all: JIM could reach neither its database nor its identity provider. A network rule in each profile's
+# local override, the place Ubuntu provides for site changes, restores it; the container keeps its own
+# profile. Rootless containers, and hosts without these profiles or already with the rule, are unaffected.
+apparmor_blocks_network() {
+    [ -z "$PODMAN_ACCOUNT" ] || return 1
+    [ "$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null)" = "Y" ] || return 1
+    local profile
+    for profile in crun podman; do
+        if [ -f "/etc/apparmor.d/${profile}" ] \
+            && ! grep -qsE '^[[:space:]]*network[[:space:],]' "/etc/apparmor.d/${profile}" "/etc/apparmor.d/local/${profile}"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+configure_apparmor() {
+    apparmor_blocks_network || return 0
+
+    local fix="${JIM_SETUP_FIX_APPARMOR:-}"
+    if [ -z "$fix" ]; then
+        echo
+        info "This host's AppArmor profiles for Podman stop JIM's containers using the network."
+        echo "  A network rule in their local overrides, /etc/apparmor.d/local/crun and podman, fixes it."
+        if prompt_yn "Add the rule?" "y"; then
+            fix="true"
+        else
+            fix="false"
+        fi
+    fi
+    if [ "$fix" != "true" ]; then
+        fatal "Without it JIM cannot reach its database or identity provider. Add a line reading network, to /etc/apparmor.d/local/crun and /etc/apparmor.d/local/podman, then reload both with apparmor_parser -r; or install JIM rootless (--rootless). See ${DOCS_BASE}/administration/podman/#firewall-selinux-and-apparmor"
+    fi
+
+    local profile
+    for profile in crun podman; do
+        [ -f "/etc/apparmor.d/${profile}" ] || continue
+        mkdir -p /etc/apparmor.d/local
+        if ! grep -qsE '^[[:space:]]*network[[:space:],]' "/etc/apparmor.d/local/${profile}"; then
+            echo "network," >> "/etc/apparmor.d/local/${profile}" \
+                || fatal "Failed to write /etc/apparmor.d/local/${profile}"
+        fi
+        apparmor_parser -r "/etc/apparmor.d/${profile}" \
+            || fatal "Failed to reload the AppArmor profile /etc/apparmor.d/${profile}"
+    done
+    success "Allowed JIM's containers to use the network under the AppArmor profiles for Podman (/etc/apparmor.d/local/crun and podman)"
 }
 
 # Starts JIM's pods, under systemd where it can.
@@ -1998,6 +2098,7 @@ main() {
     if [ "$RUNTIME" = "podman" ]; then
         choose_podman_account "$install_dir"
         prepare_podman_account
+        check_account_environment
     fi
 
     if [ -n "$BUNDLE_DIR" ]; then
@@ -2056,6 +2157,7 @@ main() {
             install_podman_units "$install_dir"
         fi
         write_install_state "$install_dir"
+        configure_apparmor
         configure_firewall
     fi
 
@@ -2068,4 +2170,7 @@ main() {
     fi
 }
 
-main "$@"
+# Run, it installs JIM; sourced, as its tests do, it only defines its functions.
+if ! (return 0 2>/dev/null); then
+    main "$@"
+fi

@@ -25,6 +25,13 @@
 .PARAMETER SkipImageExport
     Skip exporting Docker images (useful for testing the bundle structure).
 
+.PARAMETER SkipImageBuild
+    Export JIM's images as they already are in Docker, tagged ghcr.io/tetronio/<image>:<Version>, rather
+    than building them. CI builds them first, with its build cache; the script stops if one is missing.
+
+.PARAMETER SkipArchive
+    Leave the bundle as a folder, without also writing it into a .tar.gz archive.
+
 .PARAMETER IncludePostgres
     Include the PostgreSQL image in the bundle. Defaults to true.
 
@@ -32,6 +39,11 @@
     ./Build-ReleaseBundle.ps1 -Version "0.2.0"
 
     Builds a release bundle for version 0.2.0.
+
+.EXAMPLE
+    ./Build-ReleaseBundle.ps1 -Version "0.2.0" -SkipImageBuild -SkipArchive
+
+    Bundles images already built and tagged ghcr.io/tetronio/jim-*:0.2.0, as a folder only.
 
 .EXAMPLE
     ./Build-ReleaseBundle.ps1 -SkipImageExport
@@ -51,6 +63,10 @@ param(
     [string]$OutputPath = "./release-output",
 
     [switch]$SkipImageExport,
+
+    [switch]$SkipImageBuild,
+
+    [switch]$SkipArchive,
 
     [bool]$IncludePostgres = $true
 )
@@ -121,11 +137,19 @@ try {
             $imageName = $image.Name
             $imageTag = "ghcr.io/tetronio/${imageName}:$Version"
 
-            Write-Host "  Building $imageName..." -ForegroundColor Gray
-            docker build -t $imageTag -f $image.Dockerfile $image.Context --build-arg VERSION=$Version
+            if ($SkipImageBuild) {
+                docker image inspect $imageTag *> $null
+                if ($LASTEXITCODE -ne 0) {
+                    throw "The image $imageTag is not in Docker. Build it first, or leave out -SkipImageBuild."
+                }
+            }
+            else {
+                Write-Host "  Building $imageName..." -ForegroundColor Gray
+                docker build -t $imageTag -f $image.Dockerfile $image.Context --build-arg VERSION=$Version
 
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to build $imageName"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to build $imageName"
+                }
             }
 
             Write-Host "  Exporting $imageName..." -ForegroundColor Gray
@@ -520,25 +544,26 @@ License: See https://junctional.io/license
 
     Pop-Location
 
-    # Create tarball
-    Write-Host "`nCreating release archive..." -ForegroundColor Cyan
-    $tarballPath = Join-Path $OutputPath "$bundleName.tar.gz"
-
-    Push-Location $OutputPath
-    tar -czf "$bundleName.tar.gz" $bundleName
-    Pop-Location
-
-    if ($LASTEXITCODE -eq 0) {
-        $tarballSize = (Get-Item $tarballPath).Length / 1MB
-        Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB)" -ForegroundColor Green
-    }
-    else {
-        Write-Warning "Failed to create tarball"
-    }
-
     Write-Host "`nRelease bundle complete!" -ForegroundColor Green
     Write-Host "Bundle location: $bundlePath" -ForegroundColor Cyan
-    Write-Host "Archive: $tarballPath" -ForegroundColor Cyan
+
+    if (-not $SkipArchive) {
+        Write-Host "`nCreating release archive..." -ForegroundColor Cyan
+        $tarballPath = Join-Path $OutputPath "$bundleName.tar.gz"
+
+        Push-Location $OutputPath
+        tar -czf "$bundleName.tar.gz" $bundleName
+        Pop-Location
+
+        if ($LASTEXITCODE -eq 0) {
+            $tarballSize = (Get-Item $tarballPath).Length / 1MB
+            Write-Host "  Created: $tarballPath ($([math]::Round($tarballSize, 2)) MB)" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "Failed to create tarball"
+        }
+        Write-Host "Archive: $tarballPath" -ForegroundColor Cyan
+    }
 }
 finally {
     Pop-Location
