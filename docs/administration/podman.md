@@ -103,10 +103,19 @@ Each container has a health check, which `podman ps` shows. Podman 5 restarts a 
 
 None of these checks starts until its service has finished starting, however long a first start or an upgrade's database changes take, so Podman never restarts a service part-way through starting.
 
-## Firewall and SELinux
+## Firewall, SELinux and AppArmor
 
 - **firewalld**<br /> Blocks JIM's port by default on RHEL. The installer offers to open it; by hand: `firewall-cmd --permanent --add-service=https && firewall-cmd --reload` (or `--add-port=<port>/tcp` for another port).
 - **SELinux**<br /> Needs nothing for JIM's own volumes, which Podman labels itself. A host folder you mount for the File Connector needs a label (see [File Access](../connectors/jim-file-connector.md#file-access)), and an Apache httpd reverse proxy needs the `httpd_can_network_connect` boolean (see [Apache httpd Example](deployment.md#apache-httpd-example)).
+- **AppArmor, on Ubuntu 24.04**<br /> Ubuntu gives Podman's `crun` and `podman` AppArmor profiles of their own. A rootful container that sets no-new-privileges, as JIM's do, cannot leave them for its own profile, and the combination allows it no network at all, so JIM cannot reach its database or identity provider. The installer offers to add a network rule to each profile's local override, Ubuntu's place for site changes; JIM's containers keep their own AppArmor profile. By hand, as root:
+
+    ```bash
+    echo 'network,' >> /etc/apparmor.d/local/crun
+    echo 'network,' >> /etc/apparmor.d/local/podman
+    apparmor_parser -r /etc/apparmor.d/crun /etc/apparmor.d/podman
+    ```
+
+    A rootless JIM does not need it.
 
 !!! note "With Docker on the same server"
     Docker's firewall rules drop traffic forwarded to other container engines, so other machines cannot reach a rootful Podman JIM, the default, on a server that also runs Docker. Run JIM on one engine per server.
@@ -144,7 +153,7 @@ If your organisation's policy requires every step by hand, these steps do what t
       "$(base64 -w0 /opt/jim/tls/tls.crt)" "$(base64 -w0 /opt/jim/tls/tls.key)" | podman kube play --replace -
     ```
 
-5. **Open the port** in firewalld:
+5. **Open the port** in firewalld, and on Ubuntu 24.04 allow JIM's containers the network under AppArmor (see [Firewall, SELinux and AppArmor](#firewall-selinux-and-apparmor)):
 
     ```bash
     firewall-cmd --permanent --add-service=https && firewall-cmd --reload
