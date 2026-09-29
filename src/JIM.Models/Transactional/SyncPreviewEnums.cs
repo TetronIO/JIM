@@ -44,7 +44,11 @@ public enum SyncPreviewMessageCode
     /// this enum is not persisted anywhere (no database column or migration references it, and the REST API
     /// serialises it by name via <c>JsonStringEnumConverter</c>), so member order carries no compatibility
     /// requirement, but new members are still appended for readability.</summary>
-    GeneratedValueWouldFail
+    GeneratedValueWouldFail,
+    /// <summary>The enabled Attribute Flows that derive Metaverse attributes from other Metaverse attributes (#1750)
+    /// contain a dependency cycle, so no evaluation order exists: the real synchronisation would refuse to start and
+    /// process no object at all. The preview evaluates nothing either, and names the cycle.</summary>
+    DerivedFlowCycle
 }
 
 /// <summary>

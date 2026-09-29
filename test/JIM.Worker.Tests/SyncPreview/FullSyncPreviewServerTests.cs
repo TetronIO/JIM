@@ -10,6 +10,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
+using JIM.TestSupport;
 using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
@@ -105,6 +106,10 @@ public class FullSyncPreviewServerTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        // Tests run with every feature flag on (test/CLAUDE.md), which the preview reads for the Metaverse-Derived
+        // Attribute Flow graph (#1750).
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(
+            InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync().GetAwaiter().GetResult().BuildMockDbSet().Object);
 
         SyncRepo = TestUtilities.CreateSyncRepository(
             activity: ActivitiesData.First(),

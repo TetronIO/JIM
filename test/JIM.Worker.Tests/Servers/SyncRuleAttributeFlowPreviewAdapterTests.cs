@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
 using SyncRepository = JIM.InMemoryData.SyncRepository;
@@ -78,6 +79,9 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         _metaverseRepo = new Mock<IMetaverseRepository>();
         _repo.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
         _repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
+        // Tests run with every feature flag on (test/CLAUDE.md): Metaverse-Derived Attribute Flows (#1750) are
+        // evaluated by the preview engine and assessed by the adapter's findings.
+        _repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
 
         _csFirstName = new ConnectedSystemObjectTypeAttribute { Id = CsFirstNameAttributeId, Name = "givenName", Type = AttributeDataType.Text };
         _csLastName = new ConnectedSystemObjectTypeAttribute { Id = CsLastNameAttributeId, Name = "sn", Type = AttributeDataType.Text };
@@ -133,6 +137,8 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         _connectedSystemRepo.Setup(r => r.GetSyncRuleAsync(RuleId)).ReturnsAsync(() => _rule);
         _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(SystemId, false, It.IsAny<bool>())).ReturnsAsync(() => _rules);
         _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync()).ReturnsAsync(() => _rules);
+        _connectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync((int typeId) =>
+            _rules.Where(r => r.Direction == SyncRuleDirection.Import && r.MetaverseObjectTypeId == typeId).ToList());
         _connectedSystemRepo.Setup(r => r.StreamConnectedSystemObjectsOfType(SystemId, CsoTypeId)).Returns(() => _csos.ToAsyncEnumerable());
         _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountOfTypeAsync(SystemId, CsoTypeId)).ReturnsAsync(() => _csos.Count);
         _connectedSystemRepo.Setup(r => r.GetObjectTypeAsync(CsoTypeId)).ReturnsAsync(() => _csoType);

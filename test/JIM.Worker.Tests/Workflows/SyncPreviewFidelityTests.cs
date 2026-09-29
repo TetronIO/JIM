@@ -28,7 +28,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// provisioning CSO ids to carry.
 /// </summary>
 [TestFixture]
-public class SyncPreviewFidelityTests : WorkflowTestBase
+public partial class SyncPreviewFidelityTests : WorkflowTestBase
 {
     /// <summary>
     /// The flagship chain: an unjoined CSO that would project, flow a display name, provision a target
