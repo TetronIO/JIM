@@ -51,12 +51,7 @@ if ($Registry -and -not $Registry.EndsWith('/')) {
     $Registry = "$Registry/"
 }
 
-$compose = Get-Content (Join-Path $repoRoot 'docker-compose.yml') -Raw
-$postgresMatch = [regex]::Match($compose, 'image:\s+(docker\.io/library/postgres:\S+)')
-if (-not $postgresMatch.Success) {
-    throw 'Could not find the PostgreSQL image reference in docker-compose.yml'
-}
-$postgresImage = $postgresMatch.Groups[1].Value
+$postgresImage = & (Join-Path $PSScriptRoot 'Get-PostgresImageReference.ps1')
 
 $placeholders = [ordered]@{
     '__JIM_REGISTRY__'   = $Registry

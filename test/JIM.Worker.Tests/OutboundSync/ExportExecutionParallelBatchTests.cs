@@ -614,6 +614,62 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// #1875: a parallel batch's own connector was opened outside the block that closes and disposes it, so one that
+    /// failed to connect was neither closed nor disposed, and anything it returned at close (a pin the failure
+    /// invalidated) was lost. The batch still fails; its connector must still be closed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatches_BatchConnectorThatFailsToOpenIsStillClosedAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        // 4 deferred exports: with BatchSize=2 these span 2 batches, enough for the parallel dispatcher, and the
+        // second batch runs on a connector of its own from the factory.
+        var referencedMvoId = SeedResolvableReferenceTarget(targetSystem, targetUserType);
+        for (var i = 0; i < 4; i++)
+            SeedResolvableDeferredExport(targetSystem, targetUserType, PendingExportChangeType.Update, baseTime.AddSeconds(i), referencedMvoId);
+
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+
+        var batchConnectors = new System.Collections.Concurrent.ConcurrentBag<Mock<IConnectorExportUsingCalls>>();
+        Func<IConnector> connectorFactory = () =>
+        {
+            var batchConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+            var exportCalls = batchConnector.As<IConnectorExportUsingCalls>();
+            exportCalls.Setup(c => c.OpenExportConnection(It.IsAny<IList<ConnectedSystemSettingValue>>(), It.IsAny<string?>()))
+                .Throws(new InvalidOperationException("simulated connection failure"));
+            batchConnectors.Add(exportCalls);
+            return batchConnector.Object;
+        };
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 2
+        };
+
+        // Act
+        await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            primaryConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            connectorFactory: connectorFactory,
+            repositoryFactory: repositoryFactory);
+
+        // Assert
+        Assert.That(batchConnectors, Is.Not.Empty, "precondition: the parallel path created a batch connector of its own");
+        foreach (var batchConnector in batchConnectors)
+            batchConnector.Verify(c => c.CloseExportConnection(), Times.Once,
+                "a batch connector that failed to open must still be closed, so what it returns at close can be persisted");
+    }
+
+    /// <summary>
     /// Every connector used for an export must be told the Connected System's managed scope (#1764), not only
     /// the primary one. Each parallel batch gets a fresh connector from the factory, and one that never receives
     /// the scope writes wherever the Attribute Flow points it, including into containers the next import cannot

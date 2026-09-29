@@ -14,6 +14,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -444,6 +445,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// ExecuteUpdateAsync that touches no tracked state; the in-memory test provider does not support
     /// ExecuteUpdateAsync (same pattern as the failed-authentication counter in ActivitiesRepository), so it
     /// falls back to a narrow tracked load of the root entity only.
+    /// <para>
+    /// The fallback saves through a short-lived context over the same in-memory store, not the shared one, so
+    /// that, like the relational path, it writes this one column and nothing else. An import records its
+    /// watermark at the very end of the run (#1868), when the shared context in a workflow test still tracks the
+    /// run's Activity and its Run Profile Execution Item graph; a save on it would flush that graph too.
+    /// </para>
     /// </summary>
     public async Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData)
     {
@@ -455,11 +462,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return;
         }
 
-        var connectedSystem = await Repository.Database.ConnectedSystems
+        if (Repository.Database.GetService<IDbContextOptions>() is not DbContextOptions<JimDbContext> options)
+            throw new InvalidOperationException("UpdateConnectedSystemPersistedConnectorDataAsync: the non-relational fallback needs the context's own options to open a context over the same store.");
+
+        await using var isolatedContext = new JimDbContext(options);
+        var connectedSystem = await isolatedContext.ConnectedSystems
             .AsTracking()
             .SingleAsync(cs => cs.Id == connectedSystemId);
         connectedSystem.PersistedConnectorData = persistedConnectorData;
-        await Repository.Database.SaveChangesAsync();
+        await isolatedContext.SaveChangesAsync();
     }
 
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
