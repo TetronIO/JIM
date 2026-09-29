@@ -18,6 +18,22 @@ namespace JIM.Application.Servers;
 public partial class ConnectedSystemServer
 {
     /// <summary>
+    /// Builds the Attribute Priority context for a server-side recall (Synchronisation Rule deletion recall,
+    /// Synchronised Deprovisioning, the stranded value sweep), carrying the run's Metaverse-Derived Attribute Flow
+    /// graph (#1750, plan decision 12) exactly as a synchronisation run's does. With the graph attached, contributor
+    /// re-election skips derived mappings (decision 5): re-flowed there, a derived flow would read no
+    /// <c>mv["..."]</c> inputs at all and write a value nobody configured. Null graph (the feature off) is the
+    /// context exactly as before.
+    /// </summary>
+    /// <exception cref="DerivedFlowCycleException">The enabled derived flows contain a dependency cycle; the recall
+    /// fails hard before touching any object (decision 11).</exception>
+    private async Task<AttributePriorityContext> BuildRecallPriorityContextAsync(List<SyncRule> allSyncRules)
+    {
+        var derivedFlowGraph = await DerivedFlowGraphFactory.CreateAsync(Application.FeatureFlags, allSyncRules, []);
+        return new AttributePriorityContext(allSyncRules, honourNullAssertions: true, derivedFlowGraph);
+    }
+
+    /// <summary>
     /// The single-mapping save paths' entry point (create, update, settings update): gates and validates
     /// <paramref name="mapping"/> as a proposal replacing the persisted mapping with the same id on its rule, and
     /// stamps any warnings onto <see cref="SyncRuleMapping.SaveWarnings"/>.
