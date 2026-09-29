@@ -49,7 +49,7 @@ For each `AttributeFlowRule` in the export rule:
 - **Direct mappings**: use the source MVO attribute value
 - **Create operations**: include ALL mapped MVO attribute values (not just changed ones)
 - **Update operations**: only include the changed attribute values
-- **No-net-change detection**: if cache is available, skip changes where the CSO already has the target value
+- **No-net-change detection**: if cache is available, skip changes where the CSO already has the target value, and withdraw any change still queued for the same attribute (or value) on the CSO's existing Pending Export, in the in-memory batch or persisted (`SyncEngine.WithdrawChangesAlreadyCurrent`, `ExportEvaluationServer.WithdrawQueuedChangesAlreadyCurrentAsync`): the queued change is stale once the Metaverse and the target agree. Changes awaiting confirmation and executing Pending Exports are left alone; an emptied Pending Export is deleted
 - **Reference attributes**: store target MVO reference ID in `UnresolvedReferenceValue`; PE marked for deferred resolution
 - **Removals**: multi-valued → `ChangeType = Remove`; single-valued → null-clearing change
 

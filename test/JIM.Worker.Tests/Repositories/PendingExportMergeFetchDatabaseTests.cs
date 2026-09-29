@@ -161,6 +161,27 @@ public class PendingExportMergeFetchDatabaseTests
     /// fetch, which loads everything.
     /// </summary>
     [Test]
+    public async Task GetConnectedSystemObjectIdsWithPendingExportsAsync_ReturnsOnlyTheIdsThatHaveOneAsync()
+    {
+        // The per-page lookup no-net-change detection uses to decide which objects might carry a queued change it
+        // has just made stale: ids only, one query, and an id with no Pending Export is simply absent.
+        var (csoId, _) = await SeedLargeGroupWithSmallPendingExportAsync();
+        var unknownId = Guid.NewGuid();
+
+        await using var ctx = NewContext();
+        var syncRepository = new JIM.PostgresData.Repositories.SyncRepository(new PostgresDataRepository(ctx));
+
+        var withPendingExports = await syncRepository.GetConnectedSystemObjectIdsWithPendingExportsAsync([csoId, unknownId]);
+        var none = await syncRepository.GetConnectedSystemObjectIdsWithPendingExportsAsync([]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withPendingExports, Is.EquivalentTo(new[] { csoId }));
+            Assert.That(none, Is.Empty);
+        }
+    }
+
+    [Test]
     public async Task GetPendingExportLightweightByConnectedSystemObjectIdAsync_DoesNotLoadCsoOrMvoAttributeValueGraphsAsync()
     {
         var (csoId, _) = await SeedLargeGroupWithSmallPendingExportAsync();

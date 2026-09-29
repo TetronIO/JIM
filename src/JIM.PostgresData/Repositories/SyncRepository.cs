@@ -309,6 +309,21 @@ public partial class SyncRepository : ISyncRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        var ids = connectedSystemObjectIds.ToArray();
+        var found = await _context.PendingExports
+            .AsNoTracking()
+            .Where(pe => pe.ConnectedSystemObjectId != null && ids.Contains(pe.ConnectedSystemObjectId.Value))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .Distinct()
+            .ToListAsync();
+        return found.ToHashSet();
+    }
+
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
         => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize);
 
