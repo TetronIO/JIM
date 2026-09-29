@@ -969,6 +969,13 @@ public interface ISyncRepository
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Which of the given Connected System Objects have a Pending Export persisted, as ids only: one indexed
+    /// query per page, so export evaluation's no-net-change path can tell which objects might carry a queued
+    /// change it has just made stale without a database round trip for every object that needs nothing.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets CSO IDs that have Pending Exports for a Connected System.
     /// Used during import reconciliation to identify which CSOs have outstanding exports.
     /// </summary>
