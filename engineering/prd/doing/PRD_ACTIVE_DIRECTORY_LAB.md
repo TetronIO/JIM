@@ -28,7 +28,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 - The gaps above are each either fixed with a test that fails on a real domain controller before the fix, or documented as a stated limitation before V1.0.0.
 - A `RequiresActiveDirectory` test tier exercises the connector primitives that only real Active Directory can prove (paging at MaxPageSize, ranged retrieval, signing rules for `unicodePwd`, error mapping, `objectClass` ordering), and runs on the lab in minutes.
 - Active Directory password policy discovery is proven against a domain with complexity on and a Fine-Grained Password Policy present, by a new Scenario 024 that mirrors Scenario 022.
-- A release cannot be tagged unless the commit carries a green `ad-lab` commit status (the hard gate agreed for 1.0; closes the Active Directory leg of #518).
+- A release cannot be tagged unless the commit carries a green `jim-ad-lab` commit status (the hard gate agreed for 1.0; closes the Active Directory leg of #518).
 - The lab is code: a domain controller is built, populated, checkpointed, reverted and rebuilt by scripts in the repository, and nobody has to remember how a VM was configured.
 
 ## Non-Goals
@@ -57,7 +57,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 
 1. The hypervisor host runs Windows Server Datacenter with the Hyper-V role, activated, so that guests activate through Automatic Virtual Machine Activation with the generic per-version key and no per-VM licence management. Evaluation editions are not used: an evaluation domain controller cannot be converted, and its timer counts real time regardless of checkpoint reverts.
 2. Three single-domain-controller forests mirror the existing container roles and names: `dc-primary` (PANOPLY.LOCAL), `dc-source` (RESURGAM.LOCAL) and `dc-target` (GENTIAN.LOCAL), at the Windows Server 2016 forest functional level on Windows Server 2025 domain controllers. `dc-primary` has the AD Recycle Bin enabled.
-3. A dedicated Linux runner VM on the same host, registered in its own `ad-lab` runner group (repository access limited to JIM, workflow allowlist limited to the two lab workflows) with the label `ad-lab`, runs the JIM stack in Docker exactly as the existing self-hosted runners do. It is the only machine with a route to the domain controller network, an internal virtual switch on which the host serves NTP and nothing routes out. A runner carrying the default labels in `tetron-trusted` would be offered ordinary CI jobs, which is why the group is separate.
+3. A dedicated Linux runner VM on the same host, registered in its own `jim-ad-lab` runner group (repository access limited to JIM, workflow allowlist limited to the two lab workflows) with the label `jim-ad-lab`, runs the JIM stack in Docker exactly as the existing self-hosted runners do. It is the only machine with a route to the domain controller network, an internal virtual switch on which the host serves NTP and nothing routes out. A runner carrying the default labels in `tetron-trusted` would be offered ordinary CI jobs, which is why the group is separate.
 4. Every domain controller is built by a PowerShell script from installation media: unattended install with the AVMA key, promotion, an LDAPS certificate whose Subject Alternative Names match the rules `post-provision.sh` enforces, the OUs, `svc-jim` in the JIM Connectors group with the existing SDDL delegation file applied unchanged, ownership of the Deleted Objects container as `jim-delegate.sh --tombstones` does, "password never expires" on `svc-jim` and Administrator only, Windows Update automatic installation switched off, and w32time pointed at the same NTP source as the host and the runner. The domain password policy stays at Windows defaults (complexity on) except where a scenario sets its own.
 5. Each state worth returning to is a Hyper-V production checkpoint: `baseline` after the build, and `populated-<template>-<hash>` after population, where the hash covers the populate scripts exactly as the Samba snapshot label does. The runner rejects a checkpoint whose hash does not match and rebuilds it.
 6. Population reuses the LDIF that `Populate-SambaAD.ps1` already generates, delivered with `ldapadd` over LDAPS instead of `ldbadd`, binding as the domain administrator.
@@ -86,8 +86,8 @@ Every password feature (policy discovery, Initial Password, park then release, P
 
 #### CI and release gate
 
-20. `.github/workflows/ad-lab.yml` runs on `schedule` (nightly on `main`) and `workflow_dispatch` (`main`, or a branch whose ref the `ad-lab` runner group has been told to allow, the same mechanism as a release tag), only on `runs-on: [self-hosted, ad-lab]`, with a concurrency group that serialises runs, and never on `pull_request`. It posts a commit status named `ad-lab` on the tested SHA with a link to the run.
-21. The `/release` skill and `engineering/RELEASE_PROCESS.md` refuse to tag a commit without a `success` `ad-lab` status. There is no override flag; the remedy for a red night is a fix and a dispatched re-run.
+20. `.github/workflows/ad-lab.yml` runs on `schedule` (nightly on `main`) and `workflow_dispatch` (`main`, or a branch whose ref the `jim-ad-lab` runner group has been told to allow, the same mechanism as a release tag), only on `runs-on: [self-hosted, jim-ad-lab]`, with a concurrency group that serialises runs, and never on `pull_request`. It posts a commit status named `jim-ad-lab` on the tested SHA with a link to the run.
+21. The `/release` skill and `engineering/RELEASE_PROCESS.md` refuse to tag a commit without a `success` `jim-ad-lab` status. There is no override flag; the remedy for a red night is a fix and a dispatched re-run.
 22. The run uploads the regression report and the domain controller OS build as artefacts, and submits results to the metrics API with `DirectoryType` `ActiveDirectory`.
 
 ### Non-Functional Requirements
@@ -103,7 +103,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 
 **Given**: `main` moved during the day and the lab's checkpoint set is current
 **When**: the schedule fires at 02:00
-**Then**: the runner reverts `dc-primary`, `dc-source` and `dc-target`, runs every Active Directory-family scenario at Medium, and posts `ad-lab: success` on the SHA with a link to the run
+**Then**: the runner reverts `dc-primary`, `dc-source` and `dc-target`, runs every Active Directory-family scenario at Medium, and posts `jim-ad-lab: success` on the SHA with a link to the run
 
 ### Scenario 2: A release is refused
 
@@ -148,7 +148,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 | `src/JIM.Connectors/LDAP/` | Fixes the probes force: paged schema and container searches, ranged retrieval, Recycle Bin, error mapping, NTLM decision (each on its own stacked layer) |
 | `test/integration/scenarios/`, `Setup-Scenario-024.ps1` | Scenario 024; the restore-from-backup and Recycle Bin steps |
 | `.github/workflows/ad-lab.yml`, `ad-lab-rebuild.yml` (new) | Nightly run, dispatch, commit status; monthly rebuild |
-| `.claude/skills/release/SKILL.md` | Gate on the `ad-lab` status |
+| `.claude/skills/release/SKILL.md` | Gate on the `jim-ad-lab` status |
 
 ## Documentation Impact
 
@@ -156,7 +156,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 |------|--------|
 | `engineering/TESTING_STRATEGY.md` | New tier: Active Directory lab probes; the lab in the integration tier |
 | `engineering/INTEGRATION_TESTING.md` | `ActiveDirectory` directory type, the lab section (topology, lifecycle, patching), Scenario 024 |
-| `engineering/RELEASE_PROCESS.md` | The `ad-lab` gate |
+| `engineering/RELEASE_PROCESS.md` | The `jim-ad-lab` gate |
 | `engineering/COMPLIANCE_MAPPING.md` | The #518 entry moves from Planned to Implemented for the Active Directory leg |
 | `docs/connectors/jim-ldap-connector.md` | "Verified against Windows Server 2025 by JIM's integration lab" once true; any stated limitation the lab produces (NTLM, AD LDS) |
 | `docs/developer/testing.md` | How to run the probes and the lab |
@@ -164,7 +164,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 ## Dependencies
 
 - Host preparation (owner: Jay): Datacenter activation and the Hyper-V role; a virtual switch on the CI VLAN; OpenSSH Server with a dedicated Hyper-V Administrators account; NTP; non-evaluation Windows Server 2025 media.
-- The runner VM registered with the `ad-lab` label (mirrors the existing self-hosted runners).
+- The runner VM registered with the `jim-ad-lab` label (mirrors the existing self-hosted runners).
 - #518 for the gate's compliance framing; this PRD delivers its Active Directory leg first.
 
 ## Open Questions

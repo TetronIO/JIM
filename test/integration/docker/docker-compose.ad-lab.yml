@@ -17,17 +17,17 @@
 # variables for the instances it uses, so the 0.0.0.0 fallbacks never take effect for those; they exist so
 # `docker compose config` parses without them.
 
-x-ad-lab-hosts: &ad-lab-hosts
+x-jim-ad-lab-hosts: &jim-ad-lab-hosts
   - "${JIM_AD_LAB_PRIMARY_HOST:-dc1.panoply.local}:${JIM_AD_LAB_PRIMARY_ADDRESS:-0.0.0.0}"
   - "${JIM_AD_LAB_SOURCE_HOST:-dc1.resurgam.local}:${JIM_AD_LAB_SOURCE_ADDRESS:-0.0.0.0}"
   - "${JIM_AD_LAB_TARGET_HOST:-dc1.gentian.local}:${JIM_AD_LAB_TARGET_ADDRESS:-0.0.0.0}"
 
 services:
   jim.web:
-    extra_hosts: *ad-lab-hosts
+    extra_hosts: *jim-ad-lab-hosts
 
   jim.worker:
-    extra_hosts: *ad-lab-hosts
+    extra_hosts: *jim-ad-lab-hosts
 
   jim.scheduler:
-    extra_hosts: *ad-lab-hosts
+    extra_hosts: *jim-ad-lab-hosts

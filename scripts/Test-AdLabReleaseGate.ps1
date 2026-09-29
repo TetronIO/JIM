@@ -3,16 +3,16 @@
 
 <#
 .SYNOPSIS
-    Refuses a release commit that has not passed the Active Directory lab: exits 0 only when the commit's `ad-lab`
+    Refuses a release commit that has not passed the Active Directory lab: exits 0 only when the commit's `jim-ad-lab`
     commit status is `success`.
 
 .DESCRIPTION
     JIM's LDAP Connector is only ever verified against a real Windows Server domain controller by the Active Directory
     lab (test/integration/ad-lab/README.md), which .github/workflows/ad-lab.yml runs nightly on main and on demand, and
-    which posts a commit status named `ad-lab` on the SHA it tested. The release gate reads that status for the SHA
+    which posts a commit status named `jim-ad-lab` on the SHA it tested. The release gate reads that status for the SHA
     that is about to be tagged and passes only when its state is `success`.
 
-    It is called by the ad-lab-gate job at the head of release.yml (which every other release job needs) and by the
+    It is called by the jim-ad-lab-gate job at the head of release.yml (which every other release job needs) and by the
     /release skill before it tags. Any other outcome exits 1 with a message that names what was found (the state, or
     "not reported"), the run that produced it, and the remedy: fix the cause, then dispatch ad-lab.yml so it runs on
     that commit.
@@ -56,7 +56,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # The status context the lab workflow posts. A constant, not a parameter: there is nothing to configure here.
-$script:AdLabContext = 'ad-lab'
+$script:AdLabContext = 'jim-ad-lab'
 
 function Get-AdLabField {
     # One field of a status, from a parsed JSON object or a hashtable, or $null when it is not there.
@@ -91,7 +91,7 @@ function Test-AdLabStatus {
 
     .DESCRIPTION
         Pure. Takes the commit statuses (the objects GitHub returns: context, state, description, target_url,
-        created_at, updated_at) and looks only at those whose context is exactly `ad-lab`. When there is more than
+        created_at, updated_at) and looks only at those whose context is exactly `jim-ad-lab`. When there is more than
         one (a re-run on the same commit), the newest wins, so a later failure is not hidden by an earlier success
         nor a later success by an earlier failure. Passes only for state `success`.
 
@@ -142,7 +142,7 @@ function Test-AdLabStatus {
             State       = 'not reported'
             Description = $null
             TargetUrl   = $null
-            Message     = "The ad-lab status is not reported for ${Sha}: the Active Directory lab has not run on this exact commit. The nightly run tests the head of main as it stood then, so a commit made since has none. $remedy"
+            Message     = "The jim-ad-lab status is not reported for ${Sha}: the Active Directory lab has not run on this exact commit. The nightly run tests the head of main as it stood then, so a commit made since has none. $remedy"
         }
     }
 
@@ -160,7 +160,7 @@ function Test-AdLabStatus {
             State       = $state
             Description = $description
             TargetUrl   = $url
-            Message     = "ad-lab passed on ${Sha}: $detail"
+            Message     = "jim-ad-lab passed on ${Sha}: $detail"
         }
     }
 
@@ -181,7 +181,7 @@ function Test-AdLabStatus {
         State       = $shownState
         Description = $description
         TargetUrl   = $url
-        Message     = "The ad-lab status for $Sha is $shownState, not success.$said See $run. $remedy"
+        Message     = "The jim-ad-lab status for $Sha is $shownState, not success.$said See $run. $remedy"
     }
 }
 
@@ -248,7 +248,7 @@ try {
         throw "-Repository must be OWNER/NAME, not '$Repository'."
     }
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        throw 'The GitHub CLI (gh) is not on the PATH, so the ad-lab status cannot be read. The gate stays closed.'
+        throw 'The GitHub CLI (gh) is not on the PATH, so the jim-ad-lab status cannot be read. The gate stays closed.'
     }
 
     $result = Test-AdLabStatus -Statuses (Get-AdLabStatus -Repository $Repository -Sha $Sha) -Sha $Sha
@@ -258,14 +258,14 @@ try {
     }
     Write-Host $result.Message -ForegroundColor Red
     if ($env:GITHUB_ACTIONS -eq 'true') {
-        Write-Host ('::error title=Release gate: ad-lab::' + (($result.Message -replace '%', '%25') -replace "`r?`n", '%0A'))
+        Write-Host ('::error title=Release gate: jim-ad-lab::' + (($result.Message -replace '%', '%25') -replace "`r?`n", '%0A'))
     }
     exit 1
 }
 catch {
     Write-Host "Release gate: $($_.Exception.Message)" -ForegroundColor Red
     if ($env:GITHUB_ACTIONS -eq 'true') {
-        Write-Host ('::error title=Release gate: ad-lab::' + (($_.Exception.Message -replace '%', '%25') -replace "`r?`n", '%0A'))
+        Write-Host ('::error title=Release gate: jim-ad-lab::' + (($_.Exception.Message -replace '%', '%25') -replace "`r?`n", '%0A'))
     }
     exit 1
 }

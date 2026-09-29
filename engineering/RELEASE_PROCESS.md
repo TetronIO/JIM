@@ -6,7 +6,7 @@ This document describes how to create releases of JIM, including support for air
 
 JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
-1. Refuses to continue unless the tagged commit has a green `ad-lab` commit status (the Active Directory lab gate, below)
+1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below)
 2. Validates the build and runs all tests
 3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
 4. Publishes the PowerShell module to PSGallery
@@ -15,14 +15,14 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 ## The Active Directory Lab Gate
 
-A release is refused unless the exact commit being tagged has a `success` commit status named `ad-lab`. The status is posted by `.github/workflows/ad-lab.yml`, which runs every Active Directory-family integration scenario, and the connector's `RequiresActiveDirectory` probes, against three real Windows Server domain controllers on the Hyper-V lab (`test/integration/ad-lab/README.md`), nightly on `main` and on demand. The gate exists so that a customer's Active Directory is never the first one JIM has met.
+A release is refused unless the exact commit being tagged has a `success` commit status named `jim-ad-lab`. The status is posted by `.github/workflows/ad-lab.yml`, which runs every Active Directory-family integration scenario, and the connector's `RequiresActiveDirectory` probes, against three real Windows Server domain controllers on the Hyper-V lab (`test/integration/ad-lab/README.md`), nightly on `main` and on demand. The gate exists so that a customer's Active Directory is never the first one JIM has met.
 
-- **It is enforced twice.** The `/release` skill runs `scripts/Test-AdLabReleaseGate.ps1` before it tags, and the `ad-lab-gate` job at the head of `release.yml` runs the same script, which every other release job needs, so nothing is built or published for a commit the lab has not passed.
+- **It is enforced twice.** The `/release` skill runs `scripts/Test-AdLabReleaseGate.ps1` before it tags, and the `jim-ad-lab-gate` job at the head of `release.yml` runs the same script, which every other release job needs, so nothing is built or published for a commit the lab has not passed.
 - **There is no override.** No flag, variable or label skips it. The remedy for a red or missing status is a fix and a dispatched re-run.
 - **The status belongs to one SHA.** A green night on the commit before the release commit says nothing about the release commit, so the release commit (the merge commit of the release pull request) needs its own dispatched run before it is tagged. That wait, up to four hours for the full suite at the Medium template, is the expected cost of the gate. Nothing else may merge to `main` between the release pull request and the tag, or the dispatched run tests a different commit.
 - **Reading a result:** `pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The commit status's description carries the scenario count and the domain controller operating system build, and each run uploads the regression report and `dc-builds.json` as artefacts.
 - **The lab is patched by rebuild** (`ad-lab-rebuild.yml`, after each Patch Tuesday), so a red night after a rebuild is attributable to the Windows update or to JIM: the build is in every run's record.
-- **The lab runner is in its own runner group.** It is the only runner in a dedicated `ad-lab` runner group (repository access `TetronIO/JIM` only; workflow allowlist exactly `ad-lab.yml` and `ad-lab-rebuild.yml` at `refs/heads/main`), not in `tetron-trusted`: a runner carrying the default labels there would be offered ordinary `ci.yml` push jobs, which need `sudo pwsh` and a larger machine. It also means the gate itself never needs the lab: the `ad-lab-gate` job runs on the ordinary release runners and only reads a commit status. Dispatching `ad-lab.yml` from a branch other than `main` is refused by that allowlist unless the branch ref has been added to it (as a release tag is added to `tetron-trusted` in the steps below), which is one more reason to dispatch the release commit on `main`.
+- **The lab runner is in its own runner group.** It is the only runner in a dedicated `jim-ad-lab` runner group (repository access `TetronIO/JIM` only; workflow allowlist exactly `ad-lab.yml` and `ad-lab-rebuild.yml` at `refs/heads/main`), not in `tetron-trusted`: a runner carrying the default labels there would be offered ordinary `ci.yml` push jobs, which need `sudo pwsh` and a larger machine. It also means the gate itself never needs the lab: the `jim-ad-lab-gate` job runs on the ordinary release runners and only reads a commit status. Dispatching `ad-lab.yml` from a branch other than `main` is refused by that allowlist unless the branch ref has been added to it (as a release tag is added to `tetron-trusted` in the steps below), which is one more reason to dispatch the release commit on `main`.
 
 ## Release History
 
@@ -92,7 +92,7 @@ git push origin main --tags
    git push origin main
    ```
 
-6. **Pass the Active Directory lab gate**: once the release commit is on `main`, dispatch the lab on it and wait for it to finish, then confirm the gate script passes for that commit. Do not tag before it exits 0; the `ad-lab-gate` job would refuse the release anyway.
+6. **Pass the Active Directory lab gate**: once the release commit is on `main`, dispatch the lab on it and wait for it to finish, then confirm the gate script passes for that commit. Do not tag before it exits 0; the `jim-ad-lab-gate` job would refuse the release anyway.
    ```bash
    gh workflow run ad-lab.yml --ref main        # runs on the head of main: it must be the release commit
    gh run watch "$(gh run list --workflow ad-lab.yml --limit 1 --json databaseId --jq '.[0].databaseId')"

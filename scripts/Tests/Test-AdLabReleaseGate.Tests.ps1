@@ -8,7 +8,7 @@
     Pester tests for scripts/Test-AdLabReleaseGate.ps1.
 
 .DESCRIPTION
-    The release gate refuses to tag a commit unless its `ad-lab` commit status is `success`. Two things are proven
+    The release gate refuses to tag a commit unless its `jim-ad-lab` commit status is `success`. Two things are proven
     here: the decision (Test-AdLabStatus, a pure function, over every state a status can be in and over a commit
     with several statuses for the context), and the script end to end, run in-process against a fake `gh` that
     serves a commit's statuses, so the exit code (the contract release.yml and the /release skill rely on) is
@@ -32,7 +32,7 @@ BeforeAll {
 
     function Get-FakeStatus {
         param(
-            [string]$Context = 'ad-lab',
+            [string]$Context = 'jim-ad-lab',
             [string]$State = 'success',
             [string]$Description = '23/23 scenarios passed; DC build 26100.4652',
             [string]$TargetUrl = $script:RunUrl,
@@ -111,7 +111,7 @@ Describe 'Test-AdLabStatus' {
         $result.Message | Should -BeLike "*$($script:Sha)*"
     }
 
-    It 'refuses a commit with no ad-lab status, saying it is not reported' {
+    It 'refuses a commit with no jim-ad-lab status, saying it is not reported' {
         $result = Test-AdLabStatus -Statuses @() -Sha $script:Sha
         $result.Passed | Should -BeFalse
         $result.State | Should -Be 'not reported'
@@ -126,8 +126,8 @@ Describe 'Test-AdLabStatus' {
     It 'ignores other contexts, even green ones' {
         $statuses = @(
             (Get-FakeStatus -Context 'ci/build' -State 'success'),
-            (Get-FakeStatus -Context 'ad-lab-rebuild' -State 'success'),
-            (Get-FakeStatus -Context 'ad-lab-old' -State 'success')
+            (Get-FakeStatus -Context 'jim-ad-lab-rebuild' -State 'success'),
+            (Get-FakeStatus -Context 'jim-ad-lab-old' -State 'success')
         )
         $result = Test-AdLabStatus -Statuses $statuses -Sha $script:Sha
         $result.Passed | Should -BeFalse
@@ -135,11 +135,11 @@ Describe 'Test-AdLabStatus' {
     }
 
     It 'matches the context exactly, including case' {
-        (Test-AdLabStatus -Statuses @((Get-FakeStatus -Context 'AD-Lab')) -Sha $script:Sha).Passed | Should -BeFalse
-        (Test-AdLabStatus -Statuses @((Get-FakeStatus -Context 'ad-lab ')) -Sha $script:Sha).Passed | Should -BeFalse
+        (Test-AdLabStatus -Statuses @((Get-FakeStatus -Context 'JIM-AD-Lab')) -Sha $script:Sha).Passed | Should -BeFalse
+        (Test-AdLabStatus -Statuses @((Get-FakeStatus -Context 'jim-ad-lab ')) -Sha $script:Sha).Passed | Should -BeFalse
     }
 
-    It 'finds the ad-lab status among others' {
+    It 'finds the jim-ad-lab status among others' {
         $statuses = @((Get-FakeStatus -Context 'ci/build' -State 'failure'), (Get-FakeStatus), (Get-FakeStatus -Context 'other' -State 'error'))
         (Test-AdLabStatus -Statuses $statuses -Sha $script:Sha).Passed | Should -BeTrue
     }
@@ -170,21 +170,21 @@ Describe 'Test-AdLabStatus' {
     }
 
     It 'copes with a status that has no description or run link' {
-        $bare = [pscustomobject]@{ context = 'ad-lab'; state = 'failure' }
+        $bare = [pscustomobject]@{ context = 'jim-ad-lab'; state = 'failure' }
         $result = Test-AdLabStatus -Statuses @($bare) -Sha $script:Sha
         $result.Passed | Should -BeFalse
         $result.Message | Should -BeLike '*no run link was recorded*'
-        (Test-AdLabStatus -Statuses @([pscustomobject]@{ context = 'ad-lab'; state = 'success' }) -Sha $script:Sha).Passed | Should -BeTrue
+        (Test-AdLabStatus -Statuses @([pscustomobject]@{ context = 'jim-ad-lab'; state = 'success' }) -Sha $script:Sha).Passed | Should -BeTrue
     }
 
     It 'refuses a status with no state rather than passing it' {
-        $result = Test-AdLabStatus -Statuses @([pscustomobject]@{ context = 'ad-lab' }) -Sha $script:Sha
+        $result = Test-AdLabStatus -Statuses @([pscustomobject]@{ context = 'jim-ad-lab' }) -Sha $script:Sha
         $result.Passed | Should -BeFalse
         $result.State | Should -Be 'unknown'
     }
 
     It 'takes statuses as hashtables too' {
-        $result = Test-AdLabStatus -Statuses @(@{ context = 'ad-lab'; state = 'success'; description = 'ok'; target_url = 'https://example.invalid/run' }) -Sha $script:Sha
+        $result = Test-AdLabStatus -Statuses @(@{ context = 'jim-ad-lab'; state = 'success'; description = 'ok'; target_url = 'https://example.invalid/run' }) -Sha $script:Sha
         $result.Passed | Should -BeTrue
     }
 
@@ -246,7 +246,7 @@ Describe 'Test-AdLabReleaseGate.ps1' {
         $global:FakeGhCalls[0] | Should -Be "api repos/Example/Fork/commits/$($script:Sha)/status?per_page=100&page=1"
     }
 
-    It 'finds the ad-lab status on a later page of a commit with more than 100 statuses' {
+    It 'finds the jim-ad-lab status on a later page of a commit with more than 100 statuses' {
         $filler = @(1..100 | ForEach-Object { Get-FakeStatus -Context "ci/check-$_" -State 'success' })
         $global:FakeGhStatuses = $filler + @(Get-FakeStatus)
         $result = Invoke-Gate @{ Sha = $script:Sha }
@@ -291,7 +291,7 @@ Describe 'Test-AdLabReleaseGate.ps1' {
             $env:GITHUB_ACTIONS = $previous
         }
         $result.ExitCode | Should -Be 1
-        $result.Output | Should -BeLike '*::error title=Release gate: ad-lab::*'
+        $result.Output | Should -BeLike '*::error title=Release gate: jim-ad-lab::*'
     }
 
     It 'prints nothing to annotate outside Actions' {
@@ -312,9 +312,9 @@ Describe 'the gate in the release workflow' {
 
     It 'is the first job of release.yml, and validate needs it' {
         $workflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' '..' '.github' 'workflows' 'release.yml') -Raw
-        $workflow | Should -Match '(?m)^  ad-lab-gate:'
-        $workflow.IndexOf('ad-lab-gate:') | Should -BeLessThan $workflow.IndexOf('  validate:')
-        $workflow | Should -Match '(?ms)^  validate:.*?^    needs: ad-lab-gate'
+        $workflow | Should -Match '(?m)^  jim-ad-lab-gate:'
+        $workflow.IndexOf('jim-ad-lab-gate:') | Should -BeLessThan $workflow.IndexOf('  validate:')
+        $workflow | Should -Match '(?ms)^  validate:.*?^    needs: jim-ad-lab-gate'
         $workflow | Should -Match 'Test-AdLabReleaseGate\.ps1'
     }
 }

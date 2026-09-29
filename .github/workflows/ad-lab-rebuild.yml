@@ -24,17 +24,17 @@
 # it lets the rebuild proceed only when the UTC day of the month is 9 to 15 (the day after the second Tuesday,
 # which falls on the 8th to 14th, is always the 9th to 15th). workflow_dispatch does the same unless `force` is set.
 # The decision is its own job on a GitHub-hosted runner, so an ordinary Wednesday neither occupies the lab runner
-# nor queues in the ad-lab concurrency group (where it could displace a waiting nightly or dispatched run).
+# nor queues in the jim-ad-lab concurrency group (where it could displace a waiting nightly or dispatched run).
 #
 # Same trust model, runner, environment, secrets, SSH key handling and concurrency group as ad-lab.yml (read its
-# header: split-trust, the configuration, and why the runner is alone in a dedicated `ad-lab` runner group whose
+# header: split-trust, the configuration, and why the runner is alone in a dedicated `jim-ad-lab` runner group whose
 # workflow allowlist holds this file and ad-lab.yml, both at refs/heads/main only); the shared concurrency group
 # means the nightly and the rebuild never overlap. It never touches the runner VM or the
 # hypervisor host itself: patching the host is a manual, announced event because it restarts every virtual machine
 # (test/integration/ad-lab/README.md, Monthly rebuild). Unlike ad-lab.yml it posts no commit status: the nightly
 # does, on the rebuilt set, the night after.
 
-name: ad-lab-rebuild
+name: jim-ad-lab-rebuild
 
 on:
   schedule:
@@ -81,56 +81,52 @@ jobs:
     name: Rebuild the lab
     needs: window
     if: ${{ needs.window.outputs.run == 'true' }}
-    runs-on: [self-hosted, ad-lab]
-    environment: ad-lab
+    runs-on: [self-hosted, jim-ad-lab]
+    environment: jim-ad-lab
     # Three builds of 40 to 60 minutes each, then the full suite (four hours at most), with margin.
     timeout-minutes: 720
     # One lab run at a time, and never cancelled (see ad-lab.yml). Held by this job, not the workflow, so that an
     # ordinary Wednesday, which stops at the first job, takes no place in the queue.
     concurrency:
-      group: ad-lab
+      group: jim-ad-lab
       cancel-in-progress: false
     defaults:
       run:
         shell: pwsh
     env:
-      JIM_AD_LAB_CONTROL_HOST: ${{ vars.AD_LAB_CONTROL_HOST }}
-      JIM_AD_LAB_CONTROL_USER: ${{ vars.AD_LAB_CONTROL_USER || 'jim-lab' }}
-      JIM_AD_LAB_CONTROL_PORT: ${{ vars.AD_LAB_CONTROL_PORT || '22' }}
-      JIM_AD_LAB_SCRIPT_ROOT: ${{ vars.AD_LAB_SCRIPT_ROOT || 'C:\jim-ad-lab' }}
-      JIM_AD_LAB_PRIMARY_ADDRESS: ${{ vars.AD_LAB_PRIMARY_ADDRESS }}
-      JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.AD_LAB_SOURCE_ADDRESS }}
-      JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.AD_LAB_TARGET_ADDRESS }}
+      JIM_AD_LAB_CONTROL_HOST: ${{ vars.JIM_AD_LAB_CONTROL_HOST }}
+      JIM_AD_LAB_CONTROL_USER: ${{ vars.JIM_AD_LAB_CONTROL_USER || 'jim-lab' }}
+      JIM_AD_LAB_CONTROL_PORT: ${{ vars.JIM_AD_LAB_CONTROL_PORT || '22' }}
+      JIM_AD_LAB_SCRIPT_ROOT: ${{ vars.JIM_AD_LAB_SCRIPT_ROOT || 'C:\jim-ad-lab' }}
+      JIM_AD_LAB_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_PRIMARY_ADDRESS }}
+      JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_SOURCE_ADDRESS }}
+      JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.JIM_AD_LAB_TARGET_ADDRESS }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Check the lab configuration
         env:
-          HAS_SSH_KEY: ${{ secrets.AD_LAB_CONTROL_SSH_KEY != '' }}
-          HAS_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD != '' }}
-          HAS_JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD != '' }}
+          HAS_SSH_KEY: ${{ secrets.JIM_AD_LAB_CONTROL_SSH_KEY != '' }}
+          HAS_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD != '' }}
+          HAS_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD != '' }}
         run: |
           $missing = @()
-          $variables = [ordered]@{
-            AD_LAB_CONTROL_HOST     = 'JIM_AD_LAB_CONTROL_HOST'
-            AD_LAB_PRIMARY_ADDRESS  = 'JIM_AD_LAB_PRIMARY_ADDRESS'
-            AD_LAB_SOURCE_ADDRESS   = 'JIM_AD_LAB_SOURCE_ADDRESS'
-            AD_LAB_TARGET_ADDRESS   = 'JIM_AD_LAB_TARGET_ADDRESS'
-          }
-          foreach ($name in $variables.Keys) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($variables[$name]))) { $missing += "variable $name" }
+          # The variables are exported by the job's env block under their own names, so the name is the lookup key.
+          $variables = @('JIM_AD_LAB_CONTROL_HOST', 'JIM_AD_LAB_PRIMARY_ADDRESS', 'JIM_AD_LAB_SOURCE_ADDRESS', 'JIM_AD_LAB_TARGET_ADDRESS')
+          foreach ($name in $variables) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += "variable $name" }
           }
           $secrets = [ordered]@{
-            AD_LAB_CONTROL_SSH_KEY = $env:HAS_SSH_KEY
-            AD_LAB_ADMIN_PASSWORD  = $env:HAS_ADMIN_PASSWORD
-            AD_LAB_JIM_PASSWORD    = $env:HAS_JIM_PASSWORD
+            JIM_AD_LAB_CONTROL_SSH_KEY = $env:HAS_SSH_KEY
+            JIM_AD_LAB_ADMIN_PASSWORD  = $env:HAS_ADMIN_PASSWORD
+            JIM_AD_LAB_JIM_PASSWORD    = $env:HAS_JIM_PASSWORD
           }
           foreach ($name in $secrets.Keys) {
             if ($secrets[$name] -ne 'true') { $missing += "secret $name" }
           }
           if ($missing.Count -gt 0) {
-            Write-Host "::error title=The ad-lab environment is not configured::Missing: $($missing -join ', '). See the header of .github/workflows/ad-lab.yml."
+            Write-Host "::error title=The jim-ad-lab environment is not configured::Missing: $($missing -join ', '). See the header of .github/workflows/ad-lab.yml."
             exit 1
           }
 
@@ -144,7 +140,7 @@ jobs:
 
       - name: Write the control-plane SSH key
         env:
-          SSH_KEY: ${{ secrets.AD_LAB_CONTROL_SSH_KEY }}
+          SSH_KEY: ${{ secrets.JIM_AD_LAB_CONTROL_SSH_KEY }}
         run: |
           $path = Join-Path $env:RUNNER_TEMP 'ad-lab-control-key'
           New-Item -ItemType File -Path $path -Force | Out-Null
@@ -231,8 +227,8 @@ jobs:
           JIM_AD_LAB_PRIMARY_VM: dc-primary-candidate
           JIM_AD_LAB_SOURCE_VM: dc-source-candidate
           JIM_AD_LAB_TARGET_VM: dc-target-candidate
-          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
-          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
           JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
         run: |
@@ -261,9 +257,9 @@ jobs:
           JIM_TEST_AD_PLAIN_PORT: '389'
           JIM_TEST_AD_BASE_DN: DC=panoply,DC=local
           JIM_TEST_AD_USERNAME: CN=svc-jim,OU=Services,DC=panoply,DC=local
-          JIM_TEST_AD_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          JIM_TEST_AD_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
           JIM_TEST_AD_ADMIN_USERNAME: CN=Administrator,CN=Users,DC=panoply,DC=local
-          JIM_TEST_AD_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
+          JIM_TEST_AD_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
           # The integration run writes <VM name>.pem, and the VM is the candidate for this run.
           JIM_TEST_AD_CA_PATH: ${{ github.workspace }}/test/integration/ad-lab-certs/dc-primary-candidate.pem
         run: |
@@ -354,8 +350,8 @@ jobs:
       - name: Scrub secrets from the results
         if: ${{ always() }}
         env:
-          ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
-          JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
         run: |
           $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD) | Where-Object { $_ }
           $files = @(Get-ChildItem -LiteralPath 'test/integration/results', 'test/integration/ad-lab-certs' -Recurse -File -ErrorAction SilentlyContinue)
@@ -378,7 +374,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: ad-lab-rebuild-${{ github.run_id }}-${{ github.run_attempt }}
+          name: jim-ad-lab-rebuild-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             test/integration/results/
             !test/integration/results/README.md

@@ -65,7 +65,7 @@ Describe 'Get-JimComposeArgument' {
         }
     }
 
-    It 'adds the ad-lab overlay for ActiveDirectory so the JIM containers resolve the domain controllers' {
+    It 'adds the lab overlay for ActiveDirectory so the JIM containers resolve the domain controllers' {
         $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory'
 
         $composeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', '-f', 'test/integration/docker/docker-compose.ad-lab.yml')

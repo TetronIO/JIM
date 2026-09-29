@@ -38,7 +38,7 @@ function Get-JimComposeArgument {
     .DESCRIPTION
         Every docker compose call that starts, builds or stops the JIM stack (jim.web, jim.worker,
         jim.scheduler, the database) must use the same list of files or compose sees a different
-        project each time. An Active Directory run adds the ad-lab overlay, which gives the JIM
+        project each time. An Active Directory run adds the lab overlay, which gives the JIM
         containers extra_hosts entries for the domain controllers' FQDNs (their names are in no DNS the
         containers can see, and their certificates name the FQDN).
 

@@ -265,7 +265,7 @@ Names are distributed using a prime-based algorithm to ensure realistic diversit
 
 ### Active Directory lab (needs the lab host)
 
-Real Windows Server 2025 domain controllers, one forest each (`dc-primary` PANOPLY.LOCAL, `dc-source` RESURGAM.LOCAL, `dc-target` GENTIAN.LOCAL), running as Hyper-V virtual machines. Select it with `-DirectoryType ActiveDirectory`. It is **not** part of `-DirectoryType All` or `-PreRelease`, because it needs the lab host; the nightly `ad-lab` workflow has its own entry point. Building and operating the lab itself is in [`ad-lab/README.md`](ad-lab/README.md).
+Real Windows Server 2025 domain controllers, one forest each (`dc-primary` PANOPLY.LOCAL, `dc-source` RESURGAM.LOCAL, `dc-target` GENTIAN.LOCAL), running as Hyper-V virtual machines. Select it with `-DirectoryType ActiveDirectory`. It is **not** part of `-DirectoryType All` or `-PreRelease`, because it needs the lab host; the nightly `jim-ad-lab` workflow has its own entry point. Building and operating the lab itself is in [`ad-lab/README.md`](ad-lab/README.md).
 
 What is different from the Samba AD run, step by step:
 

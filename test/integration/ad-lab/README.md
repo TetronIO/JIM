@@ -245,7 +245,7 @@ the VM's Notes, and every other script refuses a VM without it.
 
 ## How the runner calls the control plane
 
-The runner VM (label `ad-lab`) never holds hypervisor credentials. It runs, over OpenSSH as `jim-lab`:
+The runner VM (label `jim-ad-lab`) never holds hypervisor credentials. It runs, over OpenSSH as `jim-lab`:
 
 ```text
 ssh -p <port> [-i <key>] jim-lab@<host> pwsh -NoProfile -NonInteractive -File "<root>\<script>.ps1" <arguments>

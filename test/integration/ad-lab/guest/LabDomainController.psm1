@@ -1928,7 +1928,7 @@ function Get-LabRunSummary {
 function Get-LabRunStatusDescription {
     <#
     .SYNOPSIS
-        The one-line description of the ad-lab commit status: scenario counts and the domain controller OS build,
+        The one-line description of the jim-ad-lab commit status: scenario counts and the domain controller OS build,
         for example "23/23 scenarios passed; DC build 26100.4652".
 
     .DESCRIPTION

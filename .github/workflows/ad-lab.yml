@@ -1,11 +1,11 @@
 # Active Directory lab: runs JIM's integration suite and connector probes against real Windows Server domain
-# controllers, and posts the `ad-lab` commit status the release gate reads.
+# controllers, and posts the `jim-ad-lab` commit status the release gate reads.
 #
 # What it does: the lab is three single-domain-controller forests on Hyper-V virtual machines
 # (test/integration/ad-lab/README.md). This job reverts them to their checkpoints, runs every Active Directory-family
 # scenario (Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory), then the RequiresActiveDirectory NUnit probes
 # against the same domain controller, uploads the regression report and the domain controller OS build as artefacts,
-# submits results to the metrics API, and posts a commit status named `ad-lab` on the SHA it tested: `success` only
+# submits results to the metrics API, and posts a commit status named `jim-ad-lab` on the SHA it tested: `success` only
 # when everything passed, with the scenario count and the OS build in its description. `/release` and release.yml
 # require `success` for the SHA being tagged (scripts/Test-AdLabReleaseGate.ps1); there is no override, so the
 # remedy for a red night is a fix and a dispatched run.
@@ -14,29 +14,32 @@
 # ci.yml): a pull_request runs code from anyone's fork, and the lab runner has a route to the domain controller
 # network and holds the lab's secrets, so fork code must never reach it. Nothing here is triggered by a fork:
 #   - the triggers are a schedule (always the default branch) and a dispatch (needs write access to this repository);
-#   - the lab runner is alone in a DEDICATED runner group named `ad-lab`, with repository access to TetronIO/JIM
+#   - the lab runner is alone in a DEDICATED runner group named `jim-ad-lab`, with repository access to TetronIO/JIM
 #     only and a workflow allowlist of exactly this file and ad-lab-rebuild.yml, both at refs/heads/main, so that
 #     even a branch that edits this workflow cannot reach the runner. It is not in `tetron-trusted`, because a
 #     runner carrying the default labels there would be offered ordinary ci.yml push jobs, which need sudo pwsh
 #     and a larger machine; and release.yml, which runs on the ordinary release runners, cannot be offered to it.
 #     Set the allowlist once, with an account holding admin:org:
 #
-#       GROUP=$(gh api orgs/TetronIO/actions/runner-groups --jq '.runner_groups[] | select(.name == "ad-lab") | .id')
+#       GROUP=$(gh api orgs/TetronIO/actions/runner-groups --jq '.runner_groups[] | select(.name == "jim-ad-lab") | .id')
 #       jq -n '{restricted_to_workflows: true, selected_workflows: ["TetronIO/JIM/.github/workflows/ad-lab.yml@refs/heads/main","TetronIO/JIM/.github/workflows/ad-lab-rebuild.yml@refs/heads/main"]}' \
 #         | gh api -X PATCH "orgs/TetronIO/actions/runner-groups/$GROUP" --input - --jq '.selected_workflows'
 #
-#   - the job runs in the `ad-lab` environment, which holds the secrets (below). Do not give that environment
+#   - the job runs in the `jim-ad-lab` environment, which holds the secrets (below). Do not give that environment
 #     required reviewers, or every night waits for a person.
 # The same allowlist is why a dispatch on another branch is refused by the runner group: it runs that branch's copy
 # of this file, and only main's is listed. Add the branch ref to the allowlist the way the /release skill authorises
 # a release tag (or merge the change to main first) when the lab has to run on a branch.
 #
-# Configuration (environment `ad-lab` on TetronIO/JIM; a value set there wins over the repository's):
-#   secrets   AD_LAB_ADMIN_PASSWORD, AD_LAB_JIM_PASSWORD (the Administrator and svc-jim passwords, the same in all
-#             three forests), AD_LAB_CONTROL_SSH_KEY (the private key of the jim-lab account on the Hyper-V host)
-#   variables AD_LAB_CONTROL_HOST, AD_LAB_CONTROL_USER (default jim-lab), AD_LAB_CONTROL_PORT (default 22),
-#             AD_LAB_SCRIPT_ROOT (default C:\jim-ad-lab), AD_LAB_PRIMARY_ADDRESS, AD_LAB_SOURCE_ADDRESS,
-#             AD_LAB_TARGET_ADDRESS
+# Configuration (environment `jim-ad-lab` on TetronIO/JIM; a value set there wins over the repository's). The names are
+# the JIM_AD_LAB_* environment variables the harness reads, one-to-one (the SSH key secret is written to a file, whose
+# path is JIM_AD_LAB_CONTROL_KEY):
+#   secrets   JIM_AD_LAB_ADMIN_PASSWORD, JIM_AD_LAB_JIM_PASSWORD (the Administrator and svc-jim passwords, the same in
+#             all three forests), JIM_AD_LAB_CONTROL_SSH_KEY (the private key of the jim-lab account on the Hyper-V
+#             host)
+#   variables JIM_AD_LAB_CONTROL_HOST, JIM_AD_LAB_CONTROL_USER (default jim-lab), JIM_AD_LAB_CONTROL_PORT (default 22),
+#             JIM_AD_LAB_SCRIPT_ROOT (default C:\jim-ad-lab), JIM_AD_LAB_PRIMARY_ADDRESS, JIM_AD_LAB_SOURCE_ADDRESS,
+#             JIM_AD_LAB_TARGET_ADDRESS
 #   optional  repository variable JIM_BENCH_API_URL and secret JIM_BENCH_API_KEY, which the runner reads to stream
 #             results to the metrics API (as for every integration run); unset, results stay local
 #
@@ -44,7 +47,7 @@
 # scenario per domain controller at the Medium template), so it is finished well before the working day, and the
 # job's timeout is a little over that. ad-lab-rebuild.yml (after Patch Tuesday) shares the concurrency group.
 
-name: ad-lab
+name: jim-ad-lab
 
 on:
   schedule:
@@ -70,33 +73,34 @@ permissions:
   statuses: write
 
 jobs:
-  ad-lab:
-    name: ad-lab
+  jim-ad-lab:
+    name: jim-ad-lab
     # A schedule always runs the default branch, but say so: only main's copy of this file may reach the lab.
     if: ${{ github.event_name != 'schedule' || github.ref == 'refs/heads/main' }}
-    runs-on: [self-hosted, ad-lab]
-    environment: ad-lab
+    runs-on: [self-hosted, jim-ad-lab]
+    environment: jim-ad-lab
     timeout-minutes: 300
     # One lab run at a time, and never cancelled: a run cancelled part way leaves the domain controllers reverted
     # to a checkpoint mid-scenario (or, for the rebuild, the live set switched off), and the next run's revert
     # would find them in whatever state the interruption left. A newer run waits its turn instead. The rebuild
     # workflow shares this group so the two never overlap.
     concurrency:
-      group: ad-lab
+      group: jim-ad-lab
       cancel-in-progress: false
     defaults:
       run:
         shell: pwsh
     env:
       # The harness (Run-IntegrationTests.ps1, Get-DirectoryConfig, Invoke-LabControl) reads JIM_AD_LAB_*; the
-      # non-secret settings are mapped here, the secrets on the steps that need them.
-      JIM_AD_LAB_CONTROL_HOST: ${{ vars.AD_LAB_CONTROL_HOST }}
-      JIM_AD_LAB_CONTROL_USER: ${{ vars.AD_LAB_CONTROL_USER || 'jim-lab' }}
-      JIM_AD_LAB_CONTROL_PORT: ${{ vars.AD_LAB_CONTROL_PORT || '22' }}
-      JIM_AD_LAB_SCRIPT_ROOT: ${{ vars.AD_LAB_SCRIPT_ROOT || 'C:\jim-ad-lab' }}
-      JIM_AD_LAB_PRIMARY_ADDRESS: ${{ vars.AD_LAB_PRIMARY_ADDRESS }}
-      JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.AD_LAB_SOURCE_ADDRESS }}
-      JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.AD_LAB_TARGET_ADDRESS }}
+      # non-secret settings are exported here from the variables of the same names, the secrets on the steps that
+      # need them.
+      JIM_AD_LAB_CONTROL_HOST: ${{ vars.JIM_AD_LAB_CONTROL_HOST }}
+      JIM_AD_LAB_CONTROL_USER: ${{ vars.JIM_AD_LAB_CONTROL_USER || 'jim-lab' }}
+      JIM_AD_LAB_CONTROL_PORT: ${{ vars.JIM_AD_LAB_CONTROL_PORT || '22' }}
+      JIM_AD_LAB_SCRIPT_ROOT: ${{ vars.JIM_AD_LAB_SCRIPT_ROOT || 'C:\jim-ad-lab' }}
+      JIM_AD_LAB_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_PRIMARY_ADDRESS }}
+      JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_SOURCE_ADDRESS }}
+      JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.JIM_AD_LAB_TARGET_ADDRESS }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -104,30 +108,26 @@ jobs:
       # Fail in one place, naming what is missing, rather than a dozen steps later with a harness error.
       - name: Check the lab configuration
         env:
-          HAS_SSH_KEY: ${{ secrets.AD_LAB_CONTROL_SSH_KEY != '' }}
-          HAS_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD != '' }}
-          HAS_JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD != '' }}
+          HAS_SSH_KEY: ${{ secrets.JIM_AD_LAB_CONTROL_SSH_KEY != '' }}
+          HAS_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD != '' }}
+          HAS_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD != '' }}
         run: |
           $missing = @()
-          $variables = [ordered]@{
-            AD_LAB_CONTROL_HOST     = 'JIM_AD_LAB_CONTROL_HOST'
-            AD_LAB_PRIMARY_ADDRESS  = 'JIM_AD_LAB_PRIMARY_ADDRESS'
-            AD_LAB_SOURCE_ADDRESS   = 'JIM_AD_LAB_SOURCE_ADDRESS'
-            AD_LAB_TARGET_ADDRESS   = 'JIM_AD_LAB_TARGET_ADDRESS'
-          }
-          foreach ($name in $variables.Keys) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($variables[$name]))) { $missing += "variable $name" }
+          # The variables are exported by the job's env block under their own names, so the name is the lookup key.
+          $variables = @('JIM_AD_LAB_CONTROL_HOST', 'JIM_AD_LAB_PRIMARY_ADDRESS', 'JIM_AD_LAB_SOURCE_ADDRESS', 'JIM_AD_LAB_TARGET_ADDRESS')
+          foreach ($name in $variables) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += "variable $name" }
           }
           $secrets = [ordered]@{
-            AD_LAB_CONTROL_SSH_KEY = $env:HAS_SSH_KEY
-            AD_LAB_ADMIN_PASSWORD  = $env:HAS_ADMIN_PASSWORD
-            AD_LAB_JIM_PASSWORD    = $env:HAS_JIM_PASSWORD
+            JIM_AD_LAB_CONTROL_SSH_KEY = $env:HAS_SSH_KEY
+            JIM_AD_LAB_ADMIN_PASSWORD  = $env:HAS_ADMIN_PASSWORD
+            JIM_AD_LAB_JIM_PASSWORD    = $env:HAS_JIM_PASSWORD
           }
           foreach ($name in $secrets.Keys) {
             if ($secrets[$name] -ne 'true') { $missing += "secret $name" }
           }
           if ($missing.Count -gt 0) {
-            Write-Host "::error title=The ad-lab environment is not configured::Missing: $($missing -join ', '). See the header of .github/workflows/ad-lab.yml."
+            Write-Host "::error title=The jim-ad-lab environment is not configured::Missing: $($missing -join ', '). See the header of .github/workflows/ad-lab.yml."
             exit 1
           }
 
@@ -145,7 +145,7 @@ jobs:
       # job's temp folder, created empty and restricted before the key goes in, and deleted by the last step.
       - name: Write the control-plane SSH key
         env:
-          SSH_KEY: ${{ secrets.AD_LAB_CONTROL_SSH_KEY }}
+          SSH_KEY: ${{ secrets.JIM_AD_LAB_CONTROL_SSH_KEY }}
         run: |
           $path = Join-Path $env:RUNNER_TEMP 'ad-lab-control-key'
           New-Item -ItemType File -Path $path -Force | Out-Null
@@ -195,8 +195,8 @@ jobs:
         env:
           SCENARIO: ${{ inputs.scenario || 'All' }}
           TEMPLATE: ${{ inputs.template || 'Medium' }}
-          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
-          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
           JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
         run: |
@@ -226,9 +226,9 @@ jobs:
           JIM_TEST_AD_PLAIN_PORT: '389'
           JIM_TEST_AD_BASE_DN: DC=panoply,DC=local
           JIM_TEST_AD_USERNAME: CN=svc-jim,OU=Services,DC=panoply,DC=local
-          JIM_TEST_AD_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          JIM_TEST_AD_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
           JIM_TEST_AD_ADMIN_USERNAME: CN=Administrator,CN=Users,DC=panoply,DC=local
-          JIM_TEST_AD_ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
+          JIM_TEST_AD_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
           # The certificate the integration run fetched off the wire (Save-ActiveDirectoryCertificate writes
           # <VM name>.pem). An absolute path: dotnet test runs from the test project's output folder.
           JIM_TEST_AD_CA_PATH: ${{ github.workspace }}/test/integration/ad-lab-certs/dc-primary.pem
@@ -280,8 +280,8 @@ jobs:
       - name: Scrub secrets from the results
         if: ${{ always() }}
         env:
-          ADMIN_PASSWORD: ${{ secrets.AD_LAB_ADMIN_PASSWORD }}
-          JIM_PASSWORD: ${{ secrets.AD_LAB_JIM_PASSWORD }}
+          ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
         run: |
           $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD) | Where-Object { $_ }
           $files = @(Get-ChildItem -LiteralPath 'test/integration/results', 'test/integration/ad-lab-certs' -Recurse -File -ErrorAction SilentlyContinue)
@@ -308,7 +308,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: ad-lab-results-${{ github.run_id }}-${{ github.run_attempt }}
+          name: jim-ad-lab-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             test/integration/results/
             !test/integration/results/README.md
@@ -322,7 +322,7 @@ jobs:
       # check out github.sha), from the job's outcome: success only when everything passed. A cancelled run posts
       # nothing, so it can neither open the gate nor close it on a commit it did not finish testing. The
       # description is capped at GitHub's 140 characters by the summary step; values reach the script through env.
-      - name: Post the ad-lab commit status
+      - name: Post the jim-ad-lab commit status
         if: ${{ always() && job.status != 'cancelled' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -341,7 +341,7 @@ jobs:
           }
           $description = $env:SUMMARY_DESCRIPTION
           if (-not $description) { $description = 'the run stopped before the lab was tested' }
-          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='ad-lab' -f description="$description" -f target_url="$env:RUN_URL"
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-ad-lab' -f description="$description" -f target_url="$env:RUN_URL"
           exit $LASTEXITCODE
 
       # The runner is not ephemeral: without teardown the stack and the key persist between jobs. Always run.

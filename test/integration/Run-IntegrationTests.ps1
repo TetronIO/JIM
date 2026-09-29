@@ -1452,7 +1452,7 @@ if ($scenarioNumber -eq 23) {
 # Compose files for every JIM stack call (build, up, down)
 # ---------------------------------------------------------------------------
 # One list, used at every call site, so that compose always sees the same project. An Active Directory run
-# adds the ad-lab overlay, which gives jim.web, jim.worker and jim.scheduler extra_hosts entries for the
+# adds the lab overlay, which gives jim.web, jim.worker and jim.scheduler extra_hosts entries for the
 # domain controllers' FQDNs (their names are in no DNS the containers can see, and their LDAPS certificates
 # name the FQDN). Decided here, after the directory type has been chosen by parameter, menu or coercion.
 $script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType
