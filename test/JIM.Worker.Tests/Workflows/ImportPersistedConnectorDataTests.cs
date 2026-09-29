@@ -89,6 +89,46 @@ public class ImportPersistedConnectorDataTests : WorkflowTestBase
             "A non-null CloseImportConnection return must be persisted even when the import run failed");
     }
 
+    /// <summary>
+    /// #1875: a connector that cannot connect records what the failure invalidated (the LDAP Connector's pinned
+    /// domain controller) for <c>CloseImportConnection</c> to return. The connection was opened outside the block
+    /// that closes it, so an open failure skipped the close and the invalidation was never persisted: every later run
+    /// resolved the same unreachable server and failed again.
+    /// </summary>
+    [Test]
+    public async Task FullImport_OpenImportConnectionFails_StillClosesTheConnectionAndPersistsItsCloseReturnAsync()
+    {
+        // Arrange
+        var connectedSystem = await CreateConnectedSystemAsync("HR System");
+        connectedSystem.PersistedConnectorData = "pinned-state";
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(connectedSystem.Id, csoType, mvType, "HR Import");
+
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Full Import", ConnectedSystemRunType.FullImport);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.FullImport);
+
+        var openFailure = new InvalidOperationException("simulated connection failure");
+        var connector = new MockCallConnector { OpenImportExceptionToThrow = openFailure };
+        connector.WithCloseImportConnectionReturnValue("pin-invalidated-state");
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+        var processor = new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            connector, connectedSystem, runProfile, workerTask, new CancellationTokenSource());
+
+        // Act: the run still fails, on the open failure itself.
+        var thrown = Assert.ThrowsAsync<InvalidOperationException>(async () => await processor.PerformImportAsync());
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown, Is.SameAs(openFailure), "the open failure must be what fails the run");
+            Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("pin-invalidated-state"),
+                "the connection must be closed after a failed open, and what the connector returned at close persisted");
+        }
+    }
+
     [Test]
     public async Task FullImport_DoesNotPersist_WhenCloseImportConnectionReturnsNullAsync()
     {
