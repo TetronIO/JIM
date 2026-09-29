@@ -87,8 +87,12 @@ Describe 'Get-ActiveDirectoryLabInstance' {
         Get-ActiveDirectoryLabInstance -ScenarioNumber 8 | Should -Be @('Primary', 'Source', 'Target')
     }
 
+    It 'is Primary and Source for Scenario 25, which compares the Recycle Bin on (Primary) with the Recycle Bin off (Source)' {
+        @(Get-ActiveDirectoryLabInstance -ScenarioNumber 25) | Should -Be @('Primary', 'Source')
+    }
+
     It 'is Primary alone for every other scenario' {
-        foreach ($number in 1, 4, 9, 17, 20, 23) {
+        foreach ($number in 1, 4, 9, 17, 20, 23, 24) {
             @(Get-ActiveDirectoryLabInstance -ScenarioNumber $number) | Should -Be @('Primary')
         }
     }
@@ -248,6 +252,16 @@ Describe 'Select-ActiveDirectoryLabCheckpoint' {
     It 'reverts every instance to baseline for a scenario that populates live (anything but 8)' {
         foreach ($instance in 'Primary', 'Source', 'Target') {
             $pick = Select-ActiveDirectoryLabCheckpoint -Instance $instance -ScenarioNumber 2 -Template 'Nano' -Hash $script:hash `
+                -AvailableCheckpoint @('baseline', $script:populated)
+
+            $pick.Checkpoint | Should -Be 'baseline'
+            $pick.NeedsPopulation | Should -BeFalse
+        }
+    }
+
+    It 'reverts Scenario 25 Source to baseline and never asks for population, even when a populated checkpoint exists' {
+        foreach ($instance in 'Primary', 'Source') {
+            $pick = Select-ActiveDirectoryLabCheckpoint -Instance $instance -ScenarioNumber 25 -Template 'Nano' -Hash $script:hash `
                 -AvailableCheckpoint @('baseline', $script:populated)
 
             $pick.Checkpoint | Should -Be 'baseline'
@@ -628,5 +642,231 @@ Describe 'Invoke-ActiveDirectoryLdifDelivery' {
         $outcome.Succeeded | Should -BeTrue
         $outcome.Applied | Should -Be 0
         Should -Invoke Invoke-LdapTool -Times 0 -Exactly
+    }
+}
+
+Describe 'Test-ActiveDirectoryOnlyScenario' {
+    It 'is true for Scenarios 24 and 25, which need real Windows domain controllers' {
+        Test-ActiveDirectoryOnlyScenario -ScenarioNumber 24 | Should -BeTrue
+        Test-ActiveDirectoryOnlyScenario -ScenarioNumber 25 | Should -BeTrue
+    }
+
+    It 'is false for every other scenario, the OpenLDAP-only and Samba AD-only ones included' {
+        foreach ($number in (1..23) + 26) {
+            Test-ActiveDirectoryOnlyScenario -ScenarioNumber $number | Should -BeFalse -Because "Scenario $number runs on a container directory"
+        }
+    }
+
+    It 'is false when there is no scenario number (a sweep, or a name that is not a numbered scenario)' {
+        Test-ActiveDirectoryOnlyScenario -ScenarioNumber $null | Should -BeFalse
+    }
+}
+
+Describe 'Get-ActiveDirectoryOnlyScenarioNumber' {
+    It 'lists Scenarios 24 and 25' {
+        @(Get-ActiveDirectoryOnlyScenarioNumber) | Should -Be @(24, 25)
+    }
+
+    It 'agrees with Test-ActiveDirectoryOnlyScenario for every scenario number the suite could reach' {
+        $listed = @(Get-ActiveDirectoryOnlyScenarioNumber)
+        foreach ($number in 1..40) {
+            (Test-ActiveDirectoryOnlyScenario -ScenarioNumber $number) | Should -Be ($number -in $listed)
+        }
+    }
+}
+
+Describe 'Resolve-ActiveDirectoryOnlyScenarioDirectoryType' {
+    Context 'a scenario that runs on a container directory' {
+        It 'leaves whatever directory type was chosen alone, asked for or not' {
+            foreach ($number in 1, 14, 17, 22, 23) {
+                foreach ($type in 'SambaAD', 'OpenLDAP', 'DirectoryServer389', 'ActiveDirectory', 'All') {
+                    foreach ($explicit in $true, $false) {
+                        $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $number -DirectoryType $type -DirectoryTypeWasExplicitlySet $explicit
+
+                        $decision.DirectoryType | Should -Be $type
+                        $decision.Coerced | Should -BeFalse
+                        $decision.Refusal | Should -BeNullOrEmpty
+                    }
+                }
+            }
+        }
+
+        It 'leaves the directory type alone when there is no scenario number' {
+            $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $null -DirectoryType 'SambaAD' -DirectoryTypeWasExplicitlySet $false
+
+            $decision.DirectoryType | Should -Be 'SambaAD'
+            $decision.Coerced | Should -BeFalse
+            $decision.Refusal | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'a scenario that runs on the Active Directory lab only' {
+        It 'accepts ActiveDirectory as it is' {
+            foreach ($number in 24, 25) {
+                $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $number -DirectoryType 'ActiveDirectory' -DirectoryTypeWasExplicitlySet $true
+
+                $decision.DirectoryType | Should -Be 'ActiveDirectory'
+                $decision.Coerced | Should -BeFalse
+                $decision.Refusal | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'refuses a container directory type that was asked for, naming it and the way out' {
+            foreach ($number in 24, 25) {
+                foreach ($type in 'SambaAD', 'OpenLDAP', 'DirectoryServer389') {
+                    $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $number -DirectoryType $type -DirectoryTypeWasExplicitlySet $true
+
+                    $decision.Refusal | Should -BeLike "*Rejected -DirectoryType $type*"
+                    $decision.Refusal | Should -BeLike '*Use -DirectoryType ActiveDirectory*'
+                    $decision.Refusal | Should -BeLike '*24*25*'
+                    $decision.Coerced | Should -BeFalse
+                }
+            }
+        }
+
+        It 'refuses -DirectoryType All, which never includes the lab, and says so' {
+            $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber 24 -DirectoryType 'All' -DirectoryTypeWasExplicitlySet $true
+
+            $decision.Refusal | Should -BeLike '*Rejected -DirectoryType All*'
+            $decision.Refusal | Should -BeLike '*never includes ActiveDirectory*'
+            $decision.Refusal | Should -BeLike '*Use -DirectoryType ActiveDirectory*'
+        }
+
+        It 'moves a directory type nobody asked for (the runner default, or a menu choice) to ActiveDirectory' {
+            foreach ($type in 'SambaAD', 'OpenLDAP', 'DirectoryServer389', 'All') {
+                $decision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber 25 -DirectoryType $type -DirectoryTypeWasExplicitlySet $false
+
+                $decision.DirectoryType | Should -Be 'ActiveDirectory'
+                $decision.Coerced | Should -BeTrue
+                $decision.Refusal | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'writes its messages without an em dash, as every text in this repository must' {
+            $refusals = foreach ($type in 'SambaAD', 'All') {
+                (Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber 24 -DirectoryType $type -DirectoryTypeWasExplicitlySet $true).Refusal
+            }
+
+            foreach ($refusal in $refusals) {
+                $refusal | Should -Not -Match ([string][char]0x2014)
+            }
+        }
+    }
+}
+
+Describe 'Run-IntegrationTests.ps1 gating of the Active Directory only scenarios' {
+    BeforeAll {
+        # The runner cannot be run without Docker and the lab, so what is proven here is that it is wired to the
+        # tested decisions above, in the places the OpenLDAP-only Scenarios 14, 19 and 22 are gated.
+        $script:runnerPath = Join-Path $PSScriptRoot '..' 'Run-IntegrationTests.ps1'
+        $script:runnerText = Get-Content -LiteralPath $script:runnerPath -Raw
+    }
+
+    It 'parses' {
+        $tokens = $null
+        $parseErrors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile($script:runnerPath, [ref]$tokens, [ref]$parseErrors) | Out-Null
+
+        @($parseErrors).Count | Should -Be 0
+    }
+
+    It 'resolves the directory type through the tested function before the -DirectoryType All handler runs' {
+        $resolve = $script:runnerText.IndexOf('Resolve-ActiveDirectoryOnlyScenarioDirectoryType')
+        $allHandler = [regex]::Match($script:runnerText, '(?m)^if \(\$DirectoryType -eq "All"\) \{')
+
+        $resolve | Should -BeGreaterThan 0
+        $allHandler.Success | Should -BeTrue
+        $resolve | Should -BeLessThan $allHandler.Index
+    }
+
+    It 'stops a refused combination with the message the function wrote' {
+        # A boolean rather than Should -Match on the text, which would print the whole runner when it failed.
+        ($script:runnerText -match '\.Refusal') | Should -BeTrue -Because 'the runner throws the Refusal the function returns'
+    }
+
+    It 'skips the Active Directory only scenarios in a -Scenario All sweep on every directory type but ActiveDirectory' {
+        ($script:runnerText -match 'Test-ActiveDirectoryOnlyScenario') | Should -BeTrue
+        ($script:runnerText -match 'Skipping Active Directory lab-only scenario') | Should -BeTrue
+    }
+
+    It 'chooses ActiveDirectory itself when the scenario is picked from the interactive menu' {
+        ($script:runnerText -match '(?s)Test-ActiveDirectoryOnlyScenario -ScenarioNumber \$scenarioNumber\)\s*\{\s*(?:#[^\r\n]*\s*)*\$DirectoryType = "ActiveDirectory"') | Should -BeTrue
+    }
+
+    It 'treats Scenarios 24 and 25 as independent of the template, like the other scenarios with fixed data' {
+        $array = [regex]::Match($script:runnerText, '(?s)\$templateIrrelevantScenarioNumbers\s*=\s*@\((?<body>.*?)\r?\n\)')
+        $array.Success | Should -BeTrue
+
+        $numbers = @([regex]::Matches($array.Groups['body'].Value, '(?m)^\s*(\d+)\s*,?') | ForEach-Object { [int]$_.Groups[1].Value })
+        $numbers | Should -Contain 24
+        $numbers | Should -Contain 25
+    }
+}
+
+Describe 'Test-PasswordContainsToken' {
+    It 'finds a token in any case, which is how Active Directory compares a name with a password' {
+        Test-PasswordContainsToken -Password 'xx-WINTERGREEN-9!' -Token 'Wintergreen' | Should -BeTrue
+        Test-PasswordContainsToken -Password 'xx-wintergreen-9!' -Token 'WINTERGREEN' | Should -BeTrue
+    }
+
+    It 'does not find a token that is not there' {
+        Test-PasswordContainsToken -Password 'Copper-Fernleaf-2286!' -Token 'Wintergreen' | Should -BeFalse
+    }
+
+    It 'ignores a token shorter than three characters, as Active Directory does' {
+        Test-PasswordContainsToken -Password 'Copper-Fernleaf-2286!' -Token 'Co' | Should -BeFalse
+        Test-PasswordContainsToken -Password 'Copper-Fernleaf-2286!' -Token '' | Should -BeFalse
+    }
+
+    It 'finds a token of exactly three characters' {
+        Test-PasswordContainsToken -Password 'Copper-Fernleaf-2286!' -Token 'per' | Should -BeTrue
+    }
+}
+
+Describe 'Get-ActiveDirectoryFixturePassword' {
+    It 'is as long as asked, 20 characters by default' {
+        (Get-ActiveDirectoryFixturePassword).Length | Should -Be 20
+        (Get-ActiveDirectoryFixturePassword -Length 12).Length | Should -Be 12
+        (Get-ActiveDirectoryFixturePassword -Length 64).Length | Should -Be 64
+    }
+
+    It 'draws on all four character classes Active Directory counts, every time, even at the shortest length' {
+        foreach ($attempt in 1..200) {
+            $password = Get-ActiveDirectoryFixturePassword -Length 12
+
+            $password | Should -MatchExactly '[A-Z]'
+            $password | Should -MatchExactly '[a-z]'
+            $password | Should -Match '[0-9]'
+            $password | Should -Match '[^A-Za-z0-9]'
+        }
+    }
+
+    It 'never starts with a symbol, so it is safe as the value of an LDAP tool option' {
+        foreach ($attempt in 1..200) {
+            (Get-ActiveDirectoryFixturePassword -Length 12) | Should -Match '^[A-Za-z0-9]'
+        }
+    }
+
+    It 'is different every time' {
+        $passwords = @(1..50 | ForEach-Object { Get-ActiveDirectoryFixturePassword })
+
+        @($passwords | Select-Object -Unique).Count | Should -Be 50
+    }
+
+    It 'leaves out every token it was told to avoid' {
+        # The characters a token is made of are all in the alphabet, so a token of three digits is one the
+        # generator can produce by chance; over many draws it must never let one through.
+        foreach ($attempt in 1..300) {
+            $password = Get-ActiveDirectoryFixturePassword -Length 12 -Avoid '234', '345', '456', 'abc'
+
+            Test-PasswordContainsToken -Password $password -Token '234' | Should -BeFalse
+            Test-PasswordContainsToken -Password $password -Token '345' | Should -BeFalse
+            Test-PasswordContainsToken -Password $password -Token '456' | Should -BeFalse
+            Test-PasswordContainsToken -Password $password -Token 'abc' | Should -BeFalse
+        }
+    }
+
+    It 'refuses a length too short to be a policy-compliant password' {
+        { Get-ActiveDirectoryFixturePassword -Length 8 } | Should -Throw
     }
 }

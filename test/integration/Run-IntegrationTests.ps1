@@ -97,7 +97,10 @@
     and dc=glitterband,dc=local, on one container, populated live on every run). Scenarios 014, 019
     and 22 are OpenLDAP only and are coerced to OpenLDAP when asked for on another directory (and
     refused on ActiveDirectory); Scenario 017 runs on the Active Directory family (Samba AD and
-    ActiveDirectory) only. "All" runs the suite against SambaAD, then OpenLDAP, then
+    ActiveDirectory) only. Scenarios 024 and 025 run on the ActiveDirectory lab only: they are moved
+    to it when no directory type was asked for, refused on any other type that was (-DirectoryType All
+    included, since it never includes ActiveDirectory), and skipped by a -Scenario All sweep of any
+    other directory. "All" runs the suite against SambaAD, then OpenLDAP, then
     DirectoryServer389, with a full environment teardown between them.
     ActiveDirectory is the real thing: Windows Server domain controllers running as Hyper-V virtual
     machines (test/integration/ad-lab/README.md). No Samba container runs; every domain controller the
@@ -630,6 +633,8 @@ function Show-ScenarioMenu {
                 19 { "Auxiliary classes (merge, import, export class convergence, discovery)" }
                 20 { "Password Synchronisation (held while a system is off, delivered when it is switched on, newest password only)" }
                 22 { "OpenLDAP password policy (discovered as published; generated Initial Passwords satisfy an enforcing ppolicy overlay)" }
+                24 { "Active Directory password policy (domain policy and Fine-Grained Password Policy discovered; generated Initial Passwords satisfy it; lab only)" }
+                25 { "Active Directory delta import integrity (Recycle Bin on and off; a checkpoint revert fails a Delta Import fast; lab only)" }
                 default { "Integration test scenario" }
             }
         }
@@ -948,7 +953,7 @@ function Show-DirectoryTypeMenu {
         @{
             Name = "DirectoryServer389"
             Description = "389 Directory Server with multi-suffix partitions"
-            Details = "LDAP on port 3389, RFC 4512 schema; every OpenLDAP scenario except 14, 19 and 22 (OpenLDAP only) and 17 (Samba AD only)"
+            Details = "LDAP on port 3389, RFC 4512 schema; every OpenLDAP scenario except 14, 19 and 22 (OpenLDAP only), 17 (Samba AD only) and 24 and 25 (Active Directory lab only)"
         }
         @{
             Name = "ActiveDirectory"
@@ -1271,7 +1276,9 @@ $templateIrrelevantScenarioNumbers = @(
     19,  # Auxiliary Classes - fixed six-user dataset per suffix, no template scaling
     20,  # Password Synchronisation - asserts against three accounts; a larger template only lengthens the export
     21,  # Run Profile Safeguards - limits are asserted relative to the population; a larger template only lengthens the runs
-    22   # OpenLDAP Password Policy - asserts against one Micro export
+    22,  # OpenLDAP Password Policy - asserts against one Micro export
+    24,  # Active Directory Password Policy - asserts against one Micro export (Active Directory lab only)
+    25   # Active Directory Delta Import Integrity - creates and deletes its own users (Active Directory lab only)
 )
 
 function Test-TemplateRelevant {
@@ -1342,6 +1349,10 @@ if (-not $Scenario) {
         if ($scenarioNumber -in 14, 19, 22) {
             $DirectoryType = "OpenLDAP"
         }
+        elseif (Test-ActiveDirectoryOnlyScenario -ScenarioNumber $scenarioNumber) {
+            # 24 and 25 assert a real domain controller, so there is nothing to choose between.
+            $DirectoryType = "ActiveDirectory"
+        }
         else {
             $DirectoryType = Show-DirectoryTypeMenu
         }
@@ -1393,6 +1404,27 @@ if ($scenarioNumber -in 14, 19, 22 -and $DirectoryType -in @("SambaAD", "Directo
     Write-Host "${YELLOW}This scenario is OpenLDAP only; using -DirectoryType OpenLDAP.${NC}"
     $DirectoryType = "OpenLDAP"
     $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType "OpenLDAP"
+}
+
+# ---------------------------------------------------------------------------
+# Active Directory lab-only directory handling (Scenarios 024 and 025)
+# ---------------------------------------------------------------------------
+# The mirror of the OpenLDAP-only coercion above. Scenario 024 asserts a Windows domain controller's password
+# policy and a Fine-Grained Password Policy, and Scenario 025 the Active Directory Recycle Bin and the effect of
+# reverting a Hyper-V checkpoint, so neither has anything to assert against on Samba AD, OpenLDAP or 389
+# Directory Server. A directory type that was asked for is refused (-DirectoryType All too: it never includes
+# ActiveDirectory), one nobody asked for is moved to ActiveDirectory. The decision is the tested function in
+# utils/ActiveDirectoryLab-Helpers.ps1; this only acts on it, and runs before the -DirectoryType All handler
+# below so that an explicit All is refused here rather than fanned out into legs that cannot run the scenario.
+$adOnlyDecision = Resolve-ActiveDirectoryOnlyScenarioDirectoryType -ScenarioNumber $scenarioNumber -DirectoryType $DirectoryType `
+    -DirectoryTypeWasExplicitlySet $DirectoryTypeWasExplicitlySet
+if ($adOnlyDecision.Refusal) {
+    throw $adOnlyDecision.Refusal
+}
+if ($adOnlyDecision.Coerced) {
+    Write-ActiveDirectoryLabLine "${YELLOW}This scenario runs on the Active Directory lab only; using -DirectoryType ActiveDirectory.${NC}"
+    $DirectoryType = $adOnlyDecision.DirectoryType
+    $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
 }
 
 # ---------------------------------------------------------------------------
@@ -1865,6 +1897,18 @@ if ($Scenario -eq "All") {
         if ($sambaOnly.Count -gt 0) {
             Write-Host "${YELLOW}Skipping Samba AD-only scenario(s) on ${DirectoryType}: $($sambaOnly -join ', ')${NC}"
             $implementedScenarios = @($implementedScenarios | Where-Object { (Get-IntegrationScenarioNumber -Scenario $_) -ne 17 })
+        }
+    }
+
+    # Scenarios 24 and 25 run on the Active Directory lab only (see Resolve-ActiveDirectoryOnlyScenarioDirectoryType
+    # above), so a sweep of Samba AD, OpenLDAP or 389 Directory Server skips them: -DirectoryType All, which runs
+    # those three and never includes ActiveDirectory, therefore never runs them either. A sweep of
+    # ActiveDirectory keeps them.
+    if ($DirectoryType -ne "ActiveDirectory") {
+        $adLabOnly = @($implementedScenarios | Where-Object { Test-ActiveDirectoryOnlyScenario -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_) })
+        if ($adLabOnly.Count -gt 0) {
+            Write-ActiveDirectoryLabLine "${YELLOW}Skipping Active Directory lab-only scenario(s) on ${DirectoryType}: $($adLabOnly -join ', ')${NC}"
+            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notin $adLabOnly })
         }
     }
 

@@ -70,8 +70,9 @@ function Get-ActiveDirectoryLabInstance {
     .DESCRIPTION
         Primary is always used: it is the run's DirectoryConfig. Scenarios 2 and 8 also use Source and
         Target (the resurgam.local and gentian.local forests), which the Samba lab runs as
-        samba-ad-source and samba-ad-target. Reverting a domain controller a scenario does not use
-        costs minutes, so the rest get Primary alone.
+        samba-ad-source and samba-ad-target. Scenario 25 uses Primary and Source: Primary has the Active
+        Directory Recycle Bin on and Source has it off, and the scenario compares the two. Reverting a
+        domain controller a scenario does not use costs minutes, so the rest get Primary alone.
 
     .PARAMETER ScenarioNumber
         The scenario's number, or $null when there is none.
@@ -87,7 +88,119 @@ function Get-ActiveDirectoryLabInstance {
     if ($ScenarioNumber -in 2, 8) {
         return [string[]]$script:AdLabInstanceOrder
     }
+    if ($ScenarioNumber -eq 25) {
+        return [string[]]@('Primary', 'Source')
+    }
     return [string[]]@('Primary')
+}
+
+# The scenarios that only make sense on the real Active Directory lab. Scenario 24 asserts a Windows domain
+# controller's password policy and a Fine-Grained Password Policy, and Scenario 25 asserts the Active Directory
+# Recycle Bin and the restore-from-backup behaviour of a Hyper-V checkpoint revert; a Samba AD container and the
+# OpenLDAP and 389 Directory Server labs have none of these to assert against.
+$script:AdOnlyScenarioNumbers = @(24, 25)
+
+function Get-ActiveDirectoryOnlyScenarioNumber {
+    <#
+    .SYNOPSIS
+        The numbers of the scenarios that run on the Active Directory lab only.
+
+    .DESCRIPTION
+        The one list the runner's gating reads, the way it reads 14, 19 and 22 for the OpenLDAP-only scenarios.
+        Both are template independent (fixed data), and neither ever runs under -DirectoryType All or
+        -PreRelease, which never include ActiveDirectory.
+    #>
+    [CmdletBinding()]
+    [OutputType([int[]])]
+    param()
+
+    return [int[]]$script:AdOnlyScenarioNumbers
+}
+
+function Test-ActiveDirectoryOnlyScenario {
+    <#
+    .SYNOPSIS
+        Whether a scenario runs on the Active Directory lab only.
+
+    .PARAMETER ScenarioNumber
+        The scenario's number, or $null when there is none (a sweep, or a name that is not a numbered scenario).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
+    if ($null -eq $ScenarioNumber) { return $false }
+    return ($ScenarioNumber -in $script:AdOnlyScenarioNumbers)
+}
+
+function Resolve-ActiveDirectoryOnlyScenarioDirectoryType {
+    <#
+    .SYNOPSIS
+        What the runner does with the directory type of a scenario that runs on the Active Directory lab only.
+
+    .DESCRIPTION
+        The mirror of the OpenLDAP-only handling of Scenarios 14, 19 and 22, decided here so that it is tested.
+        A scenario that runs anywhere is left alone. An Active Directory-only scenario:
+
+          - on ActiveDirectory: nothing to do;
+          - on another directory type that was ASKED FOR (-DirectoryType on the command line): refused, with the
+            reason and the way out, because respecting the explicit request would run a scenario against a
+            directory it cannot assert anything about. -DirectoryType All is refused in the same way and for the
+            same reason: it runs the container directories only and never includes ActiveDirectory;
+          - on a directory type nobody asked for (the runner's SambaAD default, or a menu choice made before the
+            scenario was known): moved to ActiveDirectory, as the OpenLDAP-only scenarios are moved to OpenLDAP.
+
+    .PARAMETER ScenarioNumber
+        The scenario's number, or $null when there is none.
+
+    .PARAMETER DirectoryType
+        The directory type the run has at this point.
+
+    .PARAMETER DirectoryTypeWasExplicitlySet
+        Whether the person running the suite passed -DirectoryType.
+
+    .OUTPUTS
+        A hashtable: DirectoryType (the type to carry on with), Coerced (whether it was changed) and Refusal (the
+        message to stop the run with, or $null).
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DirectoryType,
+
+        [Parameter(Mandatory=$true)]
+        [bool]$DirectoryTypeWasExplicitlySet
+    )
+
+    $unchanged = @{ DirectoryType = $DirectoryType; Coerced = $false; Refusal = $null }
+
+    if (-not (Test-ActiveDirectoryOnlyScenario -ScenarioNumber $ScenarioNumber) -or $DirectoryType -eq 'ActiveDirectory') {
+        return $unchanged
+    }
+
+    if ($DirectoryTypeWasExplicitlySet) {
+        $numbers = @(Get-ActiveDirectoryOnlyScenarioNumber)
+        $why = if ($DirectoryType -eq 'All') {
+            "-DirectoryType All runs the container directories only and never includes ActiveDirectory, which needs the lab host."
+        }
+        else {
+            "they assert a Windows domain controller's password policy, Fine-Grained Password Policies, Recycle Bin and invocationId, and $DirectoryType has none of them."
+        }
+        $unchanged.Refusal = "Scenarios $($numbers[0]) (Active Directory Password Policy) and $($numbers[1]) (Active Directory Delta Import Integrity) " +
+            "run on the Active Directory lab only: $why Rejected -DirectoryType $DirectoryType. Use -DirectoryType ActiveDirectory."
+        return $unchanged
+    }
+
+    return @{ DirectoryType = 'ActiveDirectory'; Coerced = $true; Refusal = $null }
 }
 
 function Get-ActiveDirectoryLabCheckpointName {
@@ -818,4 +931,100 @@ function Invoke-ActiveDirectoryOrganisationalUnitAdd {
     $outcome = Invoke-ActiveDirectoryLdifDelivery -DirectoryConfig $DirectoryConfig -Tool ldapadd `
         -Ldif (Get-LdapOrganizationalUnitLdif -Dn $Dn) -AcceptedResultCode 68 -Description "organisational unit $Dn"
     return $(if ($outcome.AcceptedCount -gt 0) { 'Exists' } else { 'Created' })
+}
+
+function Test-PasswordContainsToken {
+    <#
+    .SYNOPSIS
+        Whether a password contains a token of an account's name, compared without regard to case.
+
+    .DESCRIPTION
+        Active Directory's complexity rule refuses a password that contains the account's sAMAccountName, or a
+        part of its display name of three characters or more, whatever the password's length and mix of
+        characters. A token shorter than three characters is not one it looks for, so it is ignored here too.
+        Scenario 24 uses this both ways: to keep a fixture password clear of the names it is set on, and to
+        build the one password that a length and category check cannot tell is unacceptable and a domain
+        controller refuses.
+
+    .PARAMETER Password
+        The password.
+
+    .PARAMETER Token
+        The part of a name to look for.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '',
+        Justification = 'Lab fixture passwords are plain-text test values, compared as text; a SecureString would only be unwrapped again at once.')]
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Password,
+
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string]$Token
+    )
+
+    if ($Token.Length -lt 3) { return $false }
+    return ($Password.IndexOf($Token, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+}
+
+function Get-ActiveDirectoryFixturePassword {
+    <#
+    .SYNOPSIS
+        A random password for a throwaway lab account, one that satisfies a stock Active Directory policy.
+
+    .DESCRIPTION
+        For the accounts a scenario creates in a domain controller that the next checkpoint revert destroys.
+        It draws on all four character classes (upper case, lower case, digits and symbols), starts with a
+        letter or digit so that it is safe as the value of an LDAP tool option, uses characters that cannot be
+        mistaken for one another, and is chosen with System.Security.Cryptography.RandomNumberGenerator, so that
+        no password is written into a script. Tokens of the account's name the password must not contain (see
+        Test-PasswordContainsToken) are avoided by drawing again.
+
+    .PARAMETER Length
+        How many characters, 12 to 128 (default 20).
+
+    .PARAMETER Avoid
+        Name tokens the password must not contain.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(12, 128)]
+        [int]$Length = 20,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Avoid = @()
+    )
+
+    $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+    $lower = 'abcdefghijkmnopqrstuvwxyz'
+    $digits = '23456789'
+    $symbols = '!-_.'
+    $everything = $upper + $lower + $digits + $symbols
+    $leading = $upper + $lower + $digits
+
+    $draw = { param([string]$Pool) $Pool[[System.Security.Cryptography.RandomNumberGenerator]::GetInt32($Pool.Length)] }
+
+    for ($attempt = 0; $attempt -lt 100; $attempt++) {
+        # The first character is any but a symbol; every class is present in the rest, which is shuffled so
+        # that the guaranteed characters do not sit in a predictable place.
+        $rest = [System.Collections.Generic.List[char]]::new()
+        foreach ($pool in $upper, $lower, $digits, $symbols) { $rest.Add((& $draw $pool)) }
+        while ($rest.Count -lt ($Length - 1)) { $rest.Add((& $draw $everything)) }
+        for ($index = $rest.Count - 1; $index -gt 0; $index--) {
+            $swap = [System.Security.Cryptography.RandomNumberGenerator]::GetInt32($index + 1)
+            $held = $rest[$index]
+            $rest[$index] = $rest[$swap]
+            $rest[$swap] = $held
+        }
+
+        $candidate = [string](& $draw $leading) + (-join $rest)
+        $clashes = @($Avoid | Where-Object { Test-PasswordContainsToken -Password $candidate -Token $_ })
+        if ($clashes.Count -eq 0) { return $candidate }
+    }
+
+    throw "Get-ActiveDirectoryFixturePassword: could not draw a $Length character password that avoids '$($Avoid -join "', '")' in 100 attempts."
 }
