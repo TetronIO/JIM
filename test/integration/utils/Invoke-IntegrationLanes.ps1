@@ -88,6 +88,15 @@ function Remove-IntegrationLaneStack {
             $lane = Get-IntegrationLane
             $jimArgs = @(Get-JimComposeArgs)
             $integrationArgs = @(Get-IntegrationComposeArgs)
+            # Throwaway containers outside the Compose projects (the volume-audit sidecar, a CSV seeding
+            # helper caught mid-copy) would otherwise pin the lane's connector-files volume.
+            $pinning = @(docker ps -aq --filter "volume=$($lane.ConnectorFilesVolume)" 2>$null)
+            foreach ($containerId in $pinning) {
+                $project = docker inspect $containerId --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>$null
+                if (-not $project) {
+                    docker rm -f $containerId 2>&1 | Out-Null
+                }
+            }
             # The integration systems first: they sit on the JIM stack's network (declared external in the
             # integration Compose file), which the JIM stack's own `down` can only remove once they are gone.
             docker compose @integrationArgs --profile scenario-002 --profile scenario-008 --profile openldap --profile dirsrv --profile scim down -v --remove-orphans 2>&1 | Out-Null
