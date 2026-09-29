@@ -18,7 +18,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 880" role="img" aria-labelledby="jimdg-al-title jimdg-al-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-al-title">Inside the Application Layer</title>
-  <desc id="jimdg-al-desc">JIM.Web and JIM.Scheduler call the JimApplication facade, the single entry point to the domain servers: Metaverse, ConnectedSystem, ObjectMatching, Search, Security, SecurityAudit, Auth, Scheduler, Tasking, Activity, ChangeHistory, Certificate, ServiceSettings, FileSystem, InitialPassword, PasswordSynchronisation, ConfigurationChangePreview, SystemHealth, ExampleData and System, plus the configuration services. The JIM.Worker task processors bypass the facade and use SyncServer, which orchestrates the sync evaluation and execution servers (ExportEvaluation, ExportExecution, ScopingEvaluation, ScopeReconciliation and DriftDetection), and SyncEngine, the stateless sync domain logic with no I/O. The facade also exposes SyncPreview, which evaluates what synchronising an object would do through the same SyncEngine without writing anything. Domain servers reach PostgreSQL through IJimRepository; the sync servers use the dedicated ISyncRepository.</desc>
+  <desc id="jimdg-al-desc">JIM.Web and JIM.Scheduler call the JimApplication facade, the single entry point to the domain servers: Metaverse, ConnectedSystem, ObjectMatching, Search, Security, SecurityAudit, Auth, Scheduler, Tasking, Activity, ChangeHistory, Certificate, ServiceSettings, FileSystem, InitialPassword, PasswordSynchronisation, ConfigurationChangePreview, SystemHealth, FeatureFlags, ExampleData and System, plus the configuration services. The JIM.Worker task processors bypass the facade and use SyncServer, which orchestrates the sync evaluation and execution servers (ExportEvaluation, ExportExecution, ScopingEvaluation, ScopeReconciliation and DriftDetection), and SyncEngine, the stateless sync domain logic with no I/O. The facade also exposes SyncPreview, which evaluates what synchronising an object would do through the same SyncEngine without writing anything. Domain servers reach PostgreSQL through IJimRepository; the sync servers use the dedicated ISyncRepository.</desc>
   <g id="jimdg-al-callers">
     <rect class="jimdg-stage" x="150" y="20" width="240" height="64" rx="8"/>
     <text class="jimdg-stage-label" x="270" y="46">JIM.Web</text>
@@ -51,7 +51,7 @@
     <text class="jimdg-system-sub" x="350" y="417">Security · SecurityAudit · Auth · Scheduler · Tasking</text>
     <text class="jimdg-system-sub" x="350" y="438">Activity · ChangeHistory · Certificate · ServiceSettings</text>
     <text class="jimdg-system-sub" x="350" y="459">FileSystem · InitialPassword · PasswordSynchronisation</text>
-    <text class="jimdg-system-sub" x="350" y="480">ConfigurationChangePreview · SystemHealth</text>
+    <text class="jimdg-system-sub" x="350" y="480">ConfigurationChangePreview · SystemHealth · FeatureFlags</text>
     <text class="jimdg-system-sub" x="350" y="501">ExampleData · System · configuration services</text>
     <rect class="jimdg-layer" x="630" y="340" width="420" height="190" rx="8"/>
     <text class="jimdg-layer-title" x="840" y="368">Sync evaluation &amp; execution</text>

@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-09-25, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -22,7 +22,7 @@ flowchart TD
     Start([Start Sync]) --> Prepare[Prepare: count CSOs<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284<br/>Configuration changed since last fully applied?<br/>Disable the unchanged-object skip for this run]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
-    PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance<br/>Seed page identity map #1612 with<br/>the page's joined MVOs]
+    PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance<br/>Keyset cursor on Id, Full and Delta #1858<br/>Seed page identity map #1612 with<br/>the page's joined MVOs]
     LoadPage --> CsoLoop{More CSOs<br/>in page?}
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
@@ -37,7 +37,7 @@ flowchart TD
     DeferredRef --> PersistMvo[PersistPendingMetaverseObjectsAsync:<br/>bulk persist MVO creates + updates]
     PersistMvo --> CreateMvoChanges[CreatePendingMvoChangeObjectsAsync:<br/>build in-memory MVO change records<br/>for audit trail]
     CreateMvoChanges --> EvalDrift[EvaluateQueuedDrift:<br/>drift detection for queued CSOs,<br/>now that MVOs have real ids]
-    EvalDrift --> EvalExports[EvaluatePendingExportsAsync:<br/>batch-evaluate outbound exports<br/>for each tracked MVO]
+    EvalDrift --> EvalExports[EvaluatePendingExportsAsync:<br/>refresh the page's export cache,<br/>prefetch export matching candidates<br/>once per Object Matching Rule group,<br/>then evaluate outbound exports<br/>for each tracked MVO]
     EvalExports --> FlushPE[FlushPendingExportOperationsAsync:<br/>create/delete/update Pending Exports]
     FlushPE --> ResolveSnapshots[ResolvePendingExportReferenceSnapshotsAsync:<br/>fix up reference attribute snapshots<br/>on newly-created Pending Exports]
     ResolveSnapshots --> FlushCSO[FlushObsoleteCsoOperationsAsync:<br/>persist queued CSO deletions]
@@ -169,11 +169,13 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Two-pass Attribute Flow**<br /> Scalar attributes are processed first (pass 1 via `ISyncEngine.FlowInboundAttributes`), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page.
 
-- **Batch persistence**<br /> MVO creates/updates, Pending Exports, and CSO deletions are all batched per-page via `ISyncRepository` bulk operations to reduce database round trips. This is critical for performance at scale.
+- **Batch persistence**<br /> MVO creates/updates, Pending Exports, and CSO deletions are all batched per-page via `ISyncRepository` bulk operations to reduce database round trips. This is critical for performance at scale. Page-sized writes use PostgreSQL COPY on the EF connection, inside the page's transaction, so each page's write stays atomic.
 
-- **No-net-change detection**<br /> Before creating Pending Exports, the system checks if the target CSO already has the expected values (using pre-cached data). This avoids unnecessary export operations.
+- **No-net-change detection**<br /> Before creating Pending Exports, the system checks if the target CSO already has the expected values (using pre-cached data). This avoids unnecessary export operations. An attribute found already current also withdraws any change still queued for it (#1883; see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)).
 
-- **Drift detection**<br /> Inbound Attribute Flow queues each CSO for drift detection, and `EvaluateQueuedDrift` runs it at the page flush once MVOs are persisted (a Metaverse Object projected on this page has no id until then, and a corrective Pending Export records it). `DriftDetectionService` checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective Pending Export is created.
+- **Export matching prefetched per page**<br /> Before a page's export evaluation, `PrefetchExportMatchCandidatesForPageAsync` looks up existing target objects for every Metaverse Object about to be provisioned, in one query per Object Matching Rule group rather than one per object. Case-insensitive matching is exact (`lower()` on both sides), never a wildcard `ILIKE`. A failed prefetch fails the page; recall, cross-page reference resolution, drift, deprovisioning and Sync Preview keep the per-object lookup.
+
+- **Drift detection**<br /> Inbound Attribute Flow queues each CSO for drift detection, and `EvaluateQueuedDrift` runs it at the page flush once MVOs are persisted (a Metaverse Object projected on this page has no id until then, and a corrective Pending Export records it). `DriftDetectionService` checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective Pending Export is created. A divergence is left alone only when this system holds the winning import Attribute Flow for the attribute and that flow reads the diverged attribute, so the edit can flow back in (#1864); otherwise it is drift and is corrected.
 
 - **Attribute recall, re-election and hand-over via ContributedBySystemId**<br /> Every MVO attribute value tracks which Connected System contributed it. When a CSO is obsoleted, attributes contributed by that system are recalled (marked for removal from the MVO) when **both** of the following hold: the CSO type has `RemoveContributedAttributesOnObsoletion` enabled, and the MVO is not slated for immediate deletion (the immediate-deletion check avoids nugatory work when the MVO is about to be deleted at page flush, per #390). A configured deletion grace period no longer skips recall wholesale (Attribute Priority, #91): before clearing, `ReElectSurvivingContributorsAsync` hands each recalled attribute to the next-priority still-joined contributor where one survives, a change-of-value rather than a clear. Only an attribute with no surviving contributor is affected by the freeze: it is preserved rather than cleared when a deletion is pending (for the grace window) or when no remaining joined system carries an enabled import Synchronisation Rule for the object's type (as the object's last known state, surfaced as a `ValuesPreserved` outcome, #1570), so identity-critical single-source values that feed expression-based exports (for example an LDAP Distinguished Name) are not cleared. While an import source remains, the departed system's leftovers are recalled. The recalled and re-elected values are queued for export evaluation so target systems receive the removals or the change-of-value; the only export-evaluation skip is for MVOs pending immediate deletion, whose Delete Pending Exports are created by `FlushPendingMvoDeletionsAsync` instead.
 
@@ -192,6 +194,8 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 - **Error isolation**<br /> Each CSO is processed within its own try/catch. Errors create RPEIs but do not halt processing of remaining CSOs.
 
 - **Cancellation safety**<br /> `CheckCancel` completes the current page flush before stopping. This ensures all in-progress MVOs, Pending Exports, and RPEIs are persisted; no work is lost on cancellation.
+
+- **Keyset paging (#1858)**<br /> Full and Delta Synchronisation both page CSOs by a keyset cursor on `Id`. For Delta Synchronisation this is a correctness requirement: each page boundary deletes that page's obsolete CSOs, so OFFSET paging over the shrinking modified-since set skipped every other page.
 
 - **Per-page cache loading**<br /> The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large Connected Systems.
 

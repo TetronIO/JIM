@@ -33,7 +33,7 @@ The following diagram shows JIM in the context of the systems and users it inter
 
 ## Containers
 
-JIM is deployed as a set of Docker containers, each with a distinct responsibility:
+JIM is deployed as a set of containers, on Docker or Podman, each with a distinct responsibility:
 
 --8<-- "assets/diagrams/containers.svg"
 
@@ -106,7 +106,7 @@ For a component-level breakdown of the Application Layer's domain servers and re
 
 ## Deployment
 
-JIM is deployed as Docker containers and is designed to work in **air-gapped environments** with no internet connectivity. There are no cloud service dependencies -- all features work with on-premises infrastructure only.
+JIM is deployed as containers, on Docker or Podman, and is designed to work in **air-gapped environments** with no internet connectivity. There are no cloud service dependencies -- all features work with on-premises infrastructure only.
 
 A typical deployment consists of:
 

@@ -25,7 +25,7 @@ Storage scales with the number of identity objects and the frequency of synchron
 
 During a Full Import, the Worker holds every object it imports from a Connected System in memory, together with its attribute values and the Activity's result for each object. Memory requirements therefore scale linearly with the number of objects in the largest Connected System.
 
-These figures are for the **host machine** (or VM) running the Docker stack -- they must cover the operating system, all JIM containers, and the database.
+These figures are for the **host machine** (or VM) running JIM (on Docker or Podman) -- they must cover the operating system, all JIM containers, and the database.
 
 | Connected System Size       | Minimum Host RAM | Recommended Host RAM |
 |-----------------------------|------------------|----------------------|
