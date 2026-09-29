@@ -112,6 +112,7 @@ jim-release-X.Y.Z/
 |   +-- jim-worker.tar        # Docker image for worker service
 |   +-- jim-scheduler.tar     # Docker image for scheduler service
 |   +-- postgres-18.tar       # PostgreSQL image (if IncludePostgres)
+|   +-- postgres-18.image-ids # Its image ID (config digest), for installing on Docker's classic image store
 +-- compose/
 |   +-- docker-compose.yml    # Main compose file
 |   +-- docker-compose.production.yml  # Production override (pre-built images, HTTPS)

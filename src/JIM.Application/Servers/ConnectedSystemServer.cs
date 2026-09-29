@@ -6970,6 +6970,10 @@ public partial class ConnectedSystemServer
         // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
         // this save would persist a new SyncRuleMappingGeneration row.
         await EnsureGeneratedMappingAllowedAsync(mapping);
+        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
+        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
+        // no I/O, unless this is an import mapping whose expression reads mv.
+        await EnsureDerivedFlowAllowedAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -7019,6 +7023,10 @@ public partial class ConnectedSystemServer
         // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
         // this save would persist a new SyncRuleMappingGeneration row.
         await EnsureGeneratedMappingAllowedAsync(mapping);
+        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
+        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
+        // no I/O, unless this is an import mapping whose expression reads mv.
+        await EnsureDerivedFlowAllowedAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -7067,6 +7075,10 @@ public partial class ConnectedSystemServer
         // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
         // this save would persist a new SyncRuleMappingGeneration row.
         await EnsureGeneratedMappingAllowedAsync(mapping);
+        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
+        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
+        // no I/O, unless this is an import mapping whose expression reads mv.
+        await EnsureDerivedFlowAllowedAsync(mapping);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -7147,6 +7159,10 @@ public partial class ConnectedSystemServer
         // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
         // this save would persist a new SyncRuleMappingGeneration row.
         await EnsureGeneratedMappingAllowedAsync(mapping);
+        // Metaverse-Derived Attribute Flows (#1750): gate an import expression newly reading mv on the flag, and with
+        // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
+        // no I/O, unless this is an import mapping whose expression reads mv.
+        await EnsureDerivedFlowAllowedAsync(mapping);
 
         Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
 
@@ -8772,6 +8788,9 @@ public partial class ConnectedSystemServer
         // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
         // this save would persist a new SyncRuleMappingGeneration row on any mapping.
         await EnsureGeneratedMappingsAllowedAsync(syncRule);
+        // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping gate and
+        // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
+        await EnsureDerivedFlowsAllowedAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
@@ -8995,6 +9014,9 @@ public partial class ConnectedSystemServer
         // Gate new generated configuration on the Unique Value Generation flag (#242, Phase 3.5); a no-op unless
         // this save would persist a new SyncRuleMappingGeneration row on any mapping.
         await EnsureGeneratedMappingsAllowedAsync(syncRule);
+        // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping gate and
+        // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
+        await EnsureDerivedFlowsAllowedAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.

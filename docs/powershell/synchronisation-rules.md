@@ -488,7 +488,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int>
 
 ### Output
 
-Returns the created mapping object. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` (with `From` and `To`) is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written.
+Returns the created mapping object. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` (with `From` and `To`) is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is also written with `Write-Warning`.
 
 **ShouldProcess impact level:** Medium.
 
@@ -610,7 +610,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 
 ### Output
 
-Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written.
+Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is written with `Write-Warning` whether or not `-PassThru` is supplied.
 
 **ShouldProcess impact level:** Medium.
 
