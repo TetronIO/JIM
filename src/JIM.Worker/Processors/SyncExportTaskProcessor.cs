@@ -511,6 +511,9 @@ public class SyncExportTaskProcessor
         if (result.DeletesWithheld > 0 && _runProfile.MaxDeletes.HasValue)
             AppendActivityWarning(ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, _runProfile.MaxDeletes.Value, result.DeletesWithheld));
 
+        if (result.QueuedChangesWithdrawnCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForWithdrawn(result.QueuedChangesWithdrawnCount, result.PendingExportsWithdrawnCount));
+
         // Set completion message based on mode and results
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)

@@ -87,7 +87,7 @@ public class SchemaRefreshApplyAndRemoveTests
         _userRule.AttributeFlowRules.Add(_faxMapping);
         _connectedSystemRepository.Setup(r => r.GetSyncRulesAsync(1, true)).ReturnsAsync([_computerRule, _userRule]);
 
-        _jim = new JimApplication(_repository.Object);
+        _jim = new JimApplication(_repository.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository());
 
         _csvPath = Path.Join(Path.GetTempPath(), $"jim-schema-remove-{Guid.NewGuid():N}.csv");
         File.WriteAllText(_csvPath, "id,displayName\n1,Test User\n");

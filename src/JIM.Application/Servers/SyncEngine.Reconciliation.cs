@@ -2,7 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
@@ -749,4 +751,84 @@ public partial class SyncEngine
             _ => "(unknown type)"
         };
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<DeferredDeleteReconciliation> ReconcileDeferredExportsAgainstPersistedDeletes(
+        IReadOnlyCollection<PendingExport> deferredPendingExports,
+        IReadOnlyDictionary<Guid, PendingExport> persistedPendingExportsByCsoId)
+    {
+        var pairs = new List<DeferredDeleteReconciliation>();
+
+        foreach (var (csoId, persistedPe) in persistedPendingExportsByCsoId)
+        {
+            // Only a Delete that has not been attempted can be cancelled or relied on to supersede an Update.
+            if (persistedPe.ChangeType != PendingExportChangeType.Delete || persistedPe.Status != PendingExportStatus.Pending)
+                continue;
+
+            var deferredPe = deferredPendingExports.FirstOrDefault(pe =>
+                pe.ConnectedSystemObjectId == csoId &&
+                pe.Status == PendingExportStatus.Pending);
+
+            if (deferredPe == null)
+                continue;
+
+            if (deferredPe.ChangeType == PendingExportChangeType.Create)
+                pairs.Add(new DeferredDeleteReconciliation(deferredPe, persistedPe, DeferredDeleteReconciliationOutcome.CancelBoth));
+            else if (deferredPe.ChangeType == PendingExportChangeType.Update)
+                pairs.Add(new DeferredDeleteReconciliation(deferredPe, persistedPe, DeferredDeleteReconciliationOutcome.DropDeferredUpdate));
+        }
+
+        return pairs;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<PendingExportAttributeValueChange> SelectQueuedChangesWithoutAuthority(
+        PendingExport pendingExport,
+        bool connectedSystemObjectIsJoined,
+        IReadOnlyDictionary<int, SyncRule> syncRulesById,
+        IReadOnlySet<int> classMembershipAttributeIds)
+    {
+        if (pendingExport.ChangeType != PendingExportChangeType.Update || pendingExport.Status == PendingExportStatus.Executing)
+            return [];
+
+        var queued = pendingExport.AttributeValueChanges
+            .Where(c => c.SyncRuleId.HasValue &&
+                        c.Status is PendingExportAttributeChangeStatus.Pending or PendingExportAttributeChangeStatus.ExportedNotConfirmed)
+            .ToList();
+        if (queued.Count == 0)
+            return [];
+
+        var withdrawn = new List<PendingExportAttributeValueChange>();
+        var rulesLosingAttributeChanges = new HashSet<int>();
+
+        foreach (var change in queued.Where(c => !classMembershipAttributeIds.Contains(c.AttributeId)))
+        {
+            var ruleId = change.SyncRuleId!.Value;
+            if (!connectedSystemObjectIsJoined ||
+                !syncRulesById.TryGetValue(ruleId, out var rule) ||
+                !rule.Enabled ||
+                !rule.AttributeFlowRules.Any(m => m.Enabled && MappingTargetAttributeId(m) == change.AttributeId))
+            {
+                withdrawn.Add(change);
+                rulesLosingAttributeChanges.Add(ruleId);
+            }
+        }
+
+        foreach (var change in queued.Where(c => classMembershipAttributeIds.Contains(c.AttributeId)))
+        {
+            var ruleId = change.SyncRuleId!.Value;
+            if (!connectedSystemObjectIsJoined ||
+                !syncRulesById.TryGetValue(ruleId, out var rule) ||
+                !rule.Enabled ||
+                rulesLosingAttributeChanges.Contains(ruleId))
+            {
+                withdrawn.Add(change);
+            }
+        }
+
+        return withdrawn;
+    }
+
+    private static int? MappingTargetAttributeId(SyncRuleMapping mapping) =>
+        mapping.TargetConnectedSystemAttributeId ?? mapping.TargetConnectedSystemAttribute?.Id;
 }

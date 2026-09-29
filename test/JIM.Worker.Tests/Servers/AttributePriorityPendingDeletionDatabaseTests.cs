@@ -67,7 +67,7 @@ public class AttributePriorityPendingDeletionDatabaseTests
         // Delete HR the way the portal and the REST API do: load and delete on one short-lived NoTracking unit of work.
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             var rule = await jim.ConnectedSystems.GetSyncRuleAsync(seed.Hr.RuleId);
             var deletion = await jim.ConnectedSystems.DeleteSyncRuleAsync(rule!, await LoadInitiatorAsync(seed));
             Assert.That(deletion.RecallQueued, Is.True, "precondition: HR contributes a value, so its deletion must queue a recall");
@@ -84,7 +84,7 @@ public class AttributePriorityPendingDeletionDatabaseTests
         // Then reorder to the survivors only, on a fresh unit of work, as a script or a second portal action would.
         await using (var ctx = NewContext())
         {
-            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var jim = NewJimApplication(ctx);
             await jim.ConnectedSystems.SetAttributePriorityOrderAsync(seed.MvTypeId, seed.DescriptionAttributeId,
                 [(seed.Payroll.MappingId, false), (seed.Training.MappingId, false)], await LoadInitiatorAsync(seed));
         }
@@ -110,7 +110,7 @@ public class AttributePriorityPendingDeletionDatabaseTests
         }
 
         await using var actCtx = NewContext();
-        var jim = new JimApplication(new PostgresDataRepository(actCtx));
+        var jim = NewJimApplication(actCtx);
         var initiator = await LoadInitiatorAsync(seed);
 
         var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
@@ -229,9 +229,17 @@ public class AttributePriorityPendingDeletionDatabaseTests
         var mapping = new SyncRuleMapping { TargetMetaverseAttribute = await ctx.MetaverseAttributes.SingleAsync(x => x.Id == descriptionId) };
         rule.AttributeFlowRules.Add(mapping);
 
-        var jim = new JimApplication(new PostgresDataRepository(ctx));
+        var jim = NewJimApplication(ctx);
         var initiator = await ctx.MetaverseObjects.SingleAsync(x => x.Id == initiatorId);
         Assert.That(await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator), Is.True, $"Failed to create '{name}'.");
         return new Contributor(rule.Id, mapping.Id);
+    }
+
+    // The sync repository is passed explicitly, as every host passes it: saving or deleting a Synchronisation Rule or
+    // Attribute Flow checks the export queue for changes the change left without authority, which reads through it.
+    private static JimApplication NewJimApplication(JimDbContext context)
+    {
+        var repository = new PostgresDataRepository(context);
+        return new JimApplication(repository, syncRepository: repository.Sync);
     }
 }

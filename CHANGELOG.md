@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A queued Pending Export change is withdrawn, not exported, once its reason has gone: its export Attribute Flow or Synchronisation Rule was disabled, removed or deleted (withdrawn on save), or the object left scope with the Disconnect action (withdrawn at the next export).
 - 🐛 A queued Pending Export change is withdrawn once the Connected System already holds the value the Metaverse wants (for example, a value changed and changed back before an export), instead of being exported and overwriting the correct value.
 - 🐛 A Run Profile execution that fails while saving its changes to the database is now recorded as failed, with its error, instead of Complete. (#1874)
 - 🐛 When a pinned domain controller stops answering, JIM now clears the pin as documented, so the next run re-discovers a domain controller instead of failing against the same unreachable one every time. (#1875)

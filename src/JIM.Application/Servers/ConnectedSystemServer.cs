@@ -102,6 +102,23 @@ public partial class ConnectedSystemServer
             await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
     }
 
+    // A configuration change can take away the reason a queued Pending Export change exists: an export Synchronisation
+    // Rule or Attribute Flow disabled, removed or deleted. Withdrawing those changes as the change is saved keeps the
+    // Pending Exports page truthful at once, rather than until the next export (which runs the same check first, as the
+    // backstop). It runs for every rule save, import rules included, and deliberately takes no cue from the rule the
+    // caller handed over (its direction, say): the check re-reads the Connected System's rules and queue from the
+    // database and decides from those alone, so an import rule's system simply has nothing to withdraw.
+    private Task WithdrawQueuedExportChangesAsync(SyncRule syncRule) =>
+        Application.ExportExecution.WithdrawQueuedChangesWithoutAuthorityAsync(
+            syncRule.ConnectedSystem?.Id ?? syncRule.ConnectedSystemId, syncRule.ConnectedSystem?.Name);
+
+    private async Task WithdrawQueuedExportChangesAsync(int syncRuleId)
+    {
+        var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (rule != null)
+            await WithdrawQueuedExportChangesAsync(rule);
+    }
+
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
     // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
@@ -2518,12 +2535,16 @@ public partial class ConnectedSystemServer
                 affectedRules.Add(rule);
         }
 
-        if (mappingsToDisable.Count == 0)
-            return;
+        if (mappingsToDisable.Count > 0)
+        {
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(mappingsToDisable);
+            foreach (var rule in affectedRules)
+                await RecordSyncRuleDisableActivityAsync(rule, connectedSystem, refreshActivity, initiatedBy, initiatedByApiKey);
+        }
 
-        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(mappingsToDisable);
-        foreach (var rule in affectedRules)
-            await RecordSyncRuleDisableActivityAsync(rule, connectedSystem, refreshActivity, initiatedBy, initiatedByApiKey);
+        // Changes queued by the export rules and Attribute Flows just disabled have nothing left to authorise them. The
+        // check decides from the database alone, so it runs whatever the plan named.
+        await Application.ExportExecution.WithdrawQueuedChangesWithoutAuthorityAsync(connectedSystem.Id, connectedSystem.Name);
     }
 
     private static void StampUpdated(IAuditable entity, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
@@ -7073,6 +7094,7 @@ public partial class ConnectedSystemServer
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
+        await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -7168,6 +7190,7 @@ public partial class ConnectedSystemServer
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
+        await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
 
         return mapping;
@@ -7386,6 +7409,7 @@ public partial class ConnectedSystemServer
             await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
+        await WithdrawQueuedExportChangesAsync(syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
         return result;
     }
@@ -8901,6 +8925,7 @@ public partial class ConnectedSystemServer
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        await WithdrawQueuedExportChangesAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -9093,6 +9118,7 @@ public partial class ConnectedSystemServer
         await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        await WithdrawQueuedExportChangesAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -9158,6 +9184,7 @@ public partial class ConnectedSystemServer
             syncRule.DisabledReason = "Deletion in progress: contributed attribute values are being recalled.";
             StampUpdated(syncRule, initiatedBy, initiatedByApiKey);
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+            await WithdrawQueuedExportChangesAsync(syncRule);
 
             // The rule leaves each attribute's priority order now rather than when the recall lands (#1597), so the
             // survivors hold positions 1..N for every read, the portal and a positional move, and an administrator
@@ -9246,6 +9273,7 @@ public partial class ConnectedSystemServer
 
         await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+        await WithdrawQueuedExportChangesAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
             await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);

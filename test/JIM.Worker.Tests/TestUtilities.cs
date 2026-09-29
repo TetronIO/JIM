@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Data.Repositories;
 using JIM.InMemoryData;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -109,6 +110,27 @@ public static class TestUtilities
                     $"AttributeDataType of {schemaAttribute.Type} is supported by this method.");
         }
     }
+
+    /// <summary>
+    /// Stubs the two reads a configuration change makes after an export Synchronisation Rule or Attribute Flow is saved,
+    /// disabled or deleted: the check for queued Pending Export changes the change left without authority reads the
+    /// Connected System's rules and the candidate queue. Both answer empty, so the check finds nothing to withdraw. Call
+    /// it straight after creating the mock, before any more specific setup, which then takes precedence.
+    /// </summary>
+    public static Mock<ISyncRepository> StubQueuedChangeWithdrawal(Mock<ISyncRepository> syncRepository)
+    {
+        syncRepository.Setup(r => r.GetSyncRulesAsync(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>())).ReturnsAsync([]);
+        syncRepository.Setup(r => r.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(It.IsAny<int>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync([]);
+        return syncRepository;
+    }
+
+    /// <summary>
+    /// A sync repository mock for server tests over mocked repositories whose paths now reach the export queue check
+    /// described on <see cref="StubQueuedChangeWithdrawal"/>, and nothing else in the sync repository.
+    /// </summary>
+    public static ISyncRepository QueuedChangeWithdrawalSyncRepository() =>
+        StubQueuedChangeWithdrawal(new Mock<ISyncRepository>()).Object;
 
     public static void SetEnvironmentVariables()
     {
