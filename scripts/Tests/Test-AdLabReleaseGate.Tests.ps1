@@ -317,4 +317,11 @@ Describe 'the gate in the release workflow' {
         $workflow | Should -Match '(?ms)^  validate:.*?^    needs: jim-ad-lab-gate'
         $workflow | Should -Match 'Test-AdLabReleaseGate\.ps1'
     }
+
+    It 'enforces the gate only once JIM_AD_LAB_GATE_ENFORCED is true, and warns on every release until then' {
+        $workflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' '..' '.github' 'workflows' 'release.yml') -Raw
+        $gateJob = [regex]::Match($workflow, '(?ms)^  jim-ad-lab-gate:.*?(?=^  validate:)').Value
+        $gateJob | Should -Match "(?ms)if: vars\.JIM_AD_LAB_GATE_ENFORCED == 'true'\s+shell: pwsh.*?Test-AdLabReleaseGate\.ps1"
+        $gateJob | Should -Match "(?ms)if: vars\.JIM_AD_LAB_GATE_ENFORCED != 'true'.*?::warning"
+    }
 }

@@ -1,7 +1,7 @@
 # Release workflow for JIM
 # Triggered by pushing a tag like v0.2.0
 #
-# This workflow first refuses the release outright unless the tagged commit has a green `jim-ad-lab` commit
+# This workflow first refuses the release outright (once JIM_AD_LAB_GATE_ENFORCED is true) unless the tagged commit has a green `jim-ad-lab` commit
 # status (the Active Directory lab; see the jim-ad-lab-gate job), then:
 # 1. Validates the build, tests, and version consistency
 # 2. Builds, scans, smoke-tests, and pushes Docker images to ghcr.io
@@ -32,11 +32,17 @@ permissions:
 jobs:
   # Job 0: The Active Directory lab gate. The commit being tagged must have a `success` commit status named
   # `jim-ad-lab`, which .github/workflows/ad-lab.yml posts on the SHA it tested (nightly on main, and on dispatch).
-  # A release is refused otherwise, with a message naming the state, the run and the remedy. There is no override:
-  # the remedy for a red or missing status is a fix and a dispatched ad-lab.yml run on this commit, made BEFORE
-  # the tag is pushed (the /release skill does this). `validate` needs this job, and every other job needs
-  # `validate`, so nothing is built, scanned, pushed or published for a commit the lab has not passed.
+  # A release is refused otherwise, with a message naming the state, the run and the remedy. The remedy for a red or
+  # missing status is a fix and a dispatched ad-lab.yml run on this commit, made BEFORE the tag is pushed (the
+  # /release skill does this). `validate` needs this job, and every other job needs `validate`, so nothing is built,
+  # scanned, pushed or published for a commit the lab has not passed.
   # scripts/Test-AdLabReleaseGate.ps1 holds the decision and is tested in scripts/Tests.
+  #
+  # Enforced only while the repository variable JIM_AD_LAB_GATE_ENFORCED is `true`. The lab's domain controllers
+  # are not built yet, so no commit can carry the status; until the lab's first green run, the job passes with a
+  # warning on the run summary instead of refusing every release. Set the variable once the lab has passed
+  # (gh variable set JIM_AD_LAB_GATE_ENFORCED --body true); from then on there is no override, since the variable
+  # is the single switch and changing it needs repository admin. PRD_ACTIVE_DIRECTORY_LAB.md tracks switching it on.
   jim-ad-lab-gate:
     name: Active Directory Lab Gate
     runs-on: self-hosted
@@ -51,12 +57,21 @@ jobs:
 
       # The SHA and repository reach the script through env, never interpolated into it.
       - name: Require a green jim-ad-lab status on this commit
+        if: vars.JIM_AD_LAB_GATE_ENFORCED == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
+
+      - name: Report that the gate is not yet enforced
+        if: vars.JIM_AD_LAB_GATE_ENFORCED != 'true'
+        shell: pwsh
+        run: |
+          $message = 'The Active Directory lab gate is not enforced yet (JIM_AD_LAB_GATE_ENFORCED is not true), so this release has not been proven against a real domain controller.'
+          Write-Output "::warning title=Active Directory lab gate not enforced::$message"
+          "### Active Directory lab gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
   # Job 1: Validate build, tests, and version consistency
   validate:
