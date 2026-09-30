@@ -21,8 +21,9 @@
     release commit, so the release commit itself needs a dispatched run before it is tagged; that is the expected
     cost of the gate, not a defect in it.
 
-    THERE IS NO OVERRIDE. No parameter, environment variable or file skips, softens or accepts a stale result, by
-    design: the remedy for a red night is a fix and a dispatched re-run. Failing to read the status (gh missing, no
+    THERE IS NO OVERRIDE in this script. No parameter, environment variable or file skips, softens or accepts a stale
+    result, by design (whether release.yml and /release call it at all is the JIM_AD_LAB_GATE_ENFORCED repository
+    variable, which is switched on once the lab has passed its first run): the remedy for a red night is a fix and a dispatched re-run. Failing to read the status (gh missing, no
     access, the commit unknown to GitHub) also exits 1, because a gate that opens when it cannot see is not a gate.
 
     The evaluation (Test-AdLabStatus) is separate from the gh call (Get-AdLabStatus) so it is tested without either;

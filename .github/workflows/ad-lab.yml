@@ -7,7 +7,8 @@
 # against the same domain controller, uploads the regression report and the domain controller OS build as artefacts,
 # submits results to the metrics API, and posts a commit status named `jim-ad-lab` on the SHA it tested: `success` only
 # when everything passed, with the scenario count and the OS build in its description. `/release` and release.yml
-# require `success` for the SHA being tagged (scripts/Test-AdLabReleaseGate.ps1); there is no override, so the
+# require `success` for the SHA being tagged (scripts/Test-AdLabReleaseGate.ps1) once the repository variable
+# JIM_AD_LAB_GATE_ENFORCED is `true` (set after the lab's first green run); from then on there is no override, so the
 # remedy for a red night is a fix and a dispatched run.
 #
 # Triggers: nightly on main and workflow_dispatch. NEVER pull_request or push. Split-trust runner model (see

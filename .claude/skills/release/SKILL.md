@@ -40,7 +40,7 @@ Before starting, verify:
 
 5. **Review pinned Docker dependencies**: Check for open Dependabot base-image digest PRs and open `apt-pin-check` PRs, and flag them so the user can merge them before tagging. No manual verification of apt versions is needed: the production stages run `apt-get upgrade` before the pinned installs (a stale pin fails the build), and the `scan-images` CI job builds and scans every production image on each push to `main`.
 
-6. **Check the Active Directory lab gate.** `release.yml` refuses to run for a commit whose `jim-ad-lab` commit status is not `success`, and there is no override, so find out now rather than at the tag push:
+6. **Check the Active Directory lab gate.** First check whether it is enforced: `gh variable get JIM_AD_LAB_GATE_ENFORCED`. Unless that prints `true`, the gate is not enforced yet (the lab has not had its first green run), so skip this check and the gate in Step 8, and tell the user the release will carry a "gate not enforced" warning. While it is `true`, `release.yml` refuses to run for a commit whose `jim-ad-lab` commit status is not `success`, and there is no override, so find out now rather than at the tag push:
    ```
    pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
    ```
@@ -328,7 +328,7 @@ git pull origin main
 
 The release workflow runs on tag push. It will build and publish artefacts from whatever commit the tag points at, so the tag must point at a commit that is on `main`.
 
-**Gate: the Active Directory lab must have passed on this exact commit, before you tag it.** The release commit is new, so no nightly has tested it and it has no `jim-ad-lab` status. Dispatch the lab on it and wait (the full suite at Medium takes up to four hours; this is the expected cost of the gate), then run the gate script on the commit that will be tagged:
+**Gate (only while `JIM_AD_LAB_GATE_ENFORCED` is `true`; see Pre-Flight check 6): the Active Directory lab must have passed on this exact commit, before you tag it.** The release commit is new, so no nightly has tested it and it has no `jim-ad-lab` status. Dispatch the lab on it and wait (the full suite at Medium takes up to four hours; this is the expected cost of the gate), then run the gate script on the commit that will be tagged:
 
 ```bash
 git rev-parse HEAD                       # the merge commit; this is the SHA the tag will point at
