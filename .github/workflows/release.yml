@@ -373,8 +373,19 @@ jobs:
             "${IMAGE_REF}@${{ steps.build.outputs.digest }}"
 
       # Phase 6b: SLSA provenance attestation
+      # push-to-registry reads GHCR credentials from $HOME/.docker/config.json only; it ignores DOCKER_CONFIG, which
+      # points at this job's own login (see "Isolate Docker client config"). Give the action a HOME whose .docker
+      # is that config, rather than logging in to the runners' shared ~/.docker. Without it: "No credentials found
+      # for registry ghcr.io", which failed the v0.16.0 release. Tested in scripts/Tests/ReleaseWorkflow.Tests.ps1.
+      - name: Point the attestation at this job's Docker login
+        run: |
+          mkdir -p "$RUNNER_TEMP/attest-home"
+          ln -sfn "$DOCKER_CONFIG" "$RUNNER_TEMP/attest-home/.docker"
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2.4.0
+        env:
+          HOME: ${{ runner.temp }}/attest-home
         with:
           subject-name: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
