@@ -87,7 +87,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 #### CI and release gate
 
 20. `.github/workflows/ad-lab.yml` runs on `schedule` (nightly on `main`) and `workflow_dispatch` (`main`, or a branch whose ref the `jim-ad-lab` runner group has been told to allow, the same mechanism as a release tag), only on `runs-on: [self-hosted, jim-ad-lab]`, with a concurrency group that serialises runs, and never on `pull_request`. It posts a commit status named `jim-ad-lab` on the tested SHA with a link to the run.
-21. The `/release` skill and `engineering/RELEASE_PROCESS.md` refuse to tag a commit without a `success` `jim-ad-lab` status. There is no override flag; the remedy for a red night is a fix and a dispatched re-run.
+21. The `/release` skill and `engineering/RELEASE_PROCESS.md` refuse to tag a commit without a `success` `jim-ad-lab` status. There is no override flag; the remedy for a red night is a fix and a dispatched re-run. The gate is switched on by the repository variable `JIM_AD_LAB_GATE_ENFORCED` (`true`) after the lab's first green run; until then releases carry a warning instead, because no commit can carry the status before the lab exists (decided 2026-09-30 to unblock v0.16.0).
 22. The run uploads the regression report and the domain controller OS build as artefacts, and submits results to the metrics API with `DirectoryType` `ActiveDirectory`.
 
 ### Non-Functional Requirements
@@ -185,6 +185,7 @@ Every password feature (policy discovery, Initial Password, park then release, P
 - [ ] Every gap in the Problem Statement is fixed or documented as a limitation
 - [ ] `docs/connectors/jim-ldap-connector.md` states what was verified and against which Windows Server version
 - [ ] `engineering/COMPLIANCE_MAPPING.md` and `engineering/RELEASE_PROCESS.md` describe the gate
+- [ ] `JIM_AD_LAB_GATE_ENFORCED` is set to `true` after the first green run, and the compliance and release docs no longer describe the gate as pending
 
 ## Additional Context
 

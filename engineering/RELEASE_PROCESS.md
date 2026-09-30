@@ -18,7 +18,8 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 A release is refused unless the exact commit being tagged has a `success` commit status named `jim-ad-lab`. The status is posted by `.github/workflows/ad-lab.yml`, which runs every Active Directory-family integration scenario, and the connector's `RequiresActiveDirectory` probes, against three real Windows Server domain controllers on the Hyper-V lab (`test/integration/ad-lab/README.md`), nightly on `main` and on demand. The gate exists so that a customer's Active Directory is never the first one JIM has met.
 
 - **It is enforced twice.** The `/release` skill runs `scripts/Test-AdLabReleaseGate.ps1` before it tags, and the `jim-ad-lab-gate` job at the head of `release.yml` runs the same script, which every other release job needs, so nothing is built or published for a commit the lab has not passed.
-- **There is no override.** No flag, variable or label skips it. The remedy for a red or missing status is a fix and a dispatched re-run.
+- **Not enforced until the lab has passed once.** The lab's domain controllers are not built yet, so no commit can carry the status. Until then the `jim-ad-lab-gate` job, and the `/release` skill's check, run only while the repository variable `JIM_AD_LAB_GATE_ENFORCED` is `true`; with it unset, the job passes and writes a warning to the release run's summary. Set it after the lab's first green run: `gh variable set JIM_AD_LAB_GATE_ENFORCED --body true`.
+- **Once enforced, there is no override.** That variable is the single switch (changing it needs repository admin); no flag or label skips the gate. The remedy for a red or missing status is a fix and a dispatched re-run.
 - **The status belongs to one SHA.** A green night on the commit before the release commit says nothing about the release commit, so the release commit (the merge commit of the release pull request) needs its own dispatched run before it is tagged. That wait, up to four hours for the full suite at the Medium template, is the expected cost of the gate. Nothing else may merge to `main` between the release pull request and the tag, or the dispatched run tests a different commit.
 - **Reading a result:** `pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The commit status's description carries the scenario count and the domain controller operating system build, and each run uploads the regression report and `dc-builds.json` as artefacts.
 - **The lab is patched by rebuild** (`ad-lab-rebuild.yml`, after each Patch Tuesday), so a red night after a rebuild is attributable to the Windows update or to JIM: the build is in every run's record.
@@ -92,13 +93,13 @@ git push origin main --tags
    git push origin main
    ```
 
-6. **Pass the Active Directory lab gate**: once the release commit is on `main`, dispatch the lab on it and wait for it to finish, then confirm the gate script passes for that commit. Do not tag before it exits 0; the `jim-ad-lab-gate` job would refuse the release anyway.
+6. **Pass the Active Directory lab gate** (only while `JIM_AD_LAB_GATE_ENFORCED` is `true`; check with `gh variable get JIM_AD_LAB_GATE_ENFORCED`, and skip this step while it is unset): once the release commit is on `main`, dispatch the lab on it and wait for it to finish, then confirm the gate script passes for that commit. Do not tag before it exits 0; the `jim-ad-lab-gate` job would refuse the release anyway.
    ```bash
    gh workflow run ad-lab.yml --ref main        # runs on the head of main: it must be the release commit
    gh run watch "$(gh run list --workflow ad-lab.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
    pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
    ```
-   If it exits 1 the script names the state and the run; fix the cause, dispatch again and re-check. There is no override.
+   If it exits 1 the script names the state and the run; fix the cause, dispatch again and re-check. Once enforced, there is no override.
 
 7. **Create the release tag**:
    ```bash
