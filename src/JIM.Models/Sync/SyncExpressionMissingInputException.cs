@@ -53,6 +53,16 @@ public class SyncExpressionMissingInputException : Exception
         MissingInputs = missingInputs;
     }
 
+    /// <summary>
+    /// The error an administrator reads for this failure: the message, the hosting Synchronisation Rule when the
+    /// mapping is a derived flow, and what to do about it. Shared by the worker's error record and Sync Preview, so a
+    /// preview says exactly what the synchronisation would record.
+    /// </summary>
+    public string DescribeForAdministrator() =>
+        Message +
+        (SyncRuleName == null ? string.Empty : $" The Attribute Flow is derived by Synchronisation Rule '{SyncRuleName}'.") +
+        " Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+
     private static string BuildMessage(string? targetAttributeName, IReadOnlyList<string> missingInputs)
     {
         // The inputs are attribute names an administrator configured, so they belong in the message; the raw

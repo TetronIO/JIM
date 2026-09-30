@@ -1118,9 +1118,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
             runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ExpressionMissingInput;
-            runProfileExecutionItem.ErrorMessage = missingInputEx.Message +
-                (missingInputEx.SyncRuleName == null ? string.Empty : $" The Attribute Flow is derived by Synchronisation Rule '{missingInputEx.SyncRuleName}'.") +
-                " Supply the missing value, handle its absence in the Expression, or change the Attribute Flow's Missing Input Behaviour.";
+            runProfileExecutionItem.ErrorMessage = missingInputEx.DescribeForAdministrator();
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
             // See the identical guard in the ExpressionEvaluationError catch above: the MVO is the page's

@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Sync Preview now reports an Attribute Flow whose Missing Input Behaviour is "Fail the object" as a blocking error, in the words the synchronisation records, instead of failing to preview, and lists generated values in the same order the synchronisation does.
 - 🐛 A group with more members than Active Directory returns in one read (MaxValRange, 1,500 by default) now imports with every member, instead of failing as a configuration error naming `member;range=0-1499`. (#1853)
 - 🐛 Schema, container and domain controller discovery on Active Directory now read page by page, so a forest with more attributes, organisational units or domain controllers than MaxPageSize (1,000 by default) no longer fails with "size limit exceeded". (#1853)
 - 🐛 A signed-in administrator can now update or revert a Service Setting through the REST API (`PUT`/`DELETE api/v1/service-settings/{key}`); the change is attributed to them instead of being refused with a misleading 400. API key callers and the portal were unaffected. (#1802)
