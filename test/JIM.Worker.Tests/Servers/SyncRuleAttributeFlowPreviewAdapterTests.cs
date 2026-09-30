@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
 using SyncRepository = JIM.InMemoryData.SyncRepository;
@@ -54,6 +55,7 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     private Mock<IMetaverseRepository> _metaverseRepo = null!;
     private SyncRepository _syncRepo = null!;
     private JimApplication _jim = null!;
+    private JimApplication? _jimWithFeatureOff;
 
     private SyncRule _rule = null!;
     private List<SyncRule> _rules = null!;
@@ -78,6 +80,9 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         _metaverseRepo = new Mock<IMetaverseRepository>();
         _repo.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
         _repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
+        // Tests run with every feature flag on (test/CLAUDE.md): Metaverse-Derived Attribute Flows (#1750) are
+        // evaluated by the preview engine and assessed by the adapter's findings.
+        _repo.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
 
         _csFirstName = new ConnectedSystemObjectTypeAttribute { Id = CsFirstNameAttributeId, Name = "givenName", Type = AttributeDataType.Text };
         _csLastName = new ConnectedSystemObjectTypeAttribute { Id = CsLastNameAttributeId, Name = "sn", Type = AttributeDataType.Text };
@@ -133,6 +138,8 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         _connectedSystemRepo.Setup(r => r.GetSyncRuleAsync(RuleId)).ReturnsAsync(() => _rule);
         _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(SystemId, false, It.IsAny<bool>())).ReturnsAsync(() => _rules);
         _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync()).ReturnsAsync(() => _rules);
+        _connectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync((int typeId) =>
+            _rules.Where(r => r.Direction == SyncRuleDirection.Import && r.MetaverseObjectTypeId == typeId).ToList());
         _connectedSystemRepo.Setup(r => r.StreamConnectedSystemObjectsOfType(SystemId, CsoTypeId)).Returns(() => _csos.ToAsyncEnumerable());
         _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountOfTypeAsync(SystemId, CsoTypeId)).ReturnsAsync(() => _csos.Count);
         _connectedSystemRepo.Setup(r => r.GetObjectTypeAsync(CsoTypeId)).ReturnsAsync(() => _csoType);
@@ -144,7 +151,11 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [TearDown]
-    public void TearDown() => _jim?.Dispose();
+    public void TearDown()
+    {
+        _jim?.Dispose();
+        _jimWithFeatureOff?.Dispose();
+    }
 
     // ── Validation ───────────────────────────────────────────────────────────────────────────────────────────
 
@@ -438,9 +449,276 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
         }
     }
 
+    // ── Metaverse-Derived Attribute Flows (#1750, plan Phase 5) ─────────────────────────────────────────────
+
+    [Test]
+    public async Task ValidateAsync_ProposalCreatesADerivedFlowCycle_BlocksWithTheValidatorsMessageAsync()
+    {
+        // Directory Import derives Alternate Email from Email; the proposal derives Email from Alternate Email.
+        GivenADerivedFlowOnAnotherSystem(OtherSystemRuleId, "Directory Import", OtherSystemId, _mvAlternateEmail, "mv[\"Email\"] + \".alt\"");
+
+        var findings = await NewAdapter().ValidateAsync(Context(ProposalWithExpression("mv[\"Alternate Email\"]", MissingInputBehaviour.EvaluateAnyway)));
+
+        var blocking = findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).ToList();
+        Assert.That(blocking, Has.Count.EqualTo(1));
+        Assert.That(blocking[0].Message, Is.EqualTo(
+            "Saving would create a dependency cycle: Email (Synchronisation Rule 'HR Import') reads Alternate Email, " +
+            "which (Synchronisation Rule 'Directory Import') reads Email."));
+    }
+
+    [Test]
+    public async Task ValidateAsync_ProposalReadsAnUnknownMetaverseAttribute_BlocksAsync()
+    {
+        var findings = await NewAdapter().ValidateAsync(Context(ProposalWithExpression("mv[\"Nickname\"] + \"@corp\"", MissingInputBehaviour.EvaluateAnyway)));
+
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).Select(f => f.Message), Is.EqualTo(new[]
+        {
+            "The Attribute Flow to Email (Synchronisation Rule 'HR Import') reads mv[\"Nickname\"], but 'Nickname' is not an " +
+            "attribute of the Metaverse Object Type 'Person'."
+        }));
+    }
+
+    [Test]
+    public async Task ValidateAsync_ProposalReadsAReferenceAttribute_BlocksAsync()
+    {
+        var manager = GivenMetaverseAttribute(203, "Manager", AttributeDataType.Reference);
+
+        var findings = await NewAdapter().ValidateAsync(Context(ProposalWithExpression($"mv[\"{manager.Name}\"]", MissingInputBehaviour.EvaluateAnyway)));
+
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).Select(f => f.Message), Is.EqualTo(new[]
+        {
+            "The Attribute Flow to Email (Synchronisation Rule 'HR Import') reads Manager, a Reference attribute; reading a " +
+            "Reference attribute in an Attribute Flow that derives a Metaverse attribute is not supported yet."
+        }));
+    }
+
+    [Test]
+    public async Task ValidateAsync_DerivedFlowCallsANonRepeatableFunction_WarnsWithTheValidatorsMessageAsync()
+    {
+        var findings = await NewAdapter().ValidateAsync(Context(ProposalWithExpression("mv[\"Alternate Email\"] + Now()", MissingInputBehaviour.EvaluateAnyway)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
+            Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Warning).Select(f => f.Message), Does.Contain(
+                "The Attribute Flow to Email (Synchronisation Rule 'HR Import') derives its value from Metaverse attributes and " +
+                "calls Now(), which returns a different value each time it is evaluated; the value will change on every " +
+                "synchronisation and can cause repeated exports."));
+        }
+    }
+
+    [Test]
+    public async Task ValidateAsync_ProposalLeavesADerivedFlowWithoutItsInput_WarnsNamingTheDependantAsync()
+    {
+        // FR 3: removing HR's Email flow leaves Directory Import's derived Alternate Email with nothing to read.
+        GivenADerivedFlowOnAnotherSystem(OtherSystemRuleId, "Directory Import", OtherSystemId, _mvAlternateEmail, "mv[\"Email\"] + \".alt\"");
+
+        var findings = await NewAdapter().ValidateAsync(Context(new SyncRuleAttributeFlowProposal([])));
+
+        var dependant = findings.SingleOrDefault(f => f.Severity == PreviewValidationSeverity.Warning && f.MetaverseAttributeName == "Alternate Email");
+        Assert.That(dependant, Is.Not.Null);
+        Assert.That(dependant!.Message, Is.EqualTo(
+            "Once this proposal is saved, the Attribute Flow to 'Alternate Email' on Synchronisation Rule 'Directory Import' " +
+            "would be missing an input: it reads 'Email', which would have no enabled Attribute Flow contributing it. Its " +
+            "Missing Input Behaviour then decides what it writes."));
+    }
+
+    [Test]
+    public async Task ValidateAsync_ProposalChangesAnAttributeADerivedFlowOnAnotherSystemReads_SaysWhenThatSystemReEvaluatesItAsync()
+    {
+        GivenADerivedFlowOnAnotherSystem(OtherSystemRuleId, "Directory Import", OtherSystemId, _mvAlternateEmail, "mv[\"Email\"] + \".alt\"");
+        var upn = GivenMetaverseAttribute(204, "User Principal Name");
+        GivenADerivedFlowOnAnotherSystem(78, "Training Import", 7, upn, "mv[\"Alternate Email\"]");
+        // A derived flow on this same Connected System is evaluated by this preview, so it is not named.
+        GivenADerivedFlowOnAnotherSystem(79, "HR Contractors", SystemId, GivenMetaverseAttribute(205, "Mail Nickname"), "mv[\"Email\"]");
+
+        var findings = await NewAdapter().ValidateAsync(Context(ProposalWritingEmailFrom(CsFirstNameAttributeId)));
+
+        var information = findings
+            .Where(f => f.Severity == PreviewValidationSeverity.Information && f.Message.Contains("next synchronises", StringComparison.Ordinal))
+            .Select(f => f.Message)
+            .ToList();
+        Assert.That(information, Is.EqualTo(new[]
+        {
+            "The Attribute Flow to 'Alternate Email' on Synchronisation Rule 'Directory Import' reads 'Email', which this " +
+            "proposal changes. It runs in that Synchronisation Rule's own Connected System, so it is re-evaluated when that " +
+            "Connected System next synchronises; what it would write is not counted below.",
+            "The Attribute Flow to 'User Principal Name' on Synchronisation Rule 'Training Import' depends on 'Email', " +
+            "through other derived attributes, which this proposal changes. It runs in that Synchronisation Rule's own " +
+            "Connected System, so it is re-evaluated when that Connected System next synchronises; what it would write is " +
+            "not counted below."
+        }));
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ProposalChangesTheInputOfADerivedFlow_ReportsTheDerivedValueChangingTooAsync()
+    {
+        // The rule also derives Alternate Email from Email. Retargeting Email's source changes Email, and the preview
+        // engine's derived pass (evaluated against the proposal's own graph) changes Alternate Email with it.
+        var derived = new SyncRuleMapping
+        {
+            Id = MappingId + 1,
+            SyncRule = _rule,
+            SyncRuleId = _rule.Id,
+            TargetMetaverseAttribute = _mvAlternateEmail,
+            TargetMetaverseAttributeId = _mvAlternateEmail.Id
+        };
+        derived.Sources.Add(new SyncRuleMappingSource { Id = MappingId + 1, Order = 1, Expression = "mv[\"Email\"] + \".alt\"" });
+        _rule.AttributeFlowRules.Add(derived);
+        var cso = GivenJoinedCso(email: "ada@corp.local", currentMetaverseEmail: "ada@corp.local", firstName: "ada.lovelace@corp.local");
+        _mvos.Single(m => m.Id == cso.MetaverseObjectId).AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.CreateVersion7(),
+            Attribute = _mvAlternateEmail,
+            AttributeId = _mvAlternateEmail.Id,
+            StringValue = "ada@corp.local.alt",
+            ContributedBySystemId = SystemId,
+            ContributedBySyncRuleId = RuleId
+        });
+
+        var proposal = new SyncRuleAttributeFlowProposal(
+        [
+            ProposalWritingEmailFrom(CsFirstNameAttributeId).Mappings.Single(),
+            SyncRuleMappingProposal.FromMapping(derived)
+        ]);
+        var deltas = await EvaluateAsync(proposal);
+
+        var alternate = deltas.SingleOrDefault(d => d.AttributeName == "Alternate Email");
+        Assert.That(alternate, Is.Not.Null, "the derived result appears in the Attribute Flow changes like any other flow's");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(alternate!.OldValue, Is.EqualTo("ada@corp.local.alt"));
+            Assert.That(alternate!.NewValue, Is.EqualTo("ada.lovelace@corp.local.alt"));
+            Assert.That(deltas.Single(d => d.AttributeName == "Email").NewValue, Is.EqualTo("ada.lovelace@corp.local"));
+        }
+    }
+
+    [Test]
+    public async Task ValidateAsync_NoDerivedFlowsAnywhere_AddsNoFindingsBeyondTheExistingOnesAsync()
+    {
+        var proposal = ProposalWritingEmailFrom(CsFirstNameAttributeId);
+
+        var withFeature = await NewAdapter().ValidateAsync(Context(proposal));
+        var withoutFeature = await NewAdapterWithFeatureOff().ValidateAsync(Context(proposal));
+
+        Assert.That(withFeature, Is.EqualTo(withoutFeature));
+    }
+
+    [Test]
+    public async Task ValidateAsync_FeatureOffAndProposalNewlyReadsTheMetaverse_BlocksAsTheSaveWouldAsync()
+    {
+        // With the flag off, saving an import mapping that newly reads mv["..."] is refused with FeatureDisabledException
+        // (plan Phase 1); the preview predicts that refusal rather than previewing a save that cannot happen.
+        GivenADerivedFlowOnAnotherSystem(OtherSystemRuleId, "Directory Import", OtherSystemId, _mvAlternateEmail, "mv[\"Email\"] + \".alt\"");
+
+        var findings = await NewAdapterWithFeatureOff().ValidateAsync(Context(ProposalWithExpression("mv[\"Alternate Email\"]", MissingInputBehaviour.EvaluateAnyway)));
+
+        var blocking = findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking).ToList();
+        Assert.That(blocking, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(blocking[0].Message, Is.EqualTo(
+                "The 'Metaverse-Derived Attribute Flows' feature is currently disabled. The proposal makes the Attribute Flow " +
+                "to 'Email' read Metaverse attributes, so saving it would be refused until the feature is enabled."));
+            Assert.That(blocking[0].MetaverseAttributeName, Is.EqualTo("Email"));
+        }
+        _connectedSystemRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never,
+            "the flag off assesses nothing else: no graph, no other findings");
+    }
+
+    [Test]
+    public async Task ValidateAsync_FeatureOffAndTheMappingAlreadyReadTheMetaverse_DoesNotBlockAsync()
+    {
+        // The gate refuses only a mapping that NEWLY reads mv: editing one that already did (saved while the flag was on)
+        // is allowed, so the preview must not block it.
+        var stored = _rule.AttributeFlowRules.Single();
+        stored.Sources.Clear();
+        stored.Sources.Add(new SyncRuleMappingSource { Id = MappingId, Order = 1, Expression = "mv[\"Alternate Email\"]" });
+
+        var findings = await NewAdapterWithFeatureOff().ValidateAsync(Context(ProposalWithExpression("mv[\"Alternate Email\"] + \".x\"", MissingInputBehaviour.EvaluateAnyway)));
+
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
+    }
+
+    [Test]
+    public async Task ValidateAsync_FeatureOffAndNoProposedMappingReadsTheMetaverse_ReadsNothingAndAddsNothingAsync()
+    {
+        GivenADerivedFlowOnAnotherSystem(OtherSystemRuleId, "Directory Import", OtherSystemId, _mvAlternateEmail, "mv[\"Email\"] + \".alt\"");
+
+        var findings = await NewAdapterWithFeatureOff().ValidateAsync(Context(new SyncRuleAttributeFlowProposal([])));
+
+        Assert.That(findings.Where(f => f.Message.Contains("feature is currently disabled", StringComparison.Ordinal)
+            || f.Message.Contains("missing an input", StringComparison.Ordinal)), Is.Empty,
+            "the flag off leaves the preview exactly as it was");
+        _connectedSystemRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never,
+            "and reads nothing to find out");
+    }
+
+    [Test]
+    public async Task ValidateAsync_ProposalNamesATargetAttributeTheTypeDoesNotHave_AssessesNothingRatherThanFailingAsync()
+    {
+        // Such a proposal cannot be materialised; the value evaluation reports it, as it always has, so validation must
+        // not start failing on it now.
+        var proposal = new SyncRuleAttributeFlowProposal([new SyncRuleMappingProposal(
+            999, null, [new SyncRuleMappingSourceProposal(1, null, null, "mv[\"Email\"]")])]);
+
+        var findings = await NewAdapter().ValidateAsync(Context(proposal));
+
+        Assert.That(findings.Where(f => f.Severity == PreviewValidationSeverity.Blocking), Is.Empty);
+    }
+
     #region helpers
 
     private SyncRuleAttributeFlowPreviewAdapter NewAdapter() => new(_jim, new SyncEngine());
+
+    /// <summary>
+    /// The same fixture with every feature flag off, through its own application (the flag server caches per unit of work).
+    /// </summary>
+    private SyncRuleAttributeFlowPreviewAdapter NewAdapterWithFeatureOff()
+    {
+        var repo = new Mock<IRepository>();
+        repo.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+        repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
+        repo.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
+        _jimWithFeatureOff = new JimApplication(repo.Object, syncRepository: _syncRepo);
+        return new SyncRuleAttributeFlowPreviewAdapter(_jimWithFeatureOff, new SyncEngine());
+    }
+
+    private MetaverseAttribute GivenMetaverseAttribute(int id, string name, AttributeDataType type = AttributeDataType.Text)
+    {
+        var attribute = new MetaverseAttribute { Id = id, Name = name, Type = type, AttributePlurality = AttributePlurality.SingleValued };
+        _mvoType.Attributes.Add(attribute);
+        return attribute;
+    }
+
+    /// <summary>
+    /// An enabled import rule on <paramref name="connectedSystemId"/> hosting one Metaverse-Derived Attribute Flow.
+    /// </summary>
+    private void GivenADerivedFlowOnAnotherSystem(int ruleId, string ruleName, int connectedSystemId, MetaverseAttribute target, string expression)
+    {
+        var otherRule = new SyncRule
+        {
+            Id = ruleId,
+            Name = ruleName,
+            ConnectedSystemId = connectedSystemId,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            MetaverseObjectTypeId = MvoTypeId,
+            MetaverseObjectType = _mvoType
+        };
+        var mapping = new SyncRuleMapping
+        {
+            Id = ruleId * 10,
+            SyncRule = otherRule,
+            SyncRuleId = otherRule.Id,
+            TargetMetaverseAttribute = target,
+            TargetMetaverseAttributeId = target.Id
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Id = ruleId * 10, Order = 1, Expression = expression });
+        otherRule.AttributeFlowRules.Add(mapping);
+        _rules.Add(otherRule);
+        _syncRepo.SeedSyncRule(otherRule);
+    }
 
     private PreviewContext Context(SyncRuleAttributeFlowProposal proposal) => new()
     {

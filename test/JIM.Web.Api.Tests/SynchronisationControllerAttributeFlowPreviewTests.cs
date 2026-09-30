@@ -17,6 +17,7 @@ using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
 using System;
@@ -53,7 +54,6 @@ public class SynchronisationControllerAttributeFlowPreviewTests
     private Mock<IApiKeyRepository> _apiKeyRepo = null!;
     private Mock<IConfigurationChangePreviewRepository> _previewRepo = null!;
     private Mock<ITaskingRepository> _taskingRepo = null!;
-    private Mock<IServiceSettingsRepository> _serviceSettingsRepo = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
     private List<WorkerTask> _queuedWorkerTasks = null!;
@@ -70,7 +70,6 @@ public class SynchronisationControllerAttributeFlowPreviewTests
         _apiKeyRepo = new Mock<IApiKeyRepository>();
         _previewRepo = new Mock<IConfigurationChangePreviewRepository>();
         _taskingRepo = new Mock<ITaskingRepository>();
-        _serviceSettingsRepo = new Mock<IServiceSettingsRepository>();
 
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
         _repository.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
@@ -78,7 +77,8 @@ public class SynchronisationControllerAttributeFlowPreviewTests
         _repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepo.Object);
         _repository.Setup(r => r.ConfigurationChangePreviews).Returns(_previewRepo.Object);
         _repository.Setup(r => r.Tasking).Returns(_taskingRepo.Object);
-        _repository.Setup(r => r.ServiceSettings).Returns(_serviceSettingsRepo.Object);
+        // Tests run with every feature flag on (test/CLAUDE.md).
+        _repository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
 
         _queuedWorkerTasks = [];
         _previewActivity = null;
@@ -129,6 +129,8 @@ public class SynchronisationControllerAttributeFlowPreviewTests
         // The Attribute Flow adapter reads every rule across every Connected System to work out who else
         // contributes to the attributes being proposed, which is what decides Attribute Priority.
         _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync()).ReturnsAsync(() => [_syncRule]);
+        // Metaverse-Derived Attribute Flows (#1750): validation assesses the proposal against every import rule of the type.
+        _connectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => [_syncRule]);
         _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountOfTypeAsync(ConnectedSystemId, CsoTypeId))
             .ReturnsAsync(0);
 

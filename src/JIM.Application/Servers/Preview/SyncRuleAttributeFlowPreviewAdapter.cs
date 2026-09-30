@@ -1,9 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Exceptions;
+using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
@@ -113,6 +117,11 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
         if (rule.Direction == SyncRuleDirection.Import)
             findings.AddRange(await DescribeAttributePriorityAsync(rule, proposal));
+
+        // A mapping that cannot be materialised has already been reported as Blocking above; there is nothing further
+        // to assess for a proposal that cannot be saved as it stands.
+        if (rule.Direction == SyncRuleDirection.Import && findings.All(f => f.Severity != PreviewValidationSeverity.Blocking))
+            findings.AddRange(await DescribeDerivedFlowsAsync(rule, proposal));
 
         return findings;
     }
@@ -624,6 +633,189 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         }
 
         return findings;
+    }
+
+    /// <summary>
+    /// What the proposal means for Metaverse-Derived Attribute Flows (#1750, plan Phase 5, FR 3 and FR 11): nothing at
+    /// all when the feature is off.
+    /// <list type="bullet">
+    /// <item>Blocking: the save-time validation would refuse it (a dependency cycle, an <c>mv["..."]</c> name that is not
+    /// an attribute of the type, a Reference input or target), in the validator's own words.</item>
+    /// <item>Warning: a derived flow calls a function that returns a different value each time, in the validator's own
+    /// words.</item>
+    /// <item>Warning (FR 3): a derived flow the proposal leaves without an input, directly or transitively.</item>
+    /// <item>Information: the derived flows on other Connected Systems' rules that read an attribute the proposal
+    /// changes. This preview evaluates this system only, and they run in their own system's synchronisation.</item>
+    /// </list>
+    /// </summary>
+    private async Task<List<PreviewValidationFinding>> DescribeDerivedFlowsAsync(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
+    {
+        var findings = new List<PreviewValidationFinding>();
+
+        // Flag first, so a preview with the feature off reads and materialises nothing more than it did before it; it
+        // only predicts the save's flag-off refusal, from the proposal and the stored rule it already holds.
+        if (!await _application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
+            return DescribeFeatureDisabledRefusals(rule, proposal);
+
+        SyncRule standIn;
+        try
+        {
+            standIn = await MaterialiseAsync(rule, proposal);
+        }
+        catch (InvalidOperationException)
+        {
+            // A proposal naming an attribute the rule's object types do not have cannot be materialised. Validation
+            // has never failed on that: the value evaluation reports it, as it did before derived flows existed, so
+            // there is simply nothing to assess here.
+            return findings;
+        }
+
+        var assessment = await _application.ConnectedSystems.AssessDerivedFlowProposalAsync(standIn);
+        if (assessment == null)
+            return findings;
+
+        findings.AddRange(assessment.Validation.Errors.Select(message =>
+            new PreviewValidationFinding(PreviewValidationSeverity.Blocking, message, nameof(SyncRule.AttributeFlowRules))));
+        findings.AddRange(assessment.Validation.Warnings.Select(warning =>
+            new PreviewValidationFinding(PreviewValidationSeverity.Warning, warning.Message, nameof(SyncRule.AttributeFlowRules))));
+
+        var dependants = DerivedFlowDependentDetector.Detect(assessment.SyncRulesBefore, assessment.SyncRulesAfter, assessment.MetaverseObjectTypes);
+        findings.AddRange(dependants.Select(dependant => new PreviewValidationFinding(
+            PreviewValidationSeverity.Warning,
+            $"Once this proposal is saved, the Attribute Flow to '{dependant.Flow.TargetAttributeName}' on Synchronisation Rule " +
+            $"'{dependant.Flow.SyncRule.Name}' would be missing an input: it reads {DescribeMissingInputs(dependant.MissingInputs)}. " +
+            "Its Missing Input Behaviour then decides what it writes.",
+            nameof(SyncRule.AttributeFlowRules),
+            dependant.Flow.TargetAttributeName)));
+
+        findings.AddRange(DescribeDerivedReadersOnOtherSystems(rule, proposal, assessment));
+        return findings;
+    }
+
+    /// <summary>
+    /// With the feature off, saving an import mapping that newly reads <c>mv["..."]</c> is refused with
+    /// <see cref="FeatureDisabledException"/> (plan Phase 1, <c>ConnectedSystemServer.EnsureDerivedFlowProposalAllowedAsync</c>),
+    /// so the preview predicts the refusal as a Blocking finding in that exception's words. "Newly" is judged as the save
+    /// judges it, against the stored rule: a proposed mapping reading <c>mv</c> is new unless the rule already has a
+    /// mapping to the same target that reads it (a proposal carries no mapping ids, so the target stands in for one).
+    /// Pure: nothing is read when no proposed mapping reads <c>mv</c>, nor when one does.
+    /// </summary>
+    private static List<PreviewValidationFinding> DescribeFeatureDisabledRefusals(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
+    {
+        var alreadyReading = rule.AttributeFlowRules
+            .Where(mapping => (mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id) != null && DerivedFlowGraph.ReadsMetaverse(mapping))
+            .Select(mapping => (mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id)!.Value)
+            .ToHashSet();
+
+        var attributeNames = (rule.MetaverseObjectType?.Attributes ?? [])
+            .GroupBy(attribute => attribute.Id)
+            .ToDictionary(group => group.Key, group => group.First().Name);
+        var refusal = new FeatureDisabledException(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows).Message;
+
+        return
+        [
+            .. proposal.Mappings
+                .Where(mapping => mapping.TargetMetaverseAttributeId is { } targetId
+                    && !alreadyReading.Contains(targetId)
+                    && ProposedMappingReadsMetaverse(mapping))
+                .Select(mapping => mapping.TargetMetaverseAttributeId!.Value)
+                .Distinct()
+                .Select(targetId => attributeNames.GetValueOrDefault(targetId) ?? $"Metaverse Attribute {targetId}")
+                .Select(attributeName => new PreviewValidationFinding(
+                    PreviewValidationSeverity.Blocking,
+                    $"{refusal} The proposal makes the Attribute Flow to '{attributeName}' read Metaverse attributes, so " +
+                    "saving it would be refused until the feature is enabled.",
+                    nameof(SyncRule.AttributeFlowRules),
+                    attributeName))
+        ];
+    }
+
+    private static bool ProposedMappingReadsMetaverse(SyncRuleMappingProposal mapping) =>
+        mapping.Sources.Any(source => !string.IsNullOrWhiteSpace(source.Expression)
+            && ExpressionInputResolver.ResolveCached(source.Expression).Any(input => input.Source == ExpressionInputSource.Metaverse));
+
+    private static string DescribeMissingInputs(IReadOnlyList<DerivedFlowMissingInput> missingInputs) =>
+        string.Join(" and ", missingInputs.Select(input => input.ThroughDerivedFlows
+            ? $"'{input.MetaverseAttributeName}', whose only remaining contributors are themselves missing an input"
+            : $"'{input.MetaverseAttributeName}', which would have no enabled Attribute Flow contributing it"));
+
+    /// <summary>
+    /// The enabled derived flows on other Connected Systems' rules that read, directly or through other derived
+    /// attributes, a Metaverse attribute whose mappings on this rule the proposal changes. One finding per flow.
+    /// </summary>
+    private static IEnumerable<PreviewValidationFinding> DescribeDerivedReadersOnOtherSystems(
+        SyncRule rule, SyncRuleAttributeFlowProposal proposal, DerivedFlowProposalAssessment assessment)
+    {
+        var changedAttributeIds = FindChangedTargetAttributeIds(rule, proposal);
+        if (changedAttributeIds.Count == 0)
+            yield break;
+
+        var graph = new DerivedFlowGraph(assessment.SyncRulesAfter, assessment.MetaverseObjectTypes, DerivedFlowGraphScope.EnabledMappingsOnly);
+        var flows = assessment.SyncRulesAfter
+            .Where(candidate => candidate.Enabled && candidate.MetaverseObjectTypeId == rule.MetaverseObjectTypeId)
+            .SelectMany(candidate => candidate.AttributeFlowRules.Where(mapping => mapping.Enabled))
+            .Select(graph.GetDerivedFlow)
+            .Where(flow => flow != null)
+            .Select(flow => flow!)
+            .ToList();
+
+        // Breadth-first from each changed attribute through "is read by", remembering which changed attribute each
+        // derived flow depends on and whether it reads it directly.
+        var reached = new Dictionary<DerivedFlow, (int ChangedAttributeId, bool Direct)>(ReferenceEqualityComparer.Instance);
+        foreach (var changedAttributeId in changedAttributeIds.Order())
+        {
+            var visited = new HashSet<int> { changedAttributeId };
+            var frontier = new Queue<int>([changedAttributeId]);
+            while (frontier.TryDequeue(out var attributeId))
+            {
+                foreach (var reader in flows.Where(flow => flow.Inputs.Any(input => input.Id == attributeId)))
+                {
+                    reached.TryAdd(reader, (changedAttributeId, attributeId == changedAttributeId));
+                    if (visited.Add(reader.TargetAttributeId))
+                        frontier.Enqueue(reader.TargetAttributeId);
+                }
+            }
+        }
+
+        var attributeNames = assessment.MetaverseObjectTypes
+            .SelectMany(type => type.Attributes)
+            .GroupBy(attribute => attribute.Id)
+            .ToDictionary(group => group.Key, group => group.First().Name);
+
+        foreach (var (flow, (changedAttributeId, direct)) in reached
+            .Where(pair => pair.Key.SyncRule.ConnectedSystemId != rule.ConnectedSystemId)
+            .OrderBy(pair => pair.Key.SyncRule.Id)
+            .ThenBy(pair => pair.Key.TargetAttributeId))
+        {
+            var changedName = attributeNames.GetValueOrDefault(changedAttributeId) ?? $"Metaverse Attribute {changedAttributeId}";
+            var relation = direct ? $"reads '{changedName}'" : $"depends on '{changedName}', through other derived attributes";
+
+            yield return new PreviewValidationFinding(
+                PreviewValidationSeverity.Information,
+                $"The Attribute Flow to '{flow.TargetAttributeName}' on Synchronisation Rule '{flow.SyncRule.Name}' {relation}, " +
+                "which this proposal changes. It runs in that Synchronisation Rule's own Connected System, so it is " +
+                "re-evaluated when that Connected System next synchronises; what it would write is not counted below.",
+                nameof(SyncRule.AttributeFlowRules),
+                flow.TargetAttributeName);
+        }
+    }
+
+    /// <summary>
+    /// The Metaverse attributes whose mappings on this rule the proposal adds, removes or alters.
+    /// </summary>
+    private static HashSet<int> FindChangedTargetAttributeIds(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
+    {
+        var current = rule.AttributeFlowRules.Select(SyncRuleMappingProposal.FromMapping).ToList();
+
+        return current.Concat(proposal.Mappings)
+            .Select(mapping => mapping.TargetMetaverseAttributeId)
+            .OfType<int>()
+            .Where(attributeId => !new SyncRuleAttributeFlowProposal(ForTarget(current, attributeId))
+                .DescribesSameMappingsAs(new SyncRuleAttributeFlowProposal(ForTarget(proposal.Mappings, attributeId))))
+            .ToHashSet();
+
+        static List<SyncRuleMappingProposal> ForTarget(IEnumerable<SyncRuleMappingProposal> mappings, int attributeId) =>
+            [.. mappings.Where(mapping => mapping.TargetMetaverseAttributeId == attributeId)];
     }
 
     /// <summary>
