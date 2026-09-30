@@ -55,7 +55,8 @@ public static class ValueOriginGrouping
 
     /// <summary>
     /// One group per distinct source among the given attributes (plus one for attributes with several origins),
-    /// each with how many attributes belong to it. Ordered by count descending, largest source first.
+    /// each with how many attributes belong to it. Ordered by count descending, largest source first; ties keep a
+    /// Connected System's groups together.
     /// </summary>
     public static List<(Group Group, int Count)> BuildGroups(IReadOnlyList<MetaverseAttributeOriginSummary> attributes)
     {
@@ -74,9 +75,22 @@ public static class ValueOriginGrouping
             .Select(g => g.Key)
             .ToHashSet();
 
-        return byKey
-            .Select(g => (BuildGroup(g.Key, g.Sample, multiRuleSystems), g.Count))
-            .OrderByDescending(g => g.Item2)
+        var groups = byKey
+            .Select(g => (Group: BuildGroup(g.Key, g.Sample, multiRuleSystems), g.Count))
+            .ToList();
+
+        // Ties keep a Connected System's groups together (so its Generated Value sits beside it rather than behind
+        // an unrelated source of the same size), ranked by the system's largest group, the rule's own values first.
+        var largestBySystem = groups
+            .Where(g => g.Group.ConnectedSystemId.HasValue)
+            .GroupBy(g => g.Group.ConnectedSystemId!.Value)
+            .ToDictionary(g => g.Key, g => g.Max(x => x.Count));
+
+        return groups
+            .OrderByDescending(g => g.Count)
+            .ThenByDescending(g => g.Group.ConnectedSystemId is { } systemId ? largestBySystem[systemId] : g.Count)
+            .ThenBy(g => g.Group.ConnectedSystemId ?? int.MaxValue)
+            .ThenBy(g => g.Group.Kind == ValueOriginKind.GeneratedValue)
             .ToList();
     }
 

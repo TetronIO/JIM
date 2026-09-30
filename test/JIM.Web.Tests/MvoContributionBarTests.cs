@@ -107,6 +107,25 @@ public class MvoContributionBarTests : JimComponentTestContext
     }
 
     [Test]
+    public void ContributionBar_GeneratedValueTiedWithAnotherSystem_SitsNextToItsOwnConnectedSystem()
+    {
+        // Equal counts would otherwise fall in whatever order the attributes arrived, putting AD between HR and
+        // HR's own Generated Value.
+        var generated = HrOrigin with { Kind = ValueOriginKind.GeneratedValue };
+        var provenance = new MetaverseObjectProvenance
+        {
+            Attributes = [Attribute(1, AdOrigin), Attribute(2, HrOrigin), Attribute(3, HrOrigin), Attribute(4, generated)]
+        };
+
+        var cut = Render<MvoContributionBar>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        Assert.That(cut.FindAll(".jim-contribution-legend-label").Select(l => l.TextContent),
+            Is.EqualTo(new[] { "HR", "HR · Generated Value", "AD" }));
+    }
+
+    [Test]
     public void ContributionBar_AllAttributesFromOneSource_CollapsesToOneSentence()
     {
         var provenance = new MetaverseObjectProvenance
