@@ -1126,7 +1126,7 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 ## Docker & Deployment
 
 ### Service Architecture
-- **jim.web**: Blazor Server UI with integrated REST API at `/api/`. Listens on port 8080 in-container; reached at `http://localhost:5200` in the development Docker stack (HTTPS is terminated by a reverse proxy in production). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in development (disabled in production).
+- **jim.web**: Blazor Server UI with integrated REST API at `/api/`. Serves HTTPS on port 8443 in-container in production (`deploy/docker-compose.production.yml` publishes it on host port 443, changed with `JIM_WEB_PORT`; on Podman, `PublishPort` in the `jim.kube` Quadlet unit), keeping plain HTTP on 8080 for the container health check; reached at `http://localhost:5200` in the development Docker stack. Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment.
 - **jim.worker**: Background task processor built on `ISyncEngine` / `ISyncRepository` separation (see [Background Processing](#7-background-processing)). Per-task DI isolation, `ParallelBatchWriter` for concurrent writes, and COPY binary protocol for bulk inserts. Supports parallel schedule step execution and configurable LDAP pipelining. Also hosts the Password Delivery Service (see [Password Synchronisation](#3c-password-synchronisation-1119)) as a second hosted service alongside the task loop.
 - **jim.scheduler**: Schedule management service with a 30-second polling cycle, woken early by Worker Task change notifications. Detects parallel step groups (steps sharing the same `StepIndex`) and queues them with `ExecutionMode = Parallel` for concurrent worker dispatch.
 - **jim.database**: PostgreSQL 18
@@ -1739,6 +1739,6 @@ Invoke-JIMApi -Method DELETE -Endpoint "/api/v1/connected-systems/$id"
 
 ---
 
-**Last Updated**: 2026-04-22
-**Version**: 1.5
-**Applies to**: JIM v0.10.x (NET 10.0)
+**Last Updated**: 2026-09-29
+**Version**: 1.6
+**Applies to**: JIM v0.16.x (NET 10.0)

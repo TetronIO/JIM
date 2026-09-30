@@ -1,6 +1,6 @@
 # Activity and RPEI Flow
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
 
@@ -120,6 +120,7 @@ flowchart TD
     Normal -->|Joined| JoinedRPEI[RPEI: ObjectChangeType = Joined]
     Normal -->|Attribute Flow| FlowRPEI[RPEI: ObjectChangeType = AttributeFlow]
     Normal -->|Left import scope| OosRPEI[RPEI: ObjectChangeType =<br/>DisconnectedOutOfScope]
+    Normal -->|Left scope, join kept| RetainRPEI[RPEI: ObjectChangeType =<br/>OutOfScopeRetainJoin<br/>its own outcome root, #1649]
     Normal -->|No changes| SkipRPEI[No RPEI created<br/>Only when HasChanges = true]
 
     TryCatch --> JoinError{SyncJoin<br/>Exception?}
@@ -185,11 +186,15 @@ After a Full Import completes, the Worker stamps `LastSuccessfulFullImportComple
 
 ## SafeFailActivityAsync - Triple Fallback
 
-When activity completion fails (e.g., EF tracking corruption, disposed DbContext), this three-level fallback ensures activities are never left stuck in InProgress.
+When activity completion fails (e.g., EF tracking corruption, disposed DbContext), this three-level fallback ensures activities are never left stuck in InProgress. A persistence failure goes to a fresh context first, because the run's own context still holds the entities that failed to save and would re-attempt the doomed write.
 
 ```mermaid
 flowchart TD
-    Error([Exception during<br/>activity completion]) --> Level1[Level 1: Normal<br/>FailActivityWithErrorAsync<br/>via ActivityServer]
+    Error([Exception during<br/>activity completion]) --> Poisoned{Persistence failure?<br/>DbUpdateException, DbException<br/>or SyncPersistenceException}
+    Poisoned -->|Yes| FreshFirst[Fresh context first<br/>same as Level 3]
+    FreshFirst -->|Success| Done
+    FreshFirst -->|Failed| Level1
+    Poisoned -->|No| Level1[Level 1: Normal<br/>FailActivityWithErrorAsync<br/>via ActivityServer]
     Level1 --> L1Result{Success?}
     L1Result -->|Yes| Done([Activity marked failed])
 
@@ -197,7 +202,7 @@ flowchart TD
     Level2 --> L2Result{Success?}
     L2Result -->|Yes| Done
 
-    L2Result -->|No| Level3[Level 3: Emergency<br/>Create fresh JimApplication<br/>+ new DbContext<br/>Force-update activity status]
+    L2Result -->|No| Level3[Level 3: Emergency<br/>Create fresh JimApplication<br/>+ new DbContext<br/>Force-update activity status,<br/>or keep a terminal status found there<br/>Copy the terminal state onto the<br/>caller's Activity, #1874]
     Level3 --> L3Result{Success?}
     L3Result -->|Yes| Done
     L3Result -->|No| Fatal[FATAL: Log error<br/>Activity stuck in InProgress<br/>Requires manual intervention]
@@ -215,7 +220,7 @@ flowchart TD
 
 - **Status model**<br /> `Complete` (no errors, no Activity warning), `CompleteWithWarning` (some errors, or an Activity-level warning), `CompleteWithError` (some `UnhandledError` items, escalated because they indicate a defect), `FailedWithError` (all errors or unhandled exception). This gives operators clear visibility into the severity of issues.
 
-- **Triple fallback for failure**<br /> `SafeFailActivityAsync` ensures activities are never left stuck in `InProgress`, even when the DbContext is corrupted or disposed. This is critical for system reliability; stuck activities would block future schedule executions.
+- **Triple fallback for failure**<br /> `SafeFailActivityAsync` ensures activities are never left stuck in `InProgress`, even when the DbContext is corrupted or disposed. This is critical for system reliability; stuck activities would block future schedule executions. A persistence failure (including a `SyncPersistenceException`, whatever its inner cause) is recorded through a fresh context first. Whenever the fresh context records the failure, or finds the Activity already ended, the caller's copy adopts that terminal state (#1874): the Worker completes the task with the caller's copy, and `TaskingServer.CompleteWorkerTaskAsync` completes any Activity that copy still says is in progress, which used to turn a failed run into a `Complete` one and erase its error.
 
 - **Initiator triad audit**<br /> Every activity records who initiated it (`InitiatedByType`, `InitiatedById`, `InitiatedByName`). For scheduled tasks, this preserves the schedule context. For deferred MVO deletions, the original initiator is captured at mark time and replayed during housekeeping.
 

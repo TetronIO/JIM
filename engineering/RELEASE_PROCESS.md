@@ -112,7 +112,7 @@ git push origin main --tags
 9. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
 10. **Verify the release**: Once complete, verify:
-   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, and the installer, `setup.sh`)
+   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
 
@@ -138,6 +138,15 @@ jim-release-X.Y.Z/
 |   +-- docker-compose.yml    # Main compose file
 |   +-- docker-compose.production.yml  # Production override (pre-built images, HTTPS)
 |   +-- .env.example          # Environment template
++-- podman/                   # Podman files, rendered by scripts/Build-PodmanFiles.ps1 with this release's image references
+|   +-- jim.yaml              # The JIM pod (web, worker, scheduler)
+|   +-- jim-database.yaml     # The bundled PostgreSQL pod (optional)
+|   +-- jim-config.yaml       # Settings (ConfigMap)
+|   +-- jim-secrets.yaml      # Secrets template
+|   +-- quadlet/
+|       +-- jim.kube          # Quadlet units systemd runs the pods from
+|       +-- jim-database.kube
+|       +-- jim.network
 +-- powershell/
 |   +-- JIM/                  # PowerShell module directory
 +-- docs/

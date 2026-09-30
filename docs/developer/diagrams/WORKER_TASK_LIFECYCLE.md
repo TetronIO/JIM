@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -8,14 +8,17 @@ This diagram shows how the JIM Worker service picks up, executes, and completes 
 
 ```mermaid
 flowchart TD
-    Start([Worker Starts]) --> InitLog[Initialise logging]
-    InitLog --> InitDb[Initialise database<br/>Create JimApplication for main loop]
+    Start([Worker Starts]) --> InitLog[Initialise logging<br/>Create JimApplication for main loop]
+    InitLog --> WaitDb[Wait for the database server, #1808<br/>Retry with increasing delay, logging each attempt<br/>Health-check file kept fresh meanwhile]
+    WaitDb -.->|Not reachable within 5 minutes,<br/>or credentials rejected| ExitFail([Worker exits non-zero])
+    WaitDb --> InitDb[Initialise database<br/>Migrate and seed]
     InitDb --> WarmCache[Warm the CSO lookup cache<br/>for every Connected System<br/>Tasks queue until warming completes]
 
     WarmCache --> CancelOrphans[Process orphaned cancellation requests<br/>from previous crash]
     CancelOrphans --> RecoverStale[Recover ALL stale tasks<br/>TimeSpan.Zero = recover immediately<br/>All Processing tasks are orphaned at startup]
+    RecoverStale --> RecoverExports[Recover Pending Exports stranded<br/>in Executing by a crash mid-export<br/>Back to Exported if any change was sent,<br/>otherwise back to Pending]
 
-    RecoverStale --> MainLoop{Shutdown<br/>requested?}
+    RecoverExports --> MainLoop{Shutdown<br/>requested?}
     MainLoop -->|Yes| ShutdownCancel[Cancel all current tasks<br/>via CancellationTokenSource]
     ShutdownCancel --> End([Worker Stopped])
 
@@ -159,13 +162,13 @@ flowchart TD
     PhasesDone --> CompleteTask
 
     %% --- Sync exception handling ---
-    ResolveConnector -.->|Exception| SafeFail[SafeFailActivityAsync<br/>3-level fallback:<br/>1. Normal FailActivity<br/>2. Direct repository update<br/>3. Emergency new DbContext]
+    ResolveConnector -.->|Exception| SafeFail[SafeFailActivityAsync<br/>Persistence failure: fail on a fresh<br/>DbContext first, then fall back<br/>3-level fallback:<br/>1. Normal FailActivity<br/>2. Direct repository update<br/>3. Emergency new DbContext]
     SafeFail --> CompleteTask
 
     %% --- Task completion ---
     CompleteTask{Cancelled by<br/>the main loop?}
     CompleteTask -->|Yes: CancelWorkerTaskAsync<br/>already deleted the task| RemoveFromList
-    CompleteTask -->|No| DoComplete[CompleteWorkerTaskAsync<br/>Delete WorkerTask from database<br/>If scheduled: TryAdvanceScheduleExecution]
+    CompleteTask -->|No| DoComplete[CompleteWorkerTaskAsync<br/>Complete the Activity only if still InProgress<br/>a failed run stays failed, #1874<br/>Delete WorkerTask from database<br/>If scheduled: TryAdvanceScheduleExecution]
     DoComplete --> RemoveFromList
     DoComplete -.->|Throws, e.g. a poisoned DbContext| RetryFresh[Retry the completion on a<br/>fresh JimApplication, #1586<br/>If that fails too: log, and leave<br/>the row for stale-task recovery]
     RetryFresh --> RemoveFromList
@@ -198,6 +201,8 @@ History retention cleanup no longer runs here: it is a step on the built-in **Hi
 
 Both Worker and Scheduler write a heartbeat file each main-loop iteration. Docker's `HEALTHCHECK` instruction compares the file's modification timestamp against a staleness threshold.
 
+Both also keep the file fresh while they start (#1808): while waiting for the database server, and in the Worker's case every 15 seconds through migrations, seeding, cache warming and startup recovery (`HealthcheckFile.KeepFreshWhileAsync`). A large upgrade can outlast the threshold, and Podman restarts a container whose liveness check fails, which would otherwise kill a migration part-way. A service whose loop fails exits with code 1 (`HostRunner`), so the container runtime or systemd sees a failure rather than a clean stop.
+
 ```mermaid
 flowchart LR
     Loop([Main loop iteration]) --> WriteFile["Write DateTime.UtcNow to<br/>/tmp/healthcheck"]
@@ -206,7 +211,7 @@ flowchart LR
     Docker([Docker HEALTHCHECK<br/>every 30s]) --> StatFile["stat -c %Y /tmp/healthcheck"]
     StatFile --> Compare{"(now - mtime)<br/>< threshold?"}
     Compare -->|Yes| Healthy([Container healthy])
-    Compare -->|No| Unhealthy([Container unhealthy<br/>Docker restarts after retries])
+    Compare -->|No| Unhealthy([Container unhealthy after retries<br/>Docker reports it<br/>Podman 5 restarts it])
 ```
 
 | Service   | Staleness threshold | Start period | Rationale                                  |
@@ -229,7 +234,7 @@ Alongside the file, each service writes a heartbeat row to the database (`Servic
 
 - **Both loop branches are paced (#1005)**<br /> The active-task branch sleeps for 2 seconds after its heartbeat update and cancellation check, matching the idle branch. It previously looped straight back, so for the whole duration of any long-running task the loop spun as fast as its two round trips allowed (measured at 500k scale: ~200 iterations/s, 6.7M heartbeat updates and 16.4M connection-pool resets over one run). Stale-task recovery tolerates far coarser heartbeats, and up to 2 seconds of cancellation latency is acceptable.
 
-- **Startup recovery**<br /> On startup, ALL `Processing` tasks are immediately recovered, since the worker just started and nothing can genuinely be processing: each one's Activity is failed with a crash-recovery message and the task row is deleted to free the queue. A Schedule Execution left waiting on a recovered task is then settled by the Scheduler's stuck-execution safety net, which sees the failed Activity and advances or fails the execution according to the step's `ContinueOnFailure`.
+- **Startup recovery**<br /> On startup, ALL `Processing` tasks are immediately recovered, since the worker just started and nothing can genuinely be processing: each one's Activity is failed with a crash-recovery message and the task row is deleted to free the queue. A Schedule Execution left waiting on a recovered task is then settled by the Scheduler's stuck-execution safety net, which sees the failed Activity and advances or fails the execution according to the step's effective failure behaviour (`ScheduleFailureHandling`, #1787). Pending Exports left in `Executing` by an export the crash interrupted are recovered at the same point: at startup nothing can genuinely be exporting, so each goes back to `Exported` if any of its changes had already been sent, or to `Pending` otherwise.
 
 - **Task deletion on completion**<br /> Worker tasks are deleted from the database upon completion (not kept). The Activity record serves as the permanent audit trail.
 

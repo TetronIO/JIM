@@ -1,6 +1,6 @@
 # Schedule Execution Lifecycle
 
-> Last updated: 2026-09-24, JIM v0.15.0 (unreleased changes)
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows how schedules are triggered, how step groups are queued and advanced, and how the scheduler and worker collaborate to drive multi-step execution to completion.
 
@@ -43,7 +43,9 @@ The Scheduler does not rely on the 30-second cycle alone: a database trigger pub
 
 ```mermaid
 flowchart TD
-    Start([Scheduler Polling Cycle]) --> WaitDb[Wait for the application to be ready<br/>Worker has migrated and seeded<br/>Retry every 2 seconds, writing heartbeat]
+    Start([Scheduler Polling Cycle]) --> WaitServer[Wait for the database server, #1808<br/>Retry with increasing delay, logging each attempt<br/>Health-check file kept fresh meanwhile]
+    WaitServer -.->|Not reachable within 5 minutes,<br/>or credentials rejected| ExitFail([Scheduler exits non-zero])
+    WaitServer --> WaitDb[Wait for the application to be ready<br/>Worker has migrated and seeded<br/>Retry every 2 seconds, writing heartbeat]
     WaitDb --> Listen[Start listening for<br/>Worker Task change notifications]
     Listen --> PollLoop{Shutdown<br/>requested?}
 

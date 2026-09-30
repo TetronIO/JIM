@@ -806,7 +806,7 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 | `ObjectTypeName` | `string` | No | | Filter by object type name |
 | `Search` | `string` | No | | Search string; supports wildcards |
 | `AttributeName` | `string` | No | | Attribute name to search on; requires `AttributeValue` |
-| `AttributeValue` | `string` | No | | Attribute value to match; requires `AttributeName` |
+| `AttributeValue` | `string` | No | | Attribute value to match, exactly but ignoring case (`_` and `%` are literal characters, not wildcards); requires `AttributeName` |
 | `Attributes` | `string[]` | No | | Attribute names to include in results; use `"*"` to return all attributes |
 | `All` | `switch` | No | `false` | Automatically paginate through all results. Fetches at most 1000 pages (~100,000 objects at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
 | `Force` | `switch` | No | `false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
