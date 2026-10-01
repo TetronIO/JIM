@@ -219,8 +219,7 @@ public sealed class DerivedFlowGraph
     /// </summary>
     public static bool ReadsMetaverse(SyncRuleMapping mapping) => GetMetaverseInputNames(mapping).Count > 0;
 
-    private static int? GetTargetAttributeId(SyncRuleMapping mapping) =>
-        mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id;
+    private static int? GetTargetAttributeId(SyncRuleMapping mapping) => mapping.ResolveTargetMetaverseAttributeId();
 
     private TypeGraph GetOrCreateTypeGraph(SyncRule rule, Dictionary<int, MetaverseObjectType> suppliedTypes)
     {

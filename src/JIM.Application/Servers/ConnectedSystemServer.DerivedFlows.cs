@@ -227,6 +227,6 @@ public partial class ConnectedSystemServer
     /// Whether a mapping is an import mapping (it targets a Metaverse attribute) whose expression reads <c>mv["..."]</c>.
     /// </summary>
     private static bool ReadsMetaverseAsImportMapping(SyncRuleMapping mapping) =>
-        (mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id) != null &&
+        mapping.ResolveTargetMetaverseAttributeId() != null &&
         DerivedFlowGraph.ReadsMetaverse(mapping);
 }

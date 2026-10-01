@@ -578,6 +578,67 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         Assert.That(analysis.Status, Is.EqualTo(DerivedFlowAnalysisStatus.NotApplicable));
     }
 
+    // ---- Retargeting through the navigation (the portal's editor) ----
+    //
+    // The portal's Attribute Flow dialog binds a mapping's target to TargetMetaverseAttribute on the page's tracked
+    // rule; EF only fixes TargetMetaverseAttributeId up at SaveChanges, so until the write the scalar still names the
+    // target the mapping had when it was loaded. Every check made before the write must judge the target the
+    // administrator chose, not the stale one.
+
+    /// <summary>
+    /// A persisted mapping as the editor leaves it after a retarget: the navigation names the new target, the scalar
+    /// still names the old one.
+    /// </summary>
+    private static void RetargetThroughNavigationOnly(SyncRuleMapping mapping, MetaverseAttribute newTarget) =>
+        mapping.TargetMetaverseAttribute = newTarget;
+
+    [Test]
+    public async Task AnalyseDerivedFlowAsync_TargetChangedThroughTheNavigationOnly_JudgesTheChosenTargetAsync()
+    {
+        var jim = BuildApplication();
+        // Persisted: Region = cs["region"]. The administrator makes it read Display Name and retargets it to Mail
+        // Nickname, which Display Name itself reads: a loop, whichever target the scalar still names.
+        var proposal = Proposal(103, _model.Region, "mv[\"Display Name\"]");
+        RetargetThroughNavigationOnly(proposal, _model.MailNickname);
+
+        var analysis = await jim.ConnectedSystems.AnalyseDerivedFlowAsync(AdHostRule(), proposal);
+
+        Assert.That(analysis.BlockingError, Does.StartWith("Saving would create a dependency cycle: Mail Nickname"),
+            "the loop runs through the target the administrator chose, not the one the stale scalar names");
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_MappingRetargetedThroughTheNavigationIntoACycle_RefusesTheSave()
+    {
+        var jim = BuildApplication();
+        var rule = AdRuleProposal(enabled: true);
+        // The staged editor state: Mail Nickname's own flow removed, and Region's flow changed to read Display Name and
+        // retargeted to Mail Nickname, closing Display Name -> Mail Nickname -> Display Name.
+        rule.AttributeFlowRules.RemoveAll(m => m.Id == 102);
+        var region = rule.AttributeFlowRules.Single(m => m.Id == 103);
+        region.Sources[0].Expression = "mv[\"Display Name\"]";
+        RetargetThroughNavigationOnly(region, _model.MailNickname);
+
+        var exception = Assert.ThrowsAsync<JIM.Application.Exceptions.DerivedFlowValidationException>(
+            () => jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
+
+        Assert.That(exception!.Message, Does.Contain("dependency cycle"));
+        _csRepo.Verify(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_LastContributorRetargetedThroughTheNavigation_ReportsTheDependantAsync()
+    {
+        var jim = BuildApplication();
+        var rule = AdRuleProposal(enabled: true);
+        // Mail Nickname's only contributor is moved to Email in the editor; the scalar still says Mail Nickname.
+        RetargetThroughNavigationOnly(rule.AttributeFlowRules.Single(m => m.Id == 102), _model.Email);
+
+        await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator);
+
+        AssertMailNicknameDependant(rule.SaveDependentDerivedFlows);
+    }
+
     // ---- GetDerivedFlowStepsAsync ----
 
     [Test]

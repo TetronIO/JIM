@@ -703,8 +703,8 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     private static List<PreviewValidationFinding> DescribeFeatureDisabledRefusals(SyncRule rule, SyncRuleAttributeFlowProposal proposal)
     {
         var alreadyReading = rule.AttributeFlowRules
-            .Where(mapping => (mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id) != null && DerivedFlowGraph.ReadsMetaverse(mapping))
-            .Select(mapping => (mapping.TargetMetaverseAttributeId ?? mapping.TargetMetaverseAttribute?.Id)!.Value)
+            .Where(mapping => mapping.ResolveTargetMetaverseAttributeId() != null && DerivedFlowGraph.ReadsMetaverse(mapping))
+            .Select(mapping => mapping.ResolveTargetMetaverseAttributeId()!.Value)
             .ToHashSet();
 
         var attributeNames = (rule.MetaverseObjectType?.Attributes ?? [])

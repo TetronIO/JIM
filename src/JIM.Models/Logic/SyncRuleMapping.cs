@@ -210,6 +210,30 @@ public class SyncRuleMapping : IAuditable
     }
 
     /// <summary>
+    /// The Metaverse attribute this mapping targets, as it stands now: the navigation when it is loaded, otherwise
+    /// the foreign key. Null for an export mapping and for an import mapping with no target yet.
+    /// </summary>
+    /// <remarks>
+    /// The one place a mapping's target is resolved before it is written (#1750). The portal's Attribute Flow editor
+    /// binds the target to <see cref="TargetMetaverseAttribute"/> on a tracked rule, and EF only fixes
+    /// <see cref="TargetMetaverseAttributeId"/> up from it at SaveChanges, so between a retarget and the write the
+    /// scalar still names the old target (and is unset on a new mapping). Reading the scalar first judged a retarget
+    /// against the target it was moving away from: a loop it closed went undetected, and the attribute it left was
+    /// still counted as contributed. Every path that sets the scalar sets the navigation with it or clears the
+    /// navigation (the REST controllers, the proposal materialiser, the save's own detach), so the navigation is never
+    /// the stale half.
+    /// </remarks>
+    public int? ResolveTargetMetaverseAttributeId() =>
+        TargetMetaverseAttribute?.Id ?? TargetMetaverseAttributeId;
+
+    /// <summary>
+    /// The Connected System attribute this mapping targets, as it stands now; the export sibling of
+    /// <see cref="ResolveTargetMetaverseAttributeId"/>, preferring the navigation for the same reason.
+    /// </summary>
+    public int? ResolveTargetConnectedSystemAttributeId() =>
+        TargetConnectedSystemAttribute?.Id ?? TargetConnectedSystemAttributeId;
+
+    /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.
     /// </summary>
     public SyncRuleMappingSourcesType GetSourceType()
