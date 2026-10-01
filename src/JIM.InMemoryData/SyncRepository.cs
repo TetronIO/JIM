@@ -4125,7 +4125,6 @@ public class SyncRepository : ISyncRepository
                 SyncRuleName = a.SyncRuleMappingGeneration?.SyncRuleMapping?.SyncRule?.Name,
                 SyncRuleMappingId = a.SyncRuleMappingGeneration?.SyncRuleMappingId ?? 0,
                 State = a.State,
-                Adopted = a.Adopted,
                 AssignedDate = a.CommittedAt ?? a.Created
             })
             .ToList();

@@ -88,13 +88,6 @@ public class ActivityRunProfileExecutionStats
     public int TotalGeneratedValues { get; set; }
 
     /// <summary>
-    /// Count of existing values adopted rather than generated, because a participating target already
-    /// held one for the object and attribute (Unique Value Generation, #242, FR 30 adopt before generate):
-    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted"/> outcomes.
-    /// </summary>
-    public int TotalGeneratedValuesAdopted { get; set; }
-
-    /// <summary>
     /// Count of Run Profile Execution Items whose error type is <see cref="ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted"/>,
     /// <see cref="ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded"/> or
     /// <see cref="ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved"/>

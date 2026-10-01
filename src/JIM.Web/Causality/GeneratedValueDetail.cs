@@ -7,8 +7,7 @@ namespace JIM.Web.Causality;
 
 /// <summary>
 /// The parsed content of a <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned"/>
-/// or <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted"/> outcome's
-/// DetailMessage (Unique Value Generation, #242), which the worker writes as "{attributeName}: {value}"
+/// outcome's DetailMessage (Unique Value Generation, #242), which the worker writes as "{attributeName}: {value}"
 /// (<c>SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync</c>). Both fields are null when the message is
 /// missing or does not match that shape, so a caller can fall back to a generic sentence rather than guessing.
 /// </summary>

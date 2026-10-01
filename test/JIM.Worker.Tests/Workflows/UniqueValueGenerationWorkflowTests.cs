@@ -20,8 +20,8 @@ namespace JIM.Worker.Tests.Workflows;
 /// the unique value service or the engine's <c>ApplyGeneratedValue</c> in isolation. Topology throughout: an
 /// "HR" Connected System whose import Synchronisation Rule carries a generated Account Name Attribute Flow
 /// (base <c>Lower(cs["first"]) + "." + Lower(cs["last"])</c>, only-if-taken), projecting a "Person" Metaverse
-/// Object Type. Adoption tests add a "Directory" Connected System joined by Employee Number, with an export
-/// Synchronisation Rule making it a participating target.
+/// Object Type. Priority and participation tests add a "Directory" Connected System joined by Employee Number,
+/// with an export Synchronisation Rule making it a participating target.
 /// </summary>
 [TestFixture]
 public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
@@ -41,10 +41,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         {
             Assert.That(ResolvedAccountNames(ctx), Is.EquivalentTo(new[] { "joe.bloggs", "ada.lovelace" }));
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(2), "one assignment per object");
-            // A generated (not adopted) import-mode value starts Proposed: nothing in this release's scope
-            // (export-mode generation and Collision Remediation are out of scope, per the work package brief)
-            // transitions it to Committed. Adopted values are the one exception (BuildAssignment starts them
-            // Committed directly), covered by the adoption tests below.
+            // A generated import-mode value starts Proposed. Nothing yet moves it to Committed: see #1904.
             Assert.That(SyncRepo.GeneratedValueAssignments.Values.All(a => a.State == GeneratedValueAssignmentState.Proposed), Is.True);
 
             var assignedOutcomes = activity.RunProfileExecutionItems
@@ -352,7 +349,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
     #endregion
 
-    #region Adopt before generate (connector-space adoption removed: product-owner decision)
+    #region No adoption: a value already held elsewhere is never taken over (product-owner decisions)
 
     /// <summary>
     /// Formerly <c>FullSync_ParticipatingSystemAlreadyHoldsAValue_AdoptsItInsteadOfGeneratingAsync</c>: before
@@ -364,7 +361,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_ParticipatingSystemAlreadyHoldsAValueButNoImportFlow_GeneratesAndExportsOverwritingItAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         // Directory is a brownfield join: it already holds "jsmith" for the same Employee Number before HR ever
         // syncs. Directory's Synchronisation Rule only EXPORTS Account Name (no import flow reads sAMAccountName
@@ -380,18 +377,15 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("john.smith"), "generation must never read a joined target's own value");
 
             var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.False, "connector-space adoption has been removed");
             Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Proposed));
 
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
                 .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.True);
-            Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False);
 
             // The generated value flows to the participating target on export, overwriting the brownfield value.
             var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemId == ctx.Directory!.Id);
             Assert.That(pendingExport.AttributeValueChanges.Single().StringValue, Is.EqualTo("john.smith"),
-                "the export carries the generated value, never the adopted brownfield one");
+                "the export carries the generated value, never the target's brownfield one");
         }
     }
 
@@ -405,7 +399,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_HigherPriorityImportFlowFromTheTargetSuppliesAValue_NoGenerationNoAssignmentAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         // An administrator's deliberate "keep the existing target account's value" configuration: an ordinary,
         // higher-priority (1) import Attribute Flow on Directory's own rule, reading the same sAMAccountName
@@ -435,8 +429,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("jsmith"), "the higher-priority import flow must win; the generated mapping never runs");
             Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "a mapping that never wins priority must never record an assignment");
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
-                    or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False);
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.False);
         }
     }
 
@@ -451,7 +444,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_SequenceOnNumberTarget_HigherPriorityContributorDisabledLeavingItsNumberBehind_GeneratesItsOwnNumberAsync()
     {
-        var ctx = await SetUpNumericAdoptionScenarioAsync();
+        var ctx = await SetUpNumericDirectoryParticipantScenarioAsync();
 
         var directoryImportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Import);
         var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
@@ -520,7 +513,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_ValueLeftBehindIsHeldByAnotherObject_GeneratesItsOwnValueWithNoCollisionErrorAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         var directoryImportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Import);
         var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
@@ -904,8 +897,6 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         {
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "the generated mapping must take over via re-election");
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1), "the generated value must be committed to an assignment, not just written to the object");
-            var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.False);
             // ErrorType defaults to NotSet (not null) on every RunProfileExecutionItem, including ones with no
             // error at all, so "no error" must check the specific generation error types rather than != null
             // (the same pattern the exhaustion and width tests above use).
@@ -1164,12 +1155,12 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Builds the adoption topology: <see cref="SetUpBasicGenerationAsync"/>'s HR system, plus a Directory
+    /// Builds the participating-Directory topology: <see cref="SetUpBasicGenerationAsync"/>'s HR system, plus a Directory
     /// Connected System that both imports (joining by Employee Number, projecting nothing new) and exports
     /// (an Account Name -> sAMAccountName Attribute Flow, making it a participating target for HR's generated
     /// mapping).
     /// </summary>
-    private async Task<GenerationContext> SetUpAdoptionScenarioAsync(bool excludeDirectory = false)
+    private async Task<GenerationContext> SetUpDirectoryParticipantScenarioAsync(bool excludeDirectory = false)
     {
         var ctx = await SetUpBasicGenerationAsync();
 
@@ -1280,14 +1271,14 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Builds <see cref="SetUpAdoptionScenarioAsync"/>'s topology, then swaps the generated Account Name
+    /// Builds <see cref="SetUpDirectoryParticipantScenarioAsync"/>'s topology, then swaps the generated Account Name
     /// attribute (and Directory's export target) to Number, and the generated mapping to a Sequence token
-    /// (work package G review fix 2): proves adopt-before-generate reads a Number/LongNumber target's
-    /// IntValue/LongValue, not just StringValue.
+    /// (work package G review fix 2): proves the Number/LongNumber target path (IntValue/LongValue, not just
+    /// StringValue).
     /// </summary>
-    private async Task<GenerationContext> SetUpNumericAdoptionScenarioAsync()
+    private async Task<GenerationContext> SetUpNumericDirectoryParticipantScenarioAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         ctx.MvAccountNameAttribute.Type = AttributeDataType.Number;
 

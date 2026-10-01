@@ -432,7 +432,6 @@ public partial class SyncRepository
                 SyncRuleName = a.SyncRuleMappingGeneration.SyncRuleMapping.SyncRule!.Name,
                 SyncRuleMappingId = a.SyncRuleMappingGeneration.SyncRuleMappingId,
                 State = a.State,
-                Adopted = a.Adopted,
                 AssignedDate = a.CommittedAt ?? a.Created
             })
             .ToListAsync();

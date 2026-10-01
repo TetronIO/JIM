@@ -1652,7 +1652,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <remarks>
     /// The committed Unique Value Generation assignments (#242) this Metaverse Object currently holds, one per
     /// generated attribute: the value, which uniqueness token produced it, the Synchronisation Rule and mapping
-    /// responsible, its state, and whether it was adopted from an existing accepted value rather than generated.
+    /// responsible, and its state.
     /// Empty when the object holds no generated values.
     /// </remarks>
     /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>

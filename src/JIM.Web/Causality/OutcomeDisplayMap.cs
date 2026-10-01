@@ -231,8 +231,9 @@ public static class OutcomeDisplayMap
         // "identifier issued" without borrowing the Add glyph every creation outcome already uses.
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] =
             new OutcomeDisplay("Value generated", CausalityTone.Primary, Icons.Material.Filled.Fingerprint),
-        // Info, like the other "JIM used something that was already there" outcomes (CsoUpdated, Exported):
-        // adopting a value a target already held is not a decision that needs the eye drawn to it.
+        // Retired (#242, product-owner decision 2026-10-01): nothing records this outcome any more. Kept so an
+        // item recorded before the decision (development builds only; the feature was never released) still
+        // renders, and because the enum member itself must stay to preserve the persisted ordinals after it.
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] =
             new OutcomeDisplay("Existing value adopted", CausalityTone.Info, Icons.Material.Filled.MoveToInbox),
         // Warning, matching NoContributor and ValuesPreserved: a value leaving live use is worth noticing,

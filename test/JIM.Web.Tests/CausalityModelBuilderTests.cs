@@ -130,8 +130,8 @@ public class CausalityModelBuilderTests
             // the target system, so it shares DeprovisionQueued's Downstream lane rather than Identity's.
             [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = CausalityLane.Downstream,
 
-            // Unique Value Generation (#242): Assigned, Adopted and Retired happen on the Metaverse Object's
-            // attributes, like AttributeFlow, so they share its Identity lane. Remediated is recorded on the
+            // Unique Value Generation (#242): Assigned, Retired (and the retired Adopted outcome) happen on the
+            // Metaverse Object's attributes, like AttributeFlow, so they share its Identity lane. Remediated is recorded on the
             // export item, like Exported, so it is Downstream.
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = CausalityLane.Identity,
