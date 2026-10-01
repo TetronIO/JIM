@@ -3762,7 +3762,7 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
+    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId)
     {
         if (normalisedValues.Count == 0)
             return Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -3773,8 +3773,6 @@ public class SyncRepository : ISyncRepository
         foreach (var cso in _csos.Values)
         {
             if (excludingConnectedSystemObjectId.HasValue && cso.Id == excludingConnectedSystemObjectId.Value)
-                continue;
-            if (excludingJoinedMetaverseObjectId.HasValue && cso.MetaverseObjectId == excludingJoinedMetaverseObjectId.Value)
                 continue;
 
             foreach (var av in cso.AttributeValues)
@@ -3787,6 +3785,32 @@ public class SyncRepository : ISyncRepository
         }
 
         return Task.FromResult(taken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeValueHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues)
+    {
+        var wanted = new HashSet<string>(normalisedValues, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<ConnectorSpaceValueHolder> holders = _csos.Values
+            .SelectMany(cso => cso.AttributeValues
+                .Where(av => av.AttributeId == connectedSystemObjectTypeAttributeId && av.StringValue != null && wanted.Contains(av.StringValue))
+                .Select(av => new ConnectorSpaceValueHolder(av.StringValue!.ToLowerInvariant(), null, cso.Id, cso.MetaverseObjectId)))
+            .ToList();
+        return Task.FromResult(holders);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeNumberHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values)
+    {
+        var wanted = new HashSet<long>(values);
+        IReadOnlyList<ConnectorSpaceValueHolder> holders = _csos.Values
+            .SelectMany(cso => cso.AttributeValues
+                .Where(av => av.AttributeId == connectedSystemObjectTypeAttributeId)
+                .Select(av => av.IntValue ?? av.LongValue)
+                .Where(n => n.HasValue && wanted.Contains(n.Value))
+                .Select(n => new ConnectorSpaceValueHolder(null, n!.Value, cso.Id, cso.MetaverseObjectId)))
+            .ToList();
+        return Task.FromResult(holders);
     }
 
     /// <inheritdoc />
@@ -3819,7 +3843,7 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
+    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId)
     {
         if (values.Count == 0)
             return Task.FromResult(new HashSet<long>());
@@ -3830,8 +3854,6 @@ public class SyncRepository : ISyncRepository
         foreach (var cso in _csos.Values)
         {
             if (excludingConnectedSystemObjectId.HasValue && cso.Id == excludingConnectedSystemObjectId.Value)
-                continue;
-            if (excludingJoinedMetaverseObjectId.HasValue && cso.MetaverseObjectId == excludingJoinedMetaverseObjectId.Value)
                 continue;
 
             foreach (var av in cso.AttributeValues)

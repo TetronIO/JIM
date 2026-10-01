@@ -5,6 +5,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
@@ -260,39 +261,41 @@ public class GeneratedValueRepositoryDatabaseTests
     }
 
     [Test]
-    public async Task GetConnectedSystemAttributeInUse_ExcludingJoinedMetaverseObject_FreesOnlyThatObjectsOwnAccountsAsync()
+    public async Task GetConnectedSystemAttributeHolders_ReturnEachHoldersObjectAndSavedJoinAsync()
     {
-        // #242, product-owner decision 2026-10-01: a value held by a Connected System Object joined to the
-        // requesting Metaverse Object is the same person's own account, not a collision. Real SQL: the
-        // exclusion is a NOT EXISTS over ConnectedSystemObjects."MetaverseObjectId", which the in-memory
-        // provider cannot prove.
+        // #242: the import-mode connector-space gate needs WHO holds a candidate value, not just whether it is
+        // held, so it can treat the requesting object's own accounts as free. Real SQL round trip of every field:
+        // the lower-cased value, the number from either IntValue or LongValue, the holder's id and its saved join
+        // (null when unjoined).
         var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
         await JoinCsoToMvoAsync(estate);
-        var otherMvoId = await CreateSecondMvoAsync(estate);
 
         await using (var ctx = NewContext())
         {
             var text = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsTextAttributeId, StringValue = "Joe.Bloggs" };
-            var number = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsNumberAttributeId, LongValue = 4242L };
-            ctx.ConnectedSystemObjectAttributeValues.AddRange(text, number);
-            ctx.Entry(text).Property("ConnectedSystemObjectId").CurrentValue = estate.CsoId;
-            ctx.Entry(number).Property("ConnectedSystemObjectId").CurrentValue = estate.CsoId;
+            var intNumber = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsNumberAttributeId, IntValue = 42 };
+            var longNumber = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsNumberAttributeId, LongValue = 9999999999L };
+            ctx.ConnectedSystemObjectAttributeValues.AddRange(text, intNumber, longNumber);
+            foreach (var value in new[] { text, intNumber, longNumber })
+                ctx.Entry(value).Property("ConnectedSystemObjectId").CurrentValue = estate.CsoId;
             await ctx.SaveChangesAsync();
         }
 
         await using var readCtx = NewContext();
         var repo = NewSyncRepository(readCtx);
 
+        var textHolders = await repo.GetConnectedSystemAttributeValueHoldersAsync(estate.CsTextAttributeId, ["joe.bloggs", "nobody"]);
+        var numberHolders = await repo.GetConnectedSystemAttributeNumberHoldersAsync(estate.CsNumberAttributeId, [42L, 9999999999L, 7L]);
+
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(await repo.GetConnectedSystemAttributeValuesInUseAsync(estate.CsTextAttributeId, ["joe.bloggs"], null, estate.MvoId), Is.Empty,
-                "the requesting Metaverse Object's own joined account holding the value is not a collision");
-            Assert.That(await repo.GetConnectedSystemAttributeValuesInUseAsync(estate.CsTextAttributeId, ["joe.bloggs"], null, otherMvoId), Is.EquivalentTo(new[] { "joe.bloggs" }),
-                "an account joined to a different Metaverse Object still blocks the value");
-            Assert.That(await repo.GetConnectedSystemAttributeNumbersInUseAsync(estate.CsNumberAttributeId, [4242L], null, estate.MvoId), Is.Empty);
-            Assert.That(await repo.GetConnectedSystemAttributeNumbersInUseAsync(estate.CsNumberAttributeId, [4242L], null, otherMvoId), Is.EquivalentTo(new[] { 4242L }));
-            Assert.That(await repo.GetConnectedSystemAttributeNumbersInUseAsync(estate.CsNumberAttributeId, [4242L], estate.CsoId, otherMvoId), Is.Empty,
-                "both exclusions together bind their own positional parameters correctly");
+            Assert.That(textHolders, Is.EqualTo(new[] { new ConnectorSpaceValueHolder("joe.bloggs", null, estate.CsoId, estate.MvoId) }));
+            Assert.That(numberHolders, Is.EquivalentTo(new[]
+            {
+                new ConnectorSpaceValueHolder(null, 42L, estate.CsoId, estate.MvoId),
+                new ConnectorSpaceValueHolder(null, 9999999999L, estate.CsoId, estate.MvoId)
+            }));
+            Assert.That(await repo.GetConnectedSystemAttributeValueHoldersAsync(estate.CsTextAttributeId, []), Is.Empty);
         }
     }
 

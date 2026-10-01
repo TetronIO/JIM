@@ -877,7 +877,7 @@ public class SyncPreviewServer
         CsoPreviewContext context,
         List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)> flowErrors)
     {
-        var outcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context);
+        var outcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id);
 
         var graph = context.PriorityContext.DerivedFlowGraph;
         if (graph == null || inScopeRules.Count == 0)
@@ -925,7 +925,7 @@ public class SyncPreviewServer
                 break;
             }
 
-            outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context));
+            outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id));
         }
 
         return outcomes;
@@ -965,13 +965,17 @@ public class SyncPreviewServer
     /// where the real run would record an error understates what synchronising would do.</param>
     /// <param name="workingMvo">The preview's own working copy of the Metaverse Object.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="ownCsoId">The previewed Connected System Object when it is joined to (or projects)
+    /// <paramref name="workingMvo"/>: the person's own account for the connector-space gate, as in the worker.</param>
+    /// <param name="disconnectingCsoId">The previewed Connected System Object when it is LEAVING
+    /// <paramref name="workingMvo"/> (re-election after obsoletion): never the person's own account.</param>
     /// <returns>
     /// One (outcome type, attribute name, value) tuple per <c>Generated</c> result, for the
     /// caller to record as a <c>GeneratedValueAssigned</c> node in the speculative
     /// outcome tree; empty when nothing was generated.
     /// </returns>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesForPreviewAsync(
-        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context)
+        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context, Guid? ownCsoId = null, Guid? disconnectingCsoId = null)
     {
         var pending = workingMvo.PendingGeneratedValues.ToList();
         if (pending.Count == 0)
@@ -997,6 +1001,8 @@ public class SyncPreviewServer
                     AttributeName = p.Mapping.TargetMetaverseAttribute!.Name,
                     BaseValue = p.BaseValue,
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
+                    OwnConnectedSystemObjectIds = ownCsoId.HasValue ? [ownCsoId.Value] : [],
+                    DisconnectingConnectedSystemObjectId = disconnectingCsoId,
                     StickyOnly = p.BaseUnavailable
                 });
             }
@@ -1208,7 +1214,7 @@ public class SyncPreviewServer
                 (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
                 context.ObjectTypes,
                 ExpressionEvaluator,
-                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context));
+                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id));
 
             var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(guardedRepository);
             var noImportSourceRemains = !await remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(

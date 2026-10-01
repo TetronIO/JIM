@@ -415,6 +415,158 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
+    /// The same-pass case of the test above (#242): the account is joined to the Metaverse Object in the very
+    /// synchronisation pass that generates the value, so the join is still only in memory when the
+    /// connector-space gate runs. The generated mapping sits on Directory's own import rule and Directory exports
+    /// Account Name back to the same account's sAMAccountName, which already holds the base value. Two shapes:
+    /// Directory projects the object itself (a brand-new Metaverse Object with no id yet), or HR projected it
+    /// earlier and Directory's Object Matching Rule joins it in Directory's pass. Either way it is the person's
+    /// own account: the value is "john.smith", and no export renames the account.
+    /// </summary>
+    [TestCase(true, TestName = "FullSync_OwnAccountJoinedInTheSamePass_ByProjection_IsFreeForItAndNothingIsRenamedAsync")]
+    [TestCase(false, TestName = "FullSync_OwnAccountJoinedInTheSamePass_ByObjectMatchingRule_IsFreeForItAndNothingIsRenamedAsync")]
+    public async Task FullSync_OwnAccountJoinedInTheSamePass_IsFreeForItAndNothingIsRenamedAsync(bool directoryProjects)
+    {
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+        var mvAccountNameAttr = new MetaverseAttribute
+        {
+            Name = "Account Name",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(mvAccountNameAttr);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(mvAccountNameAttr);
+
+        var directory = await CreateConnectedSystemAsync("Directory");
+        var directoryType = await CreateCsoTypeAsync(directory.Id, "DirectoryUser", new List<ConnectedSystemObjectTypeAttribute>
+        {
+            new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "first", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "last", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "sAMAccountName", Type = AttributeDataType.Text, Selected = true }
+        });
+        var dirEmployeeIdAttr = directoryType.Attributes.Single(a => a.Name == "employeeId");
+        var dirSamAttr = directoryType.Attributes.Single(a => a.Name == "sAMAccountName");
+
+        var directoryImportRule = await CreateImportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Import", enableProjection: directoryProjects);
+        directoryImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryImportRule,
+            SyncRuleId = directoryImportRule.Id,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = dirEmployeeIdAttr, ConnectedSystemAttributeId = dirEmployeeIdAttr.Id } }
+        });
+        directoryImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryImportRule,
+            SyncRuleId = directoryImportRule.Id,
+            TargetMetaverseAttribute = mvAccountNameAttr,
+            TargetMetaverseAttributeId = mvAccountNameAttr.Id,
+            Generation = new SyncRuleMappingGeneration
+            {
+                TokenKind = GeneratedValueTokenKind.OnlyIfTaken,
+                SuffixStyle = GeneratedValueSuffixStyle.Number,
+                SuffixStart = 1,
+                AttemptLimit = 1000,
+                NeverReuse = true
+            },
+            Sources = { new SyncRuleMappingSource { Order = 0, Expression = "Lower(cs[\"first\"]) + \".\" + Lower(cs[\"last\"])" } }
+        });
+        if (!directoryProjects)
+        {
+            directoryImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+            {
+                SyncRule = directoryImportRule,
+                SyncRuleId = directoryImportRule.Id,
+                Order = 0,
+                CaseSensitive = true,
+                TargetMetaverseAttribute = mvEmployeeIdAttr,
+                TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+                Sources = { new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = dirEmployeeIdAttr, ConnectedSystemAttributeId = dirEmployeeIdAttr.Id } }
+            });
+        }
+
+        var directoryExportRule = await CreateExportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Export", enableProvisioning: false);
+        directoryExportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryExportRule,
+            SyncRuleId = directoryExportRule.Id,
+            TargetConnectedSystemAttribute = dirSamAttr,
+            TargetConnectedSystemAttributeId = dirSamAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvAccountNameAttr, MetaverseAttributeId = mvAccountNameAttr.Id } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        if (!directoryProjects)
+        {
+            // HR projects the person first (no Account Name flow of its own).
+            var hr = await CreateConnectedSystemAsync("HR");
+            var hrType = await CreateCsoTypeAsync(hr.Id, "HrUser", new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+                new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true }
+            });
+            var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "employeeId");
+            var hrImportRule = await CreateImportSyncRuleAsync(hr.Id, hrType, mvType, "HR Import");
+            hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+            {
+                SyncRule = hrImportRule,
+                SyncRuleId = hrImportRule.Id,
+                TargetMetaverseAttribute = mvEmployeeIdAttr,
+                TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+                Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = hrEmployeeIdAttr, ConnectedSystemAttributeId = hrEmployeeIdAttr.Id } }
+            });
+            await DbContext.SaveChangesAsync();
+
+            SeedCso(hr, hrType, ("employeeId", "E1"));
+            await RunFullSyncReturningActivityAsync(hr);
+            Assert.That(SyncRepo.MetaverseObjects, Has.Count.EqualTo(1), "sanity: HR projected the person");
+        }
+
+        SeedCso(directory, directoryType, ("first", "John"), ("last", "Smith"), ("employeeId", "E1"), ("sAMAccountName", "john.smith"));
+        await RunFullSyncReturningActivityAsync(directory);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == mvAccountNameAttr.Id)?.StringValue, Is.EqualTo("john.smith"),
+                "the account joined in this same pass is the person's own account, not a collision");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("john.smith"));
+            Assert.That(SyncRepo.PendingExports.Values.SelectMany(pe => pe.AttributeValueChanges)
+                .Where(c => c.AttributeId == dirSamAttr.Id).Select(c => c.StringValue), Has.None.Not.EqualTo("john.smith"),
+                "no export may rename the person's own account");
+        }
+    }
+
+    private void SeedCso(ConnectedSystem system, ConnectedSystemObjectType type, params (string Attribute, string Value)[] values)
+    {
+        var externalIdAttr = type.Attributes.Single(a => a.IsExternalId);
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = system.Id,
+            TypeId = type.Id,
+            Type = type,
+            ConnectedSystem = SyncRepo.ConnectedSystems[system.Id],
+            Created = DateTime.UtcNow
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = externalIdAttr.Id, Attribute = externalIdAttr, GuidValue = Guid.NewGuid() });
+        foreach (var (attribute, value) in values)
+        {
+            var attr = type.Attributes.Single(a => a.Name == attribute);
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attr.Id, Attribute = attr, StringValue = value });
+        }
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+    }
+
+    /// <summary>
     /// The counterpart of the test above: ANOTHER object's account holding the base value still blocks it.
     /// Directory holds "john.smith" on the account for a different person (E2); John Smith (E1) must get
     /// "john.smith1". Directory imports no Account Name, so only the connector-space gate can see the clash.

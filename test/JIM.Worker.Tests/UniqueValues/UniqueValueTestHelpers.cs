@@ -60,9 +60,13 @@ internal static class UniqueValueTestHelpers
         AttributeDataType targetType = AttributeDataType.Text,
         string attributeName = "Account Name",
         IReadOnlyCollection<int>? connectorSpaceAttributeIds = null,
-        bool stickyOnly = false) => new()
+        bool stickyOnly = false,
+        IReadOnlyCollection<Guid>? ownConnectedSystemObjectIds = null,
+        Guid? disconnectingConnectedSystemObjectId = null) => new()
     {
         Mode = GeneratedValueMode.Import,
+        OwnConnectedSystemObjectIds = ownConnectedSystemObjectIds ?? [],
+        DisconnectingConnectedSystemObjectId = disconnectingConnectedSystemObjectId,
         MetaverseObjectId = metaverseObjectId,
         MetaverseAttributeId = metaverseAttributeId,
         Generation = generation,

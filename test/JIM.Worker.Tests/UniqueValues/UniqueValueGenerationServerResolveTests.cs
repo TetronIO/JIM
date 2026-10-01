@@ -263,6 +263,62 @@ public class UniqueValueGenerationServerResolveTests
         Assert.That(outcomes[0].Value, Is.EqualTo(expected));
     }
 
+    [Test]
+    public async Task ResolveAsync_ImportMode_ValueHeldByAnAccountJoinedOnlyInMemory_IsFreeForItEvenForANewObjectAsync()
+    {
+        // The join (or projection) happened in this pass and is not saved: the holder's persisted Metaverse
+        // Object id is null, and a projected object has no id yet either. The caller names its own account.
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var ownAccount = ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", metaverseObjectId: null);
+        repo.SeedConnectedSystemObject(ownAccount);
+
+        var request = UniqueValueTestHelpers.ImportRequest(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), metaverseObjectId: null,
+            baseValue: "joe.bloggs", connectorSpaceAttributeIds: [csAttributeId], ownConnectedSystemObjectIds: [ownAccount.Id]);
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs"));
+    }
+
+    [Test]
+    public async Task ResolveAsync_ImportMode_ValueHeldByTheAccountLeavingTheObject_IsTakenAsync()
+    {
+        // Its saved join still names the object, but it is leaving this pass, so it is no longer the person's account.
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var mvoId = Guid.NewGuid();
+        var leaving = ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", mvoId);
+        repo.SeedConnectedSystemObject(leaving);
+
+        var request = UniqueValueTestHelpers.ImportRequest(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), mvoId,
+            baseValue: "joe.bloggs", connectorSpaceAttributeIds: [csAttributeId], disconnectingConnectedSystemObjectId: leaving.Id);
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs1"));
+    }
+
+    [Test]
+    public async Task ResolveAsync_ImportMode_ManyNewObjects_ShareOneHolderLookupPerAttributeAsync()
+    {
+        // Batching: each new object names a different own account, yet the gate still makes one lookup.
+        var repo = new InMemorySyncRepository();
+        var (countingRepo, counts) = CountingSyncRepositoryProxy.Create(repo);
+        var server = new UniqueValueGenerationServer(countingRepo);
+        var generation = UniqueValueTestHelpers.Generation();
+        var mvAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+
+        var requests = Enumerable.Range(0, 5)
+            .Select(n => UniqueValueTestHelpers.ImportRequest(generation, mvAttributeId, null, baseValue: $"person{n}",
+                connectorSpaceAttributeIds: [csAttributeId], ownConnectedSystemObjectIds: [Guid.NewGuid()]))
+            .ToList();
+        await server.ResolveAsync(requests, UniqueValueTestHelpers.Options());
+
+        Assert.That(counts[nameof(ISyncRepository.GetConnectedSystemAttributeValueHoldersAsync)], Is.EqualTo(1));
+    }
+
     [TestCase(true, "joe.bloggs", TestName = "ResolveAsync_ExportMode_ValueHeldByTheConnectedSystemObjectItIsFor_IsFreeForItAsync")]
     [TestCase(false, "joe.bloggs1", TestName = "ResolveAsync_ExportMode_ValueHeldByAnotherConnectedSystemObject_IsTakenAsync")]
     public async Task ResolveAsync_ExportMode_ExcludesOnlyTheConnectedSystemObjectTheValueIsForAsync(bool heldByTheTargetObject, string expected)

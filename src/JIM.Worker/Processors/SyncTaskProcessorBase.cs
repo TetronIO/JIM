@@ -2100,7 +2100,7 @@ public abstract class SyncTaskProcessorBase
         if (mvo.PendingGeneratedValues.Count == 0)
             return outcomesSoFar;
 
-        var resolvedHere = await ResolvePendingGeneratedValuesAsync(cso, mvo);
+        var resolvedHere = await ResolvePendingGeneratedValuesAsync(cso, mvo, csoIsJoinedToObject: true);
         return outcomesSoFar == null ? resolvedHere : [.. outcomesSoFar, .. resolvedHere];
     }
 
@@ -2263,7 +2263,7 @@ public abstract class SyncTaskProcessorBase
     /// happens later in the calling method); empty when nothing was generated this pass.
     /// </returns>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesAsync(
-        ConnectedSystemObject cso, MetaverseObject mvo)
+        ConnectedSystemObject cso, MetaverseObject mvo, bool csoIsJoinedToObject = false)
     {
         var forRpei = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, string, string)>();
 
@@ -2297,6 +2297,11 @@ public abstract class SyncTaskProcessorBase
                     AttributeName = targetAttribute.Name,
                     BaseValue = pending.BaseValue,
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
+                    // The object being synchronised is the person's own account when it is joined to (or has just
+                    // projected) this Metaverse Object, even though that join is not saved until the page flush;
+                    // on the re-election paths it is the object LEAVING, so it is never the person's own account.
+                    OwnConnectedSystemObjectIds = csoIsJoinedToObject ? [cso.Id] : [],
+                    DisconnectingConnectedSystemObjectId = csoIsJoinedToObject ? null : cso.Id,
                     StickyOnly = pending.BaseUnavailable,
                     CallerState = mvo
                 });

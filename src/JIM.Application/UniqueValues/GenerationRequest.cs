@@ -77,6 +77,23 @@ public sealed record GenerationRequest
     public IReadOnlyCollection<int> ConnectorSpaceAttributeIds { get; init; } = [];
 
     /// <summary>
+    /// Import mode only: Connected System Objects that belong to this request's Metaverse Object in memory this
+    /// pass, whether or not the join has been saved yet (typically the object being synchronised, which may
+    /// have projected the Metaverse Object or joined it moments ago). The connector-space gate treats a value
+    /// held by one of these as the person's own account, not a collision (#242: no different to an ordinary
+    /// Attribute Flow). Saved joins are recognised without this, from the holder's own Metaverse Object id.
+    /// </summary>
+    public IReadOnlyCollection<Guid> OwnConnectedSystemObjectIds { get; init; } = [];
+
+    /// <summary>
+    /// Import mode only: a Connected System Object leaving this request's Metaverse Object in this pass (an
+    /// obsoleting or out-of-scope object whose withdrawal re-elected the generated mapping). Its saved join still
+    /// names the object, but it is no longer the person's account, so the connector-space gate counts its value
+    /// as taken like anyone else's.
+    /// </summary>
+    public Guid? DisconnectingConnectedSystemObjectId { get; init; }
+
+    /// <summary>
     /// When true, the mapping's base expression could not be evaluated for this object (a required input is
     /// missing and the mapping's Missing Input Behaviour is "contribute no value", the default for a generated
     /// mapping per FR 29). <see cref="UniqueValueGenerationServer.ResolveAsync"/> then only checks for an

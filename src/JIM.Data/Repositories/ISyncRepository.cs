@@ -1547,13 +1547,24 @@ public interface ISyncRepository
     /// The connector-space counterpart of <see cref="GetMetaverseAttributeValuesInUseAsync"/>, over
     /// <c>ConnectedSystemObjectAttributeValues</c>. A Connected System Object Type attribute id is unique across
     /// every Connected System, so no system id is needed to disambiguate which system's attribute this is.
-    /// <para>
-    /// <paramref name="excludingJoinedMetaverseObjectId"/>, when given, also excludes every Connected System
-    /// Object joined to that Metaverse Object (import mode, #242): the object's own joined account holding a
-    /// value is the same person, not a collision, exactly as an ordinary Attribute Flow would see it.
-    /// </para>
     /// </summary>
-    Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null);
+    Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId);
+
+    /// <summary>
+    /// Every Connected System Object holding one of the given normalised (lower-cased) text values for
+    /// <paramref name="connectedSystemObjectTypeAttributeId"/>, with the Metaverse Object each is joined to
+    /// (Unique Value Generation, #242: the import-mode connector-space gate). Returns holders rather than a
+    /// taken set so one query per attribute serves a whole batch, and the gate can treat the requesting
+    /// object's own accounts (joined in memory this pass, or already saved) as free while every other holder
+    /// still blocks. Case-insensitive over the <c>LOWER("StringValue")</c> comparison; id-only, nothing hydrated.
+    /// </summary>
+    Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeValueHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues);
+
+    /// <summary>
+    /// The numeric counterpart of <see cref="GetConnectedSystemAttributeValueHoldersAsync"/>, matching either
+    /// <c>IntValue</c> or <c>LongValue</c>.
+    /// </summary>
+    Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeNumberHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values);
 
     /// <summary>
     /// The numeric counterpart of <see cref="GetMetaverseAttributeValuesInUseAsync"/>, for Number and Long
@@ -1564,10 +1575,9 @@ public interface ISyncRepository
     Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId);
 
     /// <summary>
-    /// The connector-space counterpart of <see cref="GetMetaverseAttributeNumbersInUseAsync"/>, with the same
-    /// <paramref name="excludingJoinedMetaverseObjectId"/> semantics as <see cref="GetConnectedSystemAttributeValuesInUseAsync"/>.
+    /// The connector-space counterpart of <see cref="GetMetaverseAttributeNumbersInUseAsync"/>.
     /// </summary>
-    Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null);
+    Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId);
 
     /// <summary>
     /// Which of the given normalised (lower-cased) values a live <see cref="GeneratedValueAssignment"/> already

@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.UniqueValues;
@@ -484,11 +485,14 @@ public sealed class UniqueValueGenerationServer
 
     /// <summary>
     /// Gate (d), import mode only: every id in <see cref="GenerationRequest.ConnectorSpaceAttributeIds"/> (plan
-    /// "Behaviour (ResolveAsync)"): a value any participating target already holds is taken, EXCEPT one held by a
-    /// Connected System Object joined to the requesting Metaverse Object. That is the same person's own account,
-    /// not a collision, so the object gets the value exactly as an ordinary Attribute Flow would write it
-    /// (product-owner decision 2026-10-01). Batched per (attribute, requesting Metaverse Object): a page of brand
-    /// new objects (no id yet, so nothing joined to exclude) still shares one query per attribute.
+    /// "Behaviour (ResolveAsync)"): a value any participating target already holds is taken, EXCEPT one held by
+    /// the requesting object's own account. That is the same person, not a collision, so the object gets the
+    /// value exactly as an ordinary Attribute Flow would write it (product-owner decision 2026-10-01). An account
+    /// is the object's own when it is joined to it in memory this pass
+    /// (<see cref="GenerationRequest.OwnConnectedSystemObjectIds"/>, which covers a join or projection not saved
+    /// yet, including a brand-new Metaverse Object with no id) or its saved join names the object, unless it is
+    /// <see cref="GenerationRequest.DisconnectingConnectedSystemObjectId"/>. One holder lookup per attribute
+    /// serves the whole batch; the per-request decision is made in memory.
     /// </summary>
     private async Task<List<int>> FilterConnectorSpaceGateAsync(
         List<int> active,
@@ -503,43 +507,55 @@ public sealed class UniqueValueGenerationServer
         var taken = new HashSet<int>();
         var isNumberTarget = relevant.ToDictionary(i => i, i => requests[i].TargetType is AttributeDataType.Number or AttributeDataType.LongNumber);
 
-        var stringByAttribute = new Dictionary<(int CsAttributeId, Guid? MetaverseObjectId), List<int>>();
-        var numberByAttribute = new Dictionary<(int CsAttributeId, Guid? MetaverseObjectId), List<int>>();
+        var stringByAttribute = new Dictionary<int, List<int>>();
+        var numberByAttribute = new Dictionary<int, List<int>>();
         foreach (var i in relevant)
         {
             var byAttribute = isNumberTarget[i] ? numberByAttribute : stringByAttribute;
             foreach (var csAttributeId in requests[i].ConnectorSpaceAttributeIds)
             {
-                var key = (csAttributeId, requests[i].MetaverseObjectId);
-                if (!byAttribute.TryGetValue(key, out var list))
-                    byAttribute[key] = list = [];
+                if (!byAttribute.TryGetValue(csAttributeId, out var list))
+                    byAttribute[csAttributeId] = list = [];
                 list.Add(i);
             }
         }
 
-        foreach (var ((csAttributeId, metaverseObjectId), indices) in stringByAttribute)
+        foreach (var (csAttributeId, indices) in stringByAttribute)
         {
             var values = indices.Select(i => candidates[i].Text.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var takenValues = await _repository.GetConnectedSystemAttributeValuesInUseAsync(csAttributeId, values, null, metaverseObjectId);
-            foreach (var i in indices)
-            {
-                if (takenValues.Contains(candidates[i].Text) && taken.Add(i))
-                    lastRejectionGate[i] = "a Connected System Object";
-            }
+            var holdersByValue = (await _repository.GetConnectedSystemAttributeValueHoldersAsync(csAttributeId, values))
+                .ToLookup(h => h.NormalisedValue!, StringComparer.OrdinalIgnoreCase);
+            // taken.Add doubles as the predicate and the dedup record (a request can reach this gate through
+            // more than one participating attribute).
+            foreach (var i in indices.Where(i => holdersByValue[candidates[i].Text.ToLowerInvariant()].Any(h => !IsOwnAccount(requests[i], h))).Where(taken.Add))
+                lastRejectionGate[i] = "a Connected System Object";
         }
 
-        foreach (var ((csAttributeId, metaverseObjectId), indices) in numberByAttribute)
+        foreach (var (csAttributeId, indices) in numberByAttribute)
         {
             var values = indices.Select(i => candidates[i].Numeric!.Value).Distinct().ToList();
-            var takenValues = await _repository.GetConnectedSystemAttributeNumbersInUseAsync(csAttributeId, values, null, metaverseObjectId);
-            foreach (var i in indices)
-            {
-                if (takenValues.Contains(candidates[i].Numeric!.Value) && taken.Add(i))
-                    lastRejectionGate[i] = "a Connected System Object";
-            }
+            var holdersByValue = (await _repository.GetConnectedSystemAttributeNumberHoldersAsync(csAttributeId, values))
+                .ToLookup(h => h.NumberValue!.Value);
+            // taken.Add doubles as the predicate and the dedup record (a request can reach this gate through
+            // more than one participating attribute).
+            foreach (var i in indices.Where(i => holdersByValue[candidates[i].Numeric!.Value].Any(h => !IsOwnAccount(requests[i], h))).Where(taken.Add))
+                lastRejectionGate[i] = "a Connected System Object";
         }
 
         return active.Where(i => !taken.Contains(i)).ToList();
+    }
+
+    /// <summary>
+    /// Whether <paramref name="holder"/> is the requesting object's own account for the connector-space gate:
+    /// joined to it in memory this pass, or by a saved join, and not leaving it this pass.
+    /// </summary>
+    private static bool IsOwnAccount(GenerationRequest request, ConnectorSpaceValueHolder holder)
+    {
+        if (holder.ConnectedSystemObjectId == request.DisconnectingConnectedSystemObjectId)
+            return false;
+
+        return request.OwnConnectedSystemObjectIds.Contains(holder.ConnectedSystemObjectId)
+            || (request.MetaverseObjectId.HasValue && holder.MetaverseObjectId == request.MetaverseObjectId);
     }
 
     /// <summary>
