@@ -57,7 +57,6 @@ internal static class UniqueValueTestHelpers
         int metaverseAttributeId,
         Guid? metaverseObjectId = null,
         string? baseValue = "joe.bloggs",
-        string? adoptableValue = null,
         AttributeDataType targetType = AttributeDataType.Text,
         string attributeName = "Account Name",
         IReadOnlyCollection<int>? connectorSpaceAttributeIds = null,
@@ -70,7 +69,6 @@ internal static class UniqueValueTestHelpers
         TargetType = targetType,
         AttributeName = attributeName,
         BaseValue = baseValue,
-        AdoptableValue = adoptableValue,
         ConnectorSpaceAttributeIds = connectorSpaceAttributeIds ?? [],
         StickyOnly = stickyOnly
     };
@@ -80,7 +78,6 @@ internal static class UniqueValueTestHelpers
         int connectedSystemObjectTypeAttributeId,
         Guid? connectedSystemObjectId = null,
         string? baseValue = "joe.bloggs",
-        string? adoptableValue = null,
         AttributeDataType targetType = AttributeDataType.Text,
         string attributeName = "Login Name",
         bool stickyOnly = false) => new()
@@ -92,7 +89,6 @@ internal static class UniqueValueTestHelpers
         TargetType = targetType,
         AttributeName = attributeName,
         BaseValue = baseValue,
-        AdoptableValue = adoptableValue,
         StickyOnly = stickyOnly
     };
 

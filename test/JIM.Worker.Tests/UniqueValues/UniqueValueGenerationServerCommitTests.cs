@@ -44,13 +44,13 @@ public class UniqueValueGenerationServerCommitTests
     }
 
     [Test]
-    public async Task CommitAssignmentsAsync_AdoptedExportOutcome_FillsConnectedSystemObjectIdAndPersistsAsync()
+    public async Task CommitAssignmentsAsync_GeneratedExportOutcome_FillsConnectedSystemObjectIdAndPersistsAsync()
     {
         var repo = new InMemorySyncRepository();
         var attributeId = UniqueValueTestHelpers.NextAttributeId();
         var server = new UniqueValueGenerationServer(repo);
         var generation = UniqueValueTestHelpers.Generation();
-        var request = UniqueValueTestHelpers.ExportRequest(generation, attributeId, null, baseValue: null, adoptableValue: "jsmith");
+        var request = UniqueValueTestHelpers.ExportRequest(generation, attributeId, null, baseValue: "jsmith");
 
         var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
         var csoId = Guid.NewGuid();
@@ -63,12 +63,11 @@ public class UniqueValueGenerationServerCommitTests
             var persisted = await repo.GetGeneratedValueAssignmentForConnectedSystemObjectAsync(csoId, attributeId);
             Assert.That(persisted, Is.Not.Null);
             Assert.That(persisted!.Value, Is.EqualTo("jsmith"));
-            Assert.That(persisted.Adopted, Is.True);
         }
     }
 
     [Test]
-    public async Task CommitAssignmentsAsync_NonGeneratedOrAdoptedOutcomes_AreIgnoredAsync()
+    public async Task CommitAssignmentsAsync_NonGeneratedOutcomes_AreIgnoredAsync()
     {
         var repo = new InMemorySyncRepository();
         var attributeId = UniqueValueTestHelpers.NextAttributeId();

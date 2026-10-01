@@ -13,7 +13,7 @@ using InMemorySyncRepository = JIM.InMemoryData.SyncRepository;
 namespace JIM.Worker.Tests.UniqueValues;
 
 /// <summary>
-/// <see cref="UniqueValueGenerationServer.ResolveAsync"/>: sticky, adopt before generate, candidate generation
+/// <see cref="UniqueValueGenerationServer.ResolveAsync"/>: sticky, then candidate generation
 /// through the ordered gates, exhaustion, width overflow, sequence seeding and block reservation, run-scoped
 /// caching, and dry run (Unique Value Generation, #242, Phase 2).
 /// </summary>
@@ -117,94 +117,6 @@ public class UniqueValueGenerationServerResolveTests
             Assert.That(counts.ContainsKey(nameof(ISyncRepository.ReserveGeneratedValueSequenceBlockAsync)), Is.False);
             Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForGenerationAsync)), Is.False);
         }
-    }
-
-    // ---- Adopt before generate (FR 30) ----
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueFree_ReturnsAdoptedCommittedAsync()
-    {
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var server = new UniqueValueGenerationServer(repo);
-        var generation = UniqueValueTestHelpers.Generation();
-        var request = UniqueValueTestHelpers.ImportRequest(generation, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.Adopted));
-            Assert.That(outcomes[0].Value, Is.EqualTo("jsmith"));
-            Assert.That(outcomes[0].Assignment!.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
-            Assert.That(outcomes[0].Assignment!.Adopted, Is.True);
-            Assert.That(outcomes[0].Assignment!.CommittedAt, Is.Not.Null);
-        }
-    }
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueHeldByAnotherLiveAssignment_ReturnsAdoptionConflictAsync()
-    {
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var generation = UniqueValueTestHelpers.Generation();
-
-        repo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
-        {
-            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = attributeId,
-            Value = "jsmith", NormalisedValue = "jsmith", State = GeneratedValueAssignmentState.Committed,
-            SyncRuleMappingGenerationId = generation.Id
-        });
-
-        var server = new UniqueValueGenerationServer(repo);
-        var request = UniqueValueTestHelpers.ImportRequest(generation, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
-
-        Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
-    }
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueHeldByAReservation_ReturnsAdoptionConflictAsync()
-    {
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var generation = UniqueValueTestHelpers.Generation();
-
-        var reservations = new UniqueValueReservationSet();
-        reservations.TryReserve(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, attributeId, "jsmith");
-
-        var server = new UniqueValueGenerationServer(repo);
-        var request = UniqueValueTestHelpers.ImportRequest(generation, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options(reservations));
-
-        Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
-    }
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueHeldByAnotherGenerationOnTheSameAttribute_ReturnsAdoptionConflictAsync()
-    {
-        // Two different Synchronisation Rule mappings can target the same Metaverse attribute (plan decision 3):
-        // the adoption conflict check must be scoped by attribute, not by which generation row asked.
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var generationA = UniqueValueTestHelpers.Generation();
-        var generationB = UniqueValueTestHelpers.Generation();
-
-        repo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
-        {
-            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = attributeId,
-            Value = "jsmith", NormalisedValue = "jsmith", State = GeneratedValueAssignmentState.Committed,
-            SyncRuleMappingGenerationId = generationA.Id
-        });
-
-        var server = new UniqueValueGenerationServer(repo);
-        var request = UniqueValueTestHelpers.ImportRequest(generationB, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
-
-        Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
     }
 
     // ---- Gate order and short-circuit ----
@@ -334,17 +246,15 @@ public class UniqueValueGenerationServerResolveTests
     public async Task ResolveAsync_NeverCallsGetGeneratedValueAssignmentsForGenerationAsync()
     {
         // A 100k-object run calls ResolveAsync once per object; scanning every assignment a generation has ever
-        // produced on every call does not scale. Gate (e) and the adoption conflict check must use the targeted,
-        // indexed lookup instead.
+        // produced on every call does not scale. Gate (e) must use the targeted, indexed lookup instead.
         var repo = new InMemorySyncRepository();
         var (countingRepo, counts) = CountingSyncRepositoryProxy.Create(repo);
         var server = new UniqueValueGenerationServer(countingRepo);
         var generation = UniqueValueTestHelpers.Generation();
 
         var generateRequest = UniqueValueTestHelpers.ImportRequest(generation, UniqueValueTestHelpers.NextAttributeId(), null, baseValue: "joe.bloggs");
-        var adoptRequest = UniqueValueTestHelpers.ImportRequest(generation, UniqueValueTestHelpers.NextAttributeId(), null, baseValue: null, adoptableValue: "jsmith");
 
-        await server.ResolveAsync([generateRequest, adoptRequest], UniqueValueTestHelpers.Options());
+        await server.ResolveAsync([generateRequest], UniqueValueTestHelpers.Options());
 
         Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForGenerationAsync)), Is.False);
     }

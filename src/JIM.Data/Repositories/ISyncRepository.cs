@@ -1566,9 +1566,9 @@ public interface ISyncRepository
     /// <summary>
     /// Which of the given normalised (lower-cased) values a live <see cref="GeneratedValueAssignment"/> already
     /// holds for the given attribute: the fifth gate ("other objects' live assignments for the attribute", plan
-    /// "The service") and the adopt-before-generate conflict check, both targeted reads over the filtered unique
-    /// indexes (<c>IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique</c> and its Connected
-    /// System counterpart) rather than a scan of every assignment a generation has ever produced. Exactly one
+    /// "The service"), a targeted read over the filtered unique indexes
+    /// (<c>IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique</c> and its Connected System
+    /// counterpart) rather than a scan of every assignment a generation has ever produced. Exactly one
     /// of <paramref name="metaverseAttributeId"/> and <paramref name="connectedSystemObjectTypeAttributeId"/>
     /// must be given (both set or neither set throws <see cref="ArgumentException"/>), matching the attribute
     /// the caller's mode targets, never the <c>SyncRuleMappingGeneration</c> that produced the request: two

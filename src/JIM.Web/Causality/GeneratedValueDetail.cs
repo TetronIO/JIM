@@ -13,5 +13,5 @@ namespace JIM.Web.Causality;
 /// missing or does not match that shape, so a caller can fall back to a generic sentence rather than guessing.
 /// </summary>
 /// <param name="AttributeName">The generated attribute's display name.</param>
-/// <param name="Value">The value JIM generated or adopted.</param>
+/// <param name="Value">The value JIM generated.</param>
 public sealed record GeneratedValueDetail(string? AttributeName, string? Value);

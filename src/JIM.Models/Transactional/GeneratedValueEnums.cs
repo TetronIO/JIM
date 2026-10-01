@@ -11,7 +11,7 @@ namespace JIM.Models.Transactional;
 public enum GeneratedValueAssignmentState
 {
     /// <summary>
-    /// The value has been generated (or adopted) for this synchronisation run but not yet committed to the
+    /// The value has been generated for this synchronisation run but not yet committed to the
     /// object; a placeholder held so incumbent detection sees the attribute as taken while the run completes.
     /// </summary>
     Proposed = 0,

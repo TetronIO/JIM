@@ -156,10 +156,10 @@ public readonly struct MetaverseObjectChangeResult
 
     /// <summary>
     /// Unique Value Generation (#242, Phase 2 work package J): one (outcome type, attribute name, value) tuple
-    /// per <c>Generated</c>/<c>Adopted</c> result from a surviving contributor's own generated mapping,
+    /// per <c>Generated</c> result from a surviving contributor's own generated mapping,
     /// re-elected during this scope exit's attribute recall. The caller records each as a
-    /// <c>GeneratedValueAssigned</c>/<c>GeneratedValueAdopted</c> child of the root outcome it builds, exactly
-    /// as the ordinary Attribute Flow path records one. Empty when re-election generated or adopted nothing
+    /// <c>GeneratedValueAssigned</c> child of the root outcome it builds, exactly
+    /// as the ordinary Attribute Flow path records one. Empty when re-election generated nothing
     /// (the overwhelmingly common case). Only populated for DisconnectedOutOfScope.
     /// </summary>
     public List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? GeneratedValueOutcomes { get; init; }
@@ -241,7 +241,7 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="mvoDeletionPolicySnapshotJson">The serialised decision-time deletion policy snapshot, when the evaluation recorded an outcome (#119).</param>
     /// <param name="mvoDeletionEligibleDate">When a scheduled deletion becomes due (UTC), for the outcome node's detail message (#119).</param>
     /// <param name="preservedNoSourceAttributeCount">How many values were preserved as last known state because no import source remains (#1570).</param>
-    /// <param name="generatedValueOutcomes">One tuple per Generated/Adopted result from a re-elected survivor's own generated mapping (#242, Phase 2 work package J).</param>
+    /// <param name="generatedValueOutcomes">One tuple per Generated result from a re-elected survivor's own generated mapping (#242, Phase 2 work package J).</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
         int? attributeFlowCount = null,
         MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted,

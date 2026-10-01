@@ -425,7 +425,7 @@ public static class CausalitySummaryBuilder
     }
 
     /// <summary>
-    /// Unique Value Generation (#242): one clause per attribute a value was generated or adopted for on this
+    /// Unique Value Generation (#242): one clause per attribute a value was generated for on this
     /// pass ("Account Name was generated as jallen42", "the existing Employee Number 40021 was adopted"), for
     /// the caller to add to the sentence's clause list. Empty when the item recorded neither outcome type.
     /// </summary>
