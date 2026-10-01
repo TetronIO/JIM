@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional.DTOs;
@@ -66,6 +67,15 @@ public class ConnectedSystemDetailDto
     /// ever has. An import that completed with object-level errors does not count.
     /// </summary>
     public DateTime? LastSuccessfulFullImportCompletedAt { get; set; }
+
+    /// <summary>
+    /// On the response to an import-schema call that disabled or removed its dependents only: the
+    /// Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation
+    /// Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The
+    /// refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always
+    /// present; empty on every other response, and whenever the Metaverse-Derived Attribute Flows feature is off.
+    /// </summary>
+    public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 
     /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.

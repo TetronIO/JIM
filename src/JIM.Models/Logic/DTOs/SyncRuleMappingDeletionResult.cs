@@ -29,4 +29,11 @@ public class SyncRuleMappingDeletionResult
     /// before the row deletion; false when the default (recall) applied or there was nothing to keep.
     /// </summary>
     public bool ContributedValuesKept { get; set; }
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows (#1750, FR 3) the deletion left with a missing input, because an attribute
+    /// they read, directly or through other derived attributes, lost its last enabled contributor. Reported, never
+    /// blocking. Always empty when the Metaverse-Derived Attribute Flows feature is off.
+    /// </summary>
+    public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 }

@@ -42,6 +42,9 @@ public class ConnectedSystemServerGeneratedMappingGateTests
         _csRepo = new Mock<IConnectedSystemRepository>();
         _activityRepo = new Mock<IActivityRepository>();
         _repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
+        // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
+        // change leaves with a missing input (#1750, FR 3): none here.
+        _csRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
 
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);

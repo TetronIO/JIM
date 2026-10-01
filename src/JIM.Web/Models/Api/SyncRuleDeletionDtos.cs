@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -27,6 +28,14 @@ public class SyncRuleDeletionQueuedResponse
     /// How many distinct Metaverse Objects held at least one of those values at decision time.
     /// </summary>
     public int AffectedObjectCount { get; set; }
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows on other Synchronisation Rules that the deletion leaves with a missing
+    /// input, because an attribute they read lost its last enabled contributor. The rule is disabled at once, so they
+    /// are affected from now. The deletion goes ahead regardless. Always present; empty when the Metaverse-Derived
+    /// Attribute Flows feature is off.
+    /// </summary>
+    public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 }
 
 /// <summary>

@@ -4,6 +4,7 @@
 using System.ComponentModel.DataAnnotations;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -80,6 +81,21 @@ public class SyncRuleMappingDto
     /// </summary>
     public List<string> Warnings { get; set; } = new();
 
+    /// <summary>
+    /// Present when this is a Metaverse-Derived Attribute Flow (an import Expression reading <c>mv["..."]</c>): the
+    /// Metaverse attributes it reads and where it sits in the evaluation order, as "step N of M". Null for every other
+    /// mapping, and whenever the Metaverse-Derived Attribute Flows feature is off.
+    /// </summary>
+    public DerivedFlowInfoDto? Derived { get; set; }
+
+    /// <summary>
+    /// On the response to an update that disabled this mapping, rewrote its Expression or changed what it writes: the
+    /// Metaverse-Derived Attribute Flows the change left with a missing input, because an attribute they read lost its
+    /// last enabled contributor. The update went ahead regardless; each flow's Missing Input Behaviour now decides
+    /// what it contributes. Always present; empty on every read, and whenever the feature is off.
+    /// </summary>
+    public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
+
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
     {
         return new SyncRuleMappingDto
@@ -100,7 +116,8 @@ public class SyncRuleMappingDto
             DisabledReason = entity.DisabledReason,
             Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList(),
             Generation = entity.Generation == null ? null : SyncRuleMappingGenerationDto.FromEntity(entity.Generation),
-            Warnings = entity.SaveWarnings.ToList()
+            Warnings = entity.SaveWarnings.ToList(),
+            DependentDerivedFlows = entity.SaveDependentDerivedFlows.ToList()
         };
     }
 }
