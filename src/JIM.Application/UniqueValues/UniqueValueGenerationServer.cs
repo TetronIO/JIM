@@ -7,15 +7,19 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.UniqueValues;
 
 /// <summary>
 /// The caller-agnostic unique value service (Unique Value Generation, #242, FR 21). Resolves a batch of
-/// <see cref="GenerationRequest"/>s to <see cref="GenerationOutcome"/>s: sticky first, then adopt before
-/// generate, then candidate generation through four ordered gates, then, once the caller has persisted the
-/// objects, saving the assignments it proposed. This type knows nothing about synchronisation runs,
+/// <see cref="GenerationRequest"/>s to <see cref="GenerationOutcome"/>s: sticky first, then candidate
+/// generation through four ordered gates, then, once the caller has persisted the objects, saving the
+/// assignments it proposed. Precedence is not this service's concern: the caller only raises a request where the
+/// generated mapping is the attribute's winning contributor under the ordinary Attribute Flow priority model, and
+/// the mapping then contributes its existing assignment if it has one and generates one otherwise (generate once;
+/// product-owner decision 2026-10-01). This type knows nothing about synchronisation runs,
 /// Synchronisation Rules, or which caller asked; it is handed data access (<see cref="ISyncRepository"/>) the
 /// same way <c>IExpressionEvaluator</c> is handed to the sync engine, so the sync engine, Sync Preview (over
 /// <see cref="ReadOnlySyncRepositoryGuard"/>), and any future caller construct their own instance over
@@ -38,7 +42,7 @@ public sealed class UniqueValueGenerationServer
     /// <summary>
     /// Resolves every request in <paramref name="requests"/> against <paramref name="options"/>'s reservation
     /// set and run-scoped caches, in the order described in the plan's "Behaviour (ResolveAsync)" section:
-    /// sticky, then adopt before generate, then candidate generation through the reservation, Metaverse (or
+    /// sticky, then candidate generation through the reservation, Metaverse (or
     /// Connected System), connector space, and other-live-assignment gates in that order, batched per
     /// (attribute, gate) within this call. Returns exactly one outcome per request, in the same order.
     /// <para>
@@ -66,28 +70,20 @@ public sealed class UniqueValueGenerationServer
         try
         {
             var stickyMap = await LoadStickyAssignmentsAsync(requests, options);
-            var toAdopt = new List<int>();
+            var toGenerate = new List<int>();
 
-            // Bug fix (#242, Scenario 023 integration run): a live Sticky assignment is only honoured while it
-            // still describes the object. A stale one (IsStickyAssignmentStale below) is treated as absent here
-            // - falling through to adopt-before-generate exactly like a request with no known assignment at all
-            // - and its id is recorded so the caller can delete it once this call's outcomes are applied.
-            var staleAssignmentIds = new Dictionary<int, Guid>();
-
+            // Generate once (product-owner decision 2026-10-01): a live assignment is contributed as it stands,
+            // whatever value another rule may have left on the object, exactly as an ordinary Attribute Flow
+            // winning priority contributes its value over whatever was there before. Only a request with no
+            // assignment generates.
             for (var i = 0; i < requests.Count; i++)
             {
                 var request = requests[i];
-                var hasSticky = stickyMap.TryGetValue(i, out var sticky);
-                var stale = hasSticky && IsStickyAssignmentStale(request, sticky!);
-
-                if (hasSticky && !stale)
+                if (stickyMap.TryGetValue(i, out var sticky))
                 {
-                    outcomes[i] = BuildStickyOutcome(request, sticky!);
+                    outcomes[i] = BuildStickyOutcome(request, sticky);
                     continue;
                 }
-
-                if (stale)
-                    staleAssignmentIds[i] = sticky!.Id;
 
                 if (request.StickyOnly)
                 {
@@ -95,26 +91,10 @@ public sealed class UniqueValueGenerationServer
                     continue;
                 }
 
-                toAdopt.Add(i);
-            }
-
-            var toGenerate = new List<int>();
-            foreach (var i in toAdopt)
-            {
-                var request = requests[i];
-                if (!string.IsNullOrEmpty(request.AdoptableValue))
-                {
-                    outcomes[i] = await TryAdoptAsync(request, options, ownerId);
-                    continue;
-                }
-
                 toGenerate.Add(i);
             }
 
             await ResolveGenerationRoundsAsync(requests, toGenerate, outcomes, options, ownerId, claimedThisCall);
-
-            foreach (var (i, staleAssignmentId) in staleAssignmentIds)
-                outcomes[i] = outcomes[i]! with { StaleAssignmentId = staleAssignmentId };
 
             return outcomes!;
         }
@@ -130,11 +110,18 @@ public sealed class UniqueValueGenerationServer
     /// one query per mode, so that <see cref="ResolveAsync"/> calls made for these objects later in the same
     /// run answer the sticky check from the cache rather than querying again. Callers use this ahead of a page
     /// to avoid a per-object query; it is an optimisation, not a requirement, since <see cref="ResolveAsync"/>
-    /// queries and caches for itself on a cache miss.
+    /// queries and caches for itself on a cache miss. Objects already known to the run are not queried again.
     /// </summary>
     public async Task PrefetchAssignmentsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds, UniqueValueResolveOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+
+        // An object already known to the run is answered from the cache, which the run keeps current as it commits
+        // and deletes assignments; querying it again would cost a round trip whose result TryAdd discards anyway.
+        // Drift Detection's per-page prefetch (#242) relies on this: export evaluation may already have resolved
+        // some of the page's Connected System Objects.
+        metaverseObjectIds = metaverseObjectIds.Where(id => !options.KnownMetaverseAssignments.ContainsKey(id)).ToList();
+        connectedSystemObjectIds = connectedSystemObjectIds.Where(id => !options.KnownConnectedSystemAssignments.ContainsKey(id)).ToList();
 
         if (metaverseObjectIds.Count > 0)
         {
@@ -154,10 +141,11 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// Persists the <see cref="GenerationOutcomeKind.Generated"/> and <see cref="GenerationOutcomeKind.Adopted"/>
-    /// outcomes' assignments, once the caller has persisted the objects themselves. <paramref name="objectIdResolver"/>
-    /// returns the now-persisted object id for a request (the caller correlates through
-    /// <see cref="GenerationRequest.CallerState"/>). Every other outcome kind is ignored.
+    /// Persists the <see cref="GenerationOutcomeKind.Generated"/> outcomes' assignments, once the caller has
+    /// persisted the objects themselves, as <see cref="GeneratedValueAssignmentState.Committed"/> with
+    /// <see cref="GeneratedValueAssignment.CommittedAt"/> set (#1904: Committed means saved onto the object).
+    /// <paramref name="objectIdResolver"/> returns the now-persisted object id for a request (the caller
+    /// correlates through <see cref="GenerationRequest.CallerState"/>). Every other outcome kind is ignored.
     /// <para>
     /// Tries the whole batch first; on <see cref="GeneratedValueConflictException"/> (the cross-assignment
     /// unique index caught a losing-run collision, plan decision 13), falls back to inserting one at a time to
@@ -185,10 +173,15 @@ public sealed class UniqueValueGenerationServer
         ArgumentNullException.ThrowIfNull(outcomes);
         ArgumentNullException.ThrowIfNull(objectIdResolver);
 
-        var toCommit = outcomes.Where(o => o.Kind is GenerationOutcomeKind.Generated or GenerationOutcomeKind.Adopted).ToList();
+        var toCommit = outcomes.Where(o => o.Kind == GenerationOutcomeKind.Generated).ToList();
         if (toCommit.Count == 0)
             return [];
 
+        // #1904 (product-owner decision 2026-10-01, option A): Committed means the value has been saved onto its
+        // object. This method's contract is that the caller has already persisted the objects (the page flush), so
+        // every assignment it saves is Committed, stamped now. Whether a target has accepted the value is a
+        // separate question (anchoring, release 4), never this state.
+        var committedAt = DateTime.UtcNow;
         foreach (var outcome in toCommit)
         {
             var assignment = outcome.Assignment!;
@@ -197,6 +190,10 @@ public sealed class UniqueValueGenerationServer
                 assignment.MetaverseObjectId = objectId;
             else
                 assignment.ConnectedSystemObjectId = objectId;
+
+            assignment.State = GeneratedValueAssignmentState.Committed;
+            assignment.CommittedAt = committedAt;
+            assignment.LastUpdated = committedAt;
         }
 
         var losers = new List<GenerationOutcome>();
@@ -219,6 +216,13 @@ public sealed class UniqueValueGenerationServer
                     losers.Add(outcome);
                 }
             }
+        }
+
+        // A loser was never saved, so it was never committed either: put it back as it was resolved.
+        foreach (var loser in losers)
+        {
+            loser.Assignment!.State = GeneratedValueAssignmentState.Proposed;
+            loser.Assignment.CommittedAt = null;
         }
 
         var saved = toCommit.Except(losers).ToList();
@@ -313,7 +317,7 @@ public sealed class UniqueValueGenerationServer
                 match = importBag.FirstOrDefault(a => a.MetaverseAttributeId == request.MetaverseAttributeId);
             else if (request.Mode == GeneratedValueMode.Export && request.ConnectedSystemObjectId.HasValue
                 && options.KnownConnectedSystemAssignments.TryGetValue(request.ConnectedSystemObjectId.Value, out var exportBag))
-                match = exportBag.FirstOrDefault(a => a.ConnectedSystemObjectTypeAttributeId == request.ConnectedSystemObjectTypeAttributeId);
+                match = UniqueValueResolveOptions.FindConnectedSystemAssignment(exportBag, request.ConnectedSystemObjectTypeAttributeId);
 
             if (match != null)
                 result[i] = match;
@@ -324,64 +328,6 @@ public sealed class UniqueValueGenerationServer
 
     private static GenerationOutcome BuildStickyOutcome(GenerationRequest request, GeneratedValueAssignment assignment) =>
         new(request, GenerationOutcomeKind.Sticky, assignment.Value, TryParseNumeric(request, assignment.Value), assignment, null);
-
-    /// <summary>
-    /// Bug fix (#242, Scenario 023 integration run): whether <paramref name="assignment"/> no longer describes
-    /// <paramref name="request"/>'s object - import mode only, since an export-mode assignment's Connected
-    /// System Object has no competing contributor for the same attribute (nothing else can leave a different
-    /// value behind), so this never triggers there. Compares <see cref="GenerationRequest.CurrentMetaverseValue"/>
-    /// (the object's own current value, from whichever rule holds it) against the assignment's recorded value,
-    /// case-insensitively: every uniqueness gate this service enforces already treats two values differing only
-    /// by case as the same value (<see cref="GeneratedValueAssignment.NormalisedValue"/> is lower-cased, and
-    /// every gate's candidate comparison lower-cases first), so a mere case change must not be flagged as
-    /// staleness here - that would delete a still-valid assignment and force a needless re-adoption or
-    /// regeneration for no real difference in the value. <see cref="StringComparison.Ordinal"/> case-sensitive comparison is
-    /// <c>SyncTaskProcessorBase.ReconcileGeneratedValueAssignmentLifecycle</c>'s own, deliberately stricter,
-    /// choice for a different question (is this assignment's TEXT an accurate provenance record, including its
-    /// exact casing); that page-flush backstop is unchanged and still runs regardless of this check.
-    /// <para>
-    /// Null or empty <see cref="GenerationRequest.CurrentMetaverseValue"/> means the object holds no value at
-    /// all (or only a null marker) for the attribute: never stale, so FR 10's reassert-if-cleared behaviour
-    /// still applies unchanged.
-    /// </para>
-    /// </summary>
-    private static bool IsStickyAssignmentStale(GenerationRequest request, GeneratedValueAssignment assignment) =>
-        request.Mode == GeneratedValueMode.Import
-        && !string.IsNullOrEmpty(request.CurrentMetaverseValue)
-        && !string.Equals(request.CurrentMetaverseValue, assignment.Value, StringComparison.OrdinalIgnoreCase);
-
-    // ---- Adopt before generate ----
-
-    private async Task<GenerationOutcome> TryAdoptAsync(GenerationRequest request, UniqueValueResolveOptions options, Guid ownerId)
-    {
-        var value = request.AdoptableValue!;
-        var normalisedValue = value.ToLowerInvariant();
-        var (attributeId, scope) = AttributeAndScope(request);
-
-        if (await IsHeldByAnotherLiveAssignmentAsync(request, normalisedValue))
-            return AdoptionConflict(request, value);
-
-        if (!options.Reservations.TryReserve(ownerId, scope, attributeId, normalisedValue))
-            return AdoptionConflict(request, value);
-
-        var assignment = BuildAssignment(request, value, normalisedValue, adopted: true);
-        return new GenerationOutcome(request, GenerationOutcomeKind.Adopted, value, TryParseNumeric(request, value), assignment, null);
-    }
-
-    private static GenerationOutcome AdoptionConflict(GenerationRequest request, string value) =>
-        new(request, GenerationOutcomeKind.AdoptionConflict, null, null, null,
-            $"\"{value}\" could not be adopted for {request.AttributeName} because another object already holds it.");
-
-    private async Task<bool> IsHeldByAnotherLiveAssignmentAsync(GenerationRequest request, string normalisedValue)
-    {
-        var (attributeId, _) = AttributeAndScope(request);
-        var mvAttributeId = request.Mode == GeneratedValueMode.Import ? attributeId : (int?)null;
-        var csAttributeId = request.Mode == GeneratedValueMode.Export ? attributeId : (int?)null;
-        var excludingId = ExcludingObjectId(request);
-
-        var taken = await _repository.GetGeneratedValueAssignmentValuesInUseAsync(mvAttributeId, csAttributeId, [normalisedValue], excludingId);
-        return taken.Contains(normalisedValue);
-    }
 
     // ---- Generation rounds ----
 
@@ -474,7 +420,7 @@ public sealed class UniqueValueGenerationServer
 
                 claimedThisCall.Add((scope, attributeId, normalisedValue));
 
-                var assignment = BuildAssignment(request, candidate.Text, normalisedValue, adopted: false);
+                var assignment = BuildAssignment(request, candidate.Text, normalisedValue);
                 outcomes[i] = new GenerationOutcome(request, GenerationOutcomeKind.Generated, candidate.Text, candidate.Numeric, assignment, null);
             }
 
@@ -563,9 +509,15 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// Gate (d), import mode only: every id in <see cref="GenerationRequest.ConnectorSpaceAttributeIds"/>, with
-    /// no exclusion (plan "Behaviour (ResolveAsync)": when the object's own target already held a value it
-    /// would have been adopted in step 2, so no exclusion is needed here).
+    /// Gate (d), import mode only: every id in <see cref="GenerationRequest.ConnectorSpaceAttributeIds"/> (plan
+    /// "Behaviour (ResolveAsync)"): a value any participating target already holds is taken, EXCEPT one held by
+    /// the requesting object's own account. That is the same person, not a collision, so the object gets the
+    /// value exactly as an ordinary Attribute Flow would write it (product-owner decision 2026-10-01). An account
+    /// is the object's own when it is joined to it in memory this pass
+    /// (<see cref="GenerationRequest.OwnConnectedSystemObjectIds"/>, which covers a join or projection not saved
+    /// yet, including a brand-new Metaverse Object with no id) or its saved join names the object, unless it is
+    /// <see cref="GenerationRequest.DisconnectingConnectedSystemObjectId"/>. One holder lookup per attribute
+    /// serves the whole batch; the per-request decision is made in memory.
     /// </summary>
     private async Task<List<int>> FilterConnectorSpaceGateAsync(
         List<int> active,
@@ -596,26 +548,39 @@ public sealed class UniqueValueGenerationServer
         foreach (var (csAttributeId, indices) in stringByAttribute)
         {
             var values = indices.Select(i => candidates[i].Text.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var takenValues = await _repository.GetConnectedSystemAttributeValuesInUseAsync(csAttributeId, values, null);
-            foreach (var i in indices)
-            {
-                if (takenValues.Contains(candidates[i].Text) && taken.Add(i))
-                    lastRejectionGate[i] = "a Connected System Object";
-            }
+            var holdersByValue = (await _repository.GetConnectedSystemAttributeValueHoldersAsync(csAttributeId, values))
+                .ToLookup(h => h.NormalisedValue!, StringComparer.OrdinalIgnoreCase);
+            // taken.Add doubles as the predicate and the dedup record (a request can reach this gate through
+            // more than one participating attribute).
+            foreach (var i in indices.Where(i => holdersByValue[candidates[i].Text.ToLowerInvariant()].Any(h => !IsOwnAccount(requests[i], h))).Where(taken.Add))
+                lastRejectionGate[i] = "a Connected System Object";
         }
 
         foreach (var (csAttributeId, indices) in numberByAttribute)
         {
             var values = indices.Select(i => candidates[i].Numeric!.Value).Distinct().ToList();
-            var takenValues = await _repository.GetConnectedSystemAttributeNumbersInUseAsync(csAttributeId, values, null);
-            foreach (var i in indices)
-            {
-                if (takenValues.Contains(candidates[i].Numeric!.Value) && taken.Add(i))
-                    lastRejectionGate[i] = "a Connected System Object";
-            }
+            var holdersByValue = (await _repository.GetConnectedSystemAttributeNumberHoldersAsync(csAttributeId, values))
+                .ToLookup(h => h.NumberValue!.Value);
+            // taken.Add doubles as the predicate and the dedup record (a request can reach this gate through
+            // more than one participating attribute).
+            foreach (var i in indices.Where(i => holdersByValue[candidates[i].Numeric!.Value].Any(h => !IsOwnAccount(requests[i], h))).Where(taken.Add))
+                lastRejectionGate[i] = "a Connected System Object";
         }
 
         return active.Where(i => !taken.Contains(i)).ToList();
+    }
+
+    /// <summary>
+    /// Whether <paramref name="holder"/> is the requesting object's own account for the connector-space gate:
+    /// joined to it in memory this pass, or by a saved join, and not leaving it this pass.
+    /// </summary>
+    private static bool IsOwnAccount(GenerationRequest request, ConnectorSpaceValueHolder holder)
+    {
+        if (holder.ConnectedSystemObjectId == request.DisconnectingConnectedSystemObjectId)
+            return false;
+
+        return request.OwnConnectedSystemObjectIds.Contains(holder.ConnectedSystemObjectId)
+            || (request.MetaverseObjectId.HasValue && holder.MetaverseObjectId == request.MetaverseObjectId);
     }
 
     /// <summary>
@@ -741,7 +706,7 @@ public sealed class UniqueValueGenerationServer
             ? numeric
             : null;
 
-    private static GeneratedValueAssignment BuildAssignment(GenerationRequest request, string value, string normalisedValue, bool adopted)
+    private static GeneratedValueAssignment BuildAssignment(GenerationRequest request, string value, string normalisedValue)
     {
         var now = DateTime.UtcNow;
         var assignment = new GeneratedValueAssignment
@@ -749,12 +714,10 @@ public sealed class UniqueValueGenerationServer
             Id = Guid.NewGuid(),
             Value = value,
             NormalisedValue = normalisedValue,
-            State = adopted ? GeneratedValueAssignmentState.Committed : GeneratedValueAssignmentState.Proposed,
+            State = GeneratedValueAssignmentState.Proposed,
             SyncRuleMappingGenerationId = request.Generation.Id,
-            Adopted = adopted,
             Created = now,
-            LastUpdated = now,
-            CommittedAt = adopted ? now : null
+            LastUpdated = now
         };
 
         if (request.Mode == GeneratedValueMode.Import)

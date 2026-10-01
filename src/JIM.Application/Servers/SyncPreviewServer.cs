@@ -787,7 +787,7 @@ public class SyncPreviewServer
             };
             result.OutcomeTree.Add(root);
 
-            // Unique Value Generation (#242): a GeneratedValueAssigned/GeneratedValueAdopted child per
+            // Unique Value Generation (#242): a GeneratedValueAssigned child per
             // resolved attribute, mirroring exactly where the worker records them: a child of the root
             // (alongside, not nested inside, the Attribute Flow child), never gated to a tracking level,
             // since a generated value is as much an audit signal in a preview as it is in a real run. Added
@@ -877,7 +877,7 @@ public class SyncPreviewServer
         CsoPreviewContext context,
         List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)> flowErrors)
     {
-        var outcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context);
+        var outcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id);
 
         var graph = context.PriorityContext.DerivedFlowGraph;
         if (graph == null || inScopeRules.Count == 0)
@@ -925,7 +925,7 @@ public class SyncPreviewServer
                 break;
             }
 
-            outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context));
+            outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id));
         }
 
         return outcomes;
@@ -955,27 +955,27 @@ public class SyncPreviewServer
     /// <see cref="MetaverseObject.PendingGeneratedValues"/>, mirroring the worker's own
     /// <c>SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync</c>.
     /// <para>
-    /// Adopt-before-generate's adoptable value (product-owner decision: the source changed from a joined
-    /// Connected System Object's value to the Metaverse Object's own value) is computed exactly as the worker
-    /// computes it, through the shared <see cref="GeneratedValueParticipation.FindMetaverseOwnValue"/>: pure,
-    /// synchronous, and read straight off <paramref name="workingMvo"/>, so this needs no repository access at
-    /// all. Participating targets (still connector-space) come from <paramref name="context"/>'s own outbound
-    /// evaluation cache and continue to feed only the generation-time collision gate, not adoption.
+    /// Participating targets come from <paramref name="context"/>'s own outbound evaluation cache and feed
+    /// only the generation-time collision gate, exactly as in the worker (<see cref="GeneratedValueParticipation"/>).
     /// </para>
     /// </summary>
     /// <param name="result">The preview result to add a <see cref="SyncPreviewMessageCode.GeneratedValueWouldFail"/>
-    /// warning to for any request that would fail in the real run (Exhausted, NoBaseValue, WidthExceeded,
-    /// AdoptionConflict): unlike the other failure surfaces this method used to stay silent on, showing nothing
+    /// warning to for any request that would fail in the real run (Exhausted, NoBaseValue, WidthExceeded):
+    /// unlike the other failure surfaces this method used to stay silent on, showing nothing
     /// where the real run would record an error understates what synchronising would do.</param>
     /// <param name="workingMvo">The preview's own working copy of the Metaverse Object.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="ownCsoId">The previewed Connected System Object when it is joined to (or projects)
+    /// <paramref name="workingMvo"/>: the person's own account for the connector-space gate, as in the worker.</param>
+    /// <param name="disconnectingCsoId">The previewed Connected System Object when it is LEAVING
+    /// <paramref name="workingMvo"/> (re-election after obsoletion): never the person's own account.</param>
     /// <returns>
-    /// One (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c> result, for the
-    /// caller to record as a <c>GeneratedValueAssigned</c>/<c>GeneratedValueAdopted</c> node in the speculative
-    /// outcome tree; empty when nothing was generated or adopted.
+    /// One (outcome type, attribute name, value) tuple per <c>Generated</c> result, for the
+    /// caller to record as a <c>GeneratedValueAssigned</c> node in the speculative
+    /// outcome tree; empty when nothing was generated.
     /// </returns>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesForPreviewAsync(
-        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context)
+        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context, Guid? ownCsoId = null, Guid? disconnectingCsoId = null)
     {
         var pending = workingMvo.PendingGeneratedValues.ToList();
         if (pending.Count == 0)
@@ -991,21 +991,6 @@ public class SyncPreviewServer
                 var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(p.Mapping, exportRules);
                 var connectorSpaceAttributeIds = participatingTargets.Select(t => t.AttributeId).Distinct().ToList();
 
-                // Adopt before generate (FR 30, import mode; product-owner decision): the Metaverse Object's
-                // own current effective value, mirroring the worker's ResolvePendingGeneratedValuesAsync
-                // exactly - never a joined Connected System Object's value, so no guarded repository read is
-                // needed here at all any more. CurrentMetaverseValue mirrors the worker's own stale-Sticky read
-                // too (bug fix, #242, Scenario 023 integration run): read regardless of StickyOnly or of whether
-                // a known assignment exists, since ResolveAsync itself decides whether a Sticky match is stale.
-                string? adoptableValue = null;
-                string? currentMetaverseValue = null;
-                if (workingMvo.Id != Guid.Empty)
-                {
-                    currentMetaverseValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, generatingSyncRuleId: null);
-                    if (!p.BaseUnavailable)
-                        adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, p.Mapping.SyncRuleId);
-                }
-
                 requests.Add(new GenerationRequest
                 {
                     Mode = GeneratedValueMode.Import,
@@ -1015,9 +1000,9 @@ public class SyncPreviewServer
                     TargetType = p.Mapping.TargetMetaverseAttribute!.Type,
                     AttributeName = p.Mapping.TargetMetaverseAttribute!.Name,
                     BaseValue = p.BaseValue,
-                    AdoptableValue = adoptableValue,
-                    CurrentMetaverseValue = currentMetaverseValue,
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
+                    OwnConnectedSystemObjectIds = ownCsoId.HasValue ? [ownCsoId.Value] : [],
+                    DisconnectingConnectedSystemObjectId = disconnectingCsoId,
                     StickyOnly = p.BaseUnavailable
                 });
             }
@@ -1029,11 +1014,6 @@ public class SyncPreviewServer
                 var outcome = outcomes[i];
                 var request = pending[i];
 
-                // outcome.StaleAssignmentId (bug fix, #242, Scenario 023) is deliberately not acted on here: it
-                // names an assignment the real run would delete through its page-flush deletion flush, but a
-                // preview never persists anything, so there is nothing for this dry run to delete either. The
-                // outcome's Kind already reflects the stale match being treated as absent, which is what the
-                // preview needs to show.
                 switch (outcome.Kind)
                 {
                     case GenerationOutcomeKind.Generated:
@@ -1041,15 +1021,10 @@ public class SyncPreviewServer
                         forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
                         break;
 
-                    case GenerationOutcomeKind.Adopted:
-                        _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
-                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
-                        break;
-
                     case GenerationOutcomeKind.Sticky:
-                        // Re-apply unconditionally, exactly as the worker does: a no-op when the object
-                        // already holds the value, and what carries a genuinely recovered value back onto
-                        // the object when something else cleared it this pass.
+                        // Re-apply unconditionally, exactly as the worker does (generate once): a no-op when the
+                        // object already holds the value; otherwise the winning generated mapping overwrites
+                        // whatever another rule left behind, or a value cleared this pass.
                         _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
                         break;
 
@@ -1060,7 +1035,6 @@ public class SyncPreviewServer
                     case GenerationOutcomeKind.Exhausted:
                     case GenerationOutcomeKind.NoBaseValue:
                     case GenerationOutcomeKind.WidthExceeded:
-                    case GenerationOutcomeKind.AdoptionConflict:
                         // A generation that would fail in the real run must not simply show nothing (#242,
                         // Phase 2 work package J): the reservation and other-live-assignment gates are
                         // time-sensitive, so a preview cannot promise a real run would hit the exact same
@@ -1240,7 +1214,7 @@ public class SyncPreviewServer
                 (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
                 context.ObjectTypes,
                 ExpressionEvaluator,
-                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context));
+                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id));
 
             var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(guardedRepository);
             var noImportSourceRemains = !await remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(
@@ -1284,8 +1258,8 @@ public class SyncPreviewServer
         };
         result.OutcomeTree.Add(root);
 
-        // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned or
-        // GeneratedValueAdopted child per resolved attribute, mirroring exactly where the ordinary inbound
+        // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned child
+        // per resolved attribute, mirroring exactly where the ordinary inbound
         // chain records them (a child of the root, alongside the AttributeFlow child below, not gated to a
         // tracking level since a generated value is as much an audit signal in a preview as in a real run).
         foreach (var (generatedOutcomeType, attributeName, value) in generatedValueOutcomes)

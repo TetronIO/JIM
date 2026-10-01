@@ -338,14 +338,16 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     ProvisioningCancelled,
 
     /// <summary>
-    /// Unique Value Generation (#242): JIM generated a value for the attribute, because it was the winning
-    /// contributor and no participating target already held a value the object could adopt instead.
+    /// Unique Value Generation (#242): JIM generated a value for the attribute, because the generated Attribute
+    /// Flow was the winning contributor and held no assignment for the object yet.
     /// </summary>
     GeneratedValueAssigned,
 
     /// <summary>
-    /// Unique Value Generation (#242): a value a participating target already held for the attribute was
-    /// adopted as the object's assignment instead of generating a new one (adopt before generate, FR 30).
+    /// Retired, never recorded (#242, product-owner decision 2026-10-01): Unique Value Generation no longer
+    /// adopts an existing value as a generated assignment, so nothing writes this outcome. The member is kept
+    /// only because this enum is persisted by ordinal and every member after it has shipped; removing it would
+    /// renumber them. Do not reuse it.
     /// </summary>
     GeneratedValueAdopted,
 

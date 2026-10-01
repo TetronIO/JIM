@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -52,6 +53,9 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
             Assert.That(assignment.ConnectedSystemObjectId, Is.EqualTo(ticketingCso.Id), "export-mode assignments key on the Connected System Object");
             Assert.That(assignment.MetaverseObjectId, Is.Null, "export-mode assignments never touch the Metaverse");
             Assert.That(assignment.Value, Is.EqualTo("e1"));
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed),
+                "#1904: the page flush that persisted the provisioning Connected System Object committed it");
+            Assert.That(assignment.CommittedAt, Is.Not.Null);
 
             var assignedOutcomes = activity.RunProfileExecutionItems
                 .SelectMany(r => r.SyncOutcomes)
@@ -115,8 +119,7 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
             Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemId == ctx.Ticketing.Id), Is.False,
                 "the Connected System Object already holds the sticky value, so no net-change Update is staged");
             Assert.That(secondActivity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
-                    or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False,
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.False,
                 "a stable re-evaluation records no new outcome");
         }
     }
@@ -145,7 +148,7 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
     #endregion
 
-    #region Adoption removed: generation always overwrites what the target already holds
+    #region Generation overwrites what the target already holds, like any export Attribute Flow
 
     /// <summary>
     /// Formerly <c>FullSync_ExistingJoinedTargetAlreadyHoldingAValue_AdoptsItAndStagesNoChangeAsync</c>: before
@@ -174,13 +177,10 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1));
             var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.False, "connector-space adoption has been removed");
             Assert.That(assignment.Value, Is.EqualTo("e1"));
 
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
                 .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.True);
-            Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False);
         }
     }
 
@@ -489,6 +489,158 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
     #endregion
 
+    #region Drift Detection (#242, product-owner decision 2026-10-01)
+
+    /// <summary>
+    /// A target value changed outside JIM is corrected back on the target system's own next synchronisation,
+    /// by Drift Detection, exactly as for an ordinary export Attribute Flow. Run twice: once with an ordinary
+    /// expression flow (the control, whose expression yields the same "e1"), once with the generated flow and an
+    /// "e1" assignment. Both must reach the same outcome.
+    /// </summary>
+    [TestCase(false, TestName = "FullSync_TargetValueChangedOutsideJim_OrdinaryFlow_IsCorrectedByDriftDetectionAsync")]
+    [TestCase(true, TestName = "FullSync_TargetValueChangedOutsideJim_GeneratedFlow_IsCorrectedByDriftDetectionAsync")]
+    public async Task FullSync_TargetValueChangedOutsideJim_IsCorrectedByDriftDetectionAsync(bool generated)
+    {
+        var ctx = await SetUpExportGenerationAsync();
+        if (!generated)
+            MakeLoginNameAnOrdinaryFlow(ctx);
+        var mvo = await SeedPreExistingMvoAsync(ctx, employeeId: "E1", matchKey: "P1");
+        var ticketingCso = await SeedTicketingCsoAsync(ctx, mvo.Id, loginName: "changed.outside.jim");
+        if (generated)
+            SeedGeneratedValueAssignmentFor(ctx, ticketingCso.Id, "e1");
+
+        var activity = await RunFullSyncReturningActivityAsync(ctx.Ticketing);
+
+        using (Assert.EnterMultipleScope())
+        {
+            var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == ticketingCso.Id);
+            Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            var change = pendingExport.AttributeValueChanges.Single(c => c.AttributeId == ctx.TicketingLoginNameAttribute.Id);
+            Assert.That(change.StringValue, Is.EqualTo("e1"), "the target is corrected back to the value JIM asserts");
+            Assert.That(change.PendingGeneration, Is.Null);
+            Assert.That(activity.RunProfileExecutionItems.Count(r => r.ObjectChangeType == ObjectChangeType.DriftCorrection), Is.EqualTo(1),
+                "the correction is reported as Drift Correction");
+            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(generated ? 1 : 0), "no assignment is created by a correction");
+        }
+    }
+
+    [TestCase(false, TestName = "FullSync_TargetValueChangedOutsideJim_EnforceStateOff_OrdinaryFlow_IsNotCorrectedAsync")]
+    [TestCase(true, TestName = "FullSync_TargetValueChangedOutsideJim_EnforceStateOff_GeneratedFlow_IsNotCorrectedAsync")]
+    public async Task FullSync_TargetValueChangedOutsideJim_EnforceStateOff_IsNotCorrectedAsync(bool generated)
+    {
+        var ctx = await SetUpExportGenerationAsync();
+        if (!generated)
+            MakeLoginNameAnOrdinaryFlow(ctx);
+        SyncRepo.SyncRules[ctx.TicketingExportRuleId].EnforceState = false;
+        var mvo = await SeedPreExistingMvoAsync(ctx, employeeId: "E1", matchKey: "P1");
+        var ticketingCso = await SeedTicketingCsoAsync(ctx, mvo.Id, loginName: "changed.outside.jim");
+        if (generated)
+            SeedGeneratedValueAssignmentFor(ctx, ticketingCso.Id, "e1");
+
+        await RunFullSyncReturningActivityAsync(ctx.Ticketing);
+
+        Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == ticketingCso.Id), Is.False);
+    }
+
+    /// <summary>
+    /// Drift Detection runs per object in the synchronisation hot path: the page's export-mode assignments are
+    /// prefetched in one query, never one per object.
+    /// </summary>
+    [Test]
+    public async Task FullSync_DriftOnSeveralGeneratedValuesInOnePage_PrefetchesAssignmentsOnceAsync()
+    {
+        var ctx = await SetUpExportGenerationAsync();
+        // Every Metaverse Object first: seeding one saves the test DbContext, which must not yet see a Connected
+        // System Object hung off an earlier Metaverse Object's navigation.
+        var mvos = new List<MetaverseObject>();
+        for (var i = 1; i <= 3; i++)
+            mvos.Add(await SeedPreExistingMvoAsync(ctx, employeeId: $"E{i}", matchKey: $"P{i}"));
+
+        var csoIds = new List<Guid>();
+        for (var i = 1; i <= 3; i++)
+        {
+            var cso = await SeedTicketingCsoAsync(ctx, mvos[i - 1].Id, loginName: "changed.outside.jim");
+            SeedGeneratedValueAssignmentFor(ctx, cso.Id, $"e{i}");
+            csoIds.Add(cso.Id);
+        }
+
+        var (countingRepo, counts) = JIM.Worker.Tests.UniqueValues.CountingSyncRepositoryProxy.Create(SyncRepo);
+        var reloaded = await ReloadEntityAsync(ctx.Ticketing);
+        var profile = await CreateRunProfileAsync(reloaded.Id, "Ticketing Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), countingRepo, reloaded, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counts.GetValueOrDefault(nameof(JIM.Data.Repositories.ISyncRepository.GetGeneratedValueAssignmentsForConnectedSystemObjectsAsync)), Is.EqualTo(1),
+                "one prefetch for the page, no per-object assignment query");
+            Assert.That(counts.ContainsKey(nameof(JIM.Data.Repositories.ISyncRepository.GetGeneratedValueAssignmentAsync)), Is.False);
+            for (var i = 0; i < csoIds.Count; i++)
+            {
+                var change = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == csoIds[i])
+                    .AttributeValueChanges.Single(c => c.AttributeId == ctx.TicketingLoginNameAttribute.Id);
+                Assert.That(change.StringValue, Is.EqualTo($"e{i + 1}"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Drift Detection and export evaluation both reach the same Connected System Object on the same page: the
+    /// target system's own import changes the Metaverse Object (so export evaluation runs for it) while its
+    /// generated value has drifted (so Drift Detection stages a correction first). Export evaluation's generated
+    /// change merges into the drift-staged Pending Export and must leave exactly one resolved change carrying the
+    /// assignment, with no unresolved marker reaching the integrity guard. The ordinary flow is the control.
+    /// </summary>
+    [TestCase(false, TestName = "FullSync_DriftAndExportEvaluationOnTheSameObject_OrdinaryFlow_MergeToOneCorrectionAsync")]
+    [TestCase(true, TestName = "FullSync_DriftAndExportEvaluationOnTheSameObject_GeneratedFlow_MergeToOneResolvedCorrectionAsync")]
+    public async Task FullSync_DriftAndExportEvaluationOnTheSameObject_MergeToOneCorrectionAsync(bool generated)
+    {
+        var ctx = await SetUpExportGenerationAsync();
+        if (!generated)
+            MakeLoginNameAnOrdinaryFlow(ctx);
+
+        // Ticketing contributes an unrelated Metaverse attribute (from its loginName), so its own synchronisation
+        // changes the Metaverse Object and queues export evaluation for it. The base expression reads Employee Id,
+        // which Ticketing does not contribute, so loginName stays drift-checked.
+        var ticketingType = SyncRepo.ObjectTypes[ctx.TicketingCsoTypeId];
+        var ticketingImport = await CreateImportSyncRuleAsync(ctx.Ticketing.Id, ticketingType, ctx.MvType, "Ticketing Import", enableProjection: false);
+        ticketingImport.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = ticketingImport,
+            SyncRuleId = ticketingImport.Id,
+            TargetMetaverseAttribute = ctx.MvNoteAttribute,
+            TargetMetaverseAttributeId = ctx.MvNoteAttribute.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = ctx.TicketingLoginNameAttribute, ConnectedSystemAttributeId = ctx.TicketingLoginNameAttribute.Id } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var mvo = await SeedPreExistingMvoAsync(ctx, employeeId: "E1", matchKey: "P1");
+        var ticketingCso = await SeedTicketingCsoAsync(ctx, mvo.Id, loginName: "changed.outside.jim");
+        if (generated)
+            SeedGeneratedValueAssignmentFor(ctx, ticketingCso.Id, "e1");
+
+        Activity? activity = null;
+        Assert.That(async () => activity = await RunFullSyncReturningActivityAsync(ctx.Ticketing), Throws.Nothing,
+            "a generated change merged into a drift-staged Pending Export must resolve, not fail the page at the integrity guard");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvNoteAttribute.Id && av.StringValue == "changed.outside.jim"), Is.True,
+                "precondition: Ticketing's import changed the Metaverse Object, so export evaluation ran for it");
+            Assert.That(activity!.RunProfileExecutionItems.Count(r => r.ObjectChangeType == ObjectChangeType.DriftCorrection), Is.EqualTo(1),
+                "precondition: Drift Detection staged its correction first, so export evaluation merged into it");
+            var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == ticketingCso.Id);
+            var loginNameChanges = pendingExport.AttributeValueChanges.Where(c => c.AttributeId == ctx.TicketingLoginNameAttribute.Id).ToList();
+            Assert.That(loginNameChanges, Has.Count.EqualTo(1), "one change for the attribute, not one from each path");
+            Assert.That(loginNameChanges[0].StringValue, Is.EqualTo("e1"));
+            Assert.That(loginNameChanges[0].PendingGeneration, Is.Null);
+            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(generated ? 1 : 0));
+        }
+    }
+
+    #endregion
+
     #region Helpers
 
     private sealed record ExportGenerationContext(
@@ -693,7 +845,7 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
     /// <summary>
     /// Reconfigures HR's import rule to join an existing Metaverse Object by the "name"/DisplayName match key
-    /// instead of projecting a new one, mirroring the import-side adoption tests' brownfield-join topology.
+    /// instead of projecting a new one, mirroring the import-side participating-Directory tests' brownfield-join topology.
     /// </summary>
     private void ConfigureHrToJoinByMatchKey(ExportGenerationContext ctx)
     {
@@ -711,6 +863,16 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
             TargetMetaverseAttributeId = ctx.MvDisplayNameAttribute.Id,
             Sources = { new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = nameAttr, ConnectedSystemAttributeId = nameAttr.Id } }
         });
+    }
+
+    /// <summary>
+    /// Turns the generated loginName flow into an ordinary expression flow with the same base expression, the
+    /// control for the generated cases: <c>Lower(mv["EmployeeId"])</c> for "E1" yields the same "e1".
+    /// </summary>
+    private void MakeLoginNameAnOrdinaryFlow(ExportGenerationContext ctx)
+    {
+        var mapping = SyncRepo.SyncRules[ctx.TicketingExportRuleId].AttributeFlowRules.Single(m => m.TargetConnectedSystemAttributeId == ctx.TicketingLoginNameAttribute.Id);
+        mapping.Generation = null;
     }
 
     private void SeedGeneratedValueAssignmentFor(ExportGenerationContext ctx, Guid connectedSystemObjectId, string value)

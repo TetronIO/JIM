@@ -72,7 +72,7 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldEnterExportScope, "Enters export scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
         (ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled, "Provisioning cancelled", CausalityTone.Warning, Icons.Material.Filled.CancelScheduleSend),
 
-        // Unique Value Generation (#242): generation, adoption, retirement and Collision Remediation outcomes.
+        // Unique Value Generation (#242): generation, retirement and Collision Remediation outcomes (Adopted is retired but still rendered).
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, "Value generated", CausalityTone.Primary, Icons.Material.Filled.Fingerprint),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, "Existing value adopted", CausalityTone.Info, Icons.Material.Filled.MoveToInbox),
         (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired, "Value retired", CausalityTone.Warning, Icons.Material.Filled.Archive),

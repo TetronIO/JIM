@@ -341,6 +341,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId)
         => _inner.GetConnectedSystemAttributeValuesInUseAsync(connectedSystemObjectTypeAttributeId, normalisedValues, excludingConnectedSystemObjectId);
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeValueHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues)
+        => _inner.GetConnectedSystemAttributeValueHoldersAsync(connectedSystemObjectTypeAttributeId, normalisedValues);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeNumberHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values)
+        => _inner.GetConnectedSystemAttributeNumberHoldersAsync(connectedSystemObjectTypeAttributeId, values);
+
     public Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId)
         => _inner.GetMetaverseAttributeNumbersInUseAsync(metaverseAttributeId, values, excludingMetaverseObjectId);
 

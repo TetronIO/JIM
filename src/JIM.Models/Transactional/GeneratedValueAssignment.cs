@@ -82,12 +82,6 @@ public class GeneratedValueAssignment
     public SyncRuleMappingGeneration? SyncRuleMappingGeneration { get; set; }
 
     /// <summary>
-    /// True when the value was adopted from an existing accepted value rather than generated (plan decision 5:
-    /// "adopt before generate"). An adopted assignment is created directly in <see cref="GeneratedValueAssignmentState.Committed"/>.
-    /// </summary>
-    public bool Adopted { get; set; }
-
-    /// <summary>
     /// How many times Collision Remediation has revised this assignment's value (release 4). The attempt-limit
     /// scope for remediation is per assignment lifetime, distinct from <see cref="SyncRuleMappingGeneration.AttemptLimit"/>,
     /// which bounds a single generation attempt (plan decision 15).

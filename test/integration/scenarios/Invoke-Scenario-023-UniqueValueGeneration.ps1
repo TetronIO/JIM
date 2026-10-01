@@ -9,8 +9,9 @@
     Exercises release 1 of Unique Value Generation (#242): a "Generated Value" source type on import
     and export Attribute Flows, whose value is a base expression plus a uniqueness token (OnlyIfTaken,
     Sequence or Random), local gates (reservation within a run, Metaverse, connector space), a brownfield account kept
-    by Attribute Priority (and the generated flow adopting the values Metaverse Objects already hold
-    when that higher-priority flow is withdrawn), sticky assignments across re-runs, and Start again. Release 1 does NOT include
+    by Attribute Priority (and, when that higher-priority flow is disabled, the generated flow taking the
+    attribute back exactly as any Attribute Flow would, renaming the account), sticky assignments across
+    re-runs, and Start again. Release 1 does NOT include
     probing, the retired values register, Collision Remediation or Needs Decision (those ship in
     releases 2 to 4). A target-side collision in this release is an ordinary export error, which is
     existing export behaviour rather than generation; it gets integration coverage with release 4's
@@ -669,6 +670,39 @@ try {
         }
         Add-TestResult -Name "The export-mode generated value is not written to the Metaverse Object" -Passed ($exportedValues.Count -gt 0 -and $leaked.Count -eq 0) `
             -Detail $(if ($exportedValues.Count -eq 0) { "No exported values were sampled" } else { $leaked -join '; ' })
+
+        # Drift Detection (product-owner decision 2026-10-01): an export-mode generated value is checked like
+        # any export Attribute Flow, so a value changed in the directory outside JIM is corrected back to the
+        # assignment by the directory's own synchronisation, then exported. One object is enough.
+        Write-TestSection "Test 6b: Export mode drift is corrected back to the assignment"
+        if ($exportedValues.Count -gt 0) {
+            $driftTarget = $exportedValues[0]
+            $driftAccountName = ($population | Where-Object { $_.id -eq $driftTarget.MvoId } | Select-Object -First 1).attributes.'Account Name'
+            $driftUser = Get-LDAPUser -UserIdentifier $driftAccountName -DirectoryConfig $DirectoryConfig
+            $driftedValue = if ($driftTarget.Value -eq '000000') { '111111' } else { '000000' }
+            $driftLdif = @("dn: $($driftUser['dn'])", "changetype: modify", "replace: preferredLanguage", "preferredLanguage: $driftedValue") -join "`n"
+            $driftResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $driftLdif -Operation modify
+            if (-not $driftResult.Success) {
+                throw "Failed to change preferredLanguage outside JIM for '$driftAccountName': $($driftResult.Output)"
+            }
+
+            foreach ($run in @(
+                @{ Profile = $config.LDAPDeltaImportProfileId; Name = "Directory Delta Import (drift)" },
+                @{ Profile = $config.LDAPDeltaSyncProfileId;   Name = "Directory Delta Sync (drift)" },
+                @{ Profile = $config.LDAPExportProfileId;      Name = "Directory Export (drift correction)" },
+                @{ Profile = $config.LDAPDeltaImportProfileId; Name = "Directory Delta Import (confirming)" },
+                @{ Profile = $config.LDAPDeltaSyncProfileId;   Name = "Directory Delta Sync (confirming)" }
+            )) {
+                $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $run.Profile -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $r.activityId -Name $run.Name
+            }
+
+            $correctedUser = Get-LDAPUser -UserIdentifier $driftAccountName -DirectoryConfig $DirectoryConfig
+            $correctedValue = if ($correctedUser) { $correctedUser['preferredLanguage'] } else { $null }
+            Add-TestResult -Name "A preferredLanguage changed in the directory outside JIM is corrected back to the generated value" `
+                -Passed ($correctedValue -eq $driftTarget.Value) `
+                -Detail "$($driftTarget.DisplayName): expected '$($driftTarget.Value)', directory holds '$correctedValue' (was changed to '$driftedValue')"
+        }
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
@@ -676,8 +710,10 @@ try {
     # Priority, not through any special rule. The administrator adds an import Attribute Flow
     # from the directory at higher priority than the generated flow and initialises in the
     # documented order (Full Import everything, Full Synchronisation sources then targets, then
-    # Export). Then (7b) the directory flow is withdrawn: the generated flow takes over and adopts
-    # the value each Metaverse Object already holds, so nobody is renamed.
+    # Export). Then (7b) the directory flow is disabled: the generated flow is the winning contributor
+    # again and, like any Attribute Flow, contributes its own value (its existing assignment) over the
+    # one the directory left behind; the ordinary export then renames the account (PRD FR 30's
+    # behavioural implication). Nothing is adopted.
     # ─────────────────────────────────────────────────────────────────────────────────────
     if ($lastStepIndex -ge $stepOrder.IndexOf("Brownfield")) {
         Write-TestSection "Test 7: Brownfield account kept by Attribute Priority"
@@ -737,24 +773,40 @@ try {
         Add-TestResult -Name "No existing person's Account Name changed when the directory flow took priority" -Passed ($changedDuringInit.Count -eq 0) `
             -Detail "$($changedDuringInit.Count) changed: $(@($changedDuringInit | Select-Object -First 5 | ForEach-Object { "$($beforeNames[$_]) -> $($afterInit[$_])" }) -join '; ')"
 
-        # 7b: withdraw the directory flow. The generated flow becomes the winning contributor again;
-        # each Metaverse Object already holds a value, so it is adopted rather than a new one generated.
-        Write-TestSection "Test 7b: Directory flow withdrawn; the generated flow adopts the values already held"
+        # 7b: disable the directory flow. The generated flow becomes the winning contributor again and
+        # contributes its existing assignment, exactly as a direct or expression flow would contribute its
+        # value (product-owner decision 2026-10-01). Everyone whose directory account already holds the
+        # generated value is unchanged; Percival, whose account holds 'pashworth99' while HR's assignment
+        # holds 'percival.ashworth' (generated in the initialisation's HR synchronisation, before the
+        # directory joined and took the attribute over), is renamed by the ordinary export.
+        Write-TestSection "Test 7b: Directory flow disabled; the generated flow takes the attribute back"
+        $percivalAssignmentBefore = @(Get-JIMGeneratedValue -MetaverseObjectId $percival.id) | Where-Object { $_.attributeName -eq 'Account Name' }
+        Add-TestResult -Name "Percival's generated Account Name assignment survived the directory taking the attribute over" `
+            -Passed ($null -ne $percivalAssignmentBefore -and $percivalAssignmentBefore.value -eq 'percival.ashworth') `
+            -Detail "Assignment: $($percivalAssignmentBefore | ConvertTo-Json -Compress)"
+
         Set-JIMSyncRuleMapping -SyncRuleId $directoryImportRule.id -MappingId $directoryAccountNameMapping.id -Enabled $false | Out-Null
         Invoke-Cycle -Config $config -FirstRun | Out-Null  # a configuration change needs a Full Synchronisation
 
         $afterWithdraw = @{}
         foreach ($p in (Get-Population)) { $afterWithdraw[$p.id] = $p.attributes.'Account Name' }
         $changedOnWithdraw = @($afterInit.Keys | Where-Object { $afterWithdraw[$_] -ne $afterInit[$_] })
-        Add-TestResult -Name "Withdrawing the directory flow renames nobody" -Passed ($changedOnWithdraw.Count -eq 0) `
-            -Detail "$($changedOnWithdraw.Count) changed: $(@($changedOnWithdraw | Select-Object -First 5 | ForEach-Object { "$($afterInit[$_]) -> $($afterWithdraw[$_])" }) -join '; ')"
+        $othersChanged = @($changedOnWithdraw | Where-Object { $_ -ne $percival.id })
+        Add-TestResult -Name "Disabling the directory flow changes nobody whose account already holds their generated value" -Passed ($othersChanged.Count -eq 0) `
+            -Detail "$($othersChanged.Count) changed: $(@($othersChanged | Select-Object -First 5 | ForEach-Object { "$($afterInit[$_]) -> $($afterWithdraw[$_])" }) -join '; ')"
+        Add-TestResult -Name "Percival's Account Name is his generated 'percival.ashworth' again (the generated flow won the attribute back)" `
+            -Passed ($afterWithdraw[$percival.id] -eq 'percival.ashworth') -Detail "Got '$($afterWithdraw[$percival.id])'"
 
         $percivalAssignment = @(Get-JIMGeneratedValue -MetaverseObjectId $percival.id) | Where-Object { $_.attributeName -eq 'Account Name' }
-        Add-TestResult -Name "Percival's 'pashworth99' is now held as an adopted generated value" `
-            -Passed ($null -ne $percivalAssignment -and $percivalAssignment.value -eq 'pashworth99' -and $percivalAssignment.adopted -eq $true) `
+        Add-TestResult -Name "Percival's assignment is the same one, unchanged (generate once; nothing adopted)" `
+            -Passed ($null -ne $percivalAssignment -and $null -ne $percivalAssignmentBefore -and $percivalAssignment.assignmentId -eq $percivalAssignmentBefore.assignmentId -and $percivalAssignment.value -eq 'percival.ashworth') `
             -Detail "Assignment: $($percivalAssignment | ConvertTo-Json -Compress)"
-        $stillThere = Get-LDAPUser -UserIdentifier "pashworth99" -DirectoryConfig $DirectoryConfig
-        Add-TestResult -Name "The directory account is still 'pashworth99' after the withdrawal" -Passed ($null -ne $stillThere)
+
+        $renamedAccount = Get-LDAPUser -UserIdentifier "percival.ashworth" -DirectoryConfig $DirectoryConfig
+        $oldAccount = Get-LDAPUser -UserIdentifier "pashworth99" -DirectoryConfig $DirectoryConfig
+        Add-TestResult -Name "The ordinary export renamed the directory account to 'percival.ashworth'" `
+            -Passed ($null -ne $renamedAccount -and $null -eq $oldAccount) `
+            -Detail "percival.ashworth present: $($null -ne $renamedAccount); pashworth99 present: $($null -ne $oldAccount)"
     }
 
     # ─────────────────────────────────────────────────────────────────────────────────────
@@ -958,6 +1010,6 @@ if ($failed -gt 0) {
 }
 
 Write-Host ""
-Write-Host "✓ Unique Value Generation (release 1) behaves as designed: tokens, gates, adoption," -ForegroundColor Green
+Write-Host "✓ Unique Value Generation (release 1) behaves as designed: tokens, gates, priority hand-over," -ForegroundColor Green
 Write-Host "  stability, Start again and surface parity all hold." -ForegroundColor Green
 exit 0

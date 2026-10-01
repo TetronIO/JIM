@@ -3788,6 +3788,32 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeValueHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues)
+    {
+        var wanted = new HashSet<string>(normalisedValues, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<ConnectorSpaceValueHolder> holders = _csos.Values
+            .SelectMany(cso => cso.AttributeValues
+                .Where(av => av.AttributeId == connectedSystemObjectTypeAttributeId && av.StringValue != null && wanted.Contains(av.StringValue))
+                .Select(av => new ConnectorSpaceValueHolder(av.StringValue!.ToLowerInvariant(), null, cso.Id, cso.MetaverseObjectId)))
+            .ToList();
+        return Task.FromResult(holders);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeNumberHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values)
+    {
+        var wanted = new HashSet<long>(values);
+        IReadOnlyList<ConnectorSpaceValueHolder> holders = _csos.Values
+            .SelectMany(cso => cso.AttributeValues
+                .Where(av => av.AttributeId == connectedSystemObjectTypeAttributeId)
+                .Select(av => av.IntValue ?? av.LongValue)
+                .Where(n => n.HasValue && wanted.Contains(n.Value))
+                .Select(n => new ConnectorSpaceValueHolder(null, n!.Value, cso.Id, cso.MetaverseObjectId)))
+            .ToList();
+        return Task.FromResult(holders);
+    }
+
+    /// <inheritdoc />
     public Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId)
     {
         if (values.Count == 0)
@@ -4125,7 +4151,6 @@ public class SyncRepository : ISyncRepository
                 SyncRuleName = a.SyncRuleMappingGeneration?.SyncRuleMapping?.SyncRule?.Name,
                 SyncRuleMappingId = a.SyncRuleMappingGeneration?.SyncRuleMappingId ?? 0,
                 State = a.State,
-                Adopted = a.Adopted,
                 AssignedDate = a.CommittedAt ?? a.Created
             })
             .ToList();

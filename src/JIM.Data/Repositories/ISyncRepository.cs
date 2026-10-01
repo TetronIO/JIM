@@ -1551,6 +1551,22 @@ public interface ISyncRepository
     Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId);
 
     /// <summary>
+    /// Every Connected System Object holding one of the given normalised (lower-cased) text values for
+    /// <paramref name="connectedSystemObjectTypeAttributeId"/>, with the Metaverse Object each is joined to
+    /// (Unique Value Generation, #242: the import-mode connector-space gate). Returns holders rather than a
+    /// taken set so one query per attribute serves a whole batch, and the gate can treat the requesting
+    /// object's own accounts (joined in memory this pass, or already saved) as free while every other holder
+    /// still blocks. Case-insensitive over the <c>LOWER("StringValue")</c> comparison; id-only, nothing hydrated.
+    /// </summary>
+    Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeValueHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues);
+
+    /// <summary>
+    /// The numeric counterpart of <see cref="GetConnectedSystemAttributeValueHoldersAsync"/>, matching either
+    /// <c>IntValue</c> or <c>LongValue</c>.
+    /// </summary>
+    Task<IReadOnlyList<ConnectorSpaceValueHolder>> GetConnectedSystemAttributeNumberHoldersAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values);
+
+    /// <summary>
     /// The numeric counterpart of <see cref="GetMetaverseAttributeValuesInUseAsync"/>, for Number and Long
     /// Number generation targets. A candidate is taken if it matches an existing value in either <c>IntValue</c>
     /// or <c>LongValue</c>: the two columns back the same attribute type distinction, not two independent value
@@ -1566,9 +1582,9 @@ public interface ISyncRepository
     /// <summary>
     /// Which of the given normalised (lower-cased) values a live <see cref="GeneratedValueAssignment"/> already
     /// holds for the given attribute: the fifth gate ("other objects' live assignments for the attribute", plan
-    /// "The service") and the adopt-before-generate conflict check, both targeted reads over the filtered unique
-    /// indexes (<c>IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique</c> and its Connected
-    /// System counterpart) rather than a scan of every assignment a generation has ever produced. Exactly one
+    /// "The service"), a targeted read over the filtered unique indexes
+    /// (<c>IX_GeneratedValueAssignments_MvAttributeId_NormalisedValue_Unique</c> and its Connected System
+    /// counterpart) rather than a scan of every assignment a generation has ever produced. Exactly one
     /// of <paramref name="metaverseAttributeId"/> and <paramref name="connectedSystemObjectTypeAttributeId"/>
     /// must be given (both set or neither set throws <see cref="ArgumentException"/>), matching the attribute
     /// the caller's mode targets, never the <c>SyncRuleMappingGeneration</c> that produced the request: two

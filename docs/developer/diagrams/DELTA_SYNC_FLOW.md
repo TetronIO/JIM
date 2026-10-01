@@ -44,7 +44,7 @@ flowchart TD
     Pass1 --> Pass2[Pass 2: non-obsolete CSOs<br/>ProcessActiveConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>join, project, Attribute Flow, drift]
     Pass2 --> CsoLoop
 
-    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. PersistPendingMetaverseObjectsAsync<br/>3. CreatePendingMvoChangeObjectsAsync<br/>4. EvaluateQueuedDrift<br/>5. EvaluatePendingExportsAsync<br/>6. FlushPendingExportOperationsAsync<br/>7. ResolvePendingExportReferenceSnapshotsAsync<br/>8. FlushObsoleteCsoOperationsAsync<br/>9. FlushPendingMvoDeletionsAsync<br/>10. FlushRpeisAsync: bulk-insert via raw SQL<br/>11. FlushPendingMvoChangesAsync<br/>12. Clear change tracker and page<br/>identity map, update progress]
+    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. PersistPendingMetaverseObjectsAsync<br/>3. CreatePendingMvoChangeObjectsAsync<br/>4. EvaluateQueuedDriftAsync<br/>5. EvaluatePendingExportsAsync<br/>6. FlushPendingExportOperationsAsync<br/>7. ResolvePendingExportReferenceSnapshotsAsync<br/>8. FlushObsoleteCsoOperationsAsync<br/>9. FlushPendingMvoDeletionsAsync<br/>10. FlushRpeisAsync: bulk-insert via raw SQL<br/>11. FlushPendingMvoChangesAsync<br/>12. Clear change tracker and page<br/>identity map, update progress]
     PageFlush --> PageLoop
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Merge reference-attribute changes under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]

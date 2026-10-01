@@ -1337,7 +1337,7 @@ Samba AD and OpenLDAP.
 | 5 Random | Hex format and uniqueness |
 | 6 Export mode | The generated `preferredLanguage` reaches the directory and never appears on the Metaverse Object |
 | 7 Brownfield | An existing account (`pashworth99`) is kept by a higher-priority import Attribute Flow from the directory, run in the documented initialisation order; nothing is renamed |
-| 7b Withdrawal | Withdrawing that flow hands the attribute back to the generated flow, which adopts the values already held; nothing is renamed |
+| 7b Hand-over | Disabling that flow hands the attribute back to the generated flow, which contributes its existing assignment like any Attribute Flow: everyone whose account already holds their generated value is unchanged, Percival goes back to `percival.ashworth` with the same assignment, and the ordinary export renames `pashworth99` (PRD FR 30's behavioural implication) |
 | 8 Start again | Counter back to the configured Start; survivors keep their numbers; no collisions; the REST route answers too |
 | 9 Failure | An attempt limit of 1 on a constant base: one object wins, the rest fail with `GeneratedValueExhausted`, nothing partial written |
 | 10 Surface parity | A mapping configured through raw REST and one through PowerShell behave identically |
@@ -1345,7 +1345,7 @@ Samba AD and OpenLDAP.
 
 **Not covered here: a target-side collision.** In release 1 a value the target already holds (outside JIM's view) is an ordinary export error, which is existing export behaviour, not generation. It gets integration coverage with release 4's Collision Remediation, which reworks that path. It also needs a harness change first: the LDAP Connector logs a rejected object at Error level, and the runner's end-of-run log scan fails a run on any Error line with no way to mark one as intended, so no scenario can yet include a deliberate export failure.
 
-**What this scenario found.** Its first runs surfaced four defects the unit tiers could not: connector-space adoption renaming a live brownfield account (removed in favour of Attribute Priority, PRD FR 30 revised); a generated export change merged into a drift-staged Pending Export being left unresolved and failing the page; a stale assignment reasserted after a higher-priority flow was withdrawn, renaming the account back; and a deliberate feature-disabled refusal logged as an unhandled Error.
+**What this scenario found.** Its first runs surfaced four defects the unit tiers could not: connector-space adoption renaming a live brownfield account (removed in favour of Attribute Priority, PRD FR 30 revised); a generated export change merged into a drift-staged Pending Export being left unresolved and failing the page; a stale assignment reasserted after a higher-priority flow was withdrawn, renaming the account back (then treated as stale; since 2026-10-01 that reassertion is the intended behaviour, by product-owner decision, exactly as for any Attribute Flow); and a deliberate feature-disabled refusal logged as an unhandled Error.
 
 **Runner handling.** Excluded from snapshot use and from the general directory population (its Scenario 001 substrate needs an empty target), defaults to OpenLDAP and rejects 389 Directory Server. `-Step` is cumulative: Joiners, Gates, Stability, Sequence, Random, ExportMode, Brownfield, StartAgain, Failure, SurfaceParity, FeatureFlag.
 

@@ -113,36 +113,6 @@ public class CausalitySummaryBuilderSpeculativeTests
             "and Account Name would be generated as jallen42."));
     }
 
-    [Test]
-    public void Build_SpeculativeJoinerScenarioWithAdoptedValue_UsesConditionalMood()
-    {
-        var preview = new SyncPreviewResult
-        {
-            OutcomeTree =
-            [
-                new SyncOutcomeNode
-                {
-                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
-                    Children =
-                    [
-                        new SyncOutcomeNode
-                        {
-                            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted,
-                            DetailMessage = "Employee Number: 40021"
-                        }
-                    ]
-                }
-            ]
-        };
-
-        var model = CausalityModelBuilder.BuildSpeculative(preview, Context());
-        var summary = CausalitySummaryBuilder.Build(model);
-
-        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC would process person Liam Allen: " +
-            "a new Metaverse Object would be projected, and the existing Employee Number 40021 would be adopted."));
-    }
-
     /// <summary>
     /// #1649: the preview of a RemainJoined scope exit states the retained join in the conditional mood.
     /// </summary>

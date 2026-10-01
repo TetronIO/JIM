@@ -915,8 +915,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
 committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
-its state, and whether it was adopted from an existing accepted value rather than generated. Empty when
-the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
+and its state. Empty when the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
 [Synchronisation Rules](synchronisation-rules.md#new-jimsyncrulemapping).
 
 #### Syntax
@@ -946,7 +945,6 @@ One `PSCustomObject` per generated value:
 | `SyncRuleName` | Its name |
 | `SyncRuleMappingId` | The mapping responsible |
 | `State` | `Proposed`, `Committed`, `Remediated` or `NeedsDecision` |
-| `Adopted` | `true` when the value was adopted from an existing accepted value, not generated |
 | `AssignedDate` | When the assignment was created |
 
 #### Examples

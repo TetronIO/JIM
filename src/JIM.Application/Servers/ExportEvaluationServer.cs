@@ -3318,10 +3318,9 @@ public class ExportEvaluationServer
         var generationServer = _previewUniqueValueGenerationServer!;
         var resolveOptions = _previewUniqueValueResolveOptions!;
 
-        // Adoption removed (FR 30, export mode; product-owner decision): a joined Connected System Object's
-        // existing value is never read for a generated export mapping any more, in preview or in a real run.
-        // With no assignment, generation runs unconditionally, so this preview needs neither changeType nor
-        // existingCso to decide whether to look one up.
+        // A joined Connected System Object's existing value is never taken over by a generated export mapping,
+        // in preview or in a real run: with no assignment, generation runs, so this preview needs neither
+        // changeType nor existingCso to decide anything beyond the object id.
         var requests = new List<GenerationRequest>(marked.Count);
         foreach (var change in marked)
         {
@@ -3354,9 +3353,7 @@ public class ExportEvaluationServer
                     break;
 
                 default:
-                    // Waiting, and every failure kind (Exhausted, NoBaseValue, WidthExceeded, AdoptionConflict -
-                    // the latter now unreachable for export mode, since AdoptableValue is never populated above):
-                    // nothing resolvable to show, so the preview omits the attribute rather than displaying a
+                    // Waiting, and every failure kind (Exhausted, NoBaseValue, WidthExceeded): nothing resolvable to show, so the preview omits the attribute rather than displaying a
                     // blank or stale marker.
                     attributeChanges.Remove(change);
                     break;

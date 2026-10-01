@@ -13,7 +13,7 @@ using InMemorySyncRepository = JIM.InMemoryData.SyncRepository;
 namespace JIM.Worker.Tests.UniqueValues;
 
 /// <summary>
-/// <see cref="UniqueValueGenerationServer.ResolveAsync"/>: sticky, adopt before generate, candidate generation
+/// <see cref="UniqueValueGenerationServer.ResolveAsync"/>: sticky, then candidate generation
 /// through the ordered gates, exhaustion, width overflow, sequence seeding and block reservation, run-scoped
 /// caching, and dry run (Unique Value Generation, #242, Phase 2).
 /// </summary>
@@ -117,94 +117,6 @@ public class UniqueValueGenerationServerResolveTests
             Assert.That(counts.ContainsKey(nameof(ISyncRepository.ReserveGeneratedValueSequenceBlockAsync)), Is.False);
             Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForGenerationAsync)), Is.False);
         }
-    }
-
-    // ---- Adopt before generate (FR 30) ----
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueFree_ReturnsAdoptedCommittedAsync()
-    {
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var server = new UniqueValueGenerationServer(repo);
-        var generation = UniqueValueTestHelpers.Generation();
-        var request = UniqueValueTestHelpers.ImportRequest(generation, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.Adopted));
-            Assert.That(outcomes[0].Value, Is.EqualTo("jsmith"));
-            Assert.That(outcomes[0].Assignment!.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
-            Assert.That(outcomes[0].Assignment!.Adopted, Is.True);
-            Assert.That(outcomes[0].Assignment!.CommittedAt, Is.Not.Null);
-        }
-    }
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueHeldByAnotherLiveAssignment_ReturnsAdoptionConflictAsync()
-    {
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var generation = UniqueValueTestHelpers.Generation();
-
-        repo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
-        {
-            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = attributeId,
-            Value = "jsmith", NormalisedValue = "jsmith", State = GeneratedValueAssignmentState.Committed,
-            SyncRuleMappingGenerationId = generation.Id
-        });
-
-        var server = new UniqueValueGenerationServer(repo);
-        var request = UniqueValueTestHelpers.ImportRequest(generation, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
-
-        Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
-    }
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueHeldByAReservation_ReturnsAdoptionConflictAsync()
-    {
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var generation = UniqueValueTestHelpers.Generation();
-
-        var reservations = new UniqueValueReservationSet();
-        reservations.TryReserve(Guid.NewGuid(), UniqueValueScope.MetaverseAttribute, attributeId, "jsmith");
-
-        var server = new UniqueValueGenerationServer(repo);
-        var request = UniqueValueTestHelpers.ImportRequest(generation, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options(reservations));
-
-        Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
-    }
-
-    [Test]
-    public async Task ResolveAsync_AdoptableValueHeldByAnotherGenerationOnTheSameAttribute_ReturnsAdoptionConflictAsync()
-    {
-        // Two different Synchronisation Rule mappings can target the same Metaverse attribute (plan decision 3):
-        // the adoption conflict check must be scoped by attribute, not by which generation row asked.
-        var repo = new InMemorySyncRepository();
-        var attributeId = UniqueValueTestHelpers.NextAttributeId();
-        var generationA = UniqueValueTestHelpers.Generation();
-        var generationB = UniqueValueTestHelpers.Generation();
-
-        repo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
-        {
-            Id = Guid.NewGuid(), MetaverseObjectId = Guid.NewGuid(), MetaverseAttributeId = attributeId,
-            Value = "jsmith", NormalisedValue = "jsmith", State = GeneratedValueAssignmentState.Committed,
-            SyncRuleMappingGenerationId = generationA.Id
-        });
-
-        var server = new UniqueValueGenerationServer(repo);
-        var request = UniqueValueTestHelpers.ImportRequest(generationB, attributeId, Guid.NewGuid(), baseValue: null, adoptableValue: "jsmith");
-
-        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
-
-        Assert.That(outcomes[0].Kind, Is.EqualTo(GenerationOutcomeKind.AdoptionConflict));
     }
 
     // ---- Gate order and short-circuit ----
@@ -330,21 +242,121 @@ public class UniqueValueGenerationServerResolveTests
             "a live assignment from a DIFFERENT generation row on the SAME attribute must still be treated as taken");
     }
 
+    // ---- Own joined account is not a collision (product-owner decision 2026-10-01) ----
+
+    [TestCase(true, "joe.bloggs", TestName = "ResolveAsync_ImportMode_ValueHeldByTheObjectsOwnJoinedConnectedSystemObject_IsFreeForItAsync")]
+    [TestCase(false, "joe.bloggs1", TestName = "ResolveAsync_ImportMode_ValueHeldByAnotherObjectsConnectedSystemObject_IsTakenAsync")]
+    public async Task ResolveAsync_ImportMode_ConnectorSpaceGate_ExcludesOnlyTheObjectsOwnJoinedAccountsAsync(bool joinedToRequestingObject, string expected)
+    {
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var generation = UniqueValueTestHelpers.Generation();
+        var mvAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var mvoId = Guid.NewGuid();
+
+        repo.SeedConnectedSystemObject(ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", joinedToRequestingObject ? mvoId : Guid.NewGuid()));
+
+        var request = UniqueValueTestHelpers.ImportRequest(generation, mvAttributeId, mvoId, baseValue: "joe.bloggs", connectorSpaceAttributeIds: [csAttributeId]);
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public async Task ResolveAsync_ImportMode_ValueHeldByAnAccountJoinedOnlyInMemory_IsFreeForItEvenForANewObjectAsync()
+    {
+        // The join (or projection) happened in this pass and is not saved: the holder's persisted Metaverse
+        // Object id is null, and a projected object has no id yet either. The caller names its own account.
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var ownAccount = ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", metaverseObjectId: null);
+        repo.SeedConnectedSystemObject(ownAccount);
+
+        var request = UniqueValueTestHelpers.ImportRequest(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), metaverseObjectId: null,
+            baseValue: "joe.bloggs", connectorSpaceAttributeIds: [csAttributeId], ownConnectedSystemObjectIds: [ownAccount.Id]);
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs"));
+    }
+
+    [Test]
+    public async Task ResolveAsync_ImportMode_ValueHeldByTheAccountLeavingTheObject_IsTakenAsync()
+    {
+        // Its saved join still names the object, but it is leaving this pass, so it is no longer the person's account.
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var mvoId = Guid.NewGuid();
+        var leaving = ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", mvoId);
+        repo.SeedConnectedSystemObject(leaving);
+
+        var request = UniqueValueTestHelpers.ImportRequest(UniqueValueTestHelpers.Generation(), UniqueValueTestHelpers.NextAttributeId(), mvoId,
+            baseValue: "joe.bloggs", connectorSpaceAttributeIds: [csAttributeId], disconnectingConnectedSystemObjectId: leaving.Id);
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo("joe.bloggs1"));
+    }
+
+    [Test]
+    public async Task ResolveAsync_ImportMode_ManyNewObjects_ShareOneHolderLookupPerAttributeAsync()
+    {
+        // Batching: each new object names a different own account, yet the gate still makes one lookup.
+        var repo = new InMemorySyncRepository();
+        var (countingRepo, counts) = CountingSyncRepositoryProxy.Create(repo);
+        var server = new UniqueValueGenerationServer(countingRepo);
+        var generation = UniqueValueTestHelpers.Generation();
+        var mvAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+
+        var requests = Enumerable.Range(0, 5)
+            .Select(n => UniqueValueTestHelpers.ImportRequest(generation, mvAttributeId, null, baseValue: $"person{n}",
+                connectorSpaceAttributeIds: [csAttributeId], ownConnectedSystemObjectIds: [Guid.NewGuid()]))
+            .ToList();
+        await server.ResolveAsync(requests, UniqueValueTestHelpers.Options());
+
+        Assert.That(counts[nameof(ISyncRepository.GetConnectedSystemAttributeValueHoldersAsync)], Is.EqualTo(1));
+    }
+
+    [TestCase(true, "joe.bloggs", TestName = "ResolveAsync_ExportMode_ValueHeldByTheConnectedSystemObjectItIsFor_IsFreeForItAsync")]
+    [TestCase(false, "joe.bloggs1", TestName = "ResolveAsync_ExportMode_ValueHeldByAnotherConnectedSystemObject_IsTakenAsync")]
+    public async Task ResolveAsync_ExportMode_ExcludesOnlyTheConnectedSystemObjectTheValueIsForAsync(bool heldByTheTargetObject, string expected)
+    {
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var generation = UniqueValueTestHelpers.Generation();
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var holder = ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", metaverseObjectId: null);
+        repo.SeedConnectedSystemObject(holder);
+
+        var targetCsoId = heldByTheTargetObject ? holder.Id : Guid.NewGuid();
+        var request = UniqueValueTestHelpers.ExportRequest(generation, csAttributeId, targetCsoId, baseValue: "joe.bloggs");
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo(expected));
+    }
+
+    private static ConnectedSystemObject ConnectedSystemObjectHolding(int attributeId, string value, Guid? metaverseObjectId)
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), MetaverseObjectId = metaverseObjectId };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attributeId, StringValue = value, ConnectedSystemObject = cso });
+        return cso;
+    }
+
     [Test]
     public async Task ResolveAsync_NeverCallsGetGeneratedValueAssignmentsForGenerationAsync()
     {
         // A 100k-object run calls ResolveAsync once per object; scanning every assignment a generation has ever
-        // produced on every call does not scale. Gate (e) and the adoption conflict check must use the targeted,
-        // indexed lookup instead.
+        // produced on every call does not scale. Gate (e) must use the targeted, indexed lookup instead.
         var repo = new InMemorySyncRepository();
         var (countingRepo, counts) = CountingSyncRepositoryProxy.Create(repo);
         var server = new UniqueValueGenerationServer(countingRepo);
         var generation = UniqueValueTestHelpers.Generation();
 
         var generateRequest = UniqueValueTestHelpers.ImportRequest(generation, UniqueValueTestHelpers.NextAttributeId(), null, baseValue: "joe.bloggs");
-        var adoptRequest = UniqueValueTestHelpers.ImportRequest(generation, UniqueValueTestHelpers.NextAttributeId(), null, baseValue: null, adoptableValue: "jsmith");
 
-        await server.ResolveAsync([generateRequest, adoptRequest], UniqueValueTestHelpers.Options());
+        await server.ResolveAsync([generateRequest], UniqueValueTestHelpers.Options());
 
         Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForGenerationAsync)), Is.False);
     }
@@ -578,6 +590,29 @@ public class UniqueValueGenerationServerResolveTests
 
         Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForMetaverseObjectsAsync)), Is.False,
             "a prefetched object's sticky check must be answered from the run-scoped cache");
+    }
+
+    [Test]
+    public async Task PrefetchAssignmentsAsync_ObjectsAlreadyKnownToTheRun_AreNotQueriedAgainAsync()
+    {
+        var repo = new InMemorySyncRepository();
+        var (countingRepo, counts) = CountingSyncRepositoryProxy.Create(repo);
+        var server = new UniqueValueGenerationServer(countingRepo);
+        var options = UniqueValueTestHelpers.Options();
+        var mvoId = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+
+        await server.PrefetchAssignmentsAsync([mvoId], [csoId], options);
+        counts.Clear();
+
+        await server.PrefetchAssignmentsAsync([mvoId], [csoId], options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForMetaverseObjectsAsync)), Is.False,
+                "an object already known to the run is answered from its cache, and a query result would be ignored anyway");
+            Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForConnectedSystemObjectsAsync)), Is.False);
+        }
     }
 
     [Test]

@@ -21,7 +21,6 @@ public class GeneratedValueAssignmentHeaderDto
     public string? SyncRuleName { get; set; }
     public int SyncRuleMappingId { get; set; }
     public GeneratedValueAssignmentState State { get; set; }
-    public bool Adopted { get; set; }
     public DateTime AssignedDate { get; set; }
 
     public static GeneratedValueAssignmentHeaderDto FromModel(GeneratedValueAssignmentHeader model) => new()
@@ -35,7 +34,6 @@ public class GeneratedValueAssignmentHeaderDto
         SyncRuleName = model.SyncRuleName,
         SyncRuleMappingId = model.SyncRuleMappingId,
         State = model.State,
-        Adopted = model.Adopted,
         AssignedDate = model.AssignedDate
     };
 }

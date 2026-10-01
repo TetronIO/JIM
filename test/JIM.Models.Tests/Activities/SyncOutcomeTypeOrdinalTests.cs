@@ -107,7 +107,8 @@ public class SyncOutcomeTypeOrdinalTests
         // deprovisioning it.
         [ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled] = 46,
 
-        // Unique Value Generation (#242): generation, adoption, retirement and Collision Remediation outcomes.
+        // Unique Value Generation (#242): generation, retirement and Collision Remediation outcomes (Adopted is
+        // retired, never written, and kept only so the ordinals after it stay fixed).
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned] = 47,
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted] = 48,
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueRetired] = 49,

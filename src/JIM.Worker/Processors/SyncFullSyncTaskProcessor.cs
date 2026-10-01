@@ -322,7 +322,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
                 // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle
                 // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
-                // THEN commit this page's generated/adopted assignments now the objects have real ids - deletion
+                // THEN commit this page's generated assignments now the objects have real ids - deletion
                 // must run first because a stale assignment being removed can share its (object, attribute) key
                 // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's
                 // doc comment. Both are no-ops for a run with no generated mappings, or a page with nothing to
@@ -335,7 +335,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
                 // evaluate queued drift detection (after MVOs persisted so corrective Pending Exports
                 // capture real Metaverse Object ids, before the export flush persists them)
-                EvaluateQueuedDrift();
+                await EvaluateQueuedDriftAsync();
 
                 // batch evaluate exports for all MVOs that changed during this page
                 await EvaluatePendingExportsAsync();

@@ -10,10 +10,8 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.UniqueValues;
 
 /// <summary>
-/// <see cref="GeneratedValueParticipation"/> (Unique Value Generation, #242, Phase 2 work package J; adoption
-/// source changed by product-owner decision): the participating-target computation (still connector-space,
-/// feeding the generation-time collision gate) and the Metaverse Object's own-value adoption lookup, shared
-/// by the worker's real synchronisation and Sync Preview's read-only evaluation. These pin the exact
+/// <see cref="GeneratedValueParticipation"/> (Unique Value Generation, #242, Phase 2 work package J): the
+/// participating-target computation feeding the generation-time collision gate, shared by the worker's real synchronisation and Sync Preview's read-only evaluation. These pin the exact
 /// semantics the worker's private copies used to have, so an extraction that drifts the behaviour fails here
 /// rather than only being noticed as a Sync Preview discrepancy.
 /// </summary>
@@ -168,140 +166,6 @@ public class GeneratedValueParticipationTests
         var targets = GeneratedValueParticipation.ComputeParticipatingTargets(mapping, [rule]);
 
         Assert.That(targets, Is.Empty);
-    }
-
-    #endregion
-
-    #region FindMetaverseOwnValue
-
-    [Test]
-    public void FindMetaverseOwnValue_NoValueForAttribute_ReturnsNull()
-    {
-        var mvo = new MetaverseObject();
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.Null);
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_PersistedTextValueNotPendingRemoval_IsReturned()
-    {
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith" } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.EqualTo("jsmith"), "a value left behind by a withdrawn higher-priority contributor must be adoptable");
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_ValuePendingRemovalThisPass_ReturnsNull()
-    {
-        var value = new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith" };
-        var mvo = new MetaverseObject { AttributeValues = { value } };
-        mvo.PendingAttributeValueRemovals.Add(value);
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.Null, "a value being removed this same pass by a real removal must never be adopted");
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_IntValue_RendersInvariant()
-    {
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, IntValue = 4242 } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.EqualTo("4242"));
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_LongValue_RendersInvariant()
-    {
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, LongValue = 42424242424242L } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.EqualTo("42424242424242"));
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_AssertedNullMarkerRow_ReturnsNull()
-    {
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, NullValue = true } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.Null, "an asserted-null marker carries no value to adopt");
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_ValueContributedByTheGeneratingRuleItself_ReturnsNull()
-    {
-        // The commit-loser case: a value THIS generated mapping produced in an earlier pass, whose assignment
-        // then lost the cross-run collision race, is left on the object with no assignment of its own. Self-
-        // healing means the object must draw a fresh candidate next time, never "adopt" its own abandoned
-        // attempt, so a value stamped by the generating rule's own id must never be treated as adoptable.
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "joe.bloggs", ContributedBySyncRuleId = 1 } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.Null);
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_ValueContributedByADifferentRule_IsReturned()
-    {
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith", ContributedBySyncRuleId = 2 } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.EqualTo("jsmith"));
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_NoGeneratingSyncRuleIdSupplied_DoesNotExcludeByProvenance()
-    {
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 500, StringValue = "jsmith", ContributedBySyncRuleId = 1 } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: null);
-
-        Assert.That(result, Is.EqualTo("jsmith"), "with no generating rule id to compare against, provenance cannot disqualify a value");
-    }
-
-    [Test]
-    public void FindMetaverseOwnValue_ValueForADifferentAttribute_ReturnsNull()
-    {
-        var mvo = new MetaverseObject
-        {
-            AttributeValues = { new MetaverseObjectAttributeValue { AttributeId = 999, StringValue = "other" } }
-        };
-
-        var result = GeneratedValueParticipation.FindMetaverseOwnValue(mvo, attributeId: 500, generatingSyncRuleId: 1);
-
-        Assert.That(result, Is.Null);
     }
 
     #endregion

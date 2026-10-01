@@ -40,14 +40,6 @@ public enum GenerationOutcomeKind
     Generated,
 
     /// <summary>
-    /// <see cref="GenerationRequest.AdoptableValue"/> was taken as the assignment (FR 30): a participating
-    /// target already held the value, so JIM adopted it rather than generating a new one.
-    /// <see cref="GenerationOutcome.Assignment"/> is a new, unsaved assignment in state <c>Committed</c>, with
-    /// <see cref="Transactional.GeneratedValueAssignment.Adopted"/> true.
-    /// </summary>
-    Adopted,
-
-    /// <summary>
     /// A live assignment already exists for the object and attribute; its value is returned unchanged (FR 10).
     /// <see cref="GenerationOutcome.Assignment"/> is that existing, already-persisted assignment.
     /// </summary>
@@ -73,17 +65,10 @@ public enum GenerationOutcomeKind
     NoBaseValue,
 
     /// <summary>
-    /// <see cref="GenerationRequest.AdoptableValue"/> is already claimed by another object: a live assignment,
-    /// or this run's reservations.
-    /// </summary>
-    AdoptionConflict,
-
-    /// <summary>
     /// <see cref="GenerationRequest.StickyOnly"/> was set and no live assignment exists for the object and
     /// attribute: the mapping's base expression could not be evaluated for this object (a required input is
-    /// missing and the mapping's Missing Input Behaviour is "contribute no value"), so nothing is generated and
-    /// nothing is adopted; the caller waits for a later run where the inputs are available. Appended last so
-    /// existing ordinal usages are undisturbed.
+    /// missing and the mapping's Missing Input Behaviour is "contribute no value"), so nothing is generated; the
+    /// caller waits for a later run where the inputs are available.
     /// </summary>
     Waiting
 }
