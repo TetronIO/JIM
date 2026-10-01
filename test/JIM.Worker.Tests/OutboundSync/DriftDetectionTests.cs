@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Application.Services;
+using JIM.Application.UniqueValues;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -2208,6 +2209,333 @@ public class DriftDetectionTests
         Assert.That(result.HasDrift, Is.False,
             "Guid values and their string representations are equivalent under SingleValueEquals; " +
             "the multi-valued comparison must fall back to the pairwise scan when hash equality fails.");
+    }
+
+    #endregion
+
+    #region Generated export Attribute Flows (#242)
+
+    // Product-owner decision 2026-10-01: a Generated Value is an ordinary Attribute Flow that generates once, so an
+    // export-mode generated value is drift-checked exactly like any export Attribute Flow. The expected value is the
+    // export-mode assignment for the Connected System Object, never the mapping's base expression.
+
+    private ConnectedSystemObjectTypeAttribute SamAccountNameCsoAttr =>
+        TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.SamAccountName.ToString());
+
+    private ConnectedSystemObjectTypeAttribute UserAccountControlCsoAttr =>
+        TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.UserAccountControl.ToString());
+
+    /// <summary>
+    /// An export rule whose only mapping is a generated Attribute Flow onto <paramref name="target"/>, with a base
+    /// expression that deliberately evaluates to something other than any assignment a test seeds, so a test that
+    /// passes cannot be comparing against the base expression.
+    /// </summary>
+    private SyncRule CreateGeneratedExportRule(
+        ConnectedSystemObjectTypeAttribute target,
+        bool enforceState = true,
+        bool initialExportOnly = false,
+        GeneratedValueTokenKind tokenKind = GeneratedValueTokenKind.OnlyIfTaken)
+    {
+        var mapping = new SyncRuleMapping
+        {
+            Id = 3000,
+            Enabled = true,
+            InitialExportOnly = initialExportOnly,
+            TargetConnectedSystemAttribute = target,
+            TargetConnectedSystemAttributeId = target.Id,
+            Generation = new SyncRuleMappingGeneration
+            {
+                Id = 3100,
+                TokenKind = tokenKind,
+                SuffixStyle = GeneratedValueSuffixStyle.Number,
+                SuffixStart = 1,
+                AttemptLimit = 1000
+            }
+        };
+        if (tokenKind == GeneratedValueTokenKind.OnlyIfTaken)
+            mapping.Sources.Add(new SyncRuleMappingSource { Id = 30000, Expression = "\"base-expression-value\"" });
+
+        var exportRule = new SyncRule
+        {
+            Id = 300,
+            Name = "Generated Export Rule",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = enforceState,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { mapping }
+        };
+
+        SyncRulesData.Add(exportRule);
+        return exportRule;
+    }
+
+    private void SeedExportAssignment(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute target, string value)
+    {
+        SyncRepo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObjectId = cso.Id,
+            ConnectedSystemObjectTypeAttributeId = target.Id,
+            Value = value,
+            NormalisedValue = value.ToLowerInvariant(),
+            State = GeneratedValueAssignmentState.Committed,
+            SyncRuleMappingGenerationId = 3100,
+            Created = DateTime.UtcNow,
+            LastUpdated = DateTime.UtcNow,
+            CommittedAt = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// The run-scoped cache as the worker hands it to drift detection: prefetched for the page's Connected System
+    /// Objects through the real <see cref="UniqueValueGenerationServer.PrefetchAssignmentsAsync"/>.
+    /// </summary>
+    private async Task<UniqueValueResolveOptions> PrefetchedAssignmentsAsync(params ConnectedSystemObject[] csos)
+    {
+        var options = new UniqueValueResolveOptions { Reservations = new UniqueValueReservationSet(), ReservationOwnerId = Guid.NewGuid() };
+        await new UniqueValueGenerationServer(SyncRepo).PrefetchAssignmentsAsync([], csos.Select(c => c.Id).ToList(), options);
+        return options;
+    }
+
+    private (MetaverseObject Mvo, ConnectedSystemObject Cso) CreateJoinedPairWithTargetText(ConnectedSystemObjectTypeAttribute target, string? targetValue)
+    {
+        var mvo = CreateTestMvo();
+        var cso = CreateTestCso(mvo);
+        if (targetValue != null)
+        {
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = cso,
+                Attribute = target,
+                AttributeId = target.Id,
+                StringValue = targetValue
+            });
+        }
+        mvo.ConnectedSystemObjects.Add(cso);
+        return (mvo, cso);
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_TargetDiffersFromAssignment_StagesCorrectionToTheAssignmentValueAsync()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "changed.outside.jim");
+        SeedExportAssignment(cso, target, "jsmith2");
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.True, "a target value differing from the assignment is drift, as for any export flow");
+            Assert.That(result.DriftedAttributes.Single().ExpectedValue, Is.EqualTo("jsmith2"),
+                "the expected value is the assignment's, never the base expression's");
+            var correctiveExport = result.CorrectiveExports.Single();
+            Assert.That(correctiveExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+            var change = correctiveExport.AttributeValueChanges.Single(c => c.AttributeId == target.Id);
+            Assert.That(change.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
+            Assert.That(change.StringValue, Is.EqualTo("jsmith2"));
+            Assert.That(change.PendingGeneration, Is.Null,
+                "a drift correction carries the resolved value, never an unresolved marker the integrity guard would reject");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_TargetMatchesAssignment_NoDriftAsync()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "jsmith2");
+        SeedExportAssignment(cso, target, "jsmith2");
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        Assert.That(result.HasDrift, Is.False,
+            "the target holds the assigned value; it differs from the base expression, which must not matter");
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_EnforceStateOff_NoCorrectionAsync()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target, enforceState: false);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "changed.outside.jim");
+        SeedExportAssignment(cso, target, "jsmith2");
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_InitialExportOnly_NoCorrectionAsync()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target, initialExportOnly: true);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "changed.outside.jim");
+        SeedExportAssignment(cso, target, "jsmith2");
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False, "Initial Export Only opts the value out of correction, as for any mapping");
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_NoAssignmentYet_NoDriftAndNothingStagedAsync()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "pre.existing.value");
+        var options = await PrefetchedAssignmentsAsync(cso); // known to this run, holding nothing
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False,
+                "with no assignment there is nothing to compare against; export evaluation generates the value");
+            Assert.That(result.CorrectiveExports, Is.Empty, "nothing may be staged blank");
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_NoAssignmentAndEmptyTarget_NothingStagedBlankAsync()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, null);
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        Assert.That(result.CorrectiveExports, Is.Empty,
+            "an empty target and no assignment is not drift; a blank corrective export would clear nothing and assert nothing");
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_ObjectNotPrefetched_NoDriftRatherThanAGuessAsync()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "changed.outside.jim");
+        SeedExportAssignment(cso, target, "jsmith2");
+        var options = await PrefetchedAssignmentsAsync(); // this object was never prefetched
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        Assert.That(result.HasDrift, Is.False,
+            "an object the run has not prefetched is not queried per object in the hot path, and is not guessed at");
+    }
+
+    [Test]
+    public void EvaluateDrift_GeneratedExportFlow_NoAssignmentCacheSupplied_NoDrift()
+    {
+        var target = SamAccountNameCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "changed.outside.jim");
+        SeedExportAssignment(cso, target, "jsmith2");
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null);
+
+        Assert.That(result.HasDrift, Is.False, "the base expression is never used as a stand-in for the assignment");
+    }
+
+    /// <summary>
+    /// Case-only differences: ordinary drift compares text ordinally (case-sensitive), and export evaluation's own
+    /// Sticky reassertion of a generated value does too, so a case-only change made in the target is drift for a
+    /// generated flow exactly as it is for an ordinary one, and is corrected back to the assignment's casing.
+    /// Uniqueness being case-insensitive governs which values may be issued, not what JIM asserts once issued.
+    /// </summary>
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_CaseOnlyDifference_IsCorrectedLikeAnOrdinaryFlowAsync()
+    {
+        // Ordinary-flow control: the same case-only difference on an ordinary Display Name flow.
+        var controlMvo = CreateTestMvo();
+        controlMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), MetaverseObject = controlMvo, Attribute = DisplayNameMvAttr, AttributeId = DisplayNameMvAttr.Id, StringValue = "John Smith"
+        });
+        var controlCso = CreateTestCso(controlMvo);
+        controlCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = controlCso, Attribute = DisplayNameCsoAttr, AttributeId = DisplayNameCsoAttr.Id, StringValue = "JOHN SMITH"
+        });
+        var ordinaryRule = CreateExportRule();
+        var ordinaryResult = Jim.DriftDetection.EvaluateDrift(controlCso, controlMvo, [ordinaryRule], null);
+
+        var target = SamAccountNameCsoAttr;
+        var generatedRule = CreateGeneratedExportRule(target);
+        var (mvo, cso) = CreateJoinedPairWithTargetText(target, "JSmith2");
+        SeedExportAssignment(cso, target, "jsmith2");
+        var options = await PrefetchedAssignmentsAsync(cso);
+        var generatedResult = Jim.DriftDetection.EvaluateDrift(cso, mvo, [generatedRule], null, null, options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ordinaryResult.HasDrift, Is.True, "precondition: ordinary drift compares text case-sensitively");
+            Assert.That(generatedResult.HasDrift, Is.EqualTo(ordinaryResult.HasDrift), "a generated flow behaves exactly as the ordinary one");
+            Assert.That(generatedResult.CorrectiveExports.Single().AttributeValueChanges.Single().StringValue, Is.EqualTo("jsmith2"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_NumberTarget_CorrectsToTheAssignedNumberAsync()
+    {
+        var target = UserAccountControlCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target, tokenKind: GeneratedValueTokenKind.Sequence);
+        var mvo = CreateTestMvo();
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso, Attribute = target, AttributeId = target.Id, IntValue = 7
+        });
+        SeedExportAssignment(cso, target, "1042");
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.True);
+            Assert.That(result.CorrectiveExports.Single().AttributeValueChanges.Single().IntValue, Is.EqualTo(1042));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDrift_GeneratedExportFlow_NumberTargetMatchingAssignment_NoDriftAsync()
+    {
+        var target = UserAccountControlCsoAttr;
+        var exportRule = CreateGeneratedExportRule(target, tokenKind: GeneratedValueTokenKind.Sequence);
+        var mvo = CreateTestMvo();
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso, Attribute = target, AttributeId = target.Id, IntValue = 1042
+        });
+        SeedExportAssignment(cso, target, "1042");
+        var options = await PrefetchedAssignmentsAsync(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [exportRule], null, null, options);
+
+        Assert.That(result.HasDrift, Is.False);
     }
 
     #endregion

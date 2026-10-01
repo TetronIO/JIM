@@ -3,6 +3,7 @@
 
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -339,8 +340,9 @@ public class SyncServer : ISyncServer
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
-        AttributePriorityContext? priorityContext = null)
-        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext);
+        AttributePriorityContext? priorityContext = null,
+        UniqueValueResolveOptions? generatedValueAssignments = null)
+        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext, generatedValueAssignments);
 
     #endregion
 

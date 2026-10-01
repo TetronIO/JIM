@@ -310,7 +310,7 @@ public sealed class UniqueValueGenerationServer
                 match = importBag.FirstOrDefault(a => a.MetaverseAttributeId == request.MetaverseAttributeId);
             else if (request.Mode == GeneratedValueMode.Export && request.ConnectedSystemObjectId.HasValue
                 && options.KnownConnectedSystemAssignments.TryGetValue(request.ConnectedSystemObjectId.Value, out var exportBag))
-                match = exportBag.FirstOrDefault(a => a.ConnectedSystemObjectTypeAttributeId == request.ConnectedSystemObjectTypeAttributeId);
+                match = UniqueValueResolveOptions.FindConnectedSystemAssignment(exportBag, request.ConnectedSystemObjectTypeAttributeId);
 
             if (match != null)
                 result[i] = match;
