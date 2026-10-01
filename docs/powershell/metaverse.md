@@ -889,7 +889,7 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-Force] [-PageSize <int>]
 
 #### Output
 
-Returns one `PSCustomObject` per change record, including the initiator, Synchronisation Rule, Run Profile context, and per-attribute value changes. Each value change carries `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, naming the Synchronisation Rule that contributed that specific value (a single change record can flow attributes from several rules); both are `$null` when the value was not contributed by a rule, or the contributing rule has since been deleted.
+Returns one `PSCustomObject` per change record, including the initiator, Synchronisation Rule, Run Profile context, and per-attribute value changes. Each value change carries `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, naming the Synchronisation Rule that contributed that specific value (a single change record can flow attributes from several rules); both are `$null` when the value was not contributed by a rule. `ContributedBySystemId` and `ContributedBySystemName` name the Connected System that rule belongs to, resolved from the still-live rule; both are `$null` once the contributing rule has since been deleted, even though `ContributedBySyncRuleName`'s snapshot survives. `IsGeneratedValue` is `$true` when a Generated Value Attribute Flow produced the value.
 
 #### Examples
 
@@ -904,6 +904,61 @@ Get-JIMMetaverseObjectChangeHistory -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -
 ```powershell title="Pipe a Metaverse Object into the cmdlet"
 Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
     Get-JIMMetaverseObjectChangeHistory -All
+```
+
+---
+
+### Get-JIMMetaverseObjectProvenance
+
+Shows where a Metaverse Object's attribute values came from: which Connected System and Synchronisation Rule contributed each one, or that no contributor is recorded.
+
+With just `-Id`, returns a summary: one entry per attribute holding at least one value, with its distinct origins ordered by value count descending. With `-AttributeName` or `-AttributeId`, returns full provenance for that one attribute: the current value(s) and their origin, the joined Connected System Object the value came from, the change that most recently set it, every Synchronisation Rule mapping that could contribute to it (in priority order, each with the value it would currently supply and its standing against the value in use), and the attribute's change history.
+
+#### Syntax
+
+```powershell
+# Summary (default)
+Get-JIMMetaverseObjectProvenance -Id <guid>
+
+# ByAttributeName
+Get-JIMMetaverseObjectProvenance -Id <guid> -AttributeName <string>
+
+# ByAttributeId
+Get-JIMMetaverseObjectProvenance -Id <guid> -AttributeId <int>
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
+| `AttributeName` | `string` | No | | Name of the attribute to get detailed provenance for. Resolved against the attributes the object holds a value for (an exact, case-insensitive match); use `-AttributeId` for an attribute with no value. Cannot be used with `-AttributeId`. |
+| `AttributeId` | `int` | No | | Identifier of the attribute to get detailed provenance for. Cannot be used with `-AttributeName`. |
+
+#### Output
+
+With just `-Id`: a `PSCustomObject` with `MetaverseObjectId` and `Attributes` (each with `AttributeId`, `AttributeName` and `Origins`, an array of `{Kind, ConnectedSystemId, ConnectedSystemName, SyncRuleId, SyncRuleName, SyncRuleDeleted, AssertsNoValue, Corrected, PersonId, PersonName}`). `Kind` is one of `NotRecorded`, `SynchronisationRule`, `GeneratedValue` or `SetByPerson`; a `GeneratedValue` origin still names the Connected System and Synchronisation Rule, and `Corrected` is true once a collision has revised the value.
+
+With `-AttributeName` or `-AttributeId`: a `PSCustomObject` with `MetaverseObjectId`, `MetaverseObjectTypeId`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `CurrentValues` (each with `DisplayValue`, `ReferenceMetaverseObjectId`, `ReferenceTypeName`, `Origin`), `CurrentValueTotalCount`, `ContributingConnectedSystemObject`, `LastSet` (the Activity that set the current value), `Sources` (each mapping's `MappingId`, `Rank`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName`, `IsExpression`, `IsGeneratedValue`, `Expression`, `State`, `CandidateValues`, `Note`; `State` is one of `InUse`, `Outranked`, `NoValue`, `NotJoined`, `Disabled` or `NotEvaluated`), `History` (newest first, up to 50 entries, each with `IsGeneratedValue` set when a Generated Value Attribute Flow produced the value) and `HistoryTruncated`.
+
+#### Examples
+
+```powershell title="Get the origin of every attribute holding a value"
+Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Get full provenance for one attribute by name"
+Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -AttributeName Department
+```
+
+```powershell title="List the Synchronisation Rules that could contribute to an attribute but are currently losing Attribute Priority"
+(Get-JIMMetaverseObjectProvenance -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -AttributeId 42).Sources |
+    Where-Object State -eq 'Outranked'
+```
+
+```powershell title="Pipe a Metaverse Object into the cmdlet"
+Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
+    Get-JIMMetaverseObjectProvenance
 ```
 
 ---

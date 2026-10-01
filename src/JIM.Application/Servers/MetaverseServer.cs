@@ -23,7 +23,7 @@ using JIM.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
-public class MetaverseServer
+public partial class MetaverseServer
 {
     #region accessors
     private JimApplication Application { get; }
@@ -1197,6 +1197,9 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectDetailAsync(id, loadStrategy);
     }
 
+    // GetMetaverseObjectProvenanceAsync and GetMetaverseAttributeProvenanceAsync (#399) are implemented in
+    // MetaverseServer.Provenance.cs.
+
     /// <summary>
     /// Returns a page of change-history rows for a Metaverse Object, projected into a flat DTO.
     /// Ordered by change time descending. <paramref name="pageSize"/> is clamped to [1, 100].
@@ -1214,7 +1217,21 @@ public class MetaverseServer
             .SetTag("id", metaverseObjectId)
             .SetTag("page", page)
             .SetTag("pageSize", pageSize);
-        return await Application.Repository.Metaverse.GetMvoChangeHistoryAsync(metaverseObjectId, page, pageSize);
+        var (items, totalCount) = await Application.Repository.Metaverse.GetMvoChangeHistoryAsync(metaverseObjectId, page, pageSize);
+
+        // Name a Generated Value as one on the Changes tab exactly as the inspector's History does (#399).
+        var generatedValues = await GetGeneratedValuesByAttributeAsync(metaverseObjectId);
+        if (generatedValues.Count == 0)
+            return (items, totalCount);
+
+        foreach (var attributeChange in items.SelectMany(i => i.AttributeChanges).Where(ac => ac.AttributeId.HasValue))
+        {
+            var ownership = generatedValues.GetValueOrDefault(attributeChange.AttributeId!.Value);
+            foreach (var valueChange in attributeChange.ValueChanges)
+                valueChange.IsGeneratedValue = ProvenanceLogic.IsGeneratedValueRecord(valueChange.ContributedBySyncRuleId, valueChange.ToDisplayString(), ownership);
+        }
+
+        return (items, totalCount);
     }
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Web.Models;
 using JIM.Web.Shared;
@@ -201,5 +202,90 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
                 Assert.That(emptyState.ActionText, Is.EqualTo("Clear Filters"));
             }
         });
+    }
+
+    /// <summary>
+    /// The Source column (#399): a change carrying provenance renders the shared origin chip, and the caller's
+    /// attribute name becomes a link into that attribute's Inspect view.
+    /// </summary>
+    [Test]
+    public async Task ChangeHistoryTimeline_ChangeDetails_ChangeWithOrigin_CarriesOriginAndInspectHrefIntoTheGridAsync()
+    {
+        var origin = new ValueOrigin
+        {
+            Kind = ValueOriginKind.SynchronisationRule,
+            ConnectedSystemId = 4,
+            ConnectedSystemName = "HR",
+            SyncRuleId = 9,
+            SyncRuleName = "HR Import"
+        };
+        var changeGroup = new ChangeHistoryTimeline.ChangeGroup
+        {
+            ChangeType = ObjectChangeType.Updated,
+            ChangeTime = new System.DateTime(2026, 5, 1, 9, 30, 0, System.DateTimeKind.Utc),
+            ChangeInitiatorType = "SynchronisationRule",
+            ChangeMechanismType = "SynchronisationRule",
+            AttributeChanges =
+            [
+                new ChangeHistoryTimeline.AttributeChange
+                {
+                    AttributeName = "Mail",
+                    ChangeType = ValueChangeType.Add,
+                    Value = "jsmith@example.com",
+                    AttributeType = AttributeDataType.Text,
+                    Origin = origin,
+                    AttributeInspectHref = "/t/people/v/11111111-1111-1111-1111-111111111111?view=inspect&attr=5"
+                }
+            ]
+        };
+
+        var provider = Render<MudDialogProvider>();
+        var timeline = Render<ChangeHistoryTimeline>(p => p
+            .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { changeGroup }));
+        timeline.Find(".cursor-pointer").Click();
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.HasComponent<VirtualisedDataGrid<ChangeHistoryTimeline.AttributeChangeDisplay>>(), Is.True));
+
+        var window = await LoadWindowAsync(provider);
+        var item = window.Items.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item.Origin, Is.Not.Null);
+            Assert.That(item.Origin!.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(item.AttributeInspectHref, Is.EqualTo("/t/people/v/11111111-1111-1111-1111-111111111111?view=inspect&attr=5"));
+        }
+
+        // Rendered markup: the shared origin chip appears in the Source column, and the attribute name is a link.
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(provider.HasComponent<ValueOriginChip>(), Is.True);
+                var attributeLink = provider.FindAll("a").FirstOrDefault(a => a.TextContent == "Mail");
+                Assert.That(attributeLink, Is.Not.Null);
+                Assert.That(attributeLink!.GetAttribute("href"), Is.EqualTo(item.AttributeInspectHref));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Callers with no provenance of their own (Connected System Object change history, Deleted Objects) carry no
+    /// <see cref="ChangeHistoryTimeline.AttributeChange.Origin"/>; the Source column must render exactly as it
+    /// always has for them, never "Source not recorded".
+    /// </summary>
+    [Test]
+    public async Task ChangeHistoryTimeline_ChangeDetails_ChangeWithNoOrigin_LeavesOriginAndHrefNullAsync()
+    {
+        var cut = RenderTimelineWithDialogOpen();
+
+        var window = await LoadWindowAsync(cut);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(window.Items, Is.Not.Empty);
+            Assert.That(window.Items.All(i => i.Origin == null), Is.True);
+            Assert.That(window.Items.All(i => i.AttributeInspectHref == null), Is.True);
+        }
     }
 }

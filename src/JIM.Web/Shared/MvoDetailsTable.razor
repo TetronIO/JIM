@@ -1,74 +1,177 @@
-@using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Core.DTOs
 @using JIM.Models.Transactional
 @using System.Globalization
 @using Utilities
-@inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
+@* The Inspect view (#399, formerly "Table"): attributes with their source and history. It renders through the same *@
+@* AttributeTable as every other object's attributes, so the search, the sorts and the way a multi-valued attribute *@
+@* reads are the same here as on a Connected System Object; the Source column, the Group by headers and the row    *@
+@* that opens the inspector are what the Inspect view adds on top. Presentational: the provenance for the object  *@
+@* and for an opened attribute are loaded by the host (Pages/Types/View.razor) and handed down, so this renders    *@
+@* from parameters alone and is bUnit-testable without the application layer. *@
+
 @if (MetaverseObject != null)
 {
-    @* One row per attribute, through the same table as every other object's attributes, so the search, the sorts
-       and the way a multi-valued attribute reads are the same here as on a Connected System Object. *@
-    <AttributeTable TItem="MvoAttributeTableGroup"
-                    Items="@_groups"
-                    Matches="MatchesSearch"
-                    Sort="SortGroups"
-                    DefaultSortBy="attribute"
-                    UrlParameterPrefix="attr-"
-                    RowClassFunc="@((group, _) => group.TotalCount > 1 ? "jim-attr-row-mva" : string.Empty)">
-        <HeaderContent>
-            <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
-            <MudTh Class="jim-attr-header-value"><VirtualisedSortHeader Title="Value" Name="value" /></MudTh>
-            <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="Type" Name="type" /></MudTh>
-            <MudTh Class="jim-attr-header-plurality"><VirtualisedSortHeader Title="Plurality" Name="plurality" /></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd Class="jim-attr-name">
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
-            </MudTd>
-            <MudTd Class="jim-attr-value">
-                @{ var group = context; }
-                <AttributeValuesCell TValue="MetaverseObjectAttributeValue" Values="@group.Values" TotalCount="@group.TotalCount">
-                    <ValueTemplate Context="attributeValue">
-                        @RenderValue(attributeValue)
-                    </ValueTemplate>
-                    <OverflowContent>
-                        <MvoMvaTable @key="group.AttributeName"
-                                     ValueCount="@group.TotalCount"
-                                     AttributeName="@group.AttributeName"
-                                     MetaverseObjectId="@_metaverseObjectId"
-                                     IsReferenceAttribute="@group.IsReference" />
-                    </OverflowContent>
-                </AttributeValuesCell>
-                @* Unique Value Generation (#242, Phase 3, Work Package D2): a generated value only ever targets a
-                   single-valued attribute, so the provenance chip only ever needs to consider a lone value
-                   (approved mockup screen 04). *@
-                @if (group.TotalCount == 1 && _generatedAssignmentsByAttribute.TryGetValue(group.AttributeName, out var assignment))
+    @if (ProvenanceLoading && Provenance == null)
+    {
+        <div class="d-flex justify-center pa-4">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+        </div>
+    }
+    else if (Provenance != null)
+    {
+        <MvoContributionBar Provenance="Provenance" ObjectTypeName="@ObjectTypeName"
+                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged" />
+    }
+
+    <div class="jim-inspect-layout">
+        <div class="jim-inspect-main">
+            @* While the inspector is open the table lays out at fixed proportions, so a long value or origin clips
+               with an ellipsis inside its column rather than pushing the table past its panel. *@
+            <AttributeTable TItem="MvoAttributeTableGroup"
+                            Items="@_visibleGroups"
+                            Matches="MatchesSearch"
+                            Sort="SortGroups"
+                            DefaultSortBy="attribute"
+                            UrlParameterPrefix="attr-"
+                            RowClassFunc="@RowClass"
+                            GroupKey="@_groupKey"
+                            GroupOrder="@_groupOrder"
+                            GroupHeaderClass="jim-inspect-group-header"
+                            OnRowClick="@(group => SelectAttributeAsync(group.AttributeId))"
+                            Class="@(ShowInspector ? "jim-inspect-table-narrow" : null)">
+                <ToolBarExtras>
+                    <span class="jim-inspect-toolbar-label mr-2">Group by</span>
+                    <SegmentedToggle TValue="string" AriaLabel="Group by" Value="@GroupBy" Options="@GroupByOptions"
+                                     ValueChanged="ChangeGroupByAsync" Dense="true" />
+                </ToolBarExtras>
+                <HeaderContent>
+                    <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
+                    <MudTh Class="jim-attr-header-value"><VirtualisedSortHeader Title="Value" Name="value" /></MudTh>
+                    @if (GroupBy != "source")
+                    {
+                        <MudTh Class="jim-attr-header-source"><MudText Typo="Typo.button">Source</MudText></MudTh>
+                    }
+                    @* Type and Plurality give way while the inspector is open: its header states both for the
+                       selected attribute, and the Value column needs the width more. *@
+                    @if (!ShowInspector)
+                    {
+                        <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="Type" Name="type" /></MudTh>
+                        <MudTh Class="jim-attr-header-plurality"><VirtualisedSortHeader Title="Plurality" Name="plurality" /></MudTh>
+                    }
+                </HeaderContent>
+                <GroupHeaderTemplate>
+                    <MudTd colspan="@ColumnCount">
+                        @{ var key = (string)context.Key!; var count = context.Items.Count(); }
+                        @* One centred line: the label, a separator, then the count, so the icon sits level with its
+                           name and the count never reads as part of it. *@
+                        <div class="jim-inspect-group-heading">
+                            @if (GroupBy == "source" && _sourceGroupsByKey.TryGetValue(key, out var sourceGroup))
+                            {
+                                @* Group by Source: the header names the source exactly as the Source column it
+                                   replaces does (the bar's swatch and legend label), with the rule beside it; the
+                                   inspector, which any row beneath it opens, carries the links. *@
+                                <SourceDot Group="@sourceGroup" ShowRule="true" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@AttributeCategories.GetIcon(key)" Size="Size.Small" Class="jim-inspect-group-icon" />
+                                <span class="jim-inspect-group-name">@key</span>
+                            }
+                            <span class="jim-inspect-group-sep" aria-hidden="true">·</span>
+                            <span class="jim-inspect-group-count">@count attribute@(count == 1 ? "" : "s")</span>
+                        </div>
+                    </MudTd>
+                </GroupHeaderTemplate>
+                <RowTemplate>
+                    @{ var group = context; var isSelected = SelectedAttributeId == group.AttributeId; }
+                    @* The row's click (AttributeTable's OnRowClick) is a mouse convenience only; the real,
+                       keyboard-accessible affordance is the attribute-name button (a row containing links cannot
+                       itself be a button). The Value cell can carry its own link (an email address, a reference
+                       value), so its content stops the click reaching the row. The Source cell is linkless (its
+                       compact chip leaves the links to the inspector), so a click there opens the inspector too. *@
+                    <MudTd Class="jim-attr-name">
+                        <button type="button" class="jim-attr-name-button mud-text-secondary"
+                                aria-expanded="@(isSelected ? "true" : "false")"
+                                @onclick="@(() => SelectAttributeAsync(group.AttributeId))"
+                                @onclick:stopPropagation="true">@group.AttributeName</button>
+                    </MudTd>
+                    <MudTd Class="jim-attr-value">
+                        <div @onclick:stopPropagation="true">
+                            <AttributeValuesCell TValue="MetaverseObjectAttributeValue" Values="@group.Values" TotalCount="@group.TotalCount">
+                                <ValueTemplate Context="attributeValue">
+                                    @if (group.TotalCount == 1)
+                                    {
+                                        <div class="jim-inspect-value" title="@ValueTitle(group)">
+                                            @RenderValue(attributeValue)
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @RenderValue(attributeValue)
+                                    }
+                                </ValueTemplate>
+                                <OverflowContent>
+                                    <MvoMvaTable @key="group.AttributeName"
+                                                 ValueCount="@group.TotalCount"
+                                                 AttributeName="@group.AttributeName"
+                                                 MetaverseObjectId="@MetaverseObject.Id"
+                                                 IsReferenceAttribute="@group.IsReference" />
+                                </OverflowContent>
+                            </AttributeValuesCell>
+                        </div>
+                    </MudTd>
+                    @if (GroupBy != "source")
+                    {
+                        <MudTd>
+                            <div class="jim-inspect-source-cell">@RenderSourceCell(group.AttributeId)</div>
+                        </MudTd>
+                    }
+                    @if (!ShowInspector)
+                    {
+                        <MudTd Class="jim-attr-type">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
+                        </MudTd>
+                        <MudTd Class="jim-attr-plurality">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@(group.IsMultiValued ? "Multi" : "Single")</MudText>
+                        </MudTd>
+                    }
+                </RowTemplate>
+                <EmptyContent>
+                    <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                     PrimaryText="@(ContributionFilterKey != null ? "No attributes come from this source" : "This object has no attribute values")" />
+                </EmptyContent>
+            </AttributeTable>
+        </div>
+
+        @if (ShowInspector)
+        {
+            <div class="jim-inspect-side">
+                @if (AttributeInspectorLoading && SelectedAttributeProvenance == null)
                 {
-                    <GeneratedValueProvenanceChip Assignment="assignment" Class="ml-2" />
+                    <MudPaper Outlined="true" Class="pa-4 d-flex justify-center">
+                        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                    </MudPaper>
                 }
-            </MudTd>
-            <MudTd Class="jim-attr-type">
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
-            </MudTd>
-            <MudTd Class="jim-attr-plurality">
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
-            </MudTd>
-        </RowTemplate>
-        <EmptyContent>
-            <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                             PrimaryText="This object has no attribute values" />
-        </EmptyContent>
-    </AttributeTable>
+                else if (SelectedAttributeProvenance != null)
+                {
+                    <MvoAttributeInspector Provenance="SelectedAttributeProvenance" OnClose="OnCloseInspector" OnOpenInTimeline="OnOpenInTimeline" />
+                }
+            </div>
+        }
+    </div>
 }
 
-@* ─── Render Fragments ─── *@
+@code {
+    // ─── Render Fragments ───
+    // RenderValue lives here (a @code method), not in a markup @{ } block: a local function declared inside the
+    // component's BuildRenderTree is not visible to an ordinary @code method.
 
-@{
-    RenderFragment RenderValue(MetaverseObjectAttributeValue attributeValue) => __builder =>
+    private RenderFragment RenderValue(MetaverseObjectAttributeValue attributeValue) => __builder =>
     {
         if (attributeValue.Attribute.Type == AttributeDataType.Text)
         {
@@ -95,9 +198,10 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
         {
-            <MudTooltip Text="@attributeValue.DateTimeValue.Value.ToString("O")">
+            var dateTimeValue = attributeValue.DateTimeValue.Value;
+            <MudTooltip Text="@dateTimeValue.ToString("O")" Arrow="true" Placement="Placement.Top">
                 <ChildContent>
-                    @attributeValue.DateTimeValue.Value.ToFriendlyDate()
+                    @dateTimeValue.ToFriendlyDate()
                 </ChildContent>
             </MudTooltip>
         }
@@ -123,50 +227,172 @@
                 @(attributeValue.ReferenceValue.NameOrId ?? attributeValue.ReferenceValue.Id.ToString())
             </MudLink>
         }
+        else
+        {
+            <EmptyValue />
+        }
     };
-}
 
-@code {
-    /// <summary>
-    /// The Metaverse Object whose attributes to display in table format.
-    /// </summary>
-    [Parameter]
+    /// <summary>The Metaverse Object whose attributes to display.</summary>
+    [Parameter, EditorRequired]
     public MetaverseObject MetaverseObject { get; set; } = null!;
 
-    /// <summary>
-    /// Per-attribute total value counts from the capped load.
-    /// Used to show accurate totals when MVA values are capped.
-    /// </summary>
+    /// <summary>The Metaverse Object Type's name, passed through to the contribution bar's heading.</summary>
+    [Parameter]
+    public string ObjectTypeName { get; set; } = "object";
+
+    /// <summary>Per-attribute total value counts from the capped load.</summary>
     [Parameter]
     public Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
 
+    /// <summary>The object's attribute origins (#399), loaded by the host when this view is shown. Null while loading.</summary>
+    [Parameter]
+    public MetaverseObjectProvenance? Provenance { get; set; }
+
+    /// <summary>Whether the host is loading <see cref="Provenance"/>.</summary>
+    [Parameter]
+    public bool ProvenanceLoading { get; set; }
+
+    /// <summary>"none", "source" or "category".</summary>
+    [Parameter]
+    public string GroupBy { get; set; } = "none";
+
+    [Parameter]
+    public EventCallback<string> OnGroupByChanged { get; set; }
+
+    /// <summary>The active source filter's group key (from the contribution bar's legend), or null.</summary>
+    [Parameter]
+    public string? ContributionFilterKey { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> OnContributionFilterChanged { get; set; }
+
+    /// <summary>The attribute id whose inspector is open, or null.</summary>
+    [Parameter]
+    public int? SelectedAttributeId { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnAttributeSelected { get; set; }
+
+    /// <summary>The opened attribute's full provenance (#399), loaded by the host. Null while loading or when none is open.</summary>
+    [Parameter]
+    public MetaverseAttributeProvenance? SelectedAttributeProvenance { get; set; }
+
+    [Parameter]
+    public bool AttributeInspectorLoading { get; set; }
+
+    [Parameter]
+    public EventCallback OnCloseInspector { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpenInTimeline { get; set; }
+
+    private bool ShowInspector => SelectedAttributeId.HasValue;
+
     /// <summary>
-    /// Generated-value assignments for the loaded Metaverse Object (Unique Value Generation, #242, Phase 3,
-    /// Work Package D2), keyed by attribute name (see <see cref="GeneratedValuePreviewHelpers.IndexAssignmentsByAttribute"/>).
-    /// Loaded once per Metaverse Object, not per row (<see cref="OnParametersSetAsync"/> guards on the id).
+    /// How many columns the header renders (Attribute and Value, plus Source unless grouped by it, plus Type and
+    /// Plurality unless the inspector is open). A group header spans exactly this many: a wider colspan makes the
+    /// browser invent empty columns, which render as a dead band down the right of the table.
     /// </summary>
-    private Dictionary<string, GeneratedValueAssignmentHeader> _generatedAssignmentsByAttribute = new();
-    private Guid? _loadedGeneratedAssignmentsForMvoId;
+    private int ColumnCount => 2 + (GroupBy != "source" ? 1 : 0) + (ShowInspector ? 0 : 2);
 
-    // Grouped once per parameter set rather than per search or sort, which only filter and order this list.
-    private List<MvoAttributeTableGroup> _groups = new();
-    private Guid _metaverseObjectId;
+    private static readonly IReadOnlyList<SegmentedToggleOption<string>> GroupByOptions =
+    [
+        new("none", "None"),
+        new("source", "Source"),
+        new("category", "Category")
+    ];
 
-    protected override async Task OnParametersSetAsync()
+    // Grouped once per parameter set; the search and the sort only filter and order these lists.
+    private List<MvoAttributeTableGroup> _groups = [];
+    private List<MvoAttributeTableGroup> _visibleGroups = [];
+
+    // The Group by functions handed to the table, rebuilt only when the grouping changes (AttributeTable rebuilds
+    // its group definition whenever it is handed a different function).
+    private Func<MvoAttributeTableGroup, object>? _groupKey;
+    private Func<MvoAttributeTableGroup, int>? _groupOrder;
+    private string? _groupingBuiltFor;
+
+    protected override void OnParametersSet()
     {
-        if (MetaverseObject == null)
-            return;
-
         _groups = GetGroupedAttributes();
-        _metaverseObjectId = MetaverseObject.Id;
+        _visibleGroups = ContributionFilterKey != null && Provenance != null
+            ? _groups.Where(g => ValueOriginGrouping.KeyFor(OriginOrNotRecorded(g)) == ContributionFilterKey).ToList()
+            : _groups;
+        BuildSourceGroups();
+        BuildGrouping();
+    }
 
-        if (MetaverseObject.Id == _loadedGeneratedAssignmentsForMvoId)
+    /// <summary>
+    /// The group key and group order for the current Group by mode: none, a category per attribute (in the
+    /// categories' own order), or a source per attribute (in the contribution bar's order, and keyed and labelled
+    /// exactly as the bar's legend is).
+    /// </summary>
+    private void BuildGrouping()
+    {
+        var mode = GroupBy == "source" && Provenance == null ? "none" : GroupBy;
+        if (mode == _groupingBuiltFor)
             return;
 
-        using var jim = JimFactory.Create();
-        var assignments = await jim.UniqueValues.GetAssignmentsForMetaverseObjectAsync(MetaverseObject.Id);
-        _generatedAssignmentsByAttribute = GeneratedValuePreviewHelpers.IndexAssignmentsByAttribute(assignments);
-        _loadedGeneratedAssignmentsForMvoId = MetaverseObject.Id;
+        _groupingBuiltFor = mode;
+
+        switch (mode)
+        {
+            case "category":
+                var categoryOrder = AttributeCategories.CategoryOrder.Select((c, i) => (c, i)).ToDictionary(x => x.c, x => x.i);
+                _groupKey = g => AttributeCategories.GetCategory(g.AttributeName);
+                _groupOrder = g => categoryOrder.GetValueOrDefault(AttributeCategories.GetCategory(g.AttributeName), int.MaxValue);
+                break;
+            case "source":
+                // Read the source groups at call time rather than capturing them, so the functions (and with them
+                // the table's group definition) stay the same across provenance reloads.
+                _groupKey = g => SourceGroupFor(g.AttributeId).Key;
+                _groupOrder = g => _sourceGroupOrder[SourceGroupFor(g.AttributeId).Key];
+                break;
+            default:
+                _groupKey = null;
+                _groupOrder = null;
+                break;
+        }
+    }
+
+    private string RowClass(MvoAttributeTableGroup group, int _) =>
+        string.Join(' ', new[]
+        {
+            "jim-inspect-row",
+            group.TotalCount > 1 ? "jim-attr-row-mva" : null,
+            SelectedAttributeId == group.AttributeId ? "jim-inspect-row-selected" : null
+        }.Where(c => c != null));
+
+    /// <summary>
+    /// The full text of a single value, for the title of its one-line cell (which clips a long value with an
+    /// ellipsis). Null for multi-valued attributes and for types that render their own affordance (a date's
+    /// tooltip, a reference's link, a Boolean's label), where there is nothing clipped to reveal.
+    /// </summary>
+    private static string? ValueTitle(MvoAttributeTableGroup group)
+    {
+        if (group.Values.Count != 1)
+            return null;
+
+        var value = group.Values[0];
+        return value.Attribute.Type switch
+        {
+            AttributeDataType.Text => string.IsNullOrWhiteSpace(value.StringValue) ? null : value.StringValue,
+            AttributeDataType.Guid => value.GuidValue?.ToString(),
+            _ => null
+        };
+    }
+
+    private async Task ChangeGroupByAsync(string groupBy)
+    {
+        if (groupBy == GroupBy)
+            return;
+        await OnGroupByChanged.InvokeAsync(groupBy);
+    }
+
+    private async Task SelectAttributeAsync(int attributeId)
+    {
+        await OnAttributeSelected.InvokeAsync(attributeId);
     }
 
     /// <summary>
@@ -174,6 +400,7 @@
     /// read the table's rows by name.
     /// </summary>
     public record MvoAttributeTableGroup(
+        int AttributeId,
         string AttributeName,
         List<MetaverseObjectAttributeValue> Values,
         bool IsMultiValued,
@@ -183,7 +410,7 @@
     private List<MvoAttributeTableGroup> GetGroupedAttributes()
     {
         if (MetaverseObject?.AttributeValues == null)
-            return new List<MvoAttributeTableGroup>();
+            return [];
 
         return MetaverseObject.AttributeValues
             .GroupBy(v => v.Attribute.Name)
@@ -193,6 +420,7 @@
                 var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
                 var isReference = values.Any(v => v.ReferenceValue != null);
                 return new MvoAttributeTableGroup(
+                    g.First().Attribute.Id,
                     g.Key,
                     values,
                     g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
@@ -210,7 +438,7 @@
         group.Values.Any(v => GetSearchText(v).Contains(search, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Orders the attributes by one of the four sorts the table's headers offer.
+    /// Orders the attributes by one of the sorts the table's headers offer.
     /// </summary>
     private static IEnumerable<MvoAttributeTableGroup> SortGroups(IEnumerable<MvoAttributeTableGroup> groups, string sortBy, bool descending)
     {
@@ -250,4 +478,59 @@
             return value.BoolValue.Value ? "True" : "False";
         return string.Empty;
     }
+
+    /// <summary>The origin summary for one attribute, or null when none was recorded for it (provenance not loaded, or not returned).</summary>
+    private MetaverseAttributeOriginSummary? OriginFor(int attributeId) =>
+        Provenance?.Attributes.FirstOrDefault(a => a.AttributeId == attributeId);
+
+    /// <summary>An attribute's origin summary, or "not recorded" when the provenance load returned nothing for it,
+    /// so every attribute has a source to be keyed, grouped and labelled by.</summary>
+    private MetaverseAttributeOriginSummary OriginOrNotRecorded(MvoAttributeTableGroup group) =>
+        OriginFor(group.AttributeId) ?? new MetaverseAttributeOriginSummary
+        {
+            AttributeId = group.AttributeId,
+            AttributeName = group.AttributeName,
+            Origins = [ValueOrigin.NotRecorded]
+        };
+
+    // The object's sources, grouped, keyed and ordered exactly as the contribution bar groups them, so a row's dot,
+    // a group header and the bar's legend always agree. Rebuilt with the groups on every parameter set.
+    private Dictionary<string, ValueOriginGrouping.Group> _sourceGroupsByKey = new();
+    private Dictionary<string, int> _sourceGroupOrder = new();
+    private Dictionary<int, ValueOriginGrouping.Group> _sourceGroupByAttributeId = new();
+
+    private void BuildSourceGroups()
+    {
+        if (Provenance == null)
+        {
+            _sourceGroupsByKey = new();
+            _sourceGroupOrder = new();
+            _sourceGroupByAttributeId = new();
+            return;
+        }
+
+        var ordered = ValueOriginGrouping.BuildGroups(_groups.Select(OriginOrNotRecorded).ToList());
+        _sourceGroupsByKey = ordered.ToDictionary(g => g.Group.Key, g => g.Group);
+        _sourceGroupOrder = ordered.Select((g, i) => (g.Group.Key, i)).ToDictionary(x => x.Key, x => x.i);
+        _sourceGroupByAttributeId = _groups.ToDictionary(
+            g => g.AttributeId,
+            g => _sourceGroupsByKey[ValueOriginGrouping.KeyFor(OriginOrNotRecorded(g))]);
+    }
+
+    /// <summary>The source group an attribute belongs to (see <see cref="BuildSourceGroups"/>).</summary>
+    private ValueOriginGrouping.Group SourceGroupFor(int attributeId) => _sourceGroupByAttributeId[attributeId];
+
+    private RenderFragment RenderSourceCell(int attributeId) => __builder =>
+    {
+        if (ProvenanceLoading && Provenance == null)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+        }
+        else if (Provenance != null)
+        {
+            @* A dot in the source's bar colour and its legend label: many rows name sources at once, so a column
+               of pills would compete with the values. The rule reads beside it only while there is room. *@
+            <SourceDot Group="@SourceGroupFor(attributeId)" ShowRule="@(!ShowInspector)" />
+        }
+    };
 }

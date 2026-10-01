@@ -150,6 +150,72 @@ public interface IMetaverseRepository
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
+    #region value provenance (#399)
+
+    /// <summary>
+    /// Returns the origin of every attribute holding at least one value (asserted-null rows included) on a
+    /// Metaverse Object (#399): what the Inspect view's Source column, contribution bar and Group by Source are
+    /// built from. Groups in SQL rather than loading every value, so a multi-valued attribute with a large number
+    /// of values costs one grouped aggregate, not a row per value. Returns null when the Metaverse Object does
+    /// not exist.
+    /// </summary>
+    public Task<MetaverseObjectProvenance?> GetMetaverseObjectProvenanceAsync(Guid metaverseObjectId);
+
+    /// <summary>
+    /// The Metaverse Object Type id of a Metaverse Object, or null when it does not exist (#399).
+    /// </summary>
+    public Task<int?> GetMetaverseObjectTypeIdAsync(Guid metaverseObjectId);
+
+    /// <summary>
+    /// The current values of one attribute on a Metaverse Object, formatted for display with their origin,
+    /// capped at <paramref name="cap"/> alongside the true total count (#399).
+    /// </summary>
+    public Task<(List<ProvenanceValue> Values, int TotalCount)> GetMetaverseAttributeCurrentValuesAsync(
+        Guid metaverseObjectId, int attributeId, int cap);
+
+    /// <summary>
+    /// The Metaverse Object's joined Connected System Object in <paramref name="connectedSystemId"/> that a
+    /// current attribute value's contributor names (#399): when <paramref name="contributingSyncRuleId"/> is
+    /// known, the joined object of that rule's Connected System Object Type is preferred; otherwise the first
+    /// joined object in the system is returned. Null when no Connected System Object is joined in that system.
+    /// </summary>
+    public Task<ProvenanceConnectedSystemObject?> GetContributingConnectedSystemObjectAsync(
+        Guid metaverseObjectId, int connectedSystemId, int? contributingSyncRuleId);
+
+    /// <summary>
+    /// The Metaverse Object's joined Connected System Object of a specific Connected System and Connected System
+    /// Object Type, with its attribute values and object type (including its attribute definitions) loaded, for
+    /// evaluating an Attribute Priority source candidate's value (#399). Null when no such object is joined.
+    /// </summary>
+    public Task<ConnectedSystemObject?> GetJoinedConnectedSystemObjectForProvenanceAsync(
+        Guid metaverseObjectId, int connectedSystemId, int connectedSystemObjectTypeId);
+
+    /// <summary>
+    /// The most recent recorded change that added an attribute's current value on a Metaverse Object (#399): the
+    /// causing Activity (and execution item), when, and who or what initiated it. Null when change tracking has
+    /// recorded no Add for the attribute.
+    /// </summary>
+    public Task<ProvenanceChange?> GetLastAttributeSetChangeAsync(Guid metaverseObjectId, int attributeId);
+
+    /// <summary>
+    /// The raw Add/Remove value-change rows for one attribute on a Metaverse Object, newest change first and
+    /// capped at <paramref name="rawCap"/> rows (#399). Deliberately unpaired: pairing a single-valued attribute's
+    /// Remove-then-Add into one <c>Set</c> entry is <c>JIM.Application.Utilities.ProvenanceLogic.PairAttributeHistory</c>,
+    /// a pure function so it is unit-testable without a database.
+    /// </summary>
+    public Task<List<MetaverseAttributeHistoryRawEntry>> GetAttributeHistoryRawEntriesAsync(
+        Guid metaverseObjectId, int attributeId, int rawCap);
+
+    /// <summary>
+    /// The Generated Values a Metaverse Object holds (#399): one per attribute a Generated Value Attribute Flow is
+    /// responsible for, in every stored assignment state: an assignment is saved only once its value is on the
+    /// object (Committed, or later Remediated or NeedsDecision; Proposed is never persisted, #1904). Whether the
+    /// value is the one in use is <see cref="GeneratedValueOwnership.IsCurrentValue"/>.
+    /// </summary>
+    public Task<List<GeneratedValueOwnership>> GetGeneratedValueOwnershipsAsync(Guid metaverseObjectId);
+
+    #endregion
+
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     public Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject);

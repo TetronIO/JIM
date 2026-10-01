@@ -1062,8 +1062,506 @@ html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
     text-overflow: ellipsis;
 }
 
+/* ─── Source dot (SourceDot.razor, #399) ─── */
+
+/* A source named quietly: the bar's colour as a dot, the legend label, then optionally the rule as secondary text.
+   One line; the rule gives way first, then the label. */
+.jim-source-dot-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+
+
+/* The label holds its width and the rule gives way, so a long rule name never clips a short system name. The
+   cap stops an unusually long label taking the whole cell; past it, the label clips too. */
+.jim-source-dot-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex-shrink: 0;
+    max-width: 70%;
+}
+
+.jim-source-dot-label:not(:has(.jim-source-dot-rule)) .jim-source-dot-name {
+    flex-shrink: 1;
+    max-width: none;
+}
+
+/* The mark between the system and its rule: the group header's count separator, never the part that gives way. */
+.jim-source-dot-sep {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+    font-weight: 700;
+}
+
+.jim-source-dot-rule {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex-shrink: 2;
+}
+
+/* A Generated Value's ending (System · Rule · Generated Value): gives way after the rule, before the system. */
+.jim-source-dot-type {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.jim-source-dot-label:has(.jim-source-dot-type):not(:has(.jim-source-dot-rule)) .jim-source-dot-name {
+    flex-shrink: 0;
+    max-width: 70%;
+}
+
+/* ─── System and rule chip (SystemRuleChip.razor, #399) ─── */
+
+/* One pill naming a route: [CS] system [SR] rule. The SR glyph separates the two halves, so no dot or divider is
+   needed; the wider gap between halves than within them is what groups each glyph with its own name. The rule's
+   name sits a weight lighter than the system's, so the pill reads "this system, by this rule". */
+.jim-system-rule-chip {
+    gap: 10px;
+    min-width: 0;
+}
+
+.jim-system-rule-chip-part {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+}
+
+/* The system's name holds its full width and only the rule's gives way, so a short system name ("HR") is never
+   clipped to make room for a long rule name. The cap stops an unusually long system name from taking the whole
+   pill; past it, the system name clips too. */
+.jim-system-rule-chip-system {
+    flex-shrink: 0;
+    max-width: 60%;
+}
+
+.jim-system-rule-chip-rule {
+    flex-shrink: 1;
+    font-weight: 450;
+}
+
+.jim-system-rule-chip-deleted {
+    color: var(--mud-palette-text-disabled);
+}
+
+.jim-system-rule-chip-deleted .jim-object-chip-glyph {
+    background: var(--mud-palette-text-disabled);
+}
+
+/* Each linked half hovers on its own (glyph lifts, name underlines), so it is clear which object a click opens;
+   a whole-pill hover would not say which. */
+a.jim-system-rule-chip-part:hover .jim-object-chip-name {
+    text-decoration: underline;
+}
+
+a.jim-system-rule-chip-part:hover .jim-object-chip-glyph {
+    filter: brightness(1.12);
+}
+
+a.jim-system-rule-chip-part:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+    border-radius: 999px;
+}
+
 .jim-header-title {
     font-weight: 300;
+}
+
+/* ─── Contribution bar (MvoContributionBar.razor, #399) ─── */
+
+/* A quiet strip rather than a section: a one-line heading, a thin bar and a row of legend pills. It sets context
+   for the table beneath it, so it must not compete with the table for attention. */
+/* 24px below, the uniform gap between panels (JIM.Web/CLAUDE.md > Panel spacing). */
+.jim-contribution-bar-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 24px;
+}
+
+.jim-contribution-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+}
+
+.jim-contribution-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-contribution-count,
+.jim-contribution-single,
+.jim-contribution-legend-count {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-contribution-count,
+.jim-contribution-single {
+    font-size: 0.875rem;
+}
+
+/* The bar itself is decorative (aria-hidden on the container); the key below is the accessible control. Thick
+   enough to read as a chart rather than a rule line; the 2px gap separates segments of adjacent colours. */
+.jim-contribution-bar {
+    display: flex;
+    gap: 2px;
+    width: 100%;
+    height: 12px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.jim-contribution-bar-segment {
+    height: 100%;
+    min-width: 2px;
+}
+
+/* The bar's key: a swatch and "HR · 6" per source, laid out as a key rather than as a row of buttons. Each entry
+   is still a real <button>, so the source filter is keyboard-operable and its pressed state is announced. */
+.jim-contribution-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+}
+
+.jim-contribution-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 0;
+    border-radius: 4px;
+    padding: 3px 6px;
+    margin-left: -6px;
+    background: none;
+    color: var(--mud-palette-text-primary);
+    font: inherit;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+}
+
+.jim-contribution-legend-item:hover {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 6%, transparent);
+}
+
+.jim-contribution-legend-item:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+}
+
+/* While a filter is on, the other sources step back and the chosen one is marked, so the key shows what the
+   table below is filtered to. */
+.jim-contribution-legend-filtered .jim-contribution-legend-item {
+    opacity: 0.55;
+}
+
+.jim-contribution-legend-filtered .jim-contribution-legend-item-active {
+    opacity: 1;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--mud-palette-primary) 10%, transparent);
+}
+
+/* One swatch shape for a source's colour wherever it appears: the bar's key, the table's Source column and the
+   inspector's list of every source. Same shape and size everywhere, so a row reads straight against the key. */
+.jim-contribution-legend-swatch,
+.jim-source-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    flex: none;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Attribute inspector (MvoAttributeInspector.razor, #399) ─── */
+
+/* A card beside the Inspect table, sticky within the viewport as the reader works down a long table. The layout
+   that sets its width lives on .jim-inspect-side, in the Inspect view's rules. */
+.jim-attribute-inspector {
+    position: sticky;
+    top: 16px;
+    background: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--jim-container-radius, 8px);
+}
+
+.jim-inspector-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 12px 12px 18px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+/* Each section is separated by a hairline rather than a heavy divider; its title is a small uppercase label so the
+   content, not the headings, carries the weight. */
+.jim-inspector-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-inspector-section:last-child {
+    border-bottom: none;
+}
+
+.jim-inspector-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-inspector-label em {
+    font-style: normal;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    font-size: 0.75rem;
+    margin-left: 6px;
+}
+
+.jim-inspector-label-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.jim-inspector-subtle {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-inspector-value {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+}
+
+/* The origin as labelled rows rather than one wrapping sentence: every fact lines up, and each chip keeps its own
+   line instead of breaking mid-phrase. */
+/* The label column is exactly as wide as its longest label, so the values (pills, mostly) get the rest. A fixed
+   width had to fit "Synchronisation Rule" and left the shorter labels ("From", "Last set") trailing empty space. */
+.jim-inspector-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 8px 16px;
+    align-items: center;
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+.jim-inspector-facts dt {
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+}
+
+.jim-inspector-facts dd {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+/* Every source in priority order, as one bordered list: rank, source, state, then the value it would supply. The
+   source in use is tinted so the winner reads at a glance. */
+.jim-inspector-sources {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.jim-inspector-source {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-inspector-source:last-child {
+    border-bottom: none;
+}
+
+.jim-inspector-source-in-use {
+    background: color-mix(in srgb, var(--mud-palette-success) 7%, transparent);
+}
+
+/* The rank is a plain number: the dot beside it carries the colour, and two filled circles side by side read
+   as noise. The source in use takes the success colour, matching its row's tint. */
+.jim-inspector-rank {
+    min-width: 22px;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-inspector-source-in-use .jim-inspector-rank {
+    color: var(--jim-chip-text-success, var(--mud-palette-success));
+}
+
+.jim-inspector-source-who {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+/* Quiet links: text-coloured until hovered, so the list reads as a ranking rather than as a set of objects. The
+   system's name holds its width; the rule's gives way. */
+.jim-inspector-source-system,
+.jim-inspector-source-rule {
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.jim-inspector-source-system {
+    color: var(--mud-palette-text-primary);
+    font-weight: 500;
+    flex-shrink: 0;
+    max-width: 60%;
+}
+
+.jim-inspector-source-rule {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+}
+
+.jim-inspector-source-type {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.jim-inspector-source-system:hover,
+.jim-inspector-source-rule:hover {
+    text-decoration: underline;
+}
+
+.jim-inspector-source-system:focus-visible,
+.jim-inspector-source-rule:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+.jim-inspector-state {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+}
+
+.jim-inspector-candidate {
+    grid-column: 2;
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+
+/* History on a rail: one dot per change, coloured by what the change did. */
+.jim-inspector-rail {
+    list-style: none;
+    margin: 0 0 0 5px;
+    padding: 0 0 0 16px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.jim-inspector-rail li {
+    position: relative;
+    font-size: 0.875rem;
+}
+
+.jim-inspector-rail li::before {
+    content: "";
+    position: absolute;
+    left: -23px;
+    top: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--mud-palette-info);
+    box-shadow: 0 0 0 3px var(--mud-palette-surface);
+}
+
+.jim-inspector-rail li.jim-inspector-rail-added::before {
+    background: var(--mud-palette-success);
+}
+
+.jim-inspector-rail li.jim-inspector-rail-removed::before {
+    background: var(--mud-palette-error);
+}
+
+.jim-inspector-previous {
+    color: var(--mud-palette-text-secondary);
+    text-decoration: line-through;
+    margin-top: 2px;
+}
+
+.jim-inspector-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+    margin-top: 3px;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* ─── Value origin chip (ValueOriginChip.razor, #399) ─── */
+
+/* One line, no wrapping: the origin (the system-and-rule pill, plus any modifier text or chips) must read as a
+   single unit in a table cell, a group header or a change row. */
+.jim-value-origin-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Only the system-and-rule pill gives way when space runs short (it clips the rule's name first); any
+   modifier text or chip beside it keeps its size. */
+.jim-value-origin-chip > * {
+    flex-shrink: 0;
+}
+
+.jim-value-origin-chip > .jim-system-rule-chip {
+    flex-shrink: 1;
 }
 
 /* !important is required so the monospace font and size win over MudBlazor's
@@ -2298,6 +2796,174 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-text-primary);
 }
 
+/* ─── Inspect view (MvoDetailsTable.razor, #399) ─── */
+
+/* The attribute inspector sits BESIDE the table, not over it (site design says Source stays visible while an
+   administrator steps through attributes): the table shrinks and the panel takes a fixed width, sticky within
+   the viewport (.jim-attribute-inspector, above). */
+/* 24px between the table and the inspector: side-by-side panels take the same gap as stacked ones
+   (JIM.Web/CLAUDE.md > Panel spacing). */
+.jim-inspect-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.jim-inspect-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.jim-inspect-side {
+    flex: 0 0 29rem;
+    max-width: 29rem;
+}
+
+.jim-inspect-toolbar-label {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The row's own click is a mouse convenience only (see the markup comment beside it); the attribute-name
+   button below is the real, keyboard-accessible control, so the row itself needs no tabindex or role. */
+.jim-inspect-row {
+    cursor: pointer;
+}
+
+/* The selected row: a light primary tint, with a 3px primary rail on its leading edge so the row the inspector
+   describes is findable at a glance without the tint having to be heavy. */
+html[lang] .jim-attribute-table.mud-table-hover tbody tr.jim-inspect-row-selected > td {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 6%, transparent);
+}
+
+html[lang] .jim-attribute-table tbody tr.jim-inspect-row-selected > td:first-child {
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
+html[lang] .jim-attribute-table tbody tr.jim-inspect-row-selected .jim-attr-name-button {
+    color: var(--mud-palette-text-primary);
+    font-weight: 500;
+    opacity: 1 !important;
+}
+
+/* The attribute name is the row's real, keyboard-accessible open-inspector control (a plain <button>, since a
+   <tr> containing links cannot itself be role="button"), styled to read as text rather than as a button. */
+.jim-attr-name-button {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.jim-attr-name-button:hover {
+    text-decoration: underline;
+}
+
+.jim-attr-name-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+/* The Source column is capped so a long Connected System or rule name cannot squeeze the Value column into a
+   character-per-line stack while the inspector narrows the table; the value keeps a readable minimum width. */
+.jim-inspect-source-cell {
+    max-width: 28rem;
+}
+
+html[lang] .jim-attribute-table td.jim-attr-value {
+    min-width: 10rem;
+}
+
+/* A single value reads on one line, clipped with an ellipsis (its full text is on the cell's title), so a long
+   value cannot push its row taller than its neighbours or squeeze the Source column. */
+.jim-inspect-value {
+    display: flex;
+    align-items: center;
+    max-width: 30rem;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+/* The value clips; anything after it keeps its size, so a long value can never push it out of sight. */
+.jim-inspect-value > :first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.jim-inspect-value > :not(:first-child) {
+    flex: none;
+}
+
+.jim-inspect-group-header td {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 3%, transparent);
+}
+
+/* A group header's one line: label (a source's dot and path, or a category's icon and name), a separator, then the
+   count, all centred on one axis so the icon sits level with the text beside it. */
+.jim-inspect-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.jim-inspect-group-icon {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-inspect-group-name {
+    font-weight: 500;
+}
+
+.jim-inspect-group-sep {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
+    font-weight: 700;
+}
+
+.jim-inspect-group-count {
+    flex: none;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Inspector open: fixed proportions, so every cell clips inside its own column (the value and the origin both
+   carry their full text on a title). Without this, an auto-layout table sizes each column to its longest
+   one-line content and runs past its panel. */
+.jim-inspect-table-narrow table {
+    table-layout: fixed;
+}
+
+/* Value takes whatever Attribute and Source leave, so it widens to fill the table when grouping by Source drops
+   the Source column. */
+.jim-inspect-table-narrow th.jim-attr-header-name {
+    width: 26%;
+}
+
+.jim-inspect-table-narrow th.jim-attr-header-source {
+    width: 26%;
+}
+
+.jim-inspect-table-narrow .jim-inspect-value,
+.jim-inspect-table-narrow .jim-inspect-source-cell {
+    max-width: 100%;
+}
+
+html[lang] .jim-inspect-table-narrow td.jim-attr-value {
+    min-width: 0;
+}
+
+.jim-inspect-table-narrow td.jim-attr-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* CSO Attribute Table Styles */
 /* A whole attribute accessor (mv["Name"] / cs["Name"]) is one span coloured by the side it reads. Colour only:
    no weight or style change, because the <ExpressionEditor /> overlays this markup on a textarea and any change
    to glyph metrics would put the highlighted text out of step with the caret. */

@@ -7022,6 +7022,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <summary>
     /// Gets the import mappings contributing to a given Metaverse attribute for a given Metaverse Object Type,
     /// ordered by attribute priority (#91). Disabled Synchronisation Rules are included so they hold position.
+    /// Includes each mapping's <see cref="SyncRuleMapping.Sources"/> (and their Connected System attribute
+    /// definitions), so <see cref="SyncRuleMapping.GetSourceType"/> and value provenance (#399) can distinguish
+    /// an Attribute, Expression, Advanced or Generated mapping without a further round trip.
     /// </summary>
     public async Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseAttributeAsync(int metaverseObjectTypeId, int metaverseAttributeId)
     {
@@ -7030,6 +7033,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(m => m.SyncRule)
                 .ThenInclude(sr => sr!.ConnectedSystem)
             .Include(m => m.TargetMetaverseAttribute)
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(m => m.Generation)
             .Where(m =>
                 m.TargetMetaverseAttributeId == metaverseAttributeId &&
                 m.SyncRule!.Direction == SyncRuleDirection.Import &&
@@ -7058,6 +7064,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 m.SyncRule.MetaverseObjectTypeId == metaverseObjectTypeId)
             .OrderBy(m => m.Priority)
             .ThenBy(m => m.Id)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<SyncRuleMapping>> GetExportSyncRuleMappingsForTargetsAsync(
+        IReadOnlyCollection<int> syncRuleIds, IReadOnlyCollection<int> connectedSystemAttributeIds)
+    {
+        if (syncRuleIds.Count == 0 || connectedSystemAttributeIds.Count == 0)
+            return new List<SyncRuleMapping>();
+
+        return await Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(m => m.Sources)
+                .ThenInclude(s => s.MetaverseAttribute)
+            .Include(m => m.Generation)
+            .Where(m =>
+                syncRuleIds.Contains(m.SyncRuleId) &&
+                m.TargetConnectedSystemAttributeId.HasValue &&
+                connectedSystemAttributeIds.Contains(m.TargetConnectedSystemAttributeId.Value))
             .ToListAsync();
     }
 

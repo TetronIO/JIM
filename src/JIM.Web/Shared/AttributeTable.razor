@@ -21,7 +21,9 @@
 <CascadingValue Value="(IVirtualisedSortable)this" IsFixed="true">
     <MudTable T="TItem" Items="@VisibleItems" Hover="true" Dense="@_dense" Outlined="true" Elevation="0"
               Class="@CssClass" RowClassFunc="@RowClassFunc"
-              HeaderContent="@HeaderContent" RowTemplate="@RowTemplate">
+              HeaderContent="@HeaderContent" RowTemplate="@RowTemplate"
+              GroupBy="@_groupDefinition" GroupHeaderTemplate="@GroupHeaderTemplate" GroupHeaderClass="@GroupHeaderClass"
+              OnRowClick="@RowClickedAsync">
         <ToolBarContent>
             @* The toolbar convention every table follows: display control, then the page's own content, on the
                left; the count against the search box that changes it on the right. *@
@@ -120,6 +122,29 @@
     [Parameter]
     public string? Class { get; set; }
 
+    /// <summary>Groups the rows under header rows, one per distinct key (optional). The search and the sort still
+    /// apply; the sort orders the rows within each group, and <see cref="GroupOrder"/> orders the groups.</summary>
+    [Parameter]
+    public Func<TItem, object>? GroupKey { get; set; }
+
+    /// <summary>The position of a row's group among the groups, lowest first; required with <see cref="GroupKey"/>,
+    /// since the order groups first appear in the sorted rows is not an order anyone chose.</summary>
+    [Parameter]
+    public Func<TItem, int>? GroupOrder { get; set; }
+
+    /// <summary>A group's header row. Render one <c>MudTd</c> spanning every column.</summary>
+    [Parameter]
+    public RenderFragment<TableGroupData<object, TItem>>? GroupHeaderTemplate { get; set; }
+
+    /// <summary>CSS classes for each group header row.</summary>
+    [Parameter]
+    public string? GroupHeaderClass { get; set; }
+
+    /// <summary>Raised when a row is clicked (optional). A mouse convenience only: a row that opens something should
+    /// also offer a real control in one of its cells for the keyboard.</summary>
+    [Parameter]
+    public EventCallback<TItem> OnRowClick { get; set; }
+
     // ─── State ───
 
     /// <summary>The search currently narrowing the rows; empty when the reader has not searched.</summary>
@@ -136,6 +161,8 @@
 
     private bool _dense = true;
     private bool _urlStateRead;
+    private TableGroupDefinition<TItem>? _groupDefinition;
+    private Func<TItem, object>? _groupDefinitionKey;
 
     private string CssClass => string.IsNullOrWhiteSpace(Class) ? "jim-attribute-table" : $"jim-attribute-table {Class}";
 
@@ -151,6 +178,13 @@
             SortBy = urlState.SortBy ?? DefaultSortBy;
             SortDescending = urlState.SortDescending;
             _urlStateRead = true;
+        }
+
+        // One definition per grouping key, so MudTable is not handed a new grouping on every render.
+        if (!ReferenceEquals(GroupKey, _groupDefinitionKey))
+        {
+            _groupDefinitionKey = GroupKey;
+            _groupDefinition = GroupKey == null ? null : new TableGroupDefinition<TItem>(GroupKey);
         }
 
         Recompute();
@@ -196,8 +230,14 @@
     {
         var search = SearchText;
         var matching = string.IsNullOrWhiteSpace(search) ? Items : Items.Where(i => Matches(i, search));
-        VisibleItems = Sort(matching, SortBy, SortDescending).ToList();
+        var sorted = Sort(matching, SortBy, SortDescending);
+
+        // OrderBy is stable, so the sort survives within each group.
+        VisibleItems = (GroupKey != null && GroupOrder != null ? sorted.OrderBy(GroupOrder) : sorted).ToList();
     }
+
+    private Task RowClickedAsync(TableRowClickEventArgs<TItem> args) =>
+        OnRowClick.HasDelegate && args.Item != null ? OnRowClick.InvokeAsync(args.Item) : Task.CompletedTask;
 
     /// <summary>
     /// Rewrites the URL to match the search and sort, in place and without a navigation (which would re-run the

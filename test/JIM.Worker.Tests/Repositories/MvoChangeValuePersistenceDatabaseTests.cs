@@ -4,6 +4,8 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
+using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -104,6 +106,75 @@ public class MvoChangeValuePersistenceDatabaseTests
             "The Long Number change value must survive the bulk COPY path at full 64-bit fidelity.");
         Assert.That(decimalChange.DecimalValue, Is.EqualTo(decimalValue),
             "The Decimal change value must survive the bulk COPY path; a missing COPY column writes NULL.");
+    }
+
+    /// <summary>
+    /// Real-PostgreSQL verification for #399: the projecting Synchronisation Rule's scalar id and name
+    /// snapshot, set on <see cref="MetaverseObjectChange.SyncRuleId"/>/<see cref="MetaverseObjectChange.SyncRuleName"/>
+    /// (never the <see cref="MetaverseObjectChange.SyncRule"/> navigation), must survive the bulk COPY path
+    /// via <see cref="SyncRepository.PersistPendingMvoChangesAsync"/>. The COPY column list is hand-maintained
+    /// and invisible to the in-memory suite, so a column missing from it would silently write NULL.
+    /// </summary>
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_SyncRuleIdAndName_PersistAtFullFidelityAsync()
+    {
+        // Arrange: a persisted MVO and Synchronisation Rule so the change graph's FKs resolve
+        await using var seedContext = NewContext();
+        var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
+        var connectorDefinition = new ConnectorDefinition { Name = $"Connector-{Guid.NewGuid():N}", BuiltIn = true };
+        var connectedSystem = new ConnectedSystem { Name = $"System-{Guid.NewGuid():N}", ConnectorDefinition = connectorDefinition };
+        var csoType = new ConnectedSystemObjectType { Name = $"CsoType-{Guid.NewGuid():N}", ConnectedSystem = connectedSystem };
+        seedContext.ConnectorDefinitions.Add(connectorDefinition);
+        seedContext.ConnectedSystems.Add(connectedSystem);
+        seedContext.ConnectedSystemObjectTypes.Add(csoType);
+        seedContext.MetaverseObjects.Add(mvo);
+        await seedContext.SaveChangesAsync();
+
+        var syncRule = new SyncRule
+        {
+            Name = "Projecting Rule",
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystemObjectTypeId = csoType.Id,
+            MetaverseObjectTypeId = mvoType.Id
+        };
+        seedContext.SyncRules.Add(syncRule);
+        await seedContext.SaveChangesAsync();
+
+        // Set only the scalar id/name, exactly as the worker does: never the SyncRule navigation, so this
+        // write path must not depend on it being loaded.
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = mvo,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Projected,
+            InitiatedByType = ActivityInitiatorType.System,
+            SyncRuleId = syncRule.Id,
+            SyncRuleName = syncRule.Name
+        };
+
+        // Act: persist through the bulk COPY path the sync engine uses
+        await using (var writeContext = NewContext())
+        {
+            var syncRepository = new SyncRepository(new PostgresDataRepository(writeContext));
+            await syncRepository.PersistPendingMvoChangesAsync(
+                new List<MetaverseObjectChange> { change },
+                new List<MetaverseObjectChange>());
+        }
+
+        // Assert: read back with a fresh context; the audit record must carry the exact rule id and name
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChanges
+            .SingleAsync(c => c.Id == change.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.SyncRuleId, Is.EqualTo(syncRule.Id),
+                "The projecting Synchronisation Rule's id must survive the bulk COPY path.");
+            Assert.That(persisted.SyncRuleName, Is.EqualTo("Projecting Rule"),
+                "The projecting Synchronisation Rule's name snapshot must survive the bulk COPY path; a missing COPY column writes NULL.");
+        }
     }
 
     [Test]

@@ -1,0 +1,100 @@
+@using JIM.Models.Core.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Inspect view's contribution bar (#399): "Where this {Object Type} gets its values", a segmented bar   *@
+@* showing each source's share of the object's attributes, and a legend that doubles as the source filter.     *@
+@* When every attribute shares one origin the bar collapses to a single sentence (see the plan's Risks table). *@
+@* The bar itself is decorative (aria-hidden); the legend buttons are the accessible control. It sits in an     *@
+@* outlined panel like the table and inspector beside it, rather than on the page background. *@
+
+<MudPaper Outlined="true" Class="pa-4 jim-contribution-bar-panel">
+    @{ var groups = ValueOriginGrouping.BuildGroups(Provenance.Attributes); }
+    <div class="jim-contribution-heading">
+        <span class="jim-contribution-title">Where this @ObjectTypeName gets its values</span>
+        <span class="jim-contribution-count">@Provenance.Attributes.Count.ToString("N0") attributes@(groups.Count > 1 ? " · select a source to filter" : null)</span>
+    </div>
+
+    @if (groups.Count <= 1)
+    {
+        <div class="jim-contribution-single">
+            All @Provenance.Attributes.Count.ToString("N0") values from @(groups.Count == 1 ? FullSourceLabel(groups[0].Group) : "Source not recorded")
+        </div>
+    }
+    else
+    {
+        var total = Provenance.Attributes.Count;
+        <div class="jim-contribution-bar" aria-hidden="true">
+            @foreach (var (group, count) in groups)
+            {
+                var widthPercent = total == 0 ? 0 : count * 100.0 / total;
+                <span class="jim-contribution-bar-segment" style="width: @(widthPercent.ToString(System.Globalization.CultureInfo.InvariantCulture))%; background: var(@ColourFor(group));" title="@($"{group.Label}: {count:N0}")"></span>
+            }
+        </div>
+
+        <div class="jim-contribution-legend @(ActiveFilterKey != null ? "jim-contribution-legend-filtered" : null)" role="group" aria-label="Filter attributes by source">
+            @foreach (var (group, count) in groups)
+            {
+                var pressed = ActiveFilterKey == group.Key;
+                <button type="button" class="jim-contribution-legend-item @(pressed ? "jim-contribution-legend-item-active" : null)"
+                        aria-pressed="@(pressed ? "true" : "false")"
+                        @onclick="@(() => ToggleFilterAsync(group.Key))">
+                    <span class="jim-contribution-legend-swatch" style="background: var(@ColourFor(group));"></span>
+                    <span><span class="jim-contribution-legend-label">@group.Label</span> <span class="jim-contribution-legend-count">· @count.ToString("N0")</span></span>
+                </button>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>The Metaverse Object's attribute origins, as loaded for the Inspect view.</summary>
+    [Parameter, EditorRequired]
+    public MetaverseObjectProvenance Provenance { get; set; } = null!;
+
+    /// <summary>The Metaverse Object Type's name, for the heading ("Where this User gets its values").</summary>
+    [Parameter, EditorRequired]
+    public string ObjectTypeName { get; set; } = string.Empty;
+
+    /// <summary>The currently active source filter's group key, or null when no filter is applied.</summary>
+    [Parameter]
+    public string? ActiveFilterKey { get; set; }
+
+    /// <summary>
+    /// Raised when a legend item is pressed: the group's key to filter to, or null when the active filter was
+    /// pressed again (clearing it).
+    /// </summary>
+    [Parameter]
+    public EventCallback<string?> OnFilterChanged { get; set; }
+
+    private async Task ToggleFilterAsync(string key)
+    {
+        await OnFilterChanged.InvokeAsync(ActiveFilterKey == key ? null : key);
+    }
+
+    /// <summary>
+    /// The single-source collapse sentence's label ("HR · HR Import"): unlike a legend item's compact
+    /// <see cref="ValueOriginGrouping.Group.Label"/>, which elides the rule unless the same system contributes
+    /// through more than one of them, the collapse sentence is the object's ONLY source and always names it in
+    /// full, since there is nothing else on the bar for the rule name to disambiguate against.
+    /// </summary>
+    private static string FullSourceLabel(ValueOriginGrouping.Group group) => group.Kind switch
+    {
+        null => "Several sources",
+        ValueOriginKind.SetByPerson => group.Label,
+        ValueOriginKind.SynchronisationRule => group.SyncRuleDeleted
+            ? $"{group.ConnectedSystemName} · rule deleted"
+            : group.SyncRuleName != null
+                ? $"{group.ConnectedSystemName} · {group.SyncRuleName}"
+                : group.ConnectedSystemName ?? "Source not recorded",
+        ValueOriginKind.GeneratedValue => group.ConnectedSystemName == null
+            ? ValueOriginGrouping.GeneratedValueLabel
+            : group.SyncRuleName != null
+                ? $"{group.ConnectedSystemName} · {group.SyncRuleName} · {ValueOriginGrouping.GeneratedValueLabel}"
+                : $"{group.ConnectedSystemName} · {ValueOriginGrouping.GeneratedValueLabel}",
+        _ => "Source not recorded"
+    };
+
+    private static string ColourFor(ValueOriginGrouping.Group group) => ValueOriginGrouping.ColourTokenFor(group);
+}

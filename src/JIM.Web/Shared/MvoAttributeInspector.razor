@@ -1,0 +1,309 @@
+@using JIM.Models.Core
+@using JIM.Models.Core.DTOs
+@using Utilities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Inspect view's attribute inspector (#399): everything about one attribute on one Metaverse Object, *@
+@* rendered beside the Inspect table rather than over it (see MvoDetailsTable, which owns the flex layout).    *@
+@* Presentational: takes the already-loaded MetaverseAttributeProvenance and renders it. *@
+
+<section class="jim-attribute-inspector" aria-label="@Provenance.AttributeName">
+    @* ─── Header ─── *@
+    <header class="jim-inspector-header">
+        <div>
+            <MudText Typo="Typo.h6">@Provenance.AttributeName</MudText>
+            <span class="jim-inspector-subtle">
+                @Provenance.AttributeType · @(Provenance.AttributePlurality == AttributePlurality.MultiValued ? "Multi" : "Single")
+            </span>
+        </div>
+        <MudTooltip Text="Close" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Close" OnClick="@(() => OnClose.InvokeAsync())" />
+        </MudTooltip>
+    </header>
+
+    @* ─── Current value and where it came from ─── *@
+    <div class="jim-inspector-section">
+        <span class="jim-inspector-label">Current value</span>
+        <div class="jim-inspector-value">
+            @if (Provenance.CurrentValues.Count == 0)
+            {
+                <EmptyValue />
+            }
+            else
+            {
+                @foreach (var value in Provenance.CurrentValues)
+                {
+                    <div>
+                        @if (string.IsNullOrEmpty(value.DisplayValue))
+                        {
+                            <EmptyValue />
+                        }
+                        else if (value.ReferenceMetaverseObjectId.HasValue)
+                        {
+                            var referenceId = value.ReferenceMetaverseObjectId.Value;
+                            <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@value.ReferenceTypeName" Name="@value.DisplayValue"
+                                        Href="@Utilities.GetMetaverseObjectHref(referenceId, value.ReferenceTypeName ?? string.Empty)" Class="ma-0" />
+                        }
+                        else
+                        {
+                            @value.DisplayValue
+                        }
+                    </div>
+                }
+                @if (Provenance.CurrentValueTotalCount > Provenance.CurrentValues.Count)
+                {
+                    <span class="jim-inspector-subtle">
+                        +@((Provenance.CurrentValueTotalCount - Provenance.CurrentValues.Count).ToString("N0")) more
+                    </span>
+                }
+            }
+        </div>
+
+        @{ var primaryOrigin = Provenance.CurrentValues.FirstOrDefault()?.Origin ?? ValueOrigin.NotRecorded; }
+        @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded && ContributingConnectedSystemObject == null && Provenance.LastSet == null)
+        {
+            <span class="jim-inspector-subtle">Source not recorded</span>
+        }
+        else
+        {
+            <dl class="jim-inspector-facts">
+                @if (primaryOrigin.Kind == ValueOriginKind.NotRecorded)
+                {
+                    <dt>Source</dt>
+                    <dd><span class="jim-inspector-subtle">Source not recorded</span></dd>
+                }
+                @if (primaryOrigin.Kind == ValueOriginKind.SetByPerson)
+                {
+                    <dt>Set by</dt>
+                    <dd>@primaryOrigin.PersonName</dd>
+                }
+                @if (primaryOrigin.ConnectedSystemId.HasValue)
+                {
+                    @* One row, one pill: the Connected System and the Synchronisation Rule the value came through. This is
+                       the panel's one pill-weight statement of the source; the list below it names sources quietly. *@
+                    var connectedSystemId = primaryOrigin.ConnectedSystemId.Value;
+                    var syncRuleHref = primaryOrigin.SyncRuleId is { } syncRuleId ? $"/admin/sync-rules/{syncRuleId}" : null;
+                    <dt>Source</dt>
+                    <dd>
+                        <SystemRuleChip ConnectedSystemName="@primaryOrigin.ConnectedSystemName"
+                                        ConnectedSystemHref="@($"/admin/connected-systems/{connectedSystemId}")"
+                                        SyncRuleName="@primaryOrigin.SyncRuleName" SyncRuleHref="@syncRuleHref"
+                                        SyncRuleDeleted="@(!primaryOrigin.SyncRuleId.HasValue)" />
+                    </dd>
+                }
+                @if (primaryOrigin.Kind == ValueOriginKind.GeneratedValue)
+                {
+                    @* The last step of the path: the Attribute Flow generated the value rather than reading it from the
+                       Connected System, which is also why there is no "From" object below. *@
+                    <dt>Source type</dt>
+                    <dd>
+                        @ValueOriginGrouping.GeneratedValueLabel
+                        @if (primaryOrigin.Corrected)
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">Corrected</MudChip>
+                        }
+                    </dd>
+                }
+                @if (primaryOrigin.AssertsNoValue)
+                {
+                    <dt>Asserts</dt>
+                    <dd>No value (Null is a value)</dd>
+                }
+                @if (ContributingConnectedSystemObject != null)
+                {
+                    <dt>From</dt>
+                    <dd>
+                        <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
+                                    TypeName="@ContributingConnectedSystemObject.TypeName"
+                                    Name="@ObjectDescription.ChipName(ContributingConnectedSystemObject.DisplayName, ContributingConnectedSystemObject.ExternalId)"
+                                    Href="@CsoHref" Class="ma-0" />
+                    </dd>
+                }
+                @if (Provenance.LastSet != null)
+                {
+                    <dt>Last set</dt>
+                    <dd>
+                        <MudTooltip Text="@Provenance.LastSet.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <span>@Provenance.LastSet.ChangeTime.ToLocalTime().ToRelativeTime()</span>
+                        </MudTooltip>
+                        @if (ActivityHref != null)
+                        {
+                            <span>by</span>
+                            <MudLink Href="@ActivityHref">@(Provenance.LastSet.ActivityDescription ?? "the Activity")</MudLink>
+                        }
+                    </dd>
+                }
+            </dl>
+        }
+    </div>
+
+    @* ─── Every source, in priority order ─── *@
+    @if (Provenance.Sources.Count > 0)
+    {
+        <div class="jim-inspector-section">
+            <span class="jim-inspector-label">Every source <em>in priority order</em></span>
+            <ol class="jim-inspector-sources">
+                @foreach (var source in Provenance.Sources)
+                {
+                    <li @key="source.MappingId" class="jim-inspector-source @(source.State == AttributeSourceState.InUse ? "jim-inspector-source-in-use" : null)">
+                        <span class="jim-inspector-rank" aria-label="@($"Priority {source.Rank}")">@source.Rank</span>
+                        @* Named quietly (a dot in the system's bar colour, then text links), so the pill above stays the
+                           panel's one strong statement of where the value came from. *@
+                        <span class="jim-inspector-source-who">
+                            <span class="jim-source-dot" style="background: var(@SourceColourToken(source));" aria-hidden="true"></span>
+                            <a class="jim-inspector-source-system" href="@($"/admin/connected-systems/{source.ConnectedSystemId}")">@source.ConnectedSystemName</a>
+                            <a class="jim-inspector-source-rule" href="@($"/admin/sync-rules/{source.SyncRuleId}")" title="@source.SyncRuleName">@source.SyncRuleName</a>
+                            @if (source.IsGeneratedValue)
+                            {
+                                <span class="jim-inspector-source-type">· @ValueOriginGrouping.GeneratedValueLabel</span>
+                            }
+                        </span>
+                        <MudTooltip Text="@(source.Note ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top" Class="jim-inspector-state">
+                            <MudChip T="string" Variant="Variant.Text" Color="@StateColour(source.State)" Class="ma-0">@StateLabel(source.State)</MudChip>
+                        </MudTooltip>
+                        <span class="jim-inspector-candidate">
+                            @if (source.CandidateValues.Count > 0)
+                            {
+                                @string.Join(", ", source.CandidateValues)
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </span>
+                    </li>
+                }
+            </ol>
+            <span class="jim-inspector-subtle">
+                Priority is set on the @Provenance.AttributeName attribute.
+                <MudLink Href="@($"/admin/schema/object-types/{Provenance.MetaverseObjectTypeId}")">Change priority</MudLink>
+            </span>
+        </div>
+    }
+
+    @* ─── History ─── *@
+    <div class="jim-inspector-section">
+        <div class="jim-inspector-label-row">
+            <span class="jim-inspector-label">History</span>
+            <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
+        </div>
+        @if (Provenance.History.Count == 0)
+        {
+            <span class="jim-inspector-subtle">No changes recorded for this attribute.</span>
+        }
+        else
+        {
+            <ol class="jim-inspector-rail">
+                @foreach (var entry in Provenance.History)
+                {
+                    <li class="jim-inspector-rail-@entry.Kind.ToString().ToLowerInvariant()">
+                        <div>
+                            <MudChip T="string" Variant="Variant.Text" Color="@HistoryKindColour(entry.Kind)" Class="ma-0">@entry.Kind</MudChip>
+                            <span class="jim-text-code">
+                                @if (string.IsNullOrEmpty(entry.Value)) { <EmptyValue /> } else { @entry.Value }
+                            </span>
+                        </div>
+                        @if (entry.Kind == AttributeHistoryChangeKind.Set && !string.IsNullOrEmpty(entry.PreviousValue))
+                        {
+                            <div class="jim-text-code jim-inspector-previous">@entry.PreviousValue</div>
+                        }
+                        <div class="jim-inspector-meta">
+                            <MudTooltip Text="@entry.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <span>@entry.Change.ChangeTime.ToLocalTime().ToRelativeTime()</span>
+                            </MudTooltip>
+                            @{ var activityHref = ActivityHrefFor(entry.Change); }
+                            @if (activityHref != null)
+                            {
+                                <span>·</span>
+                                <MudLink Href="@activityHref">@(entry.Change.ActivityDescription ?? "Activity")</MudLink>
+                            }
+                            @if (!string.IsNullOrEmpty(entry.SyncRuleName))
+                            {
+                                <span>· @entry.SyncRuleName</span>
+                            }
+                            @if (entry.IsGeneratedValue)
+                            {
+                                <span>· @ValueOriginGrouping.GeneratedValueLabel</span>
+                            }
+                        </div>
+                    </li>
+                }
+            </ol>
+            @if (Provenance.HistoryTruncated)
+            {
+                <span class="jim-inspector-subtle">Showing the most recent changes only.</span>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    /// <summary>Everything the inspector shows for one attribute on one Metaverse Object.</summary>
+    [Parameter, EditorRequired]
+    public MetaverseAttributeProvenance Provenance { get; set; } = null!;
+
+    /// <summary>Raised when the panel's close button is pressed.</summary>
+    [Parameter, EditorRequired]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>Raised by "Open in Timeline": the host switches the page to the Changes tab.</summary>
+    [Parameter]
+    public EventCallback OnOpenInTimeline { get; set; }
+
+    private ProvenanceConnectedSystemObject? ContributingConnectedSystemObject => Provenance.ContributingConnectedSystemObject;
+
+    private string? CsoHref => ContributingConnectedSystemObject == null
+        ? null
+        : $"/admin/connected-systems/{ContributingConnectedSystemObject.ConnectedSystemId}/connector-space/{ContributingConnectedSystemObject.Id}";
+
+    private string? ActivityHref => ActivityHrefFor(Provenance.LastSet);
+
+    /// <summary>
+    /// A source's dot takes the colour the contribution bar gives it: a Generated Value Attribute Flow the primary
+    /// colour, any other its Connected System's.
+    /// </summary>
+    private static string SourceColourToken(AttributeSourceCandidate source) => source.IsGeneratedValue
+        ? ValueOriginGrouping.GeneratedValueColourToken
+        : ValueOriginGrouping.ColourTokenForConnectedSystem(source.ConnectedSystemId);
+
+    /// <summary>
+    /// The execution item detail when one is recorded (the granular, per-object view every other causality
+    /// surface links to), falling back to the Activity itself when only that is known.
+    /// </summary>
+    private static string? ActivityHrefFor(ProvenanceChange? change)
+    {
+        if (change == null)
+            return null;
+        if (change.ActivityRunProfileExecutionItemId.HasValue)
+            return $"/activity/item/{change.ActivityRunProfileExecutionItemId.Value}";
+        if (change.ActivityId.HasValue)
+            return $"/activity/{change.ActivityId.Value}";
+        return null;
+    }
+
+    private static string StateLabel(AttributeSourceState state) => state switch
+    {
+        AttributeSourceState.InUse => "In use",
+        AttributeSourceState.Outranked => "Outranked",
+        AttributeSourceState.NoValue => "No value",
+        AttributeSourceState.NotJoined => "Not joined",
+        AttributeSourceState.Disabled => "Disabled",
+        _ => "Not evaluated"
+    };
+
+    private static Color StateColour(AttributeSourceState state) => state switch
+    {
+        AttributeSourceState.InUse => Color.Success,
+        AttributeSourceState.NotEvaluated => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static Color HistoryKindColour(AttributeHistoryChangeKind kind) => kind switch
+    {
+        AttributeHistoryChangeKind.Added => Color.Success,
+        AttributeHistoryChangeKind.Removed => Color.Error,
+        _ => Color.Info
+    };
+}

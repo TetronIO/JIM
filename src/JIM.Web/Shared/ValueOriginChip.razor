@@ -1,0 +1,74 @@
+@using JIM.Models.Core.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Where a Metaverse Object attribute value came from, in full (#399): a Connected System through a         *@
+@* Synchronisation Rule (read, or a Generated Value), a person, or "not recorded", with links. Used where an origin is shown   *@
+@* once per change or export (the Changes tab, Pending Export detail) so it reads identically in both. Where *@
+@* many rows name sources at once (the Inspect table), SourceDot names them quietly instead.                 *@
+@* One line, no wrapping: see .jim-value-origin-chip in site.css. *@
+
+<span class="jim-value-origin-chip">
+@if (HasSeveralOrigins)
+{
+    <span class="mud-text-secondary">Several sources</span>
+}
+else if (Origin.Kind == ValueOriginKind.SynchronisationRule)
+{
+    <SystemRuleChip ConnectedSystemName="@Origin.ConnectedSystemName" ConnectedSystemHref="@ConnectedSystemHref"
+                    SyncRuleName="@Origin.SyncRuleName" SyncRuleHref="@SyncRuleHref" SyncRuleDeleted="@Origin.SyncRuleDeleted" />
+    @if (Origin.AssertsNoValue)
+    {
+        <span class="mud-text-secondary">asserts no value</span>
+    }
+}
+else if (Origin.Kind == ValueOriginKind.GeneratedValue)
+{
+    @if (!string.IsNullOrEmpty(Origin.ConnectedSystemName))
+    {
+        <SystemRuleChip ConnectedSystemName="@Origin.ConnectedSystemName" ConnectedSystemHref="@ConnectedSystemHref"
+                        SyncRuleName="@Origin.SyncRuleName" SyncRuleHref="@SyncRuleHref" />
+        <span class="mud-text-secondary">@ValueOriginGrouping.GeneratedValueLabel</span>
+    }
+    else
+    {
+        <span>@ValueOriginGrouping.GeneratedValueLabel</span>
+    }
+    @if (Origin.Corrected)
+    {
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">Corrected</MudChip>
+    }
+}
+else if (Origin.Kind == ValueOriginKind.SetByPerson)
+{
+    <span>Set by @Origin.PersonName</span>
+}
+else
+{
+    <span class="mud-text-disabled">Source not recorded</span>
+}
+</span>
+
+@code {
+    /// <summary>
+    /// The origin to render. Ignored (but still required, since the contract's origin lists are never empty)
+    /// when <see cref="HasSeveralOrigins"/> is set: a multi-valued attribute whose values came from more than
+    /// one source reads as "Several sources" rather than naming just one of them.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ValueOrigin Origin { get; set; } = null!;
+
+    /// <summary>
+    /// True when the attribute's values came from more than one distinct origin, in which case this renders
+    /// "Several sources" instead of <see cref="Origin"/>.
+    /// </summary>
+    [Parameter]
+    public bool HasSeveralOrigins { get; set; }
+
+    private string? ConnectedSystemHref =>
+        Origin.ConnectedSystemId.HasValue ? $"/admin/connected-systems/{Origin.ConnectedSystemId}" : null;
+
+    private string? SyncRuleHref =>
+        Origin.SyncRuleId.HasValue ? $"/admin/sync-rules/{Origin.SyncRuleId}" : null;
+}

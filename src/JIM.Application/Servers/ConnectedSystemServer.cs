@@ -8460,6 +8460,7 @@ public partial class ConnectedSystemServer
             return null;
 
         result.UnresolvedReferences = await DescribeUnresolvedReferencesAsync(result.PendingExport);
+        result.ValueSources = await GetPendingExportValueSourcesAsync(result.PendingExport);
         return result;
     }
 

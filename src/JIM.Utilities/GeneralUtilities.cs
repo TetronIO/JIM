@@ -82,6 +82,16 @@ public static class Utilities
         return $"/t/{metaverseObjectHeader.TypePluralName.ToLower()}/v/{metaverseObjectHeader.Id}";
     }
 
+    /// <summary>
+    /// The Metaverse Object's Inspect view, deep-linked to one attribute's inspector (#399): the Changes tab and
+    /// Pending Export detail's "Value from" both link into here so an administrator can jump straight from a
+    /// value's origin to its full history and competing sources, rather than hunting for the attribute by hand.
+    /// </summary>
+    public static string GetMetaverseObjectInspectHref(Guid mvoId, string typePluralName, int attributeId)
+    {
+        return $"{GetMetaverseObjectHref(mvoId, typePluralName)}?view=inspect&attr={attributeId}";
+    }
+
     public static string? GetMetaverseObjectHrefText(MetaverseObjectHeader metaverseObjectHeader)
     {
         return metaverseObjectHeader.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue;

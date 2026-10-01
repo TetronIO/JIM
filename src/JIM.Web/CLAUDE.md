@@ -15,6 +15,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | Component | Use for | See |
 |-----------|---------|-----|
 | `<TableDensityToggle @bind-Dense="_dense" />` | The compact/normal row toggle in a table's `ToolBarContent` | "Row density" below |
+| `<SegmentedToggle TValue="X" Options="@o" Value="@v" ValueChanged="@h" AriaLabel="..." />` | Choosing one of a few mutually exclusive settings or views (the causality panel's view, the Inspect view's Group by): the quiet slider, not a `MudButtonGroup`. Options are `SegmentedToggleOption<T>`; `Dense` for rows in a list or table | `Shared/SegmentedToggle.razor` |
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
@@ -33,6 +34,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
 | `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
 | `<ObjectChip Kind="@k" TypeName="@t" Name="@n" Href="@url" />` | Any reference to a Connected System Object, Metaverse Object, Connected System, Synchronisation Rule, Pending Export, Deletion Record or Run Profile: the site's one object chip | "Object chips" below |
+| `<SystemRuleChip ConnectedSystemName="@cs" SyncRuleName="@sr" ConnectedSystemHref="@a" SyncRuleHref="@b" />` | A Connected System and the Synchronisation Rule something came through, as one pill (`[CS] system [SR] rule`), each half linking on its own. Prefer it to a CS chip and an SR chip side by side | `Shared/SystemRuleChip.razor` |
+| `<SourceDot Group="@g" ShowRule="@b" />` | Naming a source quietly where many rows name sources at once: a dot in the contribution bar's colour for it and its legend label. Colours come from `ValueOriginGrouping.ColourTokenFor`, never chosen at the call site | `Shared/SourceDot.razor` |
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
@@ -367,6 +370,7 @@ An Activity that a Schedule produced carries `ScheduleExecutionId` and `Schedule
 
 ## Panel spacing (target: uniform `mt-6` visual gaps between all block-level sections)
 - Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections
+- **Side by side, the same 24px.** Panels placed next to each other (a table and the detail panel it opens, two summary cards) sit 24px apart horizontally, exactly as stacked panels do vertically, so every gap between two panels on a page is the same. In a flex row that is `gap: 24px` (or `gap-6`); in a `MudGrid`, `Spacing="6"`. The Inspect view's table and attribute inspector (`.jim-inspect-layout`) are the worked example.
 - Exception: the **first** panel on a page should omit `mt-6` (use just `Class="pa-4"`) so there is no unnecessary top margin
 - **After breadcrumbs, no intro text**: `MudBreadcrumbs` carries its own 16px bottom padding. If the first panel directly follows it with nothing in between, a bare `Class="pa-4"` (no margin) under-shoots the uniform gap (16px only); use `Class="pa-4 mt-2"` so the combined gap lands on the ~24px target, same reasoning as the "Tabs margin" rule below
 - **After intro text**: intro text is now the exception rather than the norm; see "Page descriptions" above (a page states its purpose from its title's `<PageInfo />`, not from a paragraph under it). It survives only on the handful of exempted landing/specimen pages (`Pages/Index.razor`, `Pages/Admin/AdminIndex.razor`, `Pages/Admin/ThemePreview.razor`). Where it is present, `MudText` with `Typo.subtitle1` renders as a `<p>` with its own bottom margin (~16px), and the first panel after it should use `mt-4` (not `mt-6`) so the combined gap matches `mt-6` visually

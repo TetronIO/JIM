@@ -127,6 +127,26 @@ When no values exist, the action is allowed even if configuration still referenc
 
 **Objects** are Metaverse Objects: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
 
+### Where a value comes from
+
+A Metaverse Object's **Details** tab offers three views: **Form**, **Tabs** and **Inspect**. Form and Tabs show the values. **Inspect** shows where each value comes from, and is the view to use when a value looks wrong. You can also open it directly with `?view=inspect` on the object's address.
+
+- **Where this {Object Type} gets its values**<br /> A bar at the top shows each source's share of the object's attributes, with a key underneath. Select a source in the key to filter the table to it; select it again to clear the filter. When every attribute comes from one source, the bar gives way to a single sentence naming it.
+- **Source**<br /> Each attribute's row names its source, with a dot in the same colour as that source's share of the bar: the Connected System and the Synchronisation Rule that contributed the value, or **Source not recorded** for values set before JIM recorded their source. A rule deleted since it contributed the value reads "rule deleted", and the Connected System is still named. A value an Attribute Flow generated (see [Generated values](synchronisation-rules.md#generated-values)) ends in **Generated Value**, for example "HR · HR Import Users · Generated Value", and has its own share of the bar. A multi-valued attribute whose values came from more than one source reads **Several sources**. Hover over a source to read it in full; the inspector links to the Connected System and the Synchronisation Rule.
+- **Group by**<br /> Group the attributes by **Source**, to see everything one Synchronisation Rule contributes to this object (a header names each source, in place of the Source column), or by **Category**. JIM remembers your choice.
+
+Select an attribute to open its inspector beside the table. The inspector answers "why is this value what it is":
+
+- **Current value**<br /> The value, its source (the Connected System and Synchronisation Rule it came from), the Connected System Object that supplied it, and the Activity that last set it. For a generated value, a **Source type** of **Generated Value** replaces the Connected System Object, since the Attribute Flow produced the value rather than reading it. A source that positively asserts there is no value (see [Null is a value](../concepts/attribute-priority.md#null-is-a-value)) is shown as asserting no value.
+- **Every source**<br /> Every Synchronisation Rule that can contribute the attribute, in [priority order](../concepts/attribute-priority.md), with the value each would supply for this object today (for a Generated Value Attribute Flow, the value it generated). The one supplying the current value is marked **In use**; a source with a value that lost on priority is marked **Outranked**; a joined source with nothing to supply is marked **No value**. A source whose object is not joined, whose Synchronisation Rule or Attribute Flow is disabled, or whose value cannot be worked out outside a synchronisation run says so. **Change priority** opens the Metaverse Object Type, where the order is set.
+- **History**<br /> The attribute's most recent changes (up to 50), newest first, with the Activity and Synchronisation Rule behind each. **Open in Timeline** takes you to the object's **Changes** tab for its full change history.
+
+Nothing in the Inspect view changes data: working out what each source would supply reads the joined Connected System Objects and evaluates each Attribute Flow without writing anything.
+
+The same information is available through the REST API (`GET /api/v1/metaverse/objects/{id}/provenance`, and `.../attributes/{attributeId}/provenance` for one attribute; see the [interactive API reference](../../api/reference/)) and PowerShell ([`Get-JIMMetaverseObjectProvenance`](../powershell/metaverse.md#get-jimmetaverseobjectprovenance)).
+
+A value's source is not only in the Inspect view: the object's **Changes** tab names each attribute change's source alongside the change itself, and a [Pending Export's detail page](connected-systems.md#pending-exports) shows both where the outbound value came from and which Attribute Flow staged it. Both link back into Inspect so you can jump straight from a change or a queued export to the full picture.
+
 ## Confirming a configuration change
 
 Changing an object type's deletion behaviour, or an attribute's data type or plurality, is confirmed before it saves. Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects eligible for deletion, with no synchronisation run in between; the confirmation says so. See [Configuration changes](configuration-changes.md).

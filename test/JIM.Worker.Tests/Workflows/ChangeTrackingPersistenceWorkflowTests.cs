@@ -225,6 +225,168 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
             "Change record should include the DisplayName Attribute Flow");
     }
 
+    /// <summary>
+    /// Issue #399: the projecting Synchronisation Rule is known at projection time
+    /// (<c>AttemptProjection</c>'s <c>projectionSyncRule</c> out parameter) but was never recorded on the
+    /// resulting <see cref="MetaverseObjectChange"/>. This proves the Projected change record now carries
+    /// the scalar id and name snapshot of the rule that caused the projection.
+    /// </summary>
+    [Test]
+    public async Task FullSync_Projection_RecordsProjectingSyncRuleOnMvoChangeAsync()
+    {
+        // Arrange: HR system with one user and an import rule that projects
+        var hrSystem = await CreateConnectedSystemAsync("HR");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "Person");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+
+        var hrDisplayNameAttr = hrType.Attributes.First(a => a.Name == "DisplayName");
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+
+        var importRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        importRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = importRule,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = hrDisplayNameAttr,
+                ConnectedSystemAttributeId = hrDisplayNameAttr.Id
+            }}
+        });
+
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "Alice Smith");
+
+        // Act: Full Sync projects the MVO
+        var profile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(hrSystem.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(Jim), SyncRepo,
+            hrSystem, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // Assert
+        hrCso = await ReloadEntityAsync(hrCso);
+        var mvo = SyncRepo.MetaverseObjects[hrCso.MetaverseObjectId!.Value];
+        var projectedChange = mvo.Changes.Single(c => c.ChangeType == ObjectChangeType.Projected);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(projectedChange.SyncRuleId, Is.EqualTo(importRule.Id),
+                "The Projected change should record the id of the Synchronisation Rule that caused the projection");
+            Assert.That(projectedChange.SyncRuleName, Is.EqualTo("HR Import"),
+                "The Projected change should record a name snapshot of the projecting Synchronisation Rule");
+            Assert.That(projectedChange.SyncRule, Is.Null,
+                "Only the scalar id/name should be set; the SyncRule navigation must not be attached");
+        }
+    }
+
+    /// <summary>
+    /// Counterpart to <see cref="FullSync_Projection_RecordsProjectingSyncRuleOnMvoChangeAsync"/>: a join has
+    /// no single attributable rule (multiple import rules could apply to a joined object), so the Joined
+    /// change record must not carry a Synchronisation Rule attribution.
+    /// </summary>
+    [Test]
+    public async Task FullSync_Join_DoesNotRecordSyncRuleOnMvoChangeAsync()
+    {
+        // Arrange: a Directory system that projects the MVO, and an HR system that joins to it by EmployeeId
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+
+        var directorySystem = await CreateConnectedSystemAsync("Directory");
+        var directoryType = await CreateCsoTypeAsync(directorySystem.Id, "DirectoryUser");
+        var directoryEmployeeIdAttr = directoryType.Attributes.First(a => a.Name == "EmployeeId");
+        var directoryImportRule = await CreateImportSyncRuleAsync(directorySystem.Id, directoryType, mvType, "Directory Import");
+        directoryImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryImportRule,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = directoryEmployeeIdAttr,
+                ConnectedSystemAttributeId = directoryEmployeeIdAttr.Id
+            }}
+        });
+
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+
+        var hrSystem = await CreateConnectedSystemAsync("HR");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "Person");
+        var hrEmployeeIdAttr = hrType.Attributes.First(a => a.Name == "EmployeeId");
+        var hrDisplayNameAttr = hrType.Attributes.First(a => a.Name == "DisplayName");
+        var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import", enableProjection: false);
+        // A join alone (no accompanying Attribute Flow) records no MetaverseObjectChange at all, so this
+        // flow is needed purely to make the Joined change record exist for the assertion below.
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = hrDisplayNameAttr,
+                ConnectedSystemAttributeId = hrDisplayNameAttr.Id
+            }}
+        });
+        hrImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = hrImportRule,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Order = 0,
+                    ConnectedSystemAttribute = hrEmployeeIdAttr,
+                    ConnectedSystemAttributeId = hrEmployeeIdAttr.Id
+                }
+            }
+        });
+        await DbContext.SaveChangesAsync();
+
+        const string sharedEmployeeId = "EMP001";
+        await CreateCsoAsync(directorySystem.Id, directoryType, "Alice Smith", sharedEmployeeId);
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "Alice Smith (HR)", sharedEmployeeId);
+
+        // Act: project via Directory, then join HR's CSO to the projected MVO
+        var directoryProfile = await CreateRunProfileAsync(directorySystem.Id, "Directory Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var directoryActivity = await CreateActivityAsync(directorySystem.Id, directoryProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(Jim), SyncRepo,
+            directorySystem, directoryProfile, directoryActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        var hrProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var hrActivity = await CreateActivityAsync(hrSystem.Id, hrProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(
+            new SyncEngine(), new SyncServer(Jim), SyncRepo,
+            hrSystem, hrProfile, hrActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // Assert
+        hrCso = await ReloadEntityAsync(hrCso);
+        Assert.That(hrCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined),
+            "HR's CSO should have joined the Directory-projected MVO by EmployeeId");
+
+        var mvo = SyncRepo.MetaverseObjects[hrCso.MetaverseObjectId!.Value];
+        var joinedChange = mvo.Changes.Single(c => c.ChangeType == ObjectChangeType.Joined);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(joinedChange.SyncRuleId, Is.Null,
+                "A join has no single attributable Synchronisation Rule, so SyncRuleId must stay null");
+            Assert.That(joinedChange.SyncRuleName, Is.Null,
+                "A join has no single attributable Synchronisation Rule, so SyncRuleName must stay null");
+        }
+    }
+
     #endregion
 
     #region Issue 2: CachedDisplayName set on admin-created MVOs

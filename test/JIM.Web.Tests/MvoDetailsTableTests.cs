@@ -1,18 +1,17 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Web.Shared;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using NUnit.Framework;
@@ -20,150 +19,494 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Covers the Metaverse Object's Table view, which renders through the same <see cref="AttributeTable{TItem}"/> as
-/// the Connected System Object's and Pending Export's attribute tables, so it offers the same search and sorts and
-/// shows a multi-valued attribute the same way: stacked inline up to the limit, a nested virtualised table beyond.
+/// Covers the Inspect view's attribute table (#399): rendering from provenance handed down by the host (it is
+/// presentational, taking no dependency on the application layer), rows opening the inspector, and Group by
+/// Source hiding the Source column since its header states the source instead. It renders through the same
+/// <see cref="AttributeTable{TItem}"/> as the Connected System Object's and Pending Export's attribute tables, so it
+/// offers the same search and sorts and shows a multi-valued attribute the same way.
 /// </summary>
 [TestFixture]
 public class MvoDetailsTableTests : JimComponentTestContext
 {
-    private static readonly Guid MetaverseObjectId = Guid.NewGuid();
-
     private Mock<IMetaverseRepository> _metaverse = null!;
 
+    /// <summary>
+    /// Registers a fake application factory so a multi-valued attribute over the inline threshold can render
+    /// its <see cref="MvoMvaTable"/> fallback, which injects <c>IJimApplicationFactory</c> for its own window
+    /// reads (pattern: <c>MvoMvaTableTests</c>). Every other test in this fixture ignores it.
+    /// </summary>
     protected override void ConfigureAdditionalServices()
     {
         var repository = new Mock<IRepository>();
         _metaverse = new Mock<IMetaverseRepository>();
         repository.Setup(r => r.Metaverse).Returns(_metaverse.Object);
 
-        var syncRepository = new Mock<ISyncRepository>();
-        syncRepository
-            .Setup(r => r.GetGeneratedValueAssignmentHeadersForMetaverseObjectAsync(It.IsAny<Guid>()))
-            .ReturnsAsync([]);
-
-        Services.AddSingleton<IJimApplicationFactory>(
-            new FakeJimApplicationFactory(new JimApplication(repository.Object, syncRepository: syncRepository.Object)));
+        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
 
-    private static MetaverseAttribute Attribute(string name, AttributePlurality plurality = AttributePlurality.SingleValued) =>
-        new() { Name = name, Type = AttributeDataType.Text, AttributePlurality = plurality };
-
-    private static List<MetaverseObjectAttributeValue> SingleValues(params string[] names) =>
-        names.Select(name => new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = Attribute(name),
-            StringValue = $"{name}-value"
-        }).ToList();
-
-    private static List<MetaverseObjectAttributeValue> MultiValues(string name, int count)
+    private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
     {
-        var attribute = Attribute(name, AttributePlurality.MultiValued);
-        return Enumerable.Range(0, count).Select(i => new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = attribute,
-            StringValue = $"{name}-value-{i:D3}"
-        }).ToList();
+        public JimApplication Create() => new(repository);
     }
 
-    private IRenderedComponent<MvoDetailsTable> RenderTable(
-        List<MetaverseObjectAttributeValue> values, Dictionary<string, int>? totalCounts = null) =>
-        Render<MvoDetailsTable>(p => p
-            .Add(c => c.MetaverseObject, new MetaverseObject { Id = MetaverseObjectId, AttributeValues = values })
-            .Add(c => c.AttributeValueTotalCounts, totalCounts ?? new Dictionary<string, int>()));
+    private static MetaverseObjectAttributeValue TextValue(int attributeId, string name, string value) => new()
+    {
+        Id = Guid.NewGuid(),
+        Attribute = new MetaverseAttribute { Id = attributeId, Name = name, Type = AttributeDataType.Text },
+        StringValue = value
+    };
+
+    private static MetaverseObject BuildObject(params MetaverseObjectAttributeValue[] values) => new()
+    {
+        Id = Guid.NewGuid(),
+        Type = new MetaverseObjectType { Name = "User", PluralName = "Users" },
+        AttributeValues = values.ToList()
+    };
+
+    private static MetaverseObjectProvenance BuildProvenance(params (int Id, string Name, ValueOrigin Origin)[] attrs) => new()
+    {
+        Attributes = attrs.Select(a => new MetaverseAttributeOriginSummary
+        {
+            AttributeId = a.Id,
+            AttributeName = a.Name,
+            Origins = [a.Origin]
+        }).ToList()
+    };
+
+    private static ValueOrigin HrOrigin => new()
+    {
+        Kind = ValueOriginKind.SynchronisationRule,
+        ConnectedSystemId = 1,
+        ConnectedSystemName = "HR",
+        SyncRuleId = 5,
+        SyncRuleName = "HR Import"
+    };
+
+    [Test]
+    public void DetailsTable_WithProvenance_RendersASourceColumnNamingEachSourceWithTheBarsDotAndLabel()
+    {
+        // Two sources, so the contribution bar draws a legend to compare the rows' dots against.
+        var directory = HrOrigin with { ConnectedSystemId = 2, ConnectedSystemName = "Directory", SyncRuleId = 6, SyncRuleName = "Directory Import" };
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Email", "e@example.com"));
+        var provenance = BuildProvenance((1, "Job Title", HrOrigin), (2, "Email", directory));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find("th:nth-child(3)").TextContent, Is.EqualTo("Source"));
+            // The same group, label and colour the contribution bar's legend uses, so a row can be read against it.
+            var legend = cut.FindAll(".jim-contribution-legend-item")
+                .ToDictionary(b => b.QuerySelector(".jim-contribution-legend-label")!.TextContent, b => b.QuerySelector(".jim-contribution-legend-swatch")!.GetAttribute("style"));
+            var hrRow = cut.FindAll("tr.jim-inspect-row").Single(r => r.TextContent.Contains("Job Title"));
+            Assert.That(hrRow.QuerySelector(".jim-source-dot")!.GetAttribute("style"), Is.EqualTo(legend["HR"]));
+            Assert.That(hrRow.QuerySelector(".jim-source-dot-name")!.TextContent, Is.EqualTo("HR"));
+            Assert.That(hrRow.QuerySelector(".jim-source-dot-rule")!.TextContent, Is.EqualTo("HR Import"),
+                "with the inspector closed there is room to name the rule");
+        }
+    }
+
+    [Test]
+    public void DetailsTable_RowClicked_RaisesOnAttributeSelectedWithTheAttributeId()
+    {
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+        int? selected = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
+
+        cut.Find("tr.jim-inspect-row").Click();
+
+        Assert.That(selected, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void DetailsTable_AttributeNameButton_ClickedRaisesOnAttributeSelected()
+    {
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+        int? selected = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
+
+        cut.Find("button.jim-attr-name-button").Click();
+
+        Assert.That(selected, Is.EqualTo(7));
+    }
+
+    [Test]
+    public void DetailsTable_AttributeNameButton_AriaExpandedReflectsWhetherItsInspectorIsOpen()
+    {
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+
+        var closedCut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User"));
+        var openCut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.SelectedAttributeId, 7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(closedCut.Find("button.jim-attr-name-button").GetAttribute("aria-expanded"), Is.EqualTo("false"));
+            Assert.That(openCut.Find("button.jim-attr-name-button").GetAttribute("aria-expanded"), Is.EqualTo("true"));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_SourceCell_HasNoLinksAndOpensTheInspectorWhenClicked()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+        var provenance = BuildProvenance((1, "Job Title", HrOrigin));
+        int? selected = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
+
+        var sourceCell = cut.Find(".jim-inspect-source-cell");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sourceCell.QuerySelector(".jim-source-dot"), Is.Not.Null);
+            Assert.That(sourceCell.QuerySelectorAll("a"), Is.Empty, "the row's source leaves its links to the inspector");
+        }
+
+        sourceCell.Click();
+
+        Assert.That(selected, Is.EqualTo(1), "a click on the linkless Source cell opens the inspector like the rest of the row");
+    }
+
+    [Test]
+    public void DetailsTable_GroupByToggle_RaisesOnGroupByChangedWithTheChosenOption()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+        string? raised = null;
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.GroupBy, "none")
+            .Add(c => c.OnGroupByChanged, EventCallback.Factory.Create<string>(this, g => raised = g)));
+
+        var control = cut.FindComponent<SegmentedToggle<string>>();
+        cut.FindAll(".jim-seg > button").Single(b => b.TextContent.Trim() == "Category").Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(control.Instance.AriaLabel, Is.EqualTo("Group by"));
+            Assert.That(raised, Is.EqualTo("category"));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_SingleTextValue_RendersOnOneClippedLineWithItsFullTextAsTheTitle()
+    {
+        const string longValue = "Principal Software Engineer, Identity and Access Management Platform";
+        var mvo = BuildObject(TextValue(1, "Job Title", longValue));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        var value = cut.Find("td.jim-attr-value .jim-inspect-value");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(value.ClassList, Does.Contain("jim-inspect-value"));
+            Assert.That(value.GetAttribute("title"), Is.EqualTo(longValue));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_SelectedAttribute_HighlightsItsRowAndHidesTheTypeAndPluralityColumns()
+    {
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, BuildProvenance((7, "Job Title", HrOrigin)))
+            .Add(c => c.SelectedAttributeId, 7));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Find("tr.jim-inspect-row").ClassList, Does.Contain("jim-inspect-row-selected"));
+            Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Plurality"));
+            Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Type"));
+            Assert.That(cut.FindAll("td.jim-attr-type"), Is.Empty);
+            Assert.That(cut.FindAll(".jim-source-dot-rule"), Is.Empty, "the narrowed Source column names the system only");
+        }
+    }
+
+    [Test]
+    public void DetailsTable_GroupedBySource_HidesTheSourceColumnAndRendersASourceHeaderRow()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Department", "Engineering"));
+        var provenance = BuildProvenance((1, "Job Title", HrOrigin), (2, "Department", HrOrigin));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.GroupBy, "source"));
+
+        var headerRow = cut.Find("tr.jim-inspect-group-header");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("th").Select(h => h.TextContent), Does.Not.Contain("Source"));
+            // The header names the source exactly as the Source column it replaces does (the bar's swatch and
+            // legend label), with the rule beside it, rather than a hand-built label string.
+            Assert.That(headerRow.QuerySelector(".jim-source-dot"), Is.Not.Null);
+            Assert.That(headerRow.QuerySelector(".jim-source-dot-name")!.TextContent, Is.EqualTo("HR"));
+            Assert.That(headerRow.QuerySelector(".jim-source-dot-rule")!.TextContent, Is.EqualTo("HR Import"));
+            Assert.That(headerRow.QuerySelectorAll(".jim-system-rule-chip"), Is.Empty, "headers use the swatch, not the pill");
+            Assert.That(headerRow.TextContent, Does.Contain("2 attributes"));
+            Assert.That(cut.FindAll("tr.jim-inspect-row"), Has.Count.EqualTo(2));
+        }
+    }
+
+    [TestCase("source", 7)]
+    [TestCase("source", null)]
+    [TestCase("category", 7)]
+    [TestCase("category", null)]
+    public void DetailsTable_GroupHeaderRow_SpansExactlyTheColumnsTheTableHas(string groupBy, int? selectedAttributeId)
+    {
+        // A colspan wider than the header row makes the browser invent empty columns, which render as a dead band
+        // down the right of the table (worst with the inspector open, where the table lays out at fixed widths).
+        var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
+        var provenance = BuildProvenance((7, "Job Title", HrOrigin));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.GroupBy, groupBy)
+            .Add(c => c.SelectedAttributeId, selectedAttributeId));
+
+        var headerCount = cut.FindAll("thead th").Count;
+        var span = cut.Find("tr.jim-inspect-group-header td").GetAttribute("colspan");
+
+        Assert.That(span, Is.EqualTo(headerCount.ToString()));
+    }
+
+    [Test]
+    public void DetailsTable_GroupedByCategory_RendersACategoryHeaderRow()
+    {
+        var mvo = BuildObject(TextValue(1, Constants.BuiltInAttributes.DisplayName, "Amelia Sullivan"));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.GroupBy, "category"));
+
+        Assert.That(cut.Find("tr.jim-inspect-group-header").TextContent, Does.Contain("Identity"));
+    }
+
+    [Test]
+    public void DetailsTable_ContributionFilterActive_ShowsOnlyMatchingAttributes()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Office", "London"));
+        var provenance = BuildProvenance(
+            (1, "Job Title", HrOrigin),
+            (2, "Office", ValueOrigin.NotRecorded));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ContributionFilterKey, ValueOriginGrouping.KeyFor(provenance.Attributes[0])));
+
+        var rows = cut.FindAll("tr.jim-inspect-row");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].TextContent, Does.Contain("Job Title"));
+        }
+    }
+
+    [Test]
+    public void DetailsTable_ContributionFilterActive_PassesTheFilterKeyValueToTheContributionBar()
+    {
+        // Regression: a string parameter bound without @ passes the literal field name, not its value, so the
+        // bar's legend never showed the active filter as pressed. Found by runtime verification, not bUnit (#399).
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Office", "London"));
+        var provenance = BuildProvenance(
+            (1, "Job Title", HrOrigin),
+            (2, "Office", ValueOrigin.NotRecorded));
+        var filterKey = ValueOriginGrouping.KeyFor(provenance.Attributes[0]);
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ContributionFilterKey, filterKey));
+
+        Assert.That(cut.FindComponent<MvoContributionBar>().Instance.ActiveFilterKey, Is.EqualTo(filterKey));
+    }
+
+    private static MetaverseObjectAttributeValue MvaValue(string value) => new()
+    {
+        Id = Guid.NewGuid(),
+        Attribute = new MetaverseAttribute
+        {
+            Id = 3, Name = "Other Mobiles", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued
+        },
+        StringValue = value
+    };
+
+    [Test]
+    public void DetailsTable_MultiValuedAttributeWithinInlineThreshold_RendersTheStackedExpandedList()
+    {
+        var mvo = BuildObject(MvaValue("+44 1"), MvaValue("+44 2"));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(".jim-attr-expanded-item"), Has.Count.EqualTo(2));
+            Assert.That(cut.Markup, Does.Contain("+44 1"));
+            Assert.That(cut.Markup, Does.Contain("+44 2"));
+            Assert.That(cut.HasComponent<MvoMvaTable>(), Is.False);
+        }
+    }
+
+    [Test]
+    public void DetailsTable_MultiValuedAttributeAboveInlineThreshold_RendersMvoMvaTable()
+    {
+        var values = Enumerable.Range(0, 11).Select(i => MvaValue($"+44 {i}")).ToArray();
+        var mvo = BuildObject(values);
+        _metaverse
+            .Setup(r => r.GetAttributeValuesRangeAsync(mvo.Id, "Other Mobiles",
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync(new RangeResultSet<MetaverseObjectAttributeValue> { Results = values.ToList(), TotalResults = 11 });
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.HasComponent<MvoMvaTable>(), Is.True);
+            Assert.That(cut.FindAll(".jim-attr-expanded-item"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void DetailsTable_ProvenanceLoadingWithNoDataYet_ShowsAProgressIndicatorNotAnEmptyBar()
+    {
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
+
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.ProvenanceLoading, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.HasComponent<MudBlazor.MudProgressCircular>(), Is.True);
+            Assert.That(cut.HasComponent<MvoContributionBar>(), Is.False);
+        }
+    }
+
+    // ─── The shared attribute table: search, sorts and grouping order ───
 
     private static AttributeTable<MvoDetailsTable.MvoAttributeTableGroup> Table(IRenderedComponent<MvoDetailsTable> cut) =>
         cut.FindComponent<AttributeTable<MvoDetailsTable.MvoAttributeTableGroup>>().Instance;
 
-    private static IEnumerable<string> VisibleAttributeNames(IRenderedComponent<MvoDetailsTable> cut) =>
-        Table(cut).VisibleItems.Select(g => g.AttributeName);
+    private static List<string> VisibleAttributeNames(IRenderedComponent<MvoDetailsTable> cut) =>
+        Table(cut).VisibleItems.Select(g => g.AttributeName).ToList();
 
     [Test]
-    public void MvoDetailsTable_RendersThroughTheSharedAttributeTableSortedByName()
+    public void DetailsTable_RendersThroughTheSharedAttributeTableSortedByName()
     {
-        var cut = RenderTable(SingleValues("Job Title", "Display Name", "Employee ID"));
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Display Name", "Amelia"), TextValue(3, "Employee ID", "E1"));
 
-        cut.WaitForAssertion(() =>
-            Assert.That(VisibleAttributeNames(cut), Is.EqualTo(new[] { "Display Name", "Employee ID", "Job Title" })));
+        var cut = Render<MvoDetailsTable>(p => p.Add(c => c.MetaverseObject, mvo).Add(c => c.ObjectTypeName, "User"));
+
+        Assert.That(VisibleAttributeNames(cut), Is.EqualTo(new[] { "Display Name", "Employee ID", "Job Title" }));
     }
 
     [Test]
-    public async Task MvoDetailsTable_Search_MatchesTheAttributeNameAndItsValuesAsync()
+    public async Task DetailsTable_Search_MatchesTheAttributeNameAndItsValuesAsync()
     {
-        var cut = RenderTable([.. SingleValues("Display Name", "Job Title"), .. MultiValues("Other Telephones", 2)]);
-        cut.WaitForAssertion(() => Assert.That(cut.HasComponent<AttributeTable<MvoDetailsTable.MvoAttributeTableGroup>>(), Is.True));
+        var mvo = BuildObject(TextValue(1, "Display Name", "Amelia"), TextValue(2, "Job Title", "Engineer"), MvaValue("+44 1"), MvaValue("+44 2"));
+        var cut = Render<MvoDetailsTable>(p => p.Add(c => c.MetaverseObject, mvo).Add(c => c.ObjectTypeName, "User"));
 
         await cut.InvokeAsync(() => Table(cut).SetSearchAsync("job"));
-        var byName = VisibleAttributeNames(cut).ToList();
-        await cut.InvokeAsync(() => Table(cut).SetSearchAsync("Other Telephones-value-001"));
-        var byValue = VisibleAttributeNames(cut).ToList();
+        var byName = VisibleAttributeNames(cut);
+        await cut.InvokeAsync(() => Table(cut).SetSearchAsync("+44 2"));
+        var byValue = VisibleAttributeNames(cut);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(byName, Is.EqualTo(new[] { "Job Title" }));
-            Assert.That(byValue, Is.EqualTo(new[] { "Other Telephones" }),
-                "a value beyond the first is searchable too, since it is on the page");
+            Assert.That(byValue, Is.EqualTo(new[] { "Other Mobiles" }), "a value beyond the first is searchable too, since it is on the page");
         }
     }
 
     [Test]
-    public async Task MvoDetailsTable_SortByPlurality_GroupsSingleAndMultiValuedAttributesAsync()
+    public async Task DetailsTable_SortByPlurality_OrdersSingleValuedBeforeMultiValuedAsync()
     {
-        var cut = RenderTable([.. MultiValues("Other Telephones", 2), .. SingleValues("Display Name", "Job Title")]);
-        cut.WaitForAssertion(() => Assert.That(cut.HasComponent<AttributeTable<MvoDetailsTable.MvoAttributeTableGroup>>(), Is.True));
+        var mvo = BuildObject(MvaValue("+44 1"), MvaValue("+44 2"), TextValue(1, "Display Name", "Amelia"), TextValue(2, "Job Title", "Engineer"));
+        var cut = Render<MvoDetailsTable>(p => p.Add(c => c.MetaverseObject, mvo).Add(c => c.ObjectTypeName, "User"));
 
         await cut.InvokeAsync(() => Table(cut).ToggleSortAsync("plurality"));
 
-        Assert.That(VisibleAttributeNames(cut).Last(), Is.EqualTo("Other Telephones"));
+        Assert.That(VisibleAttributeNames(cut).Last(), Is.EqualTo("Other Mobiles"));
     }
 
     [Test]
-    public void MvoDetailsTable_MultiValuedAttributeWithinTheInlineLimit_StacksEveryValueInTheRow()
+    public void DetailsTable_GroupedBySource_OrdersTheGroupsAsTheContributionBarDoesAndSortsWithinEach()
     {
-        var cut = RenderTable(MultiValues("Other Telephones", 3));
+        // The bar orders sources by how many attributes each contributes, so Directory (two) leads HR (one). Within a
+        // group the table's own sort applies: by attribute name by default.
+        var directory = HrOrigin with { ConnectedSystemId = 2, ConnectedSystemName = "Directory", SyncRuleId = 6, SyncRuleName = "Directory Import" };
+        var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"), TextValue(2, "Office", "London"), TextValue(3, "Email", "e@example.com"));
+        var provenance = BuildProvenance((1, "Job Title", HrOrigin), (2, "Office", directory), (3, "Email", directory));
 
-        cut.WaitForAssertion(() =>
-        {
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(cut.FindAll(".jim-attr-expanded .jim-attr-expanded-item"), Has.Count.EqualTo(3));
-                Assert.That(cut.HasComponent<MvoMvaTable>(), Is.False);
-            }
-        });
-    }
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.GroupBy, "source"));
 
-    [Test]
-    public void MvoDetailsTable_MultiValuedAttributeBeyondTheInlineLimit_HoldsAnEmbeddedNestedTable()
-    {
-        var values = MultiValues("Static Members", 500);
-        _metaverse
-            .Setup(r => r.GetAttributeValuesRangeAsync(MetaverseObjectId, "Static Members",
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
-            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
-                new RangeResultSet<MetaverseObjectAttributeValue>
-                {
-                    Results = values.Skip(offset).Take(count).ToList(),
-                    TotalResults = includeTotalCount ? values.Count : null
-                });
-
-        var cut = RenderTable(values.Take(10).ToList(), new Dictionary<string, int> { ["Static Members"] = 500 });
-
-        cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MvoMvaTable>(), Is.True));
-        var grid = cut.FindComponent<VirtualisedDataGrid<MetaverseObjectAttributeValue>>().Instance;
-
+        var headerNames = cut.FindAll("tr.jim-inspect-group-header .jim-source-dot-name").Select(e => e.TextContent).ToList();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(grid.Embedded, Is.True,
-                "one table sits on the page per large attribute, so none may claim the address bar or the density toggle");
-            Assert.That(grid.MaxHeight, Is.Not.Null.And.Not.Empty,
-                "its container is a table cell, not the page, so it has to state its own height ceiling");
+            Assert.That(headerNames, Is.EqualTo(new[] { "Directory", "HR" }));
+            Assert.That(VisibleAttributeNames(cut), Is.EqualTo(new[] { "Email", "Office", "Job Title" }));
         }
     }
 
-    private sealed class FakeJimApplicationFactory(JimApplication jim) : IJimApplicationFactory
+    [Test]
+    public async Task DetailsTable_GroupedByCategory_SearchNarrowsTheRowsAndDropsEmptiedGroupsAsync()
     {
-        public JimApplication Create() => jim;
+        var mvo = BuildObject(TextValue(1, Constants.BuiltInAttributes.DisplayName, "Amelia Sullivan"), TextValue(2, "Job Title", "Engineer"));
+        var cut = Render<MvoDetailsTable>(p => p
+            .Add(c => c.MetaverseObject, mvo)
+            .Add(c => c.ObjectTypeName, "User")
+            .Add(c => c.GroupBy, "category"));
+        var groupsBefore = cut.FindAll("tr.jim-inspect-group-header").Count;
+
+        await cut.InvokeAsync(() => Table(cut).SetSearchAsync("Amelia"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groupsBefore, Is.EqualTo(2), "arrange: the two attributes sit in different categories");
+            Assert.That(cut.FindAll("tr.jim-inspect-group-header"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll("tr.jim-inspect-row"), Has.Count.EqualTo(1));
+        }
     }
 }
