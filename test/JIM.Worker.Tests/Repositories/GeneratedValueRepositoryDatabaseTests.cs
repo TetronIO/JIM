@@ -287,7 +287,7 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(result, Is.Empty);
     }
 
-    // ---- Gate (e) / adoption gate: GetGeneratedValueAssignmentValuesInUseAsync ----
+    // ---- Gate (e): GetGeneratedValueAssignmentValuesInUseAsync ----
 
     [Test]
     public void GetGeneratedValueAssignmentValuesInUseAsync_NeitherIdGiven_ThrowsArgumentExceptionAsync()
