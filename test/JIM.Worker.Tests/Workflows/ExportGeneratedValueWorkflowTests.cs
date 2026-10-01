@@ -628,6 +628,8 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
         {
             Assert.That(mvo.AttributeValues.Any(av => av.AttributeId == ctx.MvNoteAttribute.Id && av.StringValue == "changed.outside.jim"), Is.True,
                 "precondition: Ticketing's import changed the Metaverse Object, so export evaluation ran for it");
+            Assert.That(activity!.RunProfileExecutionItems.Count(r => r.ObjectChangeType == ObjectChangeType.DriftCorrection), Is.EqualTo(1),
+                "precondition: Drift Detection staged its correction first, so export evaluation merged into it");
             var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == ticketingCso.Id);
             var loginNameChanges = pendingExport.AttributeValueChanges.Where(c => c.AttributeId == ctx.TicketingLoginNameAttribute.Id).ToList();
             Assert.That(loginNameChanges, Has.Count.EqualTo(1), "one change for the attribute, not one from each path");
