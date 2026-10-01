@@ -74,6 +74,31 @@ window.jimInterop = {
         if (typeof value === 'string' && element.value !== value) element.value = value;
         element.focus();
         element.setSelectionRange(start, end);
+    },
+    // Keyboard movement through a picker's list of buttons (the Attribute Flow dialog's Insert attribute menu): the
+    // filter box is first, then every enabled item matching itemSelector, in DOM order. ArrowDown and ArrowUp move
+    // between them (ArrowUp from the first item returns to the filter), and Enter in the filter chooses the first
+    // item. Read from the DOM on every key, so it always walks exactly the items on show, whatever the filter
+    // left. Tab and Shift+Tab need nothing: the items are real buttons in the same order. Attached once per element.
+    listKeyboard: function (container, itemSelector) {
+        if (!container || container.jimListKeyboard) return;
+        container.jimListKeyboard = true;
+        container.addEventListener('keydown', function (event) {
+            var input = container.querySelector('input');
+            var items = Array.prototype.slice.call(container.querySelectorAll(itemSelector + ':not([disabled])'));
+            var index = items.indexOf(document.activeElement);
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                var next = items[index + 1] || items[0];
+                if (next) next.focus();
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (index <= 0) { if (input) input.focus(); } else { items[index - 1].focus(); }
+            } else if (event.key === 'Enter' && document.activeElement === input && items.length > 0) {
+                event.preventDefault();
+                items[0].click();
+            }
+        });
     }
 };
 

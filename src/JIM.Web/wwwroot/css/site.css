@@ -5943,3 +5943,44 @@ html[lang] .jim-password-timeline.mud-timeline {
     margin-left: 0.5rem;
     font-size: 0.875rem;
 }
+
+/* ─── Insert attribute menu (#1750): the Attribute Flow dialog's mv["..."] / cs["..."] picker ───
+   The items are real buttons (not MudMenu items) so Tab, Shift+Tab and the arrow keys walk exactly the entries on
+   show; see InsertAttributeMenu.razor. Every colour is a theme token, so the menu follows the active theme. */
+.jim-insert-attribute-menu {
+    min-width: 340px;
+    max-width: min(480px, 90vw);
+}
+
+.jim-insert-attribute-list {
+    max-height: 320px;
+    overflow-y: auto;
+    padding-bottom: 6px;
+}
+
+.jim-insert-attribute-item {
+    display: block;
+    width: 100%;
+    padding: 6px 16px;
+    border: 0;
+    background: transparent;
+    color: var(--mud-palette-text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.jim-insert-attribute-item:hover:not(:disabled),
+.jim-insert-attribute-item:focus-visible {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.jim-insert-attribute-item:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.jim-insert-attribute-item:disabled {
+    color: var(--mud-palette-text-disabled);
+    cursor: default;
+}

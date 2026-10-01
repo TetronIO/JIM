@@ -6,7 +6,7 @@
 @* keystroke. Bind with @bind-Value, or pass Value + ValueChanged when the handler drives a server reload. *@
 @* Immediate is deliberately NOT a parameter and unmatched attributes are deliberately NOT splatted: either would *@
 @* let a call site reinstate blur-commit. See JIM.Web/CLAUDE.md > "Search and filter boxes". *@
-<MudTextField T="string"
+<MudTextField @ref="_textField" T="string"
               Value="@Value"
               ValueChanged="@OnValueChangedAsync"
               Placeholder="@EffectivePlaceholder"
@@ -106,6 +106,14 @@
     /// </summary>
     [Parameter]
     public string? Autocomplete { get; set; }
+
+    private MudTextField<string>? _textField;
+
+    /// <summary>
+    /// Moves keyboard focus into the box: for a filter that appears on demand, inside a menu or popover just opened,
+    /// so the administrator can type at once.
+    /// </summary>
+    public ValueTask FocusAsync() => _textField?.FocusAsync() ?? ValueTask.CompletedTask;
 
     private string? EffectivePlaceholder => Placeholder ?? (string.IsNullOrEmpty(Label) ? "Search" : null);
 

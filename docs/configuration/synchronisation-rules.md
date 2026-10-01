@@ -561,6 +561,13 @@ An expression that reads its own target (`mv["Email"]` in the flow to Email) is 
 - **REST API**<br /> `dependentDerivedFlows` on the responses to deleting a mapping, updating a mapping, updating a Synchronisation Rule and deleting a Synchronisation Rule, in a schema refresh preview's `dependents`, and on the import-schema response when it disables or removes dependents. Each entry names the derived flow's mapping, target attribute, Synchronisation Rule and Connected System, and each input it lost (`missingInputs`), with the derived attributes in between (`via`) when it reaches that input indirectly.
 - **PowerShell**<br /> `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write a warning: a summary line, then one line per derived flow. They never prompt and never stop.
 - **Previews**<br /> An [Attribute Flow change preview](#previewing-an-attribute-flow-change) lists the same derived flows as warnings before you save, and names derived flows on other Connected Systems' rules that read what the change alters. [Sync Preview](sync-preview.md) shows derived values as ordinary Attribute Flow changes.
+- **Portal**<br /> Before it removes an Attribute Flow, applies an edit that disables or retargets one or changes its expression, or saves a Synchronisation Rule switched off or deletes one, the portal asks first, listing each derived flow that would be left without an input, its Synchronisation Rule and what it reads (`Email (via Account Name)` for one reached through another derived attribute). With nothing affected, you see the usual confirmation.
+
+**In the portal.** The Attribute Flow tab marks each derived flow with a **Derived · step N** chip beside its target; hover over it to see what it reads and when it runs. In the Attribute Flow dialog:
+
+- **Insert attribute**<br /> Under the Expression (and a generated value's base expression), this menu puts `mv["..."]` or `cs["..."]` at the cursor. Type in its filter to narrow the list. Metaverse attributes that cannot be read are listed but greyed out, saying why: a Reference attribute (not supported yet) and the flow's own target.
+- **The Derived Attribute Flow panel**<br /> While the expression reads the Metaverse, a panel states what it reads, its step and the chain of steps leading to it, updating as you type.
+- **Checked as you type**<br /> A loop is shown as soon as you type it, listing each attribute and the attribute it is worked out from, and **Update Attribute Flow** stays disabled until you break it; the same check refuses the save. A non-repeatable function shows its warning, and you can still save.
 
 ### Previewing an Attribute Flow change
 
