@@ -279,7 +279,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
                 // evaluate queued drift detection (after MVOs persisted so corrective Pending Exports
                 // capture real Metaverse Object ids, before the export flush persists them)
-                EvaluateQueuedDrift();
+                await EvaluateQueuedDriftAsync();
 
                 // Batch evaluate exports for all MVOs that changed during this page
                 await EvaluatePendingExportsAsync();

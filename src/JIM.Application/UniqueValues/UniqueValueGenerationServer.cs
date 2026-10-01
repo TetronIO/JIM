@@ -110,11 +110,18 @@ public sealed class UniqueValueGenerationServer
     /// one query per mode, so that <see cref="ResolveAsync"/> calls made for these objects later in the same
     /// run answer the sticky check from the cache rather than querying again. Callers use this ahead of a page
     /// to avoid a per-object query; it is an optimisation, not a requirement, since <see cref="ResolveAsync"/>
-    /// queries and caches for itself on a cache miss.
+    /// queries and caches for itself on a cache miss. Objects already known to the run are not queried again.
     /// </summary>
     public async Task PrefetchAssignmentsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IReadOnlyCollection<Guid> connectedSystemObjectIds, UniqueValueResolveOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+
+        // An object already known to the run is answered from the cache, which the run keeps current as it commits
+        // and deletes assignments; querying it again would cost a round trip whose result TryAdd discards anyway.
+        // Drift Detection's per-page prefetch (#242) relies on this: export evaluation may already have resolved
+        // some of the page's Connected System Objects.
+        metaverseObjectIds = metaverseObjectIds.Where(id => !options.KnownMetaverseAssignments.ContainsKey(id)).ToList();
+        connectedSystemObjectIds = connectedSystemObjectIds.Where(id => !options.KnownConnectedSystemAssignments.ContainsKey(id)).ToList();
 
         if (metaverseObjectIds.Count > 0)
         {
