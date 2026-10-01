@@ -6,11 +6,24 @@ This document describes how to create releases of JIM, including support for air
 
 JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
-1. Validates the build and runs all tests
-2. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
-3. Publishes the PowerShell module to PSGallery
-4. Creates an air-gapped deployment bundle
-5. Creates a GitHub Release with all assets
+1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below)
+2. Validates the build and runs all tests
+3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
+4. Publishes the PowerShell module to PSGallery
+5. Creates an air-gapped deployment bundle
+6. Creates a GitHub Release with all assets
+
+## The Active Directory Lab Gate
+
+A release is refused unless the exact commit being tagged has a `success` commit status named `jim-ad-lab`. The status is posted by `.github/workflows/ad-lab.yml`, which runs every Active Directory-family integration scenario, and the connector's `RequiresActiveDirectory` probes, against three real Windows Server domain controllers on the Hyper-V lab (`test/integration/ad-lab/README.md`), nightly on `main` and on demand. The gate exists so that a customer's Active Directory is never the first one JIM has met.
+
+- **It is enforced twice.** The `/release` skill runs `scripts/Test-AdLabReleaseGate.ps1` before it tags, and the `jim-ad-lab-gate` job at the head of `release.yml` runs the same script, which every other release job needs, so nothing is built or published for a commit the lab has not passed.
+- **Not enforced until the lab has passed once.** The lab's domain controllers are not built yet, so no commit can carry the status. Until then the `jim-ad-lab-gate` job, and the `/release` skill's check, run only while the repository variable `JIM_AD_LAB_GATE_ENFORCED` is `true`; with it unset, the job passes and writes a warning to the release run's summary. Set it after the lab's first green run: `gh variable set JIM_AD_LAB_GATE_ENFORCED --body true`.
+- **Once enforced, there is no override.** That variable is the single switch (changing it needs repository admin); no flag or label skips the gate. The remedy for a red or missing status is a fix and a dispatched re-run.
+- **The status belongs to one SHA.** A green night on the commit before the release commit says nothing about the release commit, so the release commit (the merge commit of the release pull request) needs its own dispatched run before it is tagged. That wait, up to four hours for the full suite at the Medium template, is the expected cost of the gate. Nothing else may merge to `main` between the release pull request and the tag, or the dispatched run tests a different commit.
+- **Reading a result:** `pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The commit status's description carries the scenario count and the domain controller operating system build, and each run uploads the regression report and `dc-builds.json` as artefacts.
+- **The lab is patched by rebuild** (`ad-lab-rebuild.yml`, after each Patch Tuesday), so a red night after a rebuild is attributable to the Windows update or to JIM: the build is in every run's record.
+- **The lab runner is in its own runner group.** It is the only runner in a dedicated `jim-ad-lab` runner group (repository access `TetronIO/JIM` only; workflow allowlist exactly `ad-lab.yml` and `ad-lab-rebuild.yml` at `refs/heads/main`), not in `tetron-trusted`: a runner carrying the default labels there would be offered ordinary `ci.yml` push jobs, which need `sudo pwsh` and a larger machine. It also means the gate itself never needs the lab: the `jim-ad-lab-gate` job runs on the ordinary release runners and only reads a commit status. Dispatching `ad-lab.yml` from a branch other than `main` is refused by that allowlist unless the branch ref has been added to it (as a release tag is added to `tetron-trusted` in the steps below), which is one more reason to dispatch the release commit on `main`.
 
 ## Release History
 
@@ -80,18 +93,26 @@ git push origin main --tags
    git push origin main
    ```
 
-6. **Create the release tag**:
+6. **Pass the Active Directory lab gate** (only while `JIM_AD_LAB_GATE_ENFORCED` is `true`; check with `gh variable get JIM_AD_LAB_GATE_ENFORCED`, and skip this step while it is unset): once the release commit is on `main`, dispatch the lab on it and wait for it to finish, then confirm the gate script passes for that commit. Do not tag before it exits 0; the `jim-ad-lab-gate` job would refuse the release anyway.
+   ```bash
+   gh workflow run ad-lab.yml --ref main        # runs on the head of main: it must be the release commit
+   gh run watch "$(gh run list --workflow ad-lab.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+   pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
+   ```
+   If it exits 1 the script names the state and the run; fix the cause, dispatch again and re-check. Once enforced, there is no override.
+
+7. **Create the release tag**:
    ```bash
    git tag v0.3.0
    git push origin v0.3.0
    ```
 
-7. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
+8. **Authorise the tag on the self-hosted runner group**: the release workflow runs on the self-hosted runner, and the `tetron-trusted` org runner group's workflow allowlist pins `release.yml` to a specific tag ref (the API refuses refs that do not exist, so this must follow the tag push). Until this is done the release jobs sit queued. The `/release` skill carries the exact `gh api` command; it needs the `admin:org` scope.
 
-8. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
+9. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
-9. **Verify the release**: Once complete, verify:
-   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, and the installer, `setup.sh`)
+10. **Verify the release**: Once complete, verify:
+   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
 
@@ -117,6 +138,15 @@ jim-release-X.Y.Z/
 |   +-- docker-compose.yml    # Main compose file
 |   +-- docker-compose.production.yml  # Production override (pre-built images, HTTPS)
 |   +-- .env.example          # Environment template
++-- podman/                   # Podman files, rendered by scripts/Build-PodmanFiles.ps1 with this release's image references
+|   +-- jim.yaml              # The JIM pod (web, worker, scheduler)
+|   +-- jim-database.yaml     # The bundled PostgreSQL pod (optional)
+|   +-- jim-config.yaml       # Settings (ConfigMap)
+|   +-- jim-secrets.yaml      # Secrets template
+|   +-- quadlet/
+|       +-- jim.kube          # Quadlet units systemd runs the pods from
+|       +-- jim-database.kube
+|       +-- jim.network
 +-- powershell/
 |   +-- JIM/                  # PowerShell module directory
 +-- docs/

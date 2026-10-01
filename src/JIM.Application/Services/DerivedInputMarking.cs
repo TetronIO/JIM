@@ -12,7 +12,8 @@ namespace JIM.Application.Services;
 /// Object is marked (<c>DerivedInputChangePending</c>) and its next synchronisation, delta included, picks it up.
 /// <para>
 /// Pure and shared: the worker calls it after each object's change capture and applies the marks in one bulk update
-/// per page; the writers outside synchronisation (plan Phase 4) call it with the attributes they changed.
+/// per page; the writers outside synchronisation (plan Phase 4) call it through <see cref="DerivedInputMarkBatch"/>, which
+/// excludes no system and applies the marks in one bulk update per batch.
 /// </para>
 /// </summary>
 public static class DerivedInputMarking

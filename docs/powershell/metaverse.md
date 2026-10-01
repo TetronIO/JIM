@@ -806,7 +806,7 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 | `ObjectTypeName` | `string` | No | | Filter by object type name |
 | `Search` | `string` | No | | Search string; supports wildcards |
 | `AttributeName` | `string` | No | | Attribute name to search on; requires `AttributeValue` |
-| `AttributeValue` | `string` | No | | Attribute value to match; requires `AttributeName` |
+| `AttributeValue` | `string` | No | | Attribute value to match, exactly but ignoring case (`_` and `%` are literal characters, not wildcards); requires `AttributeName` |
 | `Attributes` | `string[]` | No | | Attribute names to include in results; use `"*"` to return all attributes |
 | `All` | `switch` | No | `false` | Automatically paginate through all results. Fetches at most 1000 pages (~100,000 objects at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
 | `Force` | `switch` | No | `false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
@@ -970,8 +970,7 @@ Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
 
 Lists the generated values a Metaverse Object currently holds (Unique Value Generation, #242): the
 committed value, which uniqueness token produced it, the Synchronisation Rule and mapping responsible,
-its state, and whether it was adopted from an existing accepted value rather than generated. Empty when
-the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
+and its state. Empty when the object holds none. Configure a generated Attribute Flow with `New-JIMSyncRuleMapping -Generate`; see
 [Synchronisation Rules](synchronisation-rules.md#new-jimsyncrulemapping).
 
 #### Syntax
@@ -1001,7 +1000,6 @@ One `PSCustomObject` per generated value:
 | `SyncRuleName` | Its name |
 | `SyncRuleMappingId` | The mapping responsible |
 | `State` | `Proposed`, `Committed`, `Remediated` or `NeedsDecision` |
-| `Adopted` | `true` when the value was adopted from an existing accepted value, not generated |
 | `AssignedDate` | When the assignment was created |
 
 #### Examples

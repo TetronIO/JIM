@@ -244,20 +244,22 @@ public class MetaverseProvenanceDatabaseTests
         Assert.That(result.Single().IsCurrentValue, Is.EqualTo(expected));
     }
 
-    [Test]
-    public async Task GetGeneratedValueOwnershipsAsync_ProposedAssignment_IsIncludedAsync()
+    [TestCase(GeneratedValueAssignmentState.Committed)]
+    [TestCase(GeneratedValueAssignmentState.Remediated)]
+    [TestCase(GeneratedValueAssignmentState.NeedsDecision)]
+    public async Task GetGeneratedValueOwnershipsAsync_EveryStoredState_IsIncludedAsync(GeneratedValueAssignmentState state)
     {
+        // Every stored assignment holds a value on its object (Proposed is never persisted, #1904), so none is
+        // filtered out by state; IsCurrentValue decides whether it is the value in use.
         var (_, _, _, mvType, mvAttribute, _, mapping) = await SeedSchemaAsync();
         Guid mvoId;
         await using (var ctx = NewContext())
             mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
-        await SeedGeneratedValueAsync(mapping, mvAttribute, mvoId, GeneratedValueAssignmentState.Proposed, "E1001");
+        await SeedGeneratedValueAsync(mapping, mvAttribute, mvoId, state, "E1001");
 
         await using var readCtx = NewContext();
         var result = await new PostgresDataRepository(readCtx).Metaverse.GetGeneratedValueOwnershipsAsync(mvoId);
 
-        // An import-mode assignment stays Proposed once written, so leaving Proposed out would hide every
-        // Generated Value.
         Assert.That(result.Single().Value, Is.EqualTo("E1001"));
     }
 

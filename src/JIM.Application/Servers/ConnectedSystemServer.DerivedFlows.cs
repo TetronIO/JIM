@@ -34,6 +34,20 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Builds the derived-input mark collector (#1750, plan Phase 4, FR 9) for a server-side writer outside
+    /// synchronisation, from the Synchronisation Rules that will exist once the write completes. A rule being deleted,
+    /// or a system being deprovisioned, is left out of <paramref name="survivingSyncRules"/> by the caller: its derived
+    /// mappings are going away with it, so they must neither mark its own system nor carry transitivity onwards. Null
+    /// graph (the feature off) makes the collector inert.
+    /// </summary>
+    /// <exception cref="DerivedFlowCycleException">The surviving enabled derived flows contain a cycle (decision 11).</exception>
+    private async Task<DerivedInputMarkBatch> CreateDerivedInputMarkBatchAsync(IEnumerable<SyncRule> survivingSyncRules, string writerName)
+    {
+        var derivedFlowGraph = await DerivedFlowGraphFactory.CreateAsync(Application.FeatureFlags, survivingSyncRules, []);
+        return new DerivedInputMarkBatch(derivedFlowGraph, writerName);
+    }
+
+    /// <summary>
     /// The single-mapping save paths' entry point (create, update, settings update): gates and validates
     /// <paramref name="mapping"/> as a proposal replacing the persisted mapping with the same id on its rule, and
     /// stamps any warnings onto <see cref="SyncRuleMapping.SaveWarnings"/>.
@@ -93,11 +107,51 @@ public partial class ConnectedSystemServer
         if (syncRule.Direction != SyncRuleDirection.Import)
             return;
 
-        await EnsureDerivedFlowProposalAllowedAsync(syncRule, syncRule.AttributeFlowRules, persistedRules => persistedRules
-            .Where(rule => syncRule.Id == 0 || rule.Id != syncRule.Id)
-            .Append(syncRule)
-            .ToList());
+        await EnsureDerivedFlowProposalAllowedAsync(syncRule, syncRule.AttributeFlowRules, persistedRules => SubstituteWholeRule(persistedRules, syncRule));
     }
+
+    /// <summary>
+    /// What saving <paramref name="proposedRule"/> wholesale would mean for Metaverse-Derived Attribute Flows (#1750,
+    /// plan Phase 5), for the Configuration Change Preview: the save-time validation it would face, run exactly as the
+    /// whole-rule save runs it (every import rule of the Metaverse Object Type, disabled included, with the proposal
+    /// substituted), without throwing, plus the rule sets before and after for the FR 3 dependant detector. Reads and
+    /// writes nothing when the feature is off, or for an export rule, and returns null.
+    /// </summary>
+    /// <remarks>
+    /// Unlike the save path it loads the rules even when no proposed mapping reads <c>mv["..."]</c>: a proposal that
+    /// removes or retargets an ordinary mapping can still leave a derived flow elsewhere without its input.
+    /// </remarks>
+    internal async Task<DerivedFlowProposalAssessment?> AssessDerivedFlowProposalAsync(SyncRule proposedRule)
+    {
+        ArgumentNullException.ThrowIfNull(proposedRule);
+
+        if (proposedRule.Direction != SyncRuleDirection.Import)
+            return null;
+        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
+            return null;
+
+        var metaverseObjectTypeId = proposedRule.MetaverseObjectTypeId;
+        var persistedRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
+        var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, true)
+            ?? proposedRule.MetaverseObjectType;
+        List<MetaverseObjectType> types = metaverseObjectType == null ? [] : [metaverseObjectType];
+
+        var rulesAfter = SubstituteWholeRule(persistedRules, proposedRule);
+        var validation = DerivedFlowValidator.Validate(
+            new DerivedFlowGraph(rulesAfter, types, DerivedFlowGraphScope.AllMappings),
+            proposedRule.AttributeFlowRules.Where(ReadsMetaverseAsImportMapping).ToList());
+
+        return new DerivedFlowProposalAssessment(validation, persistedRules, rulesAfter, types);
+    }
+
+    /// <summary>
+    /// The import rules of a Metaverse Object Type as they will stand once <paramref name="syncRule"/> is saved
+    /// wholesale: the persisted rule of the same id replaced, or the new rule added.
+    /// </summary>
+    private static List<SyncRule> SubstituteWholeRule(List<SyncRule> persistedRules, SyncRule syncRule) => persistedRules
+        .Where(rule => syncRule.Id == 0 || rule.Id != syncRule.Id)
+        .Append(syncRule)
+        .ToList();
 
     /// <summary>
     /// The shared core. A no-op, with no I/O at all, unless a proposed import mapping reads <c>mv["..."]</c>, so every

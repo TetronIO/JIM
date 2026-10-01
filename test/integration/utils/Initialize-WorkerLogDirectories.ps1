@@ -33,8 +33,13 @@
     rather than letting the run fail opaquely later.
 
 .PARAMETER LogDirectory
-    The results/logs directory (the transcript target). The 'worker' bind-mount sub-directory
+    The results/logs directory (the transcript target). The worker bind-mount sub-directory
     is created beneath it.
+
+.PARAMETER WorkerDirectoryName
+    The worker bind-mount sub-directory's name. Defaults to 'worker', the one
+    docker-compose.override.yml mounts; a suffixed -Parallel lane mounts its own (for example
+    'worker-openldap', from jim-lane.override.yml) so the lanes' workers never share a log directory.
 #>
 
 function Test-PathWritable {
@@ -59,10 +64,13 @@ function Initialize-WorkerLogDirectories {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string] $LogDirectory
+        [string] $LogDirectory,
+
+        [Parameter()]
+        [string] $WorkerDirectoryName = 'worker'
     )
 
-    $workerDir = Join-Path $LogDirectory 'worker'
+    $workerDir = Join-Path $LogDirectory $WorkerDirectoryName
 
     # Create the bind-mount source ourselves so the Docker daemon does not auto-create it as
     # root. -Force creates the parent results/logs chain too and is a no-op if it already exists.

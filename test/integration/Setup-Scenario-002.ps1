@@ -37,7 +37,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -61,6 +61,7 @@ $ErrorActionPreference = "Stop"
 
 # Import helpers
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
+. "$PSScriptRoot/utils/Directory-Helpers.ps1"
 
 # Derive Source and Target configs from directory type
 # S002 needs two LDAP connected systems — for SambaAD these are separate containers,
@@ -329,37 +330,38 @@ try {
         Write-Host "  OpenLDAP: Using existing People OUs (created during bootstrap)" -ForegroundColor Gray
     }
     else {
-        # Samba AD: Create TestUsers OU in both AD instances (filters out built-in accounts)
+        # Samba AD or Active Directory: Create TestUsers OU in both AD instances (filters out built-in accounts).
+        # A real Active Directory lab already carries OU=TestUsers (built in), so the create reports "already exists".
         Write-Host "  Creating TestUsers OU in Source AD..." -ForegroundColor Gray
-        $result = docker exec $SourceConfig.ContainerName samba-tool ou create "OU=TestUsers,$($SourceConfig.BaseDN)" 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $result = New-DirectoryOu -DirectoryConfig $SourceConfig -Dn "OU=TestUsers,$($SourceConfig.BaseDN)"
+        if ($result.Outcome -eq 'Created') {
             Write-Host "    ✓ Created OU=TestUsers in Source AD" -ForegroundColor Green
         }
-        elseif ($result -match "already exists") {
+        elseif ($result.Outcome -eq 'AlreadyExists') {
             Write-Host "    OU=TestUsers already exists in Source AD" -ForegroundColor Gray
         }
         else {
-            Write-Host "    ⚠ Failed to create OU=TestUsers in Source AD: $result" -ForegroundColor Yellow
+            Write-Host "    ⚠ Failed to create OU=TestUsers in Source AD: $($result.Output)" -ForegroundColor Yellow
         }
 
         # JIM provisions into this OU, so its service account needs the delegation over it.
-        Grant-JimAdDelegation -ContainerName $SourceConfig.ContainerName -ContainerDn "OU=TestUsers,$($SourceConfig.BaseDN)"
+        Grant-JimAdDelegation -DirectoryConfig $SourceConfig -ContainerDn "OU=TestUsers,$($SourceConfig.BaseDN)"
         Write-Host "    ✓ JIM delegation granted over OU=TestUsers in Source AD" -ForegroundColor Green
 
         Write-Host "  Creating TestUsers OU in Target AD..." -ForegroundColor Gray
-        $result = docker exec $TargetConfig.ContainerName samba-tool ou create "OU=TestUsers,$($TargetConfig.BaseDN)" 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        $result = New-DirectoryOu -DirectoryConfig $TargetConfig -Dn "OU=TestUsers,$($TargetConfig.BaseDN)"
+        if ($result.Outcome -eq 'Created') {
             Write-Host "    ✓ Created OU=TestUsers in Target AD" -ForegroundColor Green
         }
-        elseif ($result -match "already exists") {
+        elseif ($result.Outcome -eq 'AlreadyExists') {
             Write-Host "    OU=TestUsers already exists in Target AD" -ForegroundColor Gray
         }
         else {
-            Write-Host "    ⚠ Failed to create OU=TestUsers in Target AD: $result" -ForegroundColor Yellow
+            Write-Host "    ⚠ Failed to create OU=TestUsers in Target AD: $($result.Output)" -ForegroundColor Yellow
         }
 
         # JIM provisions into this OU, so its service account needs the delegation over it.
-        Grant-JimAdDelegation -ContainerName $TargetConfig.ContainerName -ContainerDn "OU=TestUsers,$($TargetConfig.BaseDN)"
+        Grant-JimAdDelegation -DirectoryConfig $TargetConfig -ContainerDn "OU=TestUsers,$($TargetConfig.BaseDN)"
         Write-Host "    ✓ JIM delegation granted over OU=TestUsers in Target AD" -ForegroundColor Green
     }
 

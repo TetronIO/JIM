@@ -39,7 +39,7 @@ public sealed class PendingGeneratedExportValue
     /// value and the mapping's Missing Input Behaviour is "contribute no value" (the default for a generated
     /// mapping, FR 29), or evaluation produced no usable value. The worker resolves this as
     /// <c>StickyOnly</c>: any value the Connected System Object already holds (an existing generated
-    /// assignment) is kept and reasserted; nothing new is generated or adopted this pass.
+    /// assignment) is kept and reasserted; nothing new is generated this pass.
     /// </summary>
     public bool BaseUnavailable { get; init; }
 }

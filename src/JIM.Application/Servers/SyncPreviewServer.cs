@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Servers.Preview;
@@ -336,6 +337,16 @@ public class SyncPreviewServer
             return result;
 
         var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer);
+
+        // The real run would refuse to start on a derived flow dependency cycle (#1750, decision 11) and process no
+        // object, so the walk is not started either: one error naming the cycle, rather than every object blocked.
+        if (AddDerivedFlowCycleError(result.Errors, context))
+        {
+            Log.Warning("PreviewFullSyncAsync: Connected System {SystemId} was not previewed: the enabled derived Attribute Flows contain a dependency cycle.",
+                connectedSystemId);
+            return result;
+        }
+
         var sampleCountsByCategory = new Dictionary<FullSyncPreviewCategory, int>();
 
         // Keyset pagination from the zero GUID, matching the sync processors' population walk.
@@ -435,7 +446,7 @@ public class SyncPreviewServer
     /// enabled Synchronisation Rules, the object types, the outbound evaluation cache and the target
     /// system name lookup. Built once per single-object preview, and once for a whole full-system walk.
     /// </summary>
-    private static async Task<CsoPreviewContext> BuildCsoPreviewContextAsync(
+    private async Task<CsoPreviewContext> BuildCsoPreviewContextAsync(
         int connectedSystemId,
         ISyncRepository guardedRepository,
         ExportEvaluationServer previewServer,
@@ -450,7 +461,24 @@ public class SyncPreviewServer
         // context built from this system's rules alone would report that rule as no contributor at all.
         var allSyncRules = await guardedRepository.GetAllSyncRulesAsync();
         Substitute(allSyncRules, proposal);
-        var priorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
+
+        // Metaverse-Derived Attribute Flows (#1750, plan Phase 5): the run's dependency graph, built by the same factory
+        // from the same all-systems rule set the worker builds it from (with any proposal substituted, so a
+        // Configuration Change Preview evaluates the derived flows the proposal would leave), and attached to the
+        // priority context exactly as the worker attaches it. Null when the feature is off: the preview is then exactly
+        // as it was. A cycle refuses the whole run in the worker (decision 11), so here it is recorded on the context
+        // and every preview built from it reports it as a blocking error instead of evaluating on a guessed order.
+        DerivedFlowGraph? derivedFlowGraph = null;
+        string? derivedFlowCycleMessage = null;
+        try
+        {
+            derivedFlowGraph = await DerivedFlowGraphFactory.CreateAsync(Application.FeatureFlags, allSyncRules, []);
+        }
+        catch (DerivedFlowCycleException cycle)
+        {
+            derivedFlowCycleMessage = cycle.Message;
+        }
+        var priorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true, derivedFlowGraph);
 
         var objectTypes = await guardedRepository.GetObjectTypesAsync(connectedSystemId);
         var cache = await previewServer.BuildExportEvaluationCacheAsync();
@@ -472,7 +500,7 @@ public class SyncPreviewServer
 
         return new CsoPreviewContext(connectedSystemId, previewServer, syncRules, objectTypes, cache,
             BuildConnectedSystemNameLookup(cache), guardedRepository, priorityContext,
-            uniqueValueGenerationServer, uniqueValueResolveOptions);
+            uniqueValueGenerationServer, uniqueValueResolveOptions, derivedFlowCycleMessage);
     }
 
     /// <summary>
@@ -518,6 +546,11 @@ public class SyncPreviewServer
         var guardedRepository = context.GuardedRepository;
         var previewServer = context.PreviewServer;
         var objectTypes = context.ObjectTypes;
+
+        // A dependency cycle among the enabled derived flows (#1750) refuses the whole synchronisation before any
+        // object is processed (decision 11), so nothing about this object can be previewed either.
+        if (AddDerivedFlowCycleError(result.Errors, context))
+            return result;
 
         var inbound = new SyncPreviewInboundSummary();
         result.Inbound = inbound;
@@ -625,7 +658,8 @@ public class SyncPreviewServer
 
         // Inbound Attribute Flow onto the working copy, in one pass (references included: for a single
         // object preview, every other object's join state already exists, so no deferred pass is needed).
-        var flowErrors = new List<(SyncRule Rule, AttributeFlowError Error)>();
+        var flowErrors = new List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)>();
+        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)> generatedValueOutcomes;
         var originalMetaverseObject = cso.MetaverseObject;
         try
         {
@@ -636,7 +670,7 @@ public class SyncPreviewServer
                 {
                     foreach (var flowError in _syncEngine.FlowInboundAttributes(cso, rule, objectTypes, ExpressionEvaluator,
                         priorityContext: context.PriorityContext))
-                        flowErrors.Add((rule, flowError));
+                        flowErrors.Add((rule.Id, rule.Name, flowError));
                 }
                 catch (SyncExpressionEvaluationException expressionEx)
                 {
@@ -649,7 +683,32 @@ public class SyncPreviewServer
                         ConnectedSystemId = connectedSystemId
                     });
                 }
+                catch (SyncExpressionMissingInputException missingInputEx)
+                {
+                    // Missing Input Behaviour "Fail the object": the real run records an ExpressionMissingInput error
+                    // for the object and applies nothing, so the preview reports it as blocking, in the same words,
+                    // rather than letting the exception escape the preview.
+                    result.Errors.Add(new SyncPreviewMessage
+                    {
+                        Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                        Detail = missingInputEx.DescribeForAdministrator(),
+                        SyncRuleId = rule.Id,
+                        SyncRuleName = rule.Name,
+                        ConnectedSystemId = connectedSystemId,
+                        AttributeName = missingInputEx.TargetAttributeName
+                    });
+                }
             }
+
+            // Unique Value Generation (#242) and Metaverse-Derived Attribute Flows (#1750, plan Phase 5): the worker's
+            // per-object level loop, read-only. Level 0 resolves the generations the ordinary pass recorded (dry run);
+            // each derived level is then evaluated once and its generations resolved before the next level reads
+            // them. Must run before the flows are captured immediately below, since the derived pass and
+            // ApplyGeneratedValue stage their results the same way an ordinary Attribute Flow writer does (mirrors
+            // the worker's own "before Count actual attribute changes" ordering). Inside the try because the derived
+            // pass, like the ordinary one, reads the working copy through the object's link.
+            generatedValueOutcomes = await ResolveGenerationsAndDerivedLevelsForPreviewAsync(
+                result, cso, workingMvo, inScopeRules, context, flowErrors);
         }
         finally
         {
@@ -658,7 +717,7 @@ public class SyncPreviewServer
             cso.MetaverseObject = originalMetaverseObject;
         }
 
-        foreach (var (rule, flowError) in flowErrors)
+        foreach (var (syncRuleId, syncRuleName, flowError) in flowErrors)
         {
             // The ternary here used to collapse ExpressionMissingInput and GeneratedBaseNotSingleValue (Unique
             // Value Generation, #242) into the same "a required input has no value" message; the latter is a
@@ -677,23 +736,20 @@ public class SyncPreviewServer
                     $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")
             };
 
+            // Only the derived pass stamps the error with its hosting rule (#1750); named as the worker names it.
+            if (flowError.SyncRuleName != null)
+                detail += $" The Attribute Flow is derived by Synchronisation Rule '{flowError.SyncRuleName}'.";
+
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = code,
                 Detail = detail,
-                SyncRuleId = rule.Id,
-                SyncRuleName = rule.Name,
+                SyncRuleId = syncRuleId,
+                SyncRuleName = syncRuleName,
                 ConnectedSystemId = connectedSystemId,
                 AttributeName = flowError.TargetAttributeName
             });
         }
-
-        // Unique Value Generation (#242): resolve this object's pending generated values the way the worker
-        // does (SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync), but read-only. Must run before the
-        // flows are captured immediately below, since ApplyGeneratedValue stages its result the same way an
-        // ordinary Attribute Flow writer does (mirrors the worker's own "before Count actual attribute
-        // changes" ordering).
-        var generatedValueOutcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context);
 
         // Capture the flows before applying them, exactly as the real processor snapshots its change lists.
         foreach (var addition in workingMvo.PendingAttributeValueAdditions)
@@ -731,6 +787,25 @@ public class SyncPreviewServer
             };
             result.OutcomeTree.Add(root);
 
+            // Unique Value Generation (#242): a GeneratedValueAssigned child per
+            // resolved attribute, mirroring exactly where the worker records them: a child of the root
+            // (alongside, not nested inside, the Attribute Flow child), never gated to a tracking level,
+            // since a generated value is as much an audit signal in a preview as it is in a real run. Added
+            // BEFORE the Attribute Flow child, because that is the order the worker records them in (its root
+            // builder in SyncTaskProcessorBase adds the generated children first), and the fidelity pairing
+            // compares sibling order.
+            foreach (var (outcomeType, attributeName, value) in generatedValueOutcomes)
+            {
+                root.Children.Add(new SyncOutcomeNode
+                {
+                    OutcomeType = outcomeType,
+                    TargetEntityId = root.TargetEntityId,
+                    TargetEntityDescription = root.TargetEntityDescription,
+                    DetailMessage = $"{attributeName}: {value}",
+                    Ordinal = root.Children.Count
+                });
+            }
+
             SyncOutcomeNode? attributeFlowChild = null;
             if (rootType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Joined)
@@ -743,22 +818,6 @@ public class SyncPreviewServer
                     Ordinal = root.Children.Count
                 };
                 root.Children.Add(attributeFlowChild);
-            }
-
-            // Unique Value Generation (#242): a GeneratedValueAssigned/GeneratedValueAdopted child per
-            // resolved attribute, mirroring exactly where the worker records them: a child of the root
-            // (alongside, not nested inside, the Attribute Flow child), never gated to a tracking level,
-            // since a generated value is as much an audit signal in a preview as it is in a real run.
-            foreach (var (outcomeType, attributeName, value) in generatedValueOutcomes)
-            {
-                root.Children.Add(new SyncOutcomeNode
-                {
-                    OutcomeType = outcomeType,
-                    TargetEntityId = root.TargetEntityId,
-                    TargetEntityDescription = root.TargetEntityDescription,
-                    DetailMessage = $"{attributeName}: {value}",
-                    Ordinal = root.Children.Count
-                });
             }
 
             // The outbound outcomes nest under the Attribute Flow child where there is one, because what
@@ -778,6 +837,117 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// Records the context's derived flow dependency cycle (#1750), if it has one, as a blocking
+    /// <see cref="SyncPreviewMessageCode.DerivedFlowCycle"/> error.
+    /// </summary>
+    /// <returns>True when there is a cycle, so the caller previews nothing further.</returns>
+    private static bool AddDerivedFlowCycleError(List<SyncPreviewMessage> errors, CsoPreviewContext context)
+    {
+        if (context.DerivedFlowCycleMessage == null)
+            return false;
+
+        errors.Add(new SyncPreviewMessage
+        {
+            Code = SyncPreviewMessageCode.DerivedFlowCycle,
+            Detail = "A synchronisation would not start, so no object would be processed. " + context.DerivedFlowCycleMessage,
+            ConnectedSystemId = context.ConnectedSystemId
+        });
+        return true;
+    }
+
+    /// <summary>
+    /// The worker's per-object level loop (<c>SyncTaskProcessorBase.ResolveGenerationsAndDerivedLevelsAsync</c>;
+    /// Metaverse-Derived Attribute Flows, #1750, plan Phase 5, FR 10 and FR 11), read-only: level 0 resolves the
+    /// generation requests the ordinary pass recorded (dry run), then for each level 1 to the deepest level of the
+    /// in-scope rules' Metaverse Object Types the engine evaluates that level's derived flows hosted on
+    /// <paramref name="inScopeRules"/> (this Connected System's rules only, as in the real run), and any generation
+    /// requests they recorded are resolved before the next level reads them. Each level is evaluated exactly once. With
+    /// no derived flow graph (the feature off) only level 0 runs, which is the preview exactly as it was.
+    /// </summary>
+    /// <remarks>
+    /// Mapping-level errors are appended to <paramref name="flowErrors"/> and reported with the ordinary pass's. A thrown
+    /// derived expression error fails the object in the real run, so it is reported as a blocking error and no further
+    /// level is evaluated. Nothing here writes: derived-input marks are collected and flushed only by the worker.
+    /// </remarks>
+    private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolveGenerationsAndDerivedLevelsForPreviewAsync(
+        SyncPreviewResult result,
+        ConnectedSystemObject cso,
+        MetaverseObject workingMvo,
+        List<SyncRule> inScopeRules,
+        CsoPreviewContext context,
+        List<(int? SyncRuleId, string? SyncRuleName, AttributeFlowError Error)> flowErrors)
+    {
+        var outcomes = await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id);
+
+        var graph = context.PriorityContext.DerivedFlowGraph;
+        if (graph == null || inScopeRules.Count == 0)
+            return outcomes;
+
+        var maxLevel = inScopeRules
+            .Select(rule => rule.MetaverseObjectTypeId)
+            .Distinct()
+            .Select(graph.MaxLevel)
+            .Max();
+
+        for (var level = 1; level <= maxLevel; level++)
+        {
+            try
+            {
+                foreach (var error in _syncEngine.EvaluateDerivedLevel(cso, level, inScopeRules, context.ObjectTypes, ExpressionEvaluator, context.PriorityContext))
+                    flowErrors.Add((FindHostingRule(inScopeRules, error.SyncRuleName)?.Id, error.SyncRuleName, error));
+            }
+            catch (SyncExpressionEvaluationException expressionEx)
+            {
+                result.Errors.Add(new SyncPreviewMessage
+                {
+                    Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                    Detail = $"An Expression failed to evaluate: {expressionEx.Message}" + DescribeDerivedHost(expressionEx.SyncRuleName),
+                    SyncRuleId = FindHostingRule(inScopeRules, expressionEx.SyncRuleName)?.Id,
+                    SyncRuleName = expressionEx.SyncRuleName,
+                    ConnectedSystemId = context.ConnectedSystemId,
+                    AttributeName = expressionEx.TargetAttributeName
+                });
+                workingMvo.PendingGeneratedValues.Clear();
+                break;
+            }
+            catch (SyncExpressionMissingInputException missingInputEx)
+            {
+                result.Errors.Add(new SyncPreviewMessage
+                {
+                    Code = SyncPreviewMessageCode.ExpressionEvaluationError,
+                    Detail = missingInputEx.DescribeForAdministrator(),
+                    SyncRuleId = FindHostingRule(inScopeRules, missingInputEx.SyncRuleName)?.Id,
+                    SyncRuleName = missingInputEx.SyncRuleName,
+                    ConnectedSystemId = context.ConnectedSystemId,
+                    AttributeName = missingInputEx.TargetAttributeName
+                });
+                workingMvo.PendingGeneratedValues.Clear();
+                break;
+            }
+
+            outcomes.AddRange(await ResolvePendingGeneratedValuesForPreviewAsync(result, workingMvo, context, ownCsoId: cso.Id));
+        }
+
+        return outcomes;
+
+        static string DescribeDerivedHost(string? syncRuleName) =>
+            syncRuleName == null ? string.Empty : $" The Attribute Flow is derived by Synchronisation Rule '{syncRuleName}'.";
+    }
+
+    /// <summary>
+    /// The in-scope rule a derived flow error names, or null when the name is absent or not unique among them (the
+    /// message still carries the name).
+    /// </summary>
+    private static SyncRule? FindHostingRule(List<SyncRule> inScopeRules, string? syncRuleName)
+    {
+        if (syncRuleName == null)
+            return null;
+
+        var matches = inScopeRules.Where(rule => string.Equals(rule.Name, syncRuleName, StringComparison.Ordinal)).Take(2).ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    /// <summary>
     /// Unique Value Generation (#242): resolves <paramref name="workingMvo"/>'s pending generated values
     /// (recorded by <see cref="ISyncEngine.FlowInboundAttributes"/>'s inbound pass, just like a real run) into
     /// candidate values, applies each one through <see cref="ISyncEngine.ApplyGeneratedValue"/> so it appears
@@ -785,27 +955,27 @@ public class SyncPreviewServer
     /// <see cref="MetaverseObject.PendingGeneratedValues"/>, mirroring the worker's own
     /// <c>SyncTaskProcessorBase.ResolvePendingGeneratedValuesAsync</c>.
     /// <para>
-    /// Adopt-before-generate's adoptable value (product-owner decision: the source changed from a joined
-    /// Connected System Object's value to the Metaverse Object's own value) is computed exactly as the worker
-    /// computes it, through the shared <see cref="GeneratedValueParticipation.FindMetaverseOwnValue"/>: pure,
-    /// synchronous, and read straight off <paramref name="workingMvo"/>, so this needs no repository access at
-    /// all. Participating targets (still connector-space) come from <paramref name="context"/>'s own outbound
-    /// evaluation cache and continue to feed only the generation-time collision gate, not adoption.
+    /// Participating targets come from <paramref name="context"/>'s own outbound evaluation cache and feed
+    /// only the generation-time collision gate, exactly as in the worker (<see cref="GeneratedValueParticipation"/>).
     /// </para>
     /// </summary>
     /// <param name="result">The preview result to add a <see cref="SyncPreviewMessageCode.GeneratedValueWouldFail"/>
-    /// warning to for any request that would fail in the real run (Exhausted, NoBaseValue, WidthExceeded,
-    /// AdoptionConflict): unlike the other failure surfaces this method used to stay silent on, showing nothing
+    /// warning to for any request that would fail in the real run (Exhausted, NoBaseValue, WidthExceeded):
+    /// unlike the other failure surfaces this method used to stay silent on, showing nothing
     /// where the real run would record an error understates what synchronising would do.</param>
     /// <param name="workingMvo">The preview's own working copy of the Metaverse Object.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
+    /// <param name="ownCsoId">The previewed Connected System Object when it is joined to (or projects)
+    /// <paramref name="workingMvo"/>: the person's own account for the connector-space gate, as in the worker.</param>
+    /// <param name="disconnectingCsoId">The previewed Connected System Object when it is LEAVING
+    /// <paramref name="workingMvo"/> (re-election after obsoletion): never the person's own account.</param>
     /// <returns>
-    /// One (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c> result, for the
-    /// caller to record as a <c>GeneratedValueAssigned</c>/<c>GeneratedValueAdopted</c> node in the speculative
-    /// outcome tree; empty when nothing was generated or adopted.
+    /// One (outcome type, attribute name, value) tuple per <c>Generated</c> result, for the
+    /// caller to record as a <c>GeneratedValueAssigned</c> node in the speculative
+    /// outcome tree; empty when nothing was generated.
     /// </returns>
     private async Task<List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>> ResolvePendingGeneratedValuesForPreviewAsync(
-        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context)
+        SyncPreviewResult result, MetaverseObject workingMvo, CsoPreviewContext context, Guid? ownCsoId = null, Guid? disconnectingCsoId = null)
     {
         var pending = workingMvo.PendingGeneratedValues.ToList();
         if (pending.Count == 0)
@@ -821,21 +991,6 @@ public class SyncPreviewServer
                 var participatingTargets = GeneratedValueParticipation.ComputeParticipatingTargets(p.Mapping, exportRules);
                 var connectorSpaceAttributeIds = participatingTargets.Select(t => t.AttributeId).Distinct().ToList();
 
-                // Adopt before generate (FR 30, import mode; product-owner decision): the Metaverse Object's
-                // own current effective value, mirroring the worker's ResolvePendingGeneratedValuesAsync
-                // exactly - never a joined Connected System Object's value, so no guarded repository read is
-                // needed here at all any more. CurrentMetaverseValue mirrors the worker's own stale-Sticky read
-                // too (bug fix, #242, Scenario 023 integration run): read regardless of StickyOnly or of whether
-                // a known assignment exists, since ResolveAsync itself decides whether a Sticky match is stale.
-                string? adoptableValue = null;
-                string? currentMetaverseValue = null;
-                if (workingMvo.Id != Guid.Empty)
-                {
-                    currentMetaverseValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, generatingSyncRuleId: null);
-                    if (!p.BaseUnavailable)
-                        adoptableValue = GeneratedValueParticipation.FindMetaverseOwnValue(workingMvo, p.AttributeId, p.Mapping.SyncRuleId);
-                }
-
                 requests.Add(new GenerationRequest
                 {
                     Mode = GeneratedValueMode.Import,
@@ -845,9 +1000,9 @@ public class SyncPreviewServer
                     TargetType = p.Mapping.TargetMetaverseAttribute!.Type,
                     AttributeName = p.Mapping.TargetMetaverseAttribute!.Name,
                     BaseValue = p.BaseValue,
-                    AdoptableValue = adoptableValue,
-                    CurrentMetaverseValue = currentMetaverseValue,
                     ConnectorSpaceAttributeIds = connectorSpaceAttributeIds,
+                    OwnConnectedSystemObjectIds = ownCsoId.HasValue ? [ownCsoId.Value] : [],
+                    DisconnectingConnectedSystemObjectId = disconnectingCsoId,
                     StickyOnly = p.BaseUnavailable
                 });
             }
@@ -859,11 +1014,6 @@ public class SyncPreviewServer
                 var outcome = outcomes[i];
                 var request = pending[i];
 
-                // outcome.StaleAssignmentId (bug fix, #242, Scenario 023) is deliberately not acted on here: it
-                // names an assignment the real run would delete through its page-flush deletion flush, but a
-                // preview never persists anything, so there is nothing for this dry run to delete either. The
-                // outcome's Kind already reflects the stale match being treated as absent, which is what the
-                // preview needs to show.
                 switch (outcome.Kind)
                 {
                     case GenerationOutcomeKind.Generated:
@@ -871,15 +1021,10 @@ public class SyncPreviewServer
                         forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
                         break;
 
-                    case GenerationOutcomeKind.Adopted:
-                        _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
-                        forOutcomeTree.Add((ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted, request.Mapping.TargetMetaverseAttribute!.Name, outcome.Value!));
-                        break;
-
                     case GenerationOutcomeKind.Sticky:
-                        // Re-apply unconditionally, exactly as the worker does: a no-op when the object
-                        // already holds the value, and what carries a genuinely recovered value back onto
-                        // the object when something else cleared it this pass.
+                        // Re-apply unconditionally, exactly as the worker does (generate once): a no-op when the
+                        // object already holds the value; otherwise the winning generated mapping overwrites
+                        // whatever another rule left behind, or a value cleared this pass.
                         _syncEngine.ApplyGeneratedValue(workingMvo, request, outcome.Value, outcome.NumericValue);
                         break;
 
@@ -890,7 +1035,6 @@ public class SyncPreviewServer
                     case GenerationOutcomeKind.Exhausted:
                     case GenerationOutcomeKind.NoBaseValue:
                     case GenerationOutcomeKind.WidthExceeded:
-                    case GenerationOutcomeKind.AdoptionConflict:
                         // A generation that would fail in the real run must not simply show nothing (#242,
                         // Phase 2 work package J): the reservation and other-live-assignment gates are
                         // time-sensitive, so a preview cannot promise a real run would hit the exact same
@@ -1070,7 +1214,7 @@ public class SyncPreviewServer
                 (survivor, rule) => Application.ScopingEvaluation.IsCsoInScopeForImportRule(survivor, rule),
                 context.ObjectTypes,
                 ExpressionEvaluator,
-                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context));
+                resolvePendingGeneratedValues: resolvedMvo => ResolvePendingGeneratedValuesForPreviewAsync(result, resolvedMvo, context, disconnectingCsoId: cso.Id));
 
             var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(guardedRepository);
             var noImportSourceRemains = !await remainingImportSourceEvaluator.AnyImportSourceRemainsAsync(
@@ -1114,8 +1258,8 @@ public class SyncPreviewServer
         };
         result.OutcomeTree.Add(root);
 
-        // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned or
-        // GeneratedValueAdopted child per resolved attribute, mirroring exactly where the ordinary inbound
+        // Unique Value Generation (#242, Phase 2 work package J): one GeneratedValueAssigned child
+        // per resolved attribute, mirroring exactly where the ordinary inbound
         // chain records them (a child of the root, alongside the AttributeFlow child below, not gated to a
         // tracking level since a generated value is as much an audit signal in a preview as in a real run).
         foreach (var (generatedOutcomeType, attributeName, value) in generatedValueOutcomes)
@@ -1295,7 +1439,8 @@ public class SyncPreviewServer
         ISyncRepository GuardedRepository,
         AttributePriorityContext PriorityContext,
         UniqueValueGenerationServer UniqueValueGenerationServer,
-        UniqueValueResolveOptions UniqueValueResolveOptions)
+        UniqueValueResolveOptions UniqueValueResolveOptions,
+        string? DerivedFlowCycleMessage)
     {
         /// <summary>
         /// Per-page prefetch of every Connected System Object joined to this page's joined Metaverse

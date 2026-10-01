@@ -19,6 +19,7 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
+using JIM.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
@@ -1272,6 +1273,67 @@ public partial class MetaverseServer
             metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
+
+        // A direct edit is a write outside any Connected System's synchronisation (#1750 Phase 4, FR 9): nothing has run
+        // a derived pass on the new values, so mark the hosting systems of every derived flow reading a changed
+        // attribute. After the save, so a hosting run that clears the mark has seen the edit.
+        if (additions != null || removals != null)
+            await MarkDerivedInputChangesAsync(metaverseObject, (additions ?? []).Concat(removals ?? []).ToList());
+    }
+
+    /// <summary>
+    /// Metaverse-Derived Attribute Flows (#1750, plan Phase 4): marks, in one bulk update, the joined Connected System
+    /// Objects of every Connected System whose import Synchronisation Rules host a derived flow reading (directly or
+    /// transitively) an attribute in <paramref name="changedValues"/>, so each system's next synchronisation, delta
+    /// included, re-derives. No system is excluded: outside synchronisation nothing has run any derived pass. A direct
+    /// edit of a derived attribute itself needs nothing special: its hosting flow reasserts the value by priority on the
+    /// next synchronisation, and its readers are marked here like any other.
+    /// <para>
+    /// Reads the flag before loading any configuration, so with the feature off an edit costs exactly what it did.
+    /// A dependency cycle in the enabled derived flows is logged and marks nothing rather than failing the edit: the
+    /// edit is already saved, every hosting synchronisation fails hard on the cycle until it is broken, and this path
+    /// serves sign-in (the SSO profile supplement), which must not lock an administrator out of fixing the cycle.
+    /// </para>
+    /// </summary>
+    private async Task MarkDerivedInputChangesAsync(MetaverseObject metaverseObject, List<MetaverseObjectAttributeValue> changedValues)
+    {
+        const string writerName = "Metaverse Object edit";
+        if (changedValues.Count == 0)
+            return;
+
+        if (!await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.MetaverseDerivedAttributeFlows.Key))
+            return;
+
+        if (metaverseObject.Type == null)
+        {
+            Log.Warning("{Writer}: Metaverse Object {MvoId} has no Metaverse Object Type loaded; cannot determine which Connected " +
+                "Systems' derived Attribute Flows read its changed attributes, so none are marked.", writerName, metaverseObject.Id);
+            return;
+        }
+
+        var metaverseObjectTypeId = metaverseObject.Type.Id;
+        DerivedFlowGraph? graph;
+        try
+        {
+            // Only the object's own type matters, so only that type's import rules are read (as save-time validation
+            // does), with the type's attributes for resolving mv["..."] names.
+            var importRules = await Application.Repository.ConnectedSystems.GetImportSyncRulesForMetaverseObjectTypeAsync(metaverseObjectTypeId);
+            var metaverseObjectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, true);
+            graph = await DerivedFlowGraphFactory.CreateAsync(Application.FeatureFlags, importRules,
+                metaverseObjectType == null ? [] : [metaverseObjectType]);
+        }
+        catch (DerivedFlowCycleException ex)
+        {
+            Log.Error("{Writer}: Metaverse Object {MvoId} was updated, but no Connected System was marked for derived Attribute Flow " +
+                "re-evaluation because the enabled derived flows contain a dependency cycle: {Message}",
+                writerName, metaverseObject.Id, LogSanitiser.Sanitise(ex.Message));
+            return;
+        }
+
+        var marks = new DerivedInputMarkBatch(graph, writerName);
+        marks.Collect(metaverseObject, changedValues);
+        await marks.FlushAsync(Application.SyncRepo);
+        marks.LogSummary();
     }
 
     /// <summary>

@@ -42,7 +42,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -69,6 +69,7 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 # Derive Source and Target configs
 $directoryType = if ($DirectoryConfig) { $DirectoryConfig.DirectoryType } else { "SambaAD" }
@@ -119,14 +120,15 @@ try {
         Write-Host "  ✓ OpenLDAP healthy (both suffixes on same container)" -ForegroundColor Green
     }
     else {
-        $sourceStatus = docker inspect --format='{{.State.Health.Status}}' $SourceConfig.ContainerName 2>&1
-        $targetStatus = docker inspect --format='{{.State.Health.Status}}' $TargetConfig.ContainerName 2>&1
+        # Samba AD: the containers' Docker health. Active Directory has no container, so an LDAPS bind is the check.
+        $sourceStatus = Get-DirectoryHealthStatus -DirectoryConfig $SourceConfig
+        $targetStatus = Get-DirectoryHealthStatus -DirectoryConfig $TargetConfig
 
         if ($sourceStatus -ne "healthy") {
-            throw "$($SourceConfig.ContainerName) container is not healthy (status: $sourceStatus)"
+            throw "$($SourceConfig.Host) is not healthy (status: $sourceStatus)"
         }
         if ($targetStatus -ne "healthy") {
-            throw "$($TargetConfig.ContainerName) container is not healthy (status: $targetStatus)"
+            throw "$($TargetConfig.Host) is not healthy (status: $targetStatus)"
         }
         Write-Host "  ✓ Source healthy" -ForegroundColor Green
         Write-Host "  ✓ Target healthy" -ForegroundColor Green
@@ -143,29 +145,29 @@ try {
         if ($isRfcDirectory) {
             # OpenLDAP: delete by DN using ldapdelete
             $sourceUserDN = "$($SourceConfig.UserRdnAttr)=$user,$($SourceConfig.UserContainer)"
-            $output = docker exec $SourceConfig.ContainerName ldapdelete -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" "$sourceUserDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $sourceDelete = Remove-DirectoryEntry -DirectoryConfig $SourceConfig -Dn $sourceUserDN
+            if ($sourceDelete.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted $user from Source" -ForegroundColor Gray
                 $deletedFromSource = $true
             }
 
             $targetUserDN = "$($TargetConfig.UserRdnAttr)=$user,$($TargetConfig.UserContainer)"
-            $output = docker exec $TargetConfig.ContainerName ldapdelete -x -H "$($TargetConfig.LdapSearchScheme)://localhost:$($TargetConfig.LdapSearchPort)" -D "$($TargetConfig.BindDN)" -w "$($TargetConfig.BindPassword)" "$targetUserDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $targetDelete = Remove-DirectoryEntry -DirectoryConfig $TargetConfig -Dn $targetUserDN
+            if ($targetDelete.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted $user from Target" -ForegroundColor Gray
                 $deletedFromTarget = $true
             }
         }
         else {
-            # Samba AD: use samba-tool
-            $output = docker exec $SourceConfig.ContainerName bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-            if ($output -match "Deleted user") {
+            # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
+            $sourceDelete = Remove-DirectoryUser -DirectoryConfig $SourceConfig -SamAccountName $user
+            if ($sourceDelete.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted $user from Source" -ForegroundColor Gray
                 $deletedFromSource = $true
             }
 
-            $output = docker exec $TargetConfig.ContainerName bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-            if ($output -match "Deleted user") {
+            $targetDelete = Remove-DirectoryUser -DirectoryConfig $TargetConfig -SamAccountName $user
+            if ($targetDelete.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted $user from Target" -ForegroundColor Gray
                 $deletedFromTarget = $true
             }
@@ -347,37 +349,39 @@ mail: $testUserEmail
 employeeNumber: $testUserEmployeeNumber
 userPassword: Password123!
 "@
-            $createResult = $ldif | docker exec -i $SourceConfig.ContainerName ldapadd -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
+            $createResult = Invoke-DirectoryLdif -DirectoryConfig $SourceConfig -Ldif $ldif -Operation add
 
-            if ($LASTEXITCODE -eq 0) {
+            if ($createResult.Outcome -eq 'Created') {
                 Write-Host "  ✓ Created $testUserSam in Source" -ForegroundColor Green
             }
-            elseif ($createResult -match "already exists") {
+            elseif ($createResult.Outcome -eq 'AlreadyExists') {
                 Write-Host "  User $testUserSam already exists in Source" -ForegroundColor Yellow
             }
             else {
-                throw "Failed to create user in Source: $createResult"
+                throw "Failed to create user in Source: $($createResult.Output)"
             }
         }
         else {
-            # Samba AD: create user via samba-tool
-            $createResult = docker exec $SourceConfig.ContainerName samba-tool user create `
-                $testUserSam `
-                "Password123!" `
-                --userou="OU=TestUsers" `
-                --given-name="$testUserFirstName" `
-                --surname="$testUserLastName" `
-                --mail-address="$testUserEmail" `
-                --department="$testUserDepartment" 2>&1
+            # Samba AD (samba-tool) or Active Directory (ldapadd, then unicodePwd over LDAPS)
+            $createResult = New-DirectoryUser -DirectoryConfig $SourceConfig `
+                -Dn "CN=$testUserDisplayName,OU=TestUsers,$($SourceConfig.BaseDN)" `
+                -SamAccountName $testUserSam `
+                -Password "Password123!" `
+                -Attributes ([ordered]@{
+                    givenName  = $testUserFirstName
+                    sn         = $testUserLastName
+                    mail       = $testUserEmail
+                    department = $testUserDepartment
+                })
 
-            if ($LASTEXITCODE -eq 0) {
+            if ($createResult.Outcome -eq 'Created') {
                 Write-Host "  ✓ Created $testUserSam in Source" -ForegroundColor Green
             }
-            elseif ($createResult -match "already exists") {
+            elseif ($createResult.Outcome -eq 'AlreadyExists') {
                 Write-Host "  User $testUserSam already exists in Source" -ForegroundColor Yellow
             }
             else {
-                throw "Failed to create user in Source: $createResult"
+                throw "Failed to create user in Source: $($createResult.Output)"
             }
         }
 
@@ -403,9 +407,9 @@ userPassword: Password123!
             }
         }
         else {
-            $targetUser = docker exec $TargetConfig.ContainerName samba-tool user show $testUserSam 2>&1
+            $targetUser = Find-DirectoryEntry -DirectoryConfig $TargetConfig -Filter "(sAMAccountName=$testUserSam)" -AsText
 
-            if ($LASTEXITCODE -eq 0) {
+            if ($targetUser -match '(?m)^dn: ') {
                 Write-Host "  ✓ User '$testUserSam' provisioned to Target" -ForegroundColor Green
                 if ($targetUser -match "givenName:\s*$testUserFirstName") {
                     Write-Host "    ✓ First name correct" -ForegroundColor Green
@@ -443,24 +447,23 @@ changetype: modify
 replace: $updateAttrName
 $updateAttrName`: $updateNewValue
 "@
-            $modifyResult = $modifyLdif | docker exec -i $SourceConfig.ContainerName ldapmodify -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
         }
         else {
             $userDN = "CN=$testUserDisplayName,OU=TestUsers,$($SourceConfig.BaseDN)"
-            $modifyResult = docker exec $SourceConfig.ContainerName bash -c "cat > /tmp/modify.ldif << 'LDIFEOF'
+            $modifyLdif = @"
 dn: $userDN
 changetype: modify
 replace: $updateAttrName
 $updateAttrName`: $updateNewValue
-LDIFEOF
-ldapmodify -x -H '$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)' -D '$($SourceConfig.BindDN)' -w '$($SourceConfig.BindPassword)' -f /tmp/modify.ldif" 2>&1
+"@
         }
+        $modifyResult = Invoke-DirectoryLdif -DirectoryConfig $SourceConfig -Ldif $modifyLdif -Operation modify
 
-        if ($LASTEXITCODE -eq 0 -or $modifyResult -match "modifying entry") {
+        if ($modifyResult.Success -or $modifyResult.Output -match "modifying entry") {
             Write-Host "  ✓ Updated $updateAttrName to '$updateNewValue' in Source" -ForegroundColor Green
         }
         else {
-            Write-Host "  ⚠ ldapmodify may have failed: $modifyResult" -ForegroundColor Yellow
+            Write-Host "  ⚠ ldapmodify may have failed: $($modifyResult.Output)" -ForegroundColor Yellow
         }
 
         # Run forward sync
@@ -482,7 +485,7 @@ ldapmodify -x -H '$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.
             }
         }
         else {
-            $targetUser = docker exec $TargetConfig.ContainerName samba-tool user show $testUserSam 2>&1
+            $targetUser = Find-DirectoryEntry -DirectoryConfig $TargetConfig -Filter "(sAMAccountName=$testUserSam)" -AsText
 
             if ($targetUser -match "$updateAttrName`:\s*$updateNewValue") {
                 Write-Host "  ✓ $updateAttrName updated to '$updateNewValue' in Target" -ForegroundColor Green
@@ -529,26 +532,28 @@ displayName: $reverseUserFirstName $reverseUserLastName
 employeeNumber: CDREV01
 userPassword: Password123!
 "@
-            $createResult = $ldif | docker exec -i $TargetConfig.ContainerName ldapadd -x -H "$($TargetConfig.LdapSearchScheme)://localhost:$($TargetConfig.LdapSearchPort)" -D "$($TargetConfig.BindDN)" -w "$($TargetConfig.BindPassword)" 2>&1
+            $createResult = Invoke-DirectoryLdif -DirectoryConfig $TargetConfig -Ldif $ldif -Operation add
         }
         else {
-            $createResult = docker exec $TargetConfig.ContainerName samba-tool user create `
-                $reverseUserSam `
-                "Password123!" `
-                --userou="OU=TestUsers" `
-                --given-name="$reverseUserFirstName" `
-                --surname="$reverseUserLastName" `
-                --department="$reverseUserDepartment" 2>&1
+            $createResult = New-DirectoryUser -DirectoryConfig $TargetConfig `
+                -Dn "CN=$reverseUserFirstName $reverseUserLastName,OU=TestUsers,$($TargetConfig.BaseDN)" `
+                -SamAccountName $reverseUserSam `
+                -Password "Password123!" `
+                -Attributes ([ordered]@{
+                    givenName  = $reverseUserFirstName
+                    sn         = $reverseUserLastName
+                    department = $reverseUserDepartment
+                })
         }
 
-        if ($LASTEXITCODE -eq 0) {
+        if ($createResult.Outcome -eq 'Created') {
             Write-Host "  ✓ Created $reverseUserSam in Target" -ForegroundColor Green
         }
-        elseif ($createResult -match "already exists") {
+        elseif ($createResult.Outcome -eq 'AlreadyExists') {
             Write-Host "  User $reverseUserSam already exists in Target" -ForegroundColor Yellow
         }
         else {
-            throw "Failed to create user in Target: $createResult"
+            throw "Failed to create user in Target: $($createResult.Output)"
         }
 
         # Run Target import and sync (not full reverse sync to Source)
@@ -580,8 +585,7 @@ userPassword: Password123!
                 $reverseInSource = Test-LDAPUserExists -UserIdentifier $reverseUserSam -DirectoryConfig $SourceConfig
             }
             else {
-                docker exec $SourceConfig.ContainerName samba-tool user show $reverseUserSam 2>&1 | Out-Null
-                $reverseInSource = ($LASTEXITCODE -eq 0)
+                $reverseInSource = Test-DirectoryEntryPresent -DirectoryConfig $SourceConfig -Filter "(sAMAccountName=$reverseUserSam)"
             }
 
             if (-not $reverseInSource) {
@@ -626,19 +630,21 @@ displayName: Conflict TestUser
 employeeNumber: CDCON01
 userPassword: Password123!
 "@
-            $createResult = $ldif | docker exec -i $SourceConfig.ContainerName ldapadd -x -H "$($SourceConfig.LdapSearchScheme)://localhost:$($SourceConfig.LdapSearchPort)" -D "$($SourceConfig.BindDN)" -w "$($SourceConfig.BindPassword)" 2>&1
+            $createResult = Invoke-DirectoryLdif -DirectoryConfig $SourceConfig -Ldif $ldif -Operation add
         }
         else {
-            $createResult = docker exec $SourceConfig.ContainerName samba-tool user create `
-                $conflictUserSam `
-                "Password123!" `
-                --userou="OU=TestUsers" `
-                --given-name="Conflict" `
-                --surname="TestUser" `
-                --department="OriginalDept" 2>&1
+            $createResult = New-DirectoryUser -DirectoryConfig $SourceConfig `
+                -Dn "CN=Conflict TestUser,OU=TestUsers,$($SourceConfig.BaseDN)" `
+                -SamAccountName $conflictUserSam `
+                -Password "Password123!" `
+                -Attributes ([ordered]@{
+                    givenName  = "Conflict"
+                    sn         = "TestUser"
+                    department = "OriginalDept"
+                })
         }
 
-        if ($LASTEXITCODE -eq 0 -or $createResult -match "already exists") {
+        if ($createResult.Outcome -in @('Created', 'AlreadyExists')) {
             Write-Host "  ✓ Created/found $conflictUserSam in Source" -ForegroundColor Green
         }
 
@@ -651,8 +657,7 @@ userPassword: Password123!
             $conflictUserInTarget = Test-LDAPUserExists -UserIdentifier $conflictUserSam -DirectoryConfig $TargetConfig
         }
         else {
-            docker exec $TargetConfig.ContainerName samba-tool user show $conflictUserSam 2>&1 | Out-Null
-            $conflictUserInTarget = ($LASTEXITCODE -eq 0)
+            $conflictUserInTarget = Test-DirectoryEntryPresent -DirectoryConfig $TargetConfig -Filter "(sAMAccountName=$conflictUserSam)"
         }
 
         if ($conflictUserInTarget) {

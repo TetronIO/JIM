@@ -44,7 +44,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 ## What Makes JIM Different
 
-Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach; it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
+Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach; it deploys as a single container stack on Docker or Podman, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
 JIM is designed to solve both enterprise-scale identity management and micro-deployment challenges for edge-sync scenarios.
 

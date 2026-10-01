@@ -1,7 +1,8 @@
 # Release workflow for JIM
 # Triggered by pushing a tag like v0.2.0
 #
-# This workflow:
+# This workflow first refuses the release outright (once JIM_AD_LAB_GATE_ENFORCED is true) unless the tagged commit has a green `jim-ad-lab` commit
+# status (the Active Directory lab; see the jim-ad-lab-gate job), then:
 # 1. Validates the build, tests, and version consistency
 # 2. Builds, scans, smoke-tests, and pushes Docker images to ghcr.io
 # 3. Publishes PowerShell module to PSGallery
@@ -29,10 +30,54 @@ permissions:
 # pull_request-triggered ever runs on that runner, which is what keeps building
 # release artefacts on it acceptable for a public repo.
 jobs:
+  # Job 0: The Active Directory lab gate. The commit being tagged must have a `success` commit status named
+  # `jim-ad-lab`, which .github/workflows/ad-lab.yml posts on the SHA it tested (nightly on main, and on dispatch).
+  # A release is refused otherwise, with a message naming the state, the run and the remedy. The remedy for a red or
+  # missing status is a fix and a dispatched ad-lab.yml run on this commit, made BEFORE the tag is pushed (the
+  # /release skill does this). `validate` needs this job, and every other job needs `validate`, so nothing is built,
+  # scanned, pushed or published for a commit the lab has not passed.
+  # scripts/Test-AdLabReleaseGate.ps1 holds the decision and is tested in scripts/Tests.
+  #
+  # Enforced only while the repository variable JIM_AD_LAB_GATE_ENFORCED is `true`. The lab's domain controllers
+  # are not built yet, so no commit can carry the status; until the lab's first green run, the job passes with a
+  # warning on the run summary instead of refusing every release. Set the variable once the lab has passed
+  # (gh variable set JIM_AD_LAB_GATE_ENFORCED --body true); from then on there is no override, since the variable
+  # is the single switch and changing it needs repository admin. PRD_ACTIVE_DIRECTORY_LAB.md tracks switching it on.
+  jim-ad-lab-gate:
+    name: Active Directory Lab Gate
+    runs-on: self-hosted
+    # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
+    permissions:
+      contents: read
+      statuses: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # The SHA and repository reach the script through env, never interpolated into it.
+      - name: Require a green jim-ad-lab status on this commit
+        if: vars.JIM_AD_LAB_GATE_ENFORCED == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
+
+      - name: Report that the gate is not yet enforced
+        if: vars.JIM_AD_LAB_GATE_ENFORCED != 'true'
+        shell: pwsh
+        run: |
+          $message = 'The Active Directory lab gate is not enforced yet (JIM_AD_LAB_GATE_ENFORCED is not true), so this release has not been proven against a real domain controller.'
+          Write-Output "::warning title=Active Directory lab gate not enforced::$message"
+          "### Active Directory lab gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
   # Job 1: Validate build, tests, and version consistency
   validate:
     name: Validate Build & Tests
     runs-on: self-hosted
+    needs: jim-ad-lab-gate
 
     steps:
       - name: Checkout
@@ -86,7 +131,7 @@ jobs:
         run: |
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
           $config = New-PesterConfiguration
-          $config.Run.Path = @('./src/JIM.PowerShell/Tests', './scripts/Tests', './test/integration/utils')
+          $config.Run.Path = @('./src/JIM.PowerShell/Tests', './scripts/Tests', './test/integration/utils', './test/integration/ad-lab')
           $config.Run.Exit = $true
           $config.Output.Verbosity = 'Detailed'
           Invoke-Pester -Configuration $config
@@ -328,8 +373,19 @@ jobs:
             "${IMAGE_REF}@${{ steps.build.outputs.digest }}"
 
       # Phase 6b: SLSA provenance attestation
+      # push-to-registry reads GHCR credentials from $HOME/.docker/config.json only; it ignores DOCKER_CONFIG, which
+      # points at this job's own login (see "Isolate Docker client config"). Give the action a HOME whose .docker
+      # is that config, rather than logging in to the runners' shared ~/.docker. Without it: "No credentials found
+      # for registry ghcr.io", which failed the v0.16.0 release. Tested in scripts/Tests/ReleaseWorkflow.Tests.ps1.
+      - name: Point the attestation at this job's Docker login
+        run: |
+          mkdir -p "$RUNNER_TEMP/attest-home"
+          ln -sfn "$DOCKER_CONFIG" "$RUNNER_TEMP/attest-home/.docker"
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2.4.0
+        env:
+          HOME: ${{ runner.temp }}/attest-home
         with:
           subject-name: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}
           subject-digest: ${{ steps.build.outputs.digest }}

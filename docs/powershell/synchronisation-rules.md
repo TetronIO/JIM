@@ -497,7 +497,7 @@ Returns the created mapping object. A generated mapping's `Generation` property 
 - When multiple source attributes are provided, they are automatically ordered by position (0, 1, 2, and so on).
 - Expressions use DynamicExpresso syntax with `mv["AttributeName"]` and `cs["AttributeName"]` accessors.
 - `MissingInputBehaviour` applies to expression mappings only; a direct Attribute Flow has no inputs to be missing. Omit it to leave the mapping on `EvaluateAnyway`, which is how every mapping created before this parameter existed behaves.
-- **Unique Value Generation (#242).** `-Generate` is available on import and export mappings alike. Exclusions (per-system availability skips) and Collision Remediation are not configurable from any surface in release 1; every participating Connected System is checked. `-ExcludeConnectedSystemId` does not exist yet for the same reason.
+- **Unique Value Generation (#242), in development.** Once the feature is available, `-Generate` applies to import and export mappings alike. Exclusions (per-system availability skips) and Collision Remediation are not configurable from any surface in release 1; every participating Connected System is checked. `-ExcludeConnectedSystemId` does not exist yet for the same reason.
 - Every generation setting is optional: an omitted one leaves the server's own default in place (shown in the table above). Send only the settings you want to change.
 
 ### Examples

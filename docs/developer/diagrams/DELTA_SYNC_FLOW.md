@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -8,7 +8,7 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
-| CSO Selection | ALL CSOs (unchanged CSOs skip Attribute Flow unless Synchronisation Rule configuration changed since it was last fully applied) | Only CSOs with `LastUpdated > watermark` |
+| CSO Selection | ALL CSOs (unchanged CSOs skip Attribute Flow unless Synchronisation Rule configuration changed since it was last fully applied) | Only CSOs created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
 | Early Exit | Never | Yes, if 0 modified CSOs |
 | Per-page pipeline | Identical | Identical |
 | Watermark Update | Yes (establishes the baseline for the next Delta Sync) | Yes (even when 0 changes) |
@@ -31,11 +31,11 @@ flowchart TD
     EarlyWatermark --> EarlyDone([Return - no work needed])
 
     HasChanges -->|Yes| CountPE[ObjectsToProcess = modified CSOs<br/>Pending Exports are handled as a<br/>side effect of CSO evaluation]
-    CountPE --> LoadCaches[Load Synchronisation Rules, object types<br/>Drift detection cache<br/>Pending Exports dictionary<br/>Export evaluation cache: export rules to<br/>every Connected System, this one included #1284]
+    CountPE --> LoadCaches[Load Synchronisation Rules, object types<br/>Drift detection cache<br/>Export evaluation cache: export rules to<br/>every Connected System, this one included #1284]
 
     LoadCaches --> PageLoop{More CSO<br/>pages?}
 
-    PageLoop -->|Yes| LoadPage[Load page of modified CSOs<br/>WHERE LastUpdated > watermark<br/>Seed page identity map #1612]
+    PageLoop -->|Yes| LoadPage[Load next page of modified CSOs<br/>Created or LastUpdated > watermark<br/>Ordered by Id, keyset cursor:<br/>Id > last row of previous page #1858<br/>Seed page identity map #1612]
     LoadPage --> CsoLoop{More CSOs<br/>in page?}
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
@@ -63,7 +63,7 @@ flowchart LR
     end
 
     subgraph "Subsequent Delta Syncs"
-        PrevWatermark[LastSyncCompletedAt<br/>= previous sync time] --> FilterCSOs[Only CSOs where<br/>LastUpdated > watermark]
+        PrevWatermark[LastSyncCompletedAt<br/>= previous sync time] --> FilterCSOs[Only CSOs where<br/>Created or LastUpdated > watermark]
         FilterCSOs --> SubsetCSOs[Subset of CSOs<br/>processed]
     end
 
@@ -89,4 +89,6 @@ flowchart LR
 
 - **No stranded-value sweep**<br /> The sweep that recalls values stranded by a Connector Space clear runs only after a Full Synchronisation (see [Full Synchronisation - CSO Processing Flow](FULL_SYNC_CSO_PROCESSING.md)). A Delta Synchronisation leaves the arming in place for the next Full Synchronisation.
 
-- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 handles pending-export confirmation and obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds`. Pass 2 runs join/projection/Attribute Flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.
+- **Keyset paging (#1858)**<br /> Delta sync pages through the modified set by keyset cursor (the next page starts after the last CSO Id of the previous one), as full sync already did. Each page boundary deletes that page's obsolete CSOs (`FlushObsoleteCsoOperationsAsync`), so the modified set shrinks while it is paged; an `OFFSET` into it skipped the rows that moved up into the gap (with a whole page of obsolete CSOs, every other page), and the watermark then moved past them.
+
+- **Two-pass per-CSO processing (v0.10.0)**<br /> Each page iterates over its CSOs twice. Pass 1 handles obsolete CSO teardown across all CSOs, populating `_pendingDisconnectedMvoIds` (Pending Export confirmation is done only by imports, #1826). Pass 2 runs join/projection/Attribute Flow only on non-obsolete CSOs. This ordering guarantees Pass 2 join attempts see the complete set of disconnected MVOs from Pass 1.

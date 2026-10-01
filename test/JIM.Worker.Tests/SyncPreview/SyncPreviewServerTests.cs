@@ -12,6 +12,7 @@ using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
+using JIM.TestSupport;
 using JIM.Worker.Tests.Models;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
@@ -110,6 +111,10 @@ public class SyncPreviewServerTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        // Tests run with every feature flag on (test/CLAUDE.md), which the preview reads for the Metaverse-Derived
+        // Attribute Flow graph (#1750).
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(
+            InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync().GetAwaiter().GetResult().BuildMockDbSet().Object);
 
         SyncRepo = TestUtilities.CreateSyncRepository(
             activity: ActivitiesData.First(),
@@ -1300,13 +1305,12 @@ public class SyncPreviewServerTests
 
         var root = result.OutcomeTree.Single();
         var generatedNode = root.Children.SingleOrDefault(c =>
-            c.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
-                or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted);
+            c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(generatedNode, Is.Not.Null);
             Assert.That(generatedNode!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned),
-                "a fresh generation must be recorded, never adoption");
+                "a fresh generation must be recorded");
             Assert.That(generatedNode.DetailMessage, Is.EqualTo($"{mvEmployeeIdAttr.Name}: E123"));
         }
 
@@ -1319,15 +1323,14 @@ public class SyncPreviewServerTests
     }
 
     /// <summary>
-    /// The new adoption source at the Sync Preview level, matching the worker's own behaviour (#242,
-    /// product-owner decision): the Metaverse Object's own current value, left behind when a higher-priority
-    /// contributor withdraws (here simulated directly by seeding the value with a DIFFERENT rule's provenance,
-    /// rather than driving a full withdrawal sequence). The preview must show it adopted, through the same
-    /// <c>GeneratedValueParticipation.FindMetaverseOwnValue</c> read the worker's
-    /// <c>ResolvePendingGeneratedValuesAsync</c> uses, and write nothing.
+    /// The Sync Preview mirror of the worker's behaviour (#242, product-owner decision 2026-10-01: adoption
+    /// removed): the Metaverse Object holds a value left behind by a higher-priority contributor that withdrew
+    /// (simulated directly by seeding the value with a DIFFERENT rule's provenance), and the generated mapping,
+    /// now the winning contributor, has no assignment. The preview must show a freshly generated value replacing
+    /// the leftover, exactly as an ordinary Attribute Flow winning priority would, and write nothing.
     /// </summary>
     [Test]
-    public async Task PreviewSyncForCsoAsync_MetaverseObjectAlreadyHoldsAValueFromAnotherRule_ShowsItAdoptedAsync()
+    public async Task PreviewSyncForCsoAsync_MetaverseObjectAlreadyHoldsAValueFromAnotherRule_ShowsAFreshValueGeneratedOverItAsync()
     {
         var (cso, importRule, mvEmployeeIdAttr, _) = ArrangeGeneratedInboundFixture();
 
@@ -1354,34 +1357,35 @@ public class SyncPreviewServerTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
-                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "jsmith"), Is.False,
-                "the value is already on the object; adoption is not staged as an addition to a blank attribute");
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "E123"), Is.True,
+                "the generated mapping generates its own value; the leftover is not taken over");
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "jsmith"), Is.False);
             Assert.That(result.HasBlockingErrors, Is.False);
         }
 
-        // No outcome node is asserted here (mirrors the worker's own equivalent test in
-        // UniqueValueGenerationWorkflowTests): the adopted value is identical to what the object already
-        // holds, so nothing is added or removed and the wider outcome tree has nothing to build around. What
-        // matters is that resolution completed cleanly - no failure warning - and wrote nothing.
+        var generatedNode = result.OutcomeTree.Single().Children.SingleOrDefault(c =>
+            c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.Warnings, Is.Empty, "adoption must succeed cleanly, not surface a GeneratedValueWouldFail warning");
+            Assert.That(generatedNode, Is.Not.Null, "the preview records the generation");
+            Assert.That(result.Warnings, Is.Empty, "generation must succeed cleanly, not surface a GeneratedValueWouldFail warning");
             Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "a preview must write nothing");
             Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "a preview must not change the existing join");
         }
     }
 
     /// <summary>
-    /// The Sync Preview mirror of <c>UniqueValueGenerationWorkflowTests.FullSync_StaleStickyAssignmentSupersededThenWithdrawn_
-    /// AdoptsTheOtherRulesValueAndReplacesTheAssignmentAsync</c> (bug fix, #242, Scenario 023 integration run): a
-    /// live Sticky assignment ("stale.value") exists for the mapping, but a higher-priority contributor has
-    /// since taken the attribute over and left a DIFFERENT value ("jsmith", provenance a different rule) on the
-    /// object. The preview must show that other value adopted, never the stale assignment reasserted, exactly
-    /// as the worker's real run would. The preview writes nothing either way (dry run), so what distinguishes
-    /// the fix is which value would flow, not what gets persisted.
+    /// The Sync Preview mirror of <c>UniqueValueGenerationWorkflowTests.FullSync_HigherPriorityFlowDisabled_
+    /// GeneratedFlowWritesItsExistingAssignmentAndExportStagesTheRenameAsync</c> (#242, product-owner decision
+    /// 2026-10-01): a live assignment ("percival.ashworth") exists for the mapping, and a higher-priority
+    /// contributor that has since withdrawn left a DIFFERENT value ("jsmith", provenance a different rule) on
+    /// the object. The generated mapping, the winning contributor again, contributes its existing assignment
+    /// over the leftover, exactly as an ordinary Attribute Flow would; nothing is generated and nothing written.
+    /// Formerly <c>..._ShowsItAdoptedNotReassertedAsync</c>, which asserted the removed special case.
     /// </summary>
     [Test]
-    public async Task PreviewSyncForCsoAsync_LiveAssignmentNoLongerMatchesTheObjectsCurrentValue_ShowsItAdoptedNotReassertedAsync()
+    public async Task PreviewSyncForCsoAsync_LiveAssignmentDiffersFromTheObjectsCurrentValue_ShowsTheAssignmentContributedOverItAsync()
     {
         var (cso, importRule, mvEmployeeIdAttr, mapping) = ArrangeGeneratedInboundFixture();
 
@@ -1403,15 +1407,14 @@ public class SyncPreviewServerTests
         cso.MetaverseObject = mvo;
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
 
-        // A live Sticky assignment left over from an earlier pass, before the object's current, higher-priority
-        // contributor took the attribute over: its value no longer describes the object.
+        // The generated mapping's own live assignment, from before the higher-priority contributor took over.
         SyncRepo.SeedGeneratedValueAssignment(new GeneratedValueAssignment
         {
             Id = Guid.NewGuid(),
             MetaverseObjectId = mvo.Id,
             MetaverseAttributeId = mvEmployeeIdAttr.Id,
-            Value = "stale.value",
-            NormalisedValue = "stale.value",
+            Value = "percival.ashworth",
+            NormalisedValue = "percival.ashworth",
             State = GeneratedValueAssignmentState.Proposed,
             SyncRuleMappingGenerationId = mapping.Generation!.Id,
             Created = DateTime.UtcNow,
@@ -1422,20 +1425,19 @@ public class SyncPreviewServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id && c.Value == "stale.value"), Is.False,
-                "the stale assignment must never be reasserted over the object's current value");
+            Assert.That(result.Inbound!.AttributeFlowChanges.Any(c =>
+                c.AttributeId == mvEmployeeIdAttr.Id && c.IsAddition && c.Value == "percival.ashworth"), Is.True,
+                "the existing assignment is contributed over the value left behind");
             Assert.That(result.Inbound!.AttributeFlowChanges.Any(c => c.AttributeId == mvEmployeeIdAttr.Id && c.Value == "E123"), Is.False,
-                "the object's own current value must be adopted, not freshly generated");
+                "generate once: nothing is freshly generated while an assignment exists");
             Assert.That(result.HasBlockingErrors, Is.False);
-            Assert.That(result.Warnings, Is.Empty, "adoption must succeed cleanly, not surface a GeneratedValueWouldFail warning");
+            Assert.That(result.Warnings, Is.Empty);
         }
 
-        // Zero side effects: the preview never deletes the stale assignment either (that is the real run's
-        // page-flush job); only the value it would show changes.
         using (Assert.EnterMultipleScope())
         {
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1), "a preview must write nothing new");
-            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("stale.value"), "a preview must not delete anything either");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("percival.ashworth"), "a preview must not change the assignment");
             Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "a preview must not change the existing join");
         }
     }

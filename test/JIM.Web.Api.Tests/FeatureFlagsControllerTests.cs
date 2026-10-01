@@ -164,18 +164,12 @@ public class FeatureFlagsControllerTests
         // so the change is attributed to them rather than refused for having no initiator.
         var metaverseRepo = new Mock<IMetaverseRepository>();
         _mockRepository.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
-        var ssoAttribute = new MetaverseAttribute { Id = 1, Name = "SsoId" };
-        _mockServiceSettingsRepo.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync(new ServiceSettings
-        {
-            SSOUniqueIdentifierClaimType = "sub",
-            SSOUniqueIdentifierMetaverseAttribute = ssoAttribute
-        });
-        var userType = new MetaverseObjectType { Id = 1, Name = "User" };
-        metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(It.IsAny<string>(), false, It.IsAny<bool>())).ReturnsAsync(userType);
-        var user = new MetaverseObject { Id = Guid.NewGuid(), Type = userType, CachedDisplayName = "Admin User" };
-        metaverseRepo.Setup(r => r.GetMetaverseObjectByTypeAndAttributeAsync(userType, ssoAttribute, It.IsAny<string>())).ReturnsAsync(user);
-        var identity = new ClaimsIdentity(new List<Claim> { new("sub", user.Id.ToString()), new(ClaimTypes.Name, "Admin User") }, "TestAuth");
-        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } };
+        var user = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 1, Name = "User" }, CachedDisplayName = "Admin User" };
+        metaverseRepo.Setup(r => r.GetMetaverseObjectAsync(user.Id)).ReturnsAsync(user);
+        // Shaped as the bearer pipeline leaves it: the token's identity plus JIM's identity carrying the resolved id.
+        var tokenIdentity = new ClaimsIdentity(new List<Claim> { new("sub", "idp-subject"), new(ClaimTypes.Name, "Admin User") }, "TestAuth");
+        var jimIdentity = new ClaimsIdentity(new List<Claim> { new(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()) });
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new[] { tokenIdentity, jimIdentity }) } };
         Activity? recorded = null;
         _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Callback<Activity>(a => recorded = a).Returns(Task.CompletedTask);
 

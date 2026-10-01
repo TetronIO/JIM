@@ -26,7 +26,11 @@ The API uses URL path-based versioning. The current version is `v1`; all endpoin
 
 JIM is pre-v1.0, so breaking changes to the API can still occur between releases. Changes that affect existing integrations are called out here.
 
-**This release**
+**v0.16.0**
+
+- **A Schedule Execution can end `CompleteWithError`.** A run that carried on past a failed step (because the Schedule or the step is set to continue on failure) now ends `CompleteWithError`, naming the failed steps in `errorMessage`, where it previously ended `Complete`. An integration or script that waits for a Schedule Execution to reach `Complete`, `Failed` or `Cancelled` must treat `CompleteWithError` as finished too, or it will wait indefinitely.
+
+**v0.15.0**
 
 - **A successful Schedule Execution's status is now `Complete`, not `Completed`.** The value matches the word Activities already use for the same outcome. The REST API and the JIM PowerShell module both send and accept only `Complete`, so any integration or script that filters Schedule Executions on `Completed` must update. This is a pre-v1.0 breaking change.
 

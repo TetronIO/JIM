@@ -9,7 +9,7 @@ namespace JIM.Connectors.LDAP;
 
 internal class LdapConnectorSchema
 {
-    private readonly LdapConnection _connection;
+    private readonly ILdapOperationExecutor _executor;
     private readonly ILogger _logger;
     private readonly LdapConnectorRootDse _rootDse;
     private readonly bool _includeAuxiliaryClasses;
@@ -18,9 +18,9 @@ internal class LdapConnectorSchema
     private Dictionary<string, SearchResultEntry> _classSchemaCache = null!;
     private Dictionary<string, SearchResultEntry> _attributeSchemaCache = null!;
 
-    internal LdapConnectorSchema(LdapConnection ldapConnection, ILogger logger, LdapConnectorRootDse rootDse, bool includeAuxiliaryClasses = false)
+    internal LdapConnectorSchema(ILdapOperationExecutor executor, ILogger logger, LdapConnectorRootDse rootDse, bool includeAuxiliaryClasses = false)
     {
-        _connection = ldapConnection;
+        _executor = executor;
         _logger = logger;
         _rootDse = rootDse;
         _includeAuxiliaryClasses = includeAuxiliaryClasses;
@@ -56,7 +56,7 @@ internal class LdapConnectorSchema
         var namingContext = LdapPasswordPolicyScope.From(_rootDse).PrimaryNamingContext;
         var namingContexts = namingContext == null ? Array.Empty<string>() : new[] { namingContext };
 
-        var source = LdapDeltaSources.Create(_rootDse.DeltaSourceKind, new LdapOperationExecutor(_connection), _logger);
+        var source = LdapDeltaSources.Create(_rootDse.DeltaSourceKind, _executor, _logger);
         var findings = await source.VerifyReadinessAsync(_rootDse, namingContexts, CancellationToken.None);
         foreach (var warning in LdapDeltaSourceFindings.SchemaDiscoveryWarnings(findings))
         {
@@ -99,16 +99,13 @@ internal class LdapConnectorSchema
                 : "(objectClassCategory=1)";
             var filter = $"(&(objectClass=classSchema){classFilter}(defaultHidingValue=FALSE)(!(isDefunct=TRUE)))";
             var request = new SearchRequest(_schemaNamingContext, filter, SearchScope.Subtree);
-            var response = (SearchResponse)_connection.SendRequest(request);
+            var entries = ReadAllPages(request, "object type");
 
-            if (response.ResultCode != ResultCode.Success)
-                throw new Exception($"No success getting object types. Result code: {response.ResultCode}");
-
-            if (response.Entries.Count == 0)
-                throw new Exception($"Couldn't get object types. Non returned from Connected System. Result code: {response.ResultCode}");
+            if (entries.Count == 0)
+                throw new Exception("Couldn't get object types. None returned from Connected System.");
 
             // enumerate each object class entry
-            foreach (SearchResultEntry entry in response.Entries)
+            foreach (var entry in entries)
             {
                 var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? throw new Exception($"No name on object class entry: {entry.DistinguishedName}");
                 var objectType = new ConnectorSchemaObjectType(name);
@@ -319,10 +316,9 @@ internal class LdapConnectorSchema
     {
         var filter = "(&(objectClass=classSchema)(!(isDefunct=TRUE)))";
         var request = new SearchRequest(_schemaNamingContext, filter, SearchScope.Subtree);
-        var response = (SearchResponse)_connection.SendRequest(request);
 
         var cache = new Dictionary<string, SearchResultEntry>(StringComparer.OrdinalIgnoreCase);
-        foreach (SearchResultEntry entry in response.Entries)
+        foreach (var entry in ReadAllPages(request, "classSchema"))
         {
             var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ldapdisplayname");
             if (name != null)
@@ -340,10 +336,9 @@ internal class LdapConnectorSchema
     {
         var filter = "(&(objectClass=attributeSchema)(!(isDefunct=TRUE)))";
         var request = new SearchRequest(_schemaNamingContext, filter, SearchScope.Subtree);
-        var response = (SearchResponse)_connection.SendRequest(request);
 
         var cache = new Dictionary<string, SearchResultEntry>(StringComparer.OrdinalIgnoreCase);
-        foreach (SearchResultEntry entry in response.Entries)
+        foreach (var entry in ReadAllPages(request, "attributeSchema"))
         {
             var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ldapdisplayname");
             if (name != null)
@@ -353,12 +348,21 @@ internal class LdapConnectorSchema
         return cache;
     }
 
+    /// <summary>
+    /// Every entry a schema partition search matches, read page by page where the directory pages. A stock Active
+    /// Directory forest publishes more attributeSchema entries than its MaxPageSize allows an unpaged search to
+    /// return, so this is what lets discovery read the whole schema rather than being refused with
+    /// sizeLimitExceeded on the first connection (#1853).
+    /// </summary>
+    private List<SearchResultEntry> ReadAllPages(SearchRequest request, string purpose) =>
+        LdapPagedSearch.ReadAll(_executor, request, _rootDse.SupportsPaging, LdapConnectorConstants.METADATA_SEARCH_PAGE_SIZE, _logger, purpose);
+
     private string? GetSchemaNamingContext()
     {
         // get the schema naming context from an attribute on the rootDSE
         var request = new SearchRequest() { Scope = SearchScope.Base };
         request.Attributes.Add("schemaNamingContext");
-        var response = (SearchResponse)_connection.SendRequest(request);
+        var response = (SearchResponse)_executor.SendRequest(request);
 
         if (response.ResultCode != ResultCode.Success)
         {
@@ -402,7 +406,7 @@ internal class LdapConnectorSchema
             // Step 2: Query the subschema subentry for objectClasses, attributeTypes and DIT Content Rules
             var request = new SearchRequest(subschemaDn, "(objectClass=subschema)", SearchScope.Base);
             request.Attributes.AddRange(["objectClasses", "attributeTypes", "dITContentRules"]);
-            var response = (SearchResponse)_connection.SendRequest(request);
+            var response = (SearchResponse)_executor.SendRequest(request);
 
             if (response.ResultCode != ResultCode.Success || response.Entries.Count == 0)
                 throw new Exception($"Failed to query subschema subentry at '{subschemaDn}'. Result code: {response.ResultCode}");
@@ -709,7 +713,7 @@ internal class LdapConnectorSchema
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
         request.Attributes.Add("subschemaSubentry");
-        var response = (SearchResponse)_connection.SendRequest(request);
+        var response = (SearchResponse)_executor.SendRequest(request);
 
         if (response.ResultCode != ResultCode.Success)
         {

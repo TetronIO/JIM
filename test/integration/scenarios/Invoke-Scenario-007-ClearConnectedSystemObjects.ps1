@@ -86,7 +86,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -228,7 +228,7 @@ try {
     # to this the suite was relying on files leaking across scenarios through the
     # shared jim-connector-files-volume.
     Write-Host "Seeding CSV test data..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$(Get-IntegrationTestDataPath)"
     Write-Host "  ✓ CSV test data seeded" -ForegroundColor Green
 
     # Setup scenario configuration (reuse Scenario 001 setup for CSV connected system)
@@ -375,7 +375,7 @@ try {
     if ($Step -eq "StrandedSweep" -or $Step -eq "All") {
         Write-TestSection "Test 4: Post-Clear Reconciliation After Clear-Then-Partial-Re-Import"
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $maxMissingPercentKey = "Sync.PostClearReconciliation.MaxMissingPercent"
         $userTypeGracePeriod = [TimeSpan]::FromDays(7)
 

@@ -43,7 +43,7 @@
         That step creates the directory import Synchronisation Rule itself, so Tests 1 to 6 run
         against Scenario 001's shape unchanged.
 
-    Supports OpenLDAP (default) and Samba AD; refuses 389 Directory Server, since the SambaAD-only
+    Supports OpenLDAP (default), Samba AD and Active Directory; refuses 389 Directory Server, since the AD-family-only
     target-side collision test needs a real directory-wide unique-value constraint a CSV target
     cannot produce, and OpenLDAP already covers the RFC-directory shape.
 
@@ -61,7 +61,7 @@
 
 .PARAMETER DirectoryConfig
     Directory configuration hashtable. Defaults to Get-DirectoryConfig -DirectoryType OpenLDAP if not
-    supplied. Only OpenLDAP and SambaAD are accepted; 389 Directory Server is refused.
+    supplied. Only OpenLDAP, SambaAD and ActiveDirectory are accepted; 389 Directory Server is refused.
 
 .PARAMETER ExportConcurrency
     LDAP Connector export concurrency, passed through to Setup-Scenario-001.ps1
@@ -78,7 +78,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$true)]
     [string]$ApiKey,
@@ -111,12 +111,12 @@ if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Primary
 }
 
-if ($DirectoryConfig.DirectoryType -notin @("OpenLDAP", "SambaAD")) {
-    throw "Scenario 023 supports OpenLDAP and Samba AD only. 389 Directory Server was requested " +
-          "($($DirectoryConfig.ConnectedSystemName)): the SambaAD-only target-side collision step needs a " +
+if ($DirectoryConfig.DirectoryType -notin @("OpenLDAP", "SambaAD", "ActiveDirectory")) {
+    throw "Scenario 023 supports OpenLDAP, Samba AD and Active Directory only. 389 Directory Server was requested " +
+          "($($DirectoryConfig.ConnectedSystemName)): the AD-family-only target-side collision step needs a " +
           "real directory-wide unique-value constraint a CSV target cannot produce, and OpenLDAP already " +
           "covers the RFC-directory shape, so a third directory adds nothing this scenario needs. Use " +
-          "-DirectoryType OpenLDAP or -DirectoryType SambaAD."
+          "-DirectoryType OpenLDAP, -DirectoryType SambaAD or -DirectoryType ActiveDirectory."
 }
 
 Write-TestSection "Scenario 023 Setup: Unique Value Generation ($($DirectoryConfig.ConnectedSystemName))"

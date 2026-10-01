@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 2.0
+> **Document Version**: 2.1
 >
-> **Last Updated**: 2026-09-23
+> **Last Updated**: 2026-09-29
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -22,9 +22,9 @@
 | **Stack** | .NET 10.0, EF Core, PostgreSQL, Blazor Server |
 | **UI Framework** | MudBlazor (Material Design) |
 | **Auth** | OpenID Connect (OIDC) with PKCE |
-| **Deployment** | Docker containers, air-gapped capable |
+| **Deployment** | Docker or Podman containers, HTTPS by default, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Active development, v0.14.0 released; v0.15.0 in preparation |
+| **Status** | Active development, v0.16.0 released |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -281,7 +281,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 
 ### Key Endpoints (v1)
 
-21 API controllers. Key examples:
+22 API controllers. Key examples:
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -300,12 +300,13 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | `GET /api/v1/password-synchronisation/queue` | Password Synchronisation queue (list, retry, cancel) |
 | `GET /api/v1/metaverse/objects/{id}/sync-preview` | Sync Preview: what synchronising an object would do |
 | `GET /api/v1/previews/{activityId}` | Configuration Change Preview results |
+| `GET /api/v1/features` | Feature flags (list, enable and disable Preview features) |
 
 Full interactive Scalar API reference available at `/api/reference` in all environments, including air-gapped deployments. The OpenAPI document is pre-generated at build time and served as a static file at `/api/openapi/v1.json`.
 
 ### PowerShell Module
 
-168 cmdlets for automation:
+175 cmdlets for automation:
 
 ```powershell
 # Connect interactively (opens browser for SSO)
@@ -365,16 +366,27 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
 - ✅ Dashboard home page with system overview
-- ✅ API with JWT and API key auth (21 controllers)
-- ✅ PowerShell module (168 cmdlets)
-- ✅ Docker deployment with air-gapped bundles
-- ✅ Integration testing framework (21 scenarios, Scenarios 001-002 and 004-022)
+- ✅ API with JWT and API key auth (22 controllers)
+- ✅ PowerShell module (175 cmdlets)
+- ✅ Docker and Podman deployment (rootful or rootless, systemd, Ansible) with air-gapped bundles and HTTPS by default
+- ✅ Integration testing framework (24 scenarios, Scenarios 001-002 and 004-025, including an Active Directory lab)
 - ✅ Credential encryption
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page
 - ✅ Unified log viewer (application + PostgreSQL logs)
 
-### Recent Enhancements (in preparation for v0.15.0)
+### Recent Enhancements (v0.16.0)
+
+- ✅ **Podman Support** (#1808) - Rootful or rootless Podman under systemd (Quadlet), with no Docker required; one installer for connected and air-gapped installs, Ansible deployment, and `setup.sh --upgrade` for Docker installations
+- ✅ **HTTPS by Default** (#1808) - JIM serves HTTPS on port 443 with the organisation's certificate or one the setup script creates; services wait for the database at start-up and exit non-zero on failure
+- ✅ **Feature Flags** (#1781) - Preview features switched on from Service Settings, PowerShell (`Get/Enable/Disable-JIMFeature`) or REST, fully audited; features still In development stay hidden
+- ✅ **Schedule Failure Handling** (#1787, #1768) - Stop or continue per Schedule, with a per-step override (`Set-JIMScheduleStep`); a run that carried on past a failed step ends Complete With Error; a step that cannot be queued fails the run before anything runs
+- ✅ **Active Directory Hardening** (#1853) - Ranged retrieval of large group memberships (MaxValRange), paged schema, container and domain controller discovery, and a clear invocationId-change message; a real Active Directory lab in the integration tests
+- ✅ **Pending Export Accuracy** - Pending Exports confirmed on import only; queued changes withdrawn once nothing authorises them or the target already holds the value; Failed Pending Exports auto-clear on a confirming import; Executing ones recovered at worker start
+- ✅ **Import Watermark Integrity** (#1868) - The connector's watermark is recorded only once the run has staged what it read, so a failed or cancelled import never skips changes
+- ✅ **Auxiliary Class Contributions** - Adding an auxiliary class lists the attributes each class contributes, across portal, REST and `Get-JIMConnectedSystemAuxiliaryClass`
+
+### Recent Enhancements (v0.15.0)
 
 - ✅ **SCIM 2.0 Client Connector** (#545) - Any RFC 7643/7644 service provider; delta import, partial-update exports, optional bulk operations, rate-limit aware
 - ✅ **JIM SQL Connector** (#170) - Built-in Connector for SQL Server and Oracle: schema discovery, full and delta import, export

@@ -91,7 +91,11 @@ public abstract class ApiControllerBase(JimApplication application, ILogger logg
     }
 
     /// <summary>
-    /// Resolves the current user from JWT claims by looking up their SSO identifier in the Metaverse.
+    /// Returns the Metaverse Object of the signed-in (JWT) caller, read from the Metaverse Object id claim the
+    /// authentication pipeline attached when it resolved them (Program.cs <c>ResolveAndAttachJimIdentityAsync</c>,
+    /// <see cref="Middleware.Api.JimRoleEnrichmentMiddleware"/>). Deliberately not a second resolution from the SSO
+    /// claim: the identity a change is attributed to must be the one authorisation was granted to. The portal resolves
+    /// its user the same way (<see cref="Helpers.GetUserAsync"/>).
     /// Returns null for API key authentication (which is valid - use <see cref="IsApiKeyAuthenticated"/> to check).
     /// </summary>
     protected async Task<MetaverseObject?> GetCurrentUserAsync()
@@ -107,41 +111,13 @@ public abstract class ApiControllerBase(JimApplication application, ILogger logg
             return null;
         }
 
-        // Get the service settings to know which claim type contains the unique identifier
-        var serviceSettings = await Application.ServiceSettings.GetServiceSettingsAsync();
-        if (serviceSettings?.SSOUniqueIdentifierClaimType == null ||
-            serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
+        if (!IdentityUtilities.TryGetUserId(User, out var userId))
         {
-            Logger.LogError("Service settings are not configured for SSO claim mapping");
+            // Unreachable for an authorised caller: a principal the pipeline could not resolve receives no roles.
+            Logger.LogWarning("Authenticated caller has no JIM identity (no Metaverse Object id claim)");
             return null;
         }
 
-        // Get the unique identifier from the JWT claims
-        var uniqueIdClaimValue = IdentityUtilities.GetSsoUniqueIdentifier(
-            User,
-            serviceSettings.SSOUniqueIdentifierClaimType);
-
-        if (string.IsNullOrEmpty(uniqueIdClaimValue))
-        {
-            Logger.LogWarning("JWT does not contain the expected claim: {ClaimType}",
-                serviceSettings.SSOUniqueIdentifierClaimType);
-            return null;
-        }
-
-        // Look up the user in the Metaverse
-        var userType = await Application.Metaverse.GetMetaverseObjectTypeAsync(
-            Constants.BuiltInObjectTypes.User,
-            false);
-
-        if (userType == null)
-        {
-            Logger.LogError("Could not find User object type in Metaverse");
-            return null;
-        }
-
-        return await Application.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(
-            userType,
-            serviceSettings.SSOUniqueIdentifierMetaverseAttribute,
-            uniqueIdClaimValue);
+        return await Application.Metaverse.GetMetaverseObjectAsync(userId);
     }
 }

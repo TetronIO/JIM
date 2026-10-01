@@ -1,6 +1,6 @@
 ---
 title: Quick Start
-description: Deploy JIM using automated setup, manual Docker Compose, air-gapped installation, or a developer environment.
+description: Deploy JIM on Docker or Podman using the installer, an air-gapped bundle, or a developer environment.
 ---
 
 # Quick Start
@@ -13,7 +13,7 @@ This page covers all the ways to get JIM up and running. Choose the option that 
 
     ---
 
-    Deploy JIM in your environment using automated setup, Docker Compose, or air-gapped installation.
+    Deploy JIM in your environment on Docker or Podman, using the installer, connected or air-gapped.
 
     [:octicons-arrow-down-16: Jump to Administrator options](#for-administrators)
 

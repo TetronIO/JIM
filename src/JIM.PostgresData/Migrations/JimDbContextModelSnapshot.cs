@@ -4099,9 +4099,6 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("Adopted")
-                        .HasColumnType("boolean");
-
                     b.Property<int?>("AnchoredByConnectedSystemId")
                         .HasColumnType("integer");
 

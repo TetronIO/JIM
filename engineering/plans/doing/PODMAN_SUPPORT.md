@@ -1,6 +1,6 @@
 # Podman Support - Implementation Plan
 
-- **Status:** Doing (Phases 1, 2 and 3 complete; Phase 4's check in place, awaiting D6 and the RHEL acceptance run)
+- **Status:** Doing (Phases 1, 2 and 3 complete; Phase 4's check required, awaiting the RHEL acceptance run)
 - **Created:** 2026-09-25
 - **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
 - **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/doing/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
@@ -372,7 +372,7 @@ Delivered as one PR: the files, the installer, the release and the documentation
    - **`setup.sh` ran the rootless account's Podman with the caller's environment,** and GitHub's sudo keeps `XDG_CONFIG_HOME`, so Podman read the runner's configuration folder and failed. The account's commands now get a clean environment, keeping proxy settings.
 
    **Found on GitHub's Ubuntu runner, and detected by the installer:** the runner image sets `XDG_CONFIG_HOME` and `XDG_RUNTIME_DIR` for every account in `/etc/environment`, pointing at the runner's own folders. The rootless account's systemd user manager inherits them, so the Quadlet generator looked for JIM's units in the wrong folder and generated none, and Podman used a runtime folder the account does not own. A customer host configured the same way failed the same way, silently. `setup.sh` now reads the account's manager environment before installing anything and stops, naming each setting, where such settings usually live and how to restart the manager, when `XDG_CONFIG_HOME`, `XDG_DATA_HOME` or `XDG_RUNTIME_DIR` is not the account's own (Pester tests in `test/ci/deployment/Tests/SetupScript.Tests.ps1`, which source the installer). It does not override them: they are the host's configuration, and rootful is unaffected. The job removes those lines before the rootless leg.
-5. **Required check:** pending. Informational until it has passed ten consecutive runs (D6); then an administrator adds it to the `main` ruleset.
+5. **Required check** ✅ Added to the `main` ruleset on 2026-09-29, after 40 green runs and none failed, 5 cancelled by newer pushes (D6). It adds a median of about a minute and a half to a merge, finishing after the slowest other required check on 28 of 40 commits (at most 6m37s).
 6. **Manual acceptance:** pending. The RHEL virtual machine run from D5, covering `setup.sh` rootless and rootful and the D12 playbook, recorded in the PR that closes #1808.
 
 **Verified before the PR:** the Docker leg in the cloud sandbox (Docker 29, containerd image store), both Podman legs on the CentOS Stream 9 test host (Podman 5.8, systemd), and the parity comparison across all three. The Ubuntu runner (Podman 4.9) is proven by the job itself.

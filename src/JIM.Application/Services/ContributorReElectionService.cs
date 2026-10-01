@@ -49,16 +49,16 @@ public static class ContributorReElectionService
     /// rather than a resolved value (plan decision 6). A caller running inside a synchronisation (the worker's
     /// re-election paths, and Sync Preview's own dry-run resolver, work package J) supplies a resolver that
     /// generates the value inline through its own run-scoped Unique Value Generation context, with outcomes
-    /// and errors, returning one (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c>
+    /// and errors, returning one (outcome type, attribute name, value) tuple per <c>Generated</c>
     /// result for this method to hand back to ITS OWN caller (see the return value below); the default (null,
     /// every other caller: Synchronisation Rule deletion recall, Synchronised Deprovisioning) clears the
     /// marker and logs instead, because none of those callers hold a run-scoped reservation set to resolve
     /// it through, and the generating Connected System's own next synchronisation will see its mapping as the
     /// winning contributor and generate the value then.</param>
     /// <returns>
-    /// One (outcome type, attribute name, value) tuple per <c>Generated</c>/<c>Adopted</c> result
+    /// One (outcome type, attribute name, value) tuple per <c>Generated</c> result
     /// <paramref name="resolvePendingGeneratedValues"/> returned (work package J), for the caller to record as
-    /// a <c>GeneratedValueAssigned</c>/<c>GeneratedValueAdopted</c> child outcome once it has built its own
+    /// a <c>GeneratedValueAssigned</c> child outcome once it has built its own
     /// root outcome; empty whenever nothing was re-elected, no generated mapping was involved, or no resolver
     /// was supplied.
     /// </returns>

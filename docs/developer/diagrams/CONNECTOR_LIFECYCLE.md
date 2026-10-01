@@ -1,6 +1,6 @@
 # Connector Lifecycle
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows how connectors are resolved, configured, opened, used, and closed across import, export and password operations. Connectors implement capability interfaces that determine their lifecycle shape. The built-in connectors are the LDAP, File, SCIM 2.0 Client and SQL Connectors; the File Connector is the only file-based one.
 
@@ -108,7 +108,7 @@ flowchart TD
     Start([LDAP Delta Import, first page]) --> Pick[LdapDeltaSources.Create<br/>USN, Accesslog or Changelog<br/>from the directory type]
     Pick --> Capture[CaptureWatermarkAsync<br/>record the watermark this<br/>import will leave behind]
     Capture --> Continuity{Persisted watermark<br/>still valid here?}
-    Continuity -->|No: another domain controller,<br/>or a trimmed changelog| Refuse[The Delta Import fails:<br/>run a Full Import to<br/>re-establish the baseline]
+    Continuity -->|No: another domain controller,<br/>one restored from a backup or snapshot,<br/>or a trimmed changelog| Refuse[The Delta Import fails:<br/>run a Full Import to<br/>re-establish the baseline]
     Continuity -->|Yes| Ready{Change source<br/>readable by the<br/>service account?}
     Ready -->|No| RefuseRead[Refuse the Delta Import<br/>naming what could not be read, #1737]
     Ready -->|Yes, possibly with notes| Baseline{Last import left<br/>a watermark?}
@@ -131,6 +131,7 @@ flowchart TD
     SetScope --> InjectCert[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them]
     InjectCert --> Open[OpenExportConnection<br/>with system settings]
 
+    Open -->|Fails to connect, #1875| CloseExport
     Open --> SplitExports[Split exports into<br/>immediate and deferred]
     SplitExports --> CheckParallel{MaxParallelism > 1?}
 
@@ -141,7 +142,7 @@ flowchart TD
     SequentialExport --> BatchLoop
 
     BatchLoop --> Deferred[Process deferred exports<br/>Resolve references, export]
-    Deferred --> CloseExport[CloseExportConnection<br/>in finally block - always called]
+    Deferred --> CloseExport[CloseExportConnection<br/>in finally block - always called<br/>Returned connector data? Persist it]
     CloseExport --> Done([Export complete])
 
     %% --- File-based connector ---
@@ -198,6 +199,10 @@ flowchart TD
 - **Close in finally, on every channel**<br /> The export connection is always closed, even if an exception occurs during export. The import connection is too, so an import that fails part-way still releases its connection and any temporary trust directory prepared for it, and the password channel likewise. This prevents connection leaks in long-running worker processes. Each connection is opened inside the block that closes it, including a parallel export batch's own connector, so a connection that fails to open is closed too (#1875): failing to connect is exactly when a connector has state to return at close, such as a pinned domain controller the failure invalidated.
 
 - **Connector state returned at close wins**<br /> `CloseImportConnection` may return persisted connector data, persisted when the connection closes (even if the import failed) in place of the page watermark, which is then not persisted at all; the LDAP Connector uses this when using the connection invalidated a previously persisted domain controller pin (#1169). Null, the usual case, means nothing to override.
+
+- **Metadata searches are paged (#1853)**<br /> The LDAP Connector reads its discovery searches (the Object Type list, the class and attribute schema, a partition's containers and the forest's domain controllers) page by page through `LdapPagedSearch` wherever the directory supports paging. Active Directory refuses an unpaged search that would exceed its MaxPageSize (1,000 by default) with "size limit exceeded", and a stock forest publishes well over 1,000 attribute definitions.
+
+- **Settings reconciled at startup**<br /> When JIM starts, after each Connector Definition is brought into line with its Connector, every Connected System built on it gains a value for any setting the Connector has since added (carrying its default), and an unset value takes a newly declared default (`ConnectedSystemServer.ReconcileConnectedSystemSettingValuesAsync`). A Connected System that changes is saved under a System-attributed Activity recording what was added; one already in line is not written to, so an ordinary restart records nothing.
 
 - **Managed scope is the connector's knowledge (#1250)**<br /> Container selection means the scope JIM manages, not merely what it reads. Before an export JIM states the Connected System's scope-deciding containers (selections and exclusions) to a connector implementing `IConnectorManagedScope`, and the connector refuses per object to write outside them, so the rest of the run proceeds. A Connected System with no container selections states nothing and permits everything. The scope is currently stated only on the connector instance the run was resolved with: the per-batch instances a parallel export creates through the factory do not receive it.
 

@@ -353,11 +353,14 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     [Test]
     public void Panel_History_GroupsChangesByDayWithTodayYesterdayThenTheDate()
     {
-        var yesterday = DateTime.UtcNow.AddDays(-1);
-        var lastWeek = DateTime.UtcNow.AddDays(-6);
+        // Anchored to local calendar days, not to "ten minutes ago": the headings are local days, so a relative time
+        // falls on yesterday for the first minutes after midnight, which failed a CI run at 00:03.
+        var today = DateTime.Today.AddSeconds(1).ToUniversalTime();
+        var yesterday = DateTime.Today.AddDays(-1).AddHours(12).ToUniversalTime();
+        var lastWeek = DateTime.Today.AddDays(-6).AddHours(12).ToUniversalTime();
         var cut = RenderPanel(events:
         [
-            Change(Recently, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete)),
+            Change(today, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete)),
             Change(yesterday, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete)),
             Change(lastWeek, PendingPasswordChangeOrigin.Explicit, Outcome("Corporate AD", ActivityStatus.Complete))
         ]);
@@ -367,7 +370,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             Assert.That(FindAll(cut, DayMarker).Select(d => d.TextContent.Trim()), Is.EqualTo(new[] { "Today", "Yesterday", lastWeek.ToLocalTime().ToFriendlyDay() }));
             Assert.That(FindAll(cut, EntryMarker), Has.Count.EqualTo(3), "one entry per change");
             Assert.That(FindAll(cut, "jim-password-time").Select(t => t.TextContent.Trim()),
-                Is.EqualTo(new[] { Recently.ToLocalTime().ToFriendlyTime(), yesterday.ToLocalTime().ToFriendlyTime(), lastWeek.ToLocalTime().ToFriendlyTime() }));
+                Is.EqualTo(new[] { today.ToLocalTime().ToFriendlyTime(), yesterday.ToLocalTime().ToFriendlyTime(), lastWeek.ToLocalTime().ToFriendlyTime() }));
             Assert.That(cut.FindComponents<MudTimelineItem>(), Has.Count.EqualTo(3));
         }
     }

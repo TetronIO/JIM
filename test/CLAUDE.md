@@ -216,6 +216,9 @@ cd /workspaces/JIM
 # Run against ALL directory types with different template sizes per directory
 ./test/integration/Run-IntegrationTests.ps1 -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Scale100k50Groups -TemplateDirectoryServer389 Large
 
+# Run the directory passes side by side, one isolated stack ("lane") each: about as long as the slowest pass
+./test/integration/Run-IntegrationTests.ps1 -PreRelease -Parallel
+
 # Run only a specific test step (Joiner, Mover, Leaver, Reconnection, etc.)
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner
 
@@ -263,6 +266,8 @@ These flags are for human developer iteration only. Claude must not use them bec
 - `-SkipBuild` can run stale container images that don't reflect the current code, masking real bugs
 - `-SkipReset` carries over state from previous runs, producing results that are not reproducible
 - Integration tests must always prove the code works from a clean state with freshly built containers
+
+**Parallel lanes (`-Parallel`, #636).** With `-DirectoryType All`, `-Parallel` runs each directory pass in its own runner process and its own copy of the stack. Samba AD keeps the usual names and `localhost:5200`; the OpenLDAP lane's JIM is on `localhost:5300` (containers `jim.web-openldap` and so on) and the 389 Directory Server lane's on `localhost:5400` (`-dirsrv`). When adding harness code, never hardcode a JIM container name, volume, `http://localhost:5200`, a `docker compose -f ...` file list or a fixed path under `test/test-data` or the temp directory: use `Get-IntegrationLane` (`.WorkerContainer`, `.DatabaseContainer`, `.JimUrl`, ...), `Get-JimComposeArgs` / `Get-IntegrationComposeArgs`, `Get-IntegrationTestDataPath` and `Get-IntegrationTempPath` from `utils/IntegrationLane.ps1`, which resolve to the historic values in a serial run. Anything host-wide (image prune, monitor sweeps, `.env` edits) must stay out of lanes; the parent does it once. Full model in `engineering/INTEGRATION_TESTING.md` (search "-Parallel").
 
 **CRITICAL: A single-page run is not a sign-off for synchronisation or worker changes.**
 The worker synchronises in pages (`Sync.PageSize`, 500 by default) and clears its change tracker between them, so a template whose users fit in one page (Nano, Micro, Small) never runs the code between pages: tracker clear, cross-page reference fix-up, re-attaching bulk-created rows. The in-memory unit suite cannot see that code's faults either. Micro is fine for iterating, but before calling a change that touches synchronisation, the worker, or a sync-path repository write done, run its scenario at **Medium or above**, and preferably at the template Pre-Release uses for that directory (Medium for Samba AD, Large for OpenLDAP and 389 Directory Server), since that is the gate it will face anyway. The runner prints a `⚠ Single-page run` warning under a passing template-relevant scenario that did not cross a page boundary; treat it as "not verified", not as a pass. (Rule added after Scenario 023, Unique Value Generation, was signed off at Micro and then failed Pre-Release at Medium: page 2's bulk-created Metaverse Objects were left Modified, and the next EF save threw `DbUpdateConcurrencyException`.)

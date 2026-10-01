@@ -476,6 +476,8 @@ test/integration/results/*
 test/integration/test-data/
 test/integration/test-data/.cache/
 test/integration/.api-key
+# Domain controller certificates the Active Directory lab harness fetches (see ad-lab-certs bind mount)
+test/integration/ad-lab-certs/
 test/test-data/
 test-data/
 

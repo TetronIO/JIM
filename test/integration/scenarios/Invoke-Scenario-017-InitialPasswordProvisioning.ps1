@@ -79,7 +79,7 @@ param(
     [string]$Template = "Micro",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -104,6 +104,7 @@ $ConfirmPreference = 'None'
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType SambaAD -Instance Primary
@@ -161,7 +162,7 @@ Write-Host ""
 Write-TestSection "Step 0: Configuring JIM"
 
 Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
-& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$PSScriptRoot/../../test-data"
+& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$(Get-IntegrationTestDataPath)"
 Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
 $config = & "$PSScriptRoot/../Setup-Scenario-017.ps1" `
@@ -209,18 +210,16 @@ try {
         # reality, exactly as it would the day after an administrator tightens a real directory's policy
         # and before JIM's next schema refresh notices. A password between the two lengths clears JIM's
         # save-time check on the old figure and is then refused for real when the export tries to set it.
-        # docker exec's output is captured as a string per line; joined to one string before matching, because
-        # -match against an array filters elements rather than setting $matches (PowerShell's array/scalar
-        # -match split), which would otherwise misjudge the array as a non-match and throw below regardless.
-        $domainMinPwdLengthOutput = (docker exec $DirectoryConfig.ContainerName samba-tool domain passwordsettings show 2>&1 | Out-String)
-        if ($domainMinPwdLengthOutput -notmatch 'Minimum password length:\s*(\d+)') {
-            throw "Could not read the domain's current minimum password length from samba-tool. Output: $domainMinPwdLengthOutput"
-        }
-        $originalMinPwdLength = [int]$matches[1]
+        # Get-DirectoryPasswordPolicy reads the domain policy the directory's own way: samba-tool's output on
+        # Samba AD, the domain head object's minPwdLength on Active Directory. It throws if it cannot read one.
+        $originalMinPwdLength = (Get-DirectoryPasswordPolicy -DirectoryConfig $DirectoryConfig).MinLength
         $temporaryMinPwdLength = $originalMinPwdLength + 3
 
         Write-Host "  Raising the domain's minimum password length from $originalMinPwdLength to $temporaryMinPwdLength, so JIM's already-discovered policy is stale..." -ForegroundColor DarkGray
-        docker exec $DirectoryConfig.ContainerName samba-tool domain passwordsettings set --min-pwd-length=$temporaryMinPwdLength 2>&1 | Out-Null
+        $raiseResult = Set-DirectoryPasswordPolicy -DirectoryConfig $DirectoryConfig -MinLength $temporaryMinPwdLength
+        if (-not $raiseResult.Success) {
+            throw "Could not raise the domain's minimum password length to $temporaryMinPwdLength, so the refusal this step stages would never happen. Output: $($raiseResult.Output)"
+        }
 
         # One character short of the domain's new real minimum, but at or above the figure JIM cached
         # when it last discovered the policy: this is what makes the save succeed and the export fail.
@@ -401,6 +400,7 @@ try {
     # directory's own built-in accounts (krbtgt, Guest) out of the result.
     $searchOutput = Invoke-LDAPSearch `
         -ContainerName $DirectoryConfig.ContainerName `
+        -DirectoryConfig $DirectoryConfig `
         -Server "localhost" `
         -Port $DirectoryConfig.LdapSearchPort `
         -Scheme $DirectoryConfig.LdapSearchScheme `
@@ -535,7 +535,7 @@ finally {
     # raising it and here still restores the domain rather than leaving it stuck at the temporary value.
     if ($null -ne $originalMinPwdLength) {
         Write-Host "  Restoring the domain's minimum password length to $originalMinPwdLength..." -ForegroundColor DarkGray
-        docker exec $DirectoryConfig.ContainerName samba-tool domain passwordsettings set --min-pwd-length=$originalMinPwdLength 2>&1 | Out-Null
+        Set-DirectoryPasswordPolicy -DirectoryConfig $DirectoryConfig -MinLength $originalMinPwdLength | Out-Null
     }
 
     Disconnect-JIM -ErrorAction SilentlyContinue

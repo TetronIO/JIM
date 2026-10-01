@@ -57,7 +57,7 @@ param(
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -96,6 +96,7 @@ if (-not $DirectoryConfig) {
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 $systemName = if ($isRfcDirectory) { "Partition Test OpenLDAP" } else { "Partition Test AD" }
@@ -176,14 +177,14 @@ try {
         Write-Host "  OK OpenLDAP has pre-populated test data" -ForegroundColor Green
     }
     else {
-        # Samba AD: wait for container and create test users
+        # Samba AD or Active Directory: wait for the directory and create test users
         Write-Host "Waiting for Samba AD primary to be healthy..." -ForegroundColor Gray
         $maxWaitSeconds = 120
         $elapsed = 0
         $interval = 5
         $primaryStatus = ""
         while ($elapsed -lt $maxWaitSeconds) {
-            $primaryStatus = docker inspect --format='{{.State.Health.Status}}' samba-ad-primary 2>&1
+            $primaryStatus = Get-DirectoryHealthStatus -DirectoryConfig $DirectoryConfig
             if ($primaryStatus -eq "healthy") {
                 break
             }
@@ -193,7 +194,7 @@ try {
         }
 
         if ($primaryStatus -ne "healthy") {
-            throw "samba-ad-primary container did not become healthy within ${maxWaitSeconds}s (status: $primaryStatus)"
+            throw "$($DirectoryConfig.Host) did not become healthy within ${maxWaitSeconds}s (status: $primaryStatus)"
         }
         Write-Host "  OK Samba AD primary is healthy" -ForegroundColor Green
 
@@ -202,24 +203,26 @@ try {
 
         foreach ($user in $sambaTestUsers) {
             # Delete if exists from previous run
-            docker exec samba-ad-primary bash -c "samba-tool user delete '$($user.Sam)' 2>&1" | Out-Null
+            Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user.Sam | Out-Null
 
-            $createResult = docker exec samba-ad-primary samba-tool user create `
-                $user.Sam `
-                "Password123!" `
-                --userou="$testUsersOU" `
-                --given-name="$($user.FirstName)" `
-                --surname="$($user.LastName)" `
-                --department="$($user.Department)" 2>&1
+            $createResult = New-DirectoryUser -DirectoryConfig $DirectoryConfig `
+                -Dn "CN=$($user.FirstName) $($user.LastName),$testUsersOU,$($DirectoryConfig.BaseDN)" `
+                -SamAccountName $user.Sam `
+                -Password "Password123!" `
+                -Attributes ([ordered]@{
+                    givenName  = $user.FirstName
+                    sn         = $user.LastName
+                    department = $user.Department
+                })
 
-            if ($LASTEXITCODE -eq 0) {
+            if ($createResult.Outcome -eq 'Created') {
                 Write-Host "  OK Created $($user.Sam)" -ForegroundColor Green
             }
-            elseif ($createResult -match "already exists") {
+            elseif ($createResult.Outcome -eq 'AlreadyExists') {
                 Write-Host "  $($user.Sam) already exists" -ForegroundColor Yellow
             }
             else {
-                throw "Failed to create user $($user.Sam): $createResult"
+                throw "Failed to create user $($user.Sam): $($createResult.Output)"
             }
         }
     }
@@ -465,7 +468,7 @@ finally {
         Write-Host ""
         Write-Host "Cleaning up test users..." -ForegroundColor Gray
         foreach ($user in $sambaTestUsers) {
-            docker exec samba-ad-primary bash -c "samba-tool user delete '$($user.Sam)' 2>&1" | Out-Null
+            Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user.Sam | Out-Null
         }
         Write-Host "  OK Test users cleaned up" -ForegroundColor Green
     }

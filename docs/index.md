@@ -31,7 +31,7 @@ hide:
 
     ---
 
-    Deploys as a single Docker stack with no legacy infrastructure requirements. Bundled or external PostgreSQL.
+    Deploys as a single container stack on Docker or Podman, served over HTTPS out of the box, with no legacy infrastructure requirements. Bundled or external PostgreSQL.
 
 -   :material-shield-lock:{ .lg .middle } **[Single Sign-On (SSO)](administration/sso-setup.md)**
 
@@ -119,7 +119,7 @@ JIM supports common Identity Governance & Administration (IGA) scenarios:
 
 ## 🚀 What Makes JIM Different
 
-Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach: it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
+Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach: it deploys as a single container stack on Docker or Podman, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
 <div class="jim-capabilities" markdown>
 - :material-check-circle: Air-gapped deployment

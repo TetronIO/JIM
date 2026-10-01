@@ -159,6 +159,154 @@ public class ImportCancellationTests : WorkflowTestBase
             "All 5 CSOs should be persisted when import completes normally");
     }
 
+    /// <summary>
+    /// A connector returns its new watermark on the first page only, and the processor persists it once every page
+    /// has been read. A run cancelled between pages read only part of what that watermark stands for, and the
+    /// staged objects are discarded, so persisting it would make the next Delta Import start beyond changes JIM
+    /// never received. The watermark a cancelled run leaves behind must be the one it started with.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_CancelledBetweenPages_LeavesThePersistedWatermarkUnchangedAsync()
+    {
+        // Arrange
+        var connectedSystem = await CreateConnectedSystemAsync("HR System");
+        connectedSystem.PersistedConnectorData = "original-watermark";
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(connectedSystem.Id, csoType, mvType, "HR Import");
+
+        var runProfile = await CreateRunProfileAsync(
+            connectedSystem.Id, "Delta Import", ConnectedSystemRunType.DeltaImport);
+        var activity = await CreateActivityAsync(
+            connectedSystem.Id, runProfile, ConnectedSystemRunType.DeltaImport);
+
+        var cts = new CancellationTokenSource();
+
+        // Two pages; the first carries the new watermark, as the LDAP connector's does. Cancel once page 1 is returned.
+        var mockConnector = new MockPaginatedConnector(
+            csoType,
+            objectsPerPage: 3,
+            totalPages: 2,
+            onPageReturned: page =>
+            {
+                if (page == 1)
+                    cts.Cancel();
+            },
+            firstPagePersistedConnectorData: "new-watermark");
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+
+        var processor = new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            mockConnector, connectedSystem, runProfile, workerTask, cts);
+
+        // Act
+        await processor.PerformImportAsync();
+
+        // Assert: page 2 was never read and nothing was staged, so the watermark must not have moved on.
+        var csoCount = await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(csoCount, Is.EqualTo(0), "precondition: the cancelled run staged nothing");
+            Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("original-watermark"),
+                "a cancelled run read only part of what its watermark covers, so persisting it would skip those changes on the next Delta Import");
+        }
+    }
+
+    /// <summary>
+    /// The same rule for a Full Import, where the cost is larger: a cancelled Full Import stages nothing, so a
+    /// baseline persisted from it would leave the next Delta Import reading only what changed after a point JIM
+    /// holds no objects for.
+    /// </summary>
+    [Test]
+    public async Task FullImport_CancelledBetweenPages_LeavesThePersistedWatermarkUnchangedAsync()
+    {
+        // Arrange
+        var connectedSystem = await CreateConnectedSystemAsync("HR System");
+        connectedSystem.PersistedConnectorData = "original-watermark";
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(connectedSystem.Id, csoType, mvType, "HR Import");
+
+        var runProfile = await CreateRunProfileAsync(
+            connectedSystem.Id, "Full Import", ConnectedSystemRunType.FullImport);
+        var activity = await CreateActivityAsync(
+            connectedSystem.Id, runProfile, ConnectedSystemRunType.FullImport);
+
+        var cts = new CancellationTokenSource();
+        var mockConnector = new MockPaginatedConnector(
+            csoType,
+            objectsPerPage: 3,
+            totalPages: 2,
+            onPageReturned: page =>
+            {
+                if (page == 1)
+                    cts.Cancel();
+            },
+            firstPagePersistedConnectorData: "new-watermark");
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+
+        var processor = new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            mockConnector, connectedSystem, runProfile, workerTask, cts);
+
+        // Act
+        await processor.PerformImportAsync();
+
+        // Assert
+        var csoCount = await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(csoCount, Is.EqualTo(0), "precondition: the cancelled run staged nothing");
+            Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("original-watermark"),
+                "a cancelled Full Import staged nothing, so the baseline it captured must not be recorded");
+        }
+    }
+
+    /// <summary>
+    /// Regression guard for the two tests above: the watermark is withheld only when the run was cancelled. A
+    /// multi-page run that completes still persists the watermark the first page returned, once all pages are read.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_CompletesNormally_PersistsTheWatermarkTheFirstPageReturnedAsync()
+    {
+        // Arrange
+        var connectedSystem = await CreateConnectedSystemAsync("HR System");
+        connectedSystem.PersistedConnectorData = "original-watermark";
+        var csoType = await CreateCsoTypeAsync(connectedSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(connectedSystem.Id, csoType, mvType, "HR Import");
+
+        var runProfile = await CreateRunProfileAsync(
+            connectedSystem.Id, "Delta Import", ConnectedSystemRunType.DeltaImport);
+        var activity = await CreateActivityAsync(
+            connectedSystem.Id, runProfile, ConnectedSystemRunType.DeltaImport);
+
+        var mockConnector = new MockPaginatedConnector(
+            csoType,
+            objectsPerPage: 3,
+            totalPages: 2,
+            firstPagePersistedConnectorData: "new-watermark");
+
+        var workerTask = CreateWorkerTask(connectedSystem.Id, runProfile.Id, activity);
+
+        var processor = new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            mockConnector, connectedSystem, runProfile, workerTask, new CancellationTokenSource());
+
+        // Act
+        await processor.PerformImportAsync();
+
+        // Assert
+        var csoCount = await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(csoCount, Is.EqualTo(6), "both pages were staged");
+            Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("new-watermark"));
+        }
+    }
+
     #region Helpers
 
     private static SynchronisationWorkerTask CreateWorkerTask(
@@ -183,6 +331,7 @@ public class ImportCancellationTests : WorkflowTestBase
         private readonly int _objectsPerPage;
         private readonly int _totalPages;
         private readonly Action<int>? _onPageReturned;
+        private readonly string? _firstPagePersistedConnectorData;
 
         public string Name => "MockConnector";
         public string? Description => null;
@@ -192,12 +341,14 @@ public class ImportCancellationTests : WorkflowTestBase
             ConnectedSystemObjectType csoType,
             int objectsPerPage,
             int totalPages,
-            Action<int>? onPageReturned = null)
+            Action<int>? onPageReturned = null,
+            string? firstPagePersistedConnectorData = null)
         {
             _csoType = csoType;
             _objectsPerPage = objectsPerPage;
             _totalPages = totalPages;
             _onPageReturned = onPageReturned;
+            _firstPagePersistedConnectorData = firstPagePersistedConnectorData;
         }
 
         public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger) { }
@@ -222,7 +373,9 @@ public class ImportCancellationTests : WorkflowTestBase
 
             var result = new ConnectedSystemImportResult
             {
-                ImportObjects = new List<ConnectedSystemImportObject>()
+                ImportObjects = new List<ConnectedSystemImportObject>(),
+                // A connector returns its new watermark on the first page only; later pages return null.
+                PersistedConnectorData = currentPage == 1 ? _firstPagePersistedConnectorData : null
             };
 
             // Generate import objects for this page

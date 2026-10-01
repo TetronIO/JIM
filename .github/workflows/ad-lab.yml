@@ -1,0 +1,357 @@
+# Active Directory lab: runs JIM's integration suite and connector probes against real Windows Server domain
+# controllers, and posts the `jim-ad-lab` commit status the release gate reads.
+#
+# What it does: the lab is three single-domain-controller forests on Hyper-V virtual machines
+# (test/integration/ad-lab/README.md). This job reverts them to their checkpoints, runs every Active Directory-family
+# scenario (Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory), then the RequiresActiveDirectory NUnit probes
+# against the same domain controller, uploads the regression report and the domain controller OS build as artefacts,
+# submits results to the metrics API, and posts a commit status named `jim-ad-lab` on the SHA it tested: `success` only
+# when everything passed, with the scenario count and the OS build in its description. `/release` and release.yml
+# require `success` for the SHA being tagged (scripts/Test-AdLabReleaseGate.ps1) once the repository variable
+# JIM_AD_LAB_GATE_ENFORCED is `true` (set after the lab's first green run); from then on there is no override, so the
+# remedy for a red night is a fix and a dispatched run.
+#
+# Triggers: nightly on main and workflow_dispatch. NEVER pull_request or push. Split-trust runner model (see
+# ci.yml): a pull_request runs code from anyone's fork, and the lab runner has a route to the domain controller
+# network and holds the lab's secrets, so fork code must never reach it. Nothing here is triggered by a fork:
+#   - the triggers are a schedule (always the default branch) and a dispatch (needs write access to this repository);
+#   - the lab runner is alone in a DEDICATED runner group named `jim-ad-lab`, with repository access to TetronIO/JIM
+#     only and a workflow allowlist of exactly this file and ad-lab-rebuild.yml, both at refs/heads/main, so that
+#     even a branch that edits this workflow cannot reach the runner. It is not in `tetron-trusted`, because a
+#     runner carrying the default labels there would be offered ordinary ci.yml push jobs, which need sudo pwsh
+#     and a larger machine; and release.yml, which runs on the ordinary release runners, cannot be offered to it.
+#     Set the allowlist once, with an account holding admin:org:
+#
+#       GROUP=$(gh api orgs/TetronIO/actions/runner-groups --jq '.runner_groups[] | select(.name == "jim-ad-lab") | .id')
+#       jq -n '{restricted_to_workflows: true, selected_workflows: ["TetronIO/JIM/.github/workflows/ad-lab.yml@refs/heads/main","TetronIO/JIM/.github/workflows/ad-lab-rebuild.yml@refs/heads/main"]}' \
+#         | gh api -X PATCH "orgs/TetronIO/actions/runner-groups/$GROUP" --input - --jq '.selected_workflows'
+#
+#   - the job runs in the `jim-ad-lab` environment, which holds the secrets (below). Do not give that environment
+#     required reviewers, or every night waits for a person.
+# The same allowlist is why a dispatch on another branch is refused by the runner group: it runs that branch's copy
+# of this file, and only main's is listed. Add the branch ref to the allowlist the way the /release skill authorises
+# a release tag (or merge the change to main first) when the lab has to run on a branch.
+#
+# Configuration (environment `jim-ad-lab` on TetronIO/JIM; a value set there wins over the repository's). The names are
+# the JIM_AD_LAB_* environment variables the harness reads, one-to-one (the SSH key secret is written to a file, whose
+# path is JIM_AD_LAB_CONTROL_KEY):
+#   secrets   JIM_AD_LAB_ADMIN_PASSWORD, JIM_AD_LAB_JIM_PASSWORD (the Administrator and svc-jim passwords, the same in
+#             all three forests), JIM_AD_LAB_CONTROL_SSH_KEY (the private key of the jim-lab account on the Hyper-V
+#             host)
+#   variables JIM_AD_LAB_CONTROL_HOST, JIM_AD_LAB_CONTROL_USER (default jim-lab), JIM_AD_LAB_CONTROL_PORT (default 22),
+#             JIM_AD_LAB_SCRIPT_ROOT (default C:\jim-ad-lab), JIM_AD_LAB_PRIMARY_ADDRESS, JIM_AD_LAB_SOURCE_ADDRESS,
+#             JIM_AD_LAB_TARGET_ADDRESS
+#   optional  repository variable JIM_BENCH_API_URL and secret JIM_BENCH_API_KEY, which the runner reads to stream
+#             results to the metrics API (as for every integration run); unset, results stay local
+#
+# Timing: 02:00 UTC. The non-functional requirement is a full nightly inside four hours (a 1 to 2 minute revert per
+# scenario per domain controller at the Medium template), so it is finished well before the working day, and the
+# job's timeout is a little over that. ad-lab-rebuild.yml (after Patch Tuesday) shares the concurrency group.
+
+name: jim-ad-lab
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario to run: All, or a number, Scenario-NNN or full name (for example 8)'
+        type: string
+        default: 'All'
+      template:
+        description: 'Test data template'
+        type: choice
+        options: [Nano, Micro, Small, Medium, MediumLarge, Large]
+        default: 'Medium'
+      run_probes:
+        description: 'Also run the RequiresActiveDirectory connector probes'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  jim-ad-lab:
+    name: jim-ad-lab
+    # A schedule always runs the default branch, but say so: only main's copy of this file may reach the lab.
+    if: ${{ github.event_name != 'schedule' || github.ref == 'refs/heads/main' }}
+    runs-on: [self-hosted, jim-ad-lab]
+    environment: jim-ad-lab
+    timeout-minutes: 300
+    # One lab run at a time, and never cancelled: a run cancelled part way leaves the domain controllers reverted
+    # to a checkpoint mid-scenario (or, for the rebuild, the live set switched off), and the next run's revert
+    # would find them in whatever state the interruption left. A newer run waits its turn instead. The rebuild
+    # workflow shares this group so the two never overlap.
+    concurrency:
+      group: jim-ad-lab
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      # The harness (Run-IntegrationTests.ps1, Get-DirectoryConfig, Invoke-LabControl) reads JIM_AD_LAB_*; the
+      # non-secret settings are exported here from the variables of the same names, the secrets on the steps that
+      # need them.
+      JIM_AD_LAB_CONTROL_HOST: ${{ vars.JIM_AD_LAB_CONTROL_HOST }}
+      JIM_AD_LAB_CONTROL_USER: ${{ vars.JIM_AD_LAB_CONTROL_USER || 'jim-lab' }}
+      JIM_AD_LAB_CONTROL_PORT: ${{ vars.JIM_AD_LAB_CONTROL_PORT || '22' }}
+      JIM_AD_LAB_SCRIPT_ROOT: ${{ vars.JIM_AD_LAB_SCRIPT_ROOT || 'C:\jim-ad-lab' }}
+      JIM_AD_LAB_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_PRIMARY_ADDRESS }}
+      JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_SOURCE_ADDRESS }}
+      JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.JIM_AD_LAB_TARGET_ADDRESS }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # Fail in one place, naming what is missing, rather than a dozen steps later with a harness error.
+      - name: Check the lab configuration
+        env:
+          HAS_SSH_KEY: ${{ secrets.JIM_AD_LAB_CONTROL_SSH_KEY != '' }}
+          HAS_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD != '' }}
+          HAS_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD != '' }}
+        run: |
+          $missing = @()
+          # The variables are exported by the job's env block under their own names, so the name is the lookup key.
+          $variables = @('JIM_AD_LAB_CONTROL_HOST', 'JIM_AD_LAB_PRIMARY_ADDRESS', 'JIM_AD_LAB_SOURCE_ADDRESS', 'JIM_AD_LAB_TARGET_ADDRESS')
+          foreach ($name in $variables) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += "variable $name" }
+          }
+          $secrets = [ordered]@{
+            JIM_AD_LAB_CONTROL_SSH_KEY = $env:HAS_SSH_KEY
+            JIM_AD_LAB_ADMIN_PASSWORD  = $env:HAS_ADMIN_PASSWORD
+            JIM_AD_LAB_JIM_PASSWORD    = $env:HAS_JIM_PASSWORD
+          }
+          foreach ($name in $secrets.Keys) {
+            if ($secrets[$name] -ne 'true') { $missing += "secret $name" }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "::error title=The jim-ad-lab environment is not configured::Missing: $($missing -join ', '). See the header of .github/workflows/ad-lab.yml."
+            exit 1
+          }
+
+      # LDAPTLS_REQCERT must never be set here: it would disable libldap certificate validation for the whole
+      # process, and the probes reach the domain controller through libldap, so every refusal case they check
+      # would turn into a false pass (the same reason ci.yml's ldaps-tests job asserts it).
+      - name: Assert LDAPTLS_REQCERT is not in scope
+        run: |
+          if ($env:LDAPTLS_REQCERT) {
+            Write-Host '::error::LDAPTLS_REQCERT is set; it would disable certificate validation and void this run.'
+            exit 1
+          }
+
+      # The private key of the jim-lab account, for Invoke-LabControl's ssh calls. Written to a 0600 file under the
+      # job's temp folder, created empty and restricted before the key goes in, and deleted by the last step.
+      - name: Write the control-plane SSH key
+        env:
+          SSH_KEY: ${{ secrets.JIM_AD_LAB_CONTROL_SSH_KEY }}
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'ad-lab-control-key'
+          New-Item -ItemType File -Path $path -Force | Out-Null
+          chmod 600 $path
+          # OpenSSH insists on a trailing newline, and a key pasted from Windows carries CRLF.
+          [System.IO.File]::WriteAllText($path, (($env:SSH_KEY -replace "`r`n", "`n").TrimEnd() + "`n"))
+          "JIM_AD_LAB_CONTROL_KEY=$path" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # The integration runner expects a .env in the repository root (it is gitignored, so a fresh checkout has
+      # none). The stack is throwaway: its database password is generated for this run and never reused.
+      - name: Create the stack's .env
+        run: |
+          $bytes = New-Object byte[] 24
+          [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+          $password = [Convert]::ToBase64String($bytes).Replace('+', 'A').Replace('/', 'B').Replace('=', '')
+          $text = (Get-Content -LiteralPath .env.example -Raw) -replace '(?m)^JIM_DB_PASSWORD=.*$', "JIM_DB_PASSWORD=$password"
+          Set-Content -LiteralPath .env -Value $text -NoNewline
+
+      # Docker Hub rate-limits anonymous pulls (429s observed in testing), so pull what the run needs up front
+      # with a retry rather than letting the runner's own pull fail on a transient refusal: the volume-seeding and
+      # error-watcher sidecars, and every image the JIM stack pulls (read from the compose files so this cannot
+      # drift from them; the locally built jim-web, jim-worker and jim-scheduler images are not pulled).
+      - name: Pull sidecar and stack images
+        run: |
+          . ./test/integration/utils/ActiveDirectoryLab-Helpers.ps1
+          $compose = Get-JimComposeArgument -DirectoryType ActiveDirectory
+          $stack = @(docker compose @compose --profile with-db config --images | Where-Object { $_ -and ($_ -notmatch '(^|/)jim-(web|worker|scheduler)(:|$)') })
+          foreach ($image in (@('busybox:1.37.0', 'alpine:3.20') + $stack | Sort-Object -Unique)) {
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              docker pull $image
+              if ($LASTEXITCODE -eq 0) { break }
+              if ($attempt -eq 3) {
+                Write-Host "::error::Failed to pull $image after 3 attempts."
+                exit 1
+              }
+              Start-Sleep -Seconds 30
+            }
+          }
+
+      # The suite. -ContinueOnFailure so one red scenario does not hide the others: the point of a night's run is
+      # the full list. The runner reverts each domain controller to its checkpoint, populates and re-checkpoints
+      # when the populate scripts changed, trusts each domain controller's LDAPS certificate in JIM, and streams
+      # to the metrics API when JIM_BENCH_* is set (the submission carries DirectoryType ActiveDirectory). The
+      # scenario and template reach the script through env, never interpolated into it.
+      - name: Run the integration suite against the lab
+        id: suite
+        env:
+          SCENARIO: ${{ inputs.scenario || 'All' }}
+          TEMPLATE: ${{ inputs.template || 'Medium' }}
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
+          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario "$env:SCENARIO" -Template "$env:TEMPLATE" -DirectoryType ActiveDirectory -ContinueOnFailure
+          exit $LASTEXITCODE
+
+      # The connector probes: the connector's own code paths against the domain controller directly (the
+      # RequiresActiveDirectory tier, modelled on RequiresLdaps). They run after the suite, so the integration
+      # run has reverted the domain controllers, started them and written the certificate the probes trust.
+      - name: Setup .NET
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore dependencies
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        run: dotnet restore JIM.sln --locked-mode
+      - name: Build the probe tier
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        run: dotnet build test/JIM.Worker.Tests/ --no-restore
+      - name: Run the Active Directory probes (RequiresActiveDirectory)
+        id: probes
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.run_probes) }}
+        env:
+          JIM_TEST_AD_HOST: dc1.panoply.local
+          JIM_TEST_AD_PORT: '636'
+          JIM_TEST_AD_PLAIN_PORT: '389'
+          JIM_TEST_AD_BASE_DN: DC=panoply,DC=local
+          JIM_TEST_AD_USERNAME: CN=svc-jim,OU=Services,DC=panoply,DC=local
+          JIM_TEST_AD_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+          JIM_TEST_AD_ADMIN_USERNAME: CN=Administrator,CN=Users,DC=panoply,DC=local
+          JIM_TEST_AD_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          # The certificate the integration run fetched off the wire (Save-ActiveDirectoryCertificate writes
+          # <VM name>.pem). An absolute path: dotnet test runs from the test project's output folder.
+          JIM_TEST_AD_CA_PATH: ${{ github.workspace }}/test/integration/ad-lab-certs/dc-primary.pem
+        run: |
+          if (-not (Test-Path -LiteralPath $env:JIM_TEST_AD_CA_PATH)) {
+            Write-Host "::error::$env:JIM_TEST_AD_CA_PATH does not exist: the integration run did not reach the domain controller, so there is no certificate to trust."
+            exit 1
+          }
+          dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresActiveDirectory" --verbosity normal `
+            --logger "trx;LogFileName=ad-probes.trx" --results-directory "$env:GITHUB_WORKSPACE/test/integration/results/probes"
+          exit $LASTEXITCODE
+
+      # What the run left, condensed: scenario counts and the domain controller OS builds (recorded by the runner in
+      # the regression report, or in the performance file for a single scenario) into dc-builds.json, the job
+      # summary and the one-line description of the commit status. The logic is Get-LabRunSummary in the lab
+      # module, which is tested; see test/integration/ad-lab/LabDomainController.Tests.ps1.
+      - name: Summarise the run
+        id: summary
+        if: ${{ always() }}
+        env:
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+          PROBES_OUTCOME: ${{ steps.probes.outcome }}
+        run: |
+          Import-Module ./test/integration/ad-lab/guest/LabDomainController.psm1 -Force
+          $results = Join-Path (Get-Location) 'test/integration/results'
+          $summary = Get-LabRunSummary -ResultsDirectory $results -Success ($env:SUITE_OUTCOME -eq 'success')
+          New-Item -ItemType Directory -Path $results -Force | Out-Null
+          $summary.Builds | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $results 'dc-builds.json')
+
+          $description = Get-LabRunStatusDescription -Summary $summary
+          if ($env:PROBES_OUTCOME -eq 'failure') { $description = "probes failed; $description" }
+          if ($description.Length -gt 140) { $description = $description.Substring(0, 137) + '...' }
+          "description=$description" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          $lines = @('### Active Directory lab', '', "**$description**", '')
+          $lines += '| Domain controller | Guest OS build |'
+          $lines += '|---|---|'
+          foreach ($name in $summary.Builds.Keys) { $lines += "| $name | $($summary.Builds[$name]) |" }
+          if ($summary.FailedScenarios.Count -gt 0) {
+            $lines += ''
+            $lines += 'Failed scenarios: ' + (($summary.FailedScenarios | ForEach-Object { "``$_``" }) -join ', ')
+          }
+          $lines += ''
+          $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME."
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # Artefacts are readable by anyone who can read the repository, and GitHub only masks secrets in the log, not
+      # in a file, so nothing that holds a secret value is uploaded: a text file that does has it replaced.
+      - name: Scrub secrets from the results
+        if: ${{ always() }}
+        env:
+          ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+        run: |
+          $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD) | Where-Object { $_ }
+          $files = @(Get-ChildItem -LiteralPath 'test/integration/results', 'test/integration/ad-lab-certs' -Recurse -File -ErrorAction SilentlyContinue)
+          foreach ($file in $files) {
+            foreach ($secret in $secrets) {
+              if (Select-String -LiteralPath $file.FullName -SimpleMatch $secret -Quiet) {
+                if ($file.Length -gt 200MB) {
+                  Remove-Item -LiteralPath $file.FullName -Force
+                  Write-Host "::warning::Removed $($file.Name) from the artefacts: it held a secret and is too large to scrub."
+                  break
+                }
+                $text = [System.IO.File]::ReadAllText($file.FullName).Replace($secret, '***')
+                [System.IO.File]::WriteAllText($file.FullName, $text)
+                Write-Host "::warning::A secret was found in $($file.Name) and replaced before upload."
+              }
+            }
+          }
+
+      # The regression report and results JSON (full-regression-*.json), the scenario transcripts and worker logs
+      # (logs/), the performance files, the probe results and dc-builds.json, plus the domain controllers'
+      # public certificates for diagnosing a name or trust failure. The docker stats and events samplers are big
+      # and only useful for performance work.
+      - name: Upload the run's artefacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: jim-ad-lab-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test/integration/results/
+            !test/integration/results/README.md
+            !test/integration/results/docker-stats-*
+            !test/integration/results/docker-events-*
+            test/integration/ad-lab-certs/*.pem
+          if-no-files-found: warn
+          retention-days: 30
+
+      # The commit status the release gate reads. Posted on the SHA that was tested (a schedule and a dispatch both
+      # check out github.sha), from the job's outcome: success only when everything passed. A cancelled run posts
+      # nothing, so it can neither open the gate nor close it on a commit it did not finish testing. The
+      # description is capped at GitHub's 140 characters by the summary step; values reach the script through env.
+      - name: Post the jim-ad-lab commit status
+        if: ${{ always() && job.status != 'cancelled' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+          PROBES_OUTCOME: ${{ steps.probes.outcome }}
+          SUMMARY_DESCRIPTION: ${{ steps.summary.outputs.description }}
+        run: |
+          $state = 'success'
+          if ($env:JOB_STATUS -ne 'success') {
+            # failure: the lab was tested and something failed; error: the run never got as far as testing it.
+            if (($env:SUITE_OUTCOME -eq 'failure') -or ($env:PROBES_OUTCOME -eq 'failure')) { $state = 'failure' } else { $state = 'error' }
+          }
+          $description = $env:SUMMARY_DESCRIPTION
+          if (-not $description) { $description = 'the run stopped before the lab was tested' }
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-ad-lab' -f description="$description" -f target_url="$env:RUN_URL"
+          exit $LASTEXITCODE
+
+      # The runner is not ephemeral: without teardown the stack and the key persist between jobs. Always run.
+      - name: Stop the stack and the LDAP toolbox, and delete the key
+        if: ${{ always() }}
+        run: |
+          . ./test/integration/utils/ActiveDirectoryLab-Helpers.ps1
+          $compose = Get-JimComposeArgument -DirectoryType ActiveDirectory
+          docker compose @compose --profile with-db down -v
+          docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile ad-lab down
+          if ($env:JIM_AD_LAB_CONTROL_KEY) { Remove-Item -LiteralPath $env:JIM_AD_LAB_CONTROL_KEY -Force -ErrorAction SilentlyContinue }
+          exit 0

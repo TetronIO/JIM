@@ -1,6 +1,6 @@
 # Export Execution Flow
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows how Pending Exports are executed against Connected Systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, retry with backoff, and per-Run Profile limits on how many creates, updates and deletes a run may send.
 
@@ -28,8 +28,8 @@ flowchart TD
     Options --> Execute[ExportExecutionServer.ExecuteExportsAsync<br/>See Export Execution below]
     Execute --> ProcessResult[ProcessExportResultAsync<br/>RPEIs were streamed per batch:<br/>- Create --> Exported<br/>- Update --> Exported<br/>- Delete --> Deprovisioned<br/>- Deferred whole --> Pending Export item<br/>- Failed --> error type with retry count<br/>- Unresolved reference --> UnresolvedReference]
 
-    ProcessResult --> Withheld{Any change type<br/>withheld by a limit?}
-    Withheld -->|Yes| WarnWithheld[Record withheld counts<br/>Activity warning names the limit,<br/>the pending count and the remedy]
+    ProcessResult --> Withheld{Any change type<br/>withheld by a limit,<br/>or queued changes<br/>withdrawn?}
+    Withheld -->|Yes| WarnWithheld[Record withheld counts<br/>Activity warning names the limit,<br/>the pending count and the remedy,<br/>or the withdrawn change count]
     Withheld -->|No| CheckContainers
     WarnWithheld --> CheckContainers{New containers<br/>created during export?}
     CheckContainers -->|Yes| AutoSelect[Auto-select new containers<br/>Refresh and select containers<br/>by created external IDs<br/>Ensures they appear in future imports]
@@ -41,7 +41,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([ExecuteExportsAsync]) --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>Creates already exported are skipped while<br/>they await confirmation, #1687<br/>The same filters drive the batch sweep below]
+    Start([ExecuteExportsAsync]) --> Withdraw[Unless PreviewOnly: withdraw queued<br/>changes nothing authorises any more, #1885<br/>rule deleted or disabled, no enabled<br/>mapping, or CSO no longer joined<br/>Update PE left empty is deleted<br/>Executing PEs never touched]
+    Withdraw --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>Creates already exported are skipped while<br/>they await confirmation, #1687<br/>The same filters drive the batch sweep below]
     GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
@@ -214,9 +215,13 @@ flowchart TD
 
 - **Per-batch resource release (#1006)**<br /> Each parallel batch's `DbContext` and connector are disposed as that batch completes. They were previously held for the remainder of the run, so a large reference-heavy export drained the connection pool after around 29 batches and failed with "the connection pool has been exhausted".
 
+- **Queued changes withdrawn once nothing authorises them (#1885)**<br /> Before anything is counted or sent (and never in a preview), `WithdrawQueuedChangesWithoutAuthorityAsync` withdraws each queued change (`Pending` or `ExportedNotConfirmed`) on an Update Pending Export whose export Synchronisation Rule is deleted or disabled, no longer has an enabled Attribute Flow for the attribute, or whose CSO is no longer joined; `ISyncEngine.SelectQueuedChangesWithoutAuthority` makes the decision, and an Update left empty is deleted. The same withdrawal runs as each export-relevant configuration change is saved; the export-time run is the backstop, and the only one that sees a join broken by scope exit. The Activity carries a warning with the counts, since a change an administrator may have expected did not go out. Creates, Deletes, unattributed changes, changes already sent and `Executing` Pending Exports are left alone.
+
+- **Executing recovered at worker start**<br /> A Pending Export left `Executing` by a worker crash or restart is recovered when the worker starts (`RecoverStrandedExecutingPendingExportsAsync`): to `Exported` if any of its changes was already sent, so the next confirming import reconciles it, otherwise to `Pending`, so the next export retries it.
+
 - **Retry with backoff**<br /> Failed exports are retried with exponential backoff via `NextRetryAt`: a call-based failure returns the export to `Pending`, and a file-based export that throws marks the whole file's exports `ExportNotConfirmed` with the same backoff. After `MaxRetries` attempts, the export is marked as permanently `Failed`.
 
-- **No-net-change detection**<br /> Before exports are created during sync, the system checks if the target CSO already has the expected values. This happens upstream in `EvaluateExportRulesWithNoNetChangeDetectionAsync`, not during export execution.
+- **No-net-change detection**<br /> Before exports are created during sync, the system checks if the target CSO already has the expected values. This happens upstream in `EvaluateExportRulesWithNoNetChangeDetectionAsync`, not during export execution. An attribute found already current there also withdraws any change still queued for it (#1883); see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md).
 
 - **Container auto-selection**<br /> When exports create new containers (e.g., OUs in LDAP), their external IDs are captured and auto-selected so they appear in future imports without manual configuration.
 

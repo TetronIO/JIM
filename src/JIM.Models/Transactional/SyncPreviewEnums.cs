@@ -39,12 +39,16 @@ public enum SyncPreviewMessageCode
     /// Preview Surface plan); this warning is how the preview still surfaces it.</summary>
     DownstreamDisconnectOnly,
     /// <summary>A generated Attribute Flow mapping would fail to resolve (the generation is exhausted, has no
-    /// base value, its width would be exceeded, or an adoption conflict was detected); the real sync would
-    /// record a generated-value error against the object. Added at the end (#242, Phase 2 work package J):
+    /// base value, or its width would be exceeded); the real sync would record a generated-value error against
+    /// the object. Added at the end (#242, Phase 2 work package J):
     /// this enum is not persisted anywhere (no database column or migration references it, and the REST API
     /// serialises it by name via <c>JsonStringEnumConverter</c>), so member order carries no compatibility
     /// requirement, but new members are still appended for readability.</summary>
-    GeneratedValueWouldFail
+    GeneratedValueWouldFail,
+    /// <summary>The enabled Attribute Flows that derive Metaverse attributes from other Metaverse attributes (#1750)
+    /// contain a dependency cycle, so no evaluation order exists: the real synchronisation would refuse to start and
+    /// process no object at all. The preview evaluates nothing either, and names the cycle.</summary>
+    DerivedFlowCycle
 }
 
 /// <summary>

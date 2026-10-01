@@ -60,7 +60,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -105,6 +105,7 @@ if (-not $DirectoryConfig) {
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 # Helper function to run the standard delta sync sequence with detailed output
 # This sequence is used after CSV changes to sync them through to both target systems:
@@ -271,8 +272,8 @@ function Get-PendingExportAttributeNames {
     return $names
 }
 
-# Replaces attribute values on a directory user via ldapmodify, branching on directory type
-# (mirrors the Scenario 002 external-modification patterns).
+# Replaces attribute values on a directory user via ldapmodify (Invoke-DirectoryLdif runs it in the
+# directory's container, or in the LDAP toolbox over LDAPS for Active Directory).
 function Set-DirectoryUserAttributes {
     param([string]$UserDn, [hashtable]$Values, [string]$Label)
 
@@ -286,17 +287,9 @@ function Set-DirectoryUserAttributes {
     }
     $ldif = $ldifLines -join "`n"
 
-    if ($isRfcDirectory) {
-        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
-    }
-    else {
-        $result = docker exec $DirectoryConfig.ContainerName bash -c "cat > /tmp/scenario-001-ieo-modify.ldif << 'LDIFEOF'
-$ldif
-LDIFEOF
-ldapmodify -x -H '$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)' -D '$($DirectoryConfig.BindDN)' -w '$($DirectoryConfig.BindPassword)' -f /tmp/scenario-001-ieo-modify.ldif" 2>&1
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Label failed to modify directory user ${UserDn}: $result"
+    $result = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $ldif -Operation modify
+    if (-not $result.Success) {
+        throw "$Label failed to modify directory user ${UserDn}: $($result.Output)"
     }
 }
 
@@ -352,7 +345,7 @@ try {
     # NOTE: This is necessary even after database reset because CSV files persist
     # on the host filesystem and are mounted into containers.
     Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
+    & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$(Get-IntegrationTestDataPath)"
     Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
     # Clean up test-specific directory users from previous test runs
@@ -367,26 +360,18 @@ try {
         if ($isRfcDirectory) {
             # For OpenLDAP, delete by DN using ldapdelete
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = & docker exec $($DirectoryConfig.ContainerName) ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
-                $deletedCount++
-            } elseif ($output -match "No such object") {
-                Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
-            } else {
-                Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
-            }
+            $deleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $userDN
         } else {
-            # For Samba AD, use samba-tool
-            $output = & docker exec $($DirectoryConfig.ContainerName) bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-            if ($output -match "Deleted user") {
-                Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
-                $deletedCount++
-            } elseif ($output -match "Unable to find user") {
-                Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
-            } else {
-                Write-Host "  ⚠ Could not delete ${user}: $output" -ForegroundColor Yellow
-            }
+            # For Samba AD, samba-tool; for Active Directory, a lookup by sAMAccountName and an LDAPS delete
+            $deleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user
+        }
+        if ($deleteResult.Outcome -eq 'Deleted') {
+            Write-Host "  ✓ Deleted $user from directory" -ForegroundColor Gray
+            $deletedCount++
+        } elseif ($deleteResult.Outcome -eq 'NotFound') {
+            Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  ⚠ Could not delete ${user}: $($deleteResult.Output)" -ForegroundColor Yellow
         }
     }
     Write-Host "  ✓ Directory cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
@@ -532,9 +517,9 @@ try {
         # and once before Training Full Import (the specific read that failed in
         # the 08:47:22 Scale100k50Groups incident). See Assert-ConnectorVolumeCsvParity.
         $csvParityPairs = @(
-            @{ HostPath = "$PSScriptRoot/../../test-data/hr-users.csv";         ContainerPath = '/connector-files/test-data/hr-users.csv' }
-            @{ HostPath = "$PSScriptRoot/../../test-data/training-records.csv"; ContainerPath = '/connector-files/test-data/training-records.csv' }
-            @{ HostPath = "$PSScriptRoot/../../test-data/departments.csv";      ContainerPath = '/connector-files/test-data/departments.csv' }
+            @{ HostPath = "$(Get-IntegrationTestDataPath)/hr-users.csv";         ContainerPath = '/connector-files/test-data/hr-users.csv' }
+            @{ HostPath = "$(Get-IntegrationTestDataPath)/training-records.csv"; ContainerPath = '/connector-files/test-data/training-records.csv' }
+            @{ HostPath = "$(Get-IntegrationTestDataPath)/departments.csv";      ContainerPath = '/connector-files/test-data/departments.csv' }
         )
 
         # Parity probe: confirm the volume still has the files we seeded at setup.
@@ -772,7 +757,7 @@ try {
         # Update CSV - change the first user's title (user provisioned in Joiner test)
         # NOTE: We change Title (not Department) because Department now affects DN/OU placement.
         # This test validates simple attribute updates that don't trigger DN changes.
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Parse CSV properly to update the correct column
         # CSV columns: employeeId,firstName,lastName,email,department,title,company,samAccountName,displayName,status,userPrincipalName,employeeType,employeeEndDate
@@ -837,7 +822,7 @@ try {
 
         # The DN is computed from displayName: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=..."
         # So changing firstName in CSV will change displayName, which changes DN
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Parse CSV properly to update the correct columns
         $csv = Import-Csv $csvPath
@@ -883,8 +868,8 @@ try {
             }
         }
         else {
-            # For Samba AD, verify the DN changed (CN= component reflects new displayName)
-            $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn displayName 2>&1"
+            # For Samba AD and Active Directory, verify the DN changed (CN= component reflects new displayName)
+            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverSamAccountName)" -Attributes @('dn', 'displayName') -AsText
 
             if ($adUserInfo -match "CN=$([regex]::Escape($newDisplayName))") {
                 Write-Host "  ✓ User renamed to 'CN=$newDisplayName' in $directoryName" -ForegroundColor Green
@@ -918,7 +903,7 @@ try {
         # The DN is computed from Department: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",DC=panoply,DC=local"
         # User at index 1 is assigned to Marketing department (1 % 12 = 1)
         # This should trigger an LDAP move to OU=Finance
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Parse CSV properly to update the correct column
         $csv = Import-Csv $csvPath
@@ -966,8 +951,8 @@ try {
             }
         }
         else {
-            # For Samba AD, verify user moved to OU=Finance in the DN
-            $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$moverSamAccountName)' dn department 2>&1"
+            # For Samba AD and Active Directory, verify user moved to OU=Finance in the DN
+            $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$moverSamAccountName)" -Attributes @('dn', 'department') -AsText
 
             if ($adUserInfo -match "OU=Finance") {
                 Write-Host "  ✓ User moved to OU=Finance in $directoryName" -ForegroundColor Green
@@ -1012,7 +997,7 @@ try {
 
         # Update the status field to "Archived" - this will set the ACCOUNTDISABLE bit via DisableUser()
         # The expression is: IIF(Eq(mv["Status"], "Archived"), DisableUser(cs["userAccountControl"]), EnableUser(cs["userAccountControl"]))
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         $csv = Import-Csv $csvPath
         $targetUser = $csv | Where-Object { $_.samAccountName -eq $disableSamAccountName }
@@ -1034,9 +1019,9 @@ try {
         # userAccountControl 514 = 512 (normal) + 2 (disabled)
         Write-Host "Validating account disabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$disableSamAccountName)' userAccountControl 2>&1"
+        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$disableSamAccountName)" -Attributes @('userAccountControl') -AsText
 
-        # Check if userAccountControl is 514 (disabled) - ldbsearch returns decimal value
+        # Check if userAccountControl is 514 (disabled) - the search returns the decimal value
         if ($adUserInfo -match "userAccountControl: 514") {
             Write-Host "  ✓ Account disabled (userAccountControl=514) in AD" -ForegroundColor Green
             $testResults.Steps += @{ Name = "Disable"; Success = $true }
@@ -1086,7 +1071,7 @@ try {
         Write-Host "Setting user status back to Active in CSV (triggers AD account enable)..." -ForegroundColor Gray
 
         # Update the status field back to "Active" - this will change userAccountControl from 514 to 512
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         $csv = Import-Csv $csvPath
         $targetUser = $csv | Where-Object { $_.samAccountName -eq $enableSamAccountName }
@@ -1107,7 +1092,7 @@ try {
         # Validate account is enabled in AD
         Write-Host "Validating account enabled state in AD..." -ForegroundColor Gray
 
-        $adUserInfo = docker exec $($DirectoryConfig.ContainerName) bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$enableSamAccountName)' userAccountControl 2>&1"
+        $adUserInfo = Find-DirectoryEntry -DirectoryConfig $DirectoryConfig -Filter "(sAMAccountName=$enableSamAccountName)" -Attributes @('userAccountControl') -AsText
 
         # Check if userAccountControl is 512 (enabled)
         if ($adUserInfo -match "userAccountControl: 512") {
@@ -1165,7 +1150,7 @@ try {
             # Capture the live HR values before removal (a prior Mover test run may have changed
             # title/displayName/department) - these are what must be preserved on the Metaverse
             # Object, and on the directory account, throughout the grace period.
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $csv = Import-Csv $csvPath
             $leaverRow = $csv | Where-Object { $_.samAccountName -eq $userToRemove }
             if (-not $leaverRow) { throw "Could not find $userToRemove in the HR CSV before removal" }
@@ -1308,7 +1293,7 @@ try {
             $reconnectUser.Title = "Developer"
 
             # Add to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $upn = "$($reconnectUser.SamAccountName)@$($DirectoryConfig.Domain)"
 
             # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -1472,7 +1457,7 @@ try {
             $withdrawnUser.LastName = "Withdrawn"
             $withdrawnDisplayName = "Test Withdrawn"
 
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $csv = Import-Csv $csvPath
             $csv = @($csv) + [PSCustomObject]@{
                 employeeId = $withdrawnUser.EmployeeId
@@ -1611,7 +1596,7 @@ try {
             $withdrawnLateUser.LastName = "Withdrawnlate"
             $withdrawnLateDisplayName = "Test Withdrawnlate"
 
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $csv = Import-Csv $csvPath
             $csv = @($csv) + [PSCustomObject]@{
                 employeeId = $withdrawnLateUser.EmployeeId
@@ -1798,7 +1783,7 @@ try {
             $scale = Get-TemplateScale -Template $Template
             $ieoUser = New-TestUser -Index ($scale.Users + 15)
             $ieoSamAccountName = $ieoUser.SamAccountName
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
             Write-Host "Adding fresh joiner $ieoSamAccountName to HR CSV (title='$($ieoUser.Title)', employeeType='$($ieoUser.EmployeeType)')..." -ForegroundColor Gray
             $csv = Import-Csv $csvPath

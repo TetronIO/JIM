@@ -51,7 +51,7 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -72,6 +72,7 @@ $ErrorActionPreference = "Stop"
 # Import helpers
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
+. "$PSScriptRoot/../utils/Directory-Helpers.ps1"
 
 # Default to SambaAD Primary if no config provided
 if (-not $DirectoryConfig) {
@@ -115,7 +116,7 @@ try {
     # setup runs. We then overlay Scenario 005's minimal HR CSV on top of the baseline.
     # Prior to this the scenario relied on files leaking from Scenario 001's volume.
     Write-Host "Seeding baseline CSVs for Scenario 005..." -ForegroundColor Gray
-    $testDataPath = "$PSScriptRoot/../../test-data"
+    $testDataPath = "$(Get-IntegrationTestDataPath)"
     $scenarioDataPath = "$PSScriptRoot/data"
 
     if (-not (Test-Path $testDataPath)) {
@@ -139,15 +140,16 @@ try {
     foreach ($user in $testUsers) {
         if ($isRfcDirectory) {
             $userDN = "$($DirectoryConfig.UserRdnAttr)=$user,$($DirectoryConfig.UserContainer)"
-            $output = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$userDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $deleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $userDN
+            if ($deleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
             }
         }
         else {
-            $output = & docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
-            if ($output -match "Deleted user") {
+            # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
+            $deleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user
+            if ($deleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  Deleted $user from directory" -ForegroundColor Gray
                 $deletedCount++
             }
@@ -201,18 +203,19 @@ try {
     # Create department OUs needed for test users AFTER Setup-Scenario-001
     # (Setup may recreate base Corp OU structure, so department OUs must come after)
     if (-not $isRfcDirectory) {
-        # Samba AD: DN expression uses OU=<Department>,OU=Users,OU=Corp,DC=panoply,DC=local
+        # Samba AD / Active Directory: DN expression uses OU=<Department>,OU=Users,OU=Corp,DC=panoply,DC=local
         Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
         $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
         foreach ($dept in $testDepartments) {
-            $result = docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            # -ViaServer: on Samba AD, through the running server rather than the database file (ignored on Active Directory)
+            $result = New-DirectoryOu -DirectoryConfig $DirectoryConfig -Dn "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -ViaServer
+            if ($result.Outcome -eq 'Created') {
                 Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
-            } elseif ($result -match "already exists") {
+            } elseif ($result.Outcome -eq 'AlreadyExists') {
                 Write-Host "  - OU $dept already exists" -ForegroundColor DarkGray
             } else {
                 # Fail loudly here rather than five tests later with a confusing missing-parent error.
-                throw "Failed to create department OU '$dept': $result"
+                throw "Failed to create department OU '$dept': $($result.Output)"
             }
         }
         Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
@@ -239,7 +242,7 @@ try {
         $testUser.DisplayName = "Test Projection User"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -308,7 +311,7 @@ try {
         $testUser.DisplayName = "Test Join User"
 
         # DN is calculated dynamically by the export sync rule expression
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@panoply.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -397,7 +400,7 @@ try {
         # 2. The import detects the duplicate and rejects BOTH rows
         # 3. Neither CSO is created - the data owner must fix the source data
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Create first user with unique hrId
         $testUser1 = New-TestUser -Index 9003
@@ -583,7 +586,7 @@ try {
                 $testUser1.DisplayName = "Test MultiRule First"
 
                 # DN is calculated dynamically by the export sync rule expression
-                $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+                $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
                 $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 # Use Import-Csv/Export-Csv to ensure correct column handling
@@ -727,7 +730,7 @@ try {
         # 3. Matching rule on employeeId finds the MVO
         # 4. CSO #2 tries to join → ERROR: MVO already has a connector from this CS
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         # Create first user - will project to create MVO
         $testUser1 = New-TestUser -Index 9020
@@ -869,7 +872,7 @@ try {
         Write-Host "Testing: after a seed MVO exists, re-keying it so two new same-system CSOs both match it in" -ForegroundColor Gray
         Write-Host "  ONE sync page must not collide on the unique index; the second match fails cleanly" -ForegroundColor Gray
 
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
         $spEmployeeId = "EMP900022"  # shared matching key: the seed and both re-keyed CSOs all carry it
 
         # Local helper: append a fully-populated HR CSV row for the given identifiers.
@@ -1011,7 +1014,7 @@ try {
                 -DeletionTriggerMode SpecificSourcesDisconnect `
                 -DeletionGracePeriod ([TimeSpan]::FromHours(1)) | Out-Null
 
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             $srpEmployeeId = "EMP900050"
             $srpSam = "test.samepage.rejoin"
             $srpDisplayName = "Test SamePage Rejoin"
@@ -1168,7 +1171,7 @@ try {
             Set-JIMMetaverseObjectType @srpRestoreParams | Out-Null
 
             # Clean up test user rows from the CSV so later steps start from the scenario baseline.
-            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
             if (Test-Path $csvPath) {
                 $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.samepage.rejoin" }
                 $csvContent | Set-Content $csvPath
@@ -1230,7 +1233,7 @@ try {
                 $testUser1.Email = "test.casesens.upper@panoply.local"
                 $testUser1.DisplayName = "Test Case Upper"
 
-                $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+                $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
                 $upn1 = "$($testUser1.SamAccountName)@panoply.local"
 
                 $csv = Import-Csv $csvPath
@@ -1386,13 +1389,15 @@ try {
         # "Information Technology" is one of the department OUs Scenario 005 pre-creates for Samba AD (see
         # above); using it keeps the out-of-band DN and the CSV-driven export DN identical.
         $omjDepartment = "Information Technology"
-        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
 
         Write-Host "  Creating out-of-band directory account (not provisioned by JIM)..." -ForegroundColor Gray
 
-        if ($isRfcDirectory) {
-            $omjUserDN = "$($DirectoryConfig.UserRdnAttr)=$omjSamAccountName,$($DirectoryConfig.UserContainer)"
-            $omjLdif = @"
+        if ($isRfcDirectory -or (Test-ActiveDirectoryConfig -DirectoryConfig $DirectoryConfig)) {
+            if ($isRfcDirectory) {
+                $omjDirectoryLabel = "OpenLDAP"
+                $omjUserDN = "$($DirectoryConfig.UserRdnAttr)=$omjSamAccountName,$($DirectoryConfig.UserContainer)"
+                $omjLdif = @"
 dn: $omjUserDN
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
@@ -1407,16 +1412,41 @@ mail: $omjEmail
 employeeNumber: $omjEmployeeId
 userPassword: Password123!
 "@
-            $omjCreateResult = $omjLdif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
-
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  ✓ Created out-of-band account $omjSamAccountName in OpenLDAP (DN: $omjUserDN)" -ForegroundColor Green
             }
-            elseif ($omjCreateResult -match "already exists") {
+            else {
+                # Active Directory: a plain ldapadd over LDAPS as the administrator, at the same DN and with the same
+                # attributes as the Samba AD account below. There is no ldb here, and no need for it: the CR-versus-LF
+                # trouble is the ldb LDIF parser's, and Invoke-DirectoryLdif sends LF-only LDIF regardless. The account
+                # carries no password, so it is created disabled, which the join assertions do not depend on.
+                $omjDirectoryLabel = "Active Directory"
+                $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
+                $omjLdif = @"
+dn: $omjUserDN
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: $omjDisplayName
+sn: $omjLastName
+givenName: $omjFirstName
+sAMAccountName: $omjSamAccountName
+displayName: $omjDisplayName
+userPrincipalName: $omjEmail
+mail: $omjEmail
+department: $omjDepartment
+employeeID: $omjEmployeeId
+"@
+            }
+            $omjCreateResult = Invoke-DirectoryLdif -DirectoryConfig $DirectoryConfig -Ldif $omjLdif -Operation add
+
+            if ($omjCreateResult.Outcome -eq 'Created') {
+                Write-Host "  ✓ Created out-of-band account $omjSamAccountName in $omjDirectoryLabel (DN: $omjUserDN)" -ForegroundColor Green
+            }
+            elseif ($omjCreateResult.Outcome -eq 'AlreadyExists') {
                 Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
             }
             else {
-                throw "Failed to create out-of-band OpenLDAP account: $omjCreateResult"
+                throw "Failed to create out-of-band $omjDirectoryLabel account: $($omjCreateResult.Output)"
             }
         }
         else {
@@ -1602,21 +1632,22 @@ employeeID: $omjEmployeeId
         $omjCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
 
         if ($isRfcDirectory) {
-            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "$($DirectoryConfig.LdapSearchScheme)://localhost:$($DirectoryConfig.LdapSearchPort)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$omjUserDN" 2>&1
-            if ($LASTEXITCODE -eq 0) {
+            $omjDeleteResult = Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn $omjUserDN
+            if ($omjDeleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
             }
             else {
-                Write-Host "  ⚠ Could not delete out-of-band directory account: $omjDeleteResult" -ForegroundColor Yellow
+                Write-Host "  ⚠ Could not delete out-of-band directory account: $($omjDeleteResult.Output)" -ForegroundColor Yellow
             }
         }
         else {
-            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$omjSamAccountName' 2>&1; echo EXIT_CODE:`$?"
-            if ($omjDeleteResult -match "Deleted user") {
+            # Samba AD: samba-tool. Active Directory: a lookup by sAMAccountName, then an LDAPS delete.
+            $omjDeleteResult = Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $omjSamAccountName
+            if ($omjDeleteResult.Outcome -eq 'Deleted') {
                 Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
             }
             else {
-                Write-Host "  ⚠ Could not delete out-of-band directory account: $omjDeleteResult" -ForegroundColor Yellow
+                Write-Host "  ⚠ Could not delete out-of-band directory account: $($omjDeleteResult.Output)" -ForegroundColor Yellow
             }
         }
         Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray

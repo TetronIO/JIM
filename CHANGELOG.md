@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
+
+## [0.16.0] - 2026-09-29
+
+### Added
+
 - ✨ JIM can now be deployed with Podman, rootful or rootless, with no Docker or other extra software, including air-gapped: the setup script installs it on RHEL and other Podman hosts, and systemd starts it at boot. Ansible can deploy it too. (#1808)
 - ✨ Air-gapped installs use the same setup script: run it inside the extracted release bundle and it loads the images and installs without an internet connection. (#1808)
 - ✨ `setup.sh --upgrade` upgrades a Docker installation, online or from a release bundle: it keeps your settings and compose files of your own, refuses to overwrite edited ones, and puts everything back if it fails before JIM restarts. (#1854)
@@ -22,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 Multi-valued attributes on Connected System Object and Pending Export pages now list their values in the row, as on a Metaverse Object, instead of behind **+n more**; over 10 get a scrolling table in the row. The Metaverse Object Table view gains search and sorting.
-- 🔄 The portal is more compact: 14px body text, navigation and inputs (from 16px), 13px tables, smaller headings, denser form fields with help text clear of the next field, smaller buttons and chips, and lists that open with dense rows unless you chose otherwise.
+- 🔄 The portal is more compact, with smaller text, denser forms, buttons and tables, so more fits on screen; lists open with dense rows unless you chose otherwise.
 - 🔄 The Connected System's **Partitions & Containers** tab is now called **Scope**: it is where you choose what JIM manages in a system, whatever shape that takes. Links to the old tab name open the Details tab.
 - 🔄 The Password Channel check and the discovered Password Policy now sit on the Connected System's **Passwords** tab, beneath the Password Synchronisation settings, rather than on the Schema tab.
 - 🔄 A Connected System's Schema tab now opens on a one-line status with a Refresh Schema button instead of a warning band, and each Object Type shows Attribute Selection before its settings.
@@ -35,15 +40,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 The setup script installs in `/opt/jim` when run as root, waits until JIM is ready, and keeps a copy of itself there to renew (`--renew-certificate`) or change (`--certificate`) JIM's certificate. (#1808)
 - 🔄 The Worker now reports healthy while it upgrades the database or warms its caches at start-up, so a long upgrade no longer looks like a hung Worker. (#1808)
 - 🔄 JIM's services now wait for the database at start-up, logging each attempt, instead of exiting and restarting until it is available; an external database that is briefly unreachable no longer takes the web portal down. (#1808)
+- 🔄 A Delta Import stopped because an Active Directory or Samba AD domain controller's invocationId changed now says the directory was probably restored from a backup or snapshot, why continuing would miss changes, and that a Full Import fixes it. (#1853)
 
 ### Fixed
 
-- 🐛 A queued Pending Export change is withdrawn, not exported, once its reason has gone: its export Attribute Flow or Synchronisation Rule was disabled, removed or deleted (withdrawn on save), or the object left scope with the Disconnect action (withdrawn at the next export).
-- 🐛 A queued Pending Export change is withdrawn once the Connected System already holds the value the Metaverse wants (for example, a value changed and changed back before an export), instead of being exported and overwriting the correct value.
+- 🐛 Sync Preview now reports an Attribute Flow whose Missing Input Behaviour is "Fail the object" as a blocking error, in the words the synchronisation records, instead of failing to preview, and lists generated values in the same order the synchronisation does.
+- 🐛 A group with more members than Active Directory returns in one read (MaxValRange, 1,500 by default) now imports with every member, instead of failing as a configuration error naming `member;range=0-1499`. (#1853)
+- 🐛 Schema, container and domain controller discovery on Active Directory now read page by page, so a forest with more attributes, organisational units or domain controllers than MaxPageSize (1,000 by default) no longer fails with "size limit exceeded". (#1853)
+- 🐛 A signed-in administrator can now update or revert a Service Setting through the REST API (`PUT`/`DELETE api/v1/service-settings/{key}`); the change is attributed to them instead of being refused with a misleading 400. API key callers and the portal were unaffected. (#1802)
+- 🐛 A queued Pending Export change is now withdrawn instead of exported once nothing authorises it (its Attribute Flow or Synchronisation Rule was disabled or removed, or the object left scope with Disconnect) or the Connected System already holds the value.
 - 🐛 A Run Profile execution that fails while saving its changes to the database is now recorded as failed, with its error, instead of Complete. (#1874)
 - 🐛 When a pinned domain controller stops answering, JIM now clears the pin as documented, so the next run re-discovers a domain controller instead of failing against the same unreachable one every time. (#1875)
 - 🐛 An import that fails after reading its changes no longer moves the Connected System's change watermark on, so the next Delta Import reads those changes again instead of silently skipping them. (#1868)
-- 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image by its pinned digest: the setup script checks the loaded image against the ID the bundle records and runs it by that ID. (#1854)
+- 🐛 Air-gapped installs with the bundled PostgreSQL now work on Docker's classic image store, which could not find the bundle's PostgreSQL image. (#1854)
 - 🐛 Drift Correction now reverts an attribute edited in a Connected System whose import Attribute Flow reads a different attribute (a `displayName` edit where Display Name comes from `givenName` and `sn`), instead of leaving the two out of step. (#1864)
 - 🐛 A Delta Sync that removes objects no longer skips others: when more than one page of changes included deleted objects, about half were left unprocessed until the next Full Sync (for example, a leaver's account deleted from a target directory stayed in JIM).
 - 🐛 Running the setup script again over an installation with the bundled PostgreSQL no longer locks JIM out of its database: it keeps the database's password instead of generating a new one. (#1808)
@@ -74,9 +83,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 JIM's services now exit with a failure code when they stop on an error, instead of reporting a clean stop to the container runtime, systemd or monitoring. (#1808)
 - 🐛 A synchronisation that fails while saving its progress is now marked Failed straight away, instead of only after two further attempts that logged misleading database errors.
 - 🐛 Deleting a Pending Export no longer leaves its attribute changes behind in the database, where they accumulated indefinitely. (#1818)
-- 🐛 Synchronisation no longer reopens Failed or Parked Pending Exports, or counts errors against exports awaiting confirmation; this could silently strand an export outside both the export queue and the Failed list.
+- 🐛 Synchronisation no longer reopens Failed Pending Exports, or counts errors against exports awaiting confirmation; this could silently strand an export outside both the export queue and the Failed list.
 - 🐛 A Failed Pending Export now clears automatically once a confirming import shows every change it asserts has taken effect, without waiting for a manual retry.
 - 🐛 A Pending Export interrupted by a worker crash or restart mid-export is recovered when the worker next starts, instead of being stranded in Executing forever.
+- 🐛 A cancelled import no longer records the connector's new watermark when it staged nothing, so the next Delta Import reads from the watermark the cancelled run started with instead of silently skipping the changes it never imported. (#1853)
 
 ### Security
 
@@ -1321,7 +1331,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/TetronIO/JIM/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/TetronIO/JIM/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/TetronIO/JIM/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/TetronIO/JIM/compare/v0.12.0...v0.13.0

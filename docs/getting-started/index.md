@@ -25,7 +25,7 @@ Whether you are deploying JIM for production use or setting up a development env
 
     ---
 
-    Deploy JIM using automated setup, manual Docker Compose, air-gapped installation, or a developer environment.
+    Deploy JIM on Docker or Podman using the installer, an air-gapped bundle, or a developer environment.
 
     [:octicons-arrow-right-24: Quick Start](quickstart.md)
 
@@ -43,8 +43,8 @@ Whether you are deploying JIM for production use or setting up a development env
 
 Getting JIM running involves three main steps:
 
-1. **Prepare your environment:** Ensure Docker is installed and you have access to an OpenID Connect identity provider for authentication.
-2. **Deploy JIM:** Choose from automated setup, manual Docker Compose, or air-gapped deployment depending on your environment.
+1. **Prepare your environment:** Ensure Docker or Podman is installed and you have access to an OpenID Connect identity provider for authentication.
+2. **Deploy JIM:** Use the installer, connected or air-gapped from a release bundle, or install by hand following the Deployment Guide.
 3. **Configure your first synchronisation:** Connect a source system, define Synchronisation Rules, and verify data flows correctly through the metaverse.
 
 Once deployed, JIM's web portal answers over HTTPS at `https://<JIM's name>`, from any machine; see [TLS and Reverse Proxy](../administration/deployment.md#tls-and-reverse-proxy) for its certificate. You can also interact with JIM through its REST API or the cross-platform PowerShell module.

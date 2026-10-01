@@ -89,7 +89,7 @@ param(
     [string]$Template = "Micro",
 
     [Parameter(Mandatory=$false)]
-    [string]$JIMUrl = "http://localhost:5200",
+    [string]$JIMUrl = ($env:JIM_INTEGRATION_URL ?? "http://localhost:5200"),
 
     [Parameter(Mandatory=$false)]
     [string]$ApiKey,
@@ -282,7 +282,7 @@ Write-Host ""
 Write-TestSection "Step 0: Configuring JIM"
 
 Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
-& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$PSScriptRoot/../../test-data"
+& "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $effectiveTemplate -OutputPath "$(Get-IntegrationTestDataPath)"
 Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
 $config = & "$PSScriptRoot/../Setup-Scenario-020.ps1" `
@@ -344,6 +344,7 @@ try {
 
     $searchOutput = Invoke-LDAPSearch `
         -ContainerName $DirectoryConfig.ContainerName `
+        -DirectoryConfig $DirectoryConfig `
         -Server "localhost" `
         -Port $DirectoryConfig.LdapSearchPort `
         -Scheme $DirectoryConfig.LdapSearchScheme `
@@ -734,7 +735,7 @@ try {
     $since = $startTime.AddMinutes(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $leaked = @()
 
-    foreach ($container in @('jim.web', 'jim.worker', 'jim.scheduler')) {
+    foreach ($container in (Get-JimServiceContainers)) {
         $logText = (docker logs --since $since $container 2>&1 | Out-String)
         foreach ($password in $allPasswords) {
             if ($logText -match [regex]::Escape($password)) {

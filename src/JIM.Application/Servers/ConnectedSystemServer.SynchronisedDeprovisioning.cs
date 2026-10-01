@@ -93,6 +93,13 @@ public partial class ConnectedSystemServer
         var expressionEvaluator = new DynamicExpressoEvaluator();
         var exportEvaluationCache = await Application.ExportEvaluation.BuildExportEvaluationCacheAsync(allSyncRules);
         var recallScope = ContributorRecallScope.ForDeletedConnectedSystem(task.ConnectedSystemId);
+
+        // Derived-input marks (#1750 Phase 4) come from the rule set as it stands once the system is gone: its own
+        // rules' derived mappings go with it, so they neither mark it (its objects are being deleted anyway) nor carry
+        // transitivity onwards. Collected per batch and flushed once the batch is persisted.
+        var derivedInputMarks = await CreateDerivedInputMarkBatchAsync(
+            allSyncRules.Where(rule => rule.ConnectedSystemId != task.ConnectedSystemId), "Synchronised Deprovisioning");
+
         var remainingImportSourceEvaluator = new RemainingImportSourceEvaluator(Application.SyncRepo);
         var survivorObjectTypes = new List<ConnectedSystemObjectType>();
         var systemNamesById = await Application.SyncRepo.GetConnectedSystemNamesAsync();
@@ -126,7 +133,7 @@ public partial class ConnectedSystemServer
                 await ProcessDeprovisioningBatchAsync(task, activity, page.Results, systemSyncRules, recallScope,
                     priorityContext, remainingImportSourceEvaluator, syncEngine, syncServer, expressionEvaluator,
                     exportEvaluationCache, survivorObjectTypes, systemNamesById, syncOutcomeTrackingLevel,
-                    connectedSystem.Name, result);
+                    connectedSystem.Name, derivedInputMarks, result);
 
                 // Persist the checkpoint AFTER the batch is fully persisted: a crash between the two
                 // re-processes the batch, which is safe (idempotent per object, delete-then-create export
@@ -163,6 +170,7 @@ public partial class ConnectedSystemServer
                     expressionEvaluator,
                     exportEvaluationCache,
                     activity,
+                    derivedInputMarks,
                     reElectedDetailMessage: $"Connected System '{connectedSystem.Name}' is being deprovisioned; a surviving contributor was re-elected for the recalled attribute value(s).",
                     clearedDetailMessage: $"Connected System '{connectedSystem.Name}' is being deprovisioned; the recalled attribute value(s) had no remaining contributor and were cleared.",
                     trackActivityProgress: false,
@@ -179,6 +187,8 @@ public partial class ConnectedSystemServer
                 await Application.Tasking.UpdateWorkerTaskAsync(task);
             }
         }
+
+        derivedInputMarks.LogSummary();
 
         // Final step: the existing deletion (tombstone snapshot, orphan marking, bulk delete). The orphan
         // marking is retained for belt-and-braces: the per-object pass has already evaluated every
@@ -235,6 +245,7 @@ public partial class ConnectedSystemServer
         Dictionary<int, string> systemNamesById,
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel syncOutcomeTrackingLevel,
         string connectedSystemName,
+        DerivedInputMarkBatch derivedInputMarks,
         ConnectedSystemDeprovisioningResult result)
     {
         // Refresh the export cache for the batch's joined Metaverse Objects BEFORE the joins are broken.
@@ -325,7 +336,12 @@ public partial class ConnectedSystemServer
             if (obsoletionResult.MvoToUpdate != null)
                 changedMvos.Add(obsoletionResult.MvoToUpdate);
             if (obsoletionResult.MvoAttributeChange is { } mvoChange)
+            {
                 removedValueIds.AddRange(mvoChange.Removals.Where(av => av.Id != Guid.Empty).Select(av => av.Id));
+
+                // Recalled values and re-elected survivors may be derived flows' inputs (#1750 Phase 4, FR 9).
+                derivedInputMarks.Collect(mvoChange.Mvo, mvoChange.Additions.Concat(mvoChange.Removals));
+            }
 
             if (obsoletionResult.ExportEvaluation is { } exportEvaluationInput)
             {
@@ -413,7 +429,11 @@ public partial class ConnectedSystemServer
             result.PendingExportsStaged += stagedPendingExports.Count;
         }
 
-        // Step 5: persist the per-object results. The deleted objects' rows are gone, so the items must
+        // Step 5: every Metaverse change of the batch is persisted (and any immediately deleted object is gone, so a
+        // mark on it matches nothing); mark the hosting systems of the changed derived inputs in one bulk update.
+        await derivedInputMarks.FlushAsync(Application.SyncRepo);
+
+        // Step 6: persist the per-object results. The deleted objects' rows are gone, so the items must
         // reference them by snapshot only (the core snapshotted the display fields eagerly, and the
         // CsoDeleted outcome carries the deleted id durably); a foreign key to a deleted row would fail.
         foreach (var executionItem in executionItems)

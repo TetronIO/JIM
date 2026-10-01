@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -17,6 +17,13 @@ Since v0.15.0:
 - **Deletion-detection limits (#1618, Run Profile Safeguards)**: a Full Import's deletion detection resolves every candidate first, and refuses outright when the number that would be newly marked as deleted exceeds the Run Profile's `MaxDetectedDeletions` or `MaxDetectedDeletionsPercent`. See Deletion Detection below.
 - **Unconfirmed Create retry (#1695)**: after deletion detection, a Full Import finds every exported Create Pending Export whose Pending Provisioning CSO it did not see at all, and marks it for retry, because deletion detection deliberately excludes Pending Provisioning CSOs and reconciliation only visits CSOs an import returned.
 - **LDAP Delta Import change sources (#1736)**: the LDAP Connector reads changes through one change source per directory family (`uSNChanged` plus the Deleted Objects container for Active Directory and Samba AD, `cn=accesslog` for OpenLDAP, `cn=changelog` for other directories), and a Delta Import checks its change source's readiness first: a finding either stops the run (for example a change source it cannot read, #1737) or becomes the Activity's warning (for example deletions it cannot see, #1727), rather than silently importing nothing.
+
+Since v0.16.0:
+
+- **Watermark recorded only once staged (#1868)**: the watermark a call-based Connector returns with its first page is held back until the run has staged everything it read and recorded its results. A run that fails or is cancelled before then (including a cancelled run that staged nothing) keeps the watermark it started with, so the next Delta Import re-reads what was not staged rather than skipping it. Connector data returned by `CloseImportConnection` is still persisted even when the run fails, and wins over the page watermark.
+- **Deselected Object Types leave management (#1474)**: a Full Import's deletion detection also walks each deselected Object Type that has an External ID, so its Connected System Objects are marked Obsolete (and disconnected on the next synchronisation). A deselected Object Type an enabled Synchronisation Rule is still bound to is held back, and the Activity's warning names the rules.
+- **Confirmation on import only (#1826)**: import reconciliation is now the only place Pending Exports are confirmed; synchronisation runs no longer re-check them. Reconciliation never touches an `Executing` Pending Export (one stranded by a crash is recovered at Worker startup), and clears a `Failed` one only once every change it asserts is on the Connected System Object, otherwise leaving it untouched.
+- **Active Directory ranged retrieval (#1853)**: a multi-valued attribute with more values than the domain controller's MaxValRange (1,500 by default) is answered in ranges (`member;range=0-1499`, then `member;range=1500-*` and so on); the LDAP Connector reads every range before converting the attribute, so a large group imports with every member rather than failing as a configuration error. A Delta Import stopped by a changed domain controller `invocationId` now says the directory was probably restored from a backup or snapshot and that a Full Import re-establishes the baseline.
 
 ## Overall Import Flow
 
@@ -46,13 +53,12 @@ flowchart TD
     CaptureWatermark -->|No| ProcessPage
     SaveWatermark --> ProcessPage[ProcessImportObjectsAsync<br/>See Per-Object Processing below]
     ProcessPage --> PassTokens[Pass pagination tokens<br/>for next page]
-    PassTokens --> ClearTracker[ClearChangeTracker<br/>at page boundary]
-    ClearTracker --> PageLoop
+    PassTokens --> PageLoop
 
     PageLoop -->|No| CloseConn[CloseImportConnection<br/>Returned connector data? Persist it<br/>and drop the captured watermark]
 
-    %% Cancellation safety: when cancelled, the current page flush completes before exiting (no data loss)
-    %% Per-page change tracker clearing: ClearChangeTracker is called at page boundaries to keep memory bounded
+    %% Cancellation: the current page is finished, no further pages are read, and nothing is staged
+    %% Change tracker: hydration is untracked; ClearChangeTracker runs after each CSO update batch
 
     %% --- File-based connector ---
     ConnType -->|IConnectorImportUsingFiles| FileImport[connector.ImportAsync<br/>Returns all objects at once]
@@ -73,7 +79,7 @@ flowchart TD
 
     %% --- Persist via ISyncRepository ---
     RefResolution --> PersistCreate[Batch create new CSOs<br/>via ISyncRepository<br/>Two-phase parallel write for large batches<br/>See Two-Phase CSO Persistence below]
-    PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository]
+    PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository<br/>ClearChangeTracker after each batch]
     PersistUpdate --> StampHashes[Stamp import content hashes #1082<br/>per batch, only AFTER that batch's<br/>attribute value writes committed<br/>never touches LastUpdated]
     StampHashes --> Reconcile
 
@@ -149,7 +155,7 @@ Deletion detection runs in two phases (Run Profile Safeguards, #1618): Phase A r
 
 ```mermaid
 flowchart TD
-    Start([For each selected object type]) --> GetExisting[Get all existing CSO external IDs<br/>for this object type from database<br/>Pending Provisioning CSOs excluded<br/>Scoped to target partition if set]
+    Start([For each Object Type to check<br/>every selected one, plus each deselected<br/>one with an External ID #1474<br/>held back if an enabled Synchronisation<br/>Rule is bound to it]) --> GetExisting[Get all existing CSO external IDs<br/>for this object type from database<br/>Pending Provisioning CSOs excluded<br/>Scoped to target partition if set]
     GetExisting --> GetImported[Get all imported external IDs<br/>for this object type from collection]
     GetImported --> Compare[Except: find CSO external IDs<br/>not in imported set]
     Compare --> Loop{More missing<br/>external IDs?}
@@ -237,12 +243,18 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Status Exported or ExportNotConfirmed,<br/>or Pending with changes already written<br/>awaiting confirmation #1398]
+    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
     Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed]
     Summary --> Done([Done])
 
-    Loop -->|Yes| Compare[For each attribute change<br/>awaiting confirmation:<br/>Compare expected value<br/>against CSO current value]
+    Loop -->|Yes| StatusGate{Pending Export<br/>status? #1826}
+    StatusGate -->|Executing, or Pending<br/>with nothing written yet| Untouched[Left untouched<br/>Executing ones stranded by a crash<br/>are recovered at Worker startup]
+    Untouched --> Loop
+    StatusGate -->|Failed| FailedCheck{Every change it<br/>asserts now on<br/>the CSO?}
+    FailedCheck -->|Yes| Delete
+    FailedCheck -->|No| Untouched
+    StatusGate -->|Exported or ExportNotConfirmed,<br/>or Pending with changes already<br/>written awaiting confirmation #1398| Compare[For each attribute change<br/>awaiting confirmation:<br/>Compare expected value<br/>against CSO current value]
     Compare --> PerChange{Change<br/>confirmed?}
     PerChange -->|Yes| RemoveConfirmed[Remove the confirmed change<br/>from the Pending Export<br/>RPEI: ExportConfirmed outcome]
     PerChange -->|No, retries remain| Retry[Status = ExportedNotConfirmed<br/>RPEI: ExportNotConfirmed<br/>Retried on the next export]
@@ -278,8 +290,8 @@ flowchart TD
 
 - **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
 
-- **Cancellation safety**<br /> When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
+- **Cancellation safety**<br /> When a cancellation is requested, the page being read is finished and no further pages are requested. Staging happens only after every page has been read, so a run cancelled while reading persists no Connected System Objects at all; one cancelled after deletion detection skips persistence, and one cancelled after saving skips reconciliation. In every case the run's new watermark is not recorded (#1868), so the next Delta Import re-reads anything the cancelled run did not stage.
 
-- **Per-page change tracker clearing**<br /> `ClearChangeTracker` is called at page boundaries to detach processed entities from the EF Core change tracker, keeping memory consumption bounded regardless of total import size.
+- **Bounded change tracker**<br /> Existing Connected System Objects are hydrated without tracking (`AsNoTrackingWithIdentityResolution`, #917), so reading pages adds nothing to the EF Core change tracker. `ClearChangeTracker` is called after each update batch, and each batch's hydrated attribute values are released once persisted, keeping memory consumption bounded regardless of total import size.
 
 - **Optimistic export apply** (#1079)<br /> No import-side behaviour changed for this feature; it is purely an export-side optimisation (see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)). It changes the practical *outcome* of the "Update CSO attributes" step above: a CSO whose export was optimistically applied already carries the exported values, so the confirming import's set-diff typically finds nothing to stage, and no `Updated` RPEI is created for it.

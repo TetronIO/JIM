@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-09-25, JIM v0.15.0
+> Last updated: 2026-09-29, JIM v0.16.0
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target Connected Systems.
 
@@ -10,13 +10,13 @@ This diagram shows the full lifecycle of a Pending Export from creation during s
 stateDiagram-v2
     [*] --> Pending: Created during Sync<br/>(export evaluation)
 
-    Pending --> [*]: Never-exported provisioning<br/>cancelled with its CSO
+    Pending --> [*]: Never-exported provisioning<br/>cancelled with its CSO,<br/>or every queued change withdrawn<br/>(target already holds the value,<br/>or nothing authorises it any more)
 
     Pending --> Executing: Export run starts<br/>batch marked executing
 
-    Executing --> Exported: Connector reports<br/>success
+    Executing --> Exported: Connector reports<br/>success, or worker start<br/>recovery when a change<br/>was already sent
 
-    Executing --> Pending: Connector reports failure<br/>(retry after NextRetryAt backoff),<br/>or written in part while<br/>references are still owed
+    Executing --> Pending: Connector reports failure<br/>(retry after NextRetryAt backoff),<br/>or written in part while<br/>references are still owed,<br/>or worker start recovery<br/>when nothing was sent
     Executing --> ExportNotConfirmed: File-based export<br/>throws (retryable)
     Executing --> Failed: ErrorCount >= MaxRetries
 
@@ -34,7 +34,9 @@ stateDiagram-v2
 
     ExportNotConfirmed --> Failed: ErrorCount >= MaxRetries<br/>(permanent failure)
 
-    Failed --> [*]: Manual intervention<br/>or PE deleted
+    ExportNotConfirmed --> [*]: Every queued change withdrawn<br/>(as from Pending)
+
+    Failed --> [*]: Confirming import finds every<br/>change now on the CSO,<br/>or PE deleted manually
 
     note right of Pending
         Initial state.
@@ -78,7 +80,7 @@ flowchart LR
         InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists<br/>Cancel never-exported provisioning<br/>instead, #1681]
         InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export Synchronisation Rule mappings]
         MapAttrs --> NetChange{No-net-change<br/>detection}
-        NetChange -->|CSO already current| Skip[Skip - no PE created<br/>Target already has correct values]
+        NetChange -->|CSO already current| Skip[Skip - no PE created<br/>Target already has correct values<br/>Withdraw any change still queued<br/>for it; empty Update PE deleted]
         NetChange -->|Changes needed| CheckExisting{Existing CSO<br/>in target system?}
         CheckExisting -->|Yes, of another<br/>Object Type| TypeConflict[No PE: the MVO's one CSO<br/>in this system is of another<br/>Object Type, #1344<br/>RPEI: CouldNotExportDueTo<br/>ExistingConnectedSystemObject]
         CheckExisting -->|Yes| CreateUpdatePE[Create PE:<br/>ChangeType = Update<br/>Status = Pending]
@@ -95,6 +97,7 @@ flowchart LR
     end
 
     subgraph "2. Export"
+        Withdraw[Withdraw queued changes nothing<br/>authorises any more: rule deleted<br/>or disabled, no enabled mapping,<br/>or CSO no longer joined<br/>Empty Update PE deleted<br/>not in preview] --> GetExecutable
         GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now<br/>exported Creates skipped<br/>types over a Run Profile limit withheld] --> MarkExec[Mark batch:<br/>Status = Executing]
         MarkExec --> ConnExport[Connector executes<br/>export operations]
         ConnExport --> Success{Success?}
@@ -109,7 +112,7 @@ flowchart LR
     end
 
     subgraph "3. Confirming Import"
-        ImportData[Import fresh data<br/>from target system] --> Reconcile[Reconcile each PE for a CSO<br/>the import returned: compare<br/>its attribute changes against<br/>imported CSO values]
+        ImportData[Import fresh data<br/>from target system] --> Reconcile[Reconcile each PE for a CSO<br/>the import returned: compare<br/>its attribute changes against<br/>imported CSO values<br/>Executing PEs skipped; a Failed PE<br/>is deleted only when every change<br/>is now on the CSO, else untouched]
         Reconcile --> AllMatch{Any changes<br/>remain?}
         AllMatch -->|No| DeletePE[Delete PE<br/>Export confirmed<br/>PE lifecycle complete]
         AllMatch -->|Yes| Remaining[Remove confirmed changes<br/>A Create becomes an Update:<br/>the object is proven to exist, #1695<br/>Status from what remains:<br/>unconfirmed = ExportNotConfirmed<br/>appended only = Pending<br/>all failed = Failed]
@@ -117,11 +120,11 @@ flowchart LR
         Unseen -->|Yes| RetryCreate[Mark the Create for retry, #1695<br/>Status = ExportNotConfirmed,<br/>or Failed at MaxRetries<br/>RPEI: ExportNotConfirmed<br/>Delta Imports cannot prove absence]
     end
 
-    PersistPE --> GetExecutable
+    PersistPE --> Withdraw
     OptimisticApply --> ImportData
-    FailResult -.->|Next export run<br/>after backoff| GetExecutable
-    Remaining -.->|Next export run| GetExecutable
-    RetryCreate -.->|Next export run| GetExecutable
+    FailResult -.->|Next export run<br/>after backoff| Withdraw
+    Remaining -.->|Next export run| Withdraw
+    RetryCreate -.->|Next export run| Withdraw
 ```
 
 ## Confirmation Happens on Import Only
@@ -129,7 +132,7 @@ flowchart LR
 Pending Exports are confirmed only by the confirming import path shown in "3. Confirming Import" above (`ISyncEngine.ReconcileCsoAgainstPendingExport`, driven by `SyncImportTaskProcessor.ReconcilePendingExportsAsync`). Synchronisation does not re-check them: every change to a CSO's values arrives through an import, so the import has always seen it first.
 
 - **Failed** Pending Exports need manual intervention, and reconciliation leaves them alone (no status, attribute, ErrorCount or attempt change) unless every change they assert is now visible on the CSO, for example because an administrator fixed the target by hand. They are then deleted, like a fully confirmed Exported one.
-- **Parked** and **Executing** Pending Exports are never touched by reconciliation.
+- **Parked** and **Executing** Pending Exports are never touched by reconciliation. (`Parked` belongs to Unique Value Generation, which is in development and not yet available.)
 - **Executing** Pending Exports left behind by a worker crash or restart are recovered when the worker starts: to Exported if any change was already sent, so the next confirming import reconciles it, otherwise to Pending, so the next export retries it.
 
 ## Attribute-Level Status Tracking
@@ -140,6 +143,8 @@ Each attribute change within a Pending Export has its own status, enabling parti
 stateDiagram-v2
     [*] --> Pending: Attribute change created
 
+    Pending --> [*]: Withdrawn before export<br/>(target already holds it,<br/>or nothing authorises it)
+
     Pending --> ExportedPendingConfirmation: Export run executes<br/>successfully
 
     ExportedPendingConfirmation --> [*]: Confirming import<br/>confirms value matches<br/>(attribute change removed from PE)
@@ -149,6 +154,8 @@ stateDiagram-v2
     ExportedNotConfirmed --> Pending: Reasserted on<br/>next export run
 
     ExportedNotConfirmed --> Failed: Max retries exceeded
+
+    ExportedNotConfirmed --> [*]: Withdrawn before re-export<br/>(as from Pending)
 
     Failed --> [*]: Manual intervention
 ```
@@ -170,7 +177,7 @@ flowchart TD
     DriftCheck[EvaluateDriftAndEnforceState<br/>during sync CSO processing] --> CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
     CompareCSO --> Drifted{CSO value<br/>differs from<br/>expected?}
     Drifted -->|No| NoDrift([No action])
-    Drifted -->|Yes| CheckContributor{Is this system<br/>a legitimate contributor<br/>for this attribute?}
+    Drifted -->|Yes| CheckContributor{Is this system<br/>a legitimate contributor:<br/>its winning import flow<br/>reads the diverged<br/>attribute? #1864}
     CheckContributor -->|Yes| LegitChange([Skip - legitimate import<br/>from authoritative source])
     CheckContributor -->|No| CreateCorrective[Create corrective PE:<br/>ChangeType = Update<br/>Status = Pending<br/>RPEI: DriftCorrection]
 ```
