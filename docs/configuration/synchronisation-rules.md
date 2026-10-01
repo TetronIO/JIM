@@ -50,7 +50,7 @@ An export rule:
 - Flows attribute values from the MVO to the CSO
 - Creates Pending Exports for any changes
 
-When **enforce state** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the metaverse-derived value.
+When **enforce state** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the metaverse-derived value. For a [generated value](#generated-values) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object.
 
 A change made in the Connected System is not drift when it can flow back in: that is, when the same Connected System holds the winning import Attribute Flow for the Metaverse attribute and that flow **reads the changed attribute**. For example, an import flow of `mail` into Email and an export of Email to `mail` let an edit to `mail` update Email. If the import flow reads a different attribute (Display Name built from `givenName` and `sn`, but exported to `displayName`), an edit to `displayName` could never reach the Metaverse, so it is treated as drift and corrected.
 
@@ -514,6 +514,8 @@ The base expression is an ordinary [expression](#expression-mappings), for examp
 - On the Metaverse Object page's [Inspect view](metaverse.md#where-a-value-comes-from), a generated value's source reads **Connected System · Synchronisation Rule · Generated Value**, with its own share of the source bar, and its inspector gives the Source type as **Generated Value** (marked **Corrected** if a collision revised it).
 
 Generated values work on export mappings too: the value is generated for, and kept on, the Connected System Object alone, and never written to the Metaverse. That suits a reference number a target system needs but nothing else uses.
+
+An export-mode generated value is drift-checked like any export Attribute Flow. When the Synchronisation Rule [enforces state](#export-outbound) and the value is changed in the target system outside JIM, the target system's next synchronisation corrects it back to the value JIM generated for that object (not a freshly evaluated base expression), and a change of letter case alone counts as a change, exactly as it does for any other Attribute Flow. Mark the mapping [Initial Export Only](#initial-export-only-outbound) to have the value written once, when the object is provisioned, and then left alone. An object JIM has not yet generated a value for is not checked; the value is generated and exported instead.
 
 Configure a generated mapping in the Attribute Flow editor, with `New-JIMSyncRuleMapping -Generate` and `Set-JIMSyncRuleMapping` in PowerShell (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)), or with the `generation` object on the REST API's mapping endpoints. The REST API also lists a Metaverse Object's generated values (`GET /metaverse/objects/{id}/generated-values`), reads a sequence's state (`GET /synchronisation/sync-rules/{id}/mappings/{mappingId}/sequence`) and starts a sequence again (`POST /synchronisation/sync-rules/{id}/mappings/{mappingId}/generation/restart`).
 

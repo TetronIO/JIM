@@ -123,4 +123,33 @@ public sealed class UniqueValueResolveOptions
         KnownMetaverseAssignments.TryGetValue(metaverseObjectId, out var assignments)
             ? assignments
             : Array.Empty<GeneratedValueAssignment>();
+
+    /// <summary>
+    /// The export-mode assignment the run-scoped cache holds for <paramref name="connectedSystemObjectId"/>'s
+    /// <paramref name="connectedSystemObjectTypeAttributeId"/>, read without a query. Returns false when the
+    /// object's assignments are not known to this run at all (never prefetched or resolved), so a caller can
+    /// tell "known to hold nothing" (true, <paramref name="assignment"/> null) apart from "never looked up"
+    /// (false). Drift Detection (#242) reads the expected value of a generated export Attribute Flow through
+    /// this, after the worker has prefetched the page's assignments, so it never queries per object. Selects
+    /// exactly the assignment <see cref="UniqueValueGenerationServer.ResolveAsync"/>'s sticky check would, so
+    /// the two paths can never disagree on which value JIM owns.
+    /// </summary>
+    public bool TryGetKnownConnectedSystemAssignment(Guid connectedSystemObjectId, int connectedSystemObjectTypeAttributeId, out GeneratedValueAssignment? assignment)
+    {
+        if (!KnownConnectedSystemAssignments.TryGetValue(connectedSystemObjectId, out var assignments))
+        {
+            assignment = null;
+            return false;
+        }
+
+        assignment = FindConnectedSystemAssignment(assignments, connectedSystemObjectTypeAttributeId);
+        return true;
+    }
+
+    /// <summary>
+    /// The one place an export-mode assignment is selected from a Connected System Object's known assignments:
+    /// shared by the sticky check and <see cref="TryGetKnownConnectedSystemAssignment"/>.
+    /// </summary>
+    internal static GeneratedValueAssignment? FindConnectedSystemAssignment(IEnumerable<GeneratedValueAssignment> assignments, int? connectedSystemObjectTypeAttributeId) =>
+        assignments.FirstOrDefault(a => a.ConnectedSystemObjectTypeAttributeId == connectedSystemObjectTypeAttributeId);
 }
