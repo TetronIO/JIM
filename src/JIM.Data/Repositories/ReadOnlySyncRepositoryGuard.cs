@@ -338,14 +338,14 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<string>> GetMetaverseAttributeValuesInUseAsync(int metaverseAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingMetaverseObjectId)
         => _inner.GetMetaverseAttributeValuesInUseAsync(metaverseAttributeId, normalisedValues, excludingMetaverseObjectId);
 
-    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId)
-        => _inner.GetConnectedSystemAttributeValuesInUseAsync(connectedSystemObjectTypeAttributeId, normalisedValues, excludingConnectedSystemObjectId);
+    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
+        => _inner.GetConnectedSystemAttributeValuesInUseAsync(connectedSystemObjectTypeAttributeId, normalisedValues, excludingConnectedSystemObjectId, excludingJoinedMetaverseObjectId);
 
     public Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId)
         => _inner.GetMetaverseAttributeNumbersInUseAsync(metaverseAttributeId, values, excludingMetaverseObjectId);
 
-    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId)
-        => _inner.GetConnectedSystemAttributeNumbersInUseAsync(connectedSystemObjectTypeAttributeId, values, excludingConnectedSystemObjectId);
+    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
+        => _inner.GetConnectedSystemAttributeNumbersInUseAsync(connectedSystemObjectTypeAttributeId, values, excludingConnectedSystemObjectId, excludingJoinedMetaverseObjectId);
 
     public Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId)
         => _inner.GetGeneratedValueAssignmentValuesInUseAsync(metaverseAttributeId, connectedSystemObjectTypeAttributeId, normalisedValues, excludingObjectId);

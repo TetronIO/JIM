@@ -483,9 +483,12 @@ public sealed class UniqueValueGenerationServer
     }
 
     /// <summary>
-    /// Gate (d), import mode only: every id in <see cref="GenerationRequest.ConnectorSpaceAttributeIds"/>, with
-    /// no exclusion (plan "Behaviour (ResolveAsync)"): a value any participating target already holds is taken,
-    /// including one the requesting object's own joined target holds.
+    /// Gate (d), import mode only: every id in <see cref="GenerationRequest.ConnectorSpaceAttributeIds"/> (plan
+    /// "Behaviour (ResolveAsync)"): a value any participating target already holds is taken, EXCEPT one held by a
+    /// Connected System Object joined to the requesting Metaverse Object. That is the same person's own account,
+    /// not a collision, so the object gets the value exactly as an ordinary Attribute Flow would write it
+    /// (product-owner decision 2026-10-01). Batched per (attribute, requesting Metaverse Object): a page of brand
+    /// new objects (no id yet, so nothing joined to exclude) still shares one query per attribute.
     /// </summary>
     private async Task<List<int>> FilterConnectorSpaceGateAsync(
         List<int> active,
@@ -500,23 +503,24 @@ public sealed class UniqueValueGenerationServer
         var taken = new HashSet<int>();
         var isNumberTarget = relevant.ToDictionary(i => i, i => requests[i].TargetType is AttributeDataType.Number or AttributeDataType.LongNumber);
 
-        var stringByAttribute = new Dictionary<int, List<int>>();
-        var numberByAttribute = new Dictionary<int, List<int>>();
+        var stringByAttribute = new Dictionary<(int CsAttributeId, Guid? MetaverseObjectId), List<int>>();
+        var numberByAttribute = new Dictionary<(int CsAttributeId, Guid? MetaverseObjectId), List<int>>();
         foreach (var i in relevant)
         {
             var byAttribute = isNumberTarget[i] ? numberByAttribute : stringByAttribute;
             foreach (var csAttributeId in requests[i].ConnectorSpaceAttributeIds)
             {
-                if (!byAttribute.TryGetValue(csAttributeId, out var list))
-                    byAttribute[csAttributeId] = list = [];
+                var key = (csAttributeId, requests[i].MetaverseObjectId);
+                if (!byAttribute.TryGetValue(key, out var list))
+                    byAttribute[key] = list = [];
                 list.Add(i);
             }
         }
 
-        foreach (var (csAttributeId, indices) in stringByAttribute)
+        foreach (var ((csAttributeId, metaverseObjectId), indices) in stringByAttribute)
         {
             var values = indices.Select(i => candidates[i].Text.ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var takenValues = await _repository.GetConnectedSystemAttributeValuesInUseAsync(csAttributeId, values, null);
+            var takenValues = await _repository.GetConnectedSystemAttributeValuesInUseAsync(csAttributeId, values, null, metaverseObjectId);
             foreach (var i in indices)
             {
                 if (takenValues.Contains(candidates[i].Text) && taken.Add(i))
@@ -524,10 +528,10 @@ public sealed class UniqueValueGenerationServer
             }
         }
 
-        foreach (var (csAttributeId, indices) in numberByAttribute)
+        foreach (var ((csAttributeId, metaverseObjectId), indices) in numberByAttribute)
         {
             var values = indices.Select(i => candidates[i].Numeric!.Value).Distinct().ToList();
-            var takenValues = await _repository.GetConnectedSystemAttributeNumbersInUseAsync(csAttributeId, values, null);
+            var takenValues = await _repository.GetConnectedSystemAttributeNumbersInUseAsync(csAttributeId, values, null, metaverseObjectId);
             foreach (var i in indices)
             {
                 if (takenValues.Contains(candidates[i].Numeric!.Value) && taken.Add(i))

@@ -242,6 +242,52 @@ public class UniqueValueGenerationServerResolveTests
             "a live assignment from a DIFFERENT generation row on the SAME attribute must still be treated as taken");
     }
 
+    // ---- Own joined account is not a collision (product-owner decision 2026-10-01) ----
+
+    [TestCase(true, "joe.bloggs", TestName = "ResolveAsync_ImportMode_ValueHeldByTheObjectsOwnJoinedConnectedSystemObject_IsFreeForItAsync")]
+    [TestCase(false, "joe.bloggs1", TestName = "ResolveAsync_ImportMode_ValueHeldByAnotherObjectsConnectedSystemObject_IsTakenAsync")]
+    public async Task ResolveAsync_ImportMode_ConnectorSpaceGate_ExcludesOnlyTheObjectsOwnJoinedAccountsAsync(bool joinedToRequestingObject, string expected)
+    {
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var generation = UniqueValueTestHelpers.Generation();
+        var mvAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var mvoId = Guid.NewGuid();
+
+        repo.SeedConnectedSystemObject(ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", joinedToRequestingObject ? mvoId : Guid.NewGuid()));
+
+        var request = UniqueValueTestHelpers.ImportRequest(generation, mvAttributeId, mvoId, baseValue: "joe.bloggs", connectorSpaceAttributeIds: [csAttributeId]);
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo(expected));
+    }
+
+    [TestCase(true, "joe.bloggs", TestName = "ResolveAsync_ExportMode_ValueHeldByTheConnectedSystemObjectItIsFor_IsFreeForItAsync")]
+    [TestCase(false, "joe.bloggs1", TestName = "ResolveAsync_ExportMode_ValueHeldByAnotherConnectedSystemObject_IsTakenAsync")]
+    public async Task ResolveAsync_ExportMode_ExcludesOnlyTheConnectedSystemObjectTheValueIsForAsync(bool heldByTheTargetObject, string expected)
+    {
+        var repo = new InMemorySyncRepository();
+        var server = new UniqueValueGenerationServer(repo);
+        var generation = UniqueValueTestHelpers.Generation();
+        var csAttributeId = UniqueValueTestHelpers.NextAttributeId();
+        var holder = ConnectedSystemObjectHolding(csAttributeId, "joe.bloggs", metaverseObjectId: null);
+        repo.SeedConnectedSystemObject(holder);
+
+        var targetCsoId = heldByTheTargetObject ? holder.Id : Guid.NewGuid();
+        var request = UniqueValueTestHelpers.ExportRequest(generation, csAttributeId, targetCsoId, baseValue: "joe.bloggs");
+        var outcomes = await server.ResolveAsync([request], UniqueValueTestHelpers.Options());
+
+        Assert.That(outcomes[0].Value, Is.EqualTo(expected));
+    }
+
+    private static ConnectedSystemObject ConnectedSystemObjectHolding(int attributeId, string value, Guid? metaverseObjectId)
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), MetaverseObjectId = metaverseObjectId };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attributeId, StringValue = value, ConnectedSystemObject = cso });
+        return cso;
+    }
+
     [Test]
     public async Task ResolveAsync_NeverCallsGetGeneratedValueAssignmentsForGenerationAsync()
     {

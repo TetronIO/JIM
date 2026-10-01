@@ -3762,7 +3762,7 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId)
+    public Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
     {
         if (normalisedValues.Count == 0)
             return Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -3773,6 +3773,8 @@ public class SyncRepository : ISyncRepository
         foreach (var cso in _csos.Values)
         {
             if (excludingConnectedSystemObjectId.HasValue && cso.Id == excludingConnectedSystemObjectId.Value)
+                continue;
+            if (excludingJoinedMetaverseObjectId.HasValue && cso.MetaverseObjectId == excludingJoinedMetaverseObjectId.Value)
                 continue;
 
             foreach (var av in cso.AttributeValues)
@@ -3817,7 +3819,7 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId)
+    public Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
     {
         if (values.Count == 0)
             return Task.FromResult(new HashSet<long>());
@@ -3828,6 +3830,8 @@ public class SyncRepository : ISyncRepository
         foreach (var cso in _csos.Values)
         {
             if (excludingConnectedSystemObjectId.HasValue && cso.Id == excludingConnectedSystemObjectId.Value)
+                continue;
+            if (excludingJoinedMetaverseObjectId.HasValue && cso.MetaverseObjectId == excludingJoinedMetaverseObjectId.Value)
                 continue;
 
             foreach (var av in cso.AttributeValues)

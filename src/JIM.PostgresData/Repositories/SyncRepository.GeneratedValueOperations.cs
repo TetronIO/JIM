@@ -38,7 +38,7 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId)
+    public async Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
     {
         if (normalisedValues.Count == 0)
             return [];
@@ -50,8 +50,14 @@ public partial class SyncRepository
 
         if (excludingConnectedSystemObjectId.HasValue)
         {
-            sql += @" AND ""ConnectedSystemObjectId"" <> {2}";
+            sql += $@" AND ""ConnectedSystemObjectId"" <> {{{parameters.Count}}}";
             parameters.Add(excludingConnectedSystemObjectId.Value);
+        }
+
+        if (excludingJoinedMetaverseObjectId.HasValue)
+        {
+            sql += JoinedToMetaverseObjectExclusion(parameters.Count);
+            parameters.Add(excludingJoinedMetaverseObjectId.Value);
         }
 
         var rows = await _context.Database.SqlQueryRaw<string>(sql, parameters.ToArray()).ToListAsync();
@@ -84,12 +90,25 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId)
+    public async Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null)
     {
         if (values.Count == 0)
             return [];
 
-        var exclude = excludingConnectedSystemObjectId.HasValue ? @" AND ""ConnectedSystemObjectId"" <> {2}" : string.Empty;
+        var parameters = new List<object> { connectedSystemObjectTypeAttributeId, values.ToArray() };
+        var exclude = string.Empty;
+        if (excludingConnectedSystemObjectId.HasValue)
+        {
+            exclude += $@" AND ""ConnectedSystemObjectId"" <> {{{parameters.Count}}}";
+            parameters.Add(excludingConnectedSystemObjectId.Value);
+        }
+
+        if (excludingJoinedMetaverseObjectId.HasValue)
+        {
+            exclude += JoinedToMetaverseObjectExclusion(parameters.Count);
+            parameters.Add(excludingJoinedMetaverseObjectId.Value);
+        }
+
         var sql = $@"SELECT DISTINCT ""IntValue""::bigint AS ""Value""
                     FROM ""ConnectedSystemObjectAttributeValues""
                     WHERE ""AttributeId"" = {{0}} AND ""IntValue"" = ANY({{1}}){exclude}
@@ -98,13 +117,21 @@ public partial class SyncRepository
                     FROM ""ConnectedSystemObjectAttributeValues""
                     WHERE ""AttributeId"" = {{0}} AND ""LongValue"" = ANY({{1}}){exclude}";
 
-        var parameters = new List<object> { connectedSystemObjectTypeAttributeId, values.ToArray() };
-        if (excludingConnectedSystemObjectId.HasValue)
-            parameters.Add(excludingConnectedSystemObjectId.Value);
-
         var rows = await _context.Database.SqlQueryRaw<long>(sql, parameters.ToArray()).ToListAsync();
         return rows.ToHashSet();
     }
+
+    /// <summary>
+    /// The connector-space gates' "joined to this Metaverse Object" exclusion (#242): a value held by the
+    /// requesting object's OWN joined Connected System Object is the same person, not a collision. Expressed as a
+    /// NOT EXISTS against the owning Connected System Object so the outer query's attribute-value index still
+    /// drives the plan; <paramref name="parameterIndex"/> is the positional placeholder the caller binds the
+    /// Metaverse Object id to.
+    /// </summary>
+    private static string JoinedToMetaverseObjectExclusion(int parameterIndex) =>
+        $@" AND NOT EXISTS (SELECT 1 FROM ""ConnectedSystemObjects"" joined
+                            WHERE joined.""Id"" = ""ConnectedSystemObjectAttributeValues"".""ConnectedSystemObjectId""
+                            AND joined.""MetaverseObjectId"" = {{{parameterIndex}}})";
 
     /// <inheritdoc />
     public async Task<HashSet<string>> GetGeneratedValueAssignmentValuesInUseAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingObjectId)

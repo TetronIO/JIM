@@ -390,6 +390,55 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
+    /// The connector-space gate must not count the object's OWN joined account (#242, product-owner decision
+    /// 2026-10-01: a generated flow is no different to an ordinary flow). Directory's account for this person
+    /// already holds exactly the base value "john.smith"; that is the same person, not a collision, so the
+    /// generated value is "john.smith", exactly what an expression flow would write, not "john.smith1".
+    /// </summary>
+    [Test]
+    public async Task FullSync_ObjectsOwnJoinedAccountHoldsTheBaseValue_IsFreeForItAndNoSuffixIsAddedAsync()
+    {
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
+
+        await SeedDirectoryCsoAsync(ctx, "E1", "john.smith");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        await SeedHrCsoAsync(ctx, "John", "Smith", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("john.smith"),
+                "the object's own joined account holding the base value is not a collision");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("john.smith"));
+        }
+    }
+
+    /// <summary>
+    /// The counterpart of the test above: ANOTHER object's account holding the base value still blocks it.
+    /// Directory holds "john.smith" on the account for a different person (E2); John Smith (E1) must get
+    /// "john.smith1". Directory imports no Account Name, so only the connector-space gate can see the clash.
+    /// </summary>
+    [Test]
+    public async Task FullSync_AnotherObjectsAccountHoldsTheBaseValue_StillForcesTheSuffixAsync()
+    {
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
+
+        await SeedDirectoryCsoAsync(ctx, "E1", "jsmith");
+        await SeedDirectoryCsoAsync(ctx, "E2", "john.smith");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        await SeedHrCsoAsync(ctx, "John", "Smith", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        var e1Value = SyncRepo.MetaverseObjects.Values
+            .Where(m => m.AttributeValues.Any(av => av.AttributeId == ctx.MvEmployeeIdAttributeId && av.StringValue == "E1"))
+            .Select(m => m.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvAccountNameAttributeId)?.StringValue)
+            .Single();
+        Assert.That(e1Value, Is.EqualTo("john.smith1"), "another object's account holding the base value is a collision");
+    }
+
+    /// <summary>
     /// Formerly <c>FullSync_ExcludedSystemsValue_IsNotAdoptedAsync</c>: exclusions used to gate the
     /// connector-space adoption read. That read is gone entirely now, so this is rewritten to cover the case
     /// exclusions still matter for (#242, FR 30's replacement): a higher-priority IMPORT Attribute Flow from

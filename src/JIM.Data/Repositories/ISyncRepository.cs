@@ -1547,8 +1547,13 @@ public interface ISyncRepository
     /// The connector-space counterpart of <see cref="GetMetaverseAttributeValuesInUseAsync"/>, over
     /// <c>ConnectedSystemObjectAttributeValues</c>. A Connected System Object Type attribute id is unique across
     /// every Connected System, so no system id is needed to disambiguate which system's attribute this is.
+    /// <para>
+    /// <paramref name="excludingJoinedMetaverseObjectId"/>, when given, also excludes every Connected System
+    /// Object joined to that Metaverse Object (import mode, #242): the object's own joined account holding a
+    /// value is the same person, not a collision, exactly as an ordinary Attribute Flow would see it.
+    /// </para>
     /// </summary>
-    Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId);
+    Task<HashSet<string>> GetConnectedSystemAttributeValuesInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<string> normalisedValues, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null);
 
     /// <summary>
     /// The numeric counterpart of <see cref="GetMetaverseAttributeValuesInUseAsync"/>, for Number and Long
@@ -1559,9 +1564,10 @@ public interface ISyncRepository
     Task<HashSet<long>> GetMetaverseAttributeNumbersInUseAsync(int metaverseAttributeId, IReadOnlyCollection<long> values, Guid? excludingMetaverseObjectId);
 
     /// <summary>
-    /// The connector-space counterpart of <see cref="GetMetaverseAttributeNumbersInUseAsync"/>.
+    /// The connector-space counterpart of <see cref="GetMetaverseAttributeNumbersInUseAsync"/>, with the same
+    /// <paramref name="excludingJoinedMetaverseObjectId"/> semantics as <see cref="GetConnectedSystemAttributeValuesInUseAsync"/>.
     /// </summary>
-    Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId);
+    Task<HashSet<long>> GetConnectedSystemAttributeNumbersInUseAsync(int connectedSystemObjectTypeAttributeId, IReadOnlyCollection<long> values, Guid? excludingConnectedSystemObjectId, Guid? excludingJoinedMetaverseObjectId = null);
 
     /// <summary>
     /// Which of the given normalised (lower-cased) values a live <see cref="GeneratedValueAssignment"/> already

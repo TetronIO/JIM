@@ -259,6 +259,43 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(excludingSelf, Is.Empty, "the requesting object's own value must always be free for it");
     }
 
+    [Test]
+    public async Task GetConnectedSystemAttributeInUse_ExcludingJoinedMetaverseObject_FreesOnlyThatObjectsOwnAccountsAsync()
+    {
+        // #242, product-owner decision 2026-10-01: a value held by a Connected System Object joined to the
+        // requesting Metaverse Object is the same person's own account, not a collision. Real SQL: the
+        // exclusion is a NOT EXISTS over ConnectedSystemObjects."MetaverseObjectId", which the in-memory
+        // provider cannot prove.
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await JoinCsoToMvoAsync(estate);
+        var otherMvoId = await CreateSecondMvoAsync(estate);
+
+        await using (var ctx = NewContext())
+        {
+            var text = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsTextAttributeId, StringValue = "Joe.Bloggs" };
+            var number = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsNumberAttributeId, LongValue = 4242L };
+            ctx.ConnectedSystemObjectAttributeValues.AddRange(text, number);
+            ctx.Entry(text).Property("ConnectedSystemObjectId").CurrentValue = estate.CsoId;
+            ctx.Entry(number).Property("ConnectedSystemObjectId").CurrentValue = estate.CsoId;
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var readCtx = NewContext();
+        var repo = NewSyncRepository(readCtx);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await repo.GetConnectedSystemAttributeValuesInUseAsync(estate.CsTextAttributeId, ["joe.bloggs"], null, estate.MvoId), Is.Empty,
+                "the requesting Metaverse Object's own joined account holding the value is not a collision");
+            Assert.That(await repo.GetConnectedSystemAttributeValuesInUseAsync(estate.CsTextAttributeId, ["joe.bloggs"], null, otherMvoId), Is.EquivalentTo(new[] { "joe.bloggs" }),
+                "an account joined to a different Metaverse Object still blocks the value");
+            Assert.That(await repo.GetConnectedSystemAttributeNumbersInUseAsync(estate.CsNumberAttributeId, [4242L], null, estate.MvoId), Is.Empty);
+            Assert.That(await repo.GetConnectedSystemAttributeNumbersInUseAsync(estate.CsNumberAttributeId, [4242L], null, otherMvoId), Is.EquivalentTo(new[] { 4242L }));
+            Assert.That(await repo.GetConnectedSystemAttributeNumbersInUseAsync(estate.CsNumberAttributeId, [4242L], estate.CsoId, otherMvoId), Is.Empty,
+                "both exclusions together bind their own positional parameters correctly");
+        }
+    }
+
     // ---- Numeric value gates ----
 
     [Test]
