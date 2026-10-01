@@ -223,7 +223,7 @@ public sealed class DerivedFlowGraph
 
     private TypeGraph GetOrCreateTypeGraph(SyncRule rule, Dictionary<int, MetaverseObjectType> suppliedTypes)
     {
-        var typeId = rule.MetaverseObjectTypeId;
+        var typeId = rule.ResolveMetaverseObjectTypeId();
         if (_typeGraphs.TryGetValue(typeId, out var existing))
             return existing;
 

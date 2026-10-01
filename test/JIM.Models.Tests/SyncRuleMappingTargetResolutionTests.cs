@@ -53,6 +53,22 @@ public class SyncRuleMappingTargetResolutionTests
     }
 
     [Test]
+    public void ResolveMetaverseObjectTypeId_UnsavedRuleWithTheTypeOnTheNavigation_ReturnsTheNavigation()
+    {
+        var rule = new SyncRule { MetaverseObjectType = new MetaverseObjectType { Id = 3, Name = "User" } };
+
+        Assert.That(rule.ResolveMetaverseObjectTypeId(), Is.EqualTo(3));
+    }
+
+    [Test]
+    public void ResolveMetaverseObjectTypeId_NavigationNotLoaded_ReturnsTheScalar()
+    {
+        var rule = new SyncRule { MetaverseObjectTypeId = 3 };
+
+        Assert.That(rule.ResolveMetaverseObjectTypeId(), Is.EqualTo(3));
+    }
+
+    [Test]
     public void FromMapping_ImportMappingRetargetedInTheEditor_ProposesTheChosenTarget()
     {
         // The Configuration Change Preview is built from the editor's staged rule: previewing a retarget must

@@ -639,6 +639,273 @@ public class ConnectedSystemServerDerivedFlowDependentsTests
         AssertMailNicknameDependant(rule.SaveDependentDerivedFlows);
     }
 
+    // ---- The loop, link by link ----
+
+    [Test]
+    public async Task AnalyseDerivedFlowAsync_ProposalClosingACycle_DescribesTheLoopLinkByLinkAsync()
+    {
+        var jim = BuildApplication();
+
+        var analysis = await jim.ConnectedSystems.AnalyseDerivedFlowAsync(AdHostRule(), Proposal(102, _model.MailNickname, "mv[\"Display Name\"]"));
+
+        Assert.That(analysis.Cycle, Is.Not.Null);
+        var cycle = analysis.Cycle!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cycle.Message, Is.EqualTo(CycleMessage), "the error the links stand for, so a surface can leave it out of the rest");
+            Assert.That(cycle.Links, Is.EqualTo(new[]
+            {
+                new DerivedFlowAnalysisCycleLink("Mail Nickname", "Display Name", "AD Import", IsAnalysedFlow: true),
+                new DerivedFlowAnalysisCycleLink("Display Name", "Mail Nickname", "HR Import", IsAnalysedFlow: false)
+            }));
+        }
+    }
+
+    [Test]
+    public async Task AnalyseDerivedFlowAsync_NoCycle_HasNoCycleAsync()
+    {
+        var jim = BuildApplication();
+
+        var analysis = await jim.ConnectedSystems.AnalyseDerivedFlowAsync(AdHostRule(), Proposal(0, _model.Email, "mv[\"Display Name\"]"));
+
+        Assert.That(analysis.Cycle, Is.Null);
+    }
+
+    // ---- A rule not saved yet: its Metaverse Object Type is on the navigation only ----
+
+    private SyncRule UnsavedHostRule() => new()
+    {
+        Name = "New Import",
+        Direction = SyncRuleDirection.Import,
+        ConnectedSystemId = 30,
+        MetaverseObjectType = _model.Person
+    };
+
+    [Test]
+    public async Task AnalyseDerivedFlowAsync_UnsavedRuleWithItsTypeOnTheNavigation_OrdersItAmongTheTypesRulesAsync()
+    {
+        var jim = BuildApplication();
+
+        var analysis = await jim.ConnectedSystems.AnalyseDerivedFlowAsync(UnsavedHostRule(), Proposal(0, _model.Email, "mv[\"Display Name\"]"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(analysis.BlockingError, Is.Null);
+            Assert.That(analysis.Step, Is.EqualTo(3), "Mail Nickname, then Display Name (both on the type's saved rules), then Email");
+        }
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_NewRuleWithItsTypeOnTheNavigationClosingACycle_RefusesTheSave()
+    {
+        var jim = BuildApplication();
+        // A rule created in the portal: the Metaverse Object Type is chosen on the navigation, and the scalar stays 0
+        // until the save copies it across, after the derived flow validation has run.
+        var rule = UnsavedHostRule();
+        rule.ConnectedSystem = new ConnectedSystem { Id = 30, Name = "Directory" };
+        rule.ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 8, Name = "user" };
+        Expression(rule, 0, _model.MailNickname, "mv[\"Display Name\"]");
+
+        var exception = Assert.ThrowsAsync<JIM.Application.Exceptions.DerivedFlowValidationException>(
+            () => jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
+
+        Assert.That(exception!.Message, Does.Contain("dependency cycle"),
+            "Display Name (HR Import) reads Mail Nickname, which the new rule derives from Display Name");
+        _csRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    // ---- What a staged change would orphan (the portal's confirmation) ----
+
+    /// <summary>
+    /// The AD Import rule as the editor holds it: a separate instance from what the rules read returns, so a test can
+    /// stage changes on it without touching "before".
+    /// </summary>
+    private SyncRule StagedAdRule()
+    {
+        var rule = ComposePersistedRules()[1];
+        rule.MetaverseObjectType = _model.Person;
+        return rule;
+    }
+
+    private void VerifyNoRulesRead() =>
+        _csRepo.Verify(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>()), Times.Never);
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingRemovalAsync_LastContributorOfADerivedInput_ReportsTheDependantAsync()
+    {
+        var jim = BuildApplication();
+        var staged = StagedAdRule();
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingRemovalAsync(staged, staged.AttributeFlowRules.Single(m => m.Id == 102));
+
+        AssertMailNicknameDependant(dependants);
+        Assert.That(staged.AttributeFlowRules.Select(m => m.Id), Is.EqualTo(new[] { 102, 103 }), "the staged rule is not changed");
+        VerifyNothingWritten();
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingRemovalAsync_AttributeNoDerivedFlowReads_ReportsNothingAsync()
+    {
+        var jim = BuildApplication();
+        var staged = StagedAdRule();
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingRemovalAsync(staged, staged.AttributeFlowRules.Single(m => m.Id == 103));
+
+        Assert.That(dependants, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingRemovalAsync_InputAlreadyLostToAnEarlierStagedChange_IsNotReportedAgainAsync()
+    {
+        var jim = BuildApplication();
+        // Mail Nickname's flow was disabled earlier in the same edit session (and confirmed then); removing the now
+        // disabled flow takes nothing more away.
+        var staged = StagedAdRule();
+        var mailNickname = staged.AttributeFlowRules.Single(m => m.Id == 102);
+        mailNickname.Enabled = false;
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingRemovalAsync(staged, mailNickname);
+
+        Assert.That(dependants, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingRemovalAsync_FlagOff_ReportsNothingAndReadsNothingAsync()
+    {
+        var jim = BuildApplication(flagEnabled: false);
+        var staged = StagedAdRule();
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingRemovalAsync(staged, staged.AttributeFlowRules.Single(m => m.Id == 102));
+
+        Assert.That(dependants, Is.Empty);
+        VerifyNoRulesRead();
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingRemovalAsync_ExportRule_ReadsNothingAsync()
+    {
+        var jim = BuildApplication();
+        var rule = ExportRule(5, "AD Export", connectedSystemId: 20);
+        var mapping = new SyncRuleMapping { Id = 501, SyncRuleId = 5 };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingRemovalAsync(rule, mapping);
+
+        Assert.That(dependants, Is.Empty);
+        VerifyNoRulesRead();
+    }
+
+    /// <summary>
+    /// The mapping as it stood when the editor opened it: a copy holding what the dependency graph reads.
+    /// </summary>
+    private static SyncRuleMapping AsOpened(SyncRuleMapping mapping)
+    {
+        var copy = new SyncRuleMapping
+        {
+            Id = mapping.Id,
+            SyncRuleId = mapping.SyncRuleId,
+            Enabled = mapping.Enabled,
+            TargetMetaverseAttribute = mapping.TargetMetaverseAttribute,
+            TargetMetaverseAttributeId = mapping.TargetMetaverseAttributeId
+        };
+        copy.Sources.AddRange(mapping.Sources.Select(source => new SyncRuleMappingSource { Order = source.Order, Expression = source.Expression }));
+        return copy;
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingEditAsync_DisablingTheLastContributor_ReportsTheDependantAsync()
+    {
+        var jim = BuildApplication();
+        var staged = StagedAdRule();
+        var edited = staged.AttributeFlowRules.Single(m => m.Id == 102);
+        var asOpened = AsOpened(edited);
+        edited.Enabled = false;
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingEditAsync(staged, asOpened, edited);
+
+        AssertMailNicknameDependant(dependants);
+        VerifyNothingWritten();
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingEditAsync_RetargetingTheLastContributor_ReportsTheDependantAsync()
+    {
+        var jim = BuildApplication();
+        var staged = StagedAdRule();
+        var edited = staged.AttributeFlowRules.Single(m => m.Id == 102);
+        var asOpened = AsOpened(edited);
+        // As the dialog does it: the navigation moves, the scalar stays until the save.
+        edited.TargetMetaverseAttribute = _model.Email;
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingEditAsync(staged, asOpened, edited);
+
+        AssertMailNicknameDependant(dependants);
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfMappingEditAsync_ExpressionChangedButStillContributing_ReportsNothingAsync()
+    {
+        var jim = BuildApplication();
+        var staged = StagedAdRule();
+        var edited = staged.AttributeFlowRules.Single(m => m.Id == 102);
+        var asOpened = AsOpened(edited);
+        edited.Sources[0].Expression = "Lower(cs[\"mailNickname\"])";
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfMappingEditAsync(staged, asOpened, edited);
+
+        Assert.That(dependants, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfRuleDisableAsync_RuleHoldingTheLastContributor_ReportsTheDependantAsync()
+    {
+        var jim = BuildApplication();
+        var staged = StagedAdRule();
+        staged.Enabled = false;
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDisableAsync(staged);
+
+        AssertMailNicknameDependant(dependants);
+        Assert.That(staged.Enabled, Is.False, "the staged rule is not changed");
+        VerifyNothingWritten();
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfRuleDisableAsync_FlagOff_ReportsNothingAndReadsNothingAsync()
+    {
+        var jim = BuildApplication(flagEnabled: false);
+        var staged = StagedAdRule();
+        staged.Enabled = false;
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDisableAsync(staged);
+
+        Assert.That(dependants, Is.Empty);
+        VerifyNoRulesRead();
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfRuleDeletionAsync_RuleHoldingTheLastContributor_ReportsTheDependantAsync()
+    {
+        var jim = BuildApplication();
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDeletionAsync(StagedAdRule());
+
+        AssertMailNicknameDependant(dependants);
+        VerifyNothingWritten();
+        _csRepo.Verify(r => r.DeleteSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetDependentDerivedFlowsOfRuleDeletionAsync_ExportRule_ReadsNothingAsync()
+    {
+        var jim = BuildApplication();
+
+        var dependants = await jim.ConnectedSystems.GetDependentDerivedFlowsOfRuleDeletionAsync(ExportRule(5, "AD Export", connectedSystemId: 20));
+
+        Assert.That(dependants, Is.Empty);
+        VerifyNoRulesRead();
+    }
+
     // ---- GetDerivedFlowStepsAsync ----
 
     [Test]

@@ -54,6 +54,13 @@ public sealed class DerivedFlowAnalysis
     public string? BlockingError => Errors.Count == 0 ? null : string.Join(" ", Errors);
 
     /// <summary>
+    /// The dependency loop the flow would close, link by link, when that is one of the reasons the save would be
+    /// refused; null otherwise. Its <see cref="DerivedFlowAnalysisCycle.Message"/> is one of <see cref="Errors"/>. Null
+    /// too for a knot of several interlocking loops, which only the message describes in full.
+    /// </summary>
+    public DerivedFlowAnalysisCycle? Cycle { get; init; }
+
+    /// <summary>
     /// The non-blocking warnings the save would raise about the flow, each exactly as the save reports it.
     /// </summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];

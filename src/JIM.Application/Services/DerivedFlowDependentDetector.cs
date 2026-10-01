@@ -167,7 +167,7 @@ public static class DerivedFlowDependentDetector
                 if (mapping.ResolveTargetMetaverseAttributeId() is not { } targetId)
                     continue;
 
-                var key = (rule.MetaverseObjectTypeId, targetId);
+                var key = (rule.ResolveMetaverseObjectTypeId(), targetId);
                 if (!contributors.TryGetValue(key, out var list))
                 {
                     list = [];
