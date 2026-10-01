@@ -18,6 +18,12 @@ function Remove-JIMSyncRuleMapping {
         Before prompting for confirmation, the cmdlet quantifies the mapping's contributed values so the
         confirmation states the impact of the choice (-Force skips both the lookup and the prompt).
 
+        When the mapping was the last enabled contributor of a Metaverse attribute that an Attribute Flow
+        deriving another Metaverse attribute reads (directly, or through other derived attributes), the
+        deletion still goes ahead, and the cmdlet writes a warning naming each such flow: a summary line,
+        then one line per flow. Each flow's Missing Input Behaviour then decides what it contributes. This
+        applies only while the Metaverse-Derived Attribute Flows feature is enabled.
+
     .PARAMETER SyncRuleId
         The unique identifier of the Synchronisation Rule.
 
@@ -37,7 +43,8 @@ function Remove-JIMSyncRuleMapping {
         Skips the confirmation prompt.
 
     .OUTPUTS
-        None.
+        None. Attribute Flows deriving Metaverse attributes that the deletion left with a missing input are
+        reported with Write-Warning.
 
     .EXAMPLE
         Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5
@@ -133,9 +140,12 @@ function Remove-JIMSyncRuleMapping {
             }
 
             try {
-                $null = Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
+                $result = Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
 
                 Write-Verbose "Removed Synchronisation Rule Mapping: $mapId"
+
+                # Derived flows the deletion left with a missing input (#1750, FR 3): reported, never blocking.
+                Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
             }
             catch {
                 Write-Error "Failed to remove Synchronisation Rule Mapping: $_"

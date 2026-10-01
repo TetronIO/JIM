@@ -67,29 +67,35 @@ public partial class ConnectedSystemServer
         if (hostRule == null || hostRule.Direction != SyncRuleDirection.Import)
             return;
 
-        await EnsureDerivedFlowProposalAllowedAsync(hostRule, [mapping], persistedRules =>
-        {
-            // The rule as it will stand after this save: its persisted mappings, with the proposal replacing the one
-            // it updates (matched by id) or joining them as a new mapping.
-            var persistedHost = syncRuleId > 0 ? persistedRules.FirstOrDefault(rule => rule.Id == syncRuleId) : null;
-            var proposedHost = new SyncRule
-            {
-                Id = syncRuleId,
-                Name = string.IsNullOrEmpty(hostRule.Name) ? persistedHost?.Name ?? string.Empty : hostRule.Name,
-                Direction = SyncRuleDirection.Import,
-                ConnectedSystemId = hostRule.ConnectedSystemId > 0 ? hostRule.ConnectedSystemId : persistedHost?.ConnectedSystemId ?? 0,
-                MetaverseObjectTypeId = hostRule.MetaverseObjectTypeId,
-                Enabled = hostRule.Enabled
-            };
-            proposedHost.AttributeFlowRules.AddRange((persistedHost?.AttributeFlowRules ?? [])
-                .Where(persisted => mapping.Id == 0 || persisted.Id != mapping.Id));
-            proposedHost.AttributeFlowRules.Add(mapping);
+        await EnsureDerivedFlowProposalAllowedAsync(hostRule, [mapping], persistedRules => SubstituteMapping(persistedRules, hostRule, mapping));
+    }
 
-            return persistedRules
-                .Where(rule => syncRuleId == 0 || rule.Id != syncRuleId)
-                .Append(proposedHost)
-                .ToList();
-        });
+    /// <summary>
+    /// The import rules of a Metaverse Object Type as they will stand once <paramref name="mapping"/> is saved on
+    /// <paramref name="hostRule"/>: the host rule's persisted mappings, with the proposal replacing the one it updates
+    /// (matched by id) or joining them as a new mapping. Nothing passed in is changed; the host rule is a new shell.
+    /// </summary>
+    private static List<SyncRule> SubstituteMapping(List<SyncRule> persistedRules, SyncRule hostRule, SyncRuleMapping mapping)
+    {
+        var syncRuleId = hostRule.Id;
+        var persistedHost = syncRuleId > 0 ? persistedRules.FirstOrDefault(rule => rule.Id == syncRuleId) : null;
+        var proposedHost = new SyncRule
+        {
+            Id = syncRuleId,
+            Name = string.IsNullOrEmpty(hostRule.Name) ? persistedHost?.Name ?? string.Empty : hostRule.Name,
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = hostRule.ConnectedSystemId > 0 ? hostRule.ConnectedSystemId : persistedHost?.ConnectedSystemId ?? 0,
+            MetaverseObjectTypeId = hostRule.MetaverseObjectTypeId,
+            Enabled = hostRule.Enabled
+        };
+        proposedHost.AttributeFlowRules.AddRange((persistedHost?.AttributeFlowRules ?? [])
+            .Where(persisted => mapping.Id == 0 || persisted.Id != mapping.Id));
+        proposedHost.AttributeFlowRules.Add(mapping);
+
+        return persistedRules
+            .Where(rule => syncRuleId == 0 || rule.Id != syncRuleId)
+            .Append(proposedHost)
+            .ToList();
     }
 
     /// <summary>

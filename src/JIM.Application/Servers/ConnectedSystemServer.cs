@@ -7073,6 +7073,10 @@ public partial class ConnectedSystemServer
         // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
         // no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // FR 3 (#1750): a full update can disable, retarget or rewrite the mapping, taking away the last contributor
+        // of an attribute a derived flow reads. Reported on the mapping, never blocking; read before anything below
+        // can flush the change.
+        await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
@@ -7157,6 +7161,13 @@ public partial class ConnectedSystemServer
         // the flag on validate the dependency graph (cycles, unknown names, Reference inputs/targets); a no-op, with
         // no I/O, unless this is an import mapping whose expression reads mv.
         await EnsureDerivedFlowAllowedAsync(mapping);
+        // FR 3 (#1750): disabling the mapping, or rewriting its Expression, can take away the last contributor of an
+        // attribute a derived flow reads. Reported on the mapping, never blocking. Read before the Activity below is
+        // created: its save would flush this tracked mapping's changes, and "before" must be the stored configuration.
+        // No other setting can cost an attribute its contributor, so nothing is read for them.
+        mapping.SaveDependentDerivedFlows.Clear();
+        if (settings.Enabled == false || settings.Expression != null)
+            await StampDependentDerivedFlowsOfMappingChangeAsync(mapping);
 
         Log.Debug("UpdateSyncRuleMappingSettingsAsync() called for mapping {Id}", mapping.Id);
 
@@ -7358,6 +7369,16 @@ public partial class ConnectedSystemServer
             AffectedValueCount = contributedValuesSummary?.TotalValues ?? 0,
             AffectedObjectCount = contributedValuesSummary?.TotalObjects ?? 0
         };
+
+        // FR 3 (#1750): the derived flows this deletion leaves with a missing input, read while the mapping still
+        // exists. An export mapping contributes nothing to the Metaverse, so it cannot starve one.
+        if (targetMetaverseAttributeId.HasValue)
+        {
+            result.DependentDerivedFlows = await DetectDependentDerivedFlowsAsync(
+                () => ResolveImportMappingMetaverseObjectTypeIdAsync(mapping),
+                rules => WithoutMapping(rules, syncRuleId, mapping.Id),
+                $"Deleting Attribute Flow mapping {mapping.Id}");
+        }
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
@@ -8786,6 +8807,10 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping gate and
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
+        // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last
+        // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
+        // below writes.
+        await StampDependentDerivedFlowsOfRuleSaveAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
@@ -9012,6 +9037,10 @@ public partial class ConnectedSystemServer
         // Metaverse-Derived Attribute Flows (#1750): the whole-rule sibling of the single-mapping gate and
         // validation; the proposal replaces the persisted rule wholesale. A no-op unless a mapping reads mv.
         await EnsureDerivedFlowsAllowedAsync(syncRule);
+        // FR 3 (#1750): disabling the rule, or removing, disabling or retargeting its mappings, can take away the last
+        // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
+        // below writes.
+        await StampDependentDerivedFlowsOfRuleSaveAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
@@ -9163,6 +9192,15 @@ public partial class ConnectedSystemServer
         Guid? parentActivityId,
         bool recallContributedValues)
     {
+        // FR 3 (#1750): the derived flows the deletion leaves with a missing input, read while the rule still exists.
+        // A queued deletion disables the rule straight away, which starves a derived flow just as the deletion does.
+        var dependentDerivedFlows = syncRule.Id > 0 && syncRule.Direction == SyncRuleDirection.Import
+            ? await DetectDependentDerivedFlowsAsync(
+                () => Task.FromResult<int?>(syncRule.MetaverseObjectTypeId),
+                rules => WithoutRule(rules, syncRule.Id),
+                $"Deleting Synchronisation Rule {syncRule.Id}")
+            : [];
+
         // Quantify the rule's contributed values (count queries only). Tolerate a null summary from stubbed
         // repositories: it means nothing is known to be contributed, which is the synchronous path.
         var contributedValuesSummary = syncRule.Id > 0
@@ -9171,7 +9209,8 @@ public partial class ConnectedSystemServer
         var result = new SyncRuleDeletionResult
         {
             AffectedValueCount = contributedValuesSummary?.TotalValues ?? 0,
-            AffectedObjectCount = contributedValuesSummary?.TotalObjects ?? 0
+            AffectedObjectCount = contributedValuesSummary?.TotalObjects ?? 0,
+            DependentDerivedFlows = dependentDerivedFlows
         };
 
         if (recallContributedValues && result.AffectedValueCount > 0)

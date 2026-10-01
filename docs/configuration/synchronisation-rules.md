@@ -359,7 +359,7 @@ A direct mapping copies the attribute value as-is, with no transformation:
 
 ### Expression mappings
 
-An expression mapping applies a transformation using the JIM [expression language](../concepts/expressions.md):
+An expression mapping applies a transformation using the JIM [expression language](../concepts/expressions.md). The Expression field in the Add/Edit Attribute Flow dialog highlights the expression as you type, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references coloured differently; it grows with the expression (press Enter for a new line) and scrolls once it is long.
 
 | Source | Target |
 |--------|--------|
@@ -389,6 +389,8 @@ A mapping's **settings**, meaning how it behaves rather than what it reads and w
 Every Attribute Flow mapping can be **disabled** individually, without touching the rest of its Synchronisation Rule. A disabled mapping is skipped by synchronisation in both directions: it contributes nothing inbound (and drops out of the attribute's [Attribute Priority](../concepts/attribute-priority.md) contention), flows nothing on export, at provisioning as much as on updates, and Drift Correction leaves its target attribute alone. Each run whose rules carry disabled mappings notes how many it skipped in the service log.
 
 Disabling one mapping is the smallest safe response to a single source attribute that has been removed or redefined at the Connected System; disabling the whole rule stops every flow it carries. Either also covers changes already queued: a Pending Export change that a now-disabled (or removed, or deleted) export mapping or rule queued, and that has not been exported yet, is withdrawn from the queue as soon as the change is saved, from the portal, the REST API or PowerShell alike, so the Pending Exports page shows only what will actually be sent. Every export run checks the queue the same way before it starts, and its Activity carries a warning saying how many changes it withdrew. A change already sent and awaiting confirmation by import is left to complete. Where JIM disables a mapping, or a whole Synchronisation Rule, on your behalf (the [schema refresh decision](connected-systems.md#refreshing-the-schema)), it records why: the reason is shown on the Attribute Flow tab for a mapping, and beside the Enabled switch for a rule, and saving the item enabled clears it. Re-enabling is always a manual choice.
+
+Disabling or removing the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](#deriving-metaverse-attributes) reads goes ahead, and JIM names the derived flows it leaves with a missing input (in development).
 
 What a mapping **targets**, and whether its source is an attribute or an expression, is not editable. Retargeting revalidates against attribute types and plurality, and for an import mapping it reopens the mapping's place in the [Attribute Priority](../concepts/attribute-priority.md) order, so it is a delete and a create rather than an edit. That is deliberate: the priority position is lost either way, and an interface that hid it would lose it silently.
 
@@ -520,6 +522,45 @@ An export-mode generated value is drift-checked like any export Attribute Flow. 
 Configure a generated mapping in the Attribute Flow editor, with `New-JIMSyncRuleMapping -Generate` and `Set-JIMSyncRuleMapping` in PowerShell (see [Synchronisation Rule cmdlets](../powershell/synchronisation-rules.md)), or with the `generation` object on the REST API's mapping endpoints. The REST API also lists a Metaverse Object's generated values (`GET /metaverse/objects/{id}/generated-values`), reads a sequence's state (`GET /synchronisation/sync-rules/{id}/mappings/{mappingId}/sequence`) and starts a sequence again (`POST /synchronisation/sync-rules/{id}/mappings/{mappingId}/generation/restart`).
 
 In this release, a value a target system rejects as a duplicate is reported as an ordinary export error; changing a generated value by hand is not yet available.
+
+### Deriving Metaverse attributes
+
+!!! note "In development"
+    Deriving Metaverse attributes from other Metaverse attributes is still in development and not yet available. The feature is hidden behind a feature flag until it is ready; while it is off, JIM refuses to save an import expression that newly reads `mv["..."]`.
+
+An import Attribute Flow's expression can read the Metaverse Object it flows to with `mv["..."]`, alongside the Connected System Object with `cs["..."]`. The result is held in the Metaverse like any other contributed value, so you define an Email or a User Principal Name once, and every target sees the same value:
+
+| Source (import expression) | Target |
+|---|---|
+| `Lower(mv["Account Name"]) + "@corp.local"` | `Email` |
+| `mv["Email"]` | `User Principal Name` |
+
+JIM recognises such a flow from its expression; there is nothing to declare. It is a **Derived Attribute Flow**. The REST API marks one with `derived` on the mapping, and `Get-JIMSyncRuleMapping` with a `Derived` property, each giving the Metaverse attributes it reads and its step.
+
+**Evaluation order: steps.** Email reads Account Name and User Principal Name reads Email, so they must be evaluated in that order. JIM works the order out across every import Synchronisation Rule of the Metaverse Object Type, and evaluates in **steps**: step 1 is the object's ordinary Attribute Flow, and each later step evaluates the derived flows whose inputs are all settled by the step before. Above, Account Name is settled at step 1, Email at step 2 and User Principal Name at step 3, so the type has three steps. Every derived contributor of an attribute is evaluated at that attribute's step, in [Attribute Priority](#attribute-priority) order. The order of mappings inside a Synchronisation Rule does not matter, and two runs over the same data produce the same values. Disabled flows count when steps are numbered, so enabling one never renumbers the others.
+
+**A derived value is an ordinary contribution.** It wins or loses under Attribute Priority, "Null is a value" applies to it, [Missing Input Behaviour](#missing-input-behaviour) applies to an absent `mv["..."]` input exactly as to an absent `cs["..."]` one, and it is recalled with its rule. It reaches export evaluation, drift detection and change history in the same synchronisation as the inputs it was built from. A [generated value](#generated-values) can be an input, and a generated value's base expression can read `mv["..."]`: the generated value is resolved at its step before the next step reads it.
+
+**Loops are refused.** If Display Name reads Mail Nickname and Mail Nickname reads Display Name, neither can be evaluated first. JIM refuses the save, from the portal, the REST API (`400`) and PowerShell alike, naming every attribute and Synchronisation Rule in the loop, whichever of the rules you are saving:
+
+```text
+Saving would create a dependency cycle: Mail Nickname (Synchronisation Rule 'AD Import') reads Display Name, which (Synchronisation Rule 'HR Import') reads Mail Nickname.
+```
+
+An expression that reads its own target (`mv["Email"]` in the flow to Email) is a loop of one. Disabled flows count, so enabling one later can never complete a loop; disabling one of a loop's flows is how you break a loop that already exists. JIM also refuses an `mv["..."]` name that is not an attribute of the Metaverse Object Type and, in this release, a Reference attribute as an input or as the target, because references are resolved later in synchronisation than derived flows are evaluated.
+
+**Non-repeatable functions warn.** A derived expression that calls `Now()`, `Today()`, `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` or `Guid.NewGuid()` produces a different value on every synchronisation, which changes the Metaverse value and can export it every time. JIM saves it and warns: a `warnings` entry on the REST response, and a warning from `New-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping` and `Set-JIMSyncRule`.
+
+**Which synchronisation evaluates a derived flow.** Like every Attribute Flow on a rule, a derived flow is evaluated only in the synchronisation of its own Connected System (the hosting system), for objects joined to that system and in scope for the rule. When it reads an attribute another Connected System contributes, that system's synchronisation changes the input but not the derived value. So:
+
+- **Synchronise sources before the systems that derive from them**<br /> If Email is derived on the HR rule from a Region the directory contributes, synchronise the directory before HR, and Email is right in the same cycle. [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) and [Schedules](schedules.md#common-workflows) say the same.
+- **The wrong order costs one cycle, never more**<br /> When a synchronisation of any system, or a change made outside synchronisation (a Synchronisation Rule deletion's recall, Synchronised Deprovisioning, the stranded value sweep, a direct change to a Metaverse Object), changes an attribute that a derived flow on another system reads, JIM marks that object's Connected System Object in the hosting system. The hosting system's next synchronisation, delta included, processes the object even though nothing about it changed there, and re-derives the value. Nothing is lost either way: until then the object keeps its previous derived value.
+
+**Removing or disabling an input's last contributor.** Deleting or disabling an Attribute Flow, or a whole Synchronisation Rule, can leave a derived flow with nothing to read: Email reads Account Name, and you delete the only flow that contributes Account Name. JIM lets the change go ahead and names each derived flow it leaves with a missing input, directly or through other derived attributes (User Principal Name reads Email, which reads Account Name). That flow's Missing Input Behaviour then decides what it contributes, so set one that suits it. Only an attribute losing its **last** enabled contributor counts; while another contributor remains, nothing is reported.
+
+- **REST API**<br /> `dependentDerivedFlows` on the responses to deleting a mapping, updating a mapping, updating a Synchronisation Rule and deleting a Synchronisation Rule, in a schema refresh preview's `dependents`, and on the import-schema response when it disables or removes dependents. Each entry names the derived flow's mapping, target attribute, Synchronisation Rule and Connected System, and each input it lost (`missingInputs`), with the derived attributes in between (`via`) when it reaches that input indirectly.
+- **PowerShell**<br /> `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write a warning: a summary line, then one line per derived flow. They never prompt and never stop.
+- **Previews**<br /> An [Attribute Flow change preview](#previewing-an-attribute-flow-change) lists the same derived flows as warnings before you save, and names derived flows on other Connected Systems' rules that read what the change alters. [Sync Preview](sync-preview.md) shows derived values as ordinary Attribute Flow changes.
 
 ### Previewing an Attribute Flow change
 
@@ -653,7 +694,7 @@ A rule contributing nothing deletes immediately after a plain confirmation. A ru
 
 Removing a single **Attribute Flow mapping** from the editor offers the same choice when the mapping contributed values, with one difference in timing: a recalled mapping's values are withdrawn at the next Full Synchronisation of the contributing Connected System rather than by a background operation (the rule survives, so the ordinary recall machinery covers it). The choice is made when you remove the mapping and takes effect when you save the rule.
 
-The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter, with a rule deletion that queues a recall answering `202 Accepted` with the recall Activity's id. See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
+The same options exist on the other surfaces: `Remove-JIMSyncRule` and `Remove-JIMSyncRuleMapping` take `-KeepContributedValues` and state the impact in their confirmations, and the REST delete endpoints take a `keepContributedValues` query parameter. A deletion that completes straight away answers `200 OK` with what it affected; a rule deletion that queues a recall answers `202 Accepted` with the recall Activity's id. Both name any [derived Attribute Flow](#deriving-metaverse-attributes) the deletion leaves with a missing input (in development). See the [PowerShell reference](../powershell/synchronisation-rules.md) and the [interactive API reference](../../api/reference/).
 
 For the full recall semantics (re-election, No Contributor outcomes, and how disabling differs from deleting), see [Attribute Priority](../concepts/attribute-priority.md).
 

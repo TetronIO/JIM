@@ -10,6 +10,12 @@ function Set-JIMSyncRule {
         Updates the properties of an existing Synchronisation Rule.
         Only the parameters provided will be updated.
 
+        Disabling a rule that holds the last enabled contributor of a Metaverse attribute that an Attribute Flow
+        deriving another Metaverse attribute reads still goes ahead; the cmdlet writes a warning naming each such
+        flow (a summary line, then one line per flow). Non-blocking warnings the save raised about the rule's
+        Attribute Flows are written with Write-Warning too. Both apply only while the Metaverse-Derived Attribute
+        Flows feature is enabled.
+
     .PARAMETER Id
         The unique identifier of the Synchronisation Rule to update.
 
@@ -66,7 +72,10 @@ function Set-JIMSyncRule {
         If specified, returns the updated Synchronisation Rule object.
 
     .OUTPUTS
-        If -PassThru is specified, returns the updated Synchronisation Rule object.
+        If -PassThru is specified, returns the updated Synchronisation Rule object, including Warnings (non-blocking
+        warnings the save raised about the rule's Attribute Flows) and DependentDerivedFlows (Attribute Flows
+        deriving Metaverse attributes that the update left with a missing input). Both are also written with
+        Write-Warning whether or not -PassThru is supplied.
 
     .EXAMPLE
         Set-JIMSyncRule -Id 1 -Name "Updated Rule Name"
@@ -219,6 +228,15 @@ function Set-JIMSyncRule {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$ruleId" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Synchronisation Rule: $ruleId"
+
+                # Non-blocking warnings the save raised (#1750); the save went ahead, and each is written as the
+                # server phrased it.
+                foreach ($saveWarning in @($result.Warnings | Where-Object { $_ })) {
+                    Write-Warning $saveWarning
+                }
+
+                # Derived flows the update left with a missing input (#1750, FR 3): reported, never blocking.
+                Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
 
                 if ($PassThru) {
                     $result

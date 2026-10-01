@@ -18,6 +18,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -53,6 +54,12 @@ public class SynchronisationControllerMappingTests
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // Feature-flagged behaviour is tested as shipped (test/CLAUDE.md); Metaverse-Derived Attribute Flows read
+        // the flag on these paths (#1750).
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
+        // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
@@ -301,7 +308,7 @@ public class SynchronisationControllerMappingTests
     #region DeleteSyncRuleMappingAsync tests
 
     [Test]
-    public async Task DeleteSyncRuleMappingAsync_WithValidIds_ReturnsNoContent()
+    public async Task DeleteSyncRuleMappingAsync_WithValidIds_ReturnsOkWithTheDeletionResult()
     {
         var syncRuleId = 1;
         var mappingId = 10;
@@ -319,7 +326,7 @@ public class SynchronisationControllerMappingTests
 
         var result = await _controller.DeleteSyncRuleMappingAsync(syncRuleId, mappingId);
 
-        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
     }
 
     [Test]
@@ -685,7 +692,7 @@ public class SynchronisationControllerMappingTests
 
         var result = await _controller.DeleteSyncRuleMappingAsync(syncRuleId, mappingId, keepContributedValues: true);
 
-        Assert.That(result, Is.InstanceOf<NoContentResult>(), "a mapping delete queues nothing, so keep still answers 204");
+        Assert.That(result, Is.InstanceOf<OkObjectResult>(), "a mapping delete queues nothing, so keep answers 200 with what it affected");
         _mockMetaverseRepo.Verify(r => r.SeverContributedValueProvenanceAsync(syncRuleId, 5), Times.Once,
             "keep must sever the values' provenance before the row deletion");
         _mockConnectedSystemRepo.Verify(r => r.DeleteSyncRuleMappingAsync(mapping), Times.Once);
@@ -722,7 +729,7 @@ public class SynchronisationControllerMappingTests
 
         var result = await _controller.DeleteSyncRuleMappingAsync(syncRuleId, mappingId);
 
-        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockMetaverseRepo.Verify(r => r.SeverContributedValueProvenanceAsync(It.IsAny<int>(), It.IsAny<int?>()), Times.Never,
             "the default (recall) leaves provenance intact for the deferred orphan recall");
         _mockConnectedSystemRepo.Verify(r => r.DeleteSyncRuleMappingAsync(mapping), Times.Once);

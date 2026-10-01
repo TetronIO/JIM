@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
+- ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
+
+### Changed
+
+- 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
 
 ## [0.16.0] - 2026-09-29
 

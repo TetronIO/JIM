@@ -1,0 +1,249 @@
+@inject IJSRuntime JS
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The field every expression is typed into: a real textarea with its text made transparent, laid exactly over an
+   aria-hidden pre that draws the same text through Helpers.HighlightExpression. The textarea keeps everything a
+   browser gives a text box (caret, selection, undo, IME, clipboard, accessibility); the pre only paints colour.
+   The two must agree to the pixel, so they share one set of metrics (site.css, "Expression editor") and sit in the
+   same grid cell; the pre sizes the cell, so the field grows with its content up to MaxLines and then scrolls both
+   layers together, with no scroll syncing to drift. See JIM.Web/CLAUDE.md "Shared UI components". *@
+
+@* The textarea's value MUST stay an @bind (get/set), not value="..." plus @oninput. Only @bind tells the renderer that
+   the input event updates the value attribute, so it records what the browser already holds and does not write an
+   older value back over text typed while the previous keystroke was in flight. With value plus @oninput, typing at
+   speed lost most of what was typed (43 of 125 characters survived in the runtime check). *@
+
+<MudField Label="@Label" Variant="Variant.Outlined" HelperText="@HelperText" Error="@ShowError" ErrorText="@EffectiveErrorText"
+          Disabled="@Disabled" Class="@FieldClass" InnerPadding="false" Underline="false">
+    @* The frame's padding is the band between the border and the scrolling text; a press there focuses the textarea,
+       as it would in an ordinary text field. Presses on the textarea itself stop at the textarea. *@
+    <div class="jim-expression-editor-frame" @onmousedown="FocusFromFrameAsync" @onmousedown:preventDefault="true">
+        <div class="jim-expression-editor-scroller" style="@ScrollerStyle">
+            <div class="jim-expression-editor-stack">
+                <pre class="jim-expression-editor-layer jim-expression-editor-highlight" aria-hidden="true">@((MarkupString)OverlayMarkup)</pre>
+                <textarea @ref="_textarea" id="@Id" class="jim-expression-editor-layer jim-expression-editor-input" rows="1"
+                          @bind:get="_value" @bind:set="CommitAsync" @bind:event="oninput" @onblur="OnBlur"
+                          @onmousedown:stopPropagation="true"
+                          placeholder="@Placeholder" disabled="@Disabled"
+                          spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
+                          aria-label="@Label" aria-invalid="@(ShowError ? "true" : "false")"
+                          aria-required="@(Required ? "true" : null)"></textarea>
+            </div>
+        </div>
+    </div>
+</MudField>
+
+@code {
+    private ElementReference _textarea;
+    private string? _value;
+    private string? _lastParameterValue;
+    private bool _touched;
+
+    /// <summary>
+    /// The expression. Pair with <see cref="ValueChanged"/> (or <c>@bind-Value</c>).
+    /// </summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    /// <summary>
+    /// Raised on every keystroke, not on blur: the hosts gate their action buttons, the Expression tester and other
+    /// live UI on the value (JIM.Web/CLAUDE.md "Form action gating and input immediacy").
+    /// </summary>
+    [Parameter]
+    public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>
+    /// The label in the outlined field's notch, and the textarea's accessible name.
+    /// </summary>
+    [Parameter]
+    public string? Label { get; set; }
+
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    [Parameter]
+    public string? HelperText { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Shows "Required" beneath the field once it has been left empty, as MudBlazor's own required inputs do.
+    /// </summary>
+    [Parameter]
+    public bool Required { get; set; }
+
+    /// <summary>
+    /// Puts the field into its error state, showing <see cref="ErrorText"/> in place of the helper text.
+    /// </summary>
+    [Parameter]
+    public bool Error { get; set; }
+
+    [Parameter]
+    public string? ErrorText { get; set; }
+
+    /// <summary>
+    /// Classes for the field as a whole, for its surrounding geometry (<c>mt-5</c> and the like).
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// The textarea's id.
+    /// </summary>
+    [Parameter]
+    public string? Id { get; set; }
+
+    /// <summary>
+    /// The fewest lines the field shows, however short its content.
+    /// </summary>
+    [Parameter]
+    public int Lines { get; set; } = 1;
+
+    /// <summary>
+    /// The most lines the field grows to before it scrolls.
+    /// </summary>
+    [Parameter]
+    public int MaxLines { get; set; } = 8;
+
+    private bool ShowError => Error || RequiredButEmpty;
+
+    private bool RequiredButEmpty => Required && _touched && string.IsNullOrWhiteSpace(_value);
+
+    private string? EffectiveErrorText => Error ? ErrorText : RequiredButEmpty ? "Required" : null;
+
+    // mud-input-required is the class MudBlazor's own required inputs carry, which is what draws the asterisk after
+    // the label, so a required expression is marked exactly as the fields around it are.
+    // jim-expression-editor-shrink lifts the label into the border's notch whenever there is text or a placeholder in
+    // the field, the rule MudBlazor's own inputs follow; MudField leaves its label down until focused, which would sit
+    // it on top of the placeholder.
+    private string FieldClass => string.Join(' ',
+        new[]
+        {
+            "jim-expression-editor",
+            Required ? "mud-input-required" : null,
+            Disabled ? "jim-expression-editor-disabled" : null,
+            !string.IsNullOrEmpty(_value) || !string.IsNullOrEmpty(Placeholder) ? "jim-expression-editor-shrink" : null,
+            Class
+        }.Where(part => !string.IsNullOrWhiteSpace(part)));
+
+    private string ScrollerStyle =>
+        $"--jim-expression-editor-lines: {Math.Max(1, Lines)}; --jim-expression-editor-max-lines: {Math.Max(Math.Max(1, Lines), MaxLines)};";
+
+    /// <summary>
+    /// The highlighted text. A pre does not give a trailing line break a line of its own, while a textarea does, so
+    /// a value ending in one is padded with a space; without it the overlay would be a line shorter than the text.
+    /// While the field is empty the pre holds the placeholder, invisibly, purely so a placeholder longer than one
+    /// line still gets the height to show in full (the pre is what sizes the field).
+    /// </summary>
+    private string OverlayMarkup
+    {
+        get
+        {
+            var value = _value ?? string.Empty;
+            if (value.Length == 0)
+            {
+                return string.IsNullOrEmpty(Placeholder)
+                    ? string.Empty
+                    : $"<span class=\"jim-expression-editor-placeholder-sizer\">{System.Net.WebUtility.HtmlEncode(Placeholder)}</span>";
+            }
+
+            var markup = Helpers.HighlightExpression(value);
+            return value.EndsWith('\n') ? markup + " " : markup;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Only adopt the parameter when the host actually changed it, so a host that does not round-trip the value
+        // (or does so a render late) cannot overwrite what is being typed.
+        if (!string.Equals(Value, _lastParameterValue, StringComparison.Ordinal))
+        {
+            _value = Value;
+            _lastParameterValue = Value;
+        }
+    }
+
+    /// <summary>
+    /// Inserts <paramref name="text"/> at the caret, replacing any selection, moves the caret to just after it,
+    /// focuses the editor and raises <see cref="ValueChanged"/>. Where the caret cannot be read (the circuit is
+    /// going away, or the component has not rendered in a browser), the text is appended to the end instead.
+    /// </summary>
+    public async Task InsertAtCursorAsync(string text)
+    {
+        var current = _value ?? string.Empty;
+        var (start, end) = await ReadSelectionAsync(current.Length);
+        var updated = string.Concat(current.AsSpan(0, start), text, current.AsSpan(end));
+        var caret = start + text.Length;
+
+        await CommitAsync(updated);
+        StateHasChanged();
+
+        try
+        {
+            // The value travels with the selection so the browser can apply it before placing the caret, rather
+            // than relying on the render above having reached the textarea first.
+            await JS.InvokeVoidAsync("jimInterop.setTextSelection", _textarea, caret, caret, updated);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; there is no caret to place.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available yet (prerendering); there is no caret to place.
+        }
+    }
+
+    private async Task<(int Start, int End)> ReadSelectionAsync(int length)
+    {
+        try
+        {
+            var selection = await JS.InvokeAsync<int[]>("jimInterop.getTextSelection", _textarea);
+            if (selection is { Length: >= 2 })
+            {
+                var start = Math.Clamp(selection[0], 0, length);
+                return (start, Math.Clamp(selection[1], start, length));
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; fall back to the end of the text.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available yet (prerendering); fall back to the end of the text.
+        }
+
+        return (length, length);
+    }
+
+    private void OnBlur() => _touched = true;
+
+    private async Task FocusFromFrameAsync()
+    {
+        if (Disabled)
+            return;
+
+        try
+        {
+            await _textarea.FocusAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected; nothing to focus.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop is not available yet (prerendering); nothing to focus.
+        }
+    }
+
+    private async Task CommitAsync(string? value)
+    {
+        _value = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+}

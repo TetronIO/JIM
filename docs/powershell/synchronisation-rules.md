@@ -235,7 +235,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 
 ### Output
 
-With `-PassThru`, returns the updated Synchronisation Rule object. Without it, returns nothing.
+With `-PassThru`, returns the updated Synchronisation Rule object (the `SyncRuleHeader` properties plus `Warnings` and `DependentDerivedFlows`). Without it, returns nothing. Either way, each entry in `Warnings` (non-blocking warnings the save raised about the rule's Attribute Flows) is written with `Write-Warning`, followed by the [derived flow warnings](#derived-attribute-flow-warnings) for `DependentDerivedFlows`.
 
 **ShouldProcess impact level:** Medium.
 
@@ -316,8 +316,9 @@ When the deletion queues a contributed-values recall, returns a tracking object:
 | `RecallActivityId` | `guid` | The recall Activity's id; monitor it with `Get-JIMActivity` |
 | `AffectedValueCount` | `int` | Metaverse attribute values the rule contributed at decision time |
 | `AffectedObjectCount` | `int` | Distinct Metaverse Objects holding at least one of those values |
+| `DependentDerivedFlows` | `object[]` | Attribute Flows deriving Metaverse attributes that the deletion leaves with a missing input; see [derived flow warnings](#derived-attribute-flow-warnings) |
 
-When the deletion completes immediately (keep chosen, or nothing contributed), returns nothing. With `-PassThru`, the Synchronisation Rule object as it stood before deletion is also returned.
+When the deletion completes immediately (keep chosen, or nothing contributed), returns nothing. Either way, `DependentDerivedFlows` is written as [derived flow warnings](#derived-attribute-flow-warnings). With `-PassThru`, the Synchronisation Rule object as it stood before deletion is also returned.
 
 **ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified.
 
@@ -362,6 +363,20 @@ Get-JIMSyncRule -ConnectedSystemName "Legacy HR" |
 
 ---
 
+### Derived Attribute Flow warnings
+
+Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) reads (in development). The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
+
+```text
+WARNING: This change left 2 Attribute Flow(s) deriving Metaverse attributes with a missing input. The change went ahead; each flow's Missing Input Behaviour now decides what it contributes.
+WARNING: Email (Synchronisation Rule 'Directory Import', Connected System 'Directory', mapping 2) reads Account Name, which no longer has an enabled contributor.
+WARNING: Display Name (Synchronisation Rule 'Directory Import', Connected System 'Directory', mapping 3) reads Account Name through Email, which no longer has an enabled contributor.
+```
+
+Each `DependentDerivedFlows` entry has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`; each missing input has `MetaverseAttributeName` (the attribute that lost its last contributor), `Indirect`, and `Via` (the derived attributes in between, empty when read directly). Collect the warnings with `-WarningVariable` to act on them in a script. The list is empty, and nothing is written, whenever the feature is off.
+
+---
+
 ### Attribute Mappings
 
 Configure how attributes flow between Connected System Objects and Metaverse Objects within a Synchronisation Rule. Mappings can use direct attribute-to-Attribute Flows or expression-based transformations.
@@ -392,6 +407,16 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> -MappingId <int>
 ### Output
 
 Returns one or more mapping objects representing Attribute Flow Rules. Each mapping includes the source attribute(s) or expression, the target attribute, and the flow direction.
+
+`Derived` is present on a mapping whose import Expression reads `mv["..."]` (a [derived Attribute Flow](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), in development), and is `$null` on every other mapping and whenever the feature is off:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Derived.Step` | `int` | The step the flow is evaluated at, from 2 (step 1 is the ordinary Attribute Flow); `$null` when the flow is on, or depends on, a loop |
+| `Derived.StepCount` | `int` | How many steps the Metaverse Object Type's evaluation has |
+| `Derived.MetaverseInputs` | `string[]` | The Metaverse attributes the Expression reads, as written |
+
+`Warnings` and `DependentDerivedFlows` are always empty on a read; they describe a save.
 
 ### Examples
 
@@ -610,7 +635,7 @@ Get-JIMSyncRuleMapping -SyncRuleId <int> | Set-JIMSyncRuleMapping -SyncRuleId <i
 
 ### Output
 
-Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is written with `Write-Warning` whether or not `-PassThru` is supplied.
+Nothing by default; the updated mapping when `-PassThru` is supplied. A generated mapping's `Generation` property carries its uniqueness token settings; `Generation.SequenceSkippedAhead` is present only when `-SequenceStart` raised the target attribute's counter on this save, and a matching warning is written. `Warnings` lists any non-blocking warnings the save raised (empty when there were none); each is written with `Write-Warning` whether or not `-PassThru` is supplied. `Derived` is as for `Get-JIMSyncRuleMapping`. `DependentDerivedFlows` names the Attribute Flows deriving Metaverse attributes that the update left with a missing input (for example by disabling the mapping), written as [derived flow warnings](#derived-attribute-flow-warnings).
 
 **ShouldProcess impact level:** Medium.
 
@@ -777,7 +802,7 @@ Remove-JIMSyncRuleMapping -SyncRuleId <int> -InputObject <PSCustomObject> [-Keep
 
 ### Output
 
-None.
+None. Attribute Flows deriving Metaverse attributes that the deletion leaves with a missing input are written as [derived flow warnings](#derived-attribute-flow-warnings).
 
 **ShouldProcess impact level:** High. Prompts for confirmation unless `-Force` is specified. When the mapping contributed values, the confirmation states how many values, on how many Metaverse Objects, will be recalled or kept.
 

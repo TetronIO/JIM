@@ -208,6 +208,10 @@ function Remove-JIMSyncRule {
             try {
                 $result = Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
 
+                # Derived flows the deletion left with a missing input (#1750, FR 3), reported by both the
+                # immediate and the queued deletion: reported, never blocking.
+                Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
+
                 if ($result -and $result.RecallActivityId) {
                     # 202 Accepted: a contributed-values recall was queued. The rule is disabled now and
                     # deleted as the task's final step; surface the tracking object so scripts can monitor

@@ -31,7 +31,9 @@ function Import-JIMConnectedSystemSchema {
         expression input) are disabled with a recorded reason, so nothing runs against entries the Connected
         System no longer reports. Preview first with -Preview, whose result's Dependents property names what
         this option would disable. Re-enabling is a manual choice per rule or mapping. Cannot be combined with
-        -RemoveDependents.
+        -RemoveDependents. When a disabled mapping was the last enabled contributor of a Metaverse attribute that an
+        Attribute Flow deriving another Metaverse attribute reads, the refresh still goes ahead and a warning names
+        each such flow.
 
     .PARAMETER RemoveDependents
         If specified, the refresh is applied with its dependents removed. This deletes configuration and
@@ -40,15 +42,20 @@ function Import-JIMConnectedSystemSchema {
         deprovision through the standard pipeline, grace periods and Metaverse Deletion Rules included) and
         deletes every stored value of a removed attribute. Always preview first with -Preview, whose result's
         Dependents and RemovalImpact properties show exactly what this option would take. Follow the queued
-        removal with Get-JIMWorkerTask. Cannot be combined with -DisableDependents.
+        removal with Get-JIMWorkerTask. Cannot be combined with -DisableDependents. Attribute Flows deriving
+        Metaverse attributes that the removal leaves with a missing input are named in a warning, as for
+        -DisableDependents.
 
     .PARAMETER PassThru
         If specified, returns the updated Connected System object with imported schema. Not needed with -Preview,
         which always returns the preview result.
 
     .OUTPUTS
-        With -Preview, returns the schema refresh preview result. Otherwise, if -PassThru is specified, returns
-        the updated Connected System object.
+        With -Preview, returns the schema refresh preview result; its Dependents.DependentDerivedFlows names the
+        Attribute Flows deriving Metaverse attributes that disabling or removing the dependents would leave with a
+        missing input, and each is also written with Write-Warning. Otherwise, if -PassThru is specified, returns
+        the updated Connected System object, whose DependentDerivedFlows names those the refresh left with a
+        missing input (empty unless -DisableDependents or -RemoveDependents was supplied).
 
     .EXAMPLE
         Import-JIMConnectedSystemSchema -Id 1
@@ -130,7 +137,13 @@ function Import-JIMConnectedSystemSchema {
             # confirm, and the result is the whole point, so it is returned without -PassThru.
             Write-Verbose "Previewing schema refresh for Connected System: $systemId"
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId/import-schema/preview" -Method 'POST'
+                $previewResult = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId/import-schema/preview" -Method 'POST'
+
+                # Derived flows that disabling or removing the dependents would leave with a missing input
+                # (#1750, FR 3), worded as a prediction: the preview changes nothing.
+                Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $previewResult.Dependents.DependentDerivedFlows -Prospective
+
+                $previewResult
             }
             catch {
                 Write-Error "Failed to preview schema refresh: $_"
@@ -150,6 +163,10 @@ function Import-JIMConnectedSystemSchema {
 
                 $objectTypeCount = if ($result.objectTypes) { $result.objectTypes.Count } else { 0 }
                 Write-Verbose "Schema imported for Connected System: $systemId ($objectTypeCount object types)"
+
+                # Derived flows that disabling or removing the dependents left with a missing input (#1750, FR 3):
+                # reported, never blocking. Empty unless -DisableDependents or -RemoveDependents was supplied.
+                Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
 
                 if ($PassThru) {
                     $result

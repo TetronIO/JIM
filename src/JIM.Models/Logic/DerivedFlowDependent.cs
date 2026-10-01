@@ -12,7 +12,16 @@ namespace JIM.Models.Logic;
 /// <param name="Flow">The derived flow, as it stands after the change.</param>
 /// <param name="MissingInputs">The inputs it reads that would have no contributor able to supply a value, in the order
 /// the flow's expression first mentions them.</param>
-public sealed record DerivedFlowDependent(DerivedFlow Flow, IReadOnlyList<DerivedFlowMissingInput> MissingInputs);
+public sealed record DerivedFlowDependent(DerivedFlow Flow, IReadOnlyList<DerivedFlowMissingInput> MissingInputs)
+{
+    /// <summary>
+    /// The attributes that lost their last enabled contributor and leave this flow without an input, nearest first,
+    /// each once, at the shortest chain through which the flow reaches it. A direct dependant's only entry is the
+    /// input it reads; a transitive dependant's names the attribute at the root of the chain and the derived
+    /// attributes in between.
+    /// </summary>
+    public IReadOnlyList<DerivedFlowLostInput> LostInputs { get; init; } = [];
+}
 
 /// <summary>
 /// One input of a <see cref="DerivedFlowDependent"/> that would be left without a value.

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Logic.DTOs;
+
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
@@ -30,6 +32,15 @@ public class SchemaRefreshDependents
     /// disabled state, so the administrator resolves these themselves.
     /// </summary>
     public List<SchemaRefreshDependentMatchingRule> ReferencedObjectMatchingRules { get; set; } = new();
+
+    /// <summary>
+    /// Metaverse-Derived Attribute Flows (#1750, FR 3), on any Connected System, that disabling or removing the
+    /// rules and mappings above would leave with a missing input, because an attribute they read lost its last
+    /// enabled contributor. Display only, like <see cref="ReferencedObjectMatchingRules"/>: the derived flows keep
+    /// running and their Missing Input Behaviour decides what they contribute. Always empty when the
+    /// Metaverse-Derived Attribute Flows feature is off.
+    /// </summary>
+    public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 
     /// <summary>
     /// Whether the refresh invalidates anything at all.

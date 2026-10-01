@@ -105,8 +105,52 @@ public static class DerivedFlowDependentDetector
             .Select(flow => new DerivedFlowDependent(flow, flow.Inputs
                 .Where(input => starved.ContainsKey((flow.MetaverseObjectTypeId, input.Id)))
                 .Select(input => new DerivedFlowMissingInput(input.Id, input.Name, starved[(flow.MetaverseObjectTypeId, input.Id)]))
-                .ToList()))
+                .ToList())
+            {
+                LostInputs = FindLostInputs(flow, starved, contributorsAfter, graph)
+            })
             .ToList();
+    }
+
+    /// <summary>
+    /// The attributes at the root of a dependant's missing inputs: those left with no enabled contributor at all,
+    /// found breadth-first from the flow's own inputs through the derived contributors of every attribute starved
+    /// only transitively, so each root is named once at its shortest chain, nearest first.
+    /// </summary>
+    private static List<DerivedFlowLostInput> FindLostInputs(
+        DerivedFlow flow,
+        Dictionary<(int TypeId, int AttributeId), bool> starved,
+        Dictionary<(int TypeId, int AttributeId), List<SyncRuleMapping>> contributorsAfter,
+        DerivedFlowGraph graph)
+    {
+        var typeId = flow.MetaverseObjectTypeId;
+        var lost = new List<DerivedFlowLostInput>();
+        var visited = new HashSet<int>();
+        var frontier = new Queue<(MetaverseAttribute Attribute, List<string> Via)>();
+        foreach (var input in flow.Inputs.Where(input => starved.ContainsKey((typeId, input.Id)) && visited.Add(input.Id)))
+            frontier.Enqueue((input, []));
+
+        while (frontier.TryDequeue(out var current))
+        {
+            if (!starved[(typeId, current.Attribute.Id)])
+            {
+                lost.Add(new DerivedFlowLostInput(current.Attribute.Id, current.Attribute.Name, current.Via));
+                continue;
+            }
+
+            // Starved only transitively: every contributor it has left is a derived flow itself missing an input, so
+            // follow their starved inputs one step further down the chain.
+            var via = current.Via.Append(current.Attribute.Name).ToList();
+            var next = (contributorsAfter.GetValueOrDefault((typeId, current.Attribute.Id)) ?? [])
+                .Select(graph.GetDerivedFlow)
+                .Where(contributor => contributor != null)
+                .SelectMany(contributor => contributor!.Inputs)
+                .Where(input => starved.ContainsKey((typeId, input.Id)) && visited.Add(input.Id));
+            foreach (var input in next)
+                frontier.Enqueue((input, via));
+        }
+
+        return lost;
     }
 
     /// <summary>

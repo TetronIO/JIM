@@ -1,9 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 namespace JIM.Models.Logic;
@@ -137,6 +139,16 @@ public class SyncRule : IAuditable, IValidated
     /// or visa-versa, depending on the Synchronisation Rule direction.
     /// </summary>
     public List<SyncRuleMapping> AttributeFlowRules { get; set; } = new();
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows (#1750, FR 3) the save that returned this instance left with a missing
+    /// input: disabling the rule, or removing, disabling or retargeting its mappings, took away the last enabled
+    /// contributor of an attribute they read. Transient: never persisted, and empty on every ordinary read. Filled on
+    /// the instance the caller holds, as <see cref="SyncRuleMapping.SaveWarnings"/> is, so a REST response, a
+    /// PowerShell cmdlet or the portal can report them without a second round trip.
+    /// </summary>
+    [NotMapped]
+    public List<DependentDerivedFlow> SaveDependentDerivedFlows { get; } = [];
 
     /// <summary>
     /// Contains all the logic that determines how Connected System Objects should match a counterpart in the Metaverse.
