@@ -13,11 +13,10 @@
 
 @if (Mapping.Generation is { } generation)
 {
-    <MudTextField T="string" Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync"
+    <ExpressionEditor Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync" Id="generated-value-base-expression"
         Label="Base expression" Disabled="IsNumberTarget"
         Placeholder="@(IsNumberTarget ? null : "e.g. Lower(cs[\"firstName\"]) + \".\" + Lower(cs[\"lastName\"])")"
-        Class="mt-5" Variant="Variant.Outlined" Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Immediate="true"
-        HelperText="@BaseExpressionHelperText" />
+        Class="mt-5" HelperText="@BaseExpressionHelperText" />
 
     @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
     {

@@ -57,6 +57,23 @@ window.jimInterop = {
     replaceQueryString: function (query) {
         var url = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
         window.history.replaceState(window.history.state, '', url);
+    },
+    // Reads a textarea's or input's selection as [start, end] (UTF-16 offsets, the same units as a .NET string).
+    // A collapsed selection is the caret. Used by <ExpressionEditor /> to insert text where the administrator is
+    // typing rather than at the end.
+    getTextSelection: function (element) {
+        if (!element) return null;
+        return [element.selectionStart, element.selectionEnd];
+    },
+    // Places a textarea's or input's selection and focuses it. When value is given and differs from the element's
+    // current value it is applied first, so the selection lands in the text it was computed against even if the
+    // render carrying that value has not reached the element yet; an identical value is left alone, because
+    // assigning one moves the caret to the end in some browsers.
+    setTextSelection: function (element, start, end, value) {
+        if (!element) return;
+        if (typeof value === 'string' && element.value !== value) element.value = value;
+        element.focus();
+        element.setSelectionRange(start, end);
     }
 };
 

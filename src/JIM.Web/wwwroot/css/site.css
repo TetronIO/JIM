@@ -13,6 +13,14 @@
        because it also drives buttons, inputs and other interactive controls. */
     --jim-container-radius: 10px;
 
+    /* Attribute accessor colours for expression highlighting (Helpers.HighlightExpression): mv["Name"] in teal,
+       cs["Name"] in magenta, so which side of the Metaverse an expression reads is visible at a glance. These are
+       the light-theme defaults; every theme declares its own beside its other --jim-expr-* tokens, and
+       ThemeContrastTests fails the build if one is missing, below WCAG AA on the field or chip backgrounds, or
+       too close to the string or function colour. */
+    --jim-expr-accessor-mv: #00616f;
+    --jim-expr-accessor-cs: #9b0078;
+
     /* The label colour of a Text or Outlined chip in each semantic colour, and of anything else that paints a
        palette colour AS TEXT on a tint of itself (the causality panel's outcome pills, its Table view's change
        chips, its lineage operation chips). The palette colour is a fill chosen to sit behind white text and
@@ -2253,6 +2261,15 @@ html[lang] .jim-schema-change-table td {
     display: inline;
 }
 
+/* The chip's content box is a flex container, so the ellipsis set on it above never applied: its one child, this
+   span, was blockified and simply cut off mid-character. The ellipsis has to live on the flex item itself. */
+.jim-expr-chip .jim-expr-syntax {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .jim-expr-string {
     color: var(--jim-expr-string);
 }
@@ -2279,6 +2296,145 @@ html[lang] .jim-schema-change-table td {
 
 .jim-expr-punctuation {
     color: var(--mud-palette-text-primary);
+}
+
+/* A whole attribute accessor (mv["Name"] / cs["Name"]) is one span coloured by the side it reads. Colour only:
+   no weight or style change, because the <ExpressionEditor /> overlays this markup on a textarea and any change
+   to glyph metrics would put the highlighted text out of step with the caret. */
+.jim-expr-accessor-mv {
+    color: var(--jim-expr-accessor-mv);
+}
+
+.jim-expr-accessor-cs {
+    color: var(--jim-expr-accessor-cs);
+}
+
+/* ─── Expression editor (<ExpressionEditor />) ───
+   A transparent textarea laid over an aria-hidden pre that paints the same text highlighted. Both layers sit in one
+   grid cell and take every text metric from the .jim-expression-editor-layer rule below, so a glyph in the pre lands
+   exactly under the same character in the textarea; change a metric there and it changes for both. The pre sets the
+   cell's height (it holds the content plus a padding space after a trailing line break), so the field grows with
+   its text, and the scroller around the pair caps it at MaxLines and scrolls both layers as one: there is no scroll
+   position to keep in step. The html[lang] qualifier is there to beat MudBlazor's own input rules, which load after
+   this sheet. */
+.jim-expression-editor {
+    /* One line at 20px plus 9px above and below is 38px: the height of the outlined selects and text fields beside
+       it, so a one-line expression field lines up with them and its text sits where theirs does. */
+    --jim-expression-editor-line-height: 1.25rem;
+    --jim-expression-editor-padding-y: 9px;
+    --jim-expression-editor-padding-x: 14px;
+}
+
+/* MudField pads its slot for content with no padding of its own; the editor's frame carries it instead. */
+html[lang] .jim-expression-editor .mud-input-slot.mud-input-root {
+    padding: 0;
+}
+
+/* The vertical padding sits outside the scroller, on the frame, so scrolled text is clipped clear of the border and
+   the label in its notch rather than running up underneath them. The horizontal padding is on the layers, so the
+   scroller and its scrollbar still reach the border. */
+.jim-expression-editor-frame {
+    padding: var(--jim-expression-editor-padding-y) 0;
+    cursor: text;
+}
+
+.jim-expression-editor-disabled .jim-expression-editor-frame {
+    cursor: default;
+}
+
+/* The label's resting place in the border's notch, as MudBlazor's own .mud-shrink inputs draw it. */
+html[lang] .jim-expression-editor-shrink .mud-input.mud-input-outlined > .mud-input-outlined-border legend {
+    width: auto;
+    padding: 0 5px;
+}
+
+html[lang] .jim-expression-editor-shrink .mud-input ~ label.mud-input-label.mud-input-label-inputcontrol.mud-input-label-outlined {
+    transform: translate(14px, -6px) scale(0.75);
+    transform-origin: top left;
+    max-width: calc((100% - 14px) / 0.75);
+}
+
+.jim-expression-editor-scroller {
+    width: 100%;
+    max-height: calc(var(--jim-expression-editor-max-lines, 8) * var(--jim-expression-editor-line-height));
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.jim-expression-editor-stack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: calc(var(--jim-expression-editor-lines, 1) * var(--jim-expression-editor-line-height));
+}
+
+html[lang] .jim-expression-editor-layer {
+    grid-area: 1 / 1;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 0 var(--jim-expression-editor-padding-x);
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    font-weight: 400;
+    font-style: normal;
+    font-variant-ligatures: none;
+    font-kerning: none;
+    line-height: var(--jim-expression-editor-line-height);
+    letter-spacing: normal;
+    word-spacing: normal;
+    text-transform: none;
+    text-indent: 0;
+    text-align: start;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    tab-size: 4;
+    overflow: hidden;
+    background: transparent;
+}
+
+html[lang] .jim-expression-editor-highlight {
+    color: var(--mud-palette-text-primary);
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Sizes an empty field to its placeholder; the textarea paints the placeholder itself. */
+html[lang] .jim-expression-editor-highlight .jim-expression-editor-placeholder-sizer {
+    visibility: hidden;
+}
+
+html[lang] textarea.jim-expression-editor-input {
+    color: transparent;
+    caret-color: var(--mud-palette-text-primary);
+    resize: none;
+    outline: none;
+    height: 100%;
+}
+
+html[lang] textarea.jim-expression-editor-input::placeholder {
+    color: var(--mud-palette-text-secondary);
+    opacity: 1;
+}
+
+/* The selected text is the pre's, showing through, so the selection is a translucent wash rather than the
+   browser's opaque highlight, which would paint over it. */
+html[lang] textarea.jim-expression-editor-input::selection {
+    color: transparent;
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.3);
+}
+
+html[lang] .jim-expression-editor-disabled .jim-expression-editor-highlight,
+html[lang] .jim-expression-editor-disabled .jim-expression-editor-highlight span {
+    color: var(--mud-palette-text-disabled);
+}
+
+html[lang] .jim-expression-editor-disabled textarea.jim-expression-editor-input {
+    cursor: default;
 }
 
 /* Attribute table styles (<AttributeTable />: Connected System Object, Pending Export, Metaverse Object) */

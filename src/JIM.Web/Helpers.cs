@@ -983,6 +983,17 @@ public static class Helpers
 
                 var encoded = WebUtility.HtmlEncode(identifier);
 
+                // An attribute accessor (mv["Name"] / cs["Name"]) is the one thing an administrator most needs to
+                // pick out of an expression, and which side of the Metaverse it reads is the point of it, so the
+                // whole accessor is one span coloured by side rather than a variable, a bracket and a string.
+                if (identifier is "mv" or "cs" && TryMatchAttributeAccessor(expression, i, out var accessorEnd))
+                {
+                    var accessor = WebUtility.HtmlEncode(expression[idStart..accessorEnd]);
+                    result.Append($"<span class=\"jim-expr-accessor-{identifier}\">{accessor}</span>");
+                    i = accessorEnd - 1;
+                    continue;
+                }
+
                 if (identifier is "true" or "false" or "null")
                     result.Append($"<span class=\"jim-expr-keyword\">{encoded}</span>");
                 else if (identifier is "mv" or "cs")
@@ -1022,11 +1033,62 @@ public static class Helpers
                 continue;
             }
 
+            // A surrogate pair is one character to the encoder; encoding its halves separately turns each into a
+            // replacement character, which would break the editor overlay's character-for-character alignment.
+            if (char.IsHighSurrogate(c) && i + 1 < expression.Length && char.IsLowSurrogate(expression[i + 1]))
+            {
+                result.Append(WebUtility.HtmlEncode(expression.Substring(i, 2)));
+                i++;
+                continue;
+            }
+
+            // A lone surrogate cannot be encoded faithfully either; it carries no markup, so pass it through.
+            if (char.IsSurrogate(c))
+            {
+                result.Append(c);
+                continue;
+            }
+
             // Whitespace and other characters
             result.Append(WebUtility.HtmlEncode(c.ToString()));
         }
 
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Matches an attribute accessor's indexer after an <c>mv</c>/<c>cs</c> identifier ending at
+    /// <paramref name="identifierEnd"/>: optional whitespace, <c>[</c>, optional whitespace, a string literal, and an
+    /// optional closing <c>]</c>. Tolerates partially typed input: an unterminated string runs to the end, and a
+    /// missing <c>]</c> ends the accessor at the string. Returns false (leaving the bare variable treatment) when no
+    /// string literal follows the bracket.
+    /// </summary>
+    private static bool TryMatchAttributeAccessor(string text, int identifierEnd, out int accessorEnd)
+    {
+        accessorEnd = identifierEnd;
+        var position = SkipWhitespace(text, identifierEnd);
+        if (position >= text.Length || text[position] != '[')
+            return false;
+
+        position = SkipWhitespace(text, position + 1);
+        if (position >= text.Length || text[position] != '"')
+            return false;
+
+        position = FindClosingQuote(text, position) + 1;
+        accessorEnd = position;
+
+        var afterString = SkipWhitespace(text, position);
+        if (afterString < text.Length && text[afterString] == ']')
+            accessorEnd = afterString + 1;
+
+        return true;
+    }
+
+    private static int SkipWhitespace(string text, int position)
+    {
+        while (position < text.Length && char.IsWhiteSpace(text[position]))
+            position++;
+        return position;
     }
 
     private static int FindClosingQuote(string text, int openQuoteIndex)

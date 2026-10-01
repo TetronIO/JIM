@@ -57,6 +57,8 @@ Which accessors mean something depends on where the expression runs. An export A
 !!! note "`mv` on import is in development"
     Reading `mv["..."]` in an import expression is still in development and not yet available; it is hidden behind a feature flag. While the flag is off, JIM refuses to save an import expression that newly reads `mv["..."]`, and one saved before that check reads no value.
 
+In the portal, wherever you type an expression (an Attribute Flow's Expression source, or a Generated Value's base expression), it is syntax highlighted as you type. Metaverse attribute references (`mv["..."]`) and Connected System attribute references (`cs["..."]`) each have a colour of their own, distinct from text and functions, so you can see at a glance which side of the Metaverse an expression reads; the Attribute Flow table colours them the same way.
+
 Attribute names are matched case-insensitively, so `mv["Department"]`, `mv["department"]`, and `mv["DEPARTMENT"]` all refer to the same attribute. This applies to attribute *names* only; attribute *values* are compared case-sensitively by default, which is why text comparisons use `Eq()` and `Lower()` (see [String Comparison](#string-comparison)). Mirroring the casing shown in the JIM admin UI keeps expressions readable, but it is not required for them to work. For the wider picture of where JIM is case-sensitive and where it is forgiving, see [Case Sensitivity](case-sensitivity.md).
 
 ## Operators

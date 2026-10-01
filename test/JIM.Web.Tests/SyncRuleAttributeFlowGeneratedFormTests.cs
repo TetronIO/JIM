@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.TestSupport;
 using JIM.Web.Pages.Admin.Components;
+using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MudBlazor;
@@ -88,6 +89,25 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     }
 
     [Test]
+    public void SelectingExpression_RendersExpressionEditorBoundToTheMappingSource()
+    {
+        var (provider, tab, _) = OpenAddDialogWithGeneratedSourceType();
+        var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
+        provider.InvokeAsync(() => sourceTypePicker.Instance.ValueChanged.InvokeAsync("Expression")).GetAwaiter().GetResult();
+        tab.Render();
+
+        var editor = provider.FindComponents<ExpressionEditor>().Single(e => e.Instance.Label == "Expression");
+        provider.InvokeAsync(() => editor.Instance.ValueChanged.InvokeAsync("Upper(cs[\"firstName\"])")).GetAwaiter().GetResult();
+
+        var source = (SyncRuleMappingSource)GetPrivateField(tab.Instance, "_attributeFlowMappingSource")!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(editor.Instance.Required, Is.True, "an Expression source cannot be saved without an expression");
+            Assert.That(source.Expression, Is.EqualTo("Upper(cs[\"firstName\"])"));
+        }
+    }
+
+    [Test]
     public async Task SelectingTargetThenTokenKind_SequenceShowsStartAndIncrementFields()
     {
         var (provider, tab, _) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
@@ -152,7 +172,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     {
         var (provider, _, _) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Number);
 
-        var baseExpression = provider.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Base expression");
+        var baseExpression = provider.FindComponents<ExpressionEditor>().Single(f => f.Instance.Label == "Base expression");
 
         Assert.That(baseExpression.Instance.Disabled, Is.True,
             "a Number target cannot have a base expression: a prefix or letters would make the value text");
@@ -185,7 +205,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     {
         var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
 
-        var baseExpression = provider.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Base expression");
+        var baseExpression = provider.FindComponents<ExpressionEditor>().Single(f => f.Instance.Label == "Base expression");
         await provider.InvokeAsync(() => baseExpression.Instance.ValueChanged.InvokeAsync("Lower(cs[\"firstName\"])"));
         tab.Render();
 
@@ -218,7 +238,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     {
         var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
 
-        var baseExpression = provider.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "Base expression");
+        var baseExpression = provider.FindComponents<ExpressionEditor>().Single(f => f.Instance.Label == "Base expression");
         await provider.InvokeAsync(() => baseExpression.Instance.ValueChanged.InvokeAsync("Lower(cs[\"firstName\"])"));
         tab.Render();
 

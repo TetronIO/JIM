@@ -359,7 +359,7 @@ A direct mapping copies the attribute value as-is, with no transformation:
 
 ### Expression mappings
 
-An expression mapping applies a transformation using the JIM [expression language](../concepts/expressions.md):
+An expression mapping applies a transformation using the JIM [expression language](../concepts/expressions.md). The Expression field in the Add/Edit Attribute Flow dialog highlights the expression as you type, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references coloured differently; it grows with the expression (press Enter for a new line) and scrolls once it is long.
 
 | Source | Target |
 |--------|--------|
