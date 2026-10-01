@@ -105,6 +105,8 @@ html[lang] {
     --jim-expr-variable: #001080;
     --jim-expr-keyword: var(--jim-json-boolean);
     --jim-expr-operator: #af00db;
+    --jim-expr-accessor-mv: #00616f;
+    --jim-expr-accessor-cs: #9b0078;
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #c0c4d8;

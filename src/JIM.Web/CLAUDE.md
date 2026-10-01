@@ -40,6 +40,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<AttributeValuesCell TValue="X" Values="@vs" TotalCount="@n">` | An attribute table's value cell: stacks up to 10 values, nests a virtualised table beyond | "Attribute tables" below |
 | `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
 | `<OverflowList TItem="X" Items="@xs" ItemTemplate="..." Title="Roles" />` | A cell holding a list: the first item, then "+n more" | "One line per row" below |
+| `<ExpressionEditor @bind-Value="_expression" Label="Expression" />` | Every field where an administrator types an expression: a syntax-highlighted, auto-growing textarea in an outlined field, with `InsertAtCursorAsync` for inserting at the caret | "Expression editing" below |
 | `<SyncRuleIdentityStrip Direction="@d" MetaverseObjectTypeName="@mv" ConnectedSystemObjectTypeName="@cs" ConnectedSystemId="@id" ConnectedSystemName="@n" />` | A Synchronisation Rule's Connected System, direction and object types, beneath the page's breadcrumbs | "Synchronisation Rule identity strip" below |
 
 ## Choosing Containers
@@ -72,6 +73,14 @@ The marker is not decoration. Both sides of a flow are just names, and which sid
 - Expression chips render the expression itself with syntax highlighting, not the word "Expression": the expression text is the only thing telling two computed sources apart.
 
 **Known duplicate:** `SyncRuleAttributeFlowTab.razor` still hand-rolls this markup in eleven places, in two clusters that disagree with each other (one wraps the whole chip in a rich type/plurality tooltip, the other tooltips only the avatar with generic text). Migrating it to this component is worth doing, and needs the tooltip inconsistency resolved deliberately rather than folded into an unrelated change. Do not add a twelfth copy.
+
+## Expression editing
+
+**Every field where an administrator types an expression is an `<ExpressionEditor />`, never a `MudTextField`.** It highlights the expression as it is typed (through `Helpers.HighlightExpression`, the same highlighter as the `Ex` chip), raises `ValueChanged` on every keystroke so gated buttons and the Expression tester follow the text, and grows from `Lines` to `MaxLines` before scrolling.
+
+- It is a transparent textarea over an `aria-hidden` pre. The two layers take every text metric from one `site.css` rule (`.jim-expression-editor-layer`); anything that changes glyph metrics on one layer only (a bold or italic token class, a different font size) puts the colours out of step with the caret. Token classes change colour and nothing else.
+- The textarea's value stays an `@bind:get`/`@bind:set` pair. A `value=` attribute plus `@oninput` loses typed characters under load, because only `@bind` tells the renderer to keep what the browser already holds; see the comment in the component.
+- `Helpers.HighlightExpression` must return markup whose text content equals its input exactly, for any input, including partially typed ones. `HelpersExpressionHighlightTests` pins this with a round-trip corpus; extend it when adding a token.
 
 ## Object chips (naming any object on the site)
 
