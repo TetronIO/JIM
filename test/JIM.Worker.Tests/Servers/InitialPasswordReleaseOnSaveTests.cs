@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
 using InMemorySyncRepository = JIM.InMemoryData.SyncRepository;
@@ -48,6 +49,12 @@ public class InitialPasswordReleaseOnSaveTests
         var mockActivityRepo = new Mock<IActivityRepository>();
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
+        // Feature-flagged behaviour is tested as shipped (test/CLAUDE.md); Metaverse-Derived Attribute Flows read
+        // the flag on these paths (#1750).
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
+        // change leaves with a missing input (#1750, FR 3): none here.
+        _mockCsRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _mockRepository.Setup(r => r.Metaverse).Returns(mockMvRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(mockActivityRepo.Object);
         _mockRepository.Setup(r => r.Sync).Returns(_mockSyncRepo.Object);

@@ -227,6 +227,66 @@ public class DerivedFlowDependentDetectorTests
         Assert.That(Detect([hr, groups], [Without(hr, email), groups]).Select(d => d.Flow.Mapping), Is.EqualTo(new[] { upn }));
     }
 
+    [Test]
+    public void Detect_DirectDependant_NamesTheInputThatLostItsContributorWithNoVia()
+    {
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 1);
+        var accountName = Direct(hr, 101, _model.AccountName, "sAMAccountName");
+        Expression(hr, 102, _model.Email, "mv[\"Account Name\"] + \"@corp\"");
+
+        var lost = Detect([hr], [Without(hr, accountName)]).Single().LostInputs;
+
+        Assert.That(lost, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lost[0].MetaverseAttributeName, Is.EqualTo("Account Name"));
+            Assert.That(lost[0].MetaverseAttributeId, Is.EqualTo(_model.AccountName.Id));
+            Assert.That(lost[0].Indirect, Is.False);
+            Assert.That(lost[0].Via, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void Detect_TransitiveDependant_NamesTheRootInputAndTheChainItIsReachedThrough()
+    {
+        // User Principal Name reads Display Name, which reads Email, which reads Account Name. Removing Account Name's
+        // only contributor reaches User Principal Name through Display Name, then Email.
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 1);
+        var accountName = Direct(hr, 101, _model.AccountName, "sAMAccountName");
+        Expression(hr, 102, _model.Email, "mv[\"Account Name\"] + \"@corp\"");
+        Expression(hr, 103, _model.DisplayName, "mv[\"Email\"]");
+        var upn = Expression(hr, 104, _model.UserPrincipalName, "mv[\"Display Name\"]");
+
+        var dependant = Detect([hr], [Without(hr, accountName)]).Single(d => ReferenceEquals(d.Flow.Mapping, upn));
+
+        Assert.That(dependant.LostInputs, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dependant.LostInputs[0].MetaverseAttributeName, Is.EqualTo("Account Name"));
+            Assert.That(dependant.LostInputs[0].Indirect, Is.True);
+            Assert.That(dependant.LostInputs[0].Via, Is.EqualTo(new[] { "Display Name", "Email" }),
+                "the chain reads from the flow's own input towards the attribute that lost its contributor");
+        }
+    }
+
+    [Test]
+    public void Detect_DependantStarvedThroughTwoRoots_NamesEachRootOnce()
+    {
+        var hr = ImportRule(1, "HR Import", connectedSystemId: 1);
+        var accountName = Direct(hr, 101, _model.AccountName, "sAMAccountName");
+        var region = Direct(hr, 102, _model.Region, "region");
+        Expression(hr, 103, _model.Email, "mv[\"Account Name\"] + \"@\" + mv[\"Region\"]");
+        var upn = Expression(hr, 104, _model.UserPrincipalName, "mv[\"Email\"] + mv[\"Region\"]");
+        var hrAfter = Without(hr, accountName);
+        hrAfter.AttributeFlowRules.Remove(region);
+
+        var dependant = Detect([hr], [hrAfter]).Single(d => ReferenceEquals(d.Flow.Mapping, upn));
+
+        Assert.That(dependant.LostInputs.Select(i => (i.MetaverseAttributeName, i.Indirect, string.Join(">", i.Via))),
+            Is.EqualTo(new[] { ("Region", false, ""), ("Account Name", true, "Email") }),
+            "nearest first, each root once at its shortest chain (Region is read directly as well as through Email)");
+    }
+
     /// <summary>
     /// A copy of <paramref name="rule"/> (same id, name and settings, the same mapping instances) without
     /// <paramref name="removed"/>, standing for the rule after a change.

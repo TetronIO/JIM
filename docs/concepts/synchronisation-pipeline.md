@@ -149,7 +149,7 @@ Initialise JIM once in a new deployment, and again after any significant change 
 **The order:**
 
 1. **Full Import every Connected System.** Joins, scoping and Attribute Flows are only correct when every connector space holds current data.
-2. **Full Synchronisation every Connected System, sources before targets.** Sources project and join first, so the Metaverse is complete before targets are evaluated. A target that also supplies values (for example a higher-priority import Attribute Flow that keeps an existing account's name) contributes them during its own synchronisation, which cancels any Pending Export that would have overwritten them.
+2. **Full Synchronisation every Connected System, sources before targets.** Sources project and join first, so the Metaverse is complete before targets are evaluated. A target that also supplies values (for example a higher-priority import Attribute Flow that keeps an existing account's name) contributes them during its own synchronisation, which cancels any Pending Export that would have overwritten them. Where a Synchronisation Rule [derives a Metaverse attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) from one another Connected System contributes (in development), synchronise that other system first, so the derived value is right in the same pass.
 3. **Review the Pending Exports.** Use [Sync Preview](../configuration/sync-preview.md) to check a sample. This is the last point before anything leaves JIM.
 4. **Export.**
 

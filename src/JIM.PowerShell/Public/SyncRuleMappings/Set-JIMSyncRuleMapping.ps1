@@ -110,7 +110,11 @@ function Set-JIMSyncRuleMapping {
         Generation property carries its uniqueness token settings; Generation.SequenceSkippedAhead
         is present only when -SequenceStart raised the target attribute's counter on this save.
         Warnings lists any non-blocking warnings the save raised (empty when there were none); each is
-        written with Write-Warning whether or not -PassThru is supplied.
+        written with Write-Warning whether or not -PassThru is supplied. Derived describes a mapping that
+        derives a Metaverse attribute from other Metaverse attributes (Step, StepCount, MetaverseInputs), and
+        is null for every other mapping. DependentDerivedFlows names the Attribute Flows deriving Metaverse
+        attributes that the update left with a missing input (for example by disabling the mapping); they are
+        also written with Write-Warning, a summary line then one line per flow.
 
     .EXAMPLE
         Set-JIMSyncRuleMapping -SyncRuleId 2 -MappingId 15 -MissingInputBehaviour FailObject
@@ -282,6 +286,9 @@ function Set-JIMSyncRuleMapping {
                 foreach ($saveWarning in @($result.Warnings | Where-Object { $_ })) {
                     Write-Warning $saveWarning
                 }
+
+                # Derived flows the update left with a missing input (#1750, FR 3): reported, never blocking.
+                Write-JIMDependentDerivedFlowWarning -DependentDerivedFlows $result.DependentDerivedFlows
 
                 if ($PassThru) {
                     $result

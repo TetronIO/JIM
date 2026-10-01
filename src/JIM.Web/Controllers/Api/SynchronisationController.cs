@@ -2341,7 +2341,9 @@ public class SynchronisationController(
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">Optional. Set <c>disableDependents</c> to apply the refresh with its dependents disabled (#1485).</param>
     /// <returns>The updated Connected System with imported schema.</returns>
-    /// <response code="200">Schema imported successfully.</response>
+    /// <response code="200">Schema imported successfully. When dependents were disabled or removed,
+    /// <c>dependentDerivedFlows</c> names any Attribute Flow deriving a Metaverse attribute that doing so left with a
+    /// missing input.</response>
     /// <response code="400">Schema import failed (e.g., connection error, invalid settings).</response>
     /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -2374,6 +2376,9 @@ public class SynchronisationController(
         {
             // Get the current API key for Activity attribution if authenticated via API key
             var apiKey = await GetCurrentApiKeyAsync();
+            // The dependents a destructive flavour acts on; the derived flows they leave with a missing input are
+            // reported on the response (#1750, FR 3).
+            SchemaRefreshDependents? dependents = null;
 
             if (request is { RemoveDependents: true })
             {
@@ -2383,8 +2388,7 @@ public class SynchronisationController(
                 // plan is recomputed here so the removals always match the schema being applied. The queued
                 // task is observable via the worker tasks API.
                 var previewResult = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
-                var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
-                var dependents = SchemaRefreshDependentDetector.Detect(previewResult, syncRules, DateTime.UtcNow);
+                dependents = await _application.ConnectedSystems.DetectSchemaRefreshDependentsAsync(connectedSystemId, previewResult);
 
                 if (apiKey != null)
                     await _application.ConnectedSystems.ApplyConnectedSystemSchemaRefreshWithRemovalAsync(connectedSystem, previewResult, dependents, apiKey);
@@ -2398,8 +2402,7 @@ public class SynchronisationController(
                 // and mapping recording its reason. Stateless by design: the plan is recomputed here rather
                 // than carried over from a preview call, so the disables always match the schema being applied.
                 var previewResult = await _application.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
-                var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
-                var dependents = SchemaRefreshDependentDetector.Detect(previewResult, syncRules, DateTime.UtcNow);
+                dependents = await _application.ConnectedSystems.DetectSchemaRefreshDependentsAsync(connectedSystemId, previewResult);
 
                 if (apiKey != null)
                     await _application.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, dependents, apiKey);
@@ -2416,7 +2419,9 @@ public class SynchronisationController(
 
             // Retrieve the updated system
             var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-            return Ok(ConnectedSystemDetailDto.FromEntity(updated!));
+            var dto = ConnectedSystemDetailDto.FromEntity(updated!);
+            dto.DependentDerivedFlows = dependents?.DependentDerivedFlows ?? [];
+            return Ok(dto);
         }
         catch (Exception ex)
         {
@@ -2472,8 +2477,7 @@ public class SynchronisationController(
             // whole decision from this one response.
             if (result.HasRemovalsOrDefinitionChanges)
             {
-                var syncRules = await _application.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules: true);
-                dto.Dependents = SchemaRefreshDependentDetector.Detect(result, syncRules, DateTime.UtcNow);
+                dto.Dependents = await _application.ConnectedSystems.DetectSchemaRefreshDependentsAsync(connectedSystemId, result);
                 dto.RemovalImpact = await _application.ConnectedSystems.ComputeSchemaRefreshRemovalImpactAsync(connectedSystemId, result);
             }
 
@@ -3413,12 +3417,15 @@ public class SynchronisationController(
     /// <param name="id">The unique identifier of the Synchronisation Rule to update.</param>
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated Synchronisation Rule details.</returns>
-    /// <response code="200">Synchronisation Rule updated successfully.</response>
+    /// <response code="200">Synchronisation Rule updated. <c>warnings</c> lists any non-blocking warnings the save raised
+    /// about the rule's Attribute Flows; <c>dependentDerivedFlows</c> names any Attribute Flow deriving a Metaverse
+    /// attribute that the update left with a missing input, for example by disabling the rule (the update goes ahead
+    /// regardless).</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("sync-rules/{id:int}", Name = "UpdateSyncRule")]
-    [ProducesResponseType(typeof(SyncRuleHeader), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SyncRuleSaveResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -3487,9 +3494,9 @@ public class SynchronisationController(
 
         _logger.LogInformation("Updated Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
-        // Retrieve the updated Synchronisation Rule
+        // Retrieve the updated Synchronisation Rule; the save's warnings and dependants travel on the instance it saved.
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
-        return Ok(SyncRuleHeader.FromEntity(updated!));
+        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule));
     }
 
     /// <summary>
@@ -3935,20 +3942,22 @@ public class SynchronisationController(
     /// response is 202 Accepted with the recall Activity id and the affected counts. Pass
     /// <c>keepContributedValues=true</c> to delete the rule immediately and leave the values in place with no
     /// provenance; nothing will ever recall them. A rule contributing nothing deletes immediately with 204
-    /// either way. Use the contributed-values-summary endpoint first to understand the impact.
+    /// either way. Use the contributed-values-summary endpoint first to understand the impact. Both responses name, in
+    /// <c>dependentDerivedFlows</c>, any Attribute Flow deriving a Metaverse attribute on another Synchronisation Rule
+    /// that the deletion leaves with a missing input; the deletion goes ahead regardless.
     /// </remarks>
     /// <param name="id">The unique identifier of the Synchronisation Rule to delete.</param>
     /// <param name="keepContributedValues">True to keep the Metaverse attribute values the rule contributed
     /// (they remain in place with no provenance and are never recalled); false (the default) to recall them
     /// via a queued Worker task before the rule is deleted.</param>
     /// <param name="changeReason">An optional reason for the deletion, recorded against the change history.</param>
-    /// <returns>No content when the deletion completed immediately; a tracking response when a recall was queued.</returns>
-    /// <response code="204">Synchronisation Rule deleted successfully (keep chosen, or nothing contributed).</response>
+    /// <returns>What the deletion affected when it completed immediately; a tracking response when a recall was queued.</returns>
+    /// <response code="200">Synchronisation Rule deleted (keep chosen, or nothing contributed).</response>
     /// <response code="202">A contributed-values recall was queued; the rule is disabled and will be deleted when the recall completes.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{id:int}", Name = "DeleteSyncRule")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(SyncRuleDeletionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(SyncRuleDeletionQueuedResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -3987,13 +3996,19 @@ public class SynchronisationController(
             {
                 RecallActivityId = result.RecallActivityId.Value,
                 AffectedValueCount = result.AffectedValueCount,
-                AffectedObjectCount = result.AffectedObjectCount
+                AffectedObjectCount = result.AffectedObjectCount,
+                DependentDerivedFlows = result.DependentDerivedFlows
             });
         }
 
         _logger.LogInformation("Deleted Synchronisation Rule: {Id}", id);
 
-        return NoContent();
+        return Ok(new SyncRuleDeletionResponse
+        {
+            AffectedValueCount = result.AffectedValueCount,
+            AffectedObjectCount = result.AffectedObjectCount,
+            DependentDerivedFlows = result.DependentDerivedFlows
+        });
     }
 
     /// <summary>
@@ -4232,7 +4247,8 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
         var mappings = await _application.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
-        var dtos = mappings.Select(SyncRuleMappingDto.FromEntity);
+        var dtos = mappings.Select(SyncRuleMappingDto.FromEntity).ToList();
+        AttachDerivedFlowInfo(dtos, await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
         return Ok(dtos);
     }
 
@@ -4258,7 +4274,9 @@ public class SynchronisationController(
         if (mapping == null || mapping.SyncRule?.Id != syncRuleId)
             return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
-        return Ok(SyncRuleMappingDto.FromEntity(mapping));
+        var dto = SyncRuleMappingDto.FromEntity(mapping);
+        AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRule));
+        return Ok(dto);
     }
 
     /// <summary>
@@ -4453,6 +4471,9 @@ public class SynchronisationController(
                     : null;
             // Likewise the save's non-blocking warnings (#1750), stamped on the saved instance, not the reloaded one.
             dto.Warnings = mapping.SaveWarnings.ToList();
+            // Only a mapping reading mv["..."] can be a derived flow, so nothing is looked up for any other.
+            if (DerivedFlowGraph.ReadsMetaverse(mapping))
+                AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRuleId));
             return CreatedAtRoute("GetSyncRuleMapping", new { syncRuleId, mappingId = mapping.Id }, dto);
         }
         catch (ArgumentException ex)
@@ -4460,6 +4481,16 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create Synchronisation Rule mapping: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// Sets each mapping response's <see cref="SyncRuleMappingDto.Derived"/> from the Application layer's step facts,
+    /// which carry an entry only for Metaverse-Derived Attribute Flows (and none with the feature off).
+    /// </summary>
+    private static void AttachDerivedFlowInfo(IEnumerable<SyncRuleMappingDto> dtos, IReadOnlyDictionary<int, DerivedFlowStepInfo> steps)
+    {
+        foreach (var dto in dtos)
+            dto.Derived = steps.TryGetValue(dto.Id, out var info) ? DerivedFlowInfoDto.FromModel(info) : null;
     }
 
     /// <summary>
@@ -4483,7 +4514,9 @@ public class SynchronisationController(
     /// <param name="mappingId">The unique identifier of the mapping to update.</param>
     /// <param name="request">The settings to change.</param>
     /// <returns>The updated mapping.</returns>
-    /// <response code="200">Returns the updated mapping; its <c>warnings</c> lists any non-blocking warnings the save raised.</response>
+    /// <response code="200">Returns the updated mapping; its <c>warnings</c> lists any non-blocking warnings the save raised,
+    /// and its <c>dependentDerivedFlows</c> any Attribute Flow deriving a Metaverse attribute that the update left with a
+    /// missing input (the update goes ahead regardless).</response>
     /// <response code="400">The request named no setting, named one that does not apply to this mapping, or carried an invalid Expression.</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -4531,7 +4564,10 @@ public class SynchronisationController(
                 return NotFound(ApiErrorResponse.NotFound($"Mapping with ID {mappingId} not found in Synchronisation Rule {syncRuleId}."));
 
             _logger.LogInformation("Updated mapping {MappingId} on Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
-            return Ok(SyncRuleMappingDto.FromEntity(updated));
+            var dto = SyncRuleMappingDto.FromEntity(updated);
+            if (DerivedFlowGraph.ReadsMetaverse(updated))
+                AttachDerivedFlowInfo([dto], await _application.ConnectedSystems.GetDerivedFlowStepsAsync(syncRuleId));
+            return Ok(dto);
         }
         catch (ArgumentException ex)
         {
@@ -4556,12 +4592,14 @@ public class SynchronisationController(
     /// <param name="keepContributedValues">True to keep the Metaverse attribute values the mapping contributed
     /// (their provenance is severed, so nothing ever recalls them); false (the default) to leave them to be
     /// recalled at the next Full Synchronisation of the contributing system.</param>
-    /// <returns>No content on success.</returns>
-    /// <response code="204">Mapping deleted successfully.</response>
+    /// <returns>What the deletion affected.</returns>
+    /// <response code="200">Mapping deleted. The body states the contributed values affected and, in
+    /// <c>dependentDerivedFlows</c>, any Attribute Flow deriving a Metaverse attribute that the deletion left with a
+    /// missing input (the deletion goes ahead regardless).</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "DeleteSyncRuleMapping")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(SyncRuleMappingDeletionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSyncRuleMappingAsync(int syncRuleId, int mappingId, [FromQuery] bool keepContributedValues = false)
@@ -4585,14 +4623,19 @@ public class SynchronisationController(
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, apiKey, keepContributedValues: keepContributedValues);
-        else
-            await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy, keepContributedValues: keepContributedValues);
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, apiKey, keepContributedValues: keepContributedValues)
+            : await _application.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping, initiatedBy, keepContributedValues: keepContributedValues);
 
         _logger.LogInformation("Deleted mapping {MappingId} from Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
-        return NoContent();
+        return Ok(new SyncRuleMappingDeletionResponse
+        {
+            AffectedValueCount = result.AffectedValueCount,
+            AffectedObjectCount = result.AffectedObjectCount,
+            ContributedValuesKept = result.ContributedValuesKept,
+            DependentDerivedFlows = result.DependentDerivedFlows
+        });
     }
 
     /// <summary>

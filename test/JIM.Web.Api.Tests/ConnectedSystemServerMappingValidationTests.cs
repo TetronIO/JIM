@@ -12,6 +12,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
 
@@ -43,6 +44,12 @@ public class ConnectedSystemServerMappingValidationTests
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // Feature-flagged behaviour is tested as shipped (test/CLAUDE.md); Metaverse-Derived Attribute Flows read
+        // the flag on these paths (#1750).
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
+        // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);

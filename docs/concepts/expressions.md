@@ -11,7 +11,7 @@ Expressions live inside **Synchronisation Rules**, in what is known as the **Att
 Within a Synchronisation Rule, expressions are used in:
 
 - **Export attribute mappings**<br /> Transform metaverse attributes before sending them to a Connected System.
-- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the metaverse.
+- **Import attribute mappings**<br /> Transform Connected System attributes before storing them in the metaverse, and (in development) derive Metaverse attributes from other attributes of the same Metaverse Object.
 - **Conditional logic**<br /> Choose different values based on conditions (e.g. enable or disable an account based on employee status).
 - **Scoping filters**<br /> Determine which objects are in scope for a Synchronisation Rule.
 
@@ -51,6 +51,11 @@ mv["Department"]
 cs["sAMAccountName"]
 cs["userAccountControl"]
 ```
+
+Which accessors mean something depends on where the expression runs. An export Attribute Flow reads `mv`; an import Attribute Flow reads `cs`. An import Attribute Flow can also read `mv`, the Metaverse Object it flows to, to derive one Metaverse attribute from others: see [Deriving Metaverse attributes](../configuration/synchronisation-rules.md#deriving-metaverse-attributes) for the evaluation order, loops, and which synchronisation evaluates the flow.
+
+!!! note "`mv` on import is in development"
+    Reading `mv["..."]` in an import expression is still in development and not yet available; it is hidden behind a feature flag. While the flag is off, JIM refuses to save an import expression that newly reads `mv["..."]`, and one saved before that check reads no value.
 
 Attribute names are matched case-insensitively, so `mv["Department"]`, `mv["department"]`, and `mv["DEPARTMENT"]` all refer to the same attribute. This applies to attribute *names* only; attribute *values* are compared case-sensitively by default, which is why text comparisons use `Eq()` and `Lower()` (see [String Comparison](#string-comparison)). Mirroring the casing shown in the JIM admin UI keeps expressions readable, but it is not required for them to work. For the wider picture of where JIM is case-sensitive and where it is forgiving, see [Case Sensitivity](case-sensitivity.md).
 
@@ -179,6 +184,8 @@ Eq(Lower(mv["Status"]), "active")
 | `ToFileTime(date)` | Convert a date to Active Directory's FILETIME format | `ToFileTime(mv["Account Expires"])` |
 | `FromFileTime(filetime)` | Convert an Active Directory FILETIME back to a date | `FromFileTime(cs["accountExpires"])` |
 
+`Now()` and `Today()` return a different value as time passes, as do `RandomPassword()`, `RandomPassphrase()`, `DateTime.Now`, `DateTime.UtcNow`, `DateTime.Today` and `Guid.NewGuid()`. In an import Attribute Flow that [derives a Metaverse attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), the value then changes on every synchronisation and can be exported every time, so JIM warns when you save one (it still saves it).
+
 ### Distinguished Name (DN) Functions
 
 | Function | Description | Example |
@@ -295,6 +302,8 @@ It is set per expression source on an Attribute Flow, in the portal beside the e
 | **Fail the object** | The expression is not evaluated and nothing at all flows for the object, which is recorded as an **Expression Missing Input** error. | The value is identity-critical, such as a Distinguished Name or an account name, and a partially populated object is worse than none. |
 
 Both failure behaviours report against the object on every run until the missing value is supplied or the configuration changes, so the errors are a work queue rather than a one-off notification. Neither behaviour writes anything: "Fail this mapping" leaves the target attribute exactly as it was, and "Fail the object" leaves the whole object untouched.
+
+On an import Attribute Flow that [derives a Metaverse attribute](../configuration/synchronisation-rules.md#deriving-metaverse-attributes), its `mv["..."]` inputs count exactly as its `cs["..."]` inputs do, so "Contribute no value" waits for an Account Name that has not arrived yet rather than building `@corp.local`.
 
 The default is **Evaluate anyway** on every existing and newly created mapping, so nothing changes until you choose otherwise. Guarding the expression and setting a behaviour are complementary rather than alternatives: guard where the absence is expected and you know the right answer, and set a behaviour where it is not.
 

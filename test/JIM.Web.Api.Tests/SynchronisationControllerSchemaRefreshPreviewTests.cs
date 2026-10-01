@@ -14,6 +14,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -59,6 +60,12 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
         _metaverseRepo = new Mock<IMetaverseRepository>();
 
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
+        // Feature-flagged behaviour is tested as shipped (test/CLAUDE.md); Metaverse-Derived Attribute Flows read
+        // the flag on these paths (#1750).
+        _repository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
+        // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.
+        _connectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repository.Setup(r => r.ApiKeys).Returns(_apiKeyRepo.Object);
         _repository.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
@@ -256,6 +263,104 @@ public class SynchronisationControllerSchemaRefreshPreviewTests
             Assert.That(disabledMappings!.Single().Enabled, Is.False);
             Assert.That(disabledMappings!.Single().DisabledReason, Does.Contain("department"));
         }
+    }
+
+    /// <summary>
+    /// The department-removal schema of the disable test, plus a second Connected System's import rule that derives
+    /// Display Name from <c>mv["Department"]</c>: HR Users Inbound's department mapping is Department's only
+    /// contributor, so disabling or removing it starves the derived flow (#1750, FR 3).
+    /// </summary>
+    private void SeedDepartmentRemovalWithADerivedReader(ConnectedSystem connectedSystem)
+    {
+        var departmentAttr = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "department", Type = AttributeDataType.Text };
+        connectedSystem.ObjectTypes =
+        [
+            new ConnectedSystemObjectType
+            {
+                Id = 7,
+                Name = "user",
+                Selected = true,
+                Attributes =
+                [
+                    new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "id", Type = AttributeDataType.Number },
+                    new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "displayName", Type = AttributeDataType.Text },
+                    departmentAttr
+                ]
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId)).ReturnsAsync(connectedSystem);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(ConnectedSystemId, true)).ReturnsAsync(connectedSystem);
+
+        var department = new MetaverseAttribute { Id = 900, Name = "Department", Type = AttributeDataType.Text };
+        var displayName = new MetaverseAttribute { Id = 901, Name = "Display Name", Type = AttributeDataType.Text };
+        _metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, true)).ReturnsAsync(
+            new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People", Attributes = [department, displayName] });
+
+        SyncRule HrRule()
+        {
+            var rule = new SyncRule { Id = 20, Name = "HR Users Inbound", Direction = SyncRuleDirection.Import, Enabled = true, ConnectedSystemId = ConnectedSystemId, ConnectedSystemObjectTypeId = 7, MetaverseObjectTypeId = 1 };
+            var mapping = new SyncRuleMapping { Id = 200, SyncRuleId = 20, TargetMetaverseAttribute = department, TargetMetaverseAttributeId = department.Id };
+            mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = departmentAttr, ConnectedSystemAttributeId = departmentAttr.Id });
+            rule.AttributeFlowRules.Add(mapping);
+            return rule;
+        }
+
+        SyncRule DirectoryRule()
+        {
+            var rule = new SyncRule { Id = 30, Name = "Directory Users Inbound", Direction = SyncRuleDirection.Import, Enabled = true, ConnectedSystemId = 4, MetaverseObjectTypeId = 1 };
+            var mapping = new SyncRuleMapping { Id = 300, SyncRuleId = 30, TargetMetaverseAttribute = displayName, TargetMetaverseAttributeId = displayName.Id };
+            mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "mv[\"Department\"] + \" staff\"" });
+            rule.AttributeFlowRules.Add(mapping);
+            return rule;
+        }
+
+        _connectedSystemRepo.Setup(r => r.GetSyncRulesAsync(ConnectedSystemId, true)).ReturnsAsync(() => [HrRule()]);
+        _connectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(1)).ReturnsAsync(() => [HrRule(), DirectoryRule()]);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemNamesAsync()).ReturnsAsync(new Dictionary<int, string> { [ConnectedSystemId] = "HR", [4] = "Directory" });
+    }
+
+    [Test]
+    public async Task PreviewSchemaImport_DependentMappingWasTheLastContributorOfADerivedInput_NamesTheDerivedFlowAsync()
+    {
+        SeedDepartmentRemovalWithADerivedReader(CreateFileConnectorConnectedSystem());
+
+        var result = await _controller.PreviewConnectedSystemSchemaImportAsync(ConnectedSystemId);
+
+        var dto = (result as OkObjectResult)!.Value as SchemaRefreshResultDto;
+        var derived = dto!.Dependents!.DependentDerivedFlows;
+        Assert.That(derived, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(derived[0].MappingId, Is.EqualTo(300));
+            Assert.That(derived[0].TargetMetaverseAttributeName, Is.EqualTo("Display Name"));
+            Assert.That(derived[0].SyncRuleName, Is.EqualTo("Directory Users Inbound"));
+            Assert.That(derived[0].ConnectedSystemName, Is.EqualTo("Directory"));
+            Assert.That(derived[0].MissingInputs.Single().MetaverseAttributeName, Is.EqualTo("Department"));
+        }
+    }
+
+    [Test]
+    public async Task ImportSchema_WithDisableDependents_NamesTheDerivedFlowsItStarvesAsync()
+    {
+        SeedDepartmentRemovalWithADerivedReader(CreateFileConnectorConnectedSystem());
+
+        var result = await _controller.ImportConnectedSystemSchemaAsync(ConnectedSystemId,
+            new ImportConnectedSystemSchemaRequest { DisableDependents = true });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>(), "a derived dependant warns, it never blocks the refresh");
+        var dto = (ConnectedSystemDetailDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.DependentDerivedFlows.Select(flow => flow.MappingId), Is.EqualTo(new[] { 300 }));
+    }
+
+    [Test]
+    public async Task ImportSchema_WithoutAPosture_CarriesNoDerivedDependantsAsync()
+    {
+        SeedDepartmentRemovalWithADerivedReader(CreateFileConnectorConnectedSystem());
+
+        var result = await _controller.ImportConnectedSystemSchemaAsync(ConnectedSystemId);
+
+        var dto = (ConnectedSystemDetailDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.DependentDerivedFlows, Is.Not.Null.And.Empty, "a plain refresh disables and removes nothing");
     }
 
     [Test]

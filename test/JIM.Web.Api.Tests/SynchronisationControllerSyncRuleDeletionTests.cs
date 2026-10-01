@@ -18,6 +18,7 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Tasking;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -29,7 +30,7 @@ namespace JIM.Web.Api.Tests;
 /// <summary>
 /// Tests for the Synchronisation Rule DELETE endpoint's recall-or-keep choice (#1537): a delete that queues a
 /// value recall returns 202 Accepted with a tracking DTO carrying the recall Activity id and the affected
-/// counts; keep, or a rule with no contributed values, deletes synchronously and returns 204 exactly as before.
+/// counts; keep, or a rule with no contributed values, deletes synchronously and returns 200 with what the deletion affected.
 /// </summary>
 [TestFixture]
 public class SynchronisationControllerSyncRuleDeletionTests
@@ -58,6 +59,12 @@ public class SynchronisationControllerSyncRuleDeletionTests
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockTaskingRepo = new Mock<ITaskingRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // Feature-flagged behaviour is tested as shipped (test/CLAUDE.md); Metaverse-Derived Attribute Flows read
+        // the flag on these paths (#1750).
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+        // The import rules of a Metaverse Object Type, read to find Attribute Flows deriving Metaverse attributes that a
+        // change leaves with a missing input (#1750, FR 3): none here unless a test says otherwise.
+        _mockConnectedSystemRepo.Setup(r => r.GetImportSyncRulesForMetaverseObjectTypeAsync(It.IsAny<int>())).ReturnsAsync(() => []);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
@@ -184,13 +191,13 @@ public class SynchronisationControllerSyncRuleDeletionTests
     }
 
     [Test]
-    public async Task DeleteSyncRuleAsync_KeepContributedValues_ReturnsNoContentAndDeletesSynchronouslyAsync()
+    public async Task DeleteSyncRuleAsync_KeepContributedValues_ReturnsOkAndDeletesSynchronouslyAsync()
     {
         var syncRule = SetUpRuleWithContributedValues();
 
         var result = await _controller.DeleteSyncRuleAsync(1, keepContributedValues: true);
 
-        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockConnectedSystemRepo.Verify(r => r.DeleteSyncRuleAsync(syncRule), Times.Once,
             "keep deletes the rule synchronously, exactly as today");
         _mockTaskingRepo.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Never,
@@ -198,7 +205,7 @@ public class SynchronisationControllerSyncRuleDeletionTests
     }
 
     [Test]
-    public async Task DeleteSyncRuleAsync_RecallWithNoContributedValues_ReturnsNoContentAsync()
+    public async Task DeleteSyncRuleAsync_RecallWithNoContributedValues_ReturnsOkAsync()
     {
         var syncRule = new SyncRule { Id = 1, Name = "HR Import Rule", ConnectedSystemId = 7 };
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(1))
@@ -208,7 +215,7 @@ public class SynchronisationControllerSyncRuleDeletionTests
 
         var result = await _controller.DeleteSyncRuleAsync(1);
 
-        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockConnectedSystemRepo.Verify(r => r.DeleteSyncRuleAsync(syncRule), Times.Once);
         _mockTaskingRepo.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Never,
             "a rule contributing nothing has nothing to recall, so nothing queues");

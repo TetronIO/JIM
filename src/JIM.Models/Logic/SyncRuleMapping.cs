@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
@@ -173,6 +174,15 @@ public class SyncRuleMapping : IAuditable
     /// </summary>
     [NotMapped]
     public List<string> SaveWarnings { get; } = [];
+
+    /// <summary>
+    /// The Metaverse-Derived Attribute Flows (#1750, FR 3) the save that returned this instance left with a missing
+    /// input: disabling this mapping, or changing what it writes or reads, took away the last enabled contributor of
+    /// an attribute they read. Transient, like <see cref="SaveWarnings"/>: never persisted, and empty on every
+    /// ordinary read.
+    /// </summary>
+    [NotMapped]
+    public List<DependentDerivedFlow> SaveDependentDerivedFlows { get; } = [];
 
     /// <summary>
     /// Whether this export mapping contributes to an Update export to the Connected System. The export
