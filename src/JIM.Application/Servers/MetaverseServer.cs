@@ -1217,7 +1217,21 @@ public partial class MetaverseServer
             .SetTag("id", metaverseObjectId)
             .SetTag("page", page)
             .SetTag("pageSize", pageSize);
-        return await Application.Repository.Metaverse.GetMvoChangeHistoryAsync(metaverseObjectId, page, pageSize);
+        var (items, totalCount) = await Application.Repository.Metaverse.GetMvoChangeHistoryAsync(metaverseObjectId, page, pageSize);
+
+        // Name a Generated Value as one on the Changes tab exactly as the inspector's History does (#399).
+        var generatedValues = await GetGeneratedValuesByAttributeAsync(metaverseObjectId);
+        if (generatedValues.Count == 0)
+            return (items, totalCount);
+
+        foreach (var attributeChange in items.SelectMany(i => i.AttributeChanges).Where(ac => ac.AttributeId.HasValue))
+        {
+            var ownership = generatedValues.GetValueOrDefault(attributeChange.AttributeId!.Value);
+            foreach (var valueChange in attributeChange.ValueChanges)
+                valueChange.IsGeneratedValue = ProvenanceLogic.IsGeneratedValueRecord(valueChange.ContributedBySyncRuleId, valueChange.ToDisplayString(), ownership);
+        }
+
+        return (items, totalCount);
     }
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)

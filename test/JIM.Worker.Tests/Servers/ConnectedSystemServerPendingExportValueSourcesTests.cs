@@ -105,7 +105,7 @@ public class ConnectedSystemServerPendingExportValueSourcesTests
     }
 
     [Test]
-    public async Task GetPendingExportValueSourcesAsync_MappingHasGeneration_ReturnsComputedNamingJimAsync()
+    public async Task GetPendingExportValueSourcesAsync_MappingHasGeneration_ReturnsAGeneratedValueRatherThanAnExpressionAsync()
     {
         var mvoId = Guid.NewGuid();
         var pendingExport = BuildPendingExport(mvoId, syncRuleId: 7, connectedSystemAttributeId: 42);
@@ -127,7 +127,8 @@ public class ConnectedSystemServerPendingExportValueSourcesTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(source.IsComputed, Is.True);
-            Assert.That(source.Expression, Is.EqualTo("Generated Value"));
+            Assert.That(source.IsGeneratedValue, Is.True);
+            Assert.That(source.Expression, Is.Null, "a generated value is not an expression, so it must not be shown as one");
         }
     }
 

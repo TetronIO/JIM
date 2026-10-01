@@ -89,6 +89,17 @@ public partial class ConnectedSystemServer
                 ? mapping.Sources[0]
                 : null;
 
+        if (mapping.Generation != null)
+        {
+            // Generated, not computed from an expression, so there is no expression text to show.
+            return new PendingExportValueSource
+            {
+                ConnectedSystemAttributeId = connectedSystemAttributeId,
+                IsComputed = true,
+                IsGeneratedValue = true
+            };
+        }
+
         if (singleSource == null)
         {
             return new PendingExportValueSource
@@ -111,15 +122,11 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// The text shown for a computed source: a Generated Value names its Source Type; an expression mapping shows
-    /// its expression; an advanced/chained mapping (several sources, or an attribute source combined with
+    /// The text shown for a computed source: an expression mapping shows its expression; an advanced/chained mapping (several sources, or an attribute source combined with
     /// functions) falls back to naming its source attributes, since it has no single expression string of its own.
     /// </summary>
     private static string DescribeComputedSource(SyncRuleMapping mapping)
     {
-        if (mapping.Generation != null)
-            return "Generated Value";
-
         var expressionSource = mapping.Sources
             .OrderBy(s => s.Order)
             .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Expression));

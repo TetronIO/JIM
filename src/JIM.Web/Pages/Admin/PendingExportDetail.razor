@@ -344,6 +344,10 @@
                             {
                                 <EmptyValue />
                             }
+                            else if (source.IsGeneratedValue)
+                            {
+                                <MudText Typo="Typo.body2">@ValueOriginGrouping.GeneratedValueLabel</MudText>
+                            }
                             else if (source.IsComputed)
                             {
                                 <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />

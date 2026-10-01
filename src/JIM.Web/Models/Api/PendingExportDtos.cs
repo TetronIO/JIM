@@ -255,6 +255,9 @@ public class PendingExportValueSourceDto
     /// </summary>
     public bool IsComputed { get; set; }
 
+    /// <summary>True when the value comes from a Generated Value Attribute Flow; <c>Expression</c> is then null.</summary>
+    public bool IsGeneratedValue { get; set; }
+
     /// <summary>The text describing a computed source, when <see cref="IsComputed"/> is true.</summary>
     public string? Expression { get; set; }
 
@@ -278,6 +281,7 @@ public class PendingExportValueSourceDto
         {
             ConnectedSystemAttributeId = model.ConnectedSystemAttributeId,
             IsComputed = model.IsComputed,
+            IsGeneratedValue = model.IsGeneratedValue,
             Expression = model.Expression,
             SourceMetaverseAttributeId = model.SourceMetaverseAttributeId,
             SourceMetaverseAttributeName = model.SourceMetaverseAttributeName,

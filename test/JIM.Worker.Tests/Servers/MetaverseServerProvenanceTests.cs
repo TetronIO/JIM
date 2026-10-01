@@ -467,6 +467,33 @@ public class MetaverseServerProvenanceTests
         _mockMetaverseRepo.Verify(r => r.GetContributingConnectedSystemObjectAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int?>()), Times.Never);
     }
 
+    [TestCase("E1001", true, TestName = "GetMvoChangeHistoryAsync_ValueTheGeneratingRuleGenerated_IsMarkedAsAGeneratedValueAsync")]
+    [TestCase("E0042", false, TestName = "GetMvoChangeHistoryAsync_OtherValueFromTheGeneratingRule_IsNotMarkedAsync")]
+    public async Task GetMvoChangeHistoryAsync_MarksGeneratedValuesByValueAndRuleAsync(string value, bool expected)
+    {
+        // The Changes tab must name a generated value the way the inspector's History does: the generating rule
+        // contributed it AND it is a value the generation produced.
+        var change = new MvoChangeHistoryDto
+        {
+            AttributeChanges =
+            {
+                new MvoAttributeChangeDto
+                {
+                    AttributeId = AttributeId,
+                    AttributeName = "Employee ID",
+                    ValueChanges = { new MvoValueChangeDto { ValueChangeType = JIM.Models.Enums.ValueChangeType.Add, StringValue = value, ContributedBySyncRuleId = _syncRule.Id } }
+                }
+            }
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMvoChangeHistoryAsync(_mvoId, 1, 20)).ReturnsAsync((new List<MvoChangeHistoryDto> { change }, 1));
+        _mockMetaverseRepo.Setup(r => r.GetGeneratedValueOwnershipsAsync(_mvoId))
+            .ReturnsAsync(new List<GeneratedValueOwnership> { NewOwnership(1) });
+
+        var (items, _) = await _jim.Metaverse.GetMvoChangeHistoryAsync(_mvoId, 1, 20);
+
+        Assert.That(items.Single().AttributeChanges.Single().ValueChanges.Single().IsGeneratedValue, Is.EqualTo(expected));
+    }
+
     [Test]
     public async Task GetMetaverseObjectProvenanceAsync_AttributeHeldByAGeneratedValue_ReportsAGeneratedValueOriginAsync()
     {

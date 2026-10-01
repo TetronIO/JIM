@@ -1076,7 +1076,7 @@
                     // loaded, in which case the change still renders, just without the Source column's chip/link.
                     Origin = ProvenanceLogic.ResolveChangeValueOrigin(
                         vc.ContributedBySyncRuleId, vc.ContributedBySyncRuleName,
-                        vc.ContributedBySystemId, vc.ContributedBySystemName),
+                        vc.ContributedBySystemId, vc.ContributedBySystemName, vc.IsGeneratedValue),
                     AttributeInspectHref = ac.AttributeId.HasValue && !string.IsNullOrEmpty(typePluralName)
                         ? Utilities.GetMetaverseObjectInspectHref(metaverseObjectId, typePluralName, ac.AttributeId.Value)
                         : null

@@ -139,6 +139,13 @@ public class MvoValueChangeDto
     public string? ContributedBySystemName { get; set; }
 
     /// <summary>
+    /// True when a Generated Value Attribute Flow produced this value (#399): the contributing Synchronisation Rule
+    /// is the generating one and the value is one the generation produced. Set by
+    /// <c>MetaverseServer.GetMvoChangeHistoryAsync</c>, not by the repository.
+    /// </summary>
+    public bool IsGeneratedValue { get; set; }
+
+    /// <summary>
     /// Returns the human-readable representation of the value, mirroring the
     /// behaviour of <c>MetaverseObjectChangeAttributeValue.ToString()</c> so
     /// the UI does not need access to the original entity.

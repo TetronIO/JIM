@@ -84,6 +84,25 @@ public class ProvenanceLogicTests
     #region ResolveChangeValueOrigin
 
     [Test]
+    public void ResolveChangeValueOrigin_GeneratedValue_IsAGeneratedValueThatKeepsItsSystemAndRule()
+    {
+        var origin = ProvenanceLogic.ResolveChangeValueOrigin(5, "HR Import Users", 9, "HR", isGeneratedValue: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(origin!.Kind, Is.EqualTo(ValueOriginKind.GeneratedValue));
+            Assert.That(origin.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(origin.SyncRuleName, Is.EqualTo("HR Import Users"));
+        }
+    }
+
+    [Test]
+    public void ResolveChangeValueOrigin_GeneratedButNothingRecorded_StillReturnsNull()
+    {
+        Assert.That(ProvenanceLogic.ResolveChangeValueOrigin(null, null, null, null, isGeneratedValue: true), Is.Null);
+    }
+
+    [Test]
     public void ResolveChangeValueOrigin_NothingRecorded_ReturnsNull()
     {
         var origin = ProvenanceLogic.ResolveChangeValueOrigin(null, null, null, null);

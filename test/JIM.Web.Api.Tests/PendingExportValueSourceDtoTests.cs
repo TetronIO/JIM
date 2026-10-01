@@ -79,7 +79,7 @@ public class PendingExportValueSourceDtoTests
             PendingExport = pendingExport,
             ValueSources =
             {
-                new PendingExportValueSource { ConnectedSystemAttributeId = 42, IsComputed = true, Expression = "Generated Value" }
+                new PendingExportValueSource { ConnectedSystemAttributeId = 42, IsComputed = true, IsGeneratedValue = true }
             }
         };
 
@@ -87,5 +87,6 @@ public class PendingExportValueSourceDtoTests
 
         Assert.That(dto.ValueSources, Has.Count.EqualTo(1));
         Assert.That(dto.ValueSources[0].ConnectedSystemAttributeId, Is.EqualTo(42));
+        Assert.That(dto.ValueSources[0].IsGeneratedValue, Is.True);
     }
 }

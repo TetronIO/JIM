@@ -58,20 +58,22 @@ public static class ProvenanceLogic
     /// still-live Synchronisation Rule named by <paramref name="contributedBySyncRuleId"/>, so a deleted rule
     /// always resolves the system to null even though <paramref name="contributedBySyncRuleName"/>'s snapshot
     /// survives. Returns null when nothing was ever recorded for this value, so the caller can render nothing
-    /// (rather than "Source not recorded") for change rows that pre-date provenance.
+    /// (rather than "Source not recorded") for change rows that pre-date provenance. <paramref name="isGeneratedValue"/>
+    /// (from <see cref="IsGeneratedValueRecord"/>) makes it a <see cref="ValueOriginKind.GeneratedValue"/>.
     /// </summary>
     public static ValueOrigin? ResolveChangeValueOrigin(
         int? contributedBySyncRuleId,
         string? contributedBySyncRuleName,
         int? contributedBySystemId,
-        string? contributedBySystemName)
+        string? contributedBySystemName,
+        bool isGeneratedValue = false)
     {
         if (!contributedBySyncRuleId.HasValue && string.IsNullOrEmpty(contributedBySyncRuleName))
             return null;
 
         return new ValueOrigin
         {
-            Kind = ValueOriginKind.SynchronisationRule,
+            Kind = isGeneratedValue ? ValueOriginKind.GeneratedValue : ValueOriginKind.SynchronisationRule,
             ConnectedSystemId = contributedBySystemId,
             ConnectedSystemName = contributedBySystemName,
             SyncRuleId = contributedBySyncRuleId,
@@ -105,13 +107,21 @@ public static class ProvenanceLogic
     /// replaced). The rule alone is not enough, because an Attribute Flow can be switched to Generated Value after
     /// it has already contributed values it read from the Connected System.
     /// </summary>
-    public static bool IsGeneratedHistoryValue(AttributeHistoryEntry entry, GeneratedValueOwnership? ownership)
+    public static bool IsGeneratedHistoryValue(AttributeHistoryEntry entry, GeneratedValueOwnership? ownership) =>
+        IsGeneratedValueRecord(entry.SyncRuleId, entry.Value, ownership);
+
+    /// <summary>
+    /// Whether one recorded value change (an attribute history entry, or a Changes tab value change) was a
+    /// Generated Value: <paramref name="syncRuleId"/> is the generating rule and <paramref name="value"/> is one the
+    /// generation produced. See <see cref="IsGeneratedHistoryValue"/> for why the rule alone is not enough.
+    /// </summary>
+    public static bool IsGeneratedValueRecord(int? syncRuleId, string? value, GeneratedValueOwnership? ownership)
     {
-        if (ownership == null || entry.SyncRuleId != ownership.SyncRuleId || entry.Value == null)
+        if (ownership == null || syncRuleId != ownership.SyncRuleId || value == null)
             return false;
 
-        return string.Equals(entry.Value, ownership.Value, StringComparison.Ordinal) ||
-               string.Equals(entry.Value, ownership.PreviousValue, StringComparison.Ordinal);
+        return string.Equals(value, ownership.Value, StringComparison.Ordinal) ||
+               string.Equals(value, ownership.PreviousValue, StringComparison.Ordinal);
     }
 
     /// <summary>

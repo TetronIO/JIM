@@ -26,7 +26,16 @@ public class PendingExportValueSource
     /// </summary>
     public bool IsComputed { get; set; }
 
-    /// <summary>The text to show for a computed source, when <see cref="IsComputed"/> is true.</summary>
+    /// <summary>
+    /// True when the mapping's Source Type is Generated Value. The value is generated rather than computed from an
+    /// expression, so <see cref="Expression"/> is null.
+    /// </summary>
+    public bool IsGeneratedValue { get; set; }
+
+    /// <summary>
+    /// The text to show for a computed source, when <see cref="IsComputed"/> is true and
+    /// <see cref="IsGeneratedValue"/> is false.
+    /// </summary>
     public string? Expression { get; set; }
 
     /// <summary>The single Metaverse attribute the value came from, when <see cref="IsComputed"/> is false.</summary>
