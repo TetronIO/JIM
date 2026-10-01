@@ -286,22 +286,6 @@ public class CausalitySummaryBuilderTests
         Assert.That(valueSegment.Value, Is.EqualTo("jallen42"));
     }
 
-    [Test]
-    public void Build_JoinShapeWithAdoptedValue_NamesTheExistingAttributeAndValue()
-    {
-        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
-        var joined = CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
-            parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen");
-        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted,
-            parent: joined, ordinal: 0, detailMessage: "Employee Number: 40021");
-
-        var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
-
-        Assert.That(RenderSentence(summary.Segments), Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed person Liam Allen: " +
-            "it was joined to the Metaverse Object Liam Allen, and the existing Employee Number 40021 was adopted."));
-    }
-
     /// <summary>
     /// A missing or malformed DetailMessage (legacy data, or a caller that never populated it) must not crash
     /// or render a blank attribute name or value; it falls back to the generic sentence.
@@ -314,14 +298,11 @@ public class CausalitySummaryBuilderTests
             parent: null, ordinal: 0, targetEntityId: CausalityTestData.MvoId, targetEntityDescription: "Liam Allen");
         CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned,
             parent: joined, ordinal: 0, detailMessage: null);
-        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted,
-            parent: joined, ordinal: 1, detailMessage: "not the expected shape");
 
         var summary = BuildSummary(item, CausalityTestData.NewJoinerContext());
         var sentence = RenderSentence(summary.Segments);
 
         Assert.That(sentence, Does.Contain("a value was generated"));
-        Assert.That(sentence, Does.Contain("an existing value was adopted"));
         Assert.That(summary.Segments.OfType<SummarySegment.LiteralValue>(), Is.Empty);
     }
 

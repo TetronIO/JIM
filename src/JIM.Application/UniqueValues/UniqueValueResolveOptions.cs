@@ -100,9 +100,8 @@ public sealed class UniqueValueResolveOptions
     /// <summary>
     /// Whether the run-scoped cache already holds a live assignment for <paramref name="metaverseObjectId"/>'s
     /// <paramref name="metaverseAttributeId"/> (import mode). Public so a caller outside <c>JIM.Application</c>
-    /// (the worker's adopt-before-generate step, Phase 2 work package G) can skip its own expensive "is there
-    /// anything to adopt" query for an object <see cref="UniqueValueGenerationServer.ResolveAsync"/> is about
-    /// to resolve as <see cref="GenerationOutcomeKind.Sticky"/> anyway, without needing read access to
+    /// can skip its own work for an object <see cref="UniqueValueGenerationServer.ResolveAsync"/> is about to
+    /// resolve as <see cref="GenerationOutcomeKind.Sticky"/> anyway, without needing read access to
     /// <see cref="KnownMetaverseAssignments"/> itself, which stays internal. Returns false both when the
     /// object's assignments are known to hold nothing for this attribute and when they are not known at all
     /// (not yet prefetched or resolved this run); a caller that needs to tell those apart has no use for this

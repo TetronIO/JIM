@@ -5,6 +5,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
@@ -259,6 +260,45 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(excludingSelf, Is.Empty, "the requesting object's own value must always be free for it");
     }
 
+    [Test]
+    public async Task GetConnectedSystemAttributeHolders_ReturnEachHoldersObjectAndSavedJoinAsync()
+    {
+        // #242: the import-mode connector-space gate needs WHO holds a candidate value, not just whether it is
+        // held, so it can treat the requesting object's own accounts as free. Real SQL round trip of every field:
+        // the lower-cased value, the number from either IntValue or LongValue, the holder's id and its saved join
+        // (null when unjoined).
+        var estate = await SeedEstateAsync(Guid.NewGuid().ToString("N")[..8]);
+        await JoinCsoToMvoAsync(estate);
+
+        await using (var ctx = NewContext())
+        {
+            var text = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsTextAttributeId, StringValue = "Joe.Bloggs" };
+            var intNumber = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsNumberAttributeId, IntValue = 42 };
+            var longNumber = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = estate.CsNumberAttributeId, LongValue = 9999999999L };
+            ctx.ConnectedSystemObjectAttributeValues.AddRange(text, intNumber, longNumber);
+            foreach (var value in new[] { text, intNumber, longNumber })
+                ctx.Entry(value).Property("ConnectedSystemObjectId").CurrentValue = estate.CsoId;
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var readCtx = NewContext();
+        var repo = NewSyncRepository(readCtx);
+
+        var textHolders = await repo.GetConnectedSystemAttributeValueHoldersAsync(estate.CsTextAttributeId, ["joe.bloggs", "nobody"]);
+        var numberHolders = await repo.GetConnectedSystemAttributeNumberHoldersAsync(estate.CsNumberAttributeId, [42L, 9999999999L, 7L]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(textHolders, Is.EqualTo(new[] { new ConnectorSpaceValueHolder("joe.bloggs", null, estate.CsoId, estate.MvoId) }));
+            Assert.That(numberHolders, Is.EquivalentTo(new[]
+            {
+                new ConnectorSpaceValueHolder(null, 42L, estate.CsoId, estate.MvoId),
+                new ConnectorSpaceValueHolder(null, 9999999999L, estate.CsoId, estate.MvoId)
+            }));
+            Assert.That(await repo.GetConnectedSystemAttributeValueHoldersAsync(estate.CsTextAttributeId, []), Is.Empty);
+        }
+    }
+
     // ---- Numeric value gates ----
 
     [Test]
@@ -287,7 +327,7 @@ public class GeneratedValueRepositoryDatabaseTests
         Assert.That(result, Is.Empty);
     }
 
-    // ---- Gate (e) / adoption gate: GetGeneratedValueAssignmentValuesInUseAsync ----
+    // ---- Gate (e): GetGeneratedValueAssignmentValuesInUseAsync ----
 
     [Test]
     public void GetGeneratedValueAssignmentValuesInUseAsync_NeitherIdGiven_ThrowsArgumentExceptionAsync()

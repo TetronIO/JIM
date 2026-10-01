@@ -185,9 +185,9 @@
         @if (Direction == SyncRuleDirection.Import)
         {
             <MudText Typo="Typo.body2">
-                1. The Metaverse Object has no @(TargetName ?? "this attribute") from a higher-priority source. If it
-                already holds a value for the attribute (left behind when a higher-priority source stops supplying
-                one), that existing value is adopted rather than a new one generated.
+                1. No higher-priority source supplies @(TargetName ?? "this attribute") for the Metaverse Object. JIM
+                generates a value the first time and keeps it from then on. Like any Attribute Flow taking the
+                attribute over, it replaces a value a higher-priority source left behind when it stopped supplying one.
             </MudText>
         }
         else

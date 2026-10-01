@@ -52,6 +52,9 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
             Assert.That(assignment.ConnectedSystemObjectId, Is.EqualTo(ticketingCso.Id), "export-mode assignments key on the Connected System Object");
             Assert.That(assignment.MetaverseObjectId, Is.Null, "export-mode assignments never touch the Metaverse");
             Assert.That(assignment.Value, Is.EqualTo("e1"));
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed),
+                "#1904: the page flush that persisted the provisioning Connected System Object committed it");
+            Assert.That(assignment.CommittedAt, Is.Not.Null);
 
             var assignedOutcomes = activity.RunProfileExecutionItems
                 .SelectMany(r => r.SyncOutcomes)
@@ -115,8 +118,7 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
             Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemId == ctx.Ticketing.Id), Is.False,
                 "the Connected System Object already holds the sticky value, so no net-change Update is staged");
             Assert.That(secondActivity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
-                    or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False,
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.False,
                 "a stable re-evaluation records no new outcome");
         }
     }
@@ -145,7 +147,7 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
     #endregion
 
-    #region Adoption removed: generation always overwrites what the target already holds
+    #region Generation overwrites what the target already holds, like any export Attribute Flow
 
     /// <summary>
     /// Formerly <c>FullSync_ExistingJoinedTargetAlreadyHoldingAValue_AdoptsItAndStagesNoChangeAsync</c>: before
@@ -174,13 +176,10 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1));
             var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.False, "connector-space adoption has been removed");
             Assert.That(assignment.Value, Is.EqualTo("e1"));
 
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
                 .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.True);
-            Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False);
         }
     }
 
@@ -693,7 +692,7 @@ public class ExportGeneratedValueWorkflowTests : WorkflowTestBase
 
     /// <summary>
     /// Reconfigures HR's import rule to join an existing Metaverse Object by the "name"/DisplayName match key
-    /// instead of projecting a new one, mirroring the import-side adoption tests' brownfield-join topology.
+    /// instead of projecting a new one, mirroring the import-side participating-Directory tests' brownfield-join topology.
     /// </summary>
     private void ConfigureHrToJoinByMatchKey(ExportGenerationContext ctx)
     {

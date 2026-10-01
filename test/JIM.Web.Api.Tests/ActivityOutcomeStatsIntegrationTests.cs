@@ -513,10 +513,11 @@ public class ActivityOutcomeStatsIntegrationTests
     #region Test 11: Unique Value Generation stats
 
     [Test]
-    public async Task GetStats_GeneratedValueOutcomeBased_CountsAssignedAdoptedAndFailuresAsync()
+    public async Task GetStats_GeneratedValueOutcomeBased_CountsAssignedAndFailuresAsync()
     {
-        // Arrange: 2 GeneratedValueAssigned outcomes, 1 GeneratedValueAdopted outcome (all children of a
-        // Joined root, mirroring where the worker records them), plus one RPEI per generation failure kind.
+        // Arrange: 2 GeneratedValueAssigned outcomes (children of a Joined or AttributeFlow root, mirroring where
+        // the worker records them), plus one RPEI per generation failure kind. The retired GeneratedValueAdopted
+        // outcome (never recorded since adoption was removed, #242) is seeded too, and must not be counted.
         var activity = await CreateActivityAsync();
 
         var rpei1 = await CreateRpeiAsync(activity, ObjectChangeType.Joined);
@@ -537,7 +538,6 @@ public class ActivityOutcomeStatsIntegrationTests
 
         // Assert
         Assert.That(stats.TotalGeneratedValues, Is.EqualTo(2));
-        Assert.That(stats.TotalGeneratedValuesAdopted, Is.EqualTo(1));
         Assert.That(stats.TotalGeneratedValueFailures, Is.EqualTo(3));
     }
 
@@ -554,7 +554,6 @@ public class ActivityOutcomeStatsIntegrationTests
 
         // Assert
         Assert.That(stats.TotalGeneratedValues, Is.EqualTo(0));
-        Assert.That(stats.TotalGeneratedValuesAdopted, Is.EqualTo(0));
 
         // Failures are always derived from RPEI error types (unconditional), so this stays 0 too, with no
         // errors seeded.

@@ -39,12 +39,6 @@ public class GeneratedValueAssignmentHeader
 
     public GeneratedValueAssignmentState State { get; set; }
 
-    /// <summary>
-    /// True when the value was adopted from an existing accepted value rather than generated (plan decision 5,
-    /// "adopt before generate").
-    /// </summary>
-    public bool Adopted { get; set; }
-
     /// <summary>When the value was committed to the object; falls back to when the assignment was created for
     /// a row that has not yet completed its first commit (a rare, transitional read).</summary>
     public DateTime AssignedDate { get; set; }

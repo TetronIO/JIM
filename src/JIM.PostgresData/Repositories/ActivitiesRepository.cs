@@ -1764,7 +1764,6 @@ public class ActivityRepository : IActivityRepository
         int totalProvisioned;
         int totalMvoDeleted;
         int totalGeneratedValues;
-        int totalGeneratedValuesAdopted;
 
         if (hasOutcomes)
         {
@@ -1795,10 +1794,9 @@ public class ActivityRepository : IActivityRepository
             totalProvisioned = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
             totalMvoDeleted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
-            // Unique Value Generation (#242): outcome-only concepts, like Provisioned above; no
+            // Unique Value Generation (#242): an outcome-only concept, like Provisioned above; no
             // ObjectChangeType equivalent exists for the legacy fallback below.
             totalGeneratedValues = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned);
-            totalGeneratedValuesAdopted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted);
         }
         else
         {
@@ -1829,9 +1827,8 @@ public class ActivityRepository : IActivityRepository
 
             totalProvisioned = 0; // Provisioned is an outcome-only concept; no ObjectChangeType equivalent
 
-            // Unique Value Generation (#242): likewise outcome-only concepts, predating this graph's legacy path.
+            // Unique Value Generation (#242): likewise an outcome-only concept, predating this graph's legacy path.
             totalGeneratedValues = 0;
-            totalGeneratedValuesAdopted = 0;
         }
 
         // --- Stats that always come from RPEIs ---
@@ -1890,7 +1887,6 @@ public class ActivityRepository : IActivityRepository
             TotalProvisioned = totalProvisioned,
             TotalMvoDeleted = totalMvoDeleted,
             TotalGeneratedValues = totalGeneratedValues,
-            TotalGeneratedValuesAdopted = totalGeneratedValuesAdopted,
             TotalGeneratedValueFailures = totalGeneratedValueFailures,
 
             // Direct creation stats

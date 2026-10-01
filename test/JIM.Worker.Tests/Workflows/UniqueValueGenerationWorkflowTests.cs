@@ -20,8 +20,8 @@ namespace JIM.Worker.Tests.Workflows;
 /// the unique value service or the engine's <c>ApplyGeneratedValue</c> in isolation. Topology throughout: an
 /// "HR" Connected System whose import Synchronisation Rule carries a generated Account Name Attribute Flow
 /// (base <c>Lower(cs["first"]) + "." + Lower(cs["last"])</c>, only-if-taken), projecting a "Person" Metaverse
-/// Object Type. Adoption tests add a "Directory" Connected System joined by Employee Number, with an export
-/// Synchronisation Rule making it a participating target.
+/// Object Type. Priority and participation tests add a "Directory" Connected System joined by Employee Number,
+/// with an export Synchronisation Rule making it a participating target.
 /// </summary>
 [TestFixture]
 public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
@@ -41,11 +41,9 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         {
             Assert.That(ResolvedAccountNames(ctx), Is.EquivalentTo(new[] { "joe.bloggs", "ada.lovelace" }));
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(2), "one assignment per object");
-            // A generated (not adopted) import-mode value starts Proposed: nothing in this release's scope
-            // (export-mode generation and Collision Remediation are out of scope, per the work package brief)
-            // transitions it to Committed. Adopted values are the one exception (BuildAssignment starts them
-            // Committed directly), covered by the adoption tests below.
-            Assert.That(SyncRepo.GeneratedValueAssignments.Values.All(a => a.State == GeneratedValueAssignmentState.Proposed), Is.True);
+            // #1904 (option A): the page flush that persisted the Metaverse Objects committed their assignments.
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.All(a => a.State == GeneratedValueAssignmentState.Committed && a.CommittedAt != null), Is.True,
+                "an assignment whose object has been persisted is Committed, with CommittedAt set");
 
             var assignedOutcomes = activity.RunProfileExecutionItems
                 .SelectMany(r => r.SyncOutcomes)
@@ -352,7 +350,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
     #endregion
 
-    #region Adopt before generate (connector-space adoption removed: product-owner decision)
+    #region No adoption: a value already held elsewhere is never taken over (product-owner decisions)
 
     /// <summary>
     /// Formerly <c>FullSync_ParticipatingSystemAlreadyHoldsAValue_AdoptsItInsteadOfGeneratingAsync</c>: before
@@ -364,7 +362,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_ParticipatingSystemAlreadyHoldsAValueButNoImportFlow_GeneratesAndExportsOverwritingItAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         // Directory is a brownfield join: it already holds "jsmith" for the same Employee Number before HR ever
         // syncs. Directory's Synchronisation Rule only EXPORTS Account Name (no import flow reads sAMAccountName
@@ -380,19 +378,217 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("john.smith"), "generation must never read a joined target's own value");
 
             var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.False, "connector-space adoption has been removed");
-            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Proposed));
+            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
 
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
                 .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.True);
-            Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False);
 
             // The generated value flows to the participating target on export, overwriting the brownfield value.
             var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemId == ctx.Directory!.Id);
             Assert.That(pendingExport.AttributeValueChanges.Single().StringValue, Is.EqualTo("john.smith"),
-                "the export carries the generated value, never the adopted brownfield one");
+                "the export carries the generated value, never the target's brownfield one");
         }
+    }
+
+    /// <summary>
+    /// The connector-space gate must not count the object's OWN joined account (#242, product-owner decision
+    /// 2026-10-01: a generated flow is no different to an ordinary flow). Directory's account for this person
+    /// already holds exactly the base value "john.smith"; that is the same person, not a collision, so the
+    /// generated value is "john.smith", exactly what an expression flow would write, not "john.smith1".
+    /// </summary>
+    [Test]
+    public async Task FullSync_ObjectsOwnJoinedAccountHoldsTheBaseValue_IsFreeForItAndNoSuffixIsAddedAsync()
+    {
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
+
+        await SeedDirectoryCsoAsync(ctx, "E1", "john.smith");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        await SeedHrCsoAsync(ctx, "John", "Smith", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("john.smith"),
+                "the object's own joined account holding the base value is not a collision");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("john.smith"));
+        }
+    }
+
+    /// <summary>
+    /// The same-pass case of the test above (#242): the account is joined to the Metaverse Object in the very
+    /// synchronisation pass that generates the value, so the join is still only in memory when the
+    /// connector-space gate runs. The generated mapping sits on Directory's own import rule and Directory exports
+    /// Account Name back to the same account's sAMAccountName, which already holds the base value. Two shapes:
+    /// Directory projects the object itself (a brand-new Metaverse Object with no id yet), or HR projected it
+    /// earlier and Directory's Object Matching Rule joins it in Directory's pass. Either way it is the person's
+    /// own account: the value is "john.smith", and no export renames the account.
+    /// </summary>
+    [TestCase(true, TestName = "FullSync_OwnAccountJoinedInTheSamePass_ByProjection_IsFreeForItAndNothingIsRenamedAsync")]
+    [TestCase(false, TestName = "FullSync_OwnAccountJoinedInTheSamePass_ByObjectMatchingRule_IsFreeForItAndNothingIsRenamedAsync")]
+    public async Task FullSync_OwnAccountJoinedInTheSamePass_IsFreeForItAndNothingIsRenamedAsync(bool directoryProjects)
+    {
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+        var mvAccountNameAttr = new MetaverseAttribute
+        {
+            Name = "Account Name",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(mvAccountNameAttr);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(mvAccountNameAttr);
+
+        var directory = await CreateConnectedSystemAsync("Directory");
+        var directoryType = await CreateCsoTypeAsync(directory.Id, "DirectoryUser", new List<ConnectedSystemObjectTypeAttribute>
+        {
+            new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "first", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "last", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "sAMAccountName", Type = AttributeDataType.Text, Selected = true }
+        });
+        var dirEmployeeIdAttr = directoryType.Attributes.Single(a => a.Name == "employeeId");
+        var dirSamAttr = directoryType.Attributes.Single(a => a.Name == "sAMAccountName");
+
+        var directoryImportRule = await CreateImportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Import", enableProjection: directoryProjects);
+        directoryImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryImportRule,
+            SyncRuleId = directoryImportRule.Id,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = dirEmployeeIdAttr, ConnectedSystemAttributeId = dirEmployeeIdAttr.Id } }
+        });
+        directoryImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryImportRule,
+            SyncRuleId = directoryImportRule.Id,
+            TargetMetaverseAttribute = mvAccountNameAttr,
+            TargetMetaverseAttributeId = mvAccountNameAttr.Id,
+            Generation = new SyncRuleMappingGeneration
+            {
+                TokenKind = GeneratedValueTokenKind.OnlyIfTaken,
+                SuffixStyle = GeneratedValueSuffixStyle.Number,
+                SuffixStart = 1,
+                AttemptLimit = 1000,
+                NeverReuse = true
+            },
+            Sources = { new SyncRuleMappingSource { Order = 0, Expression = "Lower(cs[\"first\"]) + \".\" + Lower(cs[\"last\"])" } }
+        });
+        if (!directoryProjects)
+        {
+            directoryImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+            {
+                SyncRule = directoryImportRule,
+                SyncRuleId = directoryImportRule.Id,
+                Order = 0,
+                CaseSensitive = true,
+                TargetMetaverseAttribute = mvEmployeeIdAttr,
+                TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+                Sources = { new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = dirEmployeeIdAttr, ConnectedSystemAttributeId = dirEmployeeIdAttr.Id } }
+            });
+        }
+
+        var directoryExportRule = await CreateExportSyncRuleAsync(directory.Id, directoryType, mvType, "Directory Export", enableProvisioning: false);
+        directoryExportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = directoryExportRule,
+            SyncRuleId = directoryExportRule.Id,
+            TargetConnectedSystemAttribute = dirSamAttr,
+            TargetConnectedSystemAttributeId = dirSamAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvAccountNameAttr, MetaverseAttributeId = mvAccountNameAttr.Id } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        if (!directoryProjects)
+        {
+            // HR projects the person first (no Account Name flow of its own).
+            var hr = await CreateConnectedSystemAsync("HR");
+            var hrType = await CreateCsoTypeAsync(hr.Id, "HrUser", new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+                new() { Name = "employeeId", Type = AttributeDataType.Text, Selected = true }
+            });
+            var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "employeeId");
+            var hrImportRule = await CreateImportSyncRuleAsync(hr.Id, hrType, mvType, "HR Import");
+            hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+            {
+                SyncRule = hrImportRule,
+                SyncRuleId = hrImportRule.Id,
+                TargetMetaverseAttribute = mvEmployeeIdAttr,
+                TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+                Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = hrEmployeeIdAttr, ConnectedSystemAttributeId = hrEmployeeIdAttr.Id } }
+            });
+            await DbContext.SaveChangesAsync();
+
+            SeedCso(hr, hrType, ("employeeId", "E1"));
+            await RunFullSyncReturningActivityAsync(hr);
+            Assert.That(SyncRepo.MetaverseObjects, Has.Count.EqualTo(1), "sanity: HR projected the person");
+        }
+
+        SeedCso(directory, directoryType, ("first", "John"), ("last", "Smith"), ("employeeId", "E1"), ("sAMAccountName", "john.smith"));
+        await RunFullSyncReturningActivityAsync(directory);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == mvAccountNameAttr.Id)?.StringValue, Is.EqualTo("john.smith"),
+                "the account joined in this same pass is the person's own account, not a collision");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("john.smith"));
+            Assert.That(SyncRepo.PendingExports.Values.SelectMany(pe => pe.AttributeValueChanges)
+                .Where(c => c.AttributeId == dirSamAttr.Id).Select(c => c.StringValue), Has.None.Not.EqualTo("john.smith"),
+                "no export may rename the person's own account");
+        }
+    }
+
+    private void SeedCso(ConnectedSystem system, ConnectedSystemObjectType type, params (string Attribute, string Value)[] values)
+    {
+        var externalIdAttr = type.Attributes.Single(a => a.IsExternalId);
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = system.Id,
+            TypeId = type.Id,
+            Type = type,
+            ConnectedSystem = SyncRepo.ConnectedSystems[system.Id],
+            Created = DateTime.UtcNow
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = externalIdAttr.Id, Attribute = externalIdAttr, GuidValue = Guid.NewGuid() });
+        foreach (var (attribute, value) in values)
+        {
+            var attr = type.Attributes.Single(a => a.Name == attribute);
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = attr.Id, Attribute = attr, StringValue = value });
+        }
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+    }
+
+    /// <summary>
+    /// The counterpart of the test above: ANOTHER object's account holding the base value still blocks it.
+    /// Directory holds "john.smith" on the account for a different person (E2); John Smith (E1) must get
+    /// "john.smith1". Directory imports no Account Name, so only the connector-space gate can see the clash.
+    /// </summary>
+    [Test]
+    public async Task FullSync_AnotherObjectsAccountHoldsTheBaseValue_StillForcesTheSuffixAsync()
+    {
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
+
+        await SeedDirectoryCsoAsync(ctx, "E1", "jsmith");
+        await SeedDirectoryCsoAsync(ctx, "E2", "john.smith");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+
+        await SeedHrCsoAsync(ctx, "John", "Smith", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        var e1Value = SyncRepo.MetaverseObjects.Values
+            .Where(m => m.AttributeValues.Any(av => av.AttributeId == ctx.MvEmployeeIdAttributeId && av.StringValue == "E1"))
+            .Select(m => m.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvAccountNameAttributeId)?.StringValue)
+            .Single();
+        Assert.That(e1Value, Is.EqualTo("john.smith1"), "another object's account holding the base value is a collision");
     }
 
     /// <summary>
@@ -405,7 +601,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_HigherPriorityImportFlowFromTheTargetSuppliesAValue_NoGenerationNoAssignmentAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         // An administrator's deliberate "keep the existing target account's value" configuration: an ordinary,
         // higher-priority (1) import Attribute Flow on Directory's own rule, reading the same sAMAccountName
@@ -435,24 +631,22 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("jsmith"), "the higher-priority import flow must win; the generated mapping never runs");
             Assert.That(SyncRepo.GeneratedValueAssignments, Is.Empty, "a mapping that never wins priority must never record an assignment");
             Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
-                .Any(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
-                    or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted), Is.False);
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.False);
         }
     }
 
     /// <summary>
-    /// The new adoption source (#242, product-owner decision): the Metaverse Object's OWN current value, left
-    /// behind when a higher-priority contributor is disabled (#1537: a dormant mapping's contributed value is
-    /// retained, not cleared). The generated mapping, now the attribute's sole active contributor, is handed
-    /// the attribute with the value already sitting on the object and adopts it rather than generating afresh.
-    /// Formerly <c>FullSync_SequenceOnNumberTarget_ParticipatingSystemAlreadyHoldsANumber_AdoptsItAsync</c>,
-    /// which proved the same numeric rendering path (IntValue, not StringValue) against the now-removed
-    /// connector-space read; this proves it against the new Metaverse-own-value read instead.
+    /// A value a disabled higher-priority contributor left behind on the Metaverse Object is NOT taken over as
+    /// the generated mapping's own (#242, product-owner decision 2026-10-01: "adopt before generate" removed).
+    /// The generated mapping, now the attribute's winning contributor with no assignment of its own, generates
+    /// exactly as it would for any object lacking one, and overwrites the leftover value like any Attribute Flow
+    /// winning priority. Formerly <c>..._HigherPriorityContributorDisabledLeavingItsNumberBehind_AdoptsItAsync</c>;
+    /// still proves the Number target path (IntValue, not StringValue).
     /// </summary>
     [Test]
-    public async Task FullSync_SequenceOnNumberTarget_HigherPriorityContributorDisabledLeavingItsNumberBehind_AdoptsItAsync()
+    public async Task FullSync_SequenceOnNumberTarget_HigherPriorityContributorDisabledLeavingItsNumberBehind_GeneratesItsOwnNumberAsync()
     {
-        var ctx = await SetUpNumericAdoptionScenarioAsync();
+        var ctx = await SetUpNumericDirectoryParticipantScenarioAsync();
 
         var directoryImportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Import);
         var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
@@ -482,9 +676,7 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         // their contributed values), handing the attribute to the generated mapping as the sole survivor.
         // No further SaveChangesAsync here: RunFullSyncReturningActivityAsync's own ReloadEntityAsync already
         // picks up the mutation on this tracked instance (the established pattern; see
-        // RemovedMappingRecallWorkflowTests.FullSync_MappingDisabled_SoleContributor_LeavesValueInPlaceAsync),
-        // and re-saving after the prior RunFullSyncReturningActivityAsync call has moved the context on throws
-        // DbUpdateConcurrencyException.
+        // RemovedMappingRecallWorkflowTests.FullSync_MappingDisabled_SoleContributor_LeavesValueInPlaceAsync).
         directoryOverrideMapping.Enabled = false;
 
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
@@ -493,38 +685,37 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         {
             var mvo = SyncRepo.MetaverseObjects.Values.Single();
             var value = mvo.AttributeValues.Single(av => av.AttributeId == ctx.MvAccountNameAttributeId);
-            Assert.That(value.IntValue, Is.EqualTo(4242), "the value already on the object is adopted, not regenerated");
+            Assert.That(value.IntValue, Is.Not.EqualTo(4242), "the number left behind must not be taken over as the generated value");
+            Assert.That(value.ContributedBySyncRuleId, Is.EqualTo(ctx.HrImportRuleId), "the generated mapping now contributes the attribute");
 
             var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.True);
-            Assert.That(assignment.State, Is.EqualTo(GeneratedValueAssignmentState.Committed));
-            Assert.That(assignment.Value, Is.EqualTo("4242"));
+            Assert.That(assignment.Value, Is.EqualTo(value.IntValue!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                "the assignment holds the number the generated mapping produced and wrote");
 
-            // No GeneratedValueAdopted outcome node here, unlike the other adoption tests: the adopted value
-            // is identical to what the object already held (Directory's own mapping wrote 4242, and adoption
-            // reads that same value back), so ApplyGeneratedValue's own value-changed check finds nothing to
-            // add or remove. The RPEI/outcome tree is built only when an attribute actually changes this pass
-            // (SyncTaskProcessorBase.ProcessMetaverseObjectChangesAsync's attributesAdded + attributesRemoved
-            // > 0 gate); pre-existing behaviour, unrelated to which value adoption reads from.
+            Assert.That(activity.RunProfileExecutionItems.SelectMany(r => r.SyncOutcomes)
+                .Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned), Is.True,
+                "a value was generated, and the outcome says so");
+
             var generationErrors = activity.RunProfileExecutionItems
                 .Where(r => r.ErrorType is ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted
                     or ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded
                     or ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved)
                 .ToList();
-            Assert.That(generationErrors, Is.Empty, "adoption must succeed cleanly, not merely avoid changing the value");
+            Assert.That(generationErrors, Is.Empty);
         }
     }
 
     /// <summary>
-    /// The AdoptionConflict counterpart of the test above: the value a disabled higher-priority contributor
-    /// left behind on THIS object is also held by a DIFFERENT object's live assignment, so
-    /// <c>UniqueValueGenerationServer.TryAdoptAsync</c> must refuse to adopt it (never silently regenerate a
-    /// different value instead) and record a collision error.
+    /// Formerly <c>FullSync_MetaverseOwnValueAlreadyHeldByAnotherObject_RecordsAdoptionConflictAsync</c>: the
+    /// value a disabled higher-priority contributor left behind is also held by a DIFFERENT object's live
+    /// assignment. With adoption removed (#242, product-owner decision 2026-10-01) that leftover value plays no
+    /// part in generation at all, so there is no conflict to report: the generated mapping generates its own
+    /// value and overwrites the leftover, with no collision error.
     /// </summary>
     [Test]
-    public async Task FullSync_MetaverseOwnValueAlreadyHeldByAnotherObject_RecordsAdoptionConflictAsync()
+    public async Task FullSync_ValueLeftBehindIsHeldByAnotherObject_GeneratesItsOwnValueWithNoCollisionErrorAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         var directoryImportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Import);
         var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
@@ -567,105 +758,122 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1), "no new assignment for HR's object; only the pre-seeded one exists");
-            var collisionErrors = activity.RunProfileExecutionItems
-                .Where(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved)
-                .ToList();
-            Assert.That(collisionErrors, Has.Count.EqualTo(1));
+            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("john.smith"), "the generated mapping writes its own value over the leftover");
+            Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(2), "HR's object gets an assignment of its own beside the pre-seeded one");
+            Assert.That(activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved),
+                Is.False, "a leftover value is not a candidate, so it cannot collide");
         }
     }
 
     #endregion
 
-    #region Stale Sticky assignment (bug fix, #242, Scenario 023 integration run)
+    #region Priority hand-over (product-owner decision 2026-10-01: a generated flow is an ordinary Attribute Flow that generates once)
 
     /// <summary>
-    /// Reproduces the Scenario 023 integration run's bug end to end: HR generates and gets an assignment,
-    /// Directory's own higher-priority import Attribute Flow then takes the attribute over and leaves the
-    /// assignment behind (Directory's own run cannot reconcile HR's assignment), Directory's flow is withdrawn,
-    /// and HR's generated mapping wins the attribute back. Before the fix, <c>ResolveAsync</c> found the old
-    /// assignment, resolved it Sticky, and reasserted it over the value Directory's account actually held -
-    /// which would rename the live directory account on export. The fix must instead adopt the value the
-    /// object already holds (subject to the uniqueness check, since it came from another rule) and replace the
-    /// stale assignment with an Adopted one holding that value.
+    /// HR generates "percival.ashworth"; Directory's higher-priority import Attribute Flow then takes the
+    /// attribute over with "pashworth99" (in Directory's own run, which cannot reconcile HR's assignment); then
+    /// Directory's flow is disabled. HR's generated flow, the winning contributor again, contributes its
+    /// existing assignment exactly as an ordinary flow would contribute its value: the Metaverse Object goes
+    /// back to "percival.ashworth", the same assignment is kept, and the ordinary export stages the rename of
+    /// Directory's account. Formerly
+    /// <c>FullSync_StaleStickyAssignmentSupersededThenWithdrawn_AdoptsTheOtherRulesValueAndReplacesTheAssignmentAsync</c>,
+    /// which asserted the removed "stale sticky assignment" special case (adopting "pashworth99").
     /// </summary>
     [Test]
-    public async Task FullSync_StaleStickyAssignmentSupersededThenWithdrawn_AdoptsTheOtherRulesValueAndReplacesTheAssignmentAsync()
+    public async Task FullSync_HigherPriorityFlowDisabled_GeneratedFlowWritesItsExistingAssignmentAndExportStagesTheRenameAsync()
     {
         var ctx = await SetUpStaleAssignmentScenarioAsync();
 
-        // Step 1: HR projects and generates "percival.ashworth"; an assignment is created.
         await SeedHrCsoAsync(ctx, "Percival", "Ashworth", "E1");
         await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("percival.ashworth"));
-        var staleAssignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
+        var assignmentId = SyncRepo.GeneratedValueAssignments.Keys.Single();
 
-        // Step 2: Directory's higher-priority import Attribute Flow appears and wins; its own account name
-        // takes over the Metaverse Object, leaving HR's assignment behind - Directory's own run has no
-        // generated mapping of its own here to reconcile HR's stale assignment.
-        var directoryImportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Import);
-        var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
-        var sAMAccountNameAttr = directoryType.Attributes.Single(a => a.Name == "sAMAccountName");
-        var directoryOverrideMapping = new SyncRuleMapping
-        {
-            SyncRule = directoryImportRule,
-            SyncRuleId = directoryImportRule.Id,
-            Priority = 1,
-            TargetMetaverseAttribute = ctx.MvAccountNameAttribute,
-            TargetMetaverseAttributeId = ctx.MvAccountNameAttributeId,
-            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = sAMAccountNameAttr, ConnectedSystemAttributeId = sAMAccountNameAttr.Id } }
-        };
-        // No DbContext.SaveChangesAsync() here: HR's run above has already moved the context on (the
-        // established pattern; see FullSync_SequenceOnNumberTarget_HigherPriorityContributorDisabledLeavingItsNumberBehind_AdoptsItAsync),
-        // and SyncRepo shares the same tracked SyncRule instances, so the in-memory mutation is visible to the
-        // next run without a save.
-        directoryImportRule.AttributeFlowRules.Add(directoryOverrideMapping);
+        var directoryOverrideMapping = AddDirectoryAccountNameOverride(ctx, out var sAMAccountNameAttr);
 
         await SeedDirectoryCsoAsync(ctx, "E1", "pashworth99");
         await RunFullSyncReturningActivityAsync(ctx.Directory!);
 
         Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("pashworth99"), "sanity: Directory's higher-priority import must win");
-        Assert.That(SyncRepo.GeneratedValueAssignments.Keys, Has.Member(staleAssignmentId), "sanity: the stale assignment must survive Directory's own run");
+        Assert.That(SyncRepo.GeneratedValueAssignments.Keys, Has.Member(assignmentId), "sanity: Directory's own run does not touch HR's assignment");
 
-        // Step 3: Directory's flow is withdrawn; HR's generated mapping is the sole contributor again. This is
-        // the exact repro condition: ResolveAsync must not reassert the stale "percival.ashworth" assignment.
         directoryOverrideMapping.Enabled = false;
         var activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("pashworth99"),
-                "the object must keep the other rule's value; the stale assignment must never be reasserted");
+            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("percival.ashworth"),
+                "the generated flow, winning priority again, contributes its existing assignment over the value left behind");
+            Assert.That(AccountNameValue(ctx)!.ContributedBySyncRuleId, Is.EqualTo(ctx.HrImportRuleId));
+            Assert.That(SyncRepo.GeneratedValueAssignments.Keys.Single(), Is.EqualTo(assignmentId), "generate once: the same assignment is kept, nothing is regenerated");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Values.Single().Value, Is.EqualTo("percival.ashworth"));
 
-            Assert.That(SyncRepo.GeneratedValueAssignments.Keys, Does.Not.Contain(staleAssignmentId), "the stale assignment must be replaced, not kept");
-            var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.True, "the surviving value came from another rule, so it is adopted, not generated afresh");
-            Assert.That(assignment.Value, Is.EqualTo("pashworth99"));
+            Assert.That(PendingDirectoryAccountNames(ctx, sAMAccountNameAttr.Id), Has.Member("percival.ashworth"),
+                "the ordinary export renames Directory's account, exactly as it would for any Attribute Flow taking the attribute over");
 
-            var directoryPendingExports = SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == ctx.Directory!.Id);
-            Assert.That(directoryPendingExports.Any(pe => pe.AttributeValueChanges.Any(c => c.AttributeId == sAMAccountNameAttr.Id)), Is.False,
-                "no Pending Export must rename the live directory account: the object already held the adopted value");
-
-            // No GeneratedValueAdopted outcome node here, exactly like FullSync_SequenceOnNumberTarget_
-            // HigherPriorityContributorDisabledLeavingItsNumberBehind_AdoptsItAsync's own adoption: the adopted
-            // value is identical to what the object already held, so ApplyGeneratedValue's value-changed check
-            // finds nothing to add or remove, and the RPEI/outcome tree is only built when an attribute
-            // actually changes this pass. What matters here is that adoption succeeded cleanly, with no
-            // generation error recorded.
-            var generationErrors = activity.RunProfileExecutionItems
-                .Where(r => r.ErrorType is ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted
-                    or ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded
-                    or ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved)
-                .ToList();
-            Assert.That(generationErrors, Is.Empty, "adoption must succeed cleanly, not merely avoid changing the value");
+            Assert.That(activity.RunProfileExecutionItems.Any(r => r.ErrorType is ActivityRunProfileExecutionItemErrorType.GeneratedValueExhausted
+                or ActivityRunProfileExecutionItemErrorType.GeneratedValueWidthExceeded
+                or ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved), Is.False);
         }
     }
 
     /// <summary>
+    /// Proves the product-owner decision (2026-10-01) directly: a generated Attribute Flow and an ordinary
+    /// expression Attribute Flow producing the same value behave identically under priority hand-over, through
+    /// a higher-priority flow being disabled, re-enabled, and deleted with recall. The only difference between
+    /// the two arms is that the generated flow produces its value once (one assignment, kept throughout).
+    /// </summary>
+    [TestCase(true, TestName = "FullSync_PriorityHandOver_GeneratedFlow_BehavesExactlyLikeAnOrdinaryExpressionFlowAsync")]
+    [TestCase(false, TestName = "FullSync_PriorityHandOver_ExpressionFlow_BaselineForTheGeneratedFlowAsync")]
+    public async Task FullSync_PriorityHandOver_GeneratedFlowBehavesExactlyLikeAnOrdinaryExpressionFlowAsync(bool generated)
+    {
+        var ctx = await SetUpStaleAssignmentScenarioAsync();
+        if (!generated)
+        {
+            // Same base expression, same priority, same target; just not generated.
+            var hrMapping = SyncRepo.SyncRules[ctx.HrImportRuleId].AttributeFlowRules.Single(m => m.TargetMetaverseAttributeId == ctx.MvAccountNameAttributeId);
+            hrMapping.Generation = null;
+            await DbContext.SaveChangesAsync();
+        }
+
+        // 1. HR alone: HR's flow contributes.
+        await SeedHrCsoAsync(ctx, "Percival", "Ashworth", "E1");
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        AssertAccountName(ctx, "percival.ashworth", ctx.HrImportRuleId, "HR alone");
+
+        // 2. Directory's higher-priority flow takes the attribute over.
+        var directoryImportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Import);
+        var directoryOverrideMapping = AddDirectoryAccountNameOverride(ctx, out var sAMAccountNameAttr);
+        await SeedDirectoryCsoAsync(ctx, "E1", "pashworth99");
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+        AssertAccountName(ctx, "pashworth99", directoryImportRule.Id, "Directory takes over");
+
+        // 3. Directory's flow is disabled: HR's flow wins again and the export stages the rename.
+        directoryOverrideMapping.Enabled = false;
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        AssertAccountName(ctx, "percival.ashworth", ctx.HrImportRuleId, "Directory's flow disabled");
+        Assert.That(PendingDirectoryAccountNames(ctx, sAMAccountNameAttr.Id), Has.Member("percival.ashworth"),
+            "Directory's flow disabled: the ordinary export stages the rename");
+
+        // 4. Directory's flow is re-enabled: it wins again on its next run.
+        directoryOverrideMapping.Enabled = true;
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+        AssertAccountName(ctx, "pashworth99", directoryImportRule.Id, "Directory's flow re-enabled");
+
+        // 5. Directory's flow is deleted, with recall: Directory's next run recalls its value and re-elects HR's.
+        DeleteMappingFromRule(directoryImportRule, directoryOverrideMapping);
+        await RunFullSyncReturningActivityAsync(ctx.Directory!);
+        await RunFullSyncReturningActivityAsync(ctx.Hr);
+        AssertAccountName(ctx, "percival.ashworth", ctx.HrImportRuleId, "Directory's flow deleted with recall");
+
+        Assert.That(SyncRepo.GeneratedValueAssignments.Values.Select(a => a.Value), generated ? Is.EqualTo(new[] { "percival.ashworth" }) : Is.Empty,
+            "only the generated arm holds an assignment, and it holds the one value it generated");
+    }
+
+    /// <summary>
     /// The FR 10 counterpart: when the object holds NO value at all for the attribute (cleared, not merely
-    /// superseded), the live assignment is still reasserted exactly as before the fix - there is nothing to
-    /// compare it against, so <c>IsStickyAssignmentStale</c> must not treat an absent value as a mismatch.
+    /// superseded), the live assignment is reasserted and kept.
     /// </summary>
     [Test]
     public async Task FullSync_StickyAssignmentWithNoCurrentValue_IsStillReassertedAsync()
@@ -687,19 +895,73 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "the assignment's value must be reasserted, not treated as stale");
-            Assert.That(SyncRepo.GeneratedValueAssignments.Keys.Single(), Is.EqualTo(assignmentId), "the same assignment must survive: nothing here is stale");
+            Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "the assignment's value must be reasserted");
+            Assert.That(SyncRepo.GeneratedValueAssignments.Keys.Single(), Is.EqualTo(assignmentId), "the same assignment must survive");
         }
     }
 
+    private SyncRuleMapping AddDirectoryAccountNameOverride(GenerationContext ctx, out ConnectedSystemObjectTypeAttribute sAMAccountNameAttr)
+    {
+        var directoryImportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Directory!.Id && r.Direction == SyncRuleDirection.Import);
+        var directoryType = SyncRepo.ObjectTypes[ctx.DirectoryCsoTypeId!.Value];
+        sAMAccountNameAttr = directoryType.Attributes.Single(a => a.Name == "sAMAccountName");
+        var mapping = new SyncRuleMapping
+        {
+            SyncRule = directoryImportRule,
+            SyncRuleId = directoryImportRule.Id,
+            Priority = 1,
+            TargetMetaverseAttribute = ctx.MvAccountNameAttribute,
+            TargetMetaverseAttributeId = ctx.MvAccountNameAttributeId,
+            Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = sAMAccountNameAttr, ConnectedSystemAttributeId = sAMAccountNameAttr.Id } }
+        };
+
+        // No DbContext.SaveChangesAsync() here: an earlier run has already moved the context on, and SyncRepo
+        // shares the same tracked SyncRule instances, so the in-memory mutation is visible to the next run.
+        directoryImportRule.AttributeFlowRules.Add(mapping);
+        return mapping;
+    }
+
     /// <summary>
-    /// Builds the stale-assignment repro topology (#242, Scenario 023 bug fix): HR's basic generation topology
-    /// (default, lowest-priority generated Account Name mapping), plus a Directory Connected System that JOINS
-    /// the same Metaverse Object (by Employee Number) once matched, and exports Account Name back out to its
-    /// own sAMAccountName - so a wrongly-reasserted value would show up as a Pending Export renaming the live
-    /// directory account. Directory carries no Account Name import mapping yet: the test adds Directory's
-    /// higher-priority override AFTER HR has already generated, to reproduce the bug's real ordering (HR
-    /// generates first; a competing higher-priority import supersedes it later, not the other way round).
+    /// Simulates an administrator deleting a mapping with recall (Remove-JIMSyncRuleMapping / the REST delete),
+    /// as <c>RemovedMappingRecallWorkflowTests</c> does: detached first so EF's navigation fix-up cannot quietly
+    /// re-attach it, and the rule's LastUpdated stamped so the configuration watermark advances (#1533).
+    /// </summary>
+    private void DeleteMappingFromRule(SyncRule rule, SyncRuleMapping mapping)
+    {
+        foreach (var source in mapping.Sources)
+            DbContext.Entry(source).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        DbContext.Entry(mapping).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        rule.AttributeFlowRules.Remove(mapping);
+        rule.LastUpdated = DateTime.UtcNow;
+    }
+
+    private MetaverseObjectAttributeValue? AccountNameValue(GenerationContext ctx) =>
+        SyncRepo.MetaverseObjects.Values.Single().AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvAccountNameAttributeId && !av.NullValue);
+
+    private void AssertAccountName(GenerationContext ctx, string expected, int expectedRuleId, string step)
+    {
+        var value = AccountNameValue(ctx);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(value?.StringValue, Is.EqualTo(expected), $"{step}: Account Name");
+            Assert.That(value?.ContributedBySyncRuleId, Is.EqualTo(expectedRuleId), $"{step}: contributing Synchronisation Rule");
+        }
+    }
+
+    private List<string?> PendingDirectoryAccountNames(GenerationContext ctx, int sAMAccountNameAttributeId) =>
+        SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemId == ctx.Directory!.Id)
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .Where(c => c.AttributeId == sAMAccountNameAttributeId)
+            .Select(c => c.StringValue)
+            .ToList();
+
+    /// <summary>
+    /// Builds the priority hand-over topology (#242): HR's basic generation topology (default, lowest-priority
+    /// generated Account Name mapping), plus a Directory Connected System that JOINS the same Metaverse Object
+    /// (by Employee Number) once matched, and exports Account Name back out to its own sAMAccountName, so a
+    /// take-over shows up as a Pending Export renaming the directory account. Directory carries no Account Name
+    /// import mapping yet: tests add Directory's higher-priority override once HR has generated.
     /// </summary>
     private async Task<GenerationContext> SetUpStaleAssignmentScenarioAsync()
     {
@@ -837,8 +1099,6 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
         {
             Assert.That(ResolvedAccountNames(ctx).Single(), Is.EqualTo("joe.bloggs"), "the generated mapping must take over via re-election");
             Assert.That(SyncRepo.GeneratedValueAssignments, Has.Count.EqualTo(1), "the generated value must be committed to an assignment, not just written to the object");
-            var assignment = SyncRepo.GeneratedValueAssignments.Values.Single();
-            Assert.That(assignment.Adopted, Is.False);
             // ErrorType defaults to NotSet (not null) on every RunProfileExecutionItem, including ones with no
             // error at all, so "no error" must check the specific generation error types rather than != null
             // (the same pattern the exhaustion and width tests above use).
@@ -1097,12 +1357,12 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Builds the adoption topology: <see cref="SetUpBasicGenerationAsync"/>'s HR system, plus a Directory
+    /// Builds the participating-Directory topology: <see cref="SetUpBasicGenerationAsync"/>'s HR system, plus a Directory
     /// Connected System that both imports (joining by Employee Number, projecting nothing new) and exports
     /// (an Account Name -> sAMAccountName Attribute Flow, making it a participating target for HR's generated
     /// mapping).
     /// </summary>
-    private async Task<GenerationContext> SetUpAdoptionScenarioAsync(bool excludeDirectory = false)
+    private async Task<GenerationContext> SetUpDirectoryParticipantScenarioAsync(bool excludeDirectory = false)
     {
         var ctx = await SetUpBasicGenerationAsync();
 
@@ -1213,14 +1473,14 @@ public class UniqueValueGenerationWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Builds <see cref="SetUpAdoptionScenarioAsync"/>'s topology, then swaps the generated Account Name
+    /// Builds <see cref="SetUpDirectoryParticipantScenarioAsync"/>'s topology, then swaps the generated Account Name
     /// attribute (and Directory's export target) to Number, and the generated mapping to a Sequence token
-    /// (work package G review fix 2): proves adopt-before-generate reads a Number/LongNumber target's
-    /// IntValue/LongValue, not just StringValue.
+    /// (work package G review fix 2): proves the Number/LongNumber target path (IntValue/LongValue, not just
+    /// StringValue).
     /// </summary>
-    private async Task<GenerationContext> SetUpNumericAdoptionScenarioAsync()
+    private async Task<GenerationContext> SetUpNumericDirectoryParticipantScenarioAsync()
     {
-        var ctx = await SetUpAdoptionScenarioAsync();
+        var ctx = await SetUpDirectoryParticipantScenarioAsync();
 
         ctx.MvAccountNameAttribute.Type = AttributeDataType.Number;
 

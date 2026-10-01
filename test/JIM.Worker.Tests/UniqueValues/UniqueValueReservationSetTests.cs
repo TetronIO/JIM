@@ -8,7 +8,7 @@ namespace JIM.Worker.Tests.UniqueValues;
 
 /// <summary>
 /// <see cref="UniqueValueReservationSet"/>: the process-wide, thread-safe reservation set every generation
-/// round and adoption checks first (Unique Value Generation, #242).
+/// round checks first (Unique Value Generation, #242).
 /// </summary>
 [TestFixture]
 public class UniqueValueReservationSetTests

@@ -31,7 +31,7 @@ public abstract record SummarySegment
 
     /// <summary>
     /// A literal value mention (Unique Value Generation, #242), rendered in the portal's shared code face with
-    /// a subtle tint so a generated or adopted value reads as data rather than as prose. Never linked: unlike
+    /// a subtle tint so a generated value reads as data rather than as prose. Never linked: unlike
     /// an <see cref="Entity"/>, a value is not itself a navigable object.
     /// </summary>
     /// <param name="Value">The value to render verbatim (encoded by Blazor at render time).</param>
