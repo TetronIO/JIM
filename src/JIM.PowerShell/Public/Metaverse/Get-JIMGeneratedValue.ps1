@@ -9,8 +9,7 @@ function Get-JIMGeneratedValue {
     .DESCRIPTION
         Returns the committed Unique Value Generation assignments a Metaverse Object holds, one per
         generated attribute: the value, which uniqueness token produced it, the Synchronisation Rule and
-        mapping responsible, its state, and whether it was adopted from an existing accepted value rather
-        than generated. Empty when the object holds no generated values.
+        mapping responsible, and its state. Empty when the object holds no generated values.
 
     .PARAMETER MetaverseObjectId
         The unique identifier (GUID) of the Metaverse Object. Also accepts pipeline input via the Id
@@ -31,7 +30,6 @@ function Get-JIMGeneratedValue {
         | SyncRuleName         | Its name                                                                      |
         | SyncRuleMappingId    | The mapping responsible                                                       |
         | State                | Proposed, Committed, Remediated or NeedsDecision                             |
-        | Adopted              | True when the value was adopted from an existing accepted value, not generated |
         | AssignedDate         | When the assignment was created                                              |
 
     .EXAMPLE

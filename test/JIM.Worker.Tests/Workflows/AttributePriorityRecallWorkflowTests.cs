@@ -607,7 +607,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         // Unique Value Generation (#242, Phase 2 work package J): the surviving Training contributor re-elected
         // by HandleCsoOutOfScopeAsync's recall carries a GENERATED mapping, not an ordinary Attribute Flow one.
         // The worker's resolver must be given the chance to generate the value (it already was, per work
-        // package H), AND the resulting GeneratedValueAssigned/Adopted outcome must be recorded under the
+        // package H), AND the resulting GeneratedValueAssigned outcome must be recorded under the
         // DisconnectedOutOfScope root, exactly as the ordinary Attribute Flow path records one - before this
         // fix, ReElectSurvivingContributorsAsync's return value was discarded at this call site.
         var ctx = await SetUpScopedHrWithGeneratedTrainingSurvivorAsync();

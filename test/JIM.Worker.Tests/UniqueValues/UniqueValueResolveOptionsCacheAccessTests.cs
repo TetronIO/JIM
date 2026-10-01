@@ -13,7 +13,7 @@ namespace JIM.Worker.Tests.UniqueValues;
 /// <see cref="UniqueValueResolveOptions.HasKnownMetaverseAssignment"/> and
 /// <see cref="UniqueValueResolveOptions.GetKnownMetaverseAssignments"/>: the public read accessors over the
 /// otherwise-internal run-scoped assignment cache, added so a caller outside <c>JIM.Application</c> (the
-/// worker's adopt-before-generate step and page-flush lifecycle reconciliation, Unique Value Generation, #242,
+/// worker's page-flush lifecycle reconciliation, Unique Value Generation, #242,
 /// Phase 2 work package G) can read this run's known assignments without gaining write access to the cache
 /// itself. Also covers <see cref="UniqueValueGenerationServer.DeleteAssignmentsAsync"/>, which is what keeps
 /// the cache these accessors read in step with the database.

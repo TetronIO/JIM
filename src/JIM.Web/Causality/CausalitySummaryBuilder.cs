@@ -425,9 +425,9 @@ public static class CausalitySummaryBuilder
     }
 
     /// <summary>
-    /// Unique Value Generation (#242): one clause per attribute a value was generated or adopted for on this
-    /// pass ("Account Name was generated as jallen42", "the existing Employee Number 40021 was adopted"), for
-    /// the caller to add to the sentence's clause list. Empty when the item recorded neither outcome type.
+    /// Unique Value Generation (#242): one clause per attribute a value was generated for on this
+    /// pass ("Account Name was generated as jallen42"), for the caller to add to the sentence's clause list.
+    /// Empty when the item recorded no such outcome.
     /// </summary>
     private static List<List<SummarySegment>> BuildGeneratedValueClauses(IReadOnlyList<CausalityEvent> allEvents, bool isSpeculative)
     {
@@ -435,8 +435,7 @@ public static class CausalitySummaryBuilder
         // joining them into a single clause first would give the sentence two "and"s ("..., and Account Name was
         // generated as ..., and Badge Number was generated as ...").
         return allEvents
-            .Where(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
-                or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
+            .Where(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned)
             .Select(e => BuildGeneratedValueItem(e, isSpeculative))
             .ToList();
     }
@@ -451,20 +450,6 @@ public static class CausalitySummaryBuilder
     {
         var detail = GeneratedValueDetailParser.Parse(causalityEvent.DetailMessage);
 
-        if (causalityEvent.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
-        {
-            if (detail.AttributeName == null || detail.Value == null)
-                return [new SummarySegment.Text(isSpeculative ? "an existing value would be adopted" : "an existing value was adopted")];
-
-            return
-            [
-                new SummarySegment.Text($"the existing {detail.AttributeName} "),
-                new SummarySegment.LiteralValue(detail.Value),
-                new SummarySegment.Text(isSpeculative ? " would be adopted" : " was adopted")
-            ];
-        }
-
-        // GeneratedValueAssigned
         if (detail.AttributeName == null || detail.Value == null)
             return [new SummarySegment.Text(isSpeculative ? "a value would be generated" : "a value was generated")];
 
@@ -694,8 +679,7 @@ public static class CausalitySummaryBuilder
         // The filter (not a generated-value outcome, and its label not seen yet) lives in the Where clause so
         // the loop body is never guard-shaped; seenLabels.Add doubles as the predicate and the dedup record.
         foreach (var causalityEvent in allEvents.Where(e =>
-            e.OutcomeType is not (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
-                or ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAdopted)
+            e.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueAssigned
             && seenLabels.Add(e.Label)))
         {
             clauses.Add([new SummarySegment.Text(causalityEvent.Label)]);
