@@ -105,6 +105,11 @@ html[lang] {
     --jim-expr-variable: #001080;
     --jim-expr-keyword: var(--jim-json-boolean);
     --jim-expr-operator: #af00db;
+    /* Attribute accessors (mv["X"] / cs["X"]): the same teal and magenta as the other light themes, a step
+       darker, because this theme's grey surfaces (and a default chip's wash over them) are much darker
+       than white and the shared values measured near 3:1 there. */
+    --jim-expr-accessor-mv: #00434e;
+    --jim-expr-accessor-cs: #6d0055;
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #d63a28;

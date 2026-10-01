@@ -220,6 +220,119 @@ public class ThemeContrastTests
     }
 
     /// <summary>
+    /// The attribute accessor colours (<c>mv["Name"]</c> / <c>cs["Name"]</c>) an expression is highlighted with, both
+    /// in the <c>&lt;ExpressionEditor /&gt;</c> field and in the <c>Ex</c> chip on the Attribute Flow table.
+    /// </summary>
+    private static readonly string[] ExpressionAccessorTokens = ["--jim-expr-accessor-mv", "--jim-expr-accessor-cs"];
+
+    /// <summary>
+    /// Every theme must declare both accessor colours (a theme that left one out would fall back to the
+    /// <c>site.css</c> default, chosen for neither its light nor its dark surfaces), each must clear AA on every
+    /// background an expression is painted on (the dialog field, a page or card surface, and the default chip's fill
+    /// over either surface), and the two must be told apart from each other and from the string and function colours
+    /// they sit beside: the point of colouring the accessors is to make which side an expression reads stand out.
+    /// </summary>
+    [Test]
+    public void EveryTheme_ExpressionAccessorColours_AreDeclaredLegibleAndDistinct()
+    {
+        var siteCss = File.ReadAllText(Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "site.css"));
+        var siteVariables = ReadVariables(siteCss);
+        var themeDirectory = Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "wwwroot", "css", "themes");
+        var themeFiles = Directory.EnumerateFiles(themeDirectory, "*.css").OrderBy(path => path, StringComparer.Ordinal).ToList();
+        Assert.That(themeFiles, Is.Not.Empty, "Expected at least one theme stylesheet to check.");
+
+        var failures = new List<string>();
+        foreach (var token in ExpressionAccessorTokens.Where(token => !siteVariables.ContainsKey(token)))
+            failures.Add($"  site.css                   {token} has no default");
+
+        foreach (var themeFile in themeFiles)
+        {
+            var themeName = Path.GetFileName(themeFile);
+            var themeVariables = ReadVariables(File.ReadAllText(themeFile));
+            var variables = siteVariables.Concat(themeVariables)
+                .GroupBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal);
+
+            var surface = ResolveExpression("var(--mud-palette-surface)", variables, (255, 255, 255, 1));
+            if (surface is null)
+            {
+                failures.Add($"  {themeName,-26} has no --mud-palette-surface to measure against");
+                continue;
+            }
+
+            // An outlined field is transparent, so the editor sits on the dialog surface; an Ex chip is MudBlazor's
+            // default filled chip, whose fill is a translucent wash over whichever surface holds the table or card.
+            var surfaceValue = surface.Value;
+            var backgrounds = new List<(string Name, (double R, double G, double B, double A) Colour)> { ("surface", surfaceValue) };
+            backgrounds.AddRange(new[] { "--jim-dialog-surface", "--jim-inner-surface", "--mud-palette-background" }
+                .Select(name => (Name: name, Colour: ResolveExpression($"var({name})", variables, surfaceValue)))
+                .Where(candidate => candidate.Colour.HasValue)
+                .Select(candidate => (candidate.Name, Composite(candidate.Colour!.Value, surfaceValue))));
+
+            if (ResolveExpression("var(--mud-palette-action-disabled-background)", variables, surfaceValue) is { } chipFill)
+                backgrounds.AddRange(backgrounds.ToList().Select(background => ($"chip fill on {background.Name}", Composite(chipFill, background.Colour))));
+
+            var resolvedAccessors = new Dictionary<string, (double R, double G, double B, double A)>(StringComparer.Ordinal);
+            foreach (var token in ExpressionAccessorTokens)
+            {
+                if (!themeVariables.ContainsKey(token))
+                {
+                    failures.Add($"  {themeName,-26} does not declare {token}");
+                    continue;
+                }
+
+                if (ResolveExpression($"var({token})", variables, surfaceValue) is not { } accessor)
+                {
+                    failures.Add($"  {themeName,-26} {token} could not be resolved to a colour");
+                    continue;
+                }
+
+                resolvedAccessors[token] = accessor;
+                failures.AddRange(backgrounds
+                    .Select(background => (background.Name, Ratio: ContrastRatio(Composite(accessor, background.Colour), background.Colour)))
+                    .Where(measured => measured.Ratio < AaFloor)
+                    .Select(measured => string.Format(CultureInfo.InvariantCulture, "  {0,-26} {1} on {2,-40} {3:0.00} (needs {4})",
+                        themeName, token, measured.Name, measured.Ratio, AaFloor)));
+            }
+
+            // Each accessor against the string and function colours, and the two accessors against each other.
+            var neighbours = new[] { "--jim-expr-string", "--jim-expr-function" }
+                .Select(name => (Name: name, Colour: ResolveExpression($"var({name})", variables, surfaceValue)))
+                .Where(candidate => candidate.Colour.HasValue)
+                .Select(candidate => (candidate.Name, Colour: candidate.Colour!.Value))
+                .Concat(resolvedAccessors.Select(pair => (Name: pair.Key, Colour: pair.Value)))
+                .ToList();
+
+            failures.AddRange(resolvedAccessors
+                .SelectMany(pair => neighbours
+                    .Where(neighbour => neighbour.Name != pair.Key)
+                    .Select(neighbour => (Token: pair.Key, Neighbour: neighbour.Name, Distance: ColourDistance(pair.Value, neighbour.Colour))))
+                .Where(measured => measured.Distance < MinimumTokenDistance)
+                .Select(measured => string.Format(CultureInfo.InvariantCulture, "  {0,-26} {1} is too close to {2} ({3:0} apart, needs {4})",
+                    themeName, measured.Token, measured.Neighbour, measured.Distance, MinimumTokenDistance)));
+        }
+
+        Assert.That(failures, Is.Empty, () => BuildFailureMessage(failures,
+            "Declare --jim-expr-accessor-mv and --jim-expr-accessor-cs in every theme, beside the other --jim-expr-*",
+            "tokens, and keep them distinct from each other and from the string and function colours."));
+    }
+
+    /// <summary>
+    /// The smallest Euclidean distance in 0-255 RGB space at which two syntax colours read as different tokens
+    /// rather than as two shades of one. A rough measure, deliberately: it exists to stop a palette edit making
+    /// the two accessors (or an accessor and a string) the same colour, not to grade a palette.
+    /// </summary>
+    private const double MinimumTokenDistance = 80;
+
+    private static double ColourDistance((double R, double G, double B, double A) first, (double R, double G, double B, double A) second)
+    {
+        var red = first.R - second.R;
+        var green = first.G - second.G;
+        var blue = first.B - second.B;
+        return Math.Sqrt(red * red + green * green + blue * blue);
+    }
+
+    /// <summary>
     /// The declarations of the first rule block whose selector list is exactly <paramref name="selector"/>,
     /// with any <c>!important</c> stripped. Empty when site.css has no such rule.
     /// </summary>
