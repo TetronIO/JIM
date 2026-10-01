@@ -214,6 +214,7 @@ public class MetaverseServerProvenanceTests
 
     private GeneratedValueOwnership NewOwnership(int mappingId, string value = "E1001", bool corrected = false) => new()
     {
+        IsCurrentValue = true,
         AttributeId = AttributeId,
         SyncRuleId = _syncRule.Id,
         SyncRuleMappingId = mappingId,

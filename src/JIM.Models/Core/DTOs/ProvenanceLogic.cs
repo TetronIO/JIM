@@ -83,12 +83,15 @@ public static class ProvenanceLogic
     /// <summary>
     /// The origin a value really has once Generated Values are known: a value its Synchronisation Rule contributed
     /// through the Attribute Flow that generated it is a <see cref="ValueOriginKind.GeneratedValue"/>, still naming
-    /// the Connected System and the Synchronisation Rule. Any other origin, or no Generated Value for the
-    /// attribute, is returned unchanged.
+    /// the Connected System and the Synchronisation Rule. Both must hold: the value is the generating rule's, and
+    /// it is the generated value (<see cref="GeneratedValueOwnership.IsCurrentValue"/>), since the flow keeps its
+    /// assignment while a higher-priority Attribute Flow supplies the attribute. Any other origin, or no Generated
+    /// Value for the attribute, is returned unchanged.
     /// </summary>
     public static ValueOrigin ApplyGeneratedValue(ValueOrigin origin, GeneratedValueOwnership? ownership)
     {
         if (ownership == null ||
+            !ownership.IsCurrentValue ||
             origin.Kind != ValueOriginKind.SynchronisationRule ||
             origin.SyncRuleId != ownership.SyncRuleId)
             return origin;

@@ -1989,7 +1989,16 @@ public class MetaverseRepository : IMetaverseRepository
                 SyncRuleMappingId = a.SyncRuleMappingGeneration.SyncRuleMappingId,
                 Value = a.Value,
                 PreviousValue = a.PreviousValue,
-                Corrected = a.RemediationCount > 0
+                Corrected = a.RemediationCount > 0,
+                // The object holds the assignment's value from the generating rule. A generated value targets a
+                // Text or Number attribute, so the value is compared as text against whichever column holds it.
+                IsCurrentValue = Repository.Database.MetaverseObjectAttributeValues.Any(av =>
+                    av.MetaverseObject.Id == metaverseObjectId &&
+                    av.AttributeId == a.MetaverseAttributeId &&
+                    av.ContributedBySyncRuleId == a.SyncRuleMappingGeneration.SyncRuleMapping.SyncRuleId &&
+                    (av.StringValue == a.Value ||
+                     (av.IntValue != null && av.IntValue.ToString() == a.Value) ||
+                     (av.LongValue != null && av.LongValue.ToString() == a.Value)))
             })
             .ToListAsync();
     }

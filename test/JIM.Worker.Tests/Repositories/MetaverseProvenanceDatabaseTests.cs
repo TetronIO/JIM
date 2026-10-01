@@ -204,7 +204,44 @@ public class MetaverseProvenanceDatabaseTests
             Assert.That(ownership.Value, Is.EqualTo("E1001"));
             Assert.That(ownership.PreviousValue, Is.EqualTo("E1000"));
             Assert.That(ownership.Corrected, Is.True);
+            Assert.That(ownership.IsCurrentValue, Is.False, "the object holds no value for the attribute");
         }
+    }
+
+    /// <summary>Gives the Metaverse Object a value for the attribute, contributed by <paramref name="syncRuleId"/>.</summary>
+    private async Task SeedCurrentValueAsync(Guid mvoId, MetaverseAttribute mvAttribute, string value, int? syncRuleId)
+    {
+        await using var ctx = NewContext();
+        ctx.Attach(mvAttribute);
+        ctx.MetaverseObjectAttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            MetaverseObject = AttachMvoStub(ctx, mvoId),
+            Attribute = mvAttribute,
+            AttributeId = mvAttribute.Id,
+            StringValue = value,
+            ContributedBySyncRuleId = syncRuleId
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestCase("E1001", true, true, TestName = "GetGeneratedValueOwnershipsAsync_ObjectHoldsTheValueFromTheGeneratingRule_IsTheCurrentValueAsync")]
+    [TestCase("pashworth99", true, false, TestName = "GetGeneratedValueOwnershipsAsync_GeneratingRuleHoldsADifferentValue_IsNotTheCurrentValueAsync")]
+    [TestCase("E1001", false, false, TestName = "GetGeneratedValueOwnershipsAsync_SameValueFromAnotherContributor_IsNotTheCurrentValueAsync")]
+    public async Task GetGeneratedValueOwnershipsAsync_IsCurrentValueNeedsBothTheValueAndTheGeneratingRuleAsync(string heldValue, bool fromGeneratingRule, bool expected)
+    {
+        // A generated flow keeps its assignment while a higher-priority rule supplies the attribute, so the
+        // assignment is the current value's source only when the object holds that value from that rule.
+        var (_, _, _, mvType, mvAttribute, rule, mapping) = await SeedSchemaAsync();
+        Guid mvoId;
+        await using (var ctx = NewContext())
+            mvoId = await SeedMetaverseObjectAsync(ctx, mvType);
+        await SeedGeneratedValueAsync(mapping, mvAttribute, mvoId, GeneratedValueAssignmentState.Committed, "E1001");
+        await SeedCurrentValueAsync(mvoId, mvAttribute, heldValue, fromGeneratingRule ? rule.Id : null);
+
+        await using var readCtx = NewContext();
+        var result = await new PostgresDataRepository(readCtx).Metaverse.GetGeneratedValueOwnershipsAsync(mvoId);
+
+        Assert.That(result.Single().IsCurrentValue, Is.EqualTo(expected));
     }
 
     [Test]

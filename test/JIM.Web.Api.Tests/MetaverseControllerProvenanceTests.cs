@@ -159,7 +159,7 @@ public class MetaverseControllerProvenanceTests
         _metaverseRepo.Setup(r => r.GetMetaverseObjectProvenanceAsync(_mvoId)).ReturnsAsync(model);
         _metaverseRepo.Setup(r => r.GetGeneratedValueOwnershipsAsync(_mvoId)).ReturnsAsync(new List<GeneratedValueOwnership>
         {
-            new() { AttributeId = AttributeId, SyncRuleId = 2, SyncRuleMappingId = 7, Value = "E1001", Corrected = true }
+            new() { AttributeId = AttributeId, SyncRuleId = 2, SyncRuleMappingId = 7, Value = "E1001", Corrected = true, IsCurrentValue = true }
         });
 
         var payload = await OkPayload<MetaverseObjectProvenanceDto>(_controller.GetObjectProvenanceAsync(_mvoId));

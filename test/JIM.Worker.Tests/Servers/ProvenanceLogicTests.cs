@@ -148,8 +148,10 @@ public class ProvenanceLogicTests
         SyncRuleName = "HR Import Users"
     };
 
-    private static GeneratedValueOwnership Ownership(int syncRuleId = 5, string value = "E1001", string? previousValue = null, bool corrected = false) => new()
+    private static GeneratedValueOwnership Ownership(int syncRuleId = 5, string value = "E1001", string? previousValue = null, bool corrected = false,
+        bool isCurrentValue = true) => new()
     {
+        IsCurrentValue = isCurrentValue,
         AttributeId = 42,
         SyncRuleId = syncRuleId,
         SyncRuleMappingId = 7,
@@ -194,6 +196,16 @@ public class ProvenanceLogicTests
         // A deleted rule's generated mapping cascades its assignments away, so an ownership naming no rule cannot
         // match; guard the null anyway rather than matching null to null.
         var origin = ProvenanceLogic.ApplyGeneratedValue(RuleOrigin(5) with { SyncRuleId = null, SyncRuleDeleted = true }, Ownership());
+
+        Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
+    }
+
+    [Test]
+    public void ApplyGeneratedValue_AssignmentHeldButNotTheCurrentValue_StaysASynchronisationRuleValue()
+    {
+        // A generated flow keeps its assignment while a higher-priority rule's value is in use, so an assignment
+        // alone does not make the current value a Generated Value: it must be the value the object holds.
+        var origin = ProvenanceLogic.ApplyGeneratedValue(RuleOrigin(5), Ownership(syncRuleId: 5, isCurrentValue: false));
 
         Assert.That(origin.Kind, Is.EqualTo(ValueOriginKind.SynchronisationRule));
     }

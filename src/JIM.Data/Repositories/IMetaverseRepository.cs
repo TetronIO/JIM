@@ -210,7 +210,7 @@ public interface IMetaverseRepository
     /// The Generated Values a Metaverse Object holds (#399): one per attribute a Generated Value Attribute Flow is
     /// responsible for, in every assignment state. An import-mode assignment is persisted only after its Metaverse
     /// Object is and stays Proposed once written, so a Proposed one is a real value on the object; whether the value
-    /// is the one in use is decided by matching its Synchronisation Rule against the value's contributor.
+    /// is the one in use is <see cref="GeneratedValueOwnership.IsCurrentValue"/>.
     /// </summary>
     public Task<List<GeneratedValueOwnership>> GetGeneratedValueOwnershipsAsync(Guid metaverseObjectId);
 

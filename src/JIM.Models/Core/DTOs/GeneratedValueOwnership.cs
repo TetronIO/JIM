@@ -28,4 +28,11 @@ public class GeneratedValueOwnership
 
     /// <summary>True when the value has been revised after a collision at least once.</summary>
     public bool Corrected { get; set; }
+
+    /// <summary>
+    /// True when the Metaverse Object currently holds <see cref="Value"/> for the attribute, contributed by
+    /// <see cref="SyncRuleId"/>. A Generated Value Attribute Flow keeps its assignment while a higher-priority
+    /// Attribute Flow supplies the attribute, so only then is the assignment the current value's source.
+    /// </summary>
+    public bool IsCurrentValue { get; set; }
 }
