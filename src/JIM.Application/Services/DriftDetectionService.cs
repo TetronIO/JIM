@@ -3,6 +3,7 @@
 
 using JIM.Application.Expressions;
 using JIM.Application.Staging;
+using JIM.Application.UniqueValues;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Core;
@@ -27,6 +28,8 @@ namespace JIM.Application.Services;
 /// 1. Only evaluates export rules with EnforceState = true
 /// 2. Skips attributes where the Connected System is a legitimate contributor (has import rules for that attribute)
 /// 3. Uses the existing PendingExport infrastructure for corrective exports
+/// 4. A generated export Attribute Flow (Unique Value Generation, #242) is checked like any other, against its
+///    export-mode assignment for the Connected System Object rather than its base expression
 /// </remarks>
 public class DriftDetectionService
 {
@@ -47,13 +50,18 @@ public class DriftDetectionService
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
     /// <param name="exportRules">Export rules targeting this CSO's Connected System (pre-loaded for efficiency).</param>
     /// <param name="importMappingsByAttribute">Cache of import mappings by (ConnectedSystemId, MvoAttributeId) for checking if system is a contributor.</param>
+    /// <param name="priorityContext">Attribute priority context, for the priority-aware contributor check (#91).</param>
+    /// <param name="generatedValueAssignments">The run's Unique Value Generation cache, prefetched for this page's Connected
+    /// System Objects. A generated export Attribute Flow's expected value is read from here (#242); without it, generated
+    /// flows are not checked.</param>
     /// <returns>Result indicating what drift was detected and corrective exports staged (not yet persisted).</returns>
     public DriftDetectionResult EvaluateDrift(
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
-        AttributePriorityContext? priorityContext = null)
+        AttributePriorityContext? priorityContext = null,
+        UniqueValueResolveOptions? generatedValueAssignments = null)
     {
         var result = new DriftDetectionResult();
 
@@ -130,14 +138,15 @@ public class DriftDetectionService
                     continue;
                 }
 
-                // Unique Value Generation (#242, Phase 2 work package H): a generated mapping's Sources[0]
-                // holds only the base expression, not the value JIM actually asserts (base plus its uniqueness
-                // token), so comparing it against the Connected System Object's current value would flag drift
-                // on every object that ever received a suffix or token. JIM already owns and reasserts a
-                // generated value through ordinary export evaluation's Sticky resolution; Collision Remediation
-                // (release 4) is what handles a target rejecting or losing the value, not drift correction.
+                // Unique Value Generation (#242): a Generated Value is an ordinary Attribute Flow that generates
+                // once (product-owner decision 2026-10-01), so it is drift-checked exactly like any export flow,
+                // against the value JIM actually asserts: the export-mode assignment for this Connected System
+                // Object, never the mapping's base expression (which lacks the uniqueness token).
                 if (mapping.Generation != null)
+                {
+                    EvaluateGeneratedMappingDrift(cso, targetMvo, exportRule, mapping, importMappingsByAttribute, priorityContext, generatedValueAssignments, result);
                     continue;
+                }
 
                 // Check if this Connected System is a legitimate contributor for this attribute
                 // (i.e., has an import rule that maps to the same MVO attribute)
@@ -147,52 +156,7 @@ public class DriftDetectionService
                         continue;
 
                     var mvoAttributeId = source.MetaverseAttribute?.Id ?? 0;
-
-                    // Skip if this system has import rules for this attribute (not drift - legitimate change)
-                    var isContributor = mvoAttributeId > 0 && HasImportRuleForAttribute(
-                        cso.ConnectedSystemId,
-                        mvoAttributeId,
-                        importMappingsByAttribute);
-
-                    // For expression-based mappings, check if the system is a contributor for any
-                    // MVO attribute referenced in the expression. If so, skip drift detection because
-                    // the expression output depends on attributes that this system legitimately contributes to.
-                    if (!isContributor && !string.IsNullOrWhiteSpace(source.Expression))
-                    {
-                        isContributor = IsContributorForExpressionAttributes(
-                            cso.ConnectedSystemId,
-                            source.Expression,
-                            importMappingsByAttribute);
-                    }
-
-                    // Priority-aware refinement (#91): for a multi-contributor attribute, having an import rule is not
-                    // enough to be drift-exempt. The system is a legitimate contributor only if its contribution WON
-                    // resolution, i.e. the Metaverse Object's current value for the attribute was contributed by this
-                    // system. A losing contributor's diverged local value is drift, to be corrected by the EnforceState
-                    // export. Single-contributor attributes (and runs without a priority context) keep the existing
-                    // has-import-rule behaviour. (Expression sources, mvoAttributeId == 0, are unaffected here.)
-                    if (isContributor && priorityContext != null && mvoAttributeId > 0
-                        && priorityContext.GetContributorCount(targetMvo.Type.Id, mvoAttributeId) > 1
-                        && !AttributeWonByConnectedSystem(targetMvo, mvoAttributeId, cso.ConnectedSystemId))
-                    {
-                        isContributor = false;
-                    }
-
-                    // #1864: a contributor is a legitimate source for THIS divergence only if its import flow reads the
-                    // diverged Connected System attribute; only then does the out-of-band edit flow into the Metaverse.
-                    // An import flow reading a different attribute (Display Name built from givenName and sn, exported
-                    // to displayName), or only Metaverse attributes (a Metaverse-Derived Attribute Flow, #1750), leaves
-                    // the edit stranded on the Connected System Object, so skipping it would leave the two sides
-                    // disagreeing permanently. That is drift, and is corrected.
-                    if (isContributor && !AnyContributingImportFlowReads(
-                            cso.ConnectedSystemId,
-                            mvoAttributeId,
-                            source.Expression,
-                            mapping.TargetConnectedSystemAttribute,
-                            importMappingsByAttribute))
-                    {
-                        isContributor = false;
-                    }
+                    var isContributor = IsLegitimateContributor(cso, targetMvo, source, mapping.TargetConnectedSystemAttribute, importMappingsByAttribute, priorityContext);
 
                     Log.Debug("EvaluateDrift: Contributor check for CSO {CsoId}, attribute {AttrName}: " +
                         "mvoAttributeId={MvoAttrId}, csoConnectedSystemId={CsoSystemId}, isContributor={IsContributor}, " +
@@ -252,6 +216,196 @@ public class DriftDetectionService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Whether the Connected System Object's own system is a legitimate contributor for an export mapping source,
+    /// in which case a divergence on <paramref name="divergedAttribute"/> is a legitimate change rather than drift.
+    /// Shared by ordinary and generated export mappings (#242), so the two are exempted on exactly the same terms.
+    /// </summary>
+    private bool IsLegitimateContributor(
+        ConnectedSystemObject cso,
+        MetaverseObject targetMvo,
+        SyncRuleMappingSource source,
+        ConnectedSystemObjectTypeAttribute divergedAttribute,
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute,
+        AttributePriorityContext? priorityContext)
+    {
+        var mvoAttributeId = source.MetaverseAttribute?.Id ?? 0;
+
+        // Skip if this system has import rules for this attribute (not drift - legitimate change)
+        var isContributor = mvoAttributeId > 0 && HasImportRuleForAttribute(
+            cso.ConnectedSystemId,
+            mvoAttributeId,
+            importMappingsByAttribute);
+
+        // For expression-based mappings, check if the system is a contributor for any
+        // MVO attribute referenced in the expression. If so, skip drift detection because
+        // the expression output depends on attributes that this system legitimately contributes to.
+        if (!isContributor && !string.IsNullOrWhiteSpace(source.Expression))
+        {
+            isContributor = IsContributorForExpressionAttributes(
+                cso.ConnectedSystemId,
+                source.Expression,
+                importMappingsByAttribute);
+        }
+
+        // Priority-aware refinement (#91): for a multi-contributor attribute, having an import rule is not
+        // enough to be drift-exempt. The system is a legitimate contributor only if its contribution WON
+        // resolution, i.e. the Metaverse Object's current value for the attribute was contributed by this
+        // system. A losing contributor's diverged local value is drift, to be corrected by the EnforceState
+        // export. Single-contributor attributes (and runs without a priority context) keep the existing
+        // has-import-rule behaviour. (Expression sources, mvoAttributeId == 0, are unaffected here.)
+        if (isContributor && priorityContext != null && mvoAttributeId > 0
+            && priorityContext.GetContributorCount(targetMvo.Type!.Id, mvoAttributeId) > 1
+            && !AttributeWonByConnectedSystem(targetMvo, mvoAttributeId, cso.ConnectedSystemId))
+        {
+            isContributor = false;
+        }
+
+        // #1864: a contributor is a legitimate source for THIS divergence only if its import flow reads the
+        // diverged Connected System attribute; only then does the out-of-band edit flow into the Metaverse.
+        // An import flow reading a different attribute (Display Name built from givenName and sn, exported
+        // to displayName), or only Metaverse attributes (a Metaverse-Derived Attribute Flow, #1750), leaves
+        // the edit stranded on the Connected System Object, so skipping it would leave the two sides
+        // disagreeing permanently. That is drift, and is corrected.
+        if (isContributor && !AnyContributingImportFlowReads(
+                cso.ConnectedSystemId,
+                mvoAttributeId,
+                source.Expression,
+                divergedAttribute,
+                importMappingsByAttribute))
+        {
+            isContributor = false;
+        }
+
+
+        return isContributor;
+    }
+
+    /// <summary>
+    /// Drift Detection for a generated export Attribute Flow (Unique Value Generation, #242; product-owner decision
+    /// 2026-10-01). A Generated Value is an ordinary Attribute Flow that generates once, so it is checked on the same
+    /// terms as any export flow (the caller has already applied EnforceState, Enabled and
+    /// <see cref="SyncRuleMapping.FlowsOnUpdateExport"/>, so Initial Export Only and write-on-create targets never
+    /// reach here) with one difference: the expected value is the export-mode assignment JIM holds for this
+    /// Connected System Object, read from the run-scoped cache the worker prefetched for the page, never the
+    /// mapping's base expression and never a per-object query.
+    /// <para>
+    /// Nothing is compared, and so nothing is staged, when there is no assignment yet (export evaluation generates
+    /// one; a drift correction would have no value to assert and must never be staged blank), when the run's cache
+    /// was not supplied, or when this object was not prefetched (a missed prefetch is logged, not queried for).
+    /// </para>
+    /// </summary>
+    private void EvaluateGeneratedMappingDrift(
+        ConnectedSystemObject cso,
+        MetaverseObject targetMvo,
+        SyncRule exportRule,
+        SyncRuleMapping mapping,
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute,
+        AttributePriorityContext? priorityContext,
+        UniqueValueResolveOptions? generatedValueAssignments,
+        DriftDetectionResult result)
+    {
+        var targetAttribute = mapping.TargetConnectedSystemAttribute!;
+
+        // The base expression's inputs make the system a legitimate contributor on exactly the terms an ordinary
+        // expression mapping's would. A generation with no base expression (Sequence, Random) reads nothing.
+        var isContributor = mapping.Sources
+            .Where(source => source.MetaverseAttribute != null || !string.IsNullOrWhiteSpace(source.Expression))
+            .Any(source => IsLegitimateContributor(cso, targetMvo, source, targetAttribute, importMappingsByAttribute, priorityContext));
+        if (isContributor)
+        {
+            Log.Debug("EvaluateDrift: Skipping generated attribute {AttrName} for CSO {CsoId} - system is a contributor (has import rules)",
+                targetAttribute.Name, cso.Id);
+            return;
+        }
+
+        if (generatedValueAssignments == null)
+        {
+            Log.Warning("EvaluateDrift: No Unique Value Generation assignment cache was supplied, so generated attribute {AttrName} on CSO {CsoId} " +
+                "cannot be checked for drift. Its value is reasserted when export evaluation next runs for the object.",
+                targetAttribute.Name, cso.Id);
+            return;
+        }
+
+        if (!generatedValueAssignments.TryGetKnownConnectedSystemAssignment(cso.Id, targetAttribute.Id, out var assignment))
+        {
+            Log.Warning("EvaluateDrift: Generated value assignments for CSO {CsoId} were not prefetched for this page, so generated attribute " +
+                "{AttrName} is not checked for drift (drift detection never queries per object).",
+                cso.Id, targetAttribute.Name);
+            return;
+        }
+
+        if (assignment == null)
+        {
+            Log.Debug("EvaluateDrift: CSO {CsoId} has no generated value assignment for {AttrName} yet; export evaluation generates it, so there is nothing to compare against",
+                cso.Id, targetAttribute.Name);
+            return;
+        }
+
+        if (!TryGetExpectedGeneratedValue(assignment, targetAttribute, out var expectedValue))
+            return;
+
+        var actualValue = GetActualValue(cso, targetAttribute);
+
+        // The same comparison every export flow uses (ordinal for text). Export evaluation's own Sticky reassertion of
+        // a generated value compares ordinally too, so the two paths agree on what counts as a difference.
+        if (ValuesEqual(expectedValue, actualValue))
+            return;
+
+        Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} generated attribute {AttrName}. Expected (assigned): '{ExpectedValue}', Actual: '{ActualValue}'",
+            cso.Id, targetAttribute.Name, FormatValueForLog(expectedValue), FormatValueForLog(actualValue));
+
+        result.DriftedAttributes.Add(new DriftedAttribute
+        {
+            Attribute = targetAttribute,
+            ExpectedValue = expectedValue,
+            ActualValue = actualValue,
+            ExportRule = exportRule
+        });
+    }
+
+    /// <summary>
+    /// The value a generated export Attribute Flow asserts for its Connected System Object: always the assignment's
+    /// current <see cref="GeneratedValueAssignment.Value"/>, typed for the target attribute the way
+    /// <see cref="GetActualValue"/> reads the target, so the two compare like for like.
+    /// <para>
+    /// Collision Remediation hook (release 4): remediation rewrites the assignment's value in place (keeping the old
+    /// one as <see cref="GeneratedValueAssignment.PreviousValue"/>), so reading the current assignment here is what
+    /// makes drift follow a remediated value with no further change. Never derive the expected value from anything
+    /// else (the base expression, a retired value, or what the target held when the value was issued).
+    /// </para>
+    /// </summary>
+    private static bool TryGetExpectedGeneratedValue(GeneratedValueAssignment assignment, ConnectedSystemObjectTypeAttribute targetAttribute, out object? expectedValue)
+    {
+        object? value = null;
+        switch (targetAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                value = assignment.Value;
+                break;
+            case AttributeDataType.Number when int.TryParse(assignment.Value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var intValue):
+                value = intValue;
+                break;
+            case AttributeDataType.LongNumber when long.TryParse(assignment.Value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var longValue):
+                value = longValue;
+                break;
+        }
+
+        if (value == null)
+        {
+            Log.Warning("EvaluateDrift: Generated value assignment {AssignmentId} cannot be read as the {AttrType} type of attribute {AttrName}; not checked for drift",
+                assignment.Id, targetAttribute.Type, targetAttribute.Name);
+            expectedValue = null;
+            return false;
+        }
+
+        // A multi-valued target is compared as a set, as GetActualValue reads it.
+        expectedValue = targetAttribute.AttributePlurality == AttributePlurality.MultiValued
+            ? new HashSet<object> { value }
+            : value;
+        return true;
     }
 
     /// <summary>

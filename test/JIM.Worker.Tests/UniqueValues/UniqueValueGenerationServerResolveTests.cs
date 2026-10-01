@@ -593,6 +593,29 @@ public class UniqueValueGenerationServerResolveTests
     }
 
     [Test]
+    public async Task PrefetchAssignmentsAsync_ObjectsAlreadyKnownToTheRun_AreNotQueriedAgainAsync()
+    {
+        var repo = new InMemorySyncRepository();
+        var (countingRepo, counts) = CountingSyncRepositoryProxy.Create(repo);
+        var server = new UniqueValueGenerationServer(countingRepo);
+        var options = UniqueValueTestHelpers.Options();
+        var mvoId = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+
+        await server.PrefetchAssignmentsAsync([mvoId], [csoId], options);
+        counts.Clear();
+
+        await server.PrefetchAssignmentsAsync([mvoId], [csoId], options);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForMetaverseObjectsAsync)), Is.False,
+                "an object already known to the run is answered from its cache, and a query result would be ignored anyway");
+            Assert.That(counts.ContainsKey(nameof(ISyncRepository.GetGeneratedValueAssignmentsForConnectedSystemObjectsAsync)), Is.False);
+        }
+    }
+
+    [Test]
     public async Task ResolveAsync_ValueGeneratedAndCommittedInCallOne_IsStickyInCallTwoForTheSameObjectAsync()
     {
         var repo = new InMemorySyncRepository();

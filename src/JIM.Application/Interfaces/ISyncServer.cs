@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Services;
+using JIM.Application.UniqueValues;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -226,13 +227,17 @@ public interface ISyncServer
     /// Evaluates drift for a CSO that has been imported/synced against its joined MVO.
     /// Checks all export rules with EnforceState = true that target this CSO's Connected System.
     /// Returns corrective Pending Exports (not yet persisted) when drift is detected.
+    /// <paramref name="generatedValueAssignments"/> is the run's Unique Value Generation cache, already prefetched
+    /// for this Connected System Object: a generated export Attribute Flow's expected value is its export-mode
+    /// assignment, read from there without a query (#242).
     /// </summary>
     DriftDetectionResult EvaluateDrift(
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
-        AttributePriorityContext? priorityContext = null);
+        AttributePriorityContext? priorityContext = null,
+        UniqueValueResolveOptions? generatedValueAssignments = null);
 
     #endregion
 

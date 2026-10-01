@@ -362,6 +362,12 @@ public abstract class SyncTaskProcessorBase
     protected UniqueValueResolveOptions? _uniqueValueResolveOptions;
 
     /// <summary>
+    /// The (Connected System, object type) pairs this run's Drift Detection export rules carry an enforcing generated
+    /// mapping for, computed once on first need by <see cref="PrefetchGeneratedExportAssignmentsForDriftAsync"/>.
+    /// </summary>
+    private HashSet<(int ConnectedSystemId, int ConnectedSystemObjectTypeId)>? _driftGeneratedObjectTypes;
+
+    /// <summary>
     /// Per generated mapping (keyed on <c>SyncRuleMappingGeneration.Id</c>, since two generation rows may
     /// target the same attribute with different exclusions, plan decision 3), the participating export
     /// targets: every enabled export mapping in the run's export evaluation cache whose only source is this
@@ -3867,7 +3873,7 @@ public abstract class SyncTaskProcessorBase
                 await CommitGeneratedValueAssignmentsAsync();
 
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
-                EvaluateQueuedDrift();
+                await EvaluateQueuedDriftAsync();
                 await EvaluatePendingExportsAsync();
                 await FlushPendingExportOperationsAsync();
 
@@ -6140,6 +6146,7 @@ public abstract class SyncTaskProcessorBase
         _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true, derivedFlowGraph);
 
         // Cache export rules with EnforceState = true for THIS Connected System only
+        _driftGeneratedObjectTypes = null; // recomputed from the rules below on first need
         _driftDetectionExportRules = currentSystemSyncRules
             .Where(sr => sr.Enabled &&
                         sr.Direction == SyncRuleDirection.Export &&
@@ -6196,18 +6203,60 @@ public abstract class SyncTaskProcessorBase
     /// capture SourceMetaverseObjectId, and the corrective exports are staged in time for
     /// FlushPendingExportOperationsAsync to persist them.
     /// </summary>
-    protected void EvaluateQueuedDrift()
+    protected async Task EvaluateQueuedDriftAsync()
     {
         if (_pendingDriftEvaluations.Count == 0)
             return;
 
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
+            await PrefetchGeneratedExportAssignmentsForDriftAsync();
+
             foreach (var (cso, mvo) in _pendingDriftEvaluations)
                 EvaluateDriftAndEnforceState(cso, mvo);
         }
 
         _pendingDriftEvaluations.Clear();
+    }
+
+    /// <summary>
+    /// Unique Value Generation (#242, product-owner decision 2026-10-01): Drift Detection checks a generated export
+    /// Attribute Flow against the Connected System Object's export-mode assignment, so the page's assignments are
+    /// prefetched here in one query before the per-object loop, and the loop reads them from the run-scoped cache
+    /// (<see cref="UniqueValueResolveOptions.TryGetKnownConnectedSystemAssignment"/>) without querying. Only the
+    /// queued Connected System Objects an enforcing generated mapping can apply to are prefetched; objects already
+    /// known to the run (resolved or committed earlier) are not queried again. A run whose drift rules carry no
+    /// enforcing generated mapping builds nothing and queries nothing.
+    /// </summary>
+    private async Task PrefetchGeneratedExportAssignmentsForDriftAsync()
+    {
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
+            return;
+
+        // The (Connected System, object type) pairs an enforcing, enabled generated mapping that flows on Update can
+        // apply to: exactly the mappings DriftDetectionService checks against an assignment.
+        _driftGeneratedObjectTypes ??= _driftDetectionExportRules
+            .Where(rule => rule.EnforceState && rule.AttributeFlowRules.Any(m => m.Enabled && m.Generation != null && m.FlowsOnUpdateExport()))
+            .Select(rule => (rule.ConnectedSystemId, rule.ConnectedSystemObjectTypeId))
+            .ToHashSet();
+
+        if (_driftGeneratedObjectTypes.Count == 0)
+            return;
+
+        var connectedSystemObjectIds = _pendingDriftEvaluations
+            .Select(pending => pending.Cso)
+            .Where(cso => cso.Id != Guid.Empty
+                && cso.Status != ConnectedSystemObjectStatus.PendingProvisioning
+                && _driftGeneratedObjectTypes.Contains((cso.ConnectedSystemId, cso.TypeId)))
+            .Select(cso => cso.Id)
+            .Distinct()
+            .ToList();
+
+        if (connectedSystemObjectIds.Count == 0)
+            return;
+
+        EnsureUniqueValueGenerationServiceBuilt();
+        await _uniqueValueGenerationServer!.PrefetchAssignmentsAsync([], connectedSystemObjectIds, _uniqueValueResolveOptions!);
     }
 
     protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
@@ -6235,7 +6284,8 @@ public abstract class SyncTaskProcessorBase
             targetMvo,
             _driftDetectionExportRules,
             _importMappingCache,
-            _attributePriorityContext);
+            _attributePriorityContext,
+            _uniqueValueResolveOptions);
 
         if (result.HasDrift)
         {
